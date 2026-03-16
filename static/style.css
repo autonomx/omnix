@@ -1425,7 +1425,7 @@ body::before {
 .conversation-chat-view {
     display: none;
     flex-direction: column;
-    flex: 1;
+    height: 100%;
     width: 100%;
     max-width: 800px;
     margin: 0 auto;
