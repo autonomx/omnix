@@ -357,7 +357,7 @@ export class VoiceEngine {
       }
 
       // Fallback: flush the whole buffer if it matches generic flush criteria
-      if (this.textBuffer.length > this.FLUSH_MIN_LENGTH || /[.,!?]$/.test(this.textBuffer)) {
+      if (this.textBuffer.length > this.FLUSH_MIN_LENGTH || /[.!?,;:]$/.test(this.textBuffer)) {
         const chunk = this.textBuffer;
         this.textBuffer = '';
         this._sendTTS(chunk);

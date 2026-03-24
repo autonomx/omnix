@@ -1,3 +1,5 @@
+export const TIMELINE_GAP_OFFSET = 0.05;
+
 export class AudioOutput {
   constructor() {
     this.ctx = null;
@@ -36,8 +38,8 @@ export class AudioOutput {
     this._ensureContext();
 
     // Prevent timeline from falling behind (gap protection)
-    if (this.nextTime < this.ctx.currentTime + 0.05) {
-      this.nextTime = this.ctx.currentTime + 0.05;
+    if (this.nextTime < this.ctx.currentTime + TIMELINE_GAP_OFFSET) {
+      this.nextTime = this.ctx.currentTime + TIMELINE_GAP_OFFSET;
     }
 
     let float32;
@@ -79,7 +81,7 @@ export class AudioOutput {
     // Fast-start first audio (don't wait full buffer)
     if (!this.started) {
       this.started = true;
-      this.nextTime = this.ctx.currentTime + 0.05;
+      this.nextTime = this.ctx.currentTime + TIMELINE_GAP_OFFSET;
       this.hasPlayedSomething = true;
       if (this.onPlaybackStart) {
         this.onPlaybackStart();

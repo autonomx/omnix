@@ -591,8 +591,8 @@ class TestAudioStarvationProtection:
         body = m.group(0)
         assert "this.nextTime < this.ctx.currentTime" in body, \
             "enqueue must detect when timeline has fallen behind"
-        assert "0.05" in body, \
-            "enqueue must use 50ms gap protection offset"
+        assert "TIMELINE_GAP_OFFSET" in body, \
+            "enqueue must use TIMELINE_GAP_OFFSET constant for gap protection"
 
 
 class TestReducedBufferLatency:
@@ -627,13 +627,13 @@ class TestFirstAudioFastPath:
             "enqueue must not delay start by waiting for minBufferSec threshold"
 
     def test_fast_start_offset(self):
-        """First audio must set nextTime to currentTime + small offset."""
+        """First audio must set nextTime to currentTime + TIMELINE_GAP_OFFSET."""
         src = self._get_source()
         m = re.search(r'enqueue\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
         assert m
         body = m.group(0)
-        assert "this.ctx.currentTime + 0.05" in body, \
-            "First audio fast-path must use 50ms offset"
+        assert "this.ctx.currentTime + TIMELINE_GAP_OFFSET" in body, \
+            "First audio fast-path must use TIMELINE_GAP_OFFSET"
 
 
 class TestTTSBackpressure:
