@@ -1556,3 +1556,140 @@ class TestSentenceBoundaryProsody:
         body = src[start:start + 1800]
         assert ".slice(-200)" in body
         assert "200" in body
+
+
+# ---------------------------------------------------------------------------
+# Round 6: Priority mode, ultra-early LLM, interrupt consistency, barge-in STT
+# ---------------------------------------------------------------------------
+
+class TestPriorityMode:
+    """After interrupt, priority mode must clear stale deferred TTS queue."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_priority_mode_field_in_constructor(self):
+        """Constructor must initialise _priorityMode to false."""
+        src = self._get_source()
+        assert "this._priorityMode = false" in src
+
+    def test_priority_mode_set_on_interrupt(self):
+        """onSpeechStart interrupt path must enable _priorityMode."""
+        src = self._get_source()
+        m = re.search(r"console\.log\('\[VoiceEngine\] User interrupted AI'\)", src)
+        assert m, "onSpeechStart interrupt log line must exist"
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this._priorityMode = true" in body, \
+            "onSpeechStart interrupt path must set _priorityMode = true"
+
+    def test_priority_mode_set_on_cancel_ongoing(self):
+        """_cancelOngoingResponse must enable _priorityMode."""
+        src = self._get_source()
+        m = re.search(r'  _cancelOngoingResponse\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 900]
+        assert "this._priorityMode = true" in body, \
+            "_cancelOngoingResponse must set _priorityMode = true"
+
+    def test_priority_mode_set_on_explicit_interrupt(self):
+        """interrupt() method must enable _priorityMode."""
+        src = self._get_source()
+        m = re.search(r"  interrupt\(\)\s*\{", src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "this._priorityMode = true" in body, \
+            "interrupt() must set _priorityMode = true"
+
+    def test_dispatch_clears_queue_in_priority_mode(self):
+        """_dispatchTTS must clear deferredTTSQueue when _priorityMode is true."""
+        src = self._get_source()
+        m = re.search(r'  _dispatchTTS\(cleaned, seq\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 600]
+        assert "this._priorityMode" in body, \
+            "_dispatchTTS must check _priorityMode"
+        assert "this.deferredTTSQueue = []" in body, \
+            "_dispatchTTS must clear deferredTTSQueue in priority mode"
+
+    def test_priority_mode_reset_after_dispatch(self):
+        """_dispatchTTS must reset _priorityMode to false after clearing queue."""
+        src = self._get_source()
+        m = re.search(r'  _dispatchTTS\(cleaned, seq\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 600]
+        assert "this._priorityMode = false" in body, \
+            "_dispatchTTS must reset _priorityMode to false after clearing"
+
+
+class TestUltraEarlyLLMStart:
+    """LLM must start on just 1 word from partial STT for fastest response."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_min_partial_word_count_is_1(self):
+        """MIN_PARTIAL_WORD_COUNT must be 1 for ultra-early LLM start."""
+        src = self._get_source()
+        assert "this.MIN_PARTIAL_WORD_COUNT = 1" in src, \
+            "MIN_PARTIAL_WORD_COUNT must be 1 (not 2 or higher)"
+
+
+class TestInterruptWordCountReset:
+    """All interrupt paths must reset _wordCount to 0."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_onSpeechStart_interrupt_resets_wordCount(self):
+        """onSpeechStart interrupt path must reset _wordCount."""
+        src = self._get_source()
+        m = re.search(r"console\.log\('\[VoiceEngine\] User interrupted AI'\)", src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this._wordCount = 0" in body, \
+            "onSpeechStart interrupt path must reset _wordCount"
+
+    def test_cancelOngoingResponse_resets_wordCount(self):
+        """_cancelOngoingResponse must reset _wordCount."""
+        src = self._get_source()
+        m = re.search(r'  _cancelOngoingResponse\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 900]
+        assert "this._wordCount = 0" in body, \
+            "_cancelOngoingResponse must reset _wordCount"
+
+    def test_explicit_interrupt_resets_wordCount(self):
+        """interrupt() method must reset _wordCount."""
+        src = self._get_source()
+        m = re.search(r"  interrupt\(\)\s*\{", src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "this._wordCount = 0" in body, \
+            "interrupt() must reset _wordCount"
+
+
+class TestBargeInSTTForwarding:
+    """Audio chunks must be forwarded to STT during INTERRUPTED state for barge-in."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_interrupted_state_sends_audio(self):
+        """onAudioChunkInput must forward audio when state is INTERRUPTED."""
+        src = self._get_source()
+        m = re.search(r'  onAudioChunkInput\(chunk\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 400]
+        assert "INTERRUPTED" in body, \
+            "onAudioChunkInput must include INTERRUPTED state in its condition"
+        assert "stt.sendAudio" in body, \
+            "onAudioChunkInput must call stt.sendAudio"

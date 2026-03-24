@@ -65,7 +65,7 @@ export class VoiceEngine {
     // Minimum partial transcript length before early LLM start is triggered
     this.MIN_PARTIAL_TEXT_LENGTH = 20;
     // Minimum word count in partial transcript before early LLM start
-    this.MIN_PARTIAL_WORD_COUNT = 2;
+    this.MIN_PARTIAL_WORD_COUNT = 1;
     // Minimum text length before shouldFlush() returns true
     this.FLUSH_MIN_LENGTH = 30;
     // Count of TTS segments sent but not yet completed
@@ -93,6 +93,9 @@ export class VoiceEngine {
     // Monotonically incrementing counter for LLM requests so stale onLLMToken /
     // onLLMEnd callbacks from a cancelled request are silently ignored.
     this._llmRequestId = 0;
+    // Priority mode: when set after an interrupt, the next TTS dispatch clears
+    // any lingering deferred queue so the new response wins immediately.
+    this._priorityMode = false;
   }
 
   setState(newState) {
@@ -176,6 +179,7 @@ export class VoiceEngine {
       console.log('[VoiceEngine] User interrupted AI');
       
       this._ttsInFlight = 0;
+      this._wordCount = 0;
       this.ignoreAudioChunks = true;
       this.audioOutput.softReset();
       this.llm.cancel();
@@ -190,6 +194,8 @@ export class VoiceEngine {
       this.expectedSeq = 0;
       this.pendingAudio.clear();
       this.deferredTTSQueue = [];
+      // Enable priority mode so the next response wins immediately
+      this._priorityMode = true;
       
       this.setState(VoiceState.INTERRUPTED);
       this.accumulatedResponse = '';
@@ -231,7 +237,7 @@ export class VoiceEngine {
   }
 
   onAudioChunkInput(chunk) {
-    if (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING) {
+    if (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING || this.state === VoiceState.INTERRUPTED) {
       this.stt.sendAudio(chunk);
     }
   }
@@ -498,6 +504,13 @@ export class VoiceEngine {
 
   /** Internal: actually dispatch a TTS request (shared by _sendTTS and _drainDeferredTTS). */
   _dispatchTTS(cleaned, seq) {
+    // Priority mode: after an interrupt, flush any stale deferred chunks so
+    // the new response wins immediately with zero competition.
+    if (this._priorityMode) {
+      this.deferredTTSQueue = [];
+      this._priorityMode = false;
+    }
+
     this._ttsInFlight++;
     const requestId = this._ttsRequestId;
     const preview = cleaned.substring(0, 40);
@@ -672,6 +685,8 @@ export class VoiceEngine {
     // do not enqueue audio or alter state for the upcoming new turn.
     this._ttsRequestId++;
     this._llmRequestId++;
+    // Enable priority mode so the next response wins immediately
+    this._priorityMode = true;
     console.log(`[VoiceEngine] Cancelled ongoing response (ttsReqId=${this._ttsRequestId}, llmReqId=${this._llmRequestId})`);
   }
 
@@ -759,6 +774,7 @@ export class VoiceEngine {
       this.llm.cancel();
       this.tts.cancel();
       this.textBuffer = '';
+      this._wordCount = 0;
       this.llmStarted = false;
       this.hasSentFirstChunk = false;
       this._ttsInFlight = 0;
@@ -773,6 +789,8 @@ export class VoiceEngine {
       this.expectedSeq = 0;
       this.pendingAudio.clear();
       this.deferredTTSQueue = [];
+      // Enable priority mode so the next response wins immediately
+      this._priorityMode = true;
       this.setState(VoiceState.LISTENING);
       if (this.alwaysListening) {
         this.audioInput.resumeVAD();
