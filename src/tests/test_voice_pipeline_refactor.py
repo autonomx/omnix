@@ -1026,30 +1026,45 @@ class TestEarlierFirstChunkTrigger:
 
 
 class TestPhraseLevelFlush:
-    """onLLMToken must flush on word boundary for speech-rhythm chunking."""
+    """onLLMToken must flush on word boundaries for speech-rhythm chunking,
+    with adaptive chunk sizing and word count guard."""
 
     def _get_source(self):
         return _read_source("src/static/voice/voiceEngine.js")
 
     def test_phrase_flush_on_word_boundary(self):
-        """onLLMToken must check token.endsWith(' ') for phrase-level flush."""
+        """Phrase-level flush must check token.endsWith(' ')."""
         src = self._get_source()
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1600]
         assert "token.endsWith(' ')" in body, \
             "Must flush on word boundary (token ending with space)"
 
-    def test_phrase_flush_min_length(self):
-        """Phrase-level flush requires textBuffer.length > 8."""
+    def test_phrase_flush_adaptive_min_length(self):
+        """Phrase-level flush uses adaptive dynamicMinLength based on _ttsInFlight."""
         src = self._get_source()
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
-        assert "this.textBuffer.length > 8" in body, \
-            "Phrase flush must require at least 8 chars"
+        body = src[start:start + 1600]
+        assert "dynamicMinLength" in body, \
+            "Phrase flush must use adaptive dynamicMinLength"
+        assert "this._ttsInFlight > 3 ? 20 : 8" in body, \
+            "dynamicMinLength must be 20 under load, 8 when idle"
+
+    def test_phrase_flush_word_count_guard(self):
+        """Phrase-level flush must require wordCount >= 2 to prevent micro-chunks."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1600]
+        assert "wordCount >= 2" in body, \
+            "Phrase flush must require at least 2 words to prevent micro-chunks"
+        assert "split(/\\s+/)" in body, \
+            "Must compute word count via split()"
 
     def test_phrase_flush_sends_tts(self):
         """Phrase-level flush must call _sendTTS with flushText."""
@@ -1057,8 +1072,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1400]
-        # After phrase-level flush check, buffer is flushed via _sendTTS
+        body = src[start:start + 1800]
         assert "token.endsWith(' ')" in body
         assert "_sendTTS(flushText)" in body
 
@@ -1068,11 +1082,10 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1400]
-        # Find the phrase-level flush block and verify textBuffer is cleared
+        body = src[start:start + 1800]
         phrase_idx = body.find("token.endsWith(' ')")
         assert phrase_idx > 0
-        after_phrase = body[phrase_idx:phrase_idx + 200]
+        after_phrase = body[phrase_idx:phrase_idx + 350]
         assert "this.textBuffer = ''" in after_phrase, \
             "textBuffer must be cleared after phrase-level flush"
 
@@ -1103,3 +1116,63 @@ class TestPendingAudioDestructuring:
         body = src[start:start + 600]
         assert "this.audioOutput.enqueue(entry.buffer" in body, \
             "Must destructure entry.buffer for enqueue, not pass raw entry"
+
+
+class TestDeferredTTSPacing:
+    """_drainDeferredTTS must pace deferred TTS under congestion."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_drain_rate_limit_at_4(self):
+        """_drainDeferredTTS must return early if _ttsInFlight > 4."""
+        src = self._get_source()
+        m = re.search(r'  _drainDeferredTTS\s*\(\)', src)
+        assert m, "_drainDeferredTTS method not found"
+        start = m.start()
+        body = src[start:start + 400]
+        assert "this._ttsInFlight > 4" in body, \
+            "_drainDeferredTTS must rate-limit at _ttsInFlight > 4"
+
+    def test_drain_buffered_time_threshold(self):
+        """_drainDeferredTTS must check bufferedTime < 0.6."""
+        src = self._get_source()
+        m = re.search(r'  _drainDeferredTTS\s*\(\)', src)
+        assert m, "_drainDeferredTTS method not found"
+        start = m.start()
+        body = src[start:start + 400]
+        assert "bufferedTime < 0.6" in body, \
+            "_drainDeferredTTS must only drain when bufferedTime < 0.6"
+
+
+class TestSpeechContinuityTracking:
+    """VoiceEngine must track lastSpokenText for speech continuity context."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_lastSpokenText_field_in_constructor(self):
+        """Constructor must initialise this.lastSpokenText."""
+        src = self._get_source()
+        assert "this.lastSpokenText = ''" in src, \
+            "lastSpokenText must be initialised to '' in constructor"
+
+    def test_sendTTS_updates_lastSpokenText(self):
+        """_sendTTS must set lastSpokenText to the cleaned text."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m, "_sendTTS method not found"
+        start = m.start()
+        body = src[start:start + 600]
+        assert "this.lastSpokenText = cleaned" in body, \
+            "_sendTTS must track lastSpokenText for speech continuity"
+
+    def test_lastSpokenText_reset_on_stop(self):
+        """stop() must reset lastSpokenText."""
+        src = self._get_source()
+        m = re.search(r'  stop\(\)\s*\{', src)
+        assert m, "stop() method not found"
+        start = m.start()
+        body = src[start:start + 800]
+        assert "lastSpokenText" in body, \
+            "stop() must reset lastSpokenText"

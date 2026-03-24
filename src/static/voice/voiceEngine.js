@@ -80,6 +80,8 @@ export class VoiceEngine {
     this.hasSentFirstChunk = false;
     // Max gap before skipping missing TTS sequence numbers
     this.MAX_SEQUENCE_GAP = 5;
+    // Track the last spoken text for speech continuity context
+    this.lastSpokenText = '';
     // When false, VAD is paused after each turn so the user must type
     this.alwaysListening = options.alwaysListening !== false;
     // Monotonically incrementing counter – bumped on every cancel/interrupt so
@@ -154,6 +156,7 @@ export class VoiceEngine {
     this.expectedSeq = 0;
     this.pendingAudio.clear();
     this.deferredTTSQueue = [];
+    this.lastSpokenText = '';
     // Invalidate all in-flight HTTP TTS and LLM callbacks
     this._ttsRequestId++;
     this._llmRequestId++;
@@ -346,8 +349,13 @@ export class VoiceEngine {
     }
     
     // Phrase-level flush: flush on word boundary for speech-rhythm chunking
-    // This starts TTS while the sentence is still forming, reducing latency
-    if (token.endsWith(' ') && this.textBuffer.length > 8) {
+    // This starts TTS while the sentence is still forming, reducing latency.
+    // Adaptive chunk sizing: under load (many in-flight TTS) use larger chunks
+    // to avoid overwhelming the TTS pipeline; when idle, use smaller chunks
+    // for lower latency.
+    const dynamicMinLength = this._ttsInFlight > 3 ? 20 : 8;
+    const wordCount = this.textBuffer.trim().split(/\s+/).length;
+    if (token.endsWith(' ') && this.textBuffer.length > dynamicMinLength && wordCount >= 2) {
       const flushText = this.textBuffer;
       this.textBuffer = '';
       this._sendTTS(flushText);
@@ -460,6 +468,9 @@ export class VoiceEngine {
 
     const seq = this.ttsSeq++;
 
+    // Track last spoken text for speech continuity context
+    this.lastSpokenText = cleaned;
+
     // Backpressure: defer instead of dropping to avoid content loss
     if (this._ttsInFlight > 6 || this.audioOutput.bufferedTime > 0.8) {
       this.deferredTTSQueue.push({ text: cleaned, seq });
@@ -487,11 +498,11 @@ export class VoiceEngine {
   /** Drain deferred TTS queue gradually (one at a time) to avoid burst speech. */
   _drainDeferredTTS() {
     // Rate-limit: don't flood if already busy
-    if (this._ttsInFlight > 2) return;
+    if (this._ttsInFlight > 4) return;
 
     if (
       this.deferredTTSQueue.length &&
-      this.audioOutput.bufferedTime < 1.5
+      this.audioOutput.bufferedTime < 0.6
     ) {
       const { text, seq } = this.deferredTTSQueue.shift();
       this._dispatchTTS(text, seq);
