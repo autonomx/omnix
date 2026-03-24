@@ -532,7 +532,7 @@ export class VoiceEngine {
     fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, speaker: this.speaker })
+      body: JSON.stringify({ text: text, speaker: this.speaker, prev_text: this.lastSpokenText.slice(-100) })
     })
     .then(response => response.json())
     .then(data => {

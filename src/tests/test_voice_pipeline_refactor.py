@@ -1332,3 +1332,44 @@ class TestLastSpokenTextTiming:
             "Both requestId check and lastSpokenText update must exist"
         assert last_spoken_idx > reqid_idx, \
             "lastSpokenText must be set after stale requestId check"
+
+
+# ---------------------------------------------------------------------------
+# Round 4 fix: Prosody continuity – send prev_text in TTS HTTP request
+# ---------------------------------------------------------------------------
+
+class TestProsodyContinuity:
+    """_sendTTSHTTP must send prev_text (lastSpokenText) for prosody continuity."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_prev_text_in_tts_request_body(self):
+        """TTS HTTP request body must include prev_text for prosody continuity."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m, "_sendTTSHTTP method not found"
+        start = m.start()
+        body = src[start:start + 1500]
+        assert "prev_text" in body, \
+            "TTS HTTP request body must include prev_text for prosody continuity"
+
+    def test_prev_text_uses_lastSpokenText(self):
+        """prev_text must be derived from this.lastSpokenText."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1500]
+        assert "this.lastSpokenText" in body, \
+            "prev_text must reference this.lastSpokenText"
+
+    def test_prev_text_is_sliced(self):
+        """prev_text must be sliced to a bounded length (e.g. .slice(-100))."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1500]
+        assert ".slice(-100)" in body, \
+            "prev_text must be bounded with .slice(-100) to avoid oversized payloads"
