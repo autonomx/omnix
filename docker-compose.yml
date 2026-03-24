@@ -12,10 +12,10 @@ services:
       - "8020:8020"    # TTS server (Chatterbox)
       - "8080:8080"    # llama.cpp server
     volumes:
-      - ./data:/app/data
-      - ./voice_clones:/app/voice_clones
-      - ./models/llm:/app/models/llm
-      - ./models/server:/app/models/server
+      - ./resources/data:/app/data
+      - ./resources/voice_clones:/app/voice_clones
+      - ./resources/models/llm:/app/models/llm
+      - ./resources/models/server:/app/models/server
       - ~/.cache/huggingface:/root/.cache/huggingface  # Cache HuggingFace models
     environment:
       - PYTHONUNBUFFERED=1
@@ -58,7 +58,7 @@ services:
   #   ports:
   #     - "8020:8020"
   #   volumes:
-  #     - ./voice_clones:/app/voice_clones
+  #     - ./resources/voice_clones:/app/voice_clones
   #     - ~/.cache/huggingface:/root/.cache/huggingface
   #   environment:
   #     - NVIDIA_VISIBLE_DEVICES=all

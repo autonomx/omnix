@@ -1,0 +1,46 @@
+{
+  "provider": "cerebras",
+  "audio_provider_tts": "faster-qwen3-tts",
+  "audio_provider_stt": "parakeet",
+  "global_system_prompt": "You are an intelligent conversational AI designed for natural, engaging dialogue. Respond in a clear, friendly, and human-like manner while remaining concise and coherent. Prioritize understanding the user's intent and replying directly, without unnecessary elaboration or filler. Keep responses focused and easy to follow, using natural phrasing rather than formal or technical language unless required. Maintain conversational flow across turns and adapt smoothly to the user's tone. Default to brevity and do not exceed five sentences unless the user explicitly asks for more detail.",
+  "lmstudio": {
+    "base_url": "http://localhost:1234"
+  },
+  "openrouter": {
+    "api_key": "",
+    "model": "gpt-oss-120b",
+    "context_size": 128000,
+    "thinking_budget": 0
+  },
+  "cerebras": {
+    "api_key": "csk-ekcv4wyvntn43c56639cw2p8yreyj588wt59wmykfkkrvkeh",
+    "model": "gpt-oss-120b"
+  },
+  "llamacpp": {
+    "base_url": "http://localhost:8080",
+    "model": "",
+    "download_location": "server",
+    "auto_start": false
+  },
+  "faster-qwen3-tts": {
+    "model_name": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "max_seq_len": 2048,
+    "chunk_size": 12,
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 1.0,
+    "do_sample": true,
+    "repetition_penalty": 1.05,
+    "xvec_only": true,
+    "non_streaming_mode": true,
+    "append_silence": true
+  },
+  "chatterbox": {
+    "base_url": "http://localhost:8020"
+  },
+  "parakeet": {
+    "base_url": "http://localhost:8000"
+  }
+}

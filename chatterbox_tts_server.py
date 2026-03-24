@@ -46,6 +46,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, H
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import app.shared as shared
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -166,7 +167,7 @@ class VoiceCloneManager:
     
     def __init__(self):
         self.voices = {}  # voice_id -> {'audio_path': str path}
-        self.voices_dir = Path(__file__).parent / "voice_clones"
+        self.voices_dir = Path(shared.VOICE_CLONES_DIR)
         self.voices_dir.mkdir(exist_ok=True)
     
     def create_voice_clone(self, voice_id: str, audio_path: str):

@@ -1,0 +1,10 @@
+export const VoiceState = {
+  IDLE: "IDLE",
+  LISTENING: "LISTENING",
+  USER_SPEAKING: "USER_SPEAKING",
+  THINKING: "THINKING",
+  AI_SPEAKING: "AI_SPEAKING",
+  INTERRUPTED: "INTERRUPTED"
+};
+
+export default VoiceState;

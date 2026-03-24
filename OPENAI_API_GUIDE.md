@@ -264,7 +264,7 @@ Any voice files you've uploaded through the web interface will appear here with 
 3. Verify port 8001 is not in use by another application
 
 ### TTS Not Working
-1. Ensure you have voice files in the `voice_clones/` directory
+1. Ensure you have voice files in the `resources/voice_clones/` directory
 2. Check that the TTS models are downloaded
 3. Verify the voice ID exists in `/v1/audio/voices`
 

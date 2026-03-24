@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omnix</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar collapsed" id="sidebar">
+            <div class="sidebar-header">
+                <!-- Logo button -->
+                <button id="sidebarLogoBtn" class="sidebar-logo-btn" title="Omnix">
+                    <img src="/logo/omnix.png" alt="Omnix" width="28" height="28" style="border-radius: 6px;">
+                </button>
+                <h2>Chats</h2>
+                <!-- Collapse button - inside sidebar header, right side -->
+                <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" title="Collapse sidebar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M11 17L6 12L11 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M18 17L13 12L18 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Sidebar Options - visible when expanded -->
+            <div class="sidebar-options">
+                <button id="newChatBtnOption" class="sidebar-option-btn" title="Start a new chat">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span>New chat</span>
+                </button>
+                <button id="searchChatBtnOption" class="sidebar-option-btn" title="Search all messages">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                        <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span>Search</span>
+                </button>
+                <button id="historyBtnOption" class="sidebar-option-btn" title="View chat history" onclick="var m=document.getElementById('historyModal'),l=document.getElementById('historyList');m.style.display='flex';l.innerHTML='<div class=history-loading><div class=history-loading-spinner></div><div class=history-loading-text>Loading your chats...</div></div>';fetch('/api/sessions').then(r=>r.json()).then(d=>{if(d.success){var s=d.sessions||[];s.sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0));if(!s.length){l.innerHTML='<div class=history-empty><div class=history-empty-icon>&#128172;</div><p>No chat history yet</p></div>';return;}l.innerHTML=s.map(x=>{var preview='';if(x.messages&&x.messages.length){var msgs=[...x.messages].reverse();var lastUser=msgs.find(m=>m.role==='user');if(lastUser)preview=lastUser.content.substring(0,60)+(lastUser.content.length>60?'...':'');}var title=x.title||'New Chat';var date=x.updated_at?new Date(x.updated_at).toLocaleDateString():'';return '<div class=history-item id=hist-'+x.id+'><div class=history-item-header><span class=history-item-title>'+title+'</span><span class=history-item-date>'+date+'</span></div>'+(preview?'<div class=history-item-preview>'+preview+'</div>':'')+'<div class=history-item-actions><button class=history-item-delete onclick=&quot;event.stopPropagation();deleteHistoryItem(\''+x.id+'\');&quot;>&#128465;</button></div></div>'}).join('');document.querySelectorAll('.history-item').forEach(function(el){el.onclick=function(){window.sessionId=el.id.replace('hist-','');document.getElementById('historyModal').style.display='none';loadSession(window.sessionId);};});}}).catch(e=>l.innerHTML='<div class=history-empty>Error loading history</div>');">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <span>History</span>
+                </button>
+            </div>
+            
+            <!-- Sidebar Tools Section - visible when expanded -->
+            <div class="sidebar-tools">
+                <button id="settingsBtnOption" class="sidebar-option-btn" title="Settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span>Settings</span>
+                </button>
+                <button id="voiceCloneBtnOption" class="sidebar-option-btn" title="Clone Voice">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M12 16V16.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span>Voice Clone</span>
+                </button>
+                <button id="audiobookBtnOption" class="sidebar-option-btn" title="Audiobook - Convert text to audio">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M6.5 2H20V22H6.5C5.83696 22 5.20107 21.7366 4.73223 21.2678C4.26339 20.7989 4 20.163 4 19.5V4.5C4 3.83696 4.26339 3.20107 4.73223 2.73223C5.20107 2.26339 5.83696 2 6.5 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 6V14M9 10H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span>Audiobook</span>
+                </button>
+                <button id="podcastBtnOption" class="sidebar-option-btn" title="AI Podcast - Generate AI podcast episodes">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <span>Podcast</span>
+                </button>
+                <button id="voiceStudioBtnOption" class="sidebar-option-btn" title="Voice Studio - Generate speech with emotion controls">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <span>Voice Studio</span>
+                </button>
+            </div>
+            
+            <!-- Collapsed Sidebar Icons - visible when collapsed -->
+            <div class="sidebar-collapsed-icons" id="sidebarCollapsedIcons">
+                <button id="settingsBtnCollapsed" class="sidebar-collapsed-btn" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <button id="newChatBtnCollapsed" class="sidebar-collapsed-btn" title="New chat">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <button id="historyBtnCollapsed" class="sidebar-collapsed-btn" title="Chat History" onclick="var m=document.getElementById('historyModal'),l=document.getElementById('historyList');m.style.display='flex';l.innerHTML='<div class=history-loading><div class=history-loading-spinner></div><div class=history-loading-text>Loading your chats...</div></div>';fetch('/api/sessions').then(r=>r.json()).then(d=>{if(d.success){var s=d.sessions||[];s.sort((a,b)=>new Date(b.updated_at||0)-new Date(a.updated_at||0));if(!s.length){l.innerHTML='<div class=history-empty><div class=history-empty-icon>&#128172;</div><p>No chat history yet</p></div>';return;}l.innerHTML=s.map(x=>{var preview='';if(x.messages&&x.messages.length){var msgs=[...x.messages].reverse();var lastUser=msgs.find(m=>m.role==='user');if(lastUser)preview=lastUser.content.substring(0,60)+(lastUser.content.length>60?'...':'');}var title=x.title||'New Chat';var date=x.updated_at?new Date(x.updated_at).toLocaleDateString():'';return '<div class=history-item id=hist-'+x.id+'><div class=history-item-header><span class=history-item-title>'+title+'</span><span class=history-item-date>'+date+'</span></div>'+(preview?'<div class=history-item-preview>'+preview+'</div>':'')+'<div class=history-item-actions><button class=history-item-delete onclick=&quot;event.stopPropagation();deleteHistoryItem(\''+x.id+'\');&quot;>&#128465;</button></div></div>'}).join('');document.querySelectorAll('.history-item').forEach(function(el){el.onclick=function(){window.sessionId=el.id.replace('hist-','');document.getElementById('historyModal').style.display='none';loadSession(window.sessionId);};});}}).catch(e=>l.innerHTML='<div class=history-empty>Error loading history</div>');">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+                <button id="searchChatBtnCollapsed" class="sidebar-collapsed-btn" title="Search all messages">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                        <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <button id="voiceCloneBtnCollapsed" class="sidebar-collapsed-btn" title="Voice Clone">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <button id="audiobookBtnCollapsed" class="sidebar-collapsed-btn" title="Audiobook">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M4 19.5C4 18.837 4.26339 18.2011 4.73223 17.7322C5.20107 17.2634 5.83696 17 6.5 17H20" stroke="currentColor" stroke-width="2"/>
+                        <path d="M6.5 2H20V22H6.5C5.83696 22 5.20107 21.7366 4.73223 21.2678C4.26339 20.7989 4 20.163 4 19.5V4.5C4 3.83696 4.26339 3.20107 4.73223 2.73223C5.20107 2.26339 5.83696 2 6.5 2Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 6V14M9 10H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <button id="podcastBtnCollapsed" class="sidebar-collapsed-btn" title="Podcast">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+                <button id="voiceStudioBtnCollapsed" class="sidebar-collapsed-btn" title="Voice Studio">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="sidebar-collapsed-session-list" id="sidebarCollapsedSessionList" style="display: none;">
+                <!-- Sessions will be rendered here as small icons with tooltips -->
+            </div>
+            
+            <div class="session-list" id="sessionList" style="display: none;"></div>
+        </aside>
+        
+        <!-- Expand sidebar button (floating when collapsed) -->
+        <button id="expandSidebarBtn" class="expand-sidebar-btn" title="Open sidebar" style="display: none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </button>
+        
+        <!-- Search Chat Modal -->
+        <div class="modal" id="searchChatModal">
+            <div class="modal-content search-chat-modal-content">
+                <div class="modal-header">
+                    <h3>Search Chat Messages</h3>
+                    <button class="modal-close" id="closeSearchChat">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="search-chat-input-container">
+                        <input type="text" id="searchChatInput" class="search-input" placeholder="Search all messages...">
+                    </div>
+                    <div id="searchChatResults" class="search-chat-results"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- History Dialog -->
+        <div class="modal" id="historyModal">
+            <div class="modal-content history-modal-content">
+                <div class="modal-header">
+                    <h3>Chat History</h3>
+                    <button class="modal-close" id="closeHistory" onclick="document.getElementById('historyModal').style.display='none'">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="historyList" class="history-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <div class="logo">
+                        <img src="/logo/omnix.png" alt="Omnix" width="36" height="36" style="border-radius: 8px;">
+                    </div>
+                    <h1 class="app-title">Omnix</h1>
+                </div>
+                <div class="header-right">
+                    <div class="status-container">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span class="status-text" id="statusText">Connecting...</span>
+                    </div>
+                    <!-- XTTS Status -->
+                    <div class="status-container xtts-status" id="xttsStatusContainer" title="Click to manage XTTS">
+                        <span class="status-dot" id="xttsStatusDot"></span>
+                        <span class="status-text" id="xttsStatusText">TTS: Checking...</span>
+                    </div>
+                    <!-- Parakeet STT Status -->
+                    <div class="status-container xtts-status" id="sttStatusContainer" title="Click to manage STT">
+                        <span class="status-dot" id="sttStatusDot"></span>
+                        <span class="status-text" id="sttStatusText">STT: Checking...</span>
+                    </div>
+                    <select id="modelSelect" class="model-select">
+                        <option value="">Loading models...</option>
+                    </select>
+                    <button id="llmModelBtn" class="llm-model-btn" title="LLM Model Manager - Download GGUF models">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M7 10L12 15L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <select id="ttsSpeaker" class="speaker-select-header">
+                        <option value="en">Loading...</option>
+                    </select>
+<!-- Token Counter -->
+                    <div id="tokenCounter" class="token-counter" title="Token usage">
+                        <span class="token-stat" title="Input tokens">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            0
+                        </span>
+                        <span class="token-stat" title="Output tokens">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            0
+                        </span>
+                        <span class="token-stat total" title="Total tokens">0 total</span>
+                    </div>
+                    <span id="tokenRate" class="token-rate" style="display: none;">0 tok/s</span>
+                    
+                    <!-- Stop Generation Button -->
+                    <button id="stopGenerationBtn" class="stop-generation-btn" style="display: none;" title="Stop generating">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <rect x="6" y="6" width="12" height="12" fill="currentColor" rx="2"/>
+                        </svg>
+                    </button>
+                    
+                    <!-- Theme Toggle -->
+                    <button id="themeToggle" class="theme-toggle-btn" title="Toggle theme">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    
+                    <button id="clearBtn" class="clear-btn" title="Clear chat">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 6H5H21" stroke="currentColor" stroke-width="2"/>
+                            <path d="M19 6V20C19 21 18 22 17 22H7C6 22 5 21 5 20V6" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Chat Container -->
+            <main class="chat-container" id="chatContainer">
+                <!-- Regular Chat View -->
+                <div class="welcome-message" id="welcomeMessage">
+                    <div class="welcome-icon">
+                        <img src="/logo/omnix.png" alt="Omnix" width="64" height="64" style="border-radius: 12px;">
+                    </div>
+                    <h2>Welcome to Omnix</h2>
+                    <p>Start a conversation with your AI assistant.</p>
+                </div>
+                
+                <div class="messages" id="messages"></div>
+                
+                <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </main>
+
+
+            <!-- Input Area -->
+            <footer class="input-area">
+                <!-- Conversation Mode Controls -->
+                <div class="conversation-controls" id="conversationControls" style="display: none;">
+                    <div class="conversation-header">
+                        <span class="conversation-status" id="conversationStatus">Voice Mode</span>
+                        <span class="tts-lang-label">TTS:</span>
+                    </div>
+                </div>
+                
+                <div class="input-container">
+                    <button id="micBtn" class="mic-btn" title="Hold to speak (Voice Mode)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <input type="file" id="fileInput" multiple accept="image/*,.pdf,.docx,.txt,.csv" style="display: none;">
+                    <button id="fileBtn" class="mic-btn" title="Attach files or images">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M21.44 11.05L12.25 20.24C11.1242 21.3658 9.59723 21.9983 8.005 21.9983C6.41277 21.9983 4.88583 21.3658 3.76 20.24C2.63417 19.1142 2.00166 17.5872 2.00166 15.995C2.00166 14.4028 2.63417 12.8758 3.76 11.75L12.33 3.17C13.0806 2.42608 14.0999 2 15.16 2C16.2201 2 17.2394 2.42608 17.99 3.17C18.74 3.91392 19.1699 4.92751 19.1699 5.98C19.1699 7.03249 18.74 8.04608 17.99 8.79L9.41 17.37C9.03472 17.7413 8.52573 17.9472 7.995 17.9472C7.46428 17.9472 6.95528 17.7413 6.58 17.37C6.20473 16.9987 5.995 16.497 5.995 15.975C5.995 15.453 6.20473 14.9513 6.58 14.58L14.59 6.58" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <textarea 
+                        id="messageInput" 
+                        class="message-input" 
+                        placeholder="Type your message..."
+                        rows="1"
+                        autocomplete="off"
+                    ></textarea>
+                    <button id="sendBtn" class="send-btn" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M22 2L11 13" stroke="currentColor" stroke-width="2"/>
+                            <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
+                    <button id="conversationToggle" class="conversation-toggle" title="Voice Mode - Talk to AI with your voice">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 14.74C13.81 13.47 15 11.38 15 9C15 5.13 11.87 2 8 2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 17V21M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </footer>
+            <div id="attachmentPreview" class="attachment-preview"></div>
+
+            <!-- Voice Mode View - separate from chat, replaces chat+footer when active -->
+            <div class="conversation-chat-view" id="conversationChatView">
+                <div class="conversation-chat-header">
+                    <div class="mode-indicator">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 14.74C13.81 13.47 15 11.38 15 9C15 5.13 11.87 2 8 2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 17V21M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>Voice Mode</span>
+                    </div>
+                    <button id="toggleMessagesBtn" class="toggle-messages-btn" title="Toggle message display">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Messages</span>
+                    </button>
+                    <button id="alwaysListeningBtn" class="always-listening-btn" title="Toggle always listening - when ON, automatically listens after AI responds">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span class="auto-label">Auto: OFF</span>
+                    </button>
+                    <button id="exitConversationBtn" class="exit-conversation-btn" title="Exit Voice Mode">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        Exit
+                    </button>
+                </div>
+
+                <div class="conversation-messages" id="conversationMessages"></div>
+
+                <!-- Circle Indicator in Middle -->
+                <div class="conversation-circle-indicator" id="circleIndicator">
+                    <div class="circle-indicator">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2C8.13 2 5 5.13 5 9C5 11.38 6.19 13.47 8 14.74V17" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 14.74C13.81 13.47 15 11.38 15 9C15 5.13 11.87 2 8 2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 17V21M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <!-- Tap to Talk Button (shown when auto is OFF) -->
+                    <button id="tapToTalkBtn" class="tap-to-talk-btn" title="Tap to talk">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>Tap to Talk</span>
+                    </button>
+                </div>
+
+                <div class="conversation-status-message" id="conversationStatusMessage" style="display: none;">
+                    Ready to chat
+                </div>
+
+                <div class="conversation-input-container" id="conversationInputContainer">
+                    <div class="conversation-input-wrapper">
+                        <button id="conversationMicBtn" class="conversation-mic-btn" title="Hold to speak">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 1C10.9 1 10 1.9 10 3V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V3C14 1.9 13.1 1 12 1Z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
+                                <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                        <input type="text" id="conversationInput" class="message-input" placeholder="Type or hold mic to speak...">
+                        <button id="conversationSendBtn" class="send-btn" disabled>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M22 2L11 13" stroke="currentColor" stroke-width="2"/>
+                                <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button class="modal-close" id="closeSettings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Provider Selection -->
+    <div class="setting-group">
+        <label>Provider</label>
+        <select id="providerSelect" class="model-select">
+            <option value="cerebras">Cerebras (Fastest)</option>
+            <option value="openrouter">OpenRouter (Cloud)</option>
+            <option value="openai_compatible">OpenAI Compatible (Custom)</option>
+            <option value="lmstudio">LM Studio (Local)</option>
+            <option value="llamacpp">llama.cpp (Local)</option>
+        </select>
+    </div>
+
+                <!-- OpenAI Compatible Settings -->
+                <div id="openaiCompatibleSettings" style="display: none;">
+                    <div class="setting-group">
+                        <label>API Base URL</label>
+                        <input type="text" id="openaiCompatibleUrl" class="system-prompt-input" placeholder="https://your-api.com/v1">
+                        <p style="font-size: 0.75rem; color: #666; margin: 4px 0 0 0;">Base URL for the OpenAI-compatible API (e.g., Azure OpenAI, custom deployment)</p>
+                    </div>
+                    <div class="setting-group">
+                        <label>API Key</label>
+                        <input type="password" id="openaiCompatibleApiKey" class="system-prompt-input" placeholder="Your API key">
+                    </div>
+                    <div class="setting-group">
+                        <label>Model ID</label>
+                        <input type="text" id="openaiCompatibleModel" class="system-prompt-input" placeholder="gpt-4, gpt-3.5-turbo, your-custom-model">
+                    </div>
+                    <div class="setting-group">
+                        <label>Custom Headers</label>
+                        <div id="customHeadersContainer" class="custom-headers-container">
+                            <!-- Custom headers will be added here dynamically -->
+                        </div>
+                        <button id="addCustomHeaderBtn" class="btn-secondary" style="margin-top: 8px; width: 100%;">+ Add Header</button>
+                    </div>
+                    <div class="setting-group">
+                        <label>Thinking Budget (0 = disabled)</label>
+                        <input type="number" id="openaiCompatibleThinking" class="system-prompt-input" value="0">
+                    </div>
+                    <div class="setting-group">
+                        <label>Timeout (seconds)</label>
+                        <input type="number" id="openaiCompatibleTimeout" class="system-prompt-input" value="300">
+                    </div>
+                    <p style="margin-top: 12px; font-size: 0.8rem; color: #666;">
+                        💡 Supports Azure OpenAI, custom deployments, and any OpenAI-compatible API
+                    </p>
+                </div>
+
+                <!-- LM Studio Settings -->
+                <div id="lmstudioSettings">
+                    <div class="setting-group">
+                        <label>Base URL</label>
+                        <input type="text" id="lmstudioUrl" class="system-prompt-input" value="http://localhost:1234">
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="lmstudioDirect" style="margin-right: 8px;">
+                            Direct Mode (bypasses server, faster response)
+                        </label>
+                        <p class="setting-hint">When enabled, calls LMStudio directly from browser. Disable if CORS issues occur.</p>
+                    </div>
+                </div>
+
+                <!-- OpenRouter Settings -->
+                <div id="openrouterSettings" style="display: none;">
+                    <div class="setting-group">
+                        <label>API Key</label>
+                        <input type="password" id="openrouterApiKey" class="system-prompt-input" placeholder="sk-or-...">
+                    </div>
+                    <div class="setting-group">
+                        <label>Model</label>
+                        <input type="text" id="openrouterModel" class="system-prompt-input" value="openai/gpt-4o-mini">
+                        <button id="loadOpenRouterModels" class="btn-secondary" style="margin-top: 8px;">Load Models</button>
+                    </div>
+                    <div class="setting-group">
+                        <label>Context Size</label>
+                        <input type="number" id="openrouterContext" class="system-prompt-input" value="128000">
+                    </div>
+                    <div class="setting-group">
+                        <label>Thinking Budget (0 = disabled)</label>
+                        <input type="number" id="openrouterThinking" class="system-prompt-input" value="0">
+                    </div>
+                </div>
+
+                <!-- Cerebras Settings -->
+                <div id="cerebrasSettings" style="display: none;">
+                    <div class="setting-group">
+                        <label>API Key</label>
+                        <input type="password" id="cerebrasApiKey" class="system-prompt-input" placeholder="Get from cloud.cerebras.com">
+                    </div>
+                    <div class="setting-group">
+                        <label>Model</label>
+                        <select id="cerebrasModel" class="model-select">
+                            <option value="">-- Enter API key and load models --</option>
+                        </select>
+                        <button id="loadCerebrasModels" class="btn-secondary" style="margin-top: 8px;">Load Models</button>
+                    </div>
+                    <p style="margin-top: 12px; font-size: 0.8rem; color: #10b981;">
+                        ⚡ Cerebras offers the lowest latency cloud inference!
+                    </p>
+                </div>
+
+                <!-- llama.cpp Settings -->
+                <div id="llamacppSettings" style="display: none;">
+                    <!-- llama.cpp Server Binary Download Section -->
+                    <div class="setting-group">
+                        <label>Download llama.cpp Server</label>
+                        <p style="font-size: 0.75rem; color: #666; margin-bottom: 8px;">Download the llama.cpp server binary to run GGUF models locally</p>
+                        <button id="downloadLlamaCppServerBtn" class="btn-primary" style="width: 100%; margin-bottom: 8px;">Download llama.cpp Server</button>
+                        <div id="llamacppServerDownloadProgress" class="download-progress" style="display: none; margin-top: 8px;">
+                            <div class="download-item">
+                                <div class="download-info">
+                                    <span class="download-filename" id="llamacppServerDownloadFilename">llama-server.exe</span>
+                                    <span class="download-status" id="llamacppServerDownloadStatus">Downloading...</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div id="llamacppServerDownloadProgressBar" class="progress-bar"></div>
+                                </div>
+                                <div class="download-stats">
+                                    <span id="llamacppServerDownloadSpeed">0 MB/s</span>
+                                    <span id="llamacppServerDownloadEta">--:--</span>
+                                    <span id="llamacppServerDownloadPercent">0%</span>
+                                </div>
+                                <div class="download-controls">
+                                    <button id="llamacppServerStopDownloadBtn" class="btn-danger">Stop</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="llamacppServerStatus" style="margin-top: 8px; font-size: 0.8rem;"></div>
+                    </div>
+                    
+                    <!-- Server Start/Stop Controls -->
+                    <div class="setting-group">
+                        <label>Server Control</label>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="startLlamaCppServerBtn" class="btn-primary" style="flex: 1;">Start Server</button>
+                            <button id="stopLlamaCppServerBtn" class="btn-danger" style="flex: 1;">Stop Server</button>
+                        </div>
+                    </div>
+                    
+                    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 16px 0;">
+                    
+                    <div class="setting-group">
+                        <label>Model Download Location</label>
+                        <select id="llamacppDownloadLocation" class="model-select">
+                            <option value="server">models/server (for llama.cpp server)</option>
+                            <option value="llm">models/llm (general storage)</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label>Base URL</label>
+                        <input type="text" id="llamacppUrl" class="system-prompt-input" value="http://localhost:8080">
+                    </div>
+                    <div class="setting-group">
+                        <label>Model (GGUF file)</label>
+                        <select id="llamacppModel" class="model-select">
+                            <option value="">-- Select a model --</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="llamacppAutoStart" style="margin-right: 8px;">
+                            Auto-start llama.cpp server when saving settings
+                        </label>
+                        <p style="margin-top: 4px; font-size: 0.75rem; color: #666;">When enabled, the server will start automatically with the selected model.</p>
+                    </div>
+                    <div class="setting-group">
+                        <label>HuggingFace Token (optional, for private models)</label>
+                        <input type="password" id="huggingfaceToken" class="system-prompt-input" placeholder="hf_...">
+                    </div>
+                    <div class="setting-group">
+                        <label>Download New Model</label>
+                        <input type="text" id="llamacppDownloadUrl" class="system-prompt-input" placeholder="https://huggingface.co/<org>/<model>/resolve/main/model.gguf">
+                        <button id="llamacppDownloadBtn" class="btn-secondary" style="margin-top: 8px; width: 100%;">Download Model</button>
+                    </div>
+                    <!-- Download Progress for llama.cpp -->
+                    <div id="llamacppDownloadProgress" class="download-progress" style="display: none; margin-top: 12px;">
+                        <div class="download-item">
+                            <div class="download-info">
+                                <span class="download-filename" id="llamacppDownloadFilename">model.gguf</span>
+                                <span class="download-status" id="llamacppDownloadStatus">Downloading...</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div id="llamacppDownloadProgressBar" class="progress-bar"></div>
+                            </div>
+                            <div class="download-stats">
+                                <span id="llamacppDownloadSpeed">0 MB/s</span>
+                                <span id="llamacppDownloadEta">--:--</span>
+                                <span id="llamacppDownloadPercent">0%</span>
+                            </div>
+                            <div class="download-controls">
+                                <button id="llamacppPauseDownloadBtn" class="btn-secondary">Pause</button>
+                                <button id="llamacppResumeDownloadBtn" class="btn-secondary" style="display: none;">Resume</button>
+                                <button id="llamacppStopDownloadBtn" class="btn-danger">Stop</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p style="margin-top: 12px; font-size: 0.8rem; color: #666;">
+                        💻 Run llama.cpp server with: <code>llama-server -m model.gguf -c 4096 -ngl 999</code>
+                    </p>
+                </div>
+
+<!-- System Prompt Presets -->
+                <div class="setting-group">
+                    <label>System Prompt Presets</label>
+                    <div class="preset-dropdown-container">
+                        <select id="systemPromptPreset" class="model-select">
+                            <option value="">-- Select Preset --</option>
+                        </select>
+                    </div>
+                    <p style="margin-top: 4px; font-size: 0.75rem; color: #666;">Choose a preset to quickly configure the AI's personality.</p>
+                </div>
+
+                <!-- Global System Prompt (for all new sessions) -->
+                <div class="setting-group">
+                    <label>Global System Prompt (for new chats)</label>
+                    <textarea id="globalSystemPrompt" class="system-prompt-input" rows="3" placeholder="You are a helpful AI assistant."></textarea>
+                    <p style="margin-top: 4px; font-size: 0.75rem; color: #666;">This will be used for all new chat sessions.</p>
+                </div>
+
+                <!-- Session System Prompt -->
+                <div class="setting-group">
+                    <label>Current Session System Prompt</label>
+                    <textarea id="systemPrompt" class="system-prompt-input" rows="3" placeholder="You are a helpful AI assistant."></textarea>
+                </div>
+
+                <!-- VAD Sensitivity -->
+                <div class="setting-group">
+                    <label>Voice Activity Detection Sensitivity</label>
+                    <div class="vad-sensitivity-container">
+                        <div class="vad-slider-row">
+                            <input type="range" id="vadSensitivity" class="vad-slider" min="1" max="10" value="5">
+                            <span id="vadSensitivityValue" class="vad-value">Medium sensitivity</span>
+                        </div>
+                        <p style="font-size: 0.75rem; color: #666; margin: 0;">Higher sensitivity detects softer speech. Lower sensitivity reduces false triggers.</p>
+                    </div>
+                </div>
+
+                <button id="saveSettings" class="btn-primary">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Voice Clone Modal -->
+    <div class="modal" id="voiceCloneModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Clone Voice</h3>
+                <button class="modal-close" id="closeVoiceClone">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 16px; color: #888;">Create a custom voice clone by recording or uploading an audio file (10+ seconds recommended).</p>
+                
+                <div class="setting-group">
+                    <label>Voice Name</label>
+                    <input type="text" id="voiceName" class="system-prompt-input" placeholder="my_voice">
+                </div>
+                
+                <div class="setting-group">
+                    <label>Language</label>
+                    <select id="cloneLanguage" class="model-select">
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="zh-cn">Chinese</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>Gender</label>
+                    <select id="voiceGender" class="model-select">
+                        <option value="neutral">Neutral</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                    </select>
+                </div>
+                
+                <!-- Tab selection for Record vs Upload -->
+                <div class="voice-clone-tabs">
+                    <button id="recordTabBtn" class="voice-tab-btn active" onclick="showVoiceTab('record')">Record</button>
+                    <button id="uploadTabBtn" class="voice-tab-btn" onclick="showVoiceTab('upload')">Upload File</button>
+                </div>
+                
+                <!-- Record Tab -->
+                <div id="recordTab" class="voice-tab-content active">
+                    <div class="voice-recorder">
+                        <button id="recordVoiceBtn" class="record-btn">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="4" fill="currentColor"/>
+                            </svg>
+                            <span>Hold to Record</span>
+                        </button>
+                        <div id="recordingStatus" class="recording-status"></div>
+                    </div>
+                </div>
+                
+                <!-- Upload Tab -->
+                <div id="uploadTab" class="voice-tab-content">
+                    <div class="voice-uploader">
+                        <div class="upload-drop-zone" id="uploadDropZone">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style="margin-bottom: 8px; opacity: 0.5;">
+                                <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M17 8L12 3L7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 3V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <p style="color: #888; margin: 0;">Drag & drop audio file here</p>
+                            <p style="color: #666; font-size: 0.8rem; margin: 8px 0 0 0;">or</p>
+                            <input type="file" id="audioFileInput" accept=".wav,.mp3,.ogg,.flac,.m4a,.webm,.aac" style="display: none;">
+                            <button id="browseAudioBtn" class="btn-secondary" style="margin-top: 8px;">Browse Files</button>
+                            <p style="color: #555; font-size: 0.75rem; margin-top: 12px;">Supported: WAV, MP3, OGG, FLAC, M4A, WebM, AAC</p>
+                        </div>
+                        <div id="uploadedFileInfo" class="uploaded-file-info" style="display: none;">
+                            <div class="file-info-row">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="color: #10b981;">
+                                    <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <span id="uploadedFileName">audio_file.wav</span>
+                                <button id="removeUploadedFile" class="remove-file-btn" title="Remove file">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Audio Preview (for both record and upload) -->
+                <audio id="recordedPreview" controls style="display:none; width: 100%; margin-top: 12px;"></audio>
+                
+                <button id="saveVoiceBtn" class="btn-primary" style="width: 100%; margin-top: 16px;" disabled>Save Voice</button>
+                
+                <!-- Manage Voices Section -->
+                <div class="manage-voices-section" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <h4 style="margin-bottom: 12px; font-size: 0.9rem; color: var(--text-secondary);">Saved Voices</h4>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">Click the edit button to add a personality for each voice.</p>
+                    <div id="savedVoicesList" class="saved-voices-list">
+                        <p style="color: var(--text-muted); font-size: 0.8rem;">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- XTTS Control Modal -->
+    <div class="modal" id="xttsControlModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>XTTS Server Control</h3>
+                <button class="modal-close" id="closeXttSControl">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="xtts-control-panel">
+                    <div class="xtts-status-display">
+                        <span class="status-dot large" id="xttsModalStatusDot"></span>
+                        <span id="xttsModalStatusText">Checking...</span>
+                    </div>
+                    
+                    <div class="xtts-control-buttons">
+                        <button id="xttsStartBtn" class="btn-primary">Start</button>
+                        <button id="xttsStopBtn" class="btn-danger">Stop</button>
+                        <button id="xttsRestartBtn" class="btn-secondary">Restart</button>
+                    </div>
+                    
+                    <div class="xtts-logs-container">
+                        <h4>Server Output</h4>
+                        <div class="xtts-logs" id="xttsLogs">
+                            <pre id="xttsLogsContent">No logs yet...</pre>
+                        </div>
+                        <button id="xttsRefreshLogs" class="btn-secondary" style="margin-top: 8px;">Refresh Logs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parakeet STT Control Modal -->
+    <div class="modal" id="sttControlModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Parakeet STT Server Control</h3>
+                <button class="modal-close" id="closeSttControl">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="xtts-control-panel">
+                    <div class="xtts-status-display">
+                        <span class="status-dot large" id="sttModalStatusDot"></span>
+                        <span id="sttModalStatusText">Checking...</span>
+                    </div>
+                    
+                    <div class="xtts-control-buttons">
+                        <button id="sttStartBtn" class="btn-primary">Start</button>
+                        <button id="sttStopBtn" class="btn-danger">Stop</button>
+                        <button id="sttRestartBtn" class="btn-secondary">Restart</button>
+                    </div>
+                    
+                    <div class="xtts-logs-container">
+                        <h4>Server Output</h4>
+                        <div class="xtts-logs" id="sttLogs">
+                            <pre id="sttLogsContent">No logs yet...</pre>
+                        </div>
+                        <button id="sttRefreshLogs" class="btn-secondary" style="margin-top: 8px;">Refresh Logs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Podcast Modal -->
+    <div class="modal" id="podcast-modal">
+        <div class="modal-content podcast-modal-content">
+            <div class="modal-header">
+                <h3>🎙️ AI Podcast Generator</h3>
+                <button class="modal-close" onclick="closePodcastModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Episode Setup Section -->
+                <div class="podcast-setup-section">
+                    <h4>1. Episode Setup</h4>
+                    <div class="podcast-setup-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Episode Title</label>
+                                <input type="text" id="podcast-title" class="podcast-input" placeholder="My Awesome Podcast Episode">
+                            </div>
+                            <div class="form-group">
+                                <label>Format</label>
+                                <select id="podcast-format" class="podcast-select">
+                                    <option value="conversation">Conversation (Multi-Speaker)</option>
+                                    <option value="monologue">Monologue (Single Host)</option>
+                                    <option value="interview">Interview Style</option>
+                                    <option value="debate">Debate Format</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Topic / Description</label>
+                            <textarea id="podcast-topic" class="podcast-textarea" rows="2" placeholder="Describe your podcast topic..."></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Duration</label>
+                                <select id="podcast-length" class="podcast-select">
+                                    <option value="short">Short (~5 min)</option>
+                                    <option value="medium" selected>Medium (~15 min)</option>
+                                    <option value="long">Long (~30 min)</option>
+                                    <option value="extended">Extended (~60 min)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Speakers Section -->
+                <div class="podcast-speakers-section">
+                    <h4>2. Configure Speakers</h4>
+                    <div id="podcast-speakers-list" class="podcast-speakers-list">
+                        <!-- Speakers will be dynamically added here -->
+                    </div>
+                    <button id="podcast-add-speaker-btn" class="btn-secondary" onclick="addPodcastSpeaker()">
+                        + Add Speaker
+                    </button>
+                </div>
+                
+                <!-- Talking Points Section -->
+                <div class="podcast-points-section">
+                    <h4>3. Talking Points (Optional)</h4>
+                    <textarea id="podcast-points" class="podcast-textarea" rows="3" placeholder="Enter key points to cover, one per line..."></textarea>
+                </div>
+                
+                <!-- Generate Button -->
+                <div class="podcast-actions">
+                    <button id="podcast-generate-outline-btn" class="btn-secondary" onclick="generatePodcastOutline()">Generate Outline</button>
+                    <button id="podcast-generate-btn" class="btn-primary" onclick="generatePodcast()">Generate Episode</button>
+                </div>
+                
+                <!-- Progress Section -->
+                <div id="podcast-progress" class="podcast-progress" style="display: none;">
+                    <h4>Generating Episode...</h4>
+                    <div class="progress-bar-container">
+                        <div id="podcast-progress-bar" class="progress-bar"></div>
+                    </div>
+                    <p id="podcast-progress-text">Starting...</p>
+                    <div id="podcast-transcript-preview" class="podcast-transcript-preview"></div>
+                </div>
+                
+                <!-- Player Section -->
+                <div id="podcast-player" class="podcast-player" style="display: none;">
+                    <h4>Your Episode</h4>
+                    <audio id="podcast-audio" controls style="width: 100%;"></audio>
+                    <div class="podcast-player-actions">
+                        <button onclick="downloadPodcast()" class="btn-secondary">Download Audio</button>
+                        <button onclick="savePodcastDraft()" class="btn-secondary">Save Draft</button>
+                    </div>
+                </div>
+                
+                <!-- Episodes Library -->
+                <div class="podcast-library-section">
+                    <h4>📚 Episode Library</h4>
+                    <div id="podcast-episodes-list" class="podcast-episodes-list">
+                        <p style="color: var(--text-muted);">Loading episodes...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM Model Download Modal -->
+    <div class="modal" id="llmModelModal">
+        <div class="modal-content llm-model-modal-content">
+            <div class="modal-header">
+                <h3>🤖 LLM Model Manager</h3>
+                <button class="modal-close" id="closeLlmModel">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Download Section -->
+                <div class="llm-download-section">
+                    <h4>Download New Model</h4>
+                    <p style="font-size: 0.8rem; color: #888; margin-bottom: 12px;">Enter a HuggingFace model page URL to see available GGUF files, or paste a direct download link</p>
+                    
+                    <div class="setting-group">
+                        <label>HuggingFace Token (optional, for private models)</label>
+                        <input type="password" id="hfToken" class="system-prompt-input" placeholder="hf_...">
+                    </div>
+                    
+                    <!-- Option 1: Model page URL with dropdown -->
+                    <div class="setting-group">
+                        <label>HuggingFace Model Page URL</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="modelPageUrl" class="system-prompt-input" placeholder="https://huggingface.co/ggml-org/Devstral-Small-2-24B-Instruct-2512-GGUF" style="flex: 1;">
+                            <button id="fetchFilesBtn" class="btn-secondary" style="white-space: nowrap;">Fetch Files</button>
+                        </div>
+                    </div>
+                    
+                    <!-- GGUF Files Dropdown -->
+                    <div class="setting-group" id="ggufFilesGroup" style="display: none;">
+                        <label>Available GGUF Files</label>
+                        <select id="ggufFilesSelect" class="model-select">
+                            <option value="">-- Select a file to download --</option>
+                        </select>
+                        <button id="downloadSelectedBtn" class="btn-primary" style="width: 100%; margin-top: 8px;">Download Selected</button>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 12px 0; color: #666; font-size: 0.8rem;">— or —</div>
+                    
+                    <!-- Option 2: Direct URL -->
+                    <div class="setting-group">
+                        <label>Direct Download URL</label>
+                        <input type="text" id="modelDownloadUrl" class="system-prompt-input" placeholder="https://huggingface.co/<org>/<model>/resolve/main/model.gguf">
+                    </div>
+                    
+                    <button id="startDownloadBtn" class="btn-primary" style="width: 100%;">Download Model</button>
+                    
+                    <!-- Download Progress -->
+                    <div id="downloadProgress" class="download-progress" style="display: none;">
+                        <div class="download-item">
+                            <div class="download-info">
+                                <span class="download-filename" id="downloadFilename">model.gguf</span>
+                                <span class="download-status" id="downloadStatus">Downloading...</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div id="downloadProgressBar" class="progress-bar"></div>
+                            </div>
+                            <div class="download-stats">
+                                <span id="downloadSpeed">0 MB/s</span>
+                                <span id="downloadEta">--:--</span>
+                                <span id="downloadPercent">0%</span>
+                            </div>
+                            <div class="download-controls">
+                                <button id="pauseDownloadBtn" class="btn-secondary">Pause</button>
+                                <button id="resumeDownloadBtn" class="btn-secondary" style="display: none;">Resume</button>
+                                <button id="stopDownloadBtn" class="btn-danger">Stop</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Existing Models Section -->
+                <div class="llm-models-section">
+                    <h4 style="margin-top: 24px;">Installed Models</h4>
+                    <div id="llmModelsList" class="llm-models-list">
+                        <p style="color: var(--text-muted);">Loading models...</p>
+                    </div>
+                </div>
+                
+                <p style="margin-top: 16px; font-size: 0.75rem; color: #666;">
+                    💾 Models are stored in: <code>models/llm/</code>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audiobook Modal -->
+    <div class="modal" id="audiobook-modal">
+        <div class="modal-content audiobook-modal-content">
+            <div class="modal-header">
+                <h3>📖 Audiobook Generator</h3>
+                <button class="modal-close" onclick="closeAudiobookModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Audiobook Library Section -->
+                <div class="audiobook-library-section" id="audiobook-library-section">
+                    <h4>📚 Audiobook Library</h4>
+                    <div class="audiobook-library-list" id="audiobook-library-list">
+                        <p class="no-audiobooks">Loading…</p>
+                    </div>
+                </div>
+
+                <!-- Input Section -->
+                <div class="audiobook-input-section">
+                    <h4>1. Input Text</h4>
+                    <div class="audiobook-input-options">
+                        <div class="audiobook-file-upload">
+                            <label>Upload File (TXT or PDF):</label>
+                            <input type="file" id="audiobook-file" accept=".txt,.pdf" class="file-input">
+                        </div>
+                        <div class="audiobook-or">— or —</div>
+                        <div class="audiobook-text-input">
+                            <label>Paste Text:</label>
+                            <textarea id="audiobook-text" class="audiobook-textarea" placeholder="Paste your text here, or upload a file above...
+
+Example format for multi-speaker:
+Narrator: The sun was setting over the hills.
+Sofia: What a beautiful evening!
+Morgan: Indeed, it reminds me of home."></textarea>
+                        </div>
+                    </div>
+                    <div class="audiobook-action-buttons">
+                        <button id="audiobook-analyze-btn" class="btn-primary">Analyze Text</button>
+                        <button id="audiobook-ai-structure-btn" class="btn-secondary" title="Use AI to intelligently parse dialogue, detect speakers and assign voices">🤖 AI Structure</button>
+                        <button id="audiobook-direct-btn" class="btn-secondary" style="display:none;" title="Apply AI narration direction: pacing, emotion, emphasis">🎬 AI Direct</button>
+                    </div>
+                </div>
+
+                <!-- AI Structure Status -->
+                <div id="audiobook-ai-status" style="display:none; margin: 8px 0; padding: 8px 12px; background: var(--bg-secondary, #1a1a2e); border-radius: 6px; font-size: 0.85rem; color: var(--text-secondary, #aaa);"></div>
+
+                <!-- Speakers Section -->
+                <div id="audiobook-speakers-section" class="audiobook-speakers-section" style="display: none;">
+                    <h4>2. Assign Voices</h4>
+                    <div id="audiobook-speakers-list"></div>
+
+                    <!-- Voice Identity Memory Panel -->
+                    <div id="audiobook-voice-panel" class="audiobook-voice-panel" style="display:none;">
+                        <h5>🎭 Character Voice Identity</h5>
+                        <p class="voice-panel-hint">Automatically mirrored from Individual Speakers and saved per book for future sessions.</p>
+                        <div id="audiobook-voice-panel-list"></div>
+                        <button class="btn-secondary voice-panel-save-btn" style="margin-top:8px; font-size:0.8rem;" disabled>🔄 Auto-synced from Individual Speakers</button>
+                    </div>
+
+                    <button id="audiobook-generate-btn" class="btn-primary" style="margin-top: 16px;">Generate Audiobook</button>
+                </div>
+                
+                <!-- Progress Section -->
+                <div id="audiobook-progress" class="audiobook-progress" style="display: none;">
+                    <h4>3. Generating...</h4>
+                    <div class="progress-bar-container">
+                        <div id="audiobook-progress-bar" class="progress-bar"></div>
+                    </div>
+                    <p id="audiobook-progress-text">Starting...</p>
+                </div>
+                
+                <!-- Player Section -->
+                <div id="audiobook-player" class="audiobook-player" style="display: none;">
+                    <h4>4. Listen</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM Model Download Modal -->
+    <div class="modal" id="llmModelModal">
+        <div class="modal-content llm-model-modal-content">
+            <div class="modal-header">
+                <h3>🤖 LLM Model Manager</h3>
+                <button class="modal-close" id="closeLlmModel">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Download Section -->
+                <div class="llm-download-section">
+                    <h4>Download New Model</h4>
+                    <p style="font-size: 0.8rem; color: #888; margin-bottom: 12px;">Enter a HuggingFace model page URL to see available GGUF files, or paste a direct download link</p>
+                    
+                    <div class="setting-group">
+                        <label>HuggingFace Token (optional, for private models)</label>
+                        <input type="password" id="hfToken" class="system-prompt-input" placeholder="hf_...">
+                    </div>
+                    
+                    <!-- Option 1: Model page URL with dropdown -->
+                    <div class="setting-group">
+                        <label>HuggingFace Model Page URL</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="modelPageUrl" class="system-prompt-input" placeholder="https://huggingface.co/ggml-org/Devstral-Small-2-24B-Instruct-2512-GGUF" style="flex: 1;">
+                            <button id="fetchFilesBtn" class="btn-secondary" style="white-space: nowrap;">Fetch Files</button>
+                        </div>
+                    </div>
+                    
+                    <!-- GGUF Files Dropdown -->
+                    <div class="setting-group" id="ggufFilesGroup" style="display: none;">
+                        <label>Available GGUF Files</label>
+                        <select id="ggufFilesSelect" class="model-select">
+                            <option value="">-- Select a file to download --</option>
+                        </select>
+                        <button id="downloadSelectedBtn" class="btn-primary" style="width: 100%; margin-top: 8px;">Download Selected</button>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 12px 0; color: #666; font-size: 0.8rem;">— or —</div>
+                    
+                    <!-- Option 2: Direct URL -->
+                    <div class="setting-group">
+                        <label>Direct Download URL</label>
+                        <input type="text" id="modelDownloadUrl" class="system-prompt-input" placeholder="https://huggingface.co/<org>/<model>/resolve/main/model.gguf">
+                    </div>
+                    
+                    <button id="startDownloadBtn" class="btn-primary" style="width: 100%;">Download Model</button>
+                    
+                    <!-- Download Progress -->
+                    <div id="downloadProgress" class="download-progress" style="display: none;">
+                        <div class="download-item">
+                            <div class="download-info">
+                                <span class="download-filename" id="downloadFilename">model.gguf</span>
+                                <span class="download-status" id="downloadStatus">Downloading...</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div id="downloadProgressBar" class="progress-bar"></div>
+                            </div>
+                            <div class="download-stats">
+                                <span id="downloadSpeed">0 MB/s</span>
+                                <span id="downloadEta">--:--</span>
+                                <span id="downloadPercent">0%</span>
+                            </div>
+                            <div class="download-controls">
+                                <button id="pauseDownloadBtn" class="btn-secondary">Pause</button>
+                                <button id="resumeDownloadBtn" class="btn-secondary" style="display: none;">Resume</button>
+                                <button id="stopDownloadBtn" class="btn-danger">Stop</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Existing Models Section -->
+                <div class="llm-models-section">
+                    <h4 style="margin-top: 24px;">Installed Models</h4>
+                    <div id="llmModelsList" class="llm-models-list">
+                        <p style="color: var(--text-muted);">Loading models...</p>
+                    </div>
+                </div>
+                
+                <p style="margin-top: 16px; font-size: 0.75rem; color: #666;">
+                    💾 Models are stored in: <code>models/llm/</code>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- XTTS Control Modal -->
+    <div class="modal" id="xttsControlModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>XTTS Server Control</h3>
+                <button class="modal-close" id="closeXttSControl">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="xtts-control-panel">
+                    <div class="xtts-status-display">
+                        <span class="status-dot large" id="xttsModalStatusDot"></span>
+                        <span id="xttsModalStatusText">Checking...</span>
+                    </div>
+                    
+                    <div class="xtts-control-buttons">
+                        <button id="xttsStartBtn" class="btn-primary">Start</button>
+                        <button id="xttsStopBtn" class="btn-danger">Stop</button>
+                        <button id="xttsRestartBtn" class="btn-secondary">Restart</button>
+                    </div>
+                    
+                    <div class="xtts-logs-container">
+                        <h4>Server Output</h4>
+                        <div class="xtts-logs" id="xttsLogs">
+                            <pre id="xttsLogsContent">No logs yet...</pre>
+                        </div>
+                        <button id="xttsRefreshLogs" class="btn-secondary" style="margin-top: 8px;">Refresh Logs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parakeet STT Control Modal -->
+    <div class="modal" id="sttControlModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Parakeet STT Server Control</h3>
+                <button class="modal-close" id="closeSttControl">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="xtts-control-panel">
+                    <div class="xtts-status-display">
+                        <span class="status-dot large" id="sttModalStatusDot"></span>
+                        <span id="sttModalStatusText">Checking...</span>
+                    </div>
+                    
+                    <div class="xtts-control-buttons">
+                        <button id="sttStartBtn" class="btn-primary">Start</button>
+                        <button id="sttStopBtn" class="btn-danger">Stop</button>
+                        <button id="sttRestartBtn" class="btn-secondary">Restart</button>
+                    </div>
+                    
+                    <div class="xtts-logs-container">
+                        <h4>Server Output</h4>
+                        <div class="xtts-logs" id="sttLogs">
+                            <pre id="sttLogsContent">No logs yet...</pre>
+                        </div>
+                        <button id="sttRefreshLogs" class="btn-secondary" style="margin-top: 8px;">Refresh Logs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Voice Studio Modal -->
+    <div class="modal" id="voiceStudioModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🎙️ Voice Studio</h3>
+                <button class="modal-close" id="closeVoiceStudio">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 16px; color: #888;">Generate speech from text with emotion and voice controls.</p>
+
+                <div class="setting-group">
+                    <label for="vs-text">Text</label>
+                    <textarea id="vs-text" class="system-prompt-input" rows="4" maxlength="2000" placeholder="Enter text to speak (max 2000 chars)..."></textarea>
+                    <small id="vs-char-count" style="color:#666;">0 / 2000</small>
+                </div>
+
+                <div class="setting-group">
+                    <label for="vs-voice">Voice</label>
+                    <select id="vs-voice" class="model-select">
+                        <option value="">Loading voices...</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="vs-emotion">Emotion</label>
+                    <select id="vs-emotion" class="model-select">
+                        <option value="neutral">Neutral</option>
+                        <option value="calm">Calm</option>
+                        <option value="happy">Happy</option>
+                        <option value="sad">Sad</option>
+                        <option value="angry">Angry</option>
+                        <option value="dramatic">Dramatic</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="vs-speed">Speed: <span id="vs-speed-val">1.0</span></label>
+                    <input type="range" id="vs-speed" min="0.7" max="1.5" step="0.05" value="1.0" class="slider">
+                </div>
+
+                <div class="setting-group">
+                    <label for="vs-pitch">Pitch: <span id="vs-pitch-val">0</span></label>
+                    <input type="range" id="vs-pitch" min="-5" max="5" step="1" value="0" class="slider">
+                </div>
+
+                <button id="vs-generate" class="btn-primary" style="width:100%; margin-top:16px;">Generate</button>
+
+                <div id="vs-error" style="color:#ef4444; margin-top:8px; display:none;"></div>
+
+                <div id="vs-player-section" style="margin-top:16px; display:none;">
+                    <audio id="vs-player" controls style="width:100%;"></audio>
+                    <a id="vs-download" download="voice_studio.wav" style="display:inline-block; margin-top:8px; color:var(--accent); text-decoration:underline; cursor:pointer;">Download audio</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="imageModal" class="image-modal">
+        <span class="image-modal-close">&times;</span>
+        <img class="image-modal-content" id="imageModalImg">
+    </div>
+
+<script src="{{ url_for('static', filename='core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/state.js') }}"></script>
+    <script src="{{ url_for('static', filename='features.js') }}"></script>
+    <script src="{{ url_for('static', filename='websocket.js') }}"></script>
+    <script src="{{ url_for('static', filename='chat/chat-api.js') }}"></script>
+    <script src="{{ url_for('static', filename='chat/session-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='chat/message-renderer.js') }}"></script>
+    <script src="{{ url_for('static', filename='chat/audio-player.js') }}"></script>
+    <script src="{{ url_for('static', filename='chat/tts-queue.js') }}"></script>
+    <script src="{{ url_for('static', filename='chat/ws-client.js') }}"></script>
+    <script src="{{ url_for('static', filename='voice.js') }}"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "./audioInput.js": "/static/voice/audioInput.js?v=4",
+        "./audioOutput.js": "/static/voice/audioOutput.js?v=4",
+        "./sttClient.js": "/static/voice/sttClient.js?v=4",
+        "./ttsClient.js": "/static/voice/ttsClient.js?v=4",
+        "./llmClient.js": "/static/voice/llmClient.js?v=4",
+        "./voiceEngine.js": "/static/voice/voiceEngine.js?v=5",
+        "./voiceState.js": "/static/voice/voiceState.js?v=4",
+        "./voiceModeWrapper.js": "/static/voice/voiceModeWrapper.js?v=5"
+      }
+    }
+    </script>
+    <script type="module" src="{{ url_for('static', filename='voice/voiceModeWrapper.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='chat/chat.js') }}"></script>
+    <script src="{{ url_for('static', filename='audiobook.js') }}"></script>
+    <script src="{{ url_for('static', filename='podcast.js') }}"></script>
+    <script src="{{ url_for('static', filename='voice_studio.js') }}"></script>
+    <script src="{{ url_for('static', filename='controls.js') }}"></script>
+</body>
+</html>

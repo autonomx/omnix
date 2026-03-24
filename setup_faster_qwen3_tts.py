@@ -38,7 +38,7 @@ def install_faster_qwen3_tts():
     print("Installing faster-qwen3-tts library...")
     
     # Try to install from the local directory first
-    local_path = Path(__file__).parent / "models" / "tts" / "faster-qwen3-tts-main"
+    local_path = Path(__file__).parent / "resources" / "models" / "tts" / "faster-qwen3-tts-main"
     if local_path.exists():
         print(f"Found local faster-qwen3-tts at {local_path}")
         if run_command(f"pip install -e {local_path}", "Installing local faster-qwen3-tts"):
@@ -71,17 +71,18 @@ def setup_reference_audio():
     """Set up reference audio files for voice cloning."""
     print("Setting up reference audio files...")
     
-    # Create voice_clones directory
-    voice_clones_dir = Path(__file__).parent / "voice_clones"
-    voice_clones_dir.mkdir(exist_ok=True)
+    # Create voice_clones directory in resources
+    base_dir = Path(__file__).parent
+    resources_dir = base_dir / "resources" / "voice_clones"
+    resources_dir.mkdir(parents=True, exist_ok=True)
     
     # Copy reference audio files from faster-qwen3-tts
-    ref_audio_dir = Path(__file__).parent / "models" / "tts" / "faster-qwen3-tts-main"
+    ref_audio_dir = base_dir / "resources" / "models" / "tts" / "faster-qwen3-tts-main"
     ref_audio_files = ["ref_audio.wav", "ref_audio_2.wav", "ref_audio_3.wav"]
     
     for ref_file in ref_audio_files:
         src = ref_audio_dir / ref_file
-        dst = voice_clones_dir / ref_file
+        dst = resources_dir / ref_file
         if src.exists():
             shutil.copy2(src, dst)
             print(f"✓ Copied {ref_file} to voice_clones directory")
@@ -89,10 +90,10 @@ def setup_reference_audio():
             print(f"⚠ Warning: {ref_file} not found in {ref_audio_dir}")
     
     # Create a default reference audio from the first available file
-    default_ref = voice_clones_dir / "default_ref.wav"
+    default_ref = resources_dir / "default_ref.wav"
     if not default_ref.exists():
         for ref_file in ref_audio_files:
-            src = voice_clones_dir / ref_file
+            src = resources_dir / ref_file
             if src.exists():
                 shutil.copy2(src, default_ref)
                 print(f"✓ Created default reference audio: {default_ref}")
@@ -102,7 +103,7 @@ def update_settings():
     """Update the settings to use faster-qwen3-tts as default."""
     print("Updating settings to use faster-qwen3-tts as default...")
     
-    settings_file = Path(__file__).parent / "data" / "settings.json"
+    settings_file = Path(__file__).parent / "resources" / "data" / "settings.json"
     
     # Create data directory if it doesn't exist
     settings_file.parent.mkdir(exist_ok=True)

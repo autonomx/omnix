@@ -2,7 +2,7 @@
 
 A modern AI voice platform by Autonomx - featuring chat, audiobook generation, AI podcasts, live conversation, and voice cloning.
 
-<img src="logo/omnix.png" alt="Omnix Logo" width="300">
+<img src="resources/logo/omnix.png" alt="Omnix Logo" width="300">
 
 ## Features
 
@@ -97,9 +97,9 @@ This will automatically build the image if not present, then start the container
 docker run -d -p 5000:5000 -p 8000:8000 -p 8001:8001 -p 8020:8020 \
   --name omnix \
   --gpus all \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/voice_clones:/app/voice_clones \
-  -v $(pwd)/models:/app/models \
+  -v $(pwd)/resources/data:/app/data \
+  -v $(pwd)/resources/voice_clones:/app/voice_clones \
+  -v $(pwd)/resources/models:/app/models \
   omnix
 ```
 
@@ -138,7 +138,7 @@ Chatbot/
 ├── static/
 │   ├── script.js      # Frontend JavaScript
 │   └── style.css      # Frontend styles
-├── data/               # Session and settings storage
+├── resources/data/       # Session and settings storage
 ├── parakeet-tdt-0.6b-v2/  # Parakeet STT server
 └── xtts_mantella_api_server/ # XTTS TTS server
 ```
@@ -285,7 +285,7 @@ llama.cpp provides pure, efficient local inference using GGUF model files. No ex
 - Click the download button (cloud icon) in the header
 - Enter a HuggingFace model URL (e.g., `https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF`)
 - Or paste a direct GGUF download link
-- Models are saved to `models/llm/`
+- Models are saved to `resources/models/llm/`
 
 **Downloading llama.cpp Server:**
 - In Settings, under llama.cpp section, click "Download llama.cpp Server"
@@ -328,7 +328,7 @@ Use the Settings modal (gear icon) in the UI to:
 3. Choose a model
 4. Customize the system prompt
 
-Settings are saved in `data/settings.json`.
+Settings are saved in `resources/data/settings.json`.
 
 ### Provider Comparison
 
@@ -348,7 +348,7 @@ Settings are saved in `data/settings.json`.
 
 ## Configuration
 
-Edit `data/settings.json` or use the Settings modal:
+Edit `resources/data/settings.json` or use the Settings modal:
 - Provider selection (LM Studio, Cerebras, OpenRouter)
 - Model selection
 - System prompt customization

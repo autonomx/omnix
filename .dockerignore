@@ -32,11 +32,12 @@ Thumbs.db
 tests/
 
 # Local data
-data/
+resources/data/
 # voice_clones/ - included for voice cloning feature
+resources/voice_clones/
 
 # Large model files - these are downloaded inside the container
-models/
+resources/models/
 
 # Large downloads and temp files
 *.zip

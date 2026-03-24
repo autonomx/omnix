@@ -164,7 +164,44 @@ def process_audio_for_transcription(audio_path: str, session_dir: Path) -> tuple
     """Process audio file for transcription (resampling, mono conversion)"""
     try:
         print(f"[STT] Loading audio from: {audio_path}")
-        audio = AudioSegment.from_file(audio_path)
+        
+        # Try pydub first, fall back to soundfile/wave if ffprobe not available
+        audio = None
+        use_pydub = True
+        
+        try:
+            audio = AudioSegment.from_file(audio_path)
+        except (FileNotFoundError, OSError) as e:
+            # ffprobe not found (Windows Error 2 or similar), try soundfile fallback for WAV files
+            print(f"[STT] pydub failed (likely ffprobe missing: {e}), trying soundfile fallback...")
+            use_pydub = False
+            
+            import soundfile as sf
+            import numpy as np
+            
+            # Read audio with soundfile
+            data, samplerate = sf.read(audio_path, dtype='float32')
+            
+            # Convert to mono if stereo
+            if len(data.shape) > 1 and data.shape[1] > 1:
+                data = np.mean(data, axis=1)
+            
+            # Resample to 16kHz if needed
+            target_sr = 16000
+            if samplerate != target_sr:
+                from scipy import signal
+                num_samples = int(len(data) * target_sr / samplerate)
+                data = signal.resample(data, num_samples)
+                samplerate = target_sr
+            
+            # Save processed audio
+            audio_name = Path(audio_path).stem
+            processed_audio_path = session_dir / f"{audio_name}_processed.wav"
+            sf.write(processed_audio_path, data, samplerate, subtype='PCM_16')
+            
+            print(f"[STT] Audio processed via soundfile: {samplerate}Hz, mono")
+            return processed_audio_path.as_posix(), len(data) / samplerate
+        
         duration_sec = audio.duration_seconds
         
         print(f"[STT] Audio loaded: duration={duration_sec:.2f}s, channels={audio.channels}, frame_rate={audio.frame_rate}")
@@ -487,23 +524,38 @@ async def websocket_transcribe(websocket: WebSocket):
                     session_dir.mkdir(parents=True, exist_ok=True)
                     
                     try:
-                        # Write audio to temp file as webm
-                        webm_path = session_dir / "audio.webm"
-                        with open(webm_path, "wb") as f:
-                            f.write(combined_audio)
-                        
-                        # Convert webm to wav using pydub for proper processing
-                        # MediaRecorder produces webm/opus which may need conversion
-                        try:
-                            audio = AudioSegment.from_file(webm_path, format="webm")
+                        # Detect audio format and convert if needed
+                        # Check for WAV header (RIFF)
+                        if len(combined_audio) > 44 and combined_audio[:4] == b'RIFF':
+                            # Already WAV format
                             wav_path = session_dir / "audio.wav"
-                            audio.export(wav_path, format="wav")
+                            with open(wav_path, "wb") as f:
+                                f.write(combined_audio)
                             audio_path = wav_path
-                        except Exception as conv_err:
-                            # Try as raw webm if pydub fails
-                            print(f"Webm conversion failed, trying direct: {conv_err}")
-                            # Try alternative: use webm directly
-                            audio_path = webm_path
+                        # Check for webm/mp4 header
+                        elif len(combined_audio) > 4 and combined_audio[:4] in [b'\x1a\x45\xdf\xa3', b'ftyp']:
+                            # WebM format
+                            webm_path = session_dir / "audio.webm"
+                            with open(webm_path, "wb") as f:
+                                f.write(combined_audio)
+                            try:
+                                audio = AudioSegment.from_file(webm_path, format="webm")
+                                wav_path = session_dir / "audio.wav"
+                                audio.export(wav_path, format="wav")
+                                audio_path = wav_path
+                            except Exception as conv_err:
+                                print(f"Webm conversion failed: {conv_err}")
+                                audio_path = webm_path
+                        else:
+                            # Assume raw PCM Int16, create WAV container
+                            import wave
+                            wav_path = session_dir / "audio.wav"
+                            with wave.open(str(wav_path), 'wb') as wf:
+                                wf.setnchannels(1)
+                                wf.setsampwidth(2)  # 16-bit
+                                wf.setframerate(16000)  # Default to 16kHz
+                                wf.writeframes(combined_audio)
+                            audio_path = wav_path
                         
                         # Process and transcribe
                         result = get_transcripts_and_raw_times(str(audio_path), session_dir)

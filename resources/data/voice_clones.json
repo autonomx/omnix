@@ -1,0 +1,118 @@
+{
+  "Anaka": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Anaka",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Her": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Her",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Inigo": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Inigo",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Jinx": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Jinx",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Maya": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Maya",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Morgan": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Morgan",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Nate Fallout": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Nate Fallout",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "default_female": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "default_female",
+    "has_audio": true
+  },
+  "Vic Cyberpunk": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Vic Cyberpunk",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Donald Trump": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Donald Trump",
+    "has_audio": true
+  },
+  "Joe Rogen": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Joe Rogen",
+    "has_audio": true
+  },
+  "default_ref": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "default_ref",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Sofia": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Sofia",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "ref_audio": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "ref_audio",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "ref_audio_2": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "ref_audio_2",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "ref_audio_3": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "ref_audio_3",
+    "has_audio": true,
+    "is_preloaded": true
+  },
+  "Sofia2": {
+    "speaker": "default",
+    "language": "en",
+    "voice_clone_id": "Sofia2",
+    "has_audio": true,
+    "is_preloaded": true
+  }
+}
