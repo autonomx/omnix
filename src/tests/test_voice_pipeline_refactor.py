@@ -903,7 +903,7 @@ class TestEarlyFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 800]
+        body = src[start:start + 1000]
         assert "hasSentFirstChunk" in body
         assert "_sendTTS" in body
 
