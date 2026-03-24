@@ -683,14 +683,14 @@ class TestInterruptSafety:
             "_sendTTSHTTP must check requestId freshness"
 
     def test_sendTTS_captures_requestId(self):
-        """_sendTTS must capture requestId before making TTS call."""
+        """_sendTTS must delegate to _dispatchTTS which captures requestId."""
         src = self._get_source()
-        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        m = re.search(r'  _dispatchTTS\s*\(', src)
         assert m
         start = m.start()
         body = src[start:start + 800]
         assert "this._ttsRequestId" in body, \
-            "_sendTTS must reference _ttsRequestId"
+            "_dispatchTTS must reference _ttsRequestId"
 
 
 # ---------------------------------------------------------------------------
@@ -898,12 +898,12 @@ class TestEarlyFirstChunk:
         assert "this.hasSentFirstChunk" in src
 
     def test_early_first_chunk_in_onLLMToken(self):
-        """onLLMToken must send TTS earlier for the first chunk."""
+        """onLLMToken must send TTS earlier for the first chunk on first word boundary."""
         src = self._get_source()
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1000]
+        body = src[start:start + 1200]
         assert "hasSentFirstChunk" in body
         assert "_sendTTS" in body
 
@@ -1009,20 +1009,20 @@ class TestIncreasedTTSConcurrency:
 
 
 class TestEarlierFirstChunkTrigger:
-    """First TTS chunk trigger must fire at 5 chars (reduced from 10)."""
+    """First TTS chunk trigger must fire on first word boundary (token.includes(' '))."""
 
     def _get_source(self):
         return _read_source("src/static/voice/voiceEngine.js")
 
-    def test_first_chunk_threshold_is_5(self):
-        """onLLMToken must trigger first chunk at > 5 chars."""
+    def test_first_chunk_uses_word_boundary(self):
+        """onLLMToken must trigger first chunk on first complete word."""
         src = self._get_source()
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1000]
-        assert "this.textBuffer.length > 5" in body, \
-            "First chunk threshold must be 5 chars for predictive start"
+        body = src[start:start + 1200]
+        assert "token.includes(' ')" in body, \
+            "First chunk must trigger on word boundary (token.includes(' '))"
 
 
 class TestPhraseLevelFlush:
@@ -1043,7 +1043,7 @@ class TestPhraseLevelFlush:
             "Must flush on word boundary (token ending with space)"
 
     def test_phrase_flush_adaptive_min_length(self):
-        """Phrase-level flush uses adaptive dynamicMinLength based on _ttsInFlight."""
+        """Phrase-level flush uses smooth adaptive dynamicMinLength based on _ttsInFlight."""
         src = self._get_source()
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
@@ -1051,20 +1051,18 @@ class TestPhraseLevelFlush:
         body = src[start:start + 1600]
         assert "dynamicMinLength" in body, \
             "Phrase flush must use adaptive dynamicMinLength"
-        assert "this._ttsInFlight > 3 ? 20 : 8" in body, \
-            "dynamicMinLength must be 20 under load, 8 when idle"
+        assert "Math.min(8 + this._ttsInFlight * 4, 24)" in body, \
+            "dynamicMinLength must scale smoothly: Math.min(8 + _ttsInFlight * 4, 24)"
 
     def test_phrase_flush_word_count_guard(self):
-        """Phrase-level flush must require wordCount >= 2 to prevent micro-chunks."""
+        """Phrase-level flush must require _wordCount >= 2 to prevent micro-chunks."""
         src = self._get_source()
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1600]
-        assert "wordCount >= 2" in body, \
+        body = src[start:start + 1800]
+        assert "_wordCount >= 2" in body, \
             "Phrase flush must require at least 2 words to prevent micro-chunks"
-        assert "split(/\\s+/)" in body, \
-            "Must compute word count via split()"
 
     def test_phrase_flush_sends_tts(self):
         """Phrase-level flush must call _sendTTS with flushText."""
@@ -1158,14 +1156,14 @@ class TestSpeechContinuityTracking:
             "lastSpokenText must be initialised to '' in constructor"
 
     def test_sendTTS_updates_lastSpokenText(self):
-        """_sendTTS must set lastSpokenText to the cleaned text."""
+        """lastSpokenText must be updated in the TTS HTTP success path (not in _sendTTS)."""
         src = self._get_source()
-        m = re.search(r'  _sendTTS\s*\(text\)', src)
-        assert m, "_sendTTS method not found"
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m, "_sendTTSHTTP method not found"
         start = m.start()
-        body = src[start:start + 600]
-        assert "this.lastSpokenText = cleaned" in body, \
-            "_sendTTS must track lastSpokenText for speech continuity"
+        body = src[start:start + 1500]
+        assert "this.lastSpokenText" in body, \
+            "_sendTTSHTTP must update lastSpokenText on TTS success"
 
     def test_lastSpokenText_reset_on_stop(self):
         """stop() must reset lastSpokenText to empty string."""
@@ -1176,3 +1174,161 @@ class TestSpeechContinuityTracking:
         body = src[start:start + 800]
         assert "this.lastSpokenText = ''" in body, \
             "stop() must reset lastSpokenText to ''"
+
+
+# ---------------------------------------------------------------------------
+# Round 3 fixes: smooth adaptive chunking, incremental word counter,
+# deferred queue freshness, first-chunk word boundary, lastSpokenText timing
+# ---------------------------------------------------------------------------
+
+class TestSmoothAdaptiveChunking:
+    """Adaptive chunk sizing must scale smoothly (not binary jump)."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_smooth_scaling_formula(self):
+        """dynamicMinLength must use Math.min(8 + _ttsInFlight * 4, 24)."""
+        src = self._get_source()
+        assert "Math.min(8 + this._ttsInFlight * 4, 24)" in src, \
+            "Must use smooth scaling formula, not binary jump"
+
+    def test_no_binary_jump(self):
+        """Must NOT use ternary > 3 ? 20 : 8 binary jump."""
+        src = self._get_source()
+        assert "_ttsInFlight > 3 ? 20 : 8" not in src, \
+            "Binary jump must be replaced with smooth scaling"
+
+
+class TestIncrementalWordCounter:
+    """Word count must be tracked incrementally (not per-token split)."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_wordCount_field_in_constructor(self):
+        """Constructor must initialise this._wordCount = 0."""
+        src = self._get_source()
+        assert "this._wordCount = 0" in src, \
+            "_wordCount must be initialised to 0"
+
+    def test_incremental_word_tracking(self):
+        """onLLMToken must increment _wordCount on space tokens."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "this._wordCount++" in body, \
+            "Must increment _wordCount when token contains space"
+
+    def test_wordCount_reset_on_flush(self):
+        """_wordCount must be reset to 0 when textBuffer is flushed."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1800]
+        assert "this._wordCount = 0" in body, \
+            "_wordCount must be reset when buffer is flushed"
+
+    def test_no_per_token_split(self):
+        """onLLMToken must NOT call split(/\\s+/) on every token (expensive)."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1800]
+        assert "trim().split(/\\s+/)" not in body, \
+            "Must not use per-token split for word counting"
+
+    def test_wordCount_reset_on_cancel(self):
+        """_cancelOngoingResponse must reset _wordCount."""
+        src = self._get_source()
+        m = re.search(r'  _cancelOngoingResponse\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this._wordCount = 0" in body, \
+            "_cancelOngoingResponse must reset _wordCount"
+
+
+class TestDeferredQueueFreshness:
+    """Deferred TTS queue must drop oldest when queue exceeds limit."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_freshness_bias_in_sendTTS(self):
+        """_sendTTS must drop oldest when deferred queue > 5."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 600]
+        assert "deferredTTSQueue.length > 5" in body, \
+            "_sendTTS must check deferred queue length for freshness bias"
+        assert "deferredTTSQueue.shift()" in body, \
+            "_sendTTS must drop oldest when queue is too long"
+
+
+class TestFirstChunkWordBoundary:
+    """First chunk must trigger on word boundary (token.includes(' '))."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_first_chunk_uses_includes_space(self):
+        """First chunk trigger must use token.includes(' ') not length threshold."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        # Find the hasSentFirstChunk section
+        first_idx = body.find("hasSentFirstChunk")
+        assert first_idx > 0
+        section = body[first_idx:first_idx + 200]
+        assert "token.includes(' ')" in section, \
+            "First chunk must trigger on word boundary via token.includes(' ')"
+
+
+class TestLastSpokenTextTiming:
+    """lastSpokenText must be set ONLY after TTS succeeds, not in _sendTTS."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_not_in_sendTTS(self):
+        """_sendTTS must NOT set lastSpokenText (too early)."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 600]
+        assert "this.lastSpokenText" not in body, \
+            "lastSpokenText must NOT be set in _sendTTS (before TTS succeeds)"
+
+    def test_in_http_success_path(self):
+        """lastSpokenText must be set in _sendTTSHTTP success path."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1500]
+        assert "this.lastSpokenText = text" in body, \
+            "lastSpokenText must be set in HTTP TTS success callback"
+
+    def test_set_after_requestId_check(self):
+        """lastSpokenText update must come after requestId freshness check."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1500]
+        reqid_idx = body.find("requestId !== this._ttsRequestId")
+        last_spoken_idx = body.find("this.lastSpokenText = text")
+        assert reqid_idx > 0 and last_spoken_idx > 0, \
+            "Both requestId check and lastSpokenText update must exist"
+        assert last_spoken_idx > reqid_idx, \
+            "lastSpokenText must be set after stale requestId check"

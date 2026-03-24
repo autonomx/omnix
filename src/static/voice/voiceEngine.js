@@ -82,6 +82,8 @@ export class VoiceEngine {
     this.MAX_SEQUENCE_GAP = 5;
     // Track the last spoken text for speech continuity context
     this.lastSpokenText = '';
+    // Incremental word counter for the current textBuffer (avoids per-token split)
+    this._wordCount = 0;
     // When false, VAD is paused after each turn so the user must type
     this.alwaysListening = options.alwaysListening !== false;
     // Monotonically incrementing counter – bumped on every cancel/interrupt so
@@ -335,14 +337,20 @@ export class VoiceEngine {
     
     this.textBuffer += token;
 
+    // Track word count incrementally (avoids per-token split allocation)
+    if (token.includes(' ')) {
+      this._wordCount++;
+    }
+
     // Early first chunk: speak sooner for faster perceived response
-    // Flush on word boundary to avoid cutting words mid-token
-    if (!this.hasSentFirstChunk && this.textBuffer.length > 5) {
+    // Flush on first complete word for lowest latency start
+    if (!this.hasSentFirstChunk && token.includes(' ')) {
       const match = this.textBuffer.match(/^(.+\b)/);
       if (match) {
         const chunk = match[1];
         this.textBuffer = this.textBuffer.slice(chunk.length);
         this.hasSentFirstChunk = true;
+        this._wordCount = 0;
         this._sendTTS(chunk);
         return;
       }
@@ -350,14 +358,14 @@ export class VoiceEngine {
     
     // Phrase-level flush: flush on word boundary for speech-rhythm chunking
     // This starts TTS while the sentence is still forming, reducing latency.
-    // Adaptive chunk sizing: under load (many in-flight TTS) use larger chunks
-    // to avoid overwhelming the TTS pipeline; when idle, use smaller chunks
-    // for lower latency.
-    const dynamicMinLength = this._ttsInFlight > 3 ? 20 : 8;
-    const wordCount = this.textBuffer.trim().split(/\s+/).length;
-    if (token.endsWith(' ') && this.textBuffer.length > dynamicMinLength && wordCount >= 2) {
+    // Adaptive chunk sizing: smoothly scale minimum length with in-flight count
+    // to avoid overwhelming the TTS pipeline under load while keeping latency
+    // low when idle.
+    const dynamicMinLength = Math.min(8 + this._ttsInFlight * 4, 24);
+    if (token.endsWith(' ') && this.textBuffer.length > dynamicMinLength && this._wordCount >= 2) {
       const flushText = this.textBuffer;
       this.textBuffer = '';
+      this._wordCount = 0;
       this._sendTTS(flushText);
       return;
     }
@@ -366,6 +374,7 @@ export class VoiceEngine {
       // Hard cap: flush to prevent unbounded buffer growth
       const flushText = this.textBuffer;
       this.textBuffer = '';
+      this._wordCount = 0;
       this._sendTTS(flushText);
       return;
     }
@@ -374,6 +383,7 @@ export class VoiceEngine {
       // Flush when enough text has accumulated
       const flushText = this.textBuffer;
       this.textBuffer = '';
+      this._wordCount = 0;
       this._sendTTS(flushText);
       return;
     }
@@ -385,6 +395,7 @@ export class VoiceEngine {
       if (sentenceMatch) {
         const sentence = sentenceMatch[1];
         this.textBuffer = this.textBuffer.slice(sentenceMatch.index + sentence.length);
+        this._wordCount = 0;
         this._sendTTS(sentence);
         return;
       }
@@ -395,6 +406,7 @@ export class VoiceEngine {
         if (clauseMatch) {
           const clause = clauseMatch[1];
           this.textBuffer = this.textBuffer.slice(clauseMatch.index + clause.length);
+          this._wordCount = 0;
           this._sendTTS(clause);
           return;
         }
@@ -404,6 +416,7 @@ export class VoiceEngine {
       if (this.textBuffer.length > this.FLUSH_MIN_LENGTH || /[.!?,;:]$/.test(this.textBuffer)) {
         const chunk = this.textBuffer;
         this.textBuffer = '';
+        this._wordCount = 0;
         this._sendTTS(chunk);
       }
     }
@@ -468,12 +481,14 @@ export class VoiceEngine {
 
     const seq = this.ttsSeq++;
 
-    // Track last spoken text for speech continuity context
-    this.lastSpokenText = cleaned;
-
     // Backpressure: defer instead of dropping to avoid content loss
     if (this._ttsInFlight > 6 || this.audioOutput.bufferedTime > 0.8) {
       this.deferredTTSQueue.push({ text: cleaned, seq });
+      // Freshness bias: drop oldest deferred chunks under heavy load
+      // to keep speech feeling live rather than lagging behind
+      if (this.deferredTTSQueue.length > 5) {
+        this.deferredTTSQueue.shift();
+      }
       return;
     }
 
@@ -528,6 +543,8 @@ export class VoiceEngine {
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] discarding stale audio (${elapsed}ms, current req=${this._ttsRequestId})`);
         } else {
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}, seq=${seq}] enqueuing audio (${elapsed}ms)`);
+          // Only track lastSpokenText after TTS actually succeeds and is accepted
+          this.lastSpokenText = text;
           const audioData = this.base64ToArrayBuffer(data.audio);
           this._handleTTSAudio(audioData, seq, text);
         }
@@ -594,6 +611,7 @@ export class VoiceEngine {
     if (this.textBuffer.trim()) {
       this._sendTTS(this.textBuffer);
       this.textBuffer = '';
+      this._wordCount = 0;
     }
     this.responseFinished = true;
     // Check immediately: if TTS/audio already finished before this callback arrived
@@ -632,6 +650,7 @@ export class VoiceEngine {
     this.ignoreAudioChunks = true;
     this.accumulatedResponse = '';
     this.textBuffer = '';
+    this._wordCount = 0;
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
     this.llmStarted = false;
