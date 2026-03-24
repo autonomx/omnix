@@ -1373,3 +1373,186 @@ class TestProsodyContinuity:
         body = src[start:start + 1800]
         assert ".slice(-200)" in body, \
             "prev_text must be bounded with .slice(-200) to avoid oversized payloads"
+
+
+# ---------------------------------------------------------------------------
+# Round 5: Full duplex, active source tracking, jitter, sentence prosody
+# ---------------------------------------------------------------------------
+
+class TestFullDuplexVAD:
+    """VAD must remain active during AI_SPEAKING for full duplex conversation."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_resume_vad_on_first_token(self):
+        """onLLMToken first-token handler must resume VAD (not pause it)."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 600]
+        assert "resumeVAD()" in body, \
+            "onLLMToken must call resumeVAD() for full duplex (not pauseVAD)"
+        assert "pauseVAD()" not in body, \
+            "onLLMToken must NOT call pauseVAD() during AI_SPEAKING (full duplex)"
+
+
+class TestActiveSourceTracking:
+    """audioOutput.js must track active BufferSource nodes for instant stop."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_activeSources_field(self):
+        """Constructor must initialise _activeSources array."""
+        src = self._get_source()
+        assert "this._activeSources = []" in src
+
+    def test_scheduleBuffer_pushes_source(self):
+        """_scheduleBuffer must push source to _activeSources."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2000]
+        assert "_activeSources.push(source)" in body
+
+    def test_scheduleBuffer_removes_on_ended(self):
+        """_scheduleBuffer onended must remove source from _activeSources."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2000]
+        assert "_activeSources.indexOf(source)" in body or \
+               "_activeSources.splice" in body
+
+    def test_softReset_stops_active_sources(self):
+        """softReset must stop all active sources for instant interrupt."""
+        src = self._get_source()
+        m = re.search(r'  softReset\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "src.stop()" in body or "src.stop();" in body
+        assert "_activeSources = []" in body
+
+    def test_reset_stops_active_sources(self):
+        """reset must stop all active sources before closing context."""
+        src = self._get_source()
+        m = re.search(r'  reset\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "src.stop()" in body or "src.stop();" in body
+        assert "_activeSources = []" in body
+
+    def test_stopAll_uses_softReset(self):
+        """stopAll must use softReset (keep AudioContext alive)."""
+        src = self._get_source()
+        m = re.search(r'  stopAll\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 200]
+        assert "softReset()" in body
+
+
+class TestTimelineJitter:
+    """_scheduleBuffer must add slight jitter for natural speech rhythm."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_jitter_variable(self):
+        """_scheduleBuffer must define a jitter variable using Math.random."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2000]
+        assert "Math.random()" in body, \
+            "_scheduleBuffer must use Math.random() for jitter"
+
+    def test_jitter_in_timeline_advance(self):
+        """Timeline advance must include jitter in addition to base gap."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2000]
+        assert "0.03 + jitter" in body or "jitter" in body
+
+
+class TestSpeculativeFirstChunk:
+    """First TTS chunk must fire speculatively at 3+ chars, not wait for word boundary."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_uses_textBuffer_length(self):
+        """First chunk trigger must check textBuffer.length > 3."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        assert "textBuffer.length > 3" in body, \
+            "First chunk must use textBuffer.length > 3 for speculative TTS"
+
+    def test_sends_whole_buffer(self):
+        """Speculative first chunk must send the whole textBuffer (not a regex match)."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        # Should NOT have the old word-boundary regex match
+        assert ".match(/^(.+\\b)/)" not in body, \
+            "First chunk must not use word boundary regex (speculative TTS)"
+
+
+class TestSentenceBoundaryProsody:
+    """_sendTTSHTTP must detect sentence starts and clear prev_text for prosody."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_sentence_detection_variable(self):
+        """_sendTTSHTTP must define isNewSentence using /^[A-Z]/ test."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1800]
+        assert "isNewSentence" in body
+        assert "/^[A-Z]/" in body
+
+    def test_conditional_prev_text(self):
+        """prev_text must be empty for new sentences, lastSpokenText otherwise."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1800]
+        assert "isNewSentence ? '' :" in body or "isNewSentence ? \"\" :" in body
+
+    def test_accumulated_lastSpokenText(self):
+        """lastSpokenText must be accumulated (+=), not replaced (=)."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1800]
+        assert "this.lastSpokenText += text" in body, \
+            "lastSpokenText must be accumulated with += (not replaced with =)"
+
+    def test_lastSpokenText_bounded(self):
+        """lastSpokenText must be bounded to 200 chars to prevent unbounded growth."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1800]
+        assert ".slice(-200)" in body
+        assert "200" in body
