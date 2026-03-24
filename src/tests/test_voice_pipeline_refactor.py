@@ -652,8 +652,8 @@ class TestTTSBackpressure:
         assert m, "_sendTTS method not found"
         start = m.start()
         body = src[start:start + 800]
-        assert "this._ttsInFlight > 3" in body, \
-            "_sendTTS must check _ttsInFlight > 3 for backpressure"
+        assert "this._ttsInFlight > 6" in body, \
+            "_sendTTS must check _ttsInFlight > 6 for backpressure (increased concurrency)"
 
     def test_audio_buffer_limit(self):
         """_sendTTS must skip if too much audio is buffered."""
@@ -662,8 +662,8 @@ class TestTTSBackpressure:
         assert m
         start = m.start()
         body = src[start:start + 800]
-        assert "this.audioOutput.bufferedTime > 2.0" in body, \
-            "_sendTTS must check audioOutput.bufferedTime for audio backpressure"
+        assert "this.audioOutput.bufferedTime > 0.8" in body, \
+            "_sendTTS must check audioOutput.bufferedTime > 0.8 for reduced audio backpressure"
 
 
 class TestInterruptSafety:
@@ -975,3 +975,117 @@ class TestAudioContextReuse:
         start = m.start()
         body = src[start:start + 200]
         assert "softReset()" in body
+
+
+# ---------------------------------------------------------------------------
+# Latency Upgrades
+# ---------------------------------------------------------------------------
+
+class TestIncreasedTTSConcurrency:
+    """TTS concurrency limit must be raised to 6 for parallel TTS prefetch."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_inflight_limit_is_6(self):
+        """_sendTTS backpressure must use _ttsInFlight > 6."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this._ttsInFlight > 6" in body, \
+            "TTS concurrency limit must be 6 for parallel prefetch"
+
+    def test_buffered_time_limit_reduced(self):
+        """_sendTTS must use bufferedTime > 0.8 (reduced from 2.0)."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this.audioOutput.bufferedTime > 0.8" in body, \
+            "Buffered time backpressure must be 0.8 for reduced lag"
+
+
+class TestEarlierFirstChunkTrigger:
+    """First TTS chunk trigger must fire at 5 chars (reduced from 10)."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_first_chunk_threshold_is_5(self):
+        """onLLMToken must trigger first chunk at > 5 chars."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "this.textBuffer.length > 5" in body, \
+            "First chunk threshold must be 5 chars for predictive start"
+
+
+class TestPhraseLevelFlush:
+    """onLLMToken must flush on word boundary for speech-rhythm chunking."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_phrase_flush_on_word_boundary(self):
+        """onLLMToken must check token.endsWith(' ') for phrase-level flush."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "token.endsWith(' ')" in body, \
+            "Must flush on word boundary (token ending with space)"
+
+    def test_phrase_flush_min_length(self):
+        """Phrase-level flush requires textBuffer.length > 8."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "this.textBuffer.length > 8" in body, \
+            "Phrase flush must require at least 8 chars"
+
+    def test_phrase_flush_sends_tts(self):
+        """Phrase-level flush must call _sendTTS with flushText."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        # After phrase-level flush check, buffer is flushed via _sendTTS
+        assert "token.endsWith(' ')" in body
+        assert "_sendTTS(flushText)" in body
+
+
+class TestPendingAudioDestructuring:
+    """_handleTTSAudio must store and destructure { buffer, text } properly."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_stores_object_with_buffer_and_text(self):
+        """pendingAudio.set must store { buffer, text } object."""
+        src = self._get_source()
+        m = re.search(r'  _handleTTSAudio\s*\(buffer', src)
+        assert m, "_handleTTSAudio method definition not found"
+        start = m.start()
+        body = src[start:start + 600]
+        assert "pendingAudio.set(seq, { buffer, text })" in body or \
+               "pendingAudio.set(seq, {buffer, text})" in body, \
+            "_handleTTSAudio must store { buffer, text } in pendingAudio"
+
+    def test_enqueue_uses_entry_buffer(self):
+        """audioOutput.enqueue must receive entry.buffer, not raw entry."""
+        src = self._get_source()
+        m = re.search(r'  _handleTTSAudio\s*\(buffer', src)
+        assert m, "_handleTTSAudio method definition not found"
+        start = m.start()
+        body = src[start:start + 600]
+        assert "this.audioOutput.enqueue(entry.buffer" in body, \
+            "Must destructure entry.buffer for enqueue, not pass raw entry"

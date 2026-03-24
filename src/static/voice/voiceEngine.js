@@ -334,7 +334,7 @@ export class VoiceEngine {
 
     // Early first chunk: speak sooner for faster perceived response
     // Flush on word boundary to avoid cutting words mid-token
-    if (!this.hasSentFirstChunk && this.textBuffer.length > 10) {
+    if (!this.hasSentFirstChunk && this.textBuffer.length > 5) {
       const match = this.textBuffer.match(/^(.+\b)/);
       if (match) {
         const chunk = match[1];
@@ -345,6 +345,15 @@ export class VoiceEngine {
       }
     }
     
+    // Phrase-level flush: flush on word boundary for speech-rhythm chunking
+    // This starts TTS while the sentence is still forming, reducing latency
+    if (token.endsWith(' ') && this.textBuffer.length > 8) {
+      const flushText = this.textBuffer;
+      this.textBuffer = '';
+      this._sendTTS(flushText);
+      return;
+    }
+
     if (this.textBuffer.length > this.TTS_MAX_BUFFER_LENGTH) {
       // Hard cap: flush to prevent unbounded buffer growth
       const flushText = this.textBuffer;
@@ -452,7 +461,7 @@ export class VoiceEngine {
     const seq = this.ttsSeq++;
 
     // Backpressure: defer instead of dropping to avoid content loss
-    if (this._ttsInFlight > 3 || this.audioOutput.bufferedTime > 2.0) {
+    if (this._ttsInFlight > 6 || this.audioOutput.bufferedTime > 0.8) {
       this.deferredTTSQueue.push({ text: cleaned, seq });
       return;
     }
