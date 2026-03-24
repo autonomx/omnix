@@ -64,6 +64,8 @@ export class VoiceEngine {
     this.llmStarted = false;
     // Minimum partial transcript length before early LLM start is triggered
     this.MIN_PARTIAL_TEXT_LENGTH = 20;
+    // Minimum word count in partial transcript before early LLM start
+    this.MIN_PARTIAL_WORD_COUNT = 3;
     // Minimum text length before shouldFlush() returns true
     this.FLUSH_MIN_LENGTH = 30;
     // Count of TTS segments sent but not yet completed
@@ -76,6 +78,8 @@ export class VoiceEngine {
     this.deferredTTSQueue = [];
     // Early first-chunk flag: send TTS earlier for first chunk
     this.hasSentFirstChunk = false;
+    // Max gap before skipping missing TTS sequence numbers
+    this.MAX_SEQUENCE_GAP = 5;
     // When false, VAD is paused after each turn so the user must type
     this.alwaysListening = options.alwaysListening !== false;
     // Monotonically incrementing counter – bumped on every cancel/interrupt so
@@ -233,7 +237,7 @@ export class VoiceEngine {
     if (this._onTranscriptCallback) this._onTranscriptCallback(text);
 
     // Start LLM early on partial STT when enough text has arrived
-    if (!this.llmStarted && text && text.split(' ').length >= 3 &&
+    if (!this.llmStarted && text && text.split(' ').length >= this.MIN_PARTIAL_WORD_COUNT &&
         (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING)) {
       this.llmStarted = true;
       console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
@@ -529,7 +533,7 @@ export class VoiceEngine {
 
     // Timeout fallback: if a seq is lost/skipped, skip ahead to avoid memory leak
     setTimeout(() => {
-      if (this.pendingAudio.has(seq) && seq > this.expectedSeq + 5) {
+      if (this.pendingAudio.has(seq) && seq > this.expectedSeq + this.MAX_SEQUENCE_GAP) {
         console.warn(`[VoiceEngine] Skipping missing seqs up to ${seq}`);
         this.expectedSeq = seq;
         // Re-drain from the new expectedSeq

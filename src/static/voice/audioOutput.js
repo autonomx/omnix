@@ -34,6 +34,9 @@ export class AudioOutput {
   /**
    * Convert a raw chunk (Float32Array, ArrayBuffer/WAV) to a Web Audio
    * AudioBuffer and schedule it on the playback timeline.
+   * @param {Float32Array|ArrayBuffer} chunk - Audio data to enqueue
+   * @param {string} [text] - Source text for this chunk; used to determine
+   *   sentence-ending pauses for natural prosody.
    */
   enqueue(chunk, text) {
     this._ensureContext();

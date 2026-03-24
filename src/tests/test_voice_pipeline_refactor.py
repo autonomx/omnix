@@ -932,8 +932,8 @@ class TestWordCountLLMTrigger:
         body = src[start:start + 500]
         assert "split(" in body, \
             "onTranscript must use split for word count"
-        assert ">= 3" in body, \
-            "onTranscript must trigger on >= 3 words"
+        assert "MIN_PARTIAL_WORD_COUNT" in body, \
+            "onTranscript must use MIN_PARTIAL_WORD_COUNT constant"
 
 
 class TestAudioContextReuse:
