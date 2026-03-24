@@ -68,6 +68,10 @@ export class VoiceEngine {
     this.FLUSH_MIN_LENGTH = 30;
     // Count of TTS segments sent but not yet completed
     this._ttsInFlight = 0;
+    // Ensure audio order when TTS resolves out-of-order
+    this.ttsSeq = 0;
+    this.expectedSeq = 0;
+    this.pendingAudio = new Map();
     // When false, VAD is paused after each turn so the user must type
     this.alwaysListening = options.alwaysListening !== false;
     // Monotonically incrementing counter – bumped on every cancel/interrupt so
@@ -136,6 +140,10 @@ export class VoiceEngine {
     this.responseFinished = false;
     this.llmStarted = false;
     this._ttsInFlight = 0;
+    // Reset TTS sequencing state
+    this.ttsSeq = 0;
+    this.expectedSeq = 0;
+    this.pendingAudio.clear();
     // Invalidate all in-flight HTTP TTS and LLM callbacks
     this._ttsRequestId++;
     this._llmRequestId++;
@@ -161,6 +169,10 @@ export class VoiceEngine {
       this._ttsRequestId++;
       this._llmRequestId++;
       this.llmStarted = false;
+      // Reset TTS sequencing state
+      this.ttsSeq = 0;
+      this.expectedSeq = 0;
+      this.pendingAudio.clear();
       
       this.setState(VoiceState.INTERRUPTED);
       this.accumulatedResponse = '';
@@ -357,7 +369,7 @@ export class VoiceEngine {
   shouldFlush(text) {
     return (
       text.length > this.FLUSH_MIN_LENGTH ||
-      /[.!?,;]/.test(text)
+      /[.!?,;:]$/.test(text) // ONLY flush if punctuation is at the end
     );
   }
 
@@ -407,23 +419,33 @@ export class VoiceEngine {
     const cleaned = this._stripMarkdown(text);
     if (!cleaned) return;
 
+    const seq = this.ttsSeq++;
+
+    // Backpressure: don't overload TTS/audio pipeline
+    if (this._ttsInFlight > 3) return;
+
+    // Prevent too much buffered audio
+    if (this.audioOutput.bufferedTime > 2.0) {
+      return;
+    }
+
     this._ttsInFlight++;
     const requestId = this._ttsRequestId;
     const preview = cleaned.substring(0, 40);
-    console.log(`[VoiceEngine] TTS immediate [req=${requestId}]: "${preview}${cleaned.length > 40 ? '…' : ''}"`);
+    console.log(`[VoiceEngine] TTS immediate [req=${requestId}, seq=${seq}]: "${preview}${cleaned.length > 40 ? '…' : ''}"`);
 
     if (this.ttsConnected && this.tts.ws && this.tts.ws.readyState === WebSocket.OPEN) {
       this.tts.sendText(cleaned, this.speaker);
       // onTTSDone will decrement _ttsInFlight
     } else {
-      this._sendTTSHTTP(cleaned, requestId);
+      this._sendTTSHTTP(cleaned, requestId, seq);
     }
   }
 
-  _sendTTSHTTP(text, requestId) {
+  _sendTTSHTTP(text, requestId, seq) {
     const startTime = Date.now();
     const preview = text.trim().substring(0, 40);
-    console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] starting: "${preview}${text.length > 40 ? '…' : ''}"`);
+    console.log(`[VoiceEngine] TTS HTTP [req=${requestId}, seq=${seq}] starting: "${preview}${text.length > 40 ? '…' : ''}"`);
 
     fetch('/api/tts', {
       method: 'POST',
@@ -434,12 +456,13 @@ export class VoiceEngine {
     .then(data => {
       if (data.success && data.audio) {
         const elapsed = Date.now() - startTime;
+        // Drop stale audio after interrupt
         if (requestId !== this._ttsRequestId) {
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] discarding stale audio (${elapsed}ms, current req=${this._ttsRequestId})`);
         } else {
-          console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] enqueuing audio (${elapsed}ms)`);
+          console.log(`[VoiceEngine] TTS HTTP [req=${requestId}, seq=${seq}] enqueuing audio (${elapsed}ms)`);
           const audioData = this.base64ToArrayBuffer(data.audio);
-          this.audioOutput.enqueue(audioData);
+          this._handleTTSAudio(audioData, seq);
         }
       }
     })
@@ -454,6 +477,19 @@ export class VoiceEngine {
         console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] stale finally – skipping state update (current req=${this._ttsRequestId})`);
       }
     });
+  }
+
+  /** Ordered playback handler: buffers out-of-order TTS results and plays in sequence. */
+  _handleTTSAudio(buffer, seq) {
+    this.pendingAudio.set(seq, buffer);
+
+    while (this.pendingAudio.has(this.expectedSeq)) {
+      const buf = this.pendingAudio.get(this.expectedSeq);
+      this.pendingAudio.delete(this.expectedSeq);
+
+      this.audioOutput.enqueue(buf);
+      this.expectedSeq++;
+    }
   }
   
   base64ToArrayBuffer(base64) {
@@ -515,6 +551,10 @@ export class VoiceEngine {
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
     this.llmStarted = false;
+    // Reset TTS sequencing state
+    this.ttsSeq = 0;
+    this.expectedSeq = 0;
+    this.pendingAudio.clear();
     // Invalidate any in-flight HTTP TTS and stale LLM callbacks so they
     // do not enqueue audio or alter state for the upcoming new turn.
     this._ttsRequestId++;
@@ -610,6 +650,10 @@ export class VoiceEngine {
       this.responseFinished = false;
       this.hasStartedSpeaking = false;
       this.ignoreAudioChunks = true;
+      // Reset TTS sequencing state
+      this.ttsSeq = 0;
+      this.expectedSeq = 0;
+      this.pendingAudio.clear();
       this.setState(VoiceState.LISTENING);
       if (this.alwaysListening) {
         this.audioInput.resumeVAD();
@@ -626,6 +670,10 @@ export class VoiceEngine {
     this.textBuffer = '';
     this.llmStarted = false;
     this._ttsInFlight = 0;
+    // Reset TTS sequencing state
+    this.ttsSeq = 0;
+    this.expectedSeq = 0;
+    this.pendingAudio.clear();
     this._llmRequestId++;
     this._ttsRequestId++;
   }

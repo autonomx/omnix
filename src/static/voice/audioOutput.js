@@ -4,7 +4,7 @@ export class AudioOutput {
     this.nextTime = 0;
     this.started = false;
     this.bufferedTime = 0;
-    this.minBufferSec = 0.3; // tweakable: delay start until small buffer ready
+    this.minBufferSec = 0.15; // tweakable: delay start until small buffer ready
     this.onPlaybackStart = null;
     this.onPlaybackEnd = null;
     this.hasPlayedSomething = false;
@@ -34,6 +34,11 @@ export class AudioOutput {
    */
   enqueue(chunk) {
     this._ensureContext();
+
+    // Prevent timeline from falling behind (gap protection)
+    if (this.nextTime < this.ctx.currentTime + 0.05) {
+      this.nextTime = this.ctx.currentTime + 0.05;
+    }
 
     let float32;
     let sampleRate;
@@ -71,14 +76,10 @@ export class AudioOutput {
 
     this.bufferedTime += audioBuffer.duration;
 
-    // Delay start until a small buffer is ready (avoids choppy audio)
-    if (!this.started && this.bufferedTime < this.minBufferSec) {
-      this._pendingBuffers.push(audioBuffer);
-      return;
-    }
-
+    // Fast-start first audio (don't wait full buffer)
     if (!this.started) {
       this.started = true;
+      this.nextTime = this.ctx.currentTime + 0.05;
       this.hasPlayedSomething = true;
       if (this.onPlaybackStart) {
         this.onPlaybackStart();

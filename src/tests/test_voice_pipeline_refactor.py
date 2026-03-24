@@ -453,3 +453,237 @@ class TestLLMClientAbort:
         assert m, "abort method not found"
         body = m.group(0)
         assert "this.cancel()" in body
+
+
+# ---------------------------------------------------------------------------
+# Follow-up fixes: shouldFlush, TTS sequencing, audio starvation,
+# fast-path, backpressure, interrupt safety
+# ---------------------------------------------------------------------------
+
+class TestShouldFlushEndOfString:
+    """shouldFlush must only match punctuation at end of string."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_shouldFlush_uses_end_anchor(self):
+        """Regex must use $ anchor so punctuation mid-string doesn't trigger flush."""
+        src = self._get_source()
+        # Find the shouldFlush method definition (with argument)
+        m = re.search(r'shouldFlush\s*\(text\)', src)
+        assert m, "shouldFlush(text) method not found"
+        start = m.start()
+        body = src[start:start + 300]
+        # Must use $ anchor in the regex: /[.!?,;:]$/
+        assert "$/.test" in body or "$/." in body, \
+            "shouldFlush regex must use $ anchor for end-of-string matching"
+
+    def test_shouldFlush_includes_colon(self):
+        """shouldFlush regex must include : as flush trigger."""
+        src = self._get_source()
+        m = re.search(r'shouldFlush\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 300]
+        assert ";:]" in body, \
+            "shouldFlush must include colon in end-of-string punctuation regex"
+
+
+class TestTTSSequencing:
+    """TTS must use sequence numbers for ordered playback."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_ttsSeq_field(self):
+        src = self._get_source()
+        assert "this.ttsSeq" in src
+
+    def test_expectedSeq_field(self):
+        src = self._get_source()
+        assert "this.expectedSeq" in src
+
+    def test_pendingAudio_field(self):
+        src = self._get_source()
+        assert "this.pendingAudio" in src
+
+    def test_pendingAudio_is_map(self):
+        src = self._get_source()
+        assert "new Map()" in src
+
+    def test_handleTTSAudio_method(self):
+        src = self._get_source()
+        assert "_handleTTSAudio(" in src
+
+    def test_handleTTSAudio_orders_by_seq(self):
+        """_handleTTSAudio must buffer and play in expectedSeq order."""
+        src = self._get_source()
+        # Match the method definition (with 2-space indent), not call sites
+        m = re.search(r'  _handleTTSAudio\s*\(buffer,\s*seq\)', src)
+        assert m, "_handleTTSAudio method definition not found"
+        start = m.start()
+        body = src[start:start + 500]
+        assert "this.pendingAudio.set(" in body
+        assert "this.expectedSeq" in body
+        assert "this.audioOutput.enqueue" in body
+
+    def test_sendTTS_uses_seq(self):
+        """_sendTTS must assign a sequence number."""
+        src = self._get_source()
+        # Find _sendTTS method definition (not calls to it)
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m, "_sendTTS method not found"
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this.ttsSeq++" in body
+
+    def test_sendTTSHTTP_uses_handleTTSAudio(self):
+        """_sendTTSHTTP must route audio through _handleTTSAudio, not direct enqueue."""
+        src = self._get_source()
+        m = re.search(r'_sendTTSHTTP\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m, "_sendTTSHTTP method not found"
+        body = m.group(0)
+        assert "_handleTTSAudio" in body, \
+            "_sendTTSHTTP must use _handleTTSAudio for ordered playback"
+
+    def test_cancel_resets_sequencing(self):
+        """_cancelOngoingResponse must reset sequencing state."""
+        src = self._get_source()
+        m = re.search(r'_cancelOngoingResponse\s*\(\s*\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m
+        body = m.group(0)
+        assert "this.ttsSeq = 0" in body
+        assert "this.expectedSeq = 0" in body
+        assert "pendingAudio.clear()" in body
+
+    def test_interrupt_resets_sequencing(self):
+        """interrupt() must reset sequencing state."""
+        src = self._get_source()
+        m = re.search(r'  interrupt\s*\(\s*\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m
+        body = m.group(0)
+        assert "this.ttsSeq = 0" in body
+        assert "this.expectedSeq = 0" in body
+        assert "pendingAudio.clear()" in body
+
+    def test_startConversation_resets_sequencing(self):
+        """startConversation must reset sequencing state."""
+        src = self._get_source()
+        m = re.search(r'startConversation\s*\(\s*\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m
+        body = m.group(0)
+        assert "this.ttsSeq = 0" in body
+        assert "this.expectedSeq = 0" in body
+        assert "pendingAudio.clear()" in body
+
+
+class TestAudioStarvationProtection:
+    """audioOutput.js must protect against timeline gaps."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_enqueue_gap_protection(self):
+        """enqueue must push nextTime forward if it's fallen behind."""
+        src = self._get_source()
+        m = re.search(r'enqueue\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m, "enqueue method not found"
+        body = m.group(0)
+        assert "this.nextTime < this.ctx.currentTime" in body, \
+            "enqueue must detect when timeline has fallen behind"
+        assert "0.05" in body, \
+            "enqueue must use 50ms gap protection offset"
+
+
+class TestReducedBufferLatency:
+    """audioOutput.js must use reduced buffer for lower latency."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_minBufferSec_reduced(self):
+        """minBufferSec must be 0.15 (not 0.3) for lower latency."""
+        src = self._get_source()
+        m = re.search(r'this\.minBufferSec\s*=\s*([\d.]+)', src)
+        assert m, "minBufferSec assignment not found"
+        val = float(m.group(1))
+        assert val <= 0.15, \
+            f"minBufferSec should be <= 0.15 for low latency, got {val}"
+
+
+class TestFirstAudioFastPath:
+    """audioOutput.js must start playing immediately on first audio."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_no_buffering_wait(self):
+        """enqueue must not wait for minBufferSec before starting playback."""
+        src = self._get_source()
+        m = re.search(r'enqueue\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m
+        body = m.group(0)
+        assert "this.bufferedTime < this.minBufferSec" not in body, \
+            "enqueue must not delay start by waiting for minBufferSec threshold"
+
+    def test_fast_start_offset(self):
+        """First audio must set nextTime to currentTime + small offset."""
+        src = self._get_source()
+        m = re.search(r'enqueue\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m
+        body = m.group(0)
+        assert "this.ctx.currentTime + 0.05" in body, \
+            "First audio fast-path must use 50ms offset"
+
+
+class TestTTSBackpressure:
+    """_sendTTS must apply backpressure to prevent TTS flooding."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_tts_inflight_limit(self):
+        """_sendTTS must skip if too many TTS requests are in-flight."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m, "_sendTTS method not found"
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this._ttsInFlight > 3" in body, \
+            "_sendTTS must check _ttsInFlight > 3 for backpressure"
+
+    def test_audio_buffer_limit(self):
+        """_sendTTS must skip if too much audio is buffered."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this.audioOutput.bufferedTime > 2.0" in body, \
+            "_sendTTS must check audioOutput.bufferedTime for audio backpressure"
+
+
+class TestInterruptSafety:
+    """TTS HTTP path must drop stale audio after interrupt."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_sendTTSHTTP_checks_requestId(self):
+        """_sendTTSHTTP must check requestId against _ttsRequestId before enqueuing."""
+        src = self._get_source()
+        m = re.search(r'_sendTTSHTTP\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        assert m, "_sendTTSHTTP method not found"
+        body = m.group(0)
+        assert "requestId !== this._ttsRequestId" in body, \
+            "_sendTTSHTTP must check requestId freshness"
+
+    def test_sendTTS_captures_requestId(self):
+        """_sendTTS must capture requestId before making TTS call."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this._ttsRequestId" in body, \
+            "_sendTTS must reference _ttsRequestId"
