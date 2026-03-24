@@ -62,6 +62,10 @@ export class VoiceEngine {
     this.TTS_CLAUSE_FLUSH_MIN_LENGTH = 40;
     // Partial-STT early LLM start flag
     this.llmStarted = false;
+    // Minimum partial transcript length before early LLM start is triggered
+    this.MIN_PARTIAL_TEXT_LENGTH = 20;
+    // Minimum text length before shouldFlush() returns true
+    this.FLUSH_MIN_LENGTH = 30;
     // Count of TTS segments sent but not yet completed
     this._ttsInFlight = 0;
     // When false, VAD is paused after each turn so the user must type
@@ -209,7 +213,7 @@ export class VoiceEngine {
     if (this._onTranscriptCallback) this._onTranscriptCallback(text);
 
     // Start LLM early on partial STT when enough text has arrived
-    if (!this.llmStarted && text && text.length > 20 &&
+    if (!this.llmStarted && text && text.length > this.MIN_PARTIAL_TEXT_LENGTH &&
         (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING)) {
       this.llmStarted = true;
       console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
@@ -341,7 +345,7 @@ export class VoiceEngine {
       }
 
       // Fallback: flush the whole buffer if it matches generic flush criteria
-      if (this.textBuffer.length > 30 || /[.,!?]$/.test(this.textBuffer)) {
+      if (this.textBuffer.length > this.FLUSH_MIN_LENGTH || /[.,!?]$/.test(this.textBuffer)) {
         const chunk = this.textBuffer;
         this.textBuffer = '';
         this._sendTTS(chunk);
@@ -352,7 +356,7 @@ export class VoiceEngine {
   /** Returns true when the text buffer should be flushed to TTS. */
   shouldFlush(text) {
     return (
-      text.length > 30 ||
+      text.length > this.FLUSH_MIN_LENGTH ||
       /[.!?,;]/.test(text)
     );
   }
