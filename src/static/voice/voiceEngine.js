@@ -72,6 +72,10 @@ export class VoiceEngine {
     this.ttsSeq = 0;
     this.expectedSeq = 0;
     this.pendingAudio = new Map();
+    // Deferred TTS queue: holds chunks that were backpressured instead of dropped
+    this.deferredTTSQueue = [];
+    // Early first-chunk flag: send TTS earlier for first chunk
+    this.hasSentFirstChunk = false;
     // When false, VAD is paused after each turn so the user must type
     this.alwaysListening = options.alwaysListening !== false;
     // Monotonically incrementing counter – bumped on every cancel/interrupt so
@@ -139,11 +143,13 @@ export class VoiceEngine {
     this.ignoreAudioChunks = false;
     this.responseFinished = false;
     this.llmStarted = false;
+    this.hasSentFirstChunk = false;
     this._ttsInFlight = 0;
     // Reset TTS sequencing state
     this.ttsSeq = 0;
     this.expectedSeq = 0;
     this.pendingAudio.clear();
+    this.deferredTTSQueue = [];
     // Invalidate all in-flight HTTP TTS and LLM callbacks
     this._ttsRequestId++;
     this._llmRequestId++;
@@ -162,17 +168,19 @@ export class VoiceEngine {
       
       this._ttsInFlight = 0;
       this.ignoreAudioChunks = true;
-      this.audioOutput.reset();
+      this.audioOutput.softReset();
       this.llm.cancel();
       this.audioInput.resumeVAD();
       // Invalidate any in-flight HTTP TTS / stale LLM callbacks
       this._ttsRequestId++;
       this._llmRequestId++;
       this.llmStarted = false;
+      this.hasSentFirstChunk = false;
       // Reset TTS sequencing state
       this.ttsSeq = 0;
       this.expectedSeq = 0;
       this.pendingAudio.clear();
+      this.deferredTTSQueue = [];
       
       this.setState(VoiceState.INTERRUPTED);
       this.accumulatedResponse = '';
@@ -225,7 +233,7 @@ export class VoiceEngine {
     if (this._onTranscriptCallback) this._onTranscriptCallback(text);
 
     // Start LLM early on partial STT when enough text has arrived
-    if (!this.llmStarted && text && text.length > this.MIN_PARTIAL_TEXT_LENGTH &&
+    if (!this.llmStarted && text && text.split(' ').length >= 3 &&
         (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING)) {
       this.llmStarted = true;
       console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
@@ -317,6 +325,15 @@ export class VoiceEngine {
     this.onAIResponse(this.accumulatedResponse);
     
     this.textBuffer += token;
+
+    // Early first chunk: speak sooner for faster perceived response
+    if (!this.hasSentFirstChunk && this.textBuffer.length > 10) {
+      this.hasSentFirstChunk = true;
+      const chunk = this.textBuffer;
+      this.textBuffer = '';
+      this._sendTTS(chunk);
+      return;
+    }
     
     if (this.textBuffer.length > this.TTS_MAX_BUFFER_LENGTH) {
       // Hard cap: flush to prevent unbounded buffer growth
@@ -369,7 +386,10 @@ export class VoiceEngine {
   shouldFlush(text) {
     return (
       text.length > this.FLUSH_MIN_LENGTH ||
-      /[.!?,;:]$/.test(text) // ONLY flush if punctuation is at the end
+      /[.!?]$/.test(text) ||
+      /,\s$/.test(text) ||        // pause at commas
+      /\band\s$/i.test(text) ||   // natural phrasing
+      /\bbut\s$/i.test(text)      // natural phrasing
     );
   }
 
@@ -421,14 +441,17 @@ export class VoiceEngine {
 
     const seq = this.ttsSeq++;
 
-    // Backpressure: don't overload TTS/audio pipeline
-    if (this._ttsInFlight > 3) return;
-
-    // Prevent too much buffered audio
-    if (this.audioOutput.bufferedTime > 2.0) {
+    // Backpressure: defer instead of dropping to avoid content loss
+    if (this._ttsInFlight > 3 || this.audioOutput.bufferedTime > 2.0) {
+      this.deferredTTSQueue.push({ text: cleaned, seq });
       return;
     }
 
+    this._dispatchTTS(cleaned, seq);
+  }
+
+  /** Internal: actually dispatch a TTS request (shared by _sendTTS and _drainDeferredTTS). */
+  _dispatchTTS(cleaned, seq) {
     this._ttsInFlight++;
     const requestId = this._ttsRequestId;
     const preview = cleaned.substring(0, 40);
@@ -439,6 +462,18 @@ export class VoiceEngine {
       // onTTSDone will decrement _ttsInFlight
     } else {
       this._sendTTSHTTP(cleaned, requestId, seq);
+    }
+  }
+
+  /** Drain deferred TTS queue when pipeline has capacity. */
+  _drainDeferredTTS() {
+    while (
+      this.deferredTTSQueue.length &&
+      this._ttsInFlight <= 3 &&
+      this.audioOutput.bufferedTime <= 2.0
+    ) {
+      const { text, seq } = this.deferredTTSQueue.shift();
+      this._dispatchTTS(text, seq);
     }
   }
 
@@ -462,7 +497,7 @@ export class VoiceEngine {
         } else {
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}, seq=${seq}] enqueuing audio (${elapsed}ms)`);
           const audioData = this.base64ToArrayBuffer(data.audio);
-          this._handleTTSAudio(audioData, seq);
+          this._handleTTSAudio(audioData, seq, text);
         }
       }
     })
@@ -471,7 +506,8 @@ export class VoiceEngine {
     })
     .finally(() => {
       if (requestId === this._ttsRequestId) {
-        if (this._ttsInFlight > 0) this._ttsInFlight--;
+        this._ttsInFlight = Math.max(0, this._ttsInFlight - 1);
+        this._drainDeferredTTS();
         this._tryCompleteResponse();
       } else {
         console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] stale finally – skipping state update (current req=${this._ttsRequestId})`);
@@ -480,16 +516,31 @@ export class VoiceEngine {
   }
 
   /** Ordered playback handler: buffers out-of-order TTS results and plays in sequence. */
-  _handleTTSAudio(buffer, seq) {
-    this.pendingAudio.set(seq, buffer);
+  _handleTTSAudio(buffer, seq, text) {
+    this.pendingAudio.set(seq, { buffer, text });
 
     while (this.pendingAudio.has(this.expectedSeq)) {
-      const buf = this.pendingAudio.get(this.expectedSeq);
+      const entry = this.pendingAudio.get(this.expectedSeq);
       this.pendingAudio.delete(this.expectedSeq);
 
-      this.audioOutput.enqueue(buf);
+      this.audioOutput.enqueue(entry.buffer, entry.text);
       this.expectedSeq++;
     }
+
+    // Timeout fallback: if a seq is lost/skipped, skip ahead to avoid memory leak
+    setTimeout(() => {
+      if (this.pendingAudio.has(seq) && seq > this.expectedSeq + 5) {
+        console.warn(`[VoiceEngine] Skipping missing seqs up to ${seq}`);
+        this.expectedSeq = seq;
+        // Re-drain from the new expectedSeq
+        while (this.pendingAudio.has(this.expectedSeq)) {
+          const entry = this.pendingAudio.get(this.expectedSeq);
+          this.pendingAudio.delete(this.expectedSeq);
+          this.audioOutput.enqueue(entry.buffer, entry.text);
+          this.expectedSeq++;
+        }
+      }
+    }, 2000);
   }
   
   base64ToArrayBuffer(base64) {
@@ -527,7 +578,8 @@ export class VoiceEngine {
   }
 
   onTTSDone() {
-    if (this._ttsInFlight > 0) this._ttsInFlight--;
+    this._ttsInFlight = Math.max(0, this._ttsInFlight - 1);
+    this._drainDeferredTTS();
     this._tryCompleteResponse();
   }
 
@@ -543,7 +595,7 @@ export class VoiceEngine {
   _cancelOngoingResponse() {
     this.llm.cancel();
     this.tts.cancel();
-    this.audioOutput.reset();
+    this.audioOutput.softReset();
     this._ttsInFlight = 0;
     this.ignoreAudioChunks = true;
     this.accumulatedResponse = '';
@@ -551,10 +603,12 @@ export class VoiceEngine {
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
     this.llmStarted = false;
+    this.hasSentFirstChunk = false;
     // Reset TTS sequencing state
     this.ttsSeq = 0;
     this.expectedSeq = 0;
     this.pendingAudio.clear();
+    this.deferredTTSQueue = [];
     // Invalidate any in-flight HTTP TTS and stale LLM callbacks so they
     // do not enqueue audio or alter state for the upcoming new turn.
     this._ttsRequestId++;
@@ -571,7 +625,10 @@ export class VoiceEngine {
    */
   _tryCompleteResponse() {
     if (!this.responseFinished) return;
+    // Drain any deferred TTS chunks first
+    this._drainDeferredTTS();
     if (this._ttsInFlight > 0) return;
+    if (this.deferredTTSQueue.length > 0) return;
     // Flush any audio that was waiting below the minBufferSec threshold
     this.audioOutput.flush();
     if (this.audioOutput.queueLength() > 0 || this.audioOutput.isPlaying()) return;
@@ -580,6 +637,7 @@ export class VoiceEngine {
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
     this.llmStarted = false;
+    this.hasSentFirstChunk = false;
     this.setState(VoiceState.LISTENING);
     if (this.alwaysListening) {
       this.audioInput.resumeVAD();
@@ -638,11 +696,12 @@ export class VoiceEngine {
   interrupt() {
     if (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) {
       console.log('[VoiceEngine] Interrupt requested');
-      this.audioOutput.reset();
+      this.audioOutput.softReset();
       this.llm.cancel();
       this.tts.cancel();
       this.textBuffer = '';
       this.llmStarted = false;
+      this.hasSentFirstChunk = false;
       this._ttsInFlight = 0;
       this._llmRequestId++;
       this._ttsRequestId++;
@@ -654,6 +713,7 @@ export class VoiceEngine {
       this.ttsSeq = 0;
       this.expectedSeq = 0;
       this.pendingAudio.clear();
+      this.deferredTTSQueue = [];
       this.setState(VoiceState.LISTENING);
       if (this.alwaysListening) {
         this.audioInput.resumeVAD();
@@ -669,11 +729,13 @@ export class VoiceEngine {
     this.audioOutput.reset();
     this.textBuffer = '';
     this.llmStarted = false;
+    this.hasSentFirstChunk = false;
     this._ttsInFlight = 0;
     // Reset TTS sequencing state
     this.ttsSeq = 0;
     this.expectedSeq = 0;
     this.pendingAudio.clear();
+    this.deferredTTSQueue = [];
     this._llmRequestId++;
     this._ttsRequestId++;
   }

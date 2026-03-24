@@ -13,6 +13,7 @@ export class AudioOutput {
     this._pendingBuffers = [];
     this._activeSourceCount = 0;
     this._resetGeneration = 0;
+    this._lastChunkText = null;
   }
 
   _ensureContext() {
@@ -34,13 +35,16 @@ export class AudioOutput {
    * Convert a raw chunk (Float32Array, ArrayBuffer/WAV) to a Web Audio
    * AudioBuffer and schedule it on the playback timeline.
    */
-  enqueue(chunk) {
+  enqueue(chunk, text) {
     this._ensureContext();
 
     // Prevent timeline from falling behind (gap protection)
     if (this.nextTime < this.ctx.currentTime + TIMELINE_GAP_OFFSET) {
       this.nextTime = this.ctx.currentTime + TIMELINE_GAP_OFFSET;
     }
+
+    // Track the source text for prosody pauses
+    if (text) this._lastChunkText = text;
 
     let float32;
     let sampleRate;
@@ -141,7 +145,13 @@ export class AudioOutput {
       }
     };
 
-    this.nextTime += audioBuffer.duration;
+    // Advance timeline with small inter-chunk gap for natural prosody
+    this.nextTime += audioBuffer.duration + 0.03;
+
+    // Longer pause after sentence-ending punctuation
+    if (this._lastChunkText && /[.!?]$/.test(this._lastChunkText)) {
+      this.nextTime += 0.08;
+    }
   }
 
   /**
@@ -215,6 +225,27 @@ export class AudioOutput {
     return { float32: new Float32Array(0), sampleRate: 24000 };
   }
 
+  /**
+   * Lightweight reset: keep the AudioContext alive, just reset scheduling state.
+   * Avoids the latency cost of AudioContext recreation.
+   * Falls back to full reset() if the context is in a broken state.
+   */
+  softReset() {
+    this._resetGeneration++;
+    if (this.ctx && this.ctx.state !== 'closed') {
+      this.nextTime = this.ctx.currentTime + TIMELINE_GAP_OFFSET;
+    } else {
+      this.ctx = null;
+      this.nextTime = 0;
+    }
+    this.started = false;
+    this.bufferedTime = 0;
+    this._pendingBuffers = [];
+    this._activeSourceCount = 0;
+    this.hasPlayedSomething = false;
+    this._lastChunkText = null;
+  }
+
   /** Tear down the AudioContext and reset all scheduling state. */
   reset() {
     this._resetGeneration++;
@@ -228,6 +259,7 @@ export class AudioOutput {
     this._pendingBuffers = [];
     this._activeSourceCount = 0;
     this.hasPlayedSomething = false;
+    this._lastChunkText = null;
   }
 
   stop() {

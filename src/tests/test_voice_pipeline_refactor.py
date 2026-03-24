@@ -327,9 +327,10 @@ class TestVoiceEngineStreamingPipeline:
     def test_sendTTSHTTP_no_await_fetch(self):
         """_sendTTSHTTP must use .then() chain, not await."""
         src = self._get_source()
-        m = re.search(r'_sendTTSHTTP\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m, "_sendTTSHTTP method not found"
-        body = m.group(0)
+        start = m.start()
+        body = src[start:start + 1200]
         assert "await fetch" not in body, \
             "_sendTTSHTTP must not use await fetch"
         assert ".then(" in body, \
@@ -338,12 +339,12 @@ class TestVoiceEngineStreamingPipeline:
     # -- interrupt / reset --
 
     def test_interrupt_resets_audio(self):
-        """interrupt() must call audioOutput.reset()."""
+        """interrupt() must call audioOutput.reset() or audioOutput.softReset()."""
         src = self._get_source()
         m = re.search(r'  interrupt\s*\(\s*\)\s*\{.*?\n  \}', src, re.DOTALL)
         assert m, "interrupt method not found"
         body = m.group(0)
-        assert "audioOutput.reset()" in body or "_cancelOngoingResponse" in body
+        assert "audioOutput.reset()" in body or "audioOutput.softReset()" in body or "_cancelOngoingResponse" in body
 
     def test_interrupt_clears_textBuffer(self):
         """interrupt() must clear textBuffer."""
@@ -362,12 +363,12 @@ class TestVoiceEngineStreamingPipeline:
         assert "llmStarted" in body
 
     def test_cancelOngoingResponse_resets_audio(self):
-        """_cancelOngoingResponse must call audioOutput.reset()."""
+        """_cancelOngoingResponse must call audioOutput.reset() or audioOutput.softReset()."""
         src = self._get_source()
         m = re.search(r'_cancelOngoingResponse\s*\(\s*\)\s*\{.*?\n  \}', src, re.DOTALL)
         assert m
         body = m.group(0)
-        assert "audioOutput.reset()" in body
+        assert "audioOutput.reset()" in body or "audioOutput.softReset()" in body
 
     # -- startConversation --
 
@@ -479,14 +480,15 @@ class TestShouldFlushEndOfString:
             "shouldFlush regex must use $ anchor for end-of-string matching"
 
     def test_shouldFlush_includes_colon(self):
-        """shouldFlush regex must include : as flush trigger."""
+        """shouldFlush regex must include semantic boundary triggers."""
         src = self._get_source()
         m = re.search(r'shouldFlush\s*\(text\)', src)
         assert m
         start = m.start()
-        body = src[start:start + 300]
-        assert ";:]" in body, \
-            "shouldFlush must include colon in end-of-string punctuation regex"
+        body = src[start:start + 400]
+        # Must include comma-space and/or conjunction-based flush triggers
+        assert ",\\s" in body or "and" in body, \
+            "shouldFlush must include semantic boundary triggers (comma-space, conjunctions)"
 
 
 class TestTTSSequencing:
@@ -519,7 +521,7 @@ class TestTTSSequencing:
         """_handleTTSAudio must buffer and play in expectedSeq order."""
         src = self._get_source()
         # Match the method definition (with 2-space indent), not call sites
-        m = re.search(r'  _handleTTSAudio\s*\(buffer,\s*seq\)', src)
+        m = re.search(r'  _handleTTSAudio\s*\(buffer,\s*seq', src)
         assert m, "_handleTTSAudio method definition not found"
         start = m.start()
         body = src[start:start + 500]
@@ -540,9 +542,10 @@ class TestTTSSequencing:
     def test_sendTTSHTTP_uses_handleTTSAudio(self):
         """_sendTTSHTTP must route audio through _handleTTSAudio, not direct enqueue."""
         src = self._get_source()
-        m = re.search(r'_sendTTSHTTP\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m, "_sendTTSHTTP method not found"
-        body = m.group(0)
+        start = m.start()
+        body = src[start:start + 1200]
         assert "_handleTTSAudio" in body, \
             "_sendTTSHTTP must use _handleTTSAudio for ordered playback"
 
@@ -672,9 +675,10 @@ class TestInterruptSafety:
     def test_sendTTSHTTP_checks_requestId(self):
         """_sendTTSHTTP must check requestId against _ttsRequestId before enqueuing."""
         src = self._get_source()
-        m = re.search(r'_sendTTSHTTP\s*\(.*?\)\s*\{.*?\n  \}', src, re.DOTALL)
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m, "_sendTTSHTTP method not found"
-        body = m.group(0)
+        start = m.start()
+        body = src[start:start + 1200]
         assert "requestId !== this._ttsRequestId" in body, \
             "_sendTTSHTTP must check requestId freshness"
 
@@ -687,3 +691,287 @@ class TestInterruptSafety:
         body = src[start:start + 800]
         assert "this._ttsRequestId" in body, \
             "_sendTTS must reference _ttsRequestId"
+
+
+# ---------------------------------------------------------------------------
+# Follow-up fixes (round 2): deferred TTS, safe decrement, pending timeout,
+# semantic flush, prosody, early first chunk, word-count LLM, softReset
+# ---------------------------------------------------------------------------
+
+class TestDeferredTTSQueue:
+    """ISSUE 1: TTS chunks must be deferred, not dropped, under backpressure."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_deferredTTSQueue_field(self):
+        src = self._get_source()
+        assert "this.deferredTTSQueue" in src
+
+    def test_sendTTS_defers_instead_of_dropping(self):
+        """_sendTTS must push to deferredTTSQueue instead of returning silently."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "deferredTTSQueue.push(" in body, \
+            "_sendTTS must push deferred items instead of dropping"
+
+    def test_drainDeferredTTS_method(self):
+        """_drainDeferredTTS must exist and process deferred items."""
+        src = self._get_source()
+        m = re.search(r'_drainDeferredTTS\s*\(\)', src)
+        assert m, "_drainDeferredTTS method must exist"
+        start = m.start()
+        body = src[start:start + 400]
+        assert "deferredTTSQueue" in body
+        assert "shift()" in body
+
+    def test_dispatchTTS_method(self):
+        """_dispatchTTS must exist as internal dispatch helper."""
+        src = self._get_source()
+        assert "_dispatchTTS(" in src
+
+    def test_drain_called_after_completion(self):
+        """_drainDeferredTTS must be called after TTS completion."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1500]
+        assert "_drainDeferredTTS()" in body
+
+    def test_tryComplete_checks_deferred_queue(self):
+        """_tryCompleteResponse must check deferredTTSQueue is empty."""
+        src = self._get_source()
+        m = re.search(r'_tryCompleteResponse\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 600]
+        assert "deferredTTSQueue" in body
+
+    def test_cancel_clears_deferred_queue(self):
+        """_cancelOngoingResponse must clear deferredTTSQueue."""
+        src = self._get_source()
+        m = re.search(r'_cancelOngoingResponse\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "deferredTTSQueue" in body
+
+    def test_interrupt_clears_deferred_queue(self):
+        """interrupt() must clear deferredTTSQueue."""
+        src = self._get_source()
+        m = re.search(r'  interrupt\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "deferredTTSQueue" in body
+
+
+class TestSafeTTSInFlightDecrement:
+    """ISSUE 2: _ttsInFlight must use Math.max(0, ...) to prevent negative values."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_sendTTSHTTP_safe_decrement(self):
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1500]
+        assert "Math.max(0" in body, \
+            "_sendTTSHTTP .finally must use Math.max(0, ...) for safe decrement"
+
+    def test_onTTSDone_safe_decrement(self):
+        src = self._get_source()
+        m = re.search(r'  onTTSDone\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 200]
+        assert "Math.max(0" in body, \
+            "onTTSDone must use Math.max(0, ...) for safe decrement"
+
+
+class TestPendingAudioTimeout:
+    """ISSUE 3: pendingAudio must have timeout fallback for lost seqs."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_handleTTSAudio_has_timeout(self):
+        """_handleTTSAudio must set a timeout to skip stalled seqs."""
+        src = self._get_source()
+        m = re.search(r'  _handleTTSAudio\s*\(buffer,\s*seq', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "setTimeout" in body, \
+            "_handleTTSAudio must have a timeout fallback"
+
+    def test_timeout_skips_ahead(self):
+        """The timeout must advance expectedSeq to avoid memory leak."""
+        src = self._get_source()
+        m = re.search(r'  _handleTTSAudio\s*\(buffer,\s*seq', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this.expectedSeq = seq" in body
+
+
+class TestSemanticFlush:
+    """ISSUE 4: shouldFlush must detect semantic boundaries."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_shouldFlush_detects_comma(self):
+        """shouldFlush must flush on comma-space pattern."""
+        src = self._get_source()
+        m = re.search(r'shouldFlush\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 400]
+        assert r",\s" in body, \
+            "shouldFlush must detect comma-space for natural pausing"
+
+    def test_shouldFlush_detects_conjunction_and(self):
+        src = self._get_source()
+        m = re.search(r'shouldFlush\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 400]
+        assert "and" in body
+
+    def test_shouldFlush_detects_conjunction_but(self):
+        src = self._get_source()
+        m = re.search(r'shouldFlush\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 400]
+        assert "but" in body
+
+
+class TestProsodyGaps:
+    """ISSUE 5: _scheduleBuffer must add inter-chunk gaps for natural prosody."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_inter_chunk_gap(self):
+        """_scheduleBuffer must add a small gap between chunks."""
+        src = self._get_source()
+        # Match the method definition (2-space indent), not call sites
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        assert m, "_scheduleBuffer definition not found"
+        start = m.start()
+        body = src[start:start + 1800]
+        assert "+ 0.03" in body, \
+            "_scheduleBuffer must add 30ms inter-chunk gap"
+
+    def test_sentence_end_pause(self):
+        """_scheduleBuffer must add extra pause after sentence-ending punctuation."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1800]
+        assert "+= 0.08" in body or "+ 0.08" in body, \
+            "_scheduleBuffer must add 80ms pause after sentence end"
+
+    def test_lastChunkText_tracked(self):
+        """AudioOutput must track _lastChunkText for prosody decisions."""
+        src = self._get_source()
+        assert "this._lastChunkText" in src
+
+
+class TestEarlyFirstChunk:
+    """ISSUE 6: onLLMToken must send first TTS chunk earlier."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_hasSentFirstChunk_field(self):
+        src = self._get_source()
+        assert "this.hasSentFirstChunk" in src
+
+    def test_early_first_chunk_in_onLLMToken(self):
+        """onLLMToken must send TTS earlier for the first chunk."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "hasSentFirstChunk" in body
+        assert "_sendTTS" in body
+
+    def test_hasSentFirstChunk_reset_on_complete(self):
+        """hasSentFirstChunk must be reset when response completes."""
+        src = self._get_source()
+        m = re.search(r'_tryCompleteResponse\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "hasSentFirstChunk" in body
+
+
+class TestWordCountLLMTrigger:
+    """ISSUE 7: LLM early start must use word count, not char length."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_onTranscript_uses_word_count(self):
+        """onTranscript must use word count (split) for early LLM trigger."""
+        src = self._get_source()
+        m = re.search(r'  onTranscript\s*\(.*?\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 500]
+        assert "split(" in body, \
+            "onTranscript must use split for word count"
+        assert ">= 3" in body, \
+            "onTranscript must trigger on >= 3 words"
+
+
+class TestAudioContextReuse:
+    """ISSUE 8: AudioOutput must support softReset to reuse AudioContext."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_softReset_method_exists(self):
+        src = self._get_source()
+        assert "softReset()" in src or "softReset ()" in src
+
+    def test_softReset_resets_timeline(self):
+        """softReset must reset nextTime without closing context."""
+        src = self._get_source()
+        m = re.search(r'softReset\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 400]
+        assert "this.nextTime" in body
+        assert "this.started = false" in body
+        assert "this.bufferedTime = 0" in body
+
+    def test_softReset_keeps_context(self):
+        """softReset must not close the AudioContext."""
+        src = self._get_source()
+        m = re.search(r'softReset\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 400]
+        assert ".close()" not in body, \
+            "softReset must not close the AudioContext"
+
+    def test_voiceEngine_uses_softReset_for_interrupts(self):
+        """VoiceEngine interrupt paths must use softReset, not reset."""
+        src = _read_source("src/static/voice/voiceEngine.js")
+        m = re.search(r'_cancelOngoingResponse\s*\(\s*\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 200]
+        assert "softReset()" in body
