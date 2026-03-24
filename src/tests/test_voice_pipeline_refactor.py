@@ -545,7 +545,7 @@ class TestTTSSequencing:
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m, "_sendTTSHTTP method not found"
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1800]
         assert "_handleTTSAudio" in body, \
             "_sendTTSHTTP must use _handleTTSAudio for ordered playback"
 
@@ -652,8 +652,8 @@ class TestTTSBackpressure:
         assert m, "_sendTTS method not found"
         start = m.start()
         body = src[start:start + 800]
-        assert "this._ttsInFlight > 6" in body, \
-            "_sendTTS must check _ttsInFlight > 6 for backpressure (increased concurrency)"
+        assert "this._ttsInFlight > 12" in body, \
+            "_sendTTS must check _ttsInFlight > 12 for backpressure (increased concurrency)"
 
     def test_audio_buffer_limit(self):
         """_sendTTS must skip if too much audio is buffered."""
@@ -662,8 +662,8 @@ class TestTTSBackpressure:
         assert m
         start = m.start()
         body = src[start:start + 800]
-        assert "this.audioOutput.bufferedTime > 0.8" in body, \
-            "_sendTTS must check audioOutput.bufferedTime > 0.8 for reduced audio backpressure"
+        assert "this.audioOutput.bufferedTime > 0.3" in body, \
+            "_sendTTS must check audioOutput.bufferedTime > 0.3 for reduced audio backpressure"
 
 
 class TestInterruptSafety:
@@ -739,7 +739,7 @@ class TestDeferredTTSQueue:
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m
         start = m.start()
-        body = src[start:start + 1500]
+        body = src[start:start + 2000]
         assert "_drainDeferredTTS()" in body
 
     def test_tryComplete_checks_deferred_queue(self):
@@ -781,7 +781,7 @@ class TestSafeTTSInFlightDecrement:
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m
         start = m.start()
-        body = src[start:start + 1500]
+        body = src[start:start + 1800]
         assert "Math.max(0" in body, \
             "_sendTTSHTTP .finally must use Math.max(0, ...) for safe decrement"
 
@@ -877,7 +877,7 @@ class TestProsodyGaps:
         m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2000]
         assert "+= 0.08" in body or "+ 0.08" in body, \
             "_scheduleBuffer must add 80ms pause after sentence end"
 
@@ -903,7 +903,7 @@ class TestEarlyFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1400]
         assert "hasSentFirstChunk" in body
         assert "_sendTTS" in body
 
@@ -952,7 +952,7 @@ class TestAudioContextReuse:
         m = re.search(r'softReset\s*\(\s*\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 400]
+        body = src[start:start + 800]
         assert "this.nextTime" in body
         assert "this.started = false" in body
         assert "this.bufferedTime = 0" in body
@@ -963,7 +963,7 @@ class TestAudioContextReuse:
         m = re.search(r'softReset\s*\(\s*\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 400]
+        body = src[start:start + 800]
         assert ".close()" not in body, \
             "softReset must not close the AudioContext"
 
@@ -982,30 +982,30 @@ class TestAudioContextReuse:
 # ---------------------------------------------------------------------------
 
 class TestIncreasedTTSConcurrency:
-    """TTS concurrency limit must be raised to 6 for parallel TTS prefetch."""
+    """TTS concurrency limit must be raised to 12 for parallel TTS prefetch."""
 
     def _get_source(self):
         return _read_source("src/static/voice/voiceEngine.js")
 
-    def test_inflight_limit_is_6(self):
-        """_sendTTS backpressure must use _ttsInFlight > 6."""
+    def test_inflight_limit_is_12(self):
+        """_sendTTS backpressure must use _ttsInFlight > 12."""
         src = self._get_source()
         m = re.search(r'  _sendTTS\s*\(text\)', src)
         assert m
         start = m.start()
         body = src[start:start + 800]
-        assert "this._ttsInFlight > 6" in body, \
-            "TTS concurrency limit must be 6 for parallel prefetch"
+        assert "this._ttsInFlight > 12" in body, \
+            "TTS concurrency limit must be 12 for parallel prefetch"
 
     def test_buffered_time_limit_reduced(self):
-        """_sendTTS must use bufferedTime > 0.8 (reduced from 2.0)."""
+        """_sendTTS must use bufferedTime > 0.3 (reduced from 0.8)."""
         src = self._get_source()
         m = re.search(r'  _sendTTS\s*\(text\)', src)
         assert m
         start = m.start()
         body = src[start:start + 800]
-        assert "this.audioOutput.bufferedTime > 0.8" in body, \
-            "Buffered time backpressure must be 0.8 for reduced lag"
+        assert "this.audioOutput.bufferedTime > 0.3" in body, \
+            "Buffered time backpressure must be 0.3 for reduced lag"
 
 
 class TestEarlierFirstChunkTrigger:
@@ -1038,7 +1038,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1600]
+        body = src[start:start + 2000]
         assert "token.endsWith(' ')" in body, \
             "Must flush on word boundary (token ending with space)"
 
@@ -1048,7 +1048,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1600]
+        body = src[start:start + 2000]
         assert "dynamicMinLength" in body, \
             "Phrase flush must use adaptive dynamicMinLength"
         assert "Math.min(8 + this._ttsInFlight * 4, 24)" in body, \
@@ -1060,7 +1060,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2000]
         assert "_wordCount >= 2" in body, \
             "Phrase flush must require at least 2 words to prevent micro-chunks"
 
@@ -1070,7 +1070,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2000]
         assert "token.endsWith(' ')" in body
         assert "_sendTTS(flushText)" in body
 
@@ -1080,7 +1080,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2000]
         phrase_idx = body.find("token.endsWith(' ')")
         assert phrase_idx > 0
         after_phrase = body[phrase_idx:phrase_idx + 350]
@@ -1123,24 +1123,24 @@ class TestDeferredTTSPacing:
         return _read_source("src/static/voice/voiceEngine.js")
 
     def test_drain_rate_limit_at_4(self):
-        """_drainDeferredTTS must return early if _ttsInFlight > 4."""
+        """_drainDeferredTTS must return early if _ttsInFlight > 8."""
         src = self._get_source()
         m = re.search(r'  _drainDeferredTTS\s*\(\)', src)
         assert m, "_drainDeferredTTS method not found"
         start = m.start()
         body = src[start:start + 400]
-        assert "this._ttsInFlight > 4" in body, \
-            "_drainDeferredTTS must rate-limit at _ttsInFlight > 4"
+        assert "this._ttsInFlight > 8" in body, \
+            "_drainDeferredTTS must rate-limit at _ttsInFlight > 8"
 
     def test_drain_buffered_time_threshold(self):
-        """_drainDeferredTTS must check bufferedTime < 0.6."""
+        """_drainDeferredTTS must check bufferedTime < 0.3."""
         src = self._get_source()
         m = re.search(r'  _drainDeferredTTS\s*\(\)', src)
         assert m, "_drainDeferredTTS method not found"
         start = m.start()
         body = src[start:start + 400]
-        assert "bufferedTime < 0.6" in body, \
-            "_drainDeferredTTS must only drain when bufferedTime < 0.6"
+        assert "bufferedTime < 0.3" in body, \
+            "_drainDeferredTTS must only drain when bufferedTime < 0.3"
 
 
 class TestSpeechContinuityTracking:
@@ -1273,24 +1273,24 @@ class TestDeferredQueueFreshness:
 
 
 class TestFirstChunkWordBoundary:
-    """First chunk must trigger on word boundary (token.includes(' '))."""
+    """First chunk must trigger on textBuffer length > 3 for speculative TTS."""
 
     def _get_source(self):
         return _read_source("src/static/voice/voiceEngine.js")
 
-    def test_first_chunk_uses_includes_space(self):
-        """First chunk trigger must use token.includes(' ') not length threshold."""
+    def test_first_chunk_uses_textBuffer_length(self):
+        """First chunk trigger must use textBuffer.length > 3 for speculative TTS."""
         src = self._get_source()
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1400]
         # Find the hasSentFirstChunk section
         first_idx = body.find("hasSentFirstChunk")
         assert first_idx > 0
         section = body[first_idx:first_idx + 200]
-        assert "token.includes(' ')" in section, \
-            "First chunk must trigger on word boundary via token.includes(' ')"
+        assert "textBuffer.length > 3" in section, \
+            "First chunk must trigger on textBuffer.length > 3 for speculative TTS"
 
 
 class TestLastSpokenTextTiming:
@@ -1310,13 +1310,13 @@ class TestLastSpokenTextTiming:
             "lastSpokenText must NOT be set in _sendTTS (before TTS succeeds)"
 
     def test_in_http_success_path(self):
-        """lastSpokenText must be set in _sendTTSHTTP success path."""
+        """lastSpokenText must be accumulated in _sendTTSHTTP success path."""
         src = self._get_source()
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m
         start = m.start()
-        body = src[start:start + 1500]
-        assert "this.lastSpokenText = text" in body, \
+        body = src[start:start + 1800]
+        assert "this.lastSpokenText += text" in body, \
             "lastSpokenText must be set in HTTP TTS success callback"
 
     def test_set_after_requestId_check(self):
@@ -1325,9 +1325,9 @@ class TestLastSpokenTextTiming:
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m
         start = m.start()
-        body = src[start:start + 1500]
+        body = src[start:start + 1800]
         reqid_idx = body.find("requestId !== this._ttsRequestId")
-        last_spoken_idx = body.find("this.lastSpokenText = text")
+        last_spoken_idx = body.find("this.lastSpokenText += text")
         assert reqid_idx > 0 and last_spoken_idx > 0, \
             "Both requestId check and lastSpokenText update must exist"
         assert last_spoken_idx > reqid_idx, \
@@ -1365,11 +1365,11 @@ class TestProsodyContinuity:
             "prev_text must reference this.lastSpokenText"
 
     def test_prev_text_is_sliced(self):
-        """prev_text must be sliced to a bounded length (e.g. .slice(-100))."""
+        """prev_text must be sliced to a bounded length (e.g. .slice(-200))."""
         src = self._get_source()
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m
         start = m.start()
-        body = src[start:start + 1500]
-        assert ".slice(-100)" in body, \
-            "prev_text must be bounded with .slice(-100) to avoid oversized payloads"
+        body = src[start:start + 1800]
+        assert ".slice(-200)" in body, \
+            "prev_text must be bounded with .slice(-200) to avoid oversized payloads"

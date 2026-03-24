@@ -12,6 +12,7 @@ export class AudioOutput {
     this.hasPlayedSomething = false;
     this._pendingBuffers = [];
     this._activeSourceCount = 0;
+    this._activeSources = [];
     this._resetGeneration = 0;
     this._lastChunkText = null;
   }
@@ -133,12 +134,15 @@ export class AudioOutput {
     source.start(t);
 
     this._activeSourceCount++;
+    this._activeSources.push(source);
     const gen = this._resetGeneration;
 
     source.onended = () => {
       // Ignore callbacks from sources that belong to a previous (cancelled) session
       if (gen !== this._resetGeneration) return;
       this._activeSourceCount--;
+      const idx = this._activeSources.indexOf(source);
+      if (idx !== -1) this._activeSources.splice(idx, 1);
       if (this._activeSourceCount === 0 && this.hasPlayedSomething) {
         this.hasPlayedSomething = false;
         if (this.onPlaybackEnd) {
@@ -148,8 +152,9 @@ export class AudioOutput {
       }
     };
 
-    // Advance timeline with small inter-chunk gap for natural prosody
-    this.nextTime += audioBuffer.duration + 0.03;
+    // Advance timeline with small inter-chunk gap + slight jitter for natural prosody
+    const jitter = Math.random() * 0.015;
+    this.nextTime += audioBuffer.duration + 0.03 + jitter;
 
     // Longer pause after sentence-ending punctuation
     if (this._lastChunkText && /[.!?]$/.test(this._lastChunkText)) {
@@ -235,6 +240,11 @@ export class AudioOutput {
    */
   softReset() {
     this._resetGeneration++;
+    // Stop all currently playing sources immediately for instant interrupt
+    for (const src of this._activeSources) {
+      try { src.stop(); } catch (e) {}
+    }
+    this._activeSources = [];
     if (this.ctx && this.ctx.state !== 'closed') {
       this.nextTime = this.ctx.currentTime + TIMELINE_GAP_OFFSET;
     } else {
@@ -252,6 +262,11 @@ export class AudioOutput {
   /** Tear down the AudioContext and reset all scheduling state. */
   reset() {
     this._resetGeneration++;
+    // Stop all currently playing sources immediately
+    for (const src of this._activeSources) {
+      try { src.stop(); } catch (e) {}
+    }
+    this._activeSources = [];
     if (this.ctx) {
       try { this.ctx.close(); } catch (e) {}
     }
@@ -279,7 +294,7 @@ export class AudioOutput {
   }
 
   stopAll() {
-    this.reset();
+    this.softReset();
   }
 
   clear() {

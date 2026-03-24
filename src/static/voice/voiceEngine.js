@@ -328,7 +328,10 @@ export class VoiceEngine {
     if (!this.hasStartedSpeaking) {
       this.hasStartedSpeaking = true;
       this.setState(VoiceState.AI_SPEAKING);
-      this.audioInput.pauseVAD();
+      // Full duplex: resume VAD so the user can interrupt by speaking.
+      // Browser echo-cancellation (echoCancellation: true in getUserMedia)
+      // plus hasEnoughAudioForInterrupt() guard prevents false triggers.
+      this.audioInput.resumeVAD();
       console.log(`[VoiceEngine] LLM first token received (id=${this._activeLLMId})`);
     }
     
@@ -342,18 +345,16 @@ export class VoiceEngine {
       this._wordCount++;
     }
 
-    // Early first chunk: speak sooner for faster perceived response
-    // Flush on first complete word for lowest latency start
-    if (!this.hasSentFirstChunk && token.includes(' ')) {
-      const match = this.textBuffer.match(/^(.+\b)/);
-      if (match) {
-        const chunk = match[1];
-        this.textBuffer = this.textBuffer.slice(chunk.length);
-        this.hasSentFirstChunk = true;
-        this._wordCount = 0;
-        this._sendTTS(chunk);
-        return;
-      }
+    // Early first chunk: speculative TTS for fastest perceived response
+    // Flush as soon as buffer exceeds 3 chars – even partial words are OK
+    // because latency matters more than perfection for the very first chunk.
+    if (!this.hasSentFirstChunk && this.textBuffer.length > 3) {
+      const chunk = this.textBuffer;
+      this.textBuffer = '';
+      this.hasSentFirstChunk = true;
+      this._wordCount = 0;
+      this._sendTTS(chunk);
+      return;
     }
     
     // Phrase-level flush: flush on word boundary for speech-rhythm chunking
@@ -482,7 +483,7 @@ export class VoiceEngine {
     const seq = this.ttsSeq++;
 
     // Backpressure: defer instead of dropping to avoid content loss
-    if (this._ttsInFlight > 6 || this.audioOutput.bufferedTime > 0.8) {
+    if (this._ttsInFlight > 12 || this.audioOutput.bufferedTime > 0.3) {
       this.deferredTTSQueue.push({ text: cleaned, seq });
       // Freshness bias: drop oldest deferred chunks under heavy load
       // to keep speech feeling live rather than lagging behind
@@ -513,11 +514,11 @@ export class VoiceEngine {
   /** Drain deferred TTS queue gradually (one at a time) to avoid burst speech. */
   _drainDeferredTTS() {
     // Rate-limit: don't flood if already busy
-    if (this._ttsInFlight > 4) return;
+    if (this._ttsInFlight > 8) return;
 
     if (
       this.deferredTTSQueue.length &&
-      this.audioOutput.bufferedTime < 0.6
+      this.audioOutput.bufferedTime < 0.3
     ) {
       const { text, seq } = this.deferredTTSQueue.shift();
       this._dispatchTTS(text, seq);
@@ -529,10 +530,14 @@ export class VoiceEngine {
     const preview = text.trim().substring(0, 40);
     console.log(`[VoiceEngine] TTS HTTP [req=${requestId}, seq=${seq}] starting: "${preview}${text.length > 40 ? '…' : ''}"`);
 
+    // Sentence-boundary detection: don't bleed prosody across sentence starts
+    const isNewSentence = /^[A-Z]/.test(text.trim());
+    const prevText = isNewSentence ? '' : this.lastSpokenText.slice(-200);
+
     fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, speaker: this.speaker, prev_text: this.lastSpokenText.slice(-100) })
+      body: JSON.stringify({ text: text, speaker: this.speaker, prev_text: prevText })
     })
     .then(response => response.json())
     .then(data => {
@@ -543,8 +548,11 @@ export class VoiceEngine {
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] discarding stale audio (${elapsed}ms, current req=${this._ttsRequestId})`);
         } else {
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}, seq=${seq}] enqueuing audio (${elapsed}ms)`);
-          // Only track lastSpokenText after TTS actually succeeds and is accepted
-          this.lastSpokenText = text;
+          // Accumulate lastSpokenText for prosody context (bounded to 200 chars)
+          this.lastSpokenText += text;
+          if (this.lastSpokenText.length > 200) {
+            this.lastSpokenText = this.lastSpokenText.slice(-200);
+          }
           const audioData = this.base64ToArrayBuffer(data.audio);
           this._handleTTSAudio(audioData, seq, text);
         }
