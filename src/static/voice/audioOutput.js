@@ -1,122 +1,50 @@
 export class AudioOutput {
   constructor() {
-    this.audioQueue = [];
-    this.playing = false;
-    this.audioContext = null;
-    this.currentAudio = null;
+    this.ctx = null;
+    this.nextTime = 0;
+    this.started = false;
+    this.bufferedTime = 0;
+    this.minBufferSec = 0.3; // tweakable: delay start until small buffer ready
     this.onPlaybackStart = null;
     this.onPlaybackEnd = null;
     this.hasPlayedSomething = false;
-    /**
-     * Minimum number of chunks to buffer before starting playback.
-     * Prevents choppy audio when chunks arrive just-in-time.
-     * Set to 0 to disable buffering (play immediately).
-     */
-    this.minBufferSize = 3;
-    /** When true, flush / play everything regardless of buffer level. */
-    this._flushing = false;
+    this._pendingBuffers = [];
+    this._activeSourceCount = 0;
+    this._resetGeneration = 0;
   }
 
-  async initContext() {
-    if (!this.audioContext) {
-      // Match the AudioContext sample rate to the backend TTS output rate (24 kHz)
-      // so no browser-side resampling is needed and the sample rate is defined in
-      // one canonical place (here) rather than scattered as magic literals.
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+  _ensureContext() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)({
         sampleRate: 24000,
         latencyHint: 'interactive'
       });
+      this.nextTime = this.ctx.currentTime + 0.1;
+      this.started = false;
+      this.bufferedTime = 0;
     }
-    
-    if (this.audioContext.state === 'suspended') {
-      await this.audioContext.resume();
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
     }
   }
 
+  /**
+   * Convert a raw chunk (Float32Array, ArrayBuffer/WAV) to a Web Audio
+   * AudioBuffer and schedule it on the playback timeline.
+   */
   enqueue(chunk) {
-    this.audioQueue.push(chunk);
-    console.log(`[AudioOutput] Enqueued chunk (queue=${this.audioQueue.length})`);
+    this._ensureContext();
 
-    // Wait for minimum buffer before starting playback (avoids choppy audio)
-    if (this._shouldWaitForBuffer()) {
-      return;
-    }
-
-    this.playNext();
-  }
-
-  /**
-   * Returns true when buffering is active and we haven't accumulated enough
-   * chunks yet.  Once playback is already in progress we never hold back.
-   */
-  _shouldWaitForBuffer() {
-    if (this._flushing) return false;
-    if (this.minBufferSize <= 0) return false;
-    if (this.playing) return false;
-    return this.audioQueue.length < this.minBufferSize;
-  }
-
-  /**
-   * Signal that no more chunks will arrive — flush whatever is buffered.
-   */
-  flush() {
-    this._flushing = true;
-    this.playNext();
-  }
-
-  async playNext() {
-    if (this.playing) return;
-    if (this.audioQueue.length === 0) {
-      // Only fire onPlaybackEnd if we actually played something this session.
-      // Avoids a spurious callback before any audio is enqueued.
-      if (this.onPlaybackEnd && this.hasPlayedSomething) {
-        console.log('[AudioOutput] Playback queue empty – firing onPlaybackEnd');
-        this.hasPlayedSomething = false;
-        this.onPlaybackEnd();
-      }
-      return;
-    }
-
-    await this.initContext();
-
-    this.playing = true;
-    this.hasPlayedSomething = true;
-    
-    if (this.onPlaybackStart) {
-      this.onPlaybackStart();
-    }
-    console.log(`[AudioOutput] Playing next chunk (${this.audioQueue.length} remaining in queue)`);
-
-    const chunk = this.audioQueue.shift();
-    
-    try {
-      await this.playAudioChunk(chunk);
-    } catch (error) {
-      console.error('[AudioOutput] Error playing chunk:', error);
-    }
-    
-    this.playing = false;
-    this.playNext();
-  }
-
-  async playAudioChunk(chunk) {
-    const isFirstChunk = this.currentAudio === null;
-    
     let float32;
     let sampleRate;
-    
-    // Fast-path: chunk is already a decoded Float32Array (e.g. from ttsClient.js)
+
     if (chunk instanceof Float32Array) {
       float32 = chunk;
-      // initContext() is always called before playAudioChunk(), so audioContext
-      // is guaranteed to be initialised here. Derive the rate from the context
-      // rather than repeating the magic literal.
-      sampleRate = this.audioContext.sampleRate;
+      sampleRate = this.ctx.sampleRate;
     } else {
       const uint8arr = new Uint8Array(chunk);
-      const arrView = new DataView(uint8arr.buffer);
-      
-      if (uint8arr.length > 44 && 
+
+      if (uint8arr.length > 44 &&
           String.fromCharCode(uint8arr[0], uint8arr[1], uint8arr[2], uint8arr[3]) === 'RIFF' &&
           String.fromCharCode(uint8arr[8], uint8arr[9], uint8arr[10], uint8arr[11]) === 'WAVE') {
         const wavData = this.parseWAV(uint8arr);
@@ -129,50 +57,107 @@ export class AudioOutput {
           new Uint8Array(paddedBuffer).set(new Uint8Array(buffer));
           buffer = paddedBuffer;
         }
-
         const pcm16 = new Int16Array(buffer);
-        const numSamples = pcm16.length;
-        float32 = new Float32Array(numSamples);
-
-        for (let i = 0; i < numSamples; i++) {
+        float32 = new Float32Array(pcm16.length);
+        for (let i = 0; i < pcm16.length; i++) {
           float32[i] = pcm16[i] / 32768.0;
         }
         sampleRate = 24000;
       }
     }
 
-    // Fade-in only on the very first chunk to avoid a click on playback start.
-    // Subsequent chunks are continuous PCM — applying a fade would create
-    // a volume dip at every chunk boundary.
-    if (isFirstChunk) {
-      const fadeLength = Math.min(48, Math.floor(float32.length / 16));
-      for (let i = 0; i < fadeLength; i++) {
-        float32[i] *= i / fadeLength;
-      }
-    }
-
-    const audioBuffer = this.audioContext.createBuffer(1, float32.length, sampleRate);
+    const audioBuffer = this.ctx.createBuffer(1, float32.length, sampleRate);
     audioBuffer.getChannelData(0).set(float32);
 
-    const source = this.audioContext.createBufferSource();
+    this.bufferedTime += audioBuffer.duration;
+
+    // Delay start until a small buffer is ready (avoids choppy audio)
+    if (!this.started && this.bufferedTime < this.minBufferSec) {
+      this._pendingBuffers.push(audioBuffer);
+      return;
+    }
+
+    if (!this.started) {
+      this.started = true;
+      this.hasPlayedSomething = true;
+      if (this.onPlaybackStart) {
+        this.onPlaybackStart();
+      }
+      // Schedule all pending buffers
+      for (const buf of this._pendingBuffers) {
+        this._scheduleBuffer(buf);
+      }
+      this._pendingBuffers = [];
+    }
+
+    this._scheduleBuffer(audioBuffer);
+  }
+
+  /** Schedule a decoded AudioBuffer on the playback timeline (fire-and-forget). */
+  _scheduleBuffer(audioBuffer) {
+    this.hasPlayedSomething = true;
+
+    const source = this.ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(this.audioContext.destination);
 
-    this.currentAudio = source;
+    const gain = this.ctx.createGain();
+    source.connect(gain).connect(this.ctx.destination);
 
-    return new Promise((resolve, reject) => {
-      source.onended = () => {
-        this.currentAudio = null;
-        resolve();
-      };
-      
-      source.onerror = (error) => {
-        this.currentAudio = null;
-        reject(error);
-      };
+    // Underrun protection: if timeline has fallen behind, reset to now
+    const now = this.ctx.currentTime;
+    if (this.nextTime < now) {
+      this.nextTime = now + 0.02;
+    }
 
-      source.start();
-    });
+    const t = this.nextTime;
+
+    // Micro fade (prevents clicks between chunks)
+    const fadeDuration = Math.min(0.015, audioBuffer.duration / 4);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(1, t + fadeDuration);
+    if (audioBuffer.duration > fadeDuration * 2) {
+      gain.gain.setValueAtTime(1, t + audioBuffer.duration - fadeDuration);
+      gain.gain.linearRampToValueAtTime(0, t + audioBuffer.duration);
+    }
+
+    source.start(t);
+
+    this._activeSourceCount++;
+    const gen = this._resetGeneration;
+
+    source.onended = () => {
+      // Ignore callbacks from sources that belong to a previous (cancelled) session
+      if (gen !== this._resetGeneration) return;
+      this._activeSourceCount--;
+      if (this._activeSourceCount === 0 && this.hasPlayedSomething) {
+        this.hasPlayedSomething = false;
+        if (this.onPlaybackEnd) {
+          console.log('[AudioOutput] Timeline empty – firing onPlaybackEnd');
+          this.onPlaybackEnd();
+        }
+      }
+    };
+
+    this.nextTime += audioBuffer.duration;
+  }
+
+  /**
+   * Signal that no more chunks will arrive — flush whatever is buffered
+   * below the minBufferSec threshold.
+   */
+  flush() {
+    if (!this.started && this._pendingBuffers.length > 0) {
+      this._ensureContext();
+      this.started = true;
+      this.hasPlayedSomething = true;
+      if (this.onPlaybackStart) {
+        this.onPlaybackStart();
+      }
+      for (const buf of this._pendingBuffers) {
+        this._scheduleBuffer(buf);
+      }
+      this._pendingBuffers = [];
+    }
   }
 
   parseWAV(wavData) {
@@ -227,47 +212,40 @@ export class AudioOutput {
     return { float32: new Float32Array(0), sampleRate: 24000 };
   }
 
-  stop() {
-    this.audioQueue = [];
-    this.hasPlayedSomething = false;
-    this._flushing = false;
-    
-    if (this.currentAudio) {
-      try {
-        this.currentAudio.stop();
-      } catch (e) {
-      }
-      this.currentAudio = null;
+  /** Tear down the AudioContext and reset all scheduling state. */
+  reset() {
+    this._resetGeneration++;
+    if (this.ctx) {
+      try { this.ctx.close(); } catch (e) {}
     }
-    
-    this.playing = false;
+    this.ctx = null;
+    this.nextTime = 0;
+    this.started = false;
+    this.bufferedTime = 0;
+    this._pendingBuffers = [];
+    this._activeSourceCount = 0;
+    this.hasPlayedSomething = false;
+  }
+
+  stop() {
+    this.reset();
   }
 
   isPlaying() {
-    return this.playing;
+    if (!this.ctx) return false;
+    return this._activeSourceCount > 0;
   }
 
   queueLength() {
-    return this.audioQueue.length;
+    return this._pendingBuffers.length;
   }
 
   stopAll() {
-    if (this.currentAudio) {
-      try {
-        this.currentAudio.stop();
-      } catch (e) {}
-      this.currentAudio = null;
-    }
-    
-    this.audioQueue = [];
-    this.playing = false;
-    this.hasPlayedSomething = false;
-    this._flushing = false;
+    this.reset();
   }
 
   clear() {
-    this.audioQueue = [];
-    this._flushing = false;
+    this._pendingBuffers = [];
   }
 }
 

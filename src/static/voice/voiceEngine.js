@@ -47,24 +47,23 @@ export class VoiceEngine {
 
     this.currentTranscript = '';
     this.accumulatedResponse = '';
-    this.ttsBuffer = '';
+    this.textBuffer = '';
     this.responseFinished = false;
     this.awaitingSTT = false;
     this.hasStartedSpeaking = false;
     this.interrupting = false;
-    // TTS queue: process segments sequentially so audio never overlaps or repeats
-    this.ttsQueue = [];
-    this.ttsProcessing = false;
     // Guard against stale audio chunks arriving after an interrupt
     this.ignoreAudioChunks = false;
     this.minTranscriptLength = 2;
-    // TTS buffer flush thresholds
+    // Streaming text buffer flush thresholds
     this.TTS_FLUSH_LENGTH = 80;
     this.TTS_MAX_BUFFER_LENGTH = 300;
     // Minimum buffer length before a comma/semicolon clause is sent to TTS.
-    // Keeps clause segments long enough to sound natural while still reducing
-    // first-audio latency compared to waiting for sentence-ending punctuation.
     this.TTS_CLAUSE_FLUSH_MIN_LENGTH = 40;
+    // Partial-STT early LLM start flag
+    this.llmStarted = false;
+    // Count of TTS segments sent but not yet completed
+    this._ttsInFlight = 0;
     // When false, VAD is paused after each turn so the user must type
     this.alwaysListening = options.alwaysListening !== false;
     // Monotonically incrementing counter – bumped on every cancel/interrupt so
@@ -87,6 +86,9 @@ export class VoiceEngine {
     try {
       console.log('[VoiceEngine] Starting...');
       
+      // Reset state for new session (fixes "only works once" bug)
+      this.startConversation();
+
       this.setState(VoiceState.LISTENING);
       this.ttsConnected = false;
 
@@ -118,18 +120,18 @@ export class VoiceEngine {
     this.audioInput.stop();
     this.stt.disconnect();
     this.tts.disconnect();
-    this.audioOutput.stop();
+    this.audioOutput.reset();
     this.llm.cancel();
 
     this.setState(VoiceState.IDLE);
     
     this.currentTranscript = '';
     this.accumulatedResponse = '';
-    this.ttsBuffer = '';
-    this.ttsQueue = [];
-    this.ttsProcessing = false;
+    this.textBuffer = '';
     this.ignoreAudioChunks = false;
     this.responseFinished = false;
+    this.llmStarted = false;
+    this._ttsInFlight = 0;
     // Invalidate all in-flight HTTP TTS and LLM callbacks
     this._ttsRequestId++;
     this._llmRequestId++;
@@ -139,26 +141,26 @@ export class VoiceEngine {
     const isInterrupt = (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) 
                         && this.audioInput.hasEnoughAudioForInterrupt();
     
-    this.ttsBuffer = '';
+    this.textBuffer = '';
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
     
     if (isInterrupt) {
       console.log('[VoiceEngine] User interrupted AI');
       
-      this.ttsQueue = [];
-      this.ttsProcessing = false;
+      this._ttsInFlight = 0;
       this.ignoreAudioChunks = true;
-      this.audioOutput.stop();
+      this.audioOutput.reset();
       this.llm.cancel();
       this.audioInput.resumeVAD();
       // Invalidate any in-flight HTTP TTS / stale LLM callbacks
       this._ttsRequestId++;
       this._llmRequestId++;
+      this.llmStarted = false;
       
       this.setState(VoiceState.INTERRUPTED);
       this.accumulatedResponse = '';
-      this.ttsBuffer = '';
+      this.textBuffer = '';
     } else if (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) {
       return;
     }
@@ -205,6 +207,14 @@ export class VoiceEngine {
     this.currentTranscript = text;
     // Call the external callback passed via options (not this method — that would recurse infinitely)
     if (this._onTranscriptCallback) this._onTranscriptCallback(text);
+
+    // Start LLM early on partial STT when enough text has arrived
+    if (!this.llmStarted && text && text.length > 20 &&
+        (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING)) {
+      this.llmStarted = true;
+      console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
+      this.llm.sendMessage(text, this.sessionId, this.speaker);
+    }
   }
 
   onSTTFinal(text) {
@@ -229,6 +239,13 @@ export class VoiceEngine {
     console.log('[VoiceEngine] Final transcript:', text);
 
     this.onUserMessage(text);
+
+    // If LLM was already started on partial STT, skip re-sending
+    if (this.llmStarted) {
+      console.log('[VoiceEngine] LLM already started on partial – skipping re-send');
+      return;
+    }
+
     this.llm.sendMessage(text, this.sessionId, this.speaker);
   }
 
@@ -283,55 +300,61 @@ export class VoiceEngine {
     this.accumulatedResponse += token;
     this.onAIResponse(this.accumulatedResponse);
     
-    this.ttsBuffer += token;
+    this.textBuffer += token;
     
-    if (this.ttsBuffer.length > this.TTS_MAX_BUFFER_LENGTH) {
+    if (this.textBuffer.length > this.TTS_MAX_BUFFER_LENGTH) {
       // Hard cap: flush to prevent unbounded buffer growth
-      const flushText = this.ttsBuffer;
-      this.ttsBuffer = '';
-      this.addToTTSQueue(flushText);
+      const flushText = this.textBuffer;
+      this.textBuffer = '';
+      this._sendTTS(flushText);
       return;
     }
     
-    if (this.ttsBuffer.length > this.TTS_FLUSH_LENGTH && !this.ttsProcessing && this.ttsQueue.length === 0) {
-      // Flush when enough text has accumulated and nothing is queued/processing
-      const flushText = this.ttsBuffer;
-      this.ttsBuffer = '';
-      this.addToTTSQueue(flushText);
+    if (this.textBuffer.length > this.TTS_FLUSH_LENGTH) {
+      // Flush when enough text has accumulated
+      const flushText = this.textBuffer;
+      this.textBuffer = '';
+      this._sendTTS(flushText);
       return;
     }
     
     // Flush on sentence-ending punctuation for natural speech boundaries.
-    // Also flush on comma/semicolon when the buffer is long enough to produce
-    // a good-sounding clip – this reduces first-audio latency for long sentences.
-    const sentenceMatch = this.ttsBuffer.match(/(.+?[.!?])(\s|$)/);
-    
-    if (sentenceMatch) {
-      const sentence = sentenceMatch[1];
-      // Use sentenceMatch.index so that any leading characters skipped by the
-      // regex (e.g. newlines, which `.+?` never matches) are also consumed.
-      // Without this, `slice(sentence.length)` would leave the matched text at
-      // the start of the buffer and the same sentence would be re-queued on
-      // every subsequent token – producing the "1." infinite-repeat bug.
-      this.ttsBuffer = this.ttsBuffer.slice(sentenceMatch.index + sentence.length);
-      this.addToTTSQueue(sentence);
-      // Return after flushing one sentence; the clause check below would
-      // otherwise examine the freshly-trimmed remainder before the next token
-      // arrives, potentially splitting it into a very short clip.
-      return;
-    }
+    // Also flush on comma/semicolon when the buffer is long enough.
+    if (this.shouldFlush(this.textBuffer)) {
+      const sentenceMatch = this.textBuffer.match(/(.+?[.!?])(\s|$)/);
+      if (sentenceMatch) {
+        const sentence = sentenceMatch[1];
+        this.textBuffer = this.textBuffer.slice(sentenceMatch.index + sentence.length);
+        this._sendTTS(sentence);
+        return;
+      }
 
-    // Flush on clause boundary (comma/semicolon) when the buffer has a reasonable
-    // amount of text – avoids synthesising single words which sound choppy.
-    if (this.ttsBuffer.length > this.TTS_CLAUSE_FLUSH_MIN_LENGTH) {
-      const clauseMatch = this.ttsBuffer.match(/(.+?[,;])(\s|$)/);
-      if (clauseMatch) {
-        const clause = clauseMatch[1];
-        // Same index-aware slice as the sentence match above.
-        this.ttsBuffer = this.ttsBuffer.slice(clauseMatch.index + clause.length);
-        this.addToTTSQueue(clause);
+      // Clause boundary flush
+      if (this.textBuffer.length > this.TTS_CLAUSE_FLUSH_MIN_LENGTH) {
+        const clauseMatch = this.textBuffer.match(/(.+?[,;])(\s|$)/);
+        if (clauseMatch) {
+          const clause = clauseMatch[1];
+          this.textBuffer = this.textBuffer.slice(clauseMatch.index + clause.length);
+          this._sendTTS(clause);
+          return;
+        }
+      }
+
+      // Fallback: flush the whole buffer if it matches generic flush criteria
+      if (this.textBuffer.length > 30 || /[.,!?]$/.test(this.textBuffer)) {
+        const chunk = this.textBuffer;
+        this.textBuffer = '';
+        this._sendTTS(chunk);
       }
     }
+  }
+
+  /** Returns true when the text buffer should be flushed to TTS. */
+  shouldFlush(text) {
+    return (
+      text.length > 30 ||
+      /[.!?,;]/.test(text)
+    );
   }
 
   /**
@@ -374,54 +397,40 @@ export class VoiceEngine {
       .trim();
   }
 
-  /** Add text to the TTS processing queue and kick off processing if idle. */
-  addToTTSQueue(text) {
+  /** Send text to TTS immediately (no queue). Handles both WebSocket and HTTP paths. */
+  _sendTTS(text) {
     if (!text || !text.trim()) return;
     const cleaned = this._stripMarkdown(text);
     if (!cleaned) return;
-    this.ttsQueue.push(cleaned);
-    console.log(`[VoiceEngine] TTS queued (queue=${this.ttsQueue.length}): "${cleaned.substring(0, 40)}${cleaned.length > 40 ? '…' : ''}"`);
-    this.processTTSQueue();
-  }
 
-  /** Process the next item in the TTS queue (one at a time to avoid overlapping audio). */
-  async processTTSQueue() {
-    if (this.ttsProcessing) return;  // Already generating; onTTSDone will call us again
-    if (this.ttsQueue.length === 0) return;
-
-    const text = this.ttsQueue.shift();
-    this.ttsProcessing = true;
-    // Capture the current TTS generation ID so in-flight HTTP requests can
-    // detect whether they have been superseded by a cancel/interrupt.
+    this._ttsInFlight++;
     const requestId = this._ttsRequestId;
+    const preview = cleaned.substring(0, 40);
+    console.log(`[VoiceEngine] TTS immediate [req=${requestId}]: "${preview}${cleaned.length > 40 ? '…' : ''}"`);
 
     if (this.ttsConnected && this.tts.ws && this.tts.ws.readyState === WebSocket.OPEN) {
-      this.tts.sendText(text, this.speaker);
-      // ttsProcessing cleared in onTTSDone when server responds
+      this.tts.sendText(cleaned, this.speaker);
+      // onTTSDone will decrement _ttsInFlight
     } else {
-      await this._sendTTSHTTP(text, requestId);
+      this._sendTTSHTTP(cleaned, requestId);
     }
   }
 
-  async _sendTTSHTTP(text, requestId) {
+  _sendTTSHTTP(text, requestId) {
     const startTime = Date.now();
     const preview = text.trim().substring(0, 40);
     console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] starting: "${preview}${text.length > 40 ? '…' : ''}"`);
-    try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text, speaker: this.speaker })
-      });
-      
-      const data = await response.json();
-      
+
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, speaker: this.speaker })
+    })
+    .then(response => response.json())
+    .then(data => {
       if (data.success && data.audio) {
         const elapsed = Date.now() - startTime;
         if (requestId !== this._ttsRequestId) {
-          // A cancel/interrupt happened while this request was in-flight.
-          // Discard the audio to prevent old speech from bleeding into the
-          // next turn and causing the "repeating chunks" symptom.
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] discarding stale audio (${elapsed}ms, current req=${this._ttsRequestId})`);
         } else {
           console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] enqueuing audio (${elapsed}ms)`);
@@ -429,18 +438,18 @@ export class VoiceEngine {
           this.audioOutput.enqueue(audioData);
         }
       }
-    } catch (e) {
+    })
+    .catch(e => {
       console.error('[VoiceEngine] HTTP TTS failed:', e);
-    } finally {
+    })
+    .finally(() => {
       if (requestId === this._ttsRequestId) {
-        // Only update engine state for the current, non-cancelled request.
-        this.ttsProcessing = false;
-        this.processTTSQueue();       // Process next in queue
-        this._tryCompleteResponse();  // Check if turn is fully done
+        if (this._ttsInFlight > 0) this._ttsInFlight--;
+        this._tryCompleteResponse();
       } else {
         console.log(`[VoiceEngine] TTS HTTP [req=${requestId}] stale finally – skipping state update (current req=${this._ttsRequestId})`);
       }
-    }
+    });
   }
   
   base64ToArrayBuffer(base64) {
@@ -458,10 +467,10 @@ export class VoiceEngine {
       console.log(`[VoiceEngine] onLLMEnd ignored – stale LLM id=${this._activeLLMId} (current=${this._llmRequestId})`);
       return;
     }
-    console.log(`[VoiceEngine] LLM complete (id=${this._activeLLMId}), flushing ${this.ttsBuffer.length} chars remaining in TTS buffer`);
-    if (this.ttsBuffer.trim()) {
-      this.addToTTSQueue(this.ttsBuffer);
-      this.ttsBuffer = '';
+    console.log(`[VoiceEngine] LLM complete (id=${this._activeLLMId}), flushing ${this.textBuffer.length} chars remaining in text buffer`);
+    if (this.textBuffer.trim()) {
+      this._sendTTS(this.textBuffer);
+      this.textBuffer = '';
     }
     this.responseFinished = true;
     // Check immediately: if TTS/audio already finished before this callback arrived
@@ -478,9 +487,8 @@ export class VoiceEngine {
   }
 
   onTTSDone() {
-    this.ttsProcessing = false;
-    this.processTTSQueue();       // Kick off next segment if any
-    this._tryCompleteResponse();  // Finish turn if everything is done
+    if (this._ttsInFlight > 0) this._ttsInFlight--;
+    this._tryCompleteResponse();
   }
 
   onPlaybackEnded() {
@@ -495,14 +503,14 @@ export class VoiceEngine {
   _cancelOngoingResponse() {
     this.llm.cancel();
     this.tts.cancel();
-    this.audioOutput.stop();
-    this.ttsQueue = [];
-    this.ttsProcessing = false;
+    this.audioOutput.reset();
+    this._ttsInFlight = 0;
     this.ignoreAudioChunks = true;
     this.accumulatedResponse = '';
-    this.ttsBuffer = '';
+    this.textBuffer = '';
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
+    this.llmStarted = false;
     // Invalidate any in-flight HTTP TTS and stale LLM callbacks so they
     // do not enqueue audio or alter state for the upcoming new turn.
     this._ttsRequestId++;
@@ -514,18 +522,20 @@ export class VoiceEngine {
    * Central "are we done?" check.
    * Transitions to LISTENING only when ALL of the following are true:
    *   1. LLM has finished streaming (responseFinished)
-   *   2. No TTS segment is currently being generated (ttsProcessing)
-   *   3. No text is waiting in the TTS queue (ttsQueue)
-   *   4. The audio output queue is empty and nothing is playing (audioOutput)
+   *   2. No TTS segments are in-flight (_ttsInFlight === 0)
+   *   3. The audio output has finished playing
    */
   _tryCompleteResponse() {
     if (!this.responseFinished) return;
-    if (this.ttsProcessing || this.ttsQueue.length > 0) return;
+    if (this._ttsInFlight > 0) return;
+    // Flush any audio that was waiting below the minBufferSec threshold
+    this.audioOutput.flush();
     if (this.audioOutput.queueLength() > 0 || this.audioOutput.isPlaying()) return;
 
     console.log('[VoiceEngine] Response fully complete – transitioning to LISTENING');
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
+    this.llmStarted = false;
     this.setState(VoiceState.LISTENING);
     if (this.alwaysListening) {
       this.audioInput.resumeVAD();
@@ -584,12 +594,36 @@ export class VoiceEngine {
   interrupt() {
     if (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) {
       console.log('[VoiceEngine] Interrupt requested');
-      this._cancelOngoingResponse();
+      this.audioOutput.reset();
+      this.llm.cancel();
+      this.tts.cancel();
+      this.textBuffer = '';
+      this.llmStarted = false;
+      this._ttsInFlight = 0;
+      this._llmRequestId++;
+      this._ttsRequestId++;
+      this.accumulatedResponse = '';
+      this.responseFinished = false;
+      this.hasStartedSpeaking = false;
+      this.ignoreAudioChunks = true;
       this.setState(VoiceState.LISTENING);
       if (this.alwaysListening) {
         this.audioInput.resumeVAD();
       }
     }
+  }
+
+  /**
+   * Reset state before starting a new conversation.
+   * Fixes the "only works once" bug by ensuring AudioContext is fresh.
+   */
+  startConversation() {
+    this.audioOutput.reset();
+    this.textBuffer = '';
+    this.llmStarted = false;
+    this._ttsInFlight = 0;
+    this._llmRequestId++;
+    this._ttsRequestId++;
   }
 
   handleUserSpeechStart() {
