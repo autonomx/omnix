@@ -65,7 +65,7 @@ export class VoiceEngine {
     // Minimum partial transcript length before early LLM start is triggered
     this.MIN_PARTIAL_TEXT_LENGTH = 20;
     // Minimum word count in partial transcript before early LLM start
-    this.MIN_PARTIAL_WORD_COUNT = 3;
+    this.MIN_PARTIAL_WORD_COUNT = 2;
     // Minimum text length before shouldFlush() returns true
     this.FLUSH_MIN_LENGTH = 30;
     // Count of TTS segments sent but not yet completed
@@ -237,7 +237,9 @@ export class VoiceEngine {
     if (this._onTranscriptCallback) this._onTranscriptCallback(text);
 
     // Start LLM early on partial STT when enough text has arrived
-    if (!this.llmStarted && text && text.split(' ').length >= this.MIN_PARTIAL_WORD_COUNT &&
+    const wordCount = text ? text.trim().split(/\s+/).length : 0;
+    if (!this.llmStarted && text &&
+        (wordCount >= this.MIN_PARTIAL_WORD_COUNT || text.length > 12) &&
         (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING)) {
       this.llmStarted = true;
       console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
@@ -331,12 +333,16 @@ export class VoiceEngine {
     this.textBuffer += token;
 
     // Early first chunk: speak sooner for faster perceived response
+    // Flush on word boundary to avoid cutting words mid-token
     if (!this.hasSentFirstChunk && this.textBuffer.length > 10) {
-      this.hasSentFirstChunk = true;
-      const chunk = this.textBuffer;
-      this.textBuffer = '';
-      this._sendTTS(chunk);
-      return;
+      const match = this.textBuffer.match(/^(.+\b)/);
+      if (match) {
+        const chunk = match[1];
+        this.textBuffer = this.textBuffer.slice(chunk.length);
+        this.hasSentFirstChunk = true;
+        this._sendTTS(chunk);
+        return;
+      }
     }
     
     if (this.textBuffer.length > this.TTS_MAX_BUFFER_LENGTH) {
@@ -469,12 +475,14 @@ export class VoiceEngine {
     }
   }
 
-  /** Drain deferred TTS queue when pipeline has capacity. */
+  /** Drain deferred TTS queue gradually (one at a time) to avoid burst speech. */
   _drainDeferredTTS() {
-    while (
+    // Rate-limit: don't flood if already busy
+    if (this._ttsInFlight > 2) return;
+
+    if (
       this.deferredTTSQueue.length &&
-      this._ttsInFlight <= 3 &&
-      this.audioOutput.bufferedTime <= 2.0
+      this.audioOutput.bufferedTime < 1.5
     ) {
       const { text, seq } = this.deferredTTSQueue.shift();
       this._dispatchTTS(text, seq);
