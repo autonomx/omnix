@@ -1062,6 +1062,20 @@ class TestPhraseLevelFlush:
         assert "token.endsWith(' ')" in body
         assert "_sendTTS(flushText)" in body
 
+    def test_phrase_flush_clears_buffer(self):
+        """Phrase-level flush must clear textBuffer to avoid duplicate speech."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        # Find the phrase-level flush block and verify textBuffer is cleared
+        phrase_idx = body.find("token.endsWith(' ')")
+        assert phrase_idx > 0
+        after_phrase = body[phrase_idx:phrase_idx + 200]
+        assert "this.textBuffer = ''" in after_phrase, \
+            "textBuffer must be cleared after phrase-level flush"
+
 
 class TestPendingAudioDestructuring:
     """_handleTTSAudio must store and destructure { buffer, text } properly."""
