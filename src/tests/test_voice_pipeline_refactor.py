@@ -1168,11 +1168,11 @@ class TestSpeechContinuityTracking:
             "_sendTTS must track lastSpokenText for speech continuity"
 
     def test_lastSpokenText_reset_on_stop(self):
-        """stop() must reset lastSpokenText."""
+        """stop() must reset lastSpokenText to empty string."""
         src = self._get_source()
         m = re.search(r'  stop\(\)\s*\{', src)
         assert m, "stop() method not found"
         start = m.start()
         body = src[start:start + 800]
-        assert "lastSpokenText" in body, \
-            "stop() must reset lastSpokenText"
+        assert "this.lastSpokenText = ''" in body, \
+            "stop() must reset lastSpokenText to ''"
