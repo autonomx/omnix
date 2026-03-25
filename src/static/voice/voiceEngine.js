@@ -63,7 +63,7 @@ export class VoiceEngine {
     // Partial-STT early LLM start flag
     this.llmStarted = false;
     // Minimum partial transcript length before early LLM start is triggered
-    this.MIN_PARTIAL_TEXT_LENGTH = 20;
+    this.MIN_PARTIAL_TEXT_LENGTH = 4;
     // Minimum word count in partial transcript before early LLM start
     this.MIN_PARTIAL_WORD_COUNT = 1;
     // Minimum text length before shouldFlush() returns true
@@ -96,6 +96,9 @@ export class VoiceEngine {
     // Priority mode: when set after an interrupt, the next TTS dispatch clears
     // any lingering deferred queue so the new response wins immediately.
     this._priorityMode = false;
+    // Per-request AbortControllers for in-flight TTS HTTP requests so they
+    // can be hard-cancelled on interrupt instead of just discarded at callback time.
+    this._ttsControllers = new Map();
   }
 
   setState(newState) {
@@ -143,6 +146,7 @@ export class VoiceEngine {
     this.audioInput.stop();
     this.stt.disconnect();
     this.tts.disconnect();
+    this._abortAllTTS();
     this.audioOutput.reset();
     this.llm.cancel();
 
@@ -181,6 +185,7 @@ export class VoiceEngine {
       this._ttsInFlight = 0;
       this._wordCount = 0;
       this.ignoreAudioChunks = true;
+      this._abortAllTTS();
       this.audioOutput.softReset();
       this.llm.cancel();
       this.audioInput.resumeVAD();
@@ -255,6 +260,12 @@ export class VoiceEngine {
       this.llmStarted = true;
       console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
       this.llm.sendMessage(text, this.sessionId, this.speaker);
+    } else if (this.llmStarted && text) {
+      // Streaming context update: if LLM is already running, push updated
+      // transcript so the model can adapt mid-user-sentence.
+      if (typeof this.llm.updateContext === 'function') {
+        this.llm.updateContext(text);
+      }
     }
   }
 
@@ -489,7 +500,9 @@ export class VoiceEngine {
     const seq = this.ttsSeq++;
 
     // Backpressure: defer instead of dropping to avoid content loss
-    if (this._ttsInFlight > 12 || this.audioOutput.bufferedTime > 0.3) {
+    // Adaptive concurrency: allow more parallelism when buffer is low, throttle when full
+    const dynamicLimit = this.audioOutput.bufferedTime < 0.2 ? 16 : 8;
+    if (this._ttsInFlight > dynamicLimit || this.audioOutput.bufferedTime > 0.3) {
       this.deferredTTSQueue.push({ text: cleaned, seq });
       // Freshness bias: drop oldest deferred chunks under heavy load
       // to keep speech feeling live rather than lagging behind
@@ -547,10 +560,15 @@ export class VoiceEngine {
     const isNewSentence = /^[A-Z]/.test(text.trim());
     const prevText = isNewSentence ? '' : this.lastSpokenText.slice(-200);
 
+    // Per-request AbortController so interrupt can hard-cancel in-flight requests
+    const controller = new AbortController();
+    this._ttsControllers.set(seq, controller);
+
     fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, speaker: this.speaker, prev_text: prevText })
+      body: JSON.stringify({ text: text, speaker: this.speaker, prev_text: prevText }),
+      signal: controller.signal
     })
     .then(response => response.json())
     .then(data => {
@@ -572,9 +590,14 @@ export class VoiceEngine {
       }
     })
     .catch(e => {
-      console.error('[VoiceEngine] HTTP TTS failed:', e);
+      if (e.name === 'AbortError') {
+        console.log(`[VoiceEngine] TTS HTTP [req=${requestId}, seq=${seq}] aborted`);
+      } else {
+        console.error('[VoiceEngine] HTTP TTS failed:', e);
+      }
     })
     .finally(() => {
+      this._ttsControllers.delete(seq);
       if (requestId === this._ttsRequestId) {
         this._ttsInFlight = Math.max(0, this._ttsInFlight - 1);
         this._drainDeferredTTS();
@@ -658,6 +681,14 @@ export class VoiceEngine {
     this._tryCompleteResponse();
   }
 
+  /** Hard-cancel all in-flight HTTP TTS requests to save bandwidth and prevent stale audio. */
+  _abortAllTTS() {
+    for (const ctrl of this._ttsControllers.values()) {
+      ctrl.abort();
+    }
+    this._ttsControllers.clear();
+  }
+
   /**
    * Cancel any ongoing LLM/TTS pipeline and reset generation state, without
    * changing the VoiceState or touching the microphone.  Shared by
@@ -666,6 +697,7 @@ export class VoiceEngine {
   _cancelOngoingResponse() {
     this.llm.cancel();
     this.tts.cancel();
+    this._abortAllTTS();
     this.audioOutput.softReset();
     this._ttsInFlight = 0;
     this.ignoreAudioChunks = true;
@@ -770,6 +802,7 @@ export class VoiceEngine {
   interrupt() {
     if (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) {
       console.log('[VoiceEngine] Interrupt requested');
+      this._abortAllTTS();
       this.audioOutput.softReset();
       this.llm.cancel();
       this.tts.cancel();

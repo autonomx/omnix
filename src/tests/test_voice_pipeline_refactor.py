@@ -646,14 +646,16 @@ class TestTTSBackpressure:
         return _read_source("src/static/voice/voiceEngine.js")
 
     def test_tts_inflight_limit(self):
-        """_sendTTS must skip if too many TTS requests are in-flight."""
+        """_sendTTS must use adaptive concurrency limit based on buffer level."""
         src = self._get_source()
         m = re.search(r'  _sendTTS\s*\(text\)', src)
         assert m, "_sendTTS method not found"
         start = m.start()
         body = src[start:start + 800]
-        assert "this._ttsInFlight > 12" in body, \
-            "_sendTTS must check _ttsInFlight > 12 for backpressure (increased concurrency)"
+        assert "dynamicLimit" in body, \
+            "_sendTTS must compute dynamicLimit for adaptive TTS concurrency"
+        assert "this._ttsInFlight > dynamicLimit" in body, \
+            "_sendTTS must check _ttsInFlight against dynamicLimit for backpressure"
 
     def test_audio_buffer_limit(self):
         """_sendTTS must skip if too much audio is buffered."""
@@ -739,7 +741,7 @@ class TestDeferredTTSQueue:
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m
         start = m.start()
-        body = src[start:start + 2000]
+        body = src[start:start + 2400]
         assert "_drainDeferredTTS()" in body
 
     def test_tryComplete_checks_deferred_queue(self):
@@ -781,7 +783,7 @@ class TestSafeTTSInFlightDecrement:
         m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         assert "Math.max(0" in body, \
             "_sendTTSHTTP .finally must use Math.max(0, ...) for safe decrement"
 
@@ -988,14 +990,14 @@ class TestIncreasedTTSConcurrency:
         return _read_source("src/static/voice/voiceEngine.js")
 
     def test_inflight_limit_is_12(self):
-        """_sendTTS backpressure must use _ttsInFlight > 12."""
+        """_sendTTS backpressure must use adaptive concurrency (dynamicLimit)."""
         src = self._get_source()
         m = re.search(r'  _sendTTS\s*\(text\)', src)
         assert m
         start = m.start()
         body = src[start:start + 800]
-        assert "this._ttsInFlight > 12" in body, \
-            "TTS concurrency limit must be 12 for parallel prefetch"
+        assert "dynamicLimit" in body, \
+            "TTS concurrency must use adaptive dynamicLimit"
 
     def test_buffered_time_limit_reduced(self):
         """_sendTTS must use bufferedTime > 0.3 (reduced from 0.8)."""
@@ -1265,7 +1267,7 @@ class TestDeferredQueueFreshness:
         m = re.search(r'  _sendTTS\s*\(text\)', src)
         assert m
         start = m.start()
-        body = src[start:start + 600]
+        body = src[start:start + 800]
         assert "deferredTTSQueue.length > 5" in body, \
             "_sendTTS must check deferred queue length for freshness bias"
         assert "deferredTTSQueue.shift()" in body, \
@@ -1693,3 +1695,207 @@ class TestBargeInSTTForwarding:
             "onAudioChunkInput must include INTERRUPTED state in its condition"
         assert "stt.sendAudio" in body, \
             "onAudioChunkInput must call stt.sendAudio"
+
+
+# ---------------------------------------------------------------------------
+# Round 7: Hard TTS cancel, adaptive concurrency, streaming context, lower trigger
+# ---------------------------------------------------------------------------
+
+class TestHardTTSCancel:
+    """In-flight TTS HTTP requests must be hard-cancelled via AbortController on interrupt."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_tts_controllers_map_in_constructor(self):
+        """Constructor must initialise _ttsControllers as a Map."""
+        src = self._get_source()
+        assert "this._ttsControllers = new Map()" in src
+
+    def test_abort_controller_per_request(self):
+        """_sendTTSHTTP must create an AbortController per request."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "new AbortController()" in body, \
+            "_sendTTSHTTP must create AbortController for each TTS request"
+        assert "_ttsControllers.set(seq" in body, \
+            "_sendTTSHTTP must store controller in _ttsControllers Map"
+
+    def test_signal_passed_to_fetch(self):
+        """_sendTTSHTTP must pass AbortController signal to fetch."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "signal: controller.signal" in body, \
+            "_sendTTSHTTP must pass controller.signal to fetch"
+
+    def test_controller_cleaned_up_in_finally(self):
+        """_sendTTSHTTP .finally must remove controller from _ttsControllers."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2400]
+        assert "_ttsControllers.delete(seq)" in body, \
+            "_sendTTSHTTP .finally must delete controller from map"
+
+    def test_abort_error_handled(self):
+        """_sendTTSHTTP .catch must handle AbortError gracefully."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTSHTTP\s*\(text,', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2400]
+        assert "AbortError" in body, \
+            "_sendTTSHTTP must handle AbortError in .catch"
+
+    def test_abortAllTTS_method_exists(self):
+        """_abortAllTTS helper must exist."""
+        src = self._get_source()
+        assert "_abortAllTTS()" in src, \
+            "_abortAllTTS method must exist for hard-cancelling in-flight TTS"
+
+    def test_abortAllTTS_iterates_controllers(self):
+        """_abortAllTTS must iterate and abort all controllers."""
+        src = self._get_source()
+        m = re.search(r'  _abortAllTTS\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 300]
+        assert "ctrl.abort()" in body, \
+            "_abortAllTTS must call abort() on each controller"
+        assert "_ttsControllers.clear()" in body, \
+            "_abortAllTTS must clear the controllers map"
+
+    def test_onSpeechStart_interrupt_calls_abortAllTTS(self):
+        """onSpeechStart interrupt path must call _abortAllTTS."""
+        src = self._get_source()
+        m = re.search(r"console\.log\('\[VoiceEngine\] User interrupted AI'\)", src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "_abortAllTTS()" in body, \
+            "onSpeechStart interrupt must call _abortAllTTS"
+
+    def test_cancelOngoingResponse_calls_abortAllTTS(self):
+        """_cancelOngoingResponse must call _abortAllTTS."""
+        src = self._get_source()
+        m = re.search(r'  _cancelOngoingResponse\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 900]
+        assert "_abortAllTTS()" in body, \
+            "_cancelOngoingResponse must call _abortAllTTS"
+
+    def test_interrupt_calls_abortAllTTS(self):
+        """interrupt() must call _abortAllTTS."""
+        src = self._get_source()
+        m = re.search(r"  interrupt\(\)\s*\{", src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "_abortAllTTS()" in body, \
+            "interrupt() must call _abortAllTTS"
+
+    def test_stop_calls_abortAllTTS(self):
+        """stop() must call _abortAllTTS."""
+        src = self._get_source()
+        m = re.search(r"  stop\(\)\s*\{", src)
+        assert m
+        start = m.start()
+        body = src[start:start + 600]
+        assert "_abortAllTTS()" in body, \
+            "stop() must call _abortAllTTS"
+
+
+class TestAdaptiveTTSConcurrency:
+    """TTS concurrency must adapt based on audio buffer level."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_dynamic_limit_computed(self):
+        """_sendTTS must compute dynamicLimit from bufferedTime."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "dynamicLimit" in body
+        assert "bufferedTime < 0.2" in body, \
+            "dynamicLimit must check bufferedTime < 0.2 for higher concurrency"
+
+    def test_high_limit_when_buffer_low(self):
+        """dynamicLimit must be 16 when buffer is low."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "16" in body, \
+            "dynamicLimit must allow up to 16 when buffer is low"
+
+    def test_low_limit_when_buffer_high(self):
+        """dynamicLimit must be 8 when buffer is full."""
+        src = self._get_source()
+        m = re.search(r'  _sendTTS\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "8" in body, \
+            "dynamicLimit must throttle to 8 when buffer is full"
+
+
+class TestLowerSTTLLMTrigger:
+    """STT→LLM trigger threshold must be lowered for faster LLM start."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_min_partial_text_length_is_4(self):
+        """MIN_PARTIAL_TEXT_LENGTH must be 4 (lowered from 20)."""
+        src = self._get_source()
+        assert "this.MIN_PARTIAL_TEXT_LENGTH = 4" in src, \
+            "MIN_PARTIAL_TEXT_LENGTH must be 4 for ultra-fast STT→LLM bridge"
+
+
+class TestStreamingContextUpdate:
+    """onTranscript must call llm.updateContext when LLM is already running."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_updateContext_called_when_llm_started(self):
+        """onTranscript must call llm.updateContext when llmStarted is true."""
+        src = self._get_source()
+        m = re.search(r'  onTranscript\(text\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "updateContext" in body, \
+            "onTranscript must call llm.updateContext for streaming context"
+
+    def test_updateContext_guarded_by_typeof(self):
+        """updateContext call must be guarded by typeof check for optional method."""
+        src = self._get_source()
+        m = re.search(r'  onTranscript\(text\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "typeof" in body or "updateContext" in body, \
+            "updateContext must be safely guarded"
+
+    def test_updateContext_only_when_llm_started(self):
+        """updateContext must only be called in the else-if branch (llmStarted)."""
+        src = self._get_source()
+        m = re.search(r'  onTranscript\(text\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "this.llmStarted" in body, \
+            "updateContext branch must check llmStarted"
