@@ -99,6 +99,12 @@ export class VoiceEngine {
     // Per-request AbortControllers for in-flight TTS HTTP requests so they
     // can be hard-cancelled on interrupt instead of just discarded at callback time.
     this._ttsControllers = new Map();
+    // Conversational fillers: sent on first LLM token to mask latency
+    this._fillers = ["Yeah,", "Okay,", "Right,"];
+    // Soft barge-in: pending interrupt flag (cleared if user speech stops quickly)
+    this._pendingInterrupt = false;
+    // Track interrupt count for adaptive behavior
+    this.interruptCount = 0;
   }
 
   setState(newState) {
@@ -215,6 +221,9 @@ export class VoiceEngine {
   }
 
   onSpeechEnd() {
+    // Cancel any pending soft barge-in if the user stopped speaking quickly
+    this._pendingInterrupt = false;
+
     // Also handle speech-end coming in from INTERRUPTED state (user spoke after barge-in)
     if (this.state === VoiceState.INTERRUPTED) {
       this.setState(VoiceState.USER_SPEAKING);
@@ -260,6 +269,9 @@ export class VoiceEngine {
       this.llmStarted = true;
       console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
       this.llm.sendMessage(text, this.sessionId, this.speaker);
+      // Speculative response: send a brief filler to eliminate dead air while
+      // the LLM generates its first real content.
+      this._sendTTS('Hmm,');
     } else if (this.llmStarted && text) {
       // Streaming context update: if LLM is already running, push updated
       // transcript so the model can adapt mid-user-sentence.
@@ -345,6 +357,10 @@ export class VoiceEngine {
     if (!this.hasStartedSpeaking) {
       this.hasStartedSpeaking = true;
       this.setState(VoiceState.AI_SPEAKING);
+      // Pre-speech filler: send a random conversational filler immediately
+      // to mask LLM-to-TTS latency — perceived response time drops to ~0ms
+      const filler = this._fillers[Math.floor(Math.random() * this._fillers.length)];
+      this._sendTTS(filler);
       // Full duplex: resume VAD so the user can interrupt by speaking.
       // Browser echo-cancellation (echoCancellation: true in getUserMedia)
       // plus hasEnoughAudioForInterrupt() guard prevents false triggers.
@@ -852,7 +868,17 @@ export class VoiceEngine {
 
   handleUserSpeechStart() {
     if (this.state === VoiceState.AI_SPEAKING) {
-      this.interruptAI();
+      // Soft barge-in: delay interrupt by 120ms to prevent accidental cut-offs
+      // from brief overlaps (e.g. backchannel "uh-huh").  If the user stops
+      // speaking within the window, the interrupt is cancelled.
+      this._pendingInterrupt = true;
+      this.interruptCount++;
+      setTimeout(() => {
+        if (this._pendingInterrupt) {
+          this._pendingInterrupt = false;
+          this.interruptAI();
+        }
+      }, 120);
     }
   }
 

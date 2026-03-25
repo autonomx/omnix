@@ -152,14 +152,15 @@ export class AudioOutput {
       }
     };
 
-    // Advance timeline with small inter-chunk gap + slight jitter for natural prosody
-    const jitter = Math.random() * 0.015;
-    this.nextTime += audioBuffer.duration + 0.03 + jitter;
-
-    // Longer pause after sentence-ending punctuation
-    if (this._lastChunkText && /[.!?]$/.test(this._lastChunkText)) {
-      this.nextTime += 0.08;
+    // Semantic pacing: meaning-aware pauses for natural speech rhythm
+    let pause = 0.02;
+    if (this._lastChunkText) {
+      if (/[,.]/.test(this._lastChunkText)) pause += 0.04;
+      if (/[!?]/.test(this._lastChunkText)) pause += 0.08;
+      if (/\b(and|but|so|because)\b/i.test(this._lastChunkText)) pause += 0.02;
     }
+    const jitter = Math.random() * 0.015;
+    this.nextTime += audioBuffer.duration + pause + jitter;
   }
 
   /**
