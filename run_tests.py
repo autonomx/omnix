@@ -28,16 +28,26 @@ def run_tests(test_type="all", verbose=True, coverage=False):
     # Test directories and files
     test_files = {
         "unit": [
-            "tests/test_unit_backend.py",
-            "tests/test_huggingface_url.py",
-            "tests/test_search.py"
+            "src/tests/unit/test_unit_backend.py",
+            "src/tests/unit/test_huggingface_url.py",
         ],
         "openai": [
-            "tests/test_openai_api.py",
-            "tests/test_openai_compatibility.py"
+            "src/tests/api/sanity/test_openai_api.py",
+            "src/tests/api/regression/test_openai_compatibility.py"
         ],
         "integration": [
-            "tests/test_openai_integration.py"
+            "src/tests/integration/test_openai_integration.py"
+        ],
+        "api": [
+            "src/tests/api/sanity/",
+            "src/tests/api/healthcheck/",
+            "src/tests/api/regression/"
+        ],
+        "e2e": [
+            "src/tests/e2e/"
+        ],
+        "healthcheck": [
+            "src/tests/api/healthcheck/"
         ]
     }
     
@@ -50,6 +60,12 @@ def run_tests(test_type="all", verbose=True, coverage=False):
         test_targets = test_files["openai"]
     elif test_type == "integration":
         test_targets = test_files["integration"]
+    elif test_type == "api":
+        test_targets = test_files["api"]
+    elif test_type == "e2e":
+        test_targets = test_files["e2e"]
+    elif test_type == "healthcheck":
+        test_targets = test_files["healthcheck"]
     else:
         print(f"Unknown test type: {test_type}")
         return False
@@ -114,7 +130,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run Omnix test suite")
     parser.add_argument(
         "--type", 
-        choices=["all", "unit", "openai", "integration"],
+        choices=["all", "unit", "openai", "integration", "api", "e2e", "healthcheck"],
         default="all",
         help="Type of tests to run (default: all)"
     )
