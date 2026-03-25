@@ -7,8 +7,12 @@ import sys
 import os
 
 # Add parent directory and src to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, str(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src')))
+# Works whether conftest is at src/tests/ or when discovered from subdirectories
+_tests_dir = os.path.dirname(os.path.abspath(__file__))
+_src_dir = os.path.dirname(_tests_dir)
+_project_root = os.path.dirname(_src_dir)
+sys.path.insert(0, _src_dir)
+sys.path.insert(0, _project_root)
 
 
 # ============================================================

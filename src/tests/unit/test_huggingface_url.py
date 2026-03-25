@@ -18,7 +18,7 @@ import sys
 from urllib.parse import urlparse, unquote
 
 # Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 class TestHuggingFaceURLParsing:

@@ -12,7 +12,7 @@ import tempfile
 import pytest
 
 # Ensure src/ is on the path so the audiobook package is importable
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 # ---------------------------------------------------------------------------

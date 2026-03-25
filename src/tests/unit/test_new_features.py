@@ -16,7 +16,7 @@ import uuid
 import pytest
 
 # Ensure src/ is on the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 # ---------------------------------------------------------------------------
@@ -995,7 +995,7 @@ class TestSoftLimiter:
 class TestDCOffsetCorrection:
     """Verify stabilised DC offset removal in server_fastapi.py."""
 
-    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
     def _read_server_source(self):
         with open(os.path.join(self._REPO_ROOT, 'server_fastapi.py'), 'r') as f:
@@ -1020,7 +1020,7 @@ class TestDCOffsetCorrection:
 class TestNoDoubleCrossfade:
     """Verify server_fastapi.py uses ONE crossfade strategy (no double overlap)."""
 
-    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
     def _read_server_source(self):
         with open(os.path.join(self._REPO_ROOT, 'server_fastapi.py'), 'r') as f:
