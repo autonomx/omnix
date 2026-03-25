@@ -48,6 +48,7 @@ SUITE_MAP = {
         str(TESTS_DIR / "api" / "regression" / "test_search_api.py"),
         str(TESTS_DIR / "api" / "healthcheck" / "test_health_responses.py"),
     ]),
+    "healthcheck": str(TESTS_DIR / "api" / "healthcheck" / "test_health_responses.py"),
     "frontend": str(TESTS_DIR / "e2e" / "test_frontend.py"),
     "js_analysis": str(TESTS_DIR / "e2e" / "test_js_variables.py"),
     "console": str(TESTS_DIR / "e2e" / "test_js_console.py"),
