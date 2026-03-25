@@ -15,6 +15,8 @@ export class AudioOutput {
     this._activeSources = [];
     this._resetGeneration = 0;
     this._lastChunkText = null;
+    // Rolling cadence: smooths pauses across chunks to prevent stacking
+    this._recentPause = 0;
   }
 
   _ensureContext() {
@@ -165,6 +167,11 @@ export class AudioOutput {
       if (/[!?]/.test(pacingText)) pause += 0.08;
       if (/\b(and|but|so|because)\b/i.test(pacingText)) pause += 0.02;
     }
+    // Rolling cadence: smooth pauses across chunks to prevent stacking.
+    // Blends current pause with recent history so successive punctuation
+    // doesn't pile up into unnaturally long gaps.
+    pause = (pause + this._recentPause * 0.5) / 1.5;
+    this._recentPause = pause;
     const jitter = Math.random() * 0.015;
     this.nextTime += audioBuffer.duration + pause + jitter;
   }

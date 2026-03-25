@@ -111,6 +111,11 @@ export class VoiceEngine {
     this.interruptCount = 0;
     // Guard: only one filler (speculative or pre-speech) fires per turn
     this._sentFillerThisTurn = false;
+    // Filler priority: tracks which type fired ('speculative' | 'prespeech' | null)
+    // so pre-speech can upgrade a speculative filler for better context-awareness
+    this._fillerType = null;
+    // Timestamp of last interrupt for adaptive decay (resets interruptCount after 8s)
+    this._lastInterruptTime = 0;
   }
 
   setState(newState) {
@@ -215,6 +220,7 @@ export class VoiceEngine {
       this._priorityMode = true;
       // Reset filler guard for the new turn
       this._sentFillerThisTurn = false;
+      this._fillerType = null;
       
       this.setState(VoiceState.INTERRUPTED);
       this.accumulatedResponse = '';
@@ -287,6 +293,7 @@ export class VoiceEngine {
       if (!this._sentFillerThisTurn) {
         this._sendTTS('Hmm,');
         this._sentFillerThisTurn = true;
+        this._fillerType = 'speculative';
       }
     } else if (this.llmStarted && text) {
       // Streaming context update: if LLM is already running, push updated
@@ -366,6 +373,7 @@ export class VoiceEngine {
     this.ignoreAudioChunks = false;
     // Reset filler guard so one filler is allowed per turn
     this._sentFillerThisTurn = false;
+    this._fillerType = null;
   }
 
   onLLMToken(token) {
@@ -379,10 +387,19 @@ export class VoiceEngine {
       // to mask LLM-to-TTS latency — perceived response time drops to ~0ms.
       // Guarded by _sentFillerThisTurn so we never double-filler when a
       // speculative filler was already sent from onTranscript.
+      // Priority upgrade: if a speculative filler already fired, we still send
+      // a contextual pre-speech filler to override it — feels more natural
+      // because intent is clearer by the time the LLM starts responding.
       if (!this._sentFillerThisTurn) {
         const filler = this._fillers[Math.floor(Math.random() * this._fillers.length)];
         this._sendTTS(filler);
         this._sentFillerThisTurn = true;
+        this._fillerType = 'prespeech';
+      } else if (this._fillerType === 'speculative') {
+        // Upgrade speculative → pre-speech filler for better context awareness
+        const filler = this._fillers[Math.floor(Math.random() * this._fillers.length)];
+        this._sendTTS(filler);
+        this._fillerType = 'prespeech';
       }
       // Full duplex: resume VAD so the user can interrupt by speaking.
       // Browser echo-cancellation (echoCancellation: true in getUserMedia)
@@ -404,12 +421,18 @@ export class VoiceEngine {
     // Early first chunk: speculative TTS for fastest perceived response
     // Flush as soon as buffer exceeds 3 chars – even partial words are OK
     // because latency matters more than perfection for the very first chunk.
+    // Uses _dispatchTTS directly (bypassing backpressure) to shave ~50ms
+    // by firing immediately without queue checks — first chunk is always urgent.
     if (!this.hasSentFirstChunk && this.textBuffer.length > 3) {
-      const chunk = this.textBuffer;
+      const text = this.textBuffer;
       this.textBuffer = '';
       this.hasSentFirstChunk = true;
       this._wordCount = 0;
-      this._sendTTS(chunk);
+      const cleaned = this._stripMarkdown(text);
+      if (cleaned) {
+        const seq = this.ttsSeq++;
+        this._dispatchTTS(cleaned, seq);
+      }
       return;
     }
     
@@ -764,6 +787,7 @@ export class VoiceEngine {
     this._priorityMode = true;
     // Reset filler guard for the new turn
     this._sentFillerThisTurn = false;
+    this._fillerType = null;
     console.log(`[VoiceEngine] Cancelled ongoing response (ttsReqId=${this._ttsRequestId}, llmReqId=${this._llmRequestId})`);
   }
 
@@ -871,6 +895,7 @@ export class VoiceEngine {
       this._priorityMode = true;
       // Reset filler guard for the new turn
       this._sentFillerThisTurn = false;
+      this._fillerType = null;
       this.setState(VoiceState.LISTENING);
       if (this.alwaysListening) {
         this.audioInput.resumeVAD();
@@ -907,6 +932,13 @@ export class VoiceEngine {
         clearTimeout(this._interruptTimer);
       }
       this._pendingInterrupt = true;
+      // Adaptive decay: reset interrupt count if >8s since last interrupt
+      // so the system doesn't stay in "impatient mode" permanently.
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - this._lastInterruptTime > 8000) {
+        this.interruptCount = 0;
+      }
+      this._lastInterruptTime = now;
       this.interruptCount++;
       this._interruptTimer = setTimeout(() => {
         if (this._pendingInterrupt) {

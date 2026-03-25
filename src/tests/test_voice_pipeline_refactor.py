@@ -905,7 +905,7 @@ class TestEarlyFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2400]
         assert "hasSentFirstChunk" in body
         assert "_sendTTS" in body
 
@@ -1022,7 +1022,7 @@ class TestEarlierFirstChunkTrigger:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1600]
+        body = src[start:start + 2000]
         assert "token.includes(' ')" in body, \
             "First chunk must trigger on word boundary (token.includes(' '))"
 
@@ -1040,7 +1040,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 3000]
+        body = src[start:start + 3800]
         assert "token.endsWith(' ')" in body, \
             "Must flush on word boundary (token ending with space)"
 
@@ -1050,7 +1050,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 3000]
+        body = src[start:start + 3800]
         assert "dynamicMinLength" in body, \
             "Phrase flush must use adaptive dynamicMinLength"
         assert "Math.min(8 + this._ttsInFlight * 4, 24)" in body, \
@@ -1062,7 +1062,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 3000]
+        body = src[start:start + 3800]
         assert "_wordCount >= 2" in body, \
             "Phrase flush must require at least 2 words to prevent micro-chunks"
 
@@ -1072,7 +1072,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 3000]
+        body = src[start:start + 3800]
         assert "token.endsWith(' ')" in body
         assert "_sendTTS(flushText)" in body
 
@@ -1082,7 +1082,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 3000]
+        body = src[start:start + 3800]
         phrase_idx = body.find("token.endsWith(' ')")
         assert phrase_idx > 0
         after_phrase = body[phrase_idx:phrase_idx + 350]
@@ -1220,7 +1220,7 @@ class TestIncrementalWordCounter:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1600]
+        body = src[start:start + 2000]
         assert "this._wordCount++" in body, \
             "Must increment _wordCount when token contains space"
 
@@ -1230,7 +1230,7 @@ class TestIncrementalWordCounter:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2800]
         assert "this._wordCount = 0" in body, \
             "_wordCount must be reset when buffer is flushed"
 
@@ -1286,7 +1286,7 @@ class TestFirstChunkWordBoundary:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2600]
         # Find the hasSentFirstChunk section
         first_idx = body.find("hasSentFirstChunk")
         assert first_idx > 0
@@ -1393,7 +1393,7 @@ class TestFullDuplexVAD:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1400]
+        body = src[start:start + 1800]
         assert "resumeVAD()" in body, \
             "onLLMToken must call resumeVAD() for full duplex (not pauseVAD)"
         assert "pauseVAD()" not in body, \
@@ -1472,7 +1472,7 @@ class TestTimelineJitter:
         m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2400]
+        body = src[start:start + 2600]
         assert "Math.random()" in body, \
             "_scheduleBuffer must use Math.random() for jitter"
 
@@ -1482,7 +1482,7 @@ class TestTimelineJitter:
         m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2400]
+        body = src[start:start + 2600]
         assert "0.03 + jitter" in body or "jitter" in body
 
 
@@ -1498,7 +1498,7 @@ class TestSpeculativeFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2600]
         assert "textBuffer.length > 3" in body, \
             "First chunk must use textBuffer.length > 3 for speculative TTS"
 
@@ -1508,7 +1508,7 @@ class TestSpeculativeFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2600]
         # Should NOT have the old word-boundary regex match
         assert ".match(/^(.+\\b)/)" not in body, \
             "First chunk must not use word boundary regex (speculative TTS)"
@@ -2040,7 +2040,7 @@ class TestSoftBargeIn:
         m = re.search(r'  handleUserSpeechStart\(\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 600]
+        body = src[start:start + 1000]
         assert "setTimeout" in body, \
             "Soft barge-in must use setTimeout delay"
         assert "120" in body, \
@@ -2084,7 +2084,7 @@ class TestSoftBargeIn:
         m = re.search(r'  handleUserSpeechStart\(\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 600]
+        body = src[start:start + 1000]
         assert "interruptCount" in body, \
             "handleUserSpeechStart must track interrupt count"
 
@@ -2229,7 +2229,7 @@ class TestBargeInRaceCondition:
         m = re.search(r'  handleUserSpeechStart\(\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 800]
+        body = src[start:start + 1000]
         assert "_interruptTimer = setTimeout" in body, \
             "Timer ID must be stored in _interruptTimer"
 
@@ -2259,7 +2259,7 @@ class TestAdaptiveInterruptBehavior:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2600]
+        body = src[start:start + 3400]
         assert "interruptCount > 2" in body, \
             "Adaptive behavior must check interruptCount > 2"
 
@@ -2271,6 +2271,154 @@ class TestAdaptiveInterruptBehavior:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2600]
+        body = src[start:start + 3400]
         assert "IMPATIENT_MIN_CHUNK_LENGTH" in body, \
             "dynamicMinLength should use IMPATIENT_MIN_CHUNK_LENGTH for impatient users"
+
+
+# ---------------------------------------------------------------------------
+# New feature tests: filler priority, rolling cadence, interrupt decay,
+# first chunk dispatch
+# ---------------------------------------------------------------------------
+
+class TestFillerPriority:
+    """Filler priority upgrade system: speculative → pre-speech filler."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_fillerType_in_constructor(self):
+        """Constructor must initialise _fillerType to null."""
+        src = self._get_source()
+        assert "this._fillerType = null" in src
+
+    def test_speculative_sets_fillerType(self):
+        """onTranscript filler must set _fillerType = 'speculative'."""
+        src = self._get_source()
+        m = re.search(r'  onTranscript\(text\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        assert "_fillerType = 'speculative'" in body
+
+    def test_prespeech_sets_fillerType(self):
+        """onLLMToken filler must set _fillerType = 'prespeech'."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        assert "_fillerType = 'prespeech'" in body
+
+    def test_prespeech_upgrades_speculative(self):
+        """onLLMToken must have upgrade path when _fillerType === 'speculative'."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        assert "this._fillerType === 'speculative'" in body
+
+    def test_fillerType_reset_on_cancel(self):
+        """_cancelOngoingResponse must reset _fillerType."""
+        src = self._get_source()
+        m = re.search(r'  _cancelOngoingResponse\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "_fillerType = null" in body
+
+    def test_fillerType_reset_on_llm_start(self):
+        """onLLMStart must reset _fillerType."""
+        src = self._get_source()
+        m = re.search(r'  onLLMStart\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "_fillerType = null" in body
+
+
+class TestRollingCadence:
+    """Rolling cadence in AudioOutput smooths pauses across chunks."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_recentPause_in_constructor(self):
+        """Constructor must initialise _recentPause to 0."""
+        src = self._get_source()
+        assert "this._recentPause = 0" in src
+
+    def test_rolling_cadence_formula(self):
+        """_scheduleBuffer must blend current pause with recent history."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2600]
+        assert "(pause + this._recentPause * 0.5) / 1.5" in body
+
+    def test_recentPause_updated(self):
+        """_scheduleBuffer must update _recentPause after computing blended pause."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2600]
+        assert "this._recentPause = pause" in body
+
+
+class TestInterruptCountDecay:
+    """Interrupt count decay resets interruptCount after inactivity."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_lastInterruptTime_in_constructor(self):
+        """Constructor must initialise _lastInterruptTime to 0."""
+        src = self._get_source()
+        assert "this._lastInterruptTime = 0" in src
+
+    def test_decay_check_in_handleSpeechStart(self):
+        """handleUserSpeechStart must decay interruptCount after 8000ms."""
+        src = self._get_source()
+        m = re.search(r'  handleUserSpeechStart\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "8000" in body
+        assert "this.interruptCount = 0" in body
+
+    def test_lastInterruptTime_set(self):
+        """handleUserSpeechStart must update _lastInterruptTime."""
+        src = self._get_source()
+        m = re.search(r'  handleUserSpeechStart\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "_lastInterruptTime =" in body
+
+
+class TestFirstChunkDispatch:
+    """First chunk must use _dispatchTTS directly for lowest latency."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_first_chunk_uses_dispatchTTS(self):
+        """First chunk block in onLLMToken must call _dispatchTTS(cleaned, seq)."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2800]
+        assert "_dispatchTTS(cleaned, seq)" in body
+
+    def test_first_chunk_strips_markdown(self):
+        """First chunk block must call _stripMarkdown before dispatch."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2800]
+        assert "_stripMarkdown" in body
