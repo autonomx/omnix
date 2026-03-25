@@ -2264,12 +2264,13 @@ class TestAdaptiveInterruptBehavior:
             "Adaptive behavior must check interruptCount > 2"
 
     def test_shorter_chunk_on_impatience(self):
-        """When interruptCount > 2, dynamicMinLength should be 6."""
+        """When interruptCount > 2, dynamicMinLength should use IMPATIENT_MIN_CHUNK_LENGTH."""
         src = self._get_source()
+        assert "IMPATIENT_MIN_CHUNK_LENGTH" in src, \
+            "Must define IMPATIENT_MIN_CHUNK_LENGTH constant"
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
         body = src[start:start + 2600]
-        # Check that 6 appears in the ternary for impatient users
-        assert "? 6" in body or "?6" in body or ": 6" in body, \
-            "dynamicMinLength should use 6 for impatient users"
+        assert "IMPATIENT_MIN_CHUNK_LENGTH" in body, \
+            "dynamicMinLength should use IMPATIENT_MIN_CHUNK_LENGTH for impatient users"

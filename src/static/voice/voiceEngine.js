@@ -68,6 +68,8 @@ export class VoiceEngine {
     this.MIN_PARTIAL_WORD_COUNT = 1;
     // Minimum text length before shouldFlush() returns true
     this.FLUSH_MIN_LENGTH = 30;
+    // Reduced dynamicMinLength when user interrupts frequently (adaptive pacing)
+    this.IMPATIENT_MIN_CHUNK_LENGTH = 6;
     // Count of TTS segments sent but not yet completed
     this._ttsInFlight = 0;
     // Ensure audio order when TTS resolves out-of-order
@@ -419,7 +421,7 @@ export class VoiceEngine {
     // Adaptive personality: if user has interrupted frequently (> 2 times),
     // use shorter chunks so the AI speaks more concisely and responsively.
     const dynamicMinLength = this.interruptCount > 2
-      ? 6
+      ? this.IMPATIENT_MIN_CHUNK_LENGTH
       : Math.min(8 + this._ttsInFlight * 4, 24);
     if (token.endsWith(' ') && this.textBuffer.length > dynamicMinLength && this._wordCount >= 2) {
       const flushText = this.textBuffer;
