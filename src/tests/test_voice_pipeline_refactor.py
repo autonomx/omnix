@@ -866,20 +866,20 @@ class TestProsodyGaps:
         """_scheduleBuffer must add semantic pacing gap between chunks."""
         src = self._get_source()
         # Match the method definition (2-space indent), not call sites
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m, "_scheduleBuffer definition not found"
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         assert "pause" in body, \
             "_scheduleBuffer must use semantic pacing for inter-chunk gaps"
 
     def test_sentence_end_pause(self):
         """_scheduleBuffer must add extra pause after sentence-ending punctuation."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2000]
+        body = src[start:start + 2400]
         assert "+= 0.08" in body or "+ 0.08" in body, \
             "_scheduleBuffer must add 80ms pause after sentence end"
 
@@ -905,7 +905,7 @@ class TestEarlyFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1400]
+        body = src[start:start + 1800]
         assert "hasSentFirstChunk" in body
         assert "_sendTTS" in body
 
@@ -1022,7 +1022,7 @@ class TestEarlierFirstChunkTrigger:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1600]
         assert "token.includes(' ')" in body, \
             "First chunk must trigger on word boundary (token.includes(' '))"
 
@@ -1040,7 +1040,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2600]
+        body = src[start:start + 3000]
         assert "token.endsWith(' ')" in body, \
             "Must flush on word boundary (token ending with space)"
 
@@ -1050,7 +1050,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2600]
+        body = src[start:start + 3000]
         assert "dynamicMinLength" in body, \
             "Phrase flush must use adaptive dynamicMinLength"
         assert "Math.min(8 + this._ttsInFlight * 4, 24)" in body, \
@@ -1062,7 +1062,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2600]
+        body = src[start:start + 3000]
         assert "_wordCount >= 2" in body, \
             "Phrase flush must require at least 2 words to prevent micro-chunks"
 
@@ -1072,7 +1072,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2600]
+        body = src[start:start + 3000]
         assert "token.endsWith(' ')" in body
         assert "_sendTTS(flushText)" in body
 
@@ -1082,7 +1082,7 @@ class TestPhraseLevelFlush:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 2600]
+        body = src[start:start + 3000]
         phrase_idx = body.find("token.endsWith(' ')")
         assert phrase_idx > 0
         after_phrase = body[phrase_idx:phrase_idx + 350]
@@ -1220,7 +1220,7 @@ class TestIncrementalWordCounter:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1600]
         assert "this._wordCount++" in body, \
             "Must increment _wordCount when token contains space"
 
@@ -1230,7 +1230,7 @@ class TestIncrementalWordCounter:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         assert "this._wordCount = 0" in body, \
             "_wordCount must be reset when buffer is flushed"
 
@@ -1240,7 +1240,7 @@ class TestIncrementalWordCounter:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         assert "trim().split(/\\s+/)" not in body, \
             "Must not use per-token split for word counting"
 
@@ -1286,7 +1286,7 @@ class TestFirstChunkWordBoundary:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         # Find the hasSentFirstChunk section
         first_idx = body.find("hasSentFirstChunk")
         assert first_idx > 0
@@ -1393,7 +1393,7 @@ class TestFullDuplexVAD:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1000]
+        body = src[start:start + 1400]
         assert "resumeVAD()" in body, \
             "onLLMToken must call resumeVAD() for full duplex (not pauseVAD)"
         assert "pauseVAD()" not in body, \
@@ -1414,19 +1414,19 @@ class TestActiveSourceTracking:
     def test_scheduleBuffer_pushes_source(self):
         """_scheduleBuffer must push source to _activeSources."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2000]
+        body = src[start:start + 2400]
         assert "_activeSources.push(source)" in body
 
     def test_scheduleBuffer_removes_on_ended(self):
         """_scheduleBuffer onended must remove source from _activeSources."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2000]
+        body = src[start:start + 2400]
         assert "_activeSources.indexOf(source)" in body or \
                "_activeSources.splice" in body
 
@@ -1469,20 +1469,20 @@ class TestTimelineJitter:
     def test_jitter_variable(self):
         """_scheduleBuffer must define a jitter variable using Math.random."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2000]
+        body = src[start:start + 2400]
         assert "Math.random()" in body, \
             "_scheduleBuffer must use Math.random() for jitter"
 
     def test_jitter_in_timeline_advance(self):
         """Timeline advance must include jitter in addition to base gap."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2000]
+        body = src[start:start + 2400]
         assert "0.03 + jitter" in body or "jitter" in body
 
 
@@ -1498,7 +1498,7 @@ class TestSpeculativeFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         assert "textBuffer.length > 3" in body, \
             "First chunk must use textBuffer.length > 3 for speculative TTS"
 
@@ -1508,7 +1508,7 @@ class TestSpeculativeFirstChunk:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         # Should NOT have the old word-boundary regex match
         assert ".match(/^(.+\\b)/)" not in body, \
             "First chunk must not use word boundary regex (speculative TTS)"
@@ -1876,7 +1876,7 @@ class TestStreamingContextUpdate:
         m = re.search(r'  onTranscript\(text\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1400]
         assert "updateContext" in body, \
             "onTranscript must call llm.updateContext for streaming context"
 
@@ -1886,7 +1886,7 @@ class TestStreamingContextUpdate:
         m = re.search(r'  onTranscript\(text\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 1200]
+        body = src[start:start + 1400]
         assert "typeof" in body or "updateContext" in body, \
             "updateContext must be safely guarded"
 
@@ -1896,7 +1896,7 @@ class TestStreamingContextUpdate:
         m = re.search(r'  onTranscript\(text\)\s*\{', src)
         assert m
         start = m.start()
-        body = src[start:start + 800]
+        body = src[start:start + 1000]
         assert "this.llmStarted" in body, \
             "updateContext branch must check llmStarted"
 
@@ -1921,7 +1921,7 @@ class TestPreSpeechFiller:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1000]
+        body = src[start:start + 1400]
         assert "_fillers" in body, \
             "First token handler must pick from _fillers array"
         assert "_sendTTS(filler)" in body, \
@@ -1933,7 +1933,7 @@ class TestPreSpeechFiller:
         m = re.search(r'onLLMToken\s*\(', src)
         assert m
         start = m.start()
-        body = src[start:start + 1000]
+        body = src[start:start + 1400]
         assert "Math.random()" in body or "Math.floor(Math.random()" in body, \
             "Filler selection must be randomised"
 
@@ -1947,10 +1947,10 @@ class TestSemanticPacing:
     def test_comma_period_pause(self):
         """Semantic pacing must add extra pause for commas and periods."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 1800]
+        body = src[start:start + 2200]
         assert "/[,.]/" in body or "[,.]" in body, \
             "Semantic pacing must detect commas and periods"
         assert "+= 0.04" in body or "+ 0.04" in body, \
@@ -1959,10 +1959,10 @@ class TestSemanticPacing:
     def test_exclamation_question_pause(self):
         """Semantic pacing must add extra pause for exclamation and question marks."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2600]
         assert "/[!?]/" in body or "[!?]" in body, \
             "Semantic pacing must detect ! and ?"
         assert "+= 0.08" in body or "+ 0.08" in body, \
@@ -1971,10 +1971,10 @@ class TestSemanticPacing:
     def test_conjunction_pause(self):
         """Semantic pacing must add pause for conjunctions (and, but, so, because)."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2600]
         assert "and|but|so|because" in body, \
             "Semantic pacing must detect conjunctions"
         assert "+= 0.02" in body or "+ 0.02" in body, \
@@ -1983,20 +1983,20 @@ class TestSemanticPacing:
     def test_base_pause(self):
         """Semantic pacing must have a base pause of 0.02s."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2600]
         assert "pause = 0.02" in body, \
             "Base pause must be 0.02s"
 
     def test_jitter_preserved(self):
         """Semantic pacing must still include random jitter for naturalness."""
         src = self._get_source()
-        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer\)', src)
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
         assert m
         start = m.start()
-        body = src[start:start + 2200]
+        body = src[start:start + 2600]
         assert "Math.random()" in body, \
             "Must include jitter for natural prosody"
         assert "0.015" in body, \
