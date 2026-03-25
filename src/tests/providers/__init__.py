@@ -1,1 +1,0 @@
-# Tests for provider plugin system

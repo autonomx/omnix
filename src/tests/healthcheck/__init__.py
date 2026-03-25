@@ -1,1 +1,0 @@
-# Healthcheck API tests
