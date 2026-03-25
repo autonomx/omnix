@@ -101,11 +101,14 @@ export class AudioOutput {
       this._pendingBuffers = [];
     }
 
-    this._scheduleBuffer(audioBuffer);
+    this._scheduleBuffer(audioBuffer, text);
   }
 
-  /** Schedule a decoded AudioBuffer on the playback timeline (fire-and-forget). */
-  _scheduleBuffer(audioBuffer) {
+  /** Schedule a decoded AudioBuffer on the playback timeline (fire-and-forget).
+   *  @param {AudioBuffer} audioBuffer - decoded audio to play
+   *  @param {string} [text] - source text for this chunk; used for semantic pacing
+   */
+  _scheduleBuffer(audioBuffer, text = '') {
     this.hasPlayedSomething = true;
 
     const source = this.ctx.createBufferSource();
@@ -153,11 +156,14 @@ export class AudioOutput {
     };
 
     // Semantic pacing: meaning-aware pauses for natural speech rhythm
+    // Uses the text parameter (actual source text for this chunk) rather than
+    // the _lastChunkText field, so pauses align with linguistic boundaries.
     let pause = 0.02;
-    if (this._lastChunkText) {
-      if (/[,.]/.test(this._lastChunkText)) pause += 0.04;
-      if (/[!?]/.test(this._lastChunkText)) pause += 0.08;
-      if (/\b(and|but|so|because)\b/i.test(this._lastChunkText)) pause += 0.02;
+    const pacingText = text || this._lastChunkText || '';
+    if (pacingText) {
+      if (/[,.]/.test(pacingText)) pause += 0.04;
+      if (/[!?]/.test(pacingText)) pause += 0.08;
+      if (/\b(and|but|so|because)\b/i.test(pacingText)) pause += 0.02;
     }
     const jitter = Math.random() * 0.015;
     this.nextTime += audioBuffer.duration + pause + jitter;

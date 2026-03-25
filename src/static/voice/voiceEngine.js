@@ -103,8 +103,12 @@ export class VoiceEngine {
     this._fillers = ["Yeah,", "Okay,", "Right,"];
     // Soft barge-in: pending interrupt flag (cleared if user speech stops quickly)
     this._pendingInterrupt = false;
+    // Timer ID for soft barge-in (cleared on cancel to prevent stacked timers)
+    this._interruptTimer = null;
     // Track interrupt count for adaptive behavior
     this.interruptCount = 0;
+    // Guard: only one filler (speculative or pre-speech) fires per turn
+    this._sentFillerThisTurn = false;
   }
 
   setState(newState) {
@@ -207,6 +211,8 @@ export class VoiceEngine {
       this.deferredTTSQueue = [];
       // Enable priority mode so the next response wins immediately
       this._priorityMode = true;
+      // Reset filler guard for the new turn
+      this._sentFillerThisTurn = false;
       
       this.setState(VoiceState.INTERRUPTED);
       this.accumulatedResponse = '';
@@ -223,6 +229,10 @@ export class VoiceEngine {
   onSpeechEnd() {
     // Cancel any pending soft barge-in if the user stopped speaking quickly
     this._pendingInterrupt = false;
+    if (this._interruptTimer) {
+      clearTimeout(this._interruptTimer);
+      this._interruptTimer = null;
+    }
 
     // Also handle speech-end coming in from INTERRUPTED state (user spoke after barge-in)
     if (this.state === VoiceState.INTERRUPTED) {
@@ -270,8 +280,12 @@ export class VoiceEngine {
       console.log('[VoiceEngine] Starting LLM early on partial transcript:', text);
       this.llm.sendMessage(text, this.sessionId, this.speaker);
       // Speculative response: send a brief filler to eliminate dead air while
-      // the LLM generates its first real content.
-      this._sendTTS('Hmm,');
+      // the LLM generates its first real content.  Guarded by _sentFillerThisTurn
+      // so we never double-filler if onLLMToken also fires a pre-speech filler.
+      if (!this._sentFillerThisTurn) {
+        this._sendTTS('Hmm,');
+        this._sentFillerThisTurn = true;
+      }
     } else if (this.llmStarted && text) {
       // Streaming context update: if LLM is already running, push updated
       // transcript so the model can adapt mid-user-sentence.
@@ -348,6 +362,8 @@ export class VoiceEngine {
     this.accumulatedResponse = '';
     // Allow audio chunks from this new response; clear any stale-chunk guard
     this.ignoreAudioChunks = false;
+    // Reset filler guard so one filler is allowed per turn
+    this._sentFillerThisTurn = false;
   }
 
   onLLMToken(token) {
@@ -358,9 +374,14 @@ export class VoiceEngine {
       this.hasStartedSpeaking = true;
       this.setState(VoiceState.AI_SPEAKING);
       // Pre-speech filler: send a random conversational filler immediately
-      // to mask LLM-to-TTS latency — perceived response time drops to ~0ms
-      const filler = this._fillers[Math.floor(Math.random() * this._fillers.length)];
-      this._sendTTS(filler);
+      // to mask LLM-to-TTS latency — perceived response time drops to ~0ms.
+      // Guarded by _sentFillerThisTurn so we never double-filler when a
+      // speculative filler was already sent from onTranscript.
+      if (!this._sentFillerThisTurn) {
+        const filler = this._fillers[Math.floor(Math.random() * this._fillers.length)];
+        this._sendTTS(filler);
+        this._sentFillerThisTurn = true;
+      }
       // Full duplex: resume VAD so the user can interrupt by speaking.
       // Browser echo-cancellation (echoCancellation: true in getUserMedia)
       // plus hasEnoughAudioForInterrupt() guard prevents false triggers.
@@ -395,7 +416,11 @@ export class VoiceEngine {
     // Adaptive chunk sizing: smoothly scale minimum length with in-flight count
     // to avoid overwhelming the TTS pipeline under load while keeping latency
     // low when idle.
-    const dynamicMinLength = Math.min(8 + this._ttsInFlight * 4, 24);
+    // Adaptive personality: if user has interrupted frequently (> 2 times),
+    // use shorter chunks so the AI speaks more concisely and responsively.
+    const dynamicMinLength = this.interruptCount > 2
+      ? 6
+      : Math.min(8 + this._ttsInFlight * 4, 24);
     if (token.endsWith(' ') && this.textBuffer.length > dynamicMinLength && this._wordCount >= 2) {
       const flushText = this.textBuffer;
       this.textBuffer = '';
@@ -735,6 +760,8 @@ export class VoiceEngine {
     this._llmRequestId++;
     // Enable priority mode so the next response wins immediately
     this._priorityMode = true;
+    // Reset filler guard for the new turn
+    this._sentFillerThisTurn = false;
     console.log(`[VoiceEngine] Cancelled ongoing response (ttsReqId=${this._ttsRequestId}, llmReqId=${this._llmRequestId})`);
   }
 
@@ -840,6 +867,8 @@ export class VoiceEngine {
       this.deferredTTSQueue = [];
       // Enable priority mode so the next response wins immediately
       this._priorityMode = true;
+      // Reset filler guard for the new turn
+      this._sentFillerThisTurn = false;
       this.setState(VoiceState.LISTENING);
       if (this.alwaysListening) {
         this.audioInput.resumeVAD();
@@ -871,11 +900,16 @@ export class VoiceEngine {
       // Soft barge-in: delay interrupt by 120ms to prevent accidental cut-offs
       // from brief overlaps (e.g. backchannel "uh-huh").  If the user stops
       // speaking within the window, the interrupt is cancelled.
+      // Clear any previously stacked timer to avoid duplicate interrupts.
+      if (this._interruptTimer) {
+        clearTimeout(this._interruptTimer);
+      }
       this._pendingInterrupt = true;
       this.interruptCount++;
-      setTimeout(() => {
+      this._interruptTimer = setTimeout(() => {
         if (this._pendingInterrupt) {
           this._pendingInterrupt = false;
+          this._interruptTimer = null;
           this.interruptAI();
         }
       }, 120);

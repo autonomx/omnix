@@ -2087,3 +2087,189 @@ class TestSoftBargeIn:
         body = src[start:start + 600]
         assert "interruptCount" in body, \
             "handleUserSpeechStart must track interrupt count"
+
+
+class TestFillerCollisionGuard:
+    """Only one filler (speculative or pre-speech) must fire per turn."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_sentFillerThisTurn_in_constructor(self):
+        """Constructor must initialise _sentFillerThisTurn = false."""
+        src = self._get_source()
+        assert "this._sentFillerThisTurn = false" in src, \
+            "Constructor must initialise _sentFillerThisTurn"
+
+    def test_speculative_filler_guarded(self):
+        """onTranscript speculative filler must check _sentFillerThisTurn."""
+        src = self._get_source()
+        m = re.search(r'onTranscript\s*\(text\)', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        assert "_sentFillerThisTurn" in body, \
+            "Speculative filler must be guarded by _sentFillerThisTurn"
+
+    def test_prespeech_filler_guarded(self):
+        """onLLMToken pre-speech filler must check _sentFillerThisTurn."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        assert "_sentFillerThisTurn" in body, \
+            "Pre-speech filler must be guarded by _sentFillerThisTurn"
+
+    def test_filler_guard_set_true_after_send(self):
+        """After sending a filler, _sentFillerThisTurn must be set to true."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1400]
+        assert "this._sentFillerThisTurn = true" in body, \
+            "Must set _sentFillerThisTurn = true after sending filler"
+
+    def test_filler_guard_reset_on_cancel(self):
+        """_cancelOngoingResponse must reset _sentFillerThisTurn."""
+        src = self._get_source()
+        m = re.search(r'  _cancelOngoingResponse\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1000]
+        assert "_sentFillerThisTurn" in body, \
+            "_cancelOngoingResponse must reset _sentFillerThisTurn"
+
+    def test_filler_guard_reset_on_interrupt(self):
+        """interrupt() must reset _sentFillerThisTurn."""
+        src = self._get_source()
+        m = re.search(r'  interrupt\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 1200]
+        assert "_sentFillerThisTurn" in body, \
+            "interrupt() must reset _sentFillerThisTurn"
+
+    def test_filler_guard_reset_on_llm_start(self):
+        """onLLMStart must reset _sentFillerThisTurn for new turn."""
+        src = self._get_source()
+        m = re.search(r'  onLLMStart\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "_sentFillerThisTurn" in body, \
+            "onLLMStart must reset _sentFillerThisTurn"
+
+
+class TestSemanticPacingTextParam:
+    """_scheduleBuffer must accept text parameter for semantic pacing."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/audioOutput.js")
+
+    def test_scheduleBuffer_accepts_text_param(self):
+        """_scheduleBuffer signature must include text parameter."""
+        src = self._get_source()
+        m = re.search(r'_scheduleBuffer\s*\(audioBuffer\s*,\s*text', src)
+        assert m, "_scheduleBuffer must accept a text parameter"
+
+    def test_scheduleBuffer_text_default_empty(self):
+        """text parameter must default to empty string."""
+        src = self._get_source()
+        assert "_scheduleBuffer(audioBuffer, text = '')" in src, \
+            "text parameter must default to ''"
+
+    def test_pacing_uses_text_or_lastChunkText(self):
+        """Semantic pacing must use text param (falling back to _lastChunkText)."""
+        src = self._get_source()
+        m = re.search(r'  _scheduleBuffer\s*\(audioBuffer', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2600]
+        assert "pacingText" in body or ("text" in body and "_lastChunkText" in body), \
+            "Pacing must use text param or fallback to _lastChunkText"
+
+    def test_enqueue_passes_text_to_scheduleBuffer(self):
+        """enqueue must pass text parameter through to _scheduleBuffer."""
+        src = self._get_source()
+        m = re.search(r'  enqueue\s*\(chunk\s*,\s*text\)', src)
+        assert m, "enqueue must accept text parameter"
+        start = m.start()
+        body = src[start:start + 2200]
+        assert "_scheduleBuffer(audioBuffer, text)" in body, \
+            "enqueue must pass text to _scheduleBuffer"
+
+
+class TestBargeInRaceCondition:
+    """Soft barge-in must track timer ID to prevent stacked timers."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_interruptTimer_in_constructor(self):
+        """Constructor must initialise _interruptTimer = null."""
+        src = self._get_source()
+        assert "this._interruptTimer = null" in src, \
+            "Constructor must initialise _interruptTimer"
+
+    def test_clearTimeout_before_new_timer(self):
+        """handleUserSpeechStart must clearTimeout previous timer."""
+        src = self._get_source()
+        m = re.search(r'  handleUserSpeechStart\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "clearTimeout" in body, \
+            "handleUserSpeechStart must clearTimeout previous timer"
+
+    def test_timer_stored_in_field(self):
+        """setTimeout return value must be stored in _interruptTimer."""
+        src = self._get_source()
+        m = re.search(r'  handleUserSpeechStart\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 800]
+        assert "_interruptTimer = setTimeout" in body, \
+            "Timer ID must be stored in _interruptTimer"
+
+    def test_speechEnd_clears_timer(self):
+        """onSpeechEnd must clearTimeout and null _interruptTimer."""
+        src = self._get_source()
+        m = re.search(r'  onSpeechEnd\(\)\s*\{', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 400]
+        assert "clearTimeout" in body, \
+            "onSpeechEnd must clearTimeout _interruptTimer"
+        assert "_interruptTimer = null" in body or \
+               "_interruptTimer" in body, \
+            "onSpeechEnd must null out _interruptTimer"
+
+
+class TestAdaptiveInterruptBehavior:
+    """Frequent interrupts (>2) must shorten chunk sizes for faster AI response."""
+
+    def _get_source(self):
+        return _read_source("src/static/voice/voiceEngine.js")
+
+    def test_interruptCount_affects_dynamicMinLength(self):
+        """dynamicMinLength must be shortened when interruptCount > 2."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2600]
+        assert "interruptCount > 2" in body, \
+            "Adaptive behavior must check interruptCount > 2"
+
+    def test_shorter_chunk_on_impatience(self):
+        """When interruptCount > 2, dynamicMinLength should be 6."""
+        src = self._get_source()
+        m = re.search(r'onLLMToken\s*\(', src)
+        assert m
+        start = m.start()
+        body = src[start:start + 2600]
+        # Check that 6 appears in the ternary for impatient users
+        assert "? 6" in body or "?6" in body or ": 6" in body, \
+            "dynamicMinLength should use 6 for impatient users"
