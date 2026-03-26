@@ -326,7 +326,7 @@ export class VoiceEngine {
       // cases.  Both feed into the confidence score.
       const isStrongIntent = this.interruptClassifier.isStrongInterrupt(text);
 
-      const score = this._computeInterruptScore({ duration, words, text });
+      const score = this._computeInterruptScore({ duration, words, text, isStrongIntent });
 
       if (isStrongIntent && this._isValidInterrupt) {
         // Stage 1 — instant: strong heuristic match, interrupt immediately
@@ -341,6 +341,8 @@ export class VoiceEngine {
           if (isIntent && this._interruptCandidate && this.state === VoiceState.AI_SPEAKING) {
             this._executeInterrupt();
           }
+        }).catch(() => {
+          // Classification errors must not break the voice pipeline
         });
       }
     }
@@ -376,10 +378,10 @@ export class VoiceEngine {
    *   • Semantic intent (strong turn-taking phrases boost score)
    *   • Filler penalty (lone "uh" / "um" / "hmm" reduces score)
    *
-   * @param {{duration: number, words: number, text: string}} params
+   * @param {{duration: number, words: number, text: string, isStrongIntent?: boolean}} params
    * @returns {number} score between 0 and 1
    */
-  _computeInterruptScore({ duration, words, text }) {
+  _computeInterruptScore({ duration, words, text, isStrongIntent }) {
     let score = 0;
 
     // Duration weight
@@ -390,12 +392,12 @@ export class VoiceEngine {
     if (words >= 2) score += 0.2;
     if (words >= 4) score += 0.1;
 
-    // Semantic intent boost
-    if (this.interruptClassifier.isStrongInterrupt(text)) {
+    // Semantic intent boost (reuse pre-computed result when available)
+    if (isStrongIntent !== undefined ? isStrongIntent : this.interruptClassifier.isStrongInterrupt(text)) {
       score += 0.4;
     }
 
-    // Penalise lone fillers
+    // Penalize lone fillers
     if (/^(uh|um|hmm)$/i.test(text.trim())) {
       score -= 0.5;
     }

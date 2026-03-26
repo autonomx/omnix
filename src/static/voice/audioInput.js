@@ -163,7 +163,8 @@ export class AudioInput {
    * @returns {boolean}
    */
   isEcho(inputChunk) {
-    const ref = this._audioOutput && this._audioOutput.lastPlayedSamples;
+    if (!this._audioOutput) return false;
+    const ref = this._audioOutput.lastPlayedSamples;
     if (!ref) return false;
 
     const similarity = AudioInput._correlate(inputChunk, ref);
@@ -174,12 +175,18 @@ export class AudioInput {
    * Normalised dot-product correlation between two audio buffers.
    * Returns a value in [0, 1] where 1 means identical.
    *
+   * To keep this lightweight, at most MAX_CORRELATE_SAMPLES are compared
+   * (roughly 1 second at 24 kHz).
+   *
    * @param {Float32Array} a
    * @param {Float32Array} b
    * @returns {number}
    */
   static _correlate(a, b) {
-    const len = Math.min(a.length, b.length);
+    // Cap the comparison window to ~1 s at 24 kHz to avoid expensive
+    // correlations on long buffers.
+    const MAX_CORRELATE_SAMPLES = 24000;
+    const len = Math.min(a.length, b.length, MAX_CORRELATE_SAMPLES);
     if (len === 0) return 0;
 
     let dot = 0;
