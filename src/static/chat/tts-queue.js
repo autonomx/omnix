@@ -202,7 +202,8 @@ function connectTTSWebSocket() {
             return;
         }
         
-        const wsUrl = `ws://localhost:8020/ws/tts`;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.hostname}:8020/ws/tts`;
         ttsWebSocket = new WebSocket(wsUrl);
         
         ttsWebSocket.onopen = () => {

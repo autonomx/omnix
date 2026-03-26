@@ -8,7 +8,8 @@ let sttWs = null;
 let sttWsConnected = false;
 let sttStreamingAudioChunks = [];
 
-const STT_WS_URL = "ws://localhost:8000/ws/transcribe";
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const STT_WS_URL = `${WS_PROTOCOL}//${window.location.hostname}:8000/ws/transcribe`;
 
 // Unified Voice WebSocket (STT + LLM + TTS)
 let voiceWs = null;
@@ -22,7 +23,7 @@ let ttsWs = null;
 let ttsWsConnected = false;
 let ttsAudioBuffer = [];
 
-const TTS_WS_URL = "ws://localhost:8020/ws/tts";
+const TTS_WS_URL = `${WS_PROTOCOL}//${window.location.hostname}:8020/ws/tts`;
 
 // Voice pipeline state
 let voiceResponseText = '';

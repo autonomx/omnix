@@ -31,7 +31,8 @@ export class TTSClient {
     this.ws = null;
     this.connected = false;
     this.connecting = false;
-    this.url = 'ws://localhost:8020/ws/tts';
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    this.url = `${wsProtocol}//${window.location.hostname}:8020/ws/tts`;
     this.currentAudio = null;
   }
 
