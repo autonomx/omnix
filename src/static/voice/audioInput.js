@@ -176,7 +176,9 @@ export class AudioInput {
 
   /**
    * Normalised dot-product correlation between two audio buffers.
-   * Returns a value in [0, 1] where 1 means identical.
+   * Returns a value in [-1, 1] where 1 means identical and -1 means
+   * perfectly anti-correlated.  For echo detection only the magnitude
+   * matters; the caller compares the result against a positive threshold.
    *
    * To keep this lightweight, at most MAX_CORRELATE_SAMPLES are compared
    * (roughly 1 second at 24 kHz).

@@ -350,8 +350,11 @@ export class VoiceEngine {
 
       // Intent persistence: accumulate confidence across transcript updates
       // to eliminate flicker decisions from jittery partial STT results.
-      this._intentConfidence += (isStrongIntent || score > this._interruptScoreThreshold) ? 1 : -1;
-      this._intentConfidence = Math.max(0, this._intentConfidence);
+      if (isStrongIntent || score > this._interruptScoreThreshold) {
+        this._intentConfidence += 1;
+      } else {
+        this._intentConfidence = Math.max(0, this._intentConfidence - 1);
+      }
 
       if (isStrongIntent && this._isValidInterrupt) {
         // Stage 1 — instant: strong heuristic match, interrupt immediately
@@ -397,8 +400,9 @@ export class VoiceEngine {
     this._intentConfidence = 0;
     this._lastInterruptAt = Date.now();
 
-    // Adaptive decay: reset interrupt count if >8s since last interrupt
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    // Adaptive decay: reset interrupt count if >8s since last interrupt.
+    // Uses Date.now() consistently with _lastInterruptAt for cooldown tracking.
+    const now = Date.now();
     if (now - this._lastInterruptTime > 8000) {
       this.interruptCount = 0;
     }
