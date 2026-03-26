@@ -2743,8 +2743,9 @@ def _generate_ws_tts(text: str, speaker: str, ws: WebSocket,
     Streams int16 PCM frames to the WebSocket via ``run_coroutine_threadsafe``.
     """
     if not tts_provider or not hasattr(tts_provider, 'generate_audio_stream'):
+        err = "TTS streaming not supported by current provider" if tts_provider else "No TTS provider loaded"
         asyncio.run_coroutine_threadsafe(
-            ws.send_json({"type": "error", "error": "TTS provider unavailable"}),
+            ws.send_json({"type": "error", "error": err}),
             loop,
         ).result()
         return
