@@ -47,13 +47,10 @@ COPY requirements.txt .
 # Install Python dependencies (excluding torch - already installed)
 RUN pip install --no-cache-dir -r requirements.txt || true
 
-# Install Chatterbox TTS
-RUN pip install --no-cache-dir chatterbox-tts==0.1.6
-
 # Install NeMo ASR for Parakeet STT
 RUN pip install --no-cache-dir "nemo_toolkit[asr]"
 
-# Install compatible transformers version for Chatterbox TTS
+# Install compatible transformers version
 # (nemo_toolkit installs transformers 4.53+ which breaks LlamaModel import)
 # Must be installed AFTER nemo to override its version
 # Also need to pin tokenizers to compatible version
@@ -67,7 +64,7 @@ RUN pip install --no-cache-dir \
     torchaudio==2.6.0+cu124 \
     --force-reinstall --index-url https://download.pytorch.org/whl/cu124
 
-# Fix numpy and other dependencies for chatterbox compatibility
+# Fix numpy and other dependencies for compatibility
 RUN pip install --no-cache-dir numpy==1.25.2 safetensors==0.5.3 fsspec==2024.12.0 pillow==11.0.0 --force-reinstall
 
 # Pre-download Parakeet TDT 0.6B model
@@ -103,9 +100,8 @@ RUN chmod +x /app/start_llama_server.sh
 # Expose ports
 # 5000: Main Flask app
 # 8000: STT server (Parakeet)
-# 8020: TTS server (Chatterbox)
 # 8080: llama.cpp server
-EXPOSE 5000 8000 8020 8080
+EXPOSE 5000 8000 8080
 
 # Set environment variables
 ENV FLASK_APP=app.py
@@ -137,12 +133,10 @@ CMD ["python", "app.py"]
 # 5. Access the application:
 #    - Main app: http://localhost:5000
 #    - STT server: http://localhost:8000
-#    - Realtime server: http://localhost:8001
-#    - TTS server: http://localhost:8020
 #
 # 6. Stop the container:
 #    docker-compose down
 #
-# Note: On first run, the Parakeet STT model (~600MB) and Chatterbox TTS 
-# model will be downloaded. Check logs for progress.
+# Note: On first run, the Parakeet STT model (~600MB) will be downloaded.
+# Check logs for progress.
 # ============================================================================

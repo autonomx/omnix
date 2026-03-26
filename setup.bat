@@ -10,7 +10,7 @@ echo.
 echo This will install all dependencies for:
 echo   - Chatbot Web Server
 echo   - Parakeet STT (Speech-to-Text)
-echo   - Chatterbox TTS TURBO (Text-to-Speech)
+echo   - FasterQwen3TTS (Text-to-Speech)
 echo.
 echo Using Python virtual environment for isolation
 pause
@@ -62,7 +62,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/7] Installing torchmetrics (required for Chatterbox TTS)...
+echo [4/7] Installing torchmetrics...
 pip install torchmetrics==1.4.2
 
 echo.
@@ -75,15 +75,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [6/8] Installing Chatterbox TTS TURBO...
-pip install chatterbox-tts==0.1.6
-if errorlevel 1 (
-    echo WARNING: Failed to install Chatterbox TTS
-    echo You can try: pip install chatterbox-tts
-)
-
-echo.
-echo [7/8] Installing FasterQwen3TTS...
+echo [6/8] Installing FasterQwen3TTS...
 pip install faster-qwen3-tts>=0.2.4
 if errorlevel 1 (
     echo WARNING: Failed to install FasterQwen3TTS
@@ -143,9 +135,9 @@ python -c "import torch; print(f'PyTorch: {torch.__version__}')" 2>nul
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>nul
 
 REM Check TTS
-python -c "from chatterbox.tts_turbo import ChatterboxTurboTTS; print('Chatterbox TTS: OK')" 2>nul
+python -c "import faster_qwen3_tts; print('FasterQwen3TTS: OK')" 2>nul
 if errorlevel 1 (
-    echo Chatterbox TTS: FAILED - check torch/torchvision versions
+    echo FasterQwen3TTS: FAILED - check faster-qwen3-tts installation
 )
 
 REM Check STT
@@ -170,7 +162,6 @@ echo.
 echo To start services:
 echo   start_all.bat             - Start all services
 echo   start_parakeet_stt.bat    - Start STT only
-echo   python chatterbox_tts_server.py - Start TTS only
 echo.
 echo To run with virtual environment:
 echo   venv\Scripts\activate.bat && start_all.bat

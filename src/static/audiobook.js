@@ -1753,7 +1753,7 @@ async function generateAudiobookSSE() {
                                 console.error('Audiobook error:', data.error);
                                 const errorMsg = data.error || 'Unknown error';
                                 if (data.code === 'TTS_UNAVAILABLE') {
-                                    updateProgress(-1, 'TTS server is not running. Please start the TTS server (e.g. chatterbox_tts_server.py) and try again.');
+                                    updateProgress(-1, 'TTS is not available. Please check that the TTS provider is configured in settings and try again.');
                                     stopStreamingAudio();
                                 } else {
                                     updateProgress(-1, `Error: ${errorMsg}`);

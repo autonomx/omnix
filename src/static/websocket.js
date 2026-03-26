@@ -18,12 +18,10 @@ let voiceAudioBuffer = [];
 
 // const VOICE_WS_URL = "ws://localhost:8001/ws/voice"; // Removed - no longer using realtime server
 
-// Streaming TTS WebSocket
+// TTS WebSocket removed (TTS runs via HTTP /api/tts)
 let ttsWs = null;
 let ttsWsConnected = false;
 let ttsAudioBuffer = [];
-
-const TTS_WS_URL = `${WS_PROTOCOL}//${window.location.hostname}:8020/ws/tts`;
 
 // Voice pipeline state
 let voiceResponseText = '';
@@ -166,80 +164,10 @@ function closeStreamingSTT() {
 // STREAMING TTS WEBSOCKET
 // ============================================================
 
-// Connect to streaming TTS WebSocket
+// Connect to streaming TTS WebSocket (no longer available - TTS uses HTTP)
 function connectStreamingTTS() {
-    return new Promise((resolve, reject) => {
-        if (ttsWs && ttsWs.readyState === WebSocket.OPEN) {
-            resolve();
-            return;
-        }
-        
-        try {
-            ttsWs = new WebSocket(TTS_WS_URL);
-            
-            ttsWs.onopen = () => {
-                console.log('Streaming TTS WebSocket connected');
-                ttsWsConnected = true;
-                resolve();
-            };
-            
-            ttsWs.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    
-                    if (data.type === 'audio') {
-                        // Add audio chunk to buffer
-                        ttsAudioBuffer.push(data.data);
-                        
-                        // Play audio chunk immediately (streaming playback)
-                        playStreamingAudioChunk(data.data, data.sample_rate);
-                    } else if (data.type === 'done') {
-                        console.log('TTS streaming done');
-                        if (conversationMode) {
-                            if (alwaysListening) {
-                                showCircleIndicator('listening');
-                                updateConversationStatus('🎤 Auto-listening - Speak now!', 'listening');
-                            } else {
-                                showCircleIndicator('idle');
-                                updateConversationStatus('Ready to chat');
-                            }
-                        }
-                        ttsAudioBuffer = [];
-                    } else if (data.type === 'error') {
-                        console.error('TTS streaming error:', data.data);
-                        if (conversationMode) {
-                            showCircleIndicator('idle');
-                            updateConversationStatus('Ready to chat');
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error parsing TTS message:', e);
-                }
-            };
-            
-            ttsWs.onerror = (error) => {
-                console.error('TTS WebSocket error:', error);
-                ttsWsConnected = false;
-                reject(error);
-            };
-            
-            ttsWs.onclose = () => {
-                console.log('TTS WebSocket closed');
-                ttsWsConnected = false;
-                ttsWs = null;
-            };
-            
-            // Timeout for connection
-            setTimeout(() => {
-                if (!ttsWsConnected) {
-                    reject(new Error('Connection timeout'));
-                }
-            }, 5000);
-            
-        } catch (e) {
-            reject(e);
-        }
-    });
+    return Promise.reject(new Error('TTS WebSocket not available'));
+}
 }
 
 // Play streaming audio chunk immediately (schedule directly, no queue wait)
