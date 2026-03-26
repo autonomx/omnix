@@ -20,6 +20,12 @@ export class AudioInput {
     this.VAD_THRESHOLD = 0.008;
     this.VAD_SILENCE_TIMEOUT = 500;
     this.MIN_SPEECH_CHUNKS = 3; // minimum chunks of audio needed to count as a real interrupt
+
+    // Echo cancellation: reference to the AudioOutput instance whose
+    // lastPlayedSamples are compared against incoming mic data.
+    this._audioOutput = null;
+    /** Correlation threshold above which a mic chunk is considered echo. */
+    this.ECHO_SIMILARITY_THRESHOLD = 0.8;
   }
 
   async start() {
@@ -73,6 +79,10 @@ export class AudioInput {
 
   _processAudioChunk(samples) {
     if (this.vadPaused) return;
+
+    // Echo cancellation: skip this chunk if it matches the audio we just
+    // played through AudioOutput (mic hearing its own TTS output).
+    if (this.isEcho(samples)) return;
 
     // Always forward audio to STT when the user is speaking
     if (this.isSpeaking) {
@@ -131,6 +141,58 @@ export class AudioInput {
 
   resumeVAD() {
     this.vadPaused = false;
+  }
+
+  /**
+   * Link an AudioOutput instance so that echo cancellation can compare
+   * incoming mic audio against the most recently played TTS output.
+   * @param {import('./audioOutput.js').AudioOutput} audioOutput
+   */
+  setAudioOutput(audioOutput) {
+    this._audioOutput = audioOutput;
+  }
+
+  /**
+   * Return true if `inputChunk` closely matches the audio we recently
+   * played through AudioOutput, indicating the mic is hearing its own echo.
+   *
+   * Uses a lightweight normalised dot-product correlation — not perfect
+   * but a significant improvement over no echo detection at all.
+   *
+   * @param {Float32Array} inputChunk
+   * @returns {boolean}
+   */
+  isEcho(inputChunk) {
+    const ref = this._audioOutput && this._audioOutput.lastPlayedSamples;
+    if (!ref) return false;
+
+    const similarity = AudioInput._correlate(inputChunk, ref);
+    return similarity > this.ECHO_SIMILARITY_THRESHOLD;
+  }
+
+  /**
+   * Normalised dot-product correlation between two audio buffers.
+   * Returns a value in [0, 1] where 1 means identical.
+   *
+   * @param {Float32Array} a
+   * @param {Float32Array} b
+   * @returns {number}
+   */
+  static _correlate(a, b) {
+    const len = Math.min(a.length, b.length);
+    if (len === 0) return 0;
+
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < len; i++) {
+      dot += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    return denom === 0 ? 0 : dot / denom;
   }
 
   hasEnoughAudioForInterrupt() {

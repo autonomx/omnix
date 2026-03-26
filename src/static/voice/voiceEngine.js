@@ -4,6 +4,7 @@ import { AudioOutput } from './audioOutput.js?v=2';
 import { STTClient } from './sttClient.js?v=2';
 import { LLMClient } from './llmClient.js?v=2';
 import { TTSClient } from './ttsClient.js?v=2';
+import { InterruptClassifier } from './interruptClassifier.js?v=2';
 
 export { VoiceState };
 export class VoiceEngine {
@@ -44,6 +45,9 @@ export class VoiceEngine {
       this.onAudioChunkInput.bind(this),
       this.handleUserSpeechStart.bind(this)
     );
+    // Wire echo cancellation: let AudioInput compare mic chunks against
+    // the most recently played TTS audio to suppress self-echo.
+    this.audioInput.setAudioOutput(this.audioOutput);
 
     this.currentTranscript = '';
     this.accumulatedResponse = '';
@@ -128,6 +132,10 @@ export class VoiceEngine {
     this._interruptEnabledAt = 0;
     this._interruptGracePeriod = 800; // ms – delay before interrupts are accepted after AI starts
     this._isValidInterrupt = false;
+    // Semantic interrupt classifier (heuristic + optional LLM fallback)
+    this.interruptClassifier = new InterruptClassifier();
+    // Confidence threshold: scores above this trigger a real interrupt
+    this._interruptScoreThreshold = 0.6;
   }
 
   setState(newState) {
@@ -305,30 +313,94 @@ export class VoiceEngine {
       }
     }
 
-    // Interrupt intent validation: confirm the candidate interrupt is real
-    // speech (not noise / echo) before cancelling the AI turn.
+    // Interrupt intent validation: use confidence scoring with semantic
+    // classification instead of a simple word-count boolean check.
     if (this._interruptCandidate && this.state === VoiceState.AI_SPEAKING) {
       if (this._isNoise(text)) return;
 
+      const duration = Date.now() - this._interruptStartTime;
       const words = text.trim().split(/\s+/).length;
 
-      if (words >= this._interruptMinWords && this._isValidInterrupt) {
-        console.log('[VoiceEngine] Valid interrupt detected');
+      // Two-stage system: heuristic fast-path runs synchronously for instant
+      // response on obvious interrupts; LLM fallback runs async for ambiguous
+      // cases.  Both feed into the confidence score.
+      const isStrongIntent = this.interruptClassifier.isStrongInterrupt(text);
 
-        this._interruptCandidate = false;
-        this._isValidInterrupt = false;
+      const score = this._computeInterruptScore({ duration, words, text });
 
-        // Adaptive decay: reset interrupt count if >8s since last interrupt
-        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        if (now - this._lastInterruptTime > 8000) {
-          this.interruptCount = 0;
-        }
-        this._lastInterruptTime = now;
-        this.interruptCount++;
-
-        this.interruptAI();
+      if (isStrongIntent && this._isValidInterrupt) {
+        // Stage 1 — instant: strong heuristic match, interrupt immediately
+        this._executeInterrupt();
+      } else if (score > this._interruptScoreThreshold && this._isValidInterrupt) {
+        // Score already passes threshold (e.g. long duration + multiple words)
+        this._executeInterrupt();
+      } else if (this._isValidInterrupt && !isStrongIntent) {
+        // Stage 2 — async: ambiguous speech, ask the LLM classifier
+        this.interruptClassifier.classify(text).then(isIntent => {
+          // Re-check guards: the turn may have ended while the LLM was thinking
+          if (isIntent && this._interruptCandidate && this.state === VoiceState.AI_SPEAKING) {
+            this._executeInterrupt();
+          }
+        });
       }
     }
+  }
+
+  /**
+   * Shared interrupt execution: logs, resets arbitration state, updates
+   * adaptive counters, and fires the actual interrupt.
+   */
+  _executeInterrupt() {
+    console.log('[VoiceEngine] Valid interrupt detected');
+
+    this._interruptCandidate = false;
+    this._isValidInterrupt = false;
+
+    // Adaptive decay: reset interrupt count if >8s since last interrupt
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - this._lastInterruptTime > 8000) {
+      this.interruptCount = 0;
+    }
+    this._lastInterruptTime = now;
+    this.interruptCount++;
+
+    this.interruptAI();
+  }
+
+  /**
+   * Compute a 0–1 confidence score for an interrupt candidate.
+   *
+   * Factors:
+   *   • Speech duration (longer = more likely intentional)
+   *   • Word count (more words = more likely intentional)
+   *   • Semantic intent (strong turn-taking phrases boost score)
+   *   • Filler penalty (lone "uh" / "um" / "hmm" reduces score)
+   *
+   * @param {{duration: number, words: number, text: string}} params
+   * @returns {number} score between 0 and 1
+   */
+  _computeInterruptScore({ duration, words, text }) {
+    let score = 0;
+
+    // Duration weight
+    if (duration > 300) score += 0.3;
+    if (duration > 600) score += 0.2;
+
+    // Word count weight
+    if (words >= 2) score += 0.2;
+    if (words >= 4) score += 0.1;
+
+    // Semantic intent boost
+    if (this.interruptClassifier.isStrongInterrupt(text)) {
+      score += 0.4;
+    }
+
+    // Penalise lone fillers
+    if (/^(uh|um|hmm)$/i.test(text.trim())) {
+      score -= 0.5;
+    }
+
+    return Math.max(0, Math.min(1, score));
   }
 
   onSTTFinal(text) {
