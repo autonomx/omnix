@@ -99,7 +99,7 @@ export class SpeakerFilter {
 
   /**
    * Normalised dot-product correlation between two audio buffers.
-   * Returns a value in [-1, 1].  Capped at 24 000 samples (~1 s at 24 kHz).
+   * Returns a value in [-1, 1].  Capped at 24,000 samples (~1 s at 24 kHz).
    *
    * @param {Float32Array} a
    * @param {Float32Array} b
