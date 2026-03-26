@@ -53,11 +53,9 @@ def kill_port(port):
 @services_bp.route('/api/services/tts/start', methods=['POST'])
 def start_tts():
     global tts_process, tts_status
-    kill_port(8020)
     try:
-        tts_process = subprocess.Popen(['python', 'cosyvoice_tts_server.py'], cwd=shared.BASE_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
-        threading.Thread(target=read_logs, args=(tts_process, tts_log_queue, "TTS"), daemon=True).start()
-        tts_status = {"running": True, "message": "Starting..."}
+        # TTS now runs in-process via the audio provider system (e.g. faster-qwen3-tts)
+        tts_status = {"running": True, "message": "TTS runs in-process via audio provider"}
     except Exception as e: tts_status = {"running": False, "message": str(e)}
     return jsonify({"success": True, "status": tts_status})
 
@@ -95,7 +93,10 @@ def stop_stt():
 def get_status():
     global tts_status, stt_status
     tts_r, stt_r = False, False
-    try: tts_r = requests.get(f"{shared.TTS_BASE_URL}/health", timeout=2).status_code == 200
+    # TTS now runs in-process via audio provider - check if provider is available
+    try:
+        tts_provider = shared.get_tts_provider()
+        tts_r = tts_provider is not None
     except: pass
     try: stt_r = requests.get(f"{shared.STT_BASE_URL}/health", timeout=2).status_code == 200
     except: pass
@@ -111,9 +112,9 @@ def get_xtts_logs():
         while not tts_log_queue.empty():
             logs.append(tts_log_queue.get_nowait())
         
-        # If no logs, check if service is running and add info
+        # If no logs, TTS now runs in-process
         if len(logs) == 0:
-            check_service_and_add_log("TTS", shared.TTS_BASE_URL, tts_log_queue)
+            tts_log_queue.put("[TTS] TTS runs in-process via audio provider")
             while not tts_log_queue.empty():
                 logs.append(tts_log_queue.get_nowait())
     except: pass
@@ -137,13 +138,14 @@ def get_stt_logs():
 
 def pregen_audio(speaker="default"):
     voice_id = shared.custom_voices.get(speaker.replace(" (Custom)", ""), {}).get("voice_clone_id")
+    tts_provider = shared.get_tts_provider()
+    if not tts_provider:
+        return
     for phrase in SPECULATIVE_FILLERS + CONVERSATION_GREETINGS:
         try:
-            req = {"text": phrase, "language": "en", "speaker": speaker}
-            if voice_id: req["voice_clone_id"] = voice_id
-            r = requests.post(f"{shared.TTS_BASE_URL}/tts", json=req, timeout=60)
-            if r.status_code == 200 and r.json().get('success'):
-                with cache_lock: speculative_cache[phrase] = (r.json().get('audio'), r.json().get('sample_rate'))
+            result = tts_provider.generate_audio(text=phrase, speaker=speaker, language="en")
+            if result.get('success'):
+                with cache_lock: speculative_cache[phrase] = (result.get('audio'), result.get('sample_rate'))
         except: pass
 
 @services_bp.route('/api/tts/pregenerate', methods=['POST'])
@@ -166,14 +168,13 @@ def get_greeting():
     phrase = random.choice(CONVERSATION_GREETINGS)
     voice_id = shared.custom_voices.get(speaker.replace(" (Custom)", ""), {}).get("voice_clone_id")
     
-    # Try generating fresh audio (handles both custom and provider voices)
+    # Try generating fresh audio via in-process TTS provider
     try:
-        req = {"text": phrase, "language": "en", "speaker": speaker}
-        if voice_id: req["voice_clone_id"] = voice_id
-        
-        r = requests.post(f"{shared.TTS_BASE_URL}/tts", json=req, timeout=60)
-        if r.status_code == 200 and r.json().get('success'):
-            return jsonify({"success": True, "text": phrase, "audio": r.json().get('audio'), "sample_rate": r.json().get('sample_rate')})
+        tts_provider = shared.get_tts_provider()
+        if tts_provider:
+            result = tts_provider.generate_audio(text=phrase, speaker=speaker, language="en")
+            if result.get('success'):
+                return jsonify({"success": True, "text": phrase, "audio": result.get('audio'), "sample_rate": result.get('sample_rate')})
     except: pass
     
     # Fallback to cache if generation failed

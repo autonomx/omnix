@@ -120,64 +120,6 @@ class OpenAITTSProvider(TTSProvider):
             logger.error("OpenAI TTS streaming request failed: %s", exc)
 
 
-class LocalModelTTSProvider(TTSProvider):
-    """TTS provider wrapping a local TTS model server (like the existing system)."""
-
-    def __init__(self, base_url: str = "http://localhost:8020"):
-        self._base_url = base_url.rstrip("/")
-
-    @property
-    def name(self) -> str:
-        return "local"
-
-    def generate(self, text: str, speaker: Optional[str] = None, **kwargs) -> bytes:
-        """Call local TTS server and return audio bytes."""
-        payload: Dict[str, Any] = {"text": text}
-        if speaker:
-            payload["speaker"] = speaker
-        payload.update(kwargs)
-
-        try:
-            resp = requests.post(
-                f"{self._base_url}/api/tts",
-                json=payload,
-                timeout=120,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            audio_b64 = data.get("audio", "")
-            if audio_b64:
-                return base64.b64decode(audio_b64)
-            return b""
-        except requests.RequestException as exc:
-            logger.error("Local TTS request failed: %s", exc)
-            return b""
-        except (ValueError, KeyError) as exc:
-            logger.error("Failed to decode local TTS response: %s", exc)
-            return b""
-
-    def stream(self, text: str, speaker: Optional[str] = None, **kwargs) -> Iterator[bytes]:
-        """Stream from local TTS server."""
-        payload: Dict[str, Any] = {"text": text}
-        if speaker:
-            payload["speaker"] = speaker
-        payload.update(kwargs)
-
-        try:
-            resp = requests.post(
-                f"{self._base_url}/api/tts/stream",
-                json=payload,
-                timeout=120,
-                stream=True,
-            )
-            resp.raise_for_status()
-            for chunk in resp.iter_content(chunk_size=4096):
-                if chunk:
-                    yield chunk
-        except requests.RequestException as exc:
-            logger.error("Local TTS streaming request failed: %s", exc)
-
-
 # ---------------------------------------------------------------------------
 # Registry for simplified providers
 # ---------------------------------------------------------------------------

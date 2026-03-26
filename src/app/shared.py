@@ -22,7 +22,6 @@ os.makedirs(os.path.join(MODELS_DIR, 'server'), exist_ok=True)
 os.makedirs(VOICE_CLONES_DIR, exist_ok=True)
 
 # Shared Service Constants
-TTS_BASE_URL = "http://localhost:8020"
 TTS_SAMPLE_RATE = 24000
 TARGET_SR = TTS_SAMPLE_RATE  # canonical playback sample-rate for the whole pipeline
 STT_BASE_URL = "http://localhost:8000"
@@ -70,7 +69,6 @@ DEFAULT_SETTINGS = {
         "non_streaming_mode": True,
         "append_silence": True
     },
-    "chatterbox": {"base_url": "http://localhost:8020"},
     "parakeet": {"base_url": "http://localhost:8000"}
 }
 
@@ -97,8 +95,6 @@ def migrate_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
             settings['audio_provider_tts'] = DEFAULT_SETTINGS['audio_provider_tts']
         if 'audio_provider_stt' not in settings:
             settings['audio_provider_stt'] = DEFAULT_SETTINGS['audio_provider_stt']
-        if 'chatterbox' not in settings:
-            settings['chatterbox'] = DEFAULT_SETTINGS['chatterbox']
         if 'parakeet' not in settings:
             settings['parakeet'] = DEFAULT_SETTINGS['parakeet']
         return settings
@@ -120,8 +116,6 @@ def migrate_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
         migrated['audio_provider_tts'] = DEFAULT_SETTINGS['audio_provider_tts']
     if 'audio_provider_stt' not in migrated:
         migrated['audio_provider_stt'] = DEFAULT_SETTINGS['audio_provider_stt']
-    if 'chatterbox' not in migrated:
-        migrated['chatterbox'] = DEFAULT_SETTINGS['chatterbox']
     if 'parakeet' not in migrated:
         migrated['parakeet'] = DEFAULT_SETTINGS['parakeet']
     
@@ -349,9 +343,7 @@ def get_tts_provider(provider_name: Optional[str] = None) -> Optional[Any]:
             base_url = provider_settings.get("base_url")
             if not base_url:
                 # Fallback to default base URL if not configured
-                if provider == 'chatterbox':
-                    base_url = "http://localhost:8020"
-                elif provider == 'parakeet':
+                if provider == 'parakeet':
                     base_url = "http://localhost:8000"
                 else:
                     base_url = None
