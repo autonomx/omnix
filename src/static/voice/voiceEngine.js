@@ -120,6 +120,13 @@ export class VoiceEngine {
     this._fillerType = null;
     // Timestamp of last interrupt for adaptive decay (resets interruptCount after 8s)
     this._lastInterruptTime = 0;
+    // Full-duplex interrupt arbitration
+    this._interruptCandidate = false;
+    this._interruptStartTime = 0;
+    this._interruptMinDuration = 350; // ms – minimum speech duration to validate interrupt
+    this._interruptMinWords = 2;
+    this._interruptEnabledAt = 0;
+    this._isValidInterrupt = false;
   }
 
   setState(newState) {
@@ -193,55 +200,31 @@ export class VoiceEngine {
   }
 
   onSpeechStart() {
-    const isInterrupt = (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) 
-                        && this.audioInput.hasEnoughAudioForInterrupt();
-    
-    if (isInterrupt) {
-      console.log('[VoiceEngine] User interrupted AI');
-      
-      this._ttsInFlight = 0;
-      this._wordCount = 0;
-      this.ignoreAudioChunks = true;
-      this._abortAllTTS();
-      this.audioOutput.softReset();
-      this.llm.cancel();
-      this.audioInput.resumeVAD();
-      // Invalidate any in-flight HTTP TTS / stale LLM callbacks
-      this._ttsRequestId++;
-      this._llmRequestId++;
-      this.llmStarted = false;
-      this.hasSentFirstChunk = false;
-      // Reset TTS sequencing state
-      this.ttsSeq = 0;
-      this.expectedSeq = 0;
-      this.pendingAudio.clear();
-      this.deferredTTSQueue = [];
-      // Enable priority mode so the next response wins immediately
-      this._priorityMode = true;
-      // Reset filler guard for the new turn
-      this._sentFillerThisTurn = false;
-      this._fillerType = null;
-      
-      this.setState(VoiceState.INTERRUPTED);
-      this.accumulatedResponse = '';
-      this.textBuffer = '';
-    } else if (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) {
-      // Non-qualifying speech during AI turn – ignore entirely without
-      // resetting state variables (prevents corrupting the active response).
+    // During AI speech, delegate to the full-duplex interrupt arbitration
+    // pipeline (candidate → validate → maybe interrupt) instead of cancelling
+    // immediately.
+    if (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) {
+      this.handleUserSpeechStart();
       return;
     }
 
-    // Safe to reset for a normal speech-start or post-interrupt continuation
+    // Safe to reset for a normal speech-start
     this.textBuffer = '';
     this.responseFinished = false;
     this.hasStartedSpeaking = false;
 
-    if (this.state !== VoiceState.INTERRUPTED) {
-      this.setState(VoiceState.USER_SPEAKING);
-    }
+    this.setState(VoiceState.USER_SPEAKING);
   }
 
   onSpeechEnd() {
+    // Cancel interrupt candidate if user stopped too quickly (false interrupt)
+    if (this._interruptCandidate) {
+      this._interruptCandidate = false;
+      this._isValidInterrupt = false;
+      // Restore volume after ducking
+      this.audioOutput.setVolume?.(1.0);
+    }
+
     // Cancel any pending soft barge-in if the user stopped speaking quickly
     this._pendingInterrupt = false;
     if (this._interruptTimer) {
@@ -279,6 +262,16 @@ export class VoiceEngine {
     if (this.state === VoiceState.USER_SPEAKING || this.state === VoiceState.LISTENING || this.state === VoiceState.INTERRUPTED) {
       this.stt.sendAudio(chunk);
     }
+
+    // Full-duplex interrupt validation: if the user is a candidate for
+    // interrupting, check whether they have been speaking long enough
+    // (duration gate) before allowing the intent check in onTranscript.
+    if (this._interruptCandidate && this.state === VoiceState.AI_SPEAKING) {
+      const duration = Date.now() - this._interruptStartTime;
+      if (duration > this._interruptMinDuration) {
+        this._isValidInterrupt = true;
+      }
+    }
   }
 
   onTranscript(text) {
@@ -308,6 +301,31 @@ export class VoiceEngine {
       // transcript so the model can adapt mid-user-sentence.
       if (typeof this.llm.updateContext === 'function') {
         this.llm.updateContext(text);
+      }
+    }
+
+    // Interrupt intent validation: confirm the candidate interrupt is real
+    // speech (not noise / echo) before cancelling the AI turn.
+    if (this._interruptCandidate && this.state === VoiceState.AI_SPEAKING) {
+      if (this._isNoise(text)) return;
+
+      const words = text.trim().split(/\s+/).length;
+
+      if (words >= this._interruptMinWords && this._isValidInterrupt) {
+        console.log('[VoiceEngine] Valid interrupt detected');
+
+        this._interruptCandidate = false;
+        this._isValidInterrupt = false;
+
+        // Adaptive decay: reset interrupt count if >8s since last interrupt
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (now - this._lastInterruptTime > 8000) {
+          this.interruptCount = 0;
+        }
+        this._lastInterruptTime = now;
+        this.interruptCount++;
+
+        this.interruptAI();
       }
     }
   }
@@ -418,6 +436,9 @@ export class VoiceEngine {
       if (this.ttsConnected) {
         this.audioInput.resumeVAD();
       }
+      // Prevent early self-interrupt: enable interrupt validation only after
+      // AI audio has had time to start playing back.
+      this._interruptEnabledAt = Date.now() + 800;
       console.log(`[VoiceEngine] LLM first token received (id=${this._activeLLMId})`);
     }
     
@@ -824,6 +845,9 @@ export class VoiceEngine {
     // Reset filler guard for the new turn
     this._sentFillerThisTurn = false;
     this._fillerType = null;
+    // Reset interrupt arbitration state
+    this._interruptCandidate = false;
+    this._isValidInterrupt = false;
     console.log(`[VoiceEngine] Cancelled ongoing response (ttsReqId=${this._ttsRequestId}, llmReqId=${this._llmRequestId})`);
   }
 
@@ -890,7 +914,7 @@ export class VoiceEngine {
 
         if (data.audio) {
           this.setState(VoiceState.AI_SPEAKING);
-          this.audioInput.pauseVAD();
+          // Full duplex: keep VAD active so user can interrupt even during greeting
           this.ignoreAudioChunks = false;
           // Mark response finished so _tryCompleteResponse() can fire once playback ends
           this.responseFinished = true;
@@ -959,41 +983,36 @@ export class VoiceEngine {
   }
 
   handleUserSpeechStart() {
-    if (this.state === VoiceState.AI_SPEAKING) {
-      // In HTTP TTS mode, skip barge-in entirely — the delayed audio playback
-      // causes echo that triggers false interrupts, cutting off responses.
-      // VAD is also paused during HTTP AI speech (see onLLMToken), so this
-      // serves as a belt-and-suspenders guard.
-      if (!this.ttsConnected) return;
-      // Soft barge-in: delay interrupt by 120ms to prevent accidental cut-offs
-      // from brief overlaps (e.g. backchannel "uh-huh").  If the user stops
-      // speaking within the window, the interrupt is cancelled.
-      // Clear any previously stacked timer to avoid duplicate interrupts.
-      if (this._interruptTimer) {
-        clearTimeout(this._interruptTimer);
-      }
-      this._pendingInterrupt = true;
-      // Adaptive decay: reset interrupt count if >8s since last interrupt
-      // so the system doesn't stay in "impatient mode" permanently.
-      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-      if (now - this._lastInterruptTime > 8000) {
-        this.interruptCount = 0;
-      }
-      this._lastInterruptTime = now;
-      this.interruptCount++;
-      this._interruptTimer = setTimeout(() => {
-        if (this._pendingInterrupt) {
-          this._pendingInterrupt = false;
-          this._interruptTimer = null;
-          this.interruptAI();
-        }
-      }, 120);
-    }
+    if (this.state !== VoiceState.AI_SPEAKING) return;
+    // In HTTP TTS mode, skip barge-in entirely — the delayed audio playback
+    // causes echo that triggers false interrupts, cutting off responses.
+    if (!this.ttsConnected) return;
+
+    // Too early → ignore (prevents self-interrupt from AI audio bleed)
+    if (Date.now() < this._interruptEnabledAt) return;
+
+    // Start interrupt candidate
+    this._interruptCandidate = true;
+    this._interruptStartTime = Date.now();
+
+    // Duck audio instead of immediately cancelling
+    this.audioOutput.setVolume?.(0.3);
+  }
+
+  /**
+   * Return true if the text is noise / backchannel that should not trigger
+   * an interrupt (e.g. "uh", "um", "hmm", or very short fragments).
+   */
+  _isNoise(text) {
+    return !text || text.trim().length < 2 || /^(uh|um|hmm)$/i.test(text.trim());
   }
 
   interruptAI() {
     if (this.interrupting) return;
-    
+
+    // Restore volume in case ducking was active
+    this.audioOutput.setVolume?.(1.0);
+
     this.interrupting = true;
     this._cancelOngoingResponse();
     this.setState(VoiceState.LISTENING);

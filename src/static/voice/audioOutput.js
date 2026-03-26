@@ -17,6 +17,8 @@ export class AudioOutput {
     this._lastChunkText = null;
     // Rolling cadence: smooths pauses across chunks to prevent stacking
     this._recentPause = 0;
+    // Master gain node for volume ducking during interrupt candidacy
+    this._masterGain = null;
   }
 
   _ensureContext() {
@@ -28,9 +30,23 @@ export class AudioOutput {
       this.nextTime = this.ctx.currentTime + 0.1;
       this.started = false;
       this.bufferedTime = 0;
+      // Create master gain node for volume ducking
+      this._masterGain = this.ctx.createGain();
+      this._masterGain.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
+    }
+  }
+
+  /**
+   * Set the master output volume (0.0 – 1.0).
+   * Used for ducking audio during interrupt candidacy.
+   * @param {number} vol - Volume level between 0.0 and 1.0
+   */
+  setVolume(vol) {
+    if (this._masterGain) {
+      this._masterGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.03);
     }
   }
 
@@ -117,7 +133,8 @@ export class AudioOutput {
     source.buffer = audioBuffer;
 
     const gain = this.ctx.createGain();
-    source.connect(gain).connect(this.ctx.destination);
+    const dest = this._masterGain || this.ctx.destination;
+    source.connect(gain).connect(dest);
 
     // Underrun protection: if timeline has fallen behind, reset to now
     const now = this.ctx.currentTime;
@@ -254,6 +271,10 @@ export class AudioOutput {
    */
   softReset() {
     this._resetGeneration++;
+    // Restore volume in case ducking was active
+    if (this._masterGain && this.ctx && this.ctx.state !== 'closed') {
+      try { this._masterGain.gain.setValueAtTime(1.0, this.ctx.currentTime); } catch (e) {}
+    }
     // Stop all currently playing sources immediately for instant interrupt
     for (const src of this._activeSources) {
       try { src.stop(); } catch (e) {}
@@ -285,6 +306,7 @@ export class AudioOutput {
       try { this.ctx.close(); } catch (e) {}
     }
     this.ctx = null;
+    this._masterGain = null;
     this.nextTime = 0;
     this.started = false;
     this.bufferedTime = 0;
