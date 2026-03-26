@@ -189,7 +189,7 @@ function enqueueAudio(audioBase64, sampleRate) {
 }
 
 // ============================================================
-// WEBSOCKET TTS (Streaming Mode)
+// WEBSOCKET TTS (Streaming via /ws/tts)
 // ============================================================
 
 /**
@@ -202,8 +202,10 @@ function connectTTSWebSocket() {
             return;
         }
         
-        const wsUrl = `ws://localhost:8020/ws/tts`;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.hostname}:${window.location.port || '5000'}/ws/tts`;
         ttsWebSocket = new WebSocket(wsUrl);
+        ttsWebSocket.binaryType = 'arraybuffer';
         
         ttsWebSocket.onopen = () => {
             console.log('[TTS-WS] Connected');
@@ -220,19 +222,20 @@ function connectTTSWebSocket() {
             ttsWebSocket = null;
         };
         
-        // Simple JSON message handling - like pocket-tts-server
         ttsWebSocket.onmessage = (event) => {
             try {
-                const msg = JSON.parse(event.data);
-                console.log('[TTS-WS] Message:', msg.type, msg.chunk);
-                
-                if (msg.type === 'audio') {
-                    // Queue the complete WAV file
-                    window.AudioPlayer?.queueTTSChunk?.(msg.data);
-                } else if (msg.type === 'done') {
-                    console.log('[TTS-WS] Stream complete');
-                } else if (msg.type === 'error') {
-                    console.error('[TTS-WS] Server error:', msg.data);
+                if (event.data instanceof ArrayBuffer) {
+                    // Binary frame: int16 PCM audio — queue for playback
+                    window.AudioPlayer?.queueTTSChunk?.(event.data);
+                } else {
+                    const msg = JSON.parse(event.data);
+                    console.log('[TTS-WS] Message:', msg.type);
+                    
+                    if (msg.type === 'done') {
+                        console.log('[TTS-WS] Stream complete');
+                    } else if (msg.type === 'error') {
+                        console.error('[TTS-WS] Server error:', msg.error);
+                    }
                 }
             } catch (e) {
                 console.error('[TTS-WS] Parse error:', e);
@@ -242,7 +245,7 @@ function connectTTSWebSocket() {
 }
 
 /**
- * Stream TTS via WebSocket - simple approach matching pocket-tts-server
+ * Stream TTS via WebSocket with HTTP fallback
  */
 async function speakTextViaWebSocket(text, voiceCloneId = null) {
     console.log('[TTS-WS] speakTextViaWebSocket:', text.substring(0, 50));
@@ -262,12 +265,12 @@ async function speakTextViaWebSocket(text, voiceCloneId = null) {
         
         const request = {
             text: text,
-            voice_clone_id: voiceCloneId
+            voice: voiceCloneId || 'default'
         };
         ttsWebSocket.send(JSON.stringify(request));
         console.log('[TTS-WS] Request sent');
         
-        // Wait for all playback (simple queue handles this automatically)
+        // Wait for completion (done message sets flag)
         return new Promise((resolve) => {
             const checkDone = () => {
                 if (!window.AudioPlayer?.ttsIsPlayingQueue && 
@@ -281,7 +284,7 @@ async function speakTextViaWebSocket(text, voiceCloneId = null) {
         });
         
     } catch (error) {
-        console.error('[TTS-WS] Error:', error);
+        console.error('[TTS-WS] WebSocket failed, falling back to HTTP:', error);
         // Fall back to batch TTS
         if (typeof speakText === 'function') {
             await speakText(text, voiceCloneId);

@@ -171,6 +171,7 @@ export class VoiceEngine {
 
       await this.stt.connect();
       
+      // Try WebSocket TTS for low-latency streaming; fall back to HTTP if unavailable
       try {
         await this.tts.connect();
         this.ttsConnected = true;

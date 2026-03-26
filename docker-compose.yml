@@ -9,7 +9,6 @@ services:
     ports:
       - "5000:5000"    # Main Flask app
       - "8000:8000"    # STT server (Parakeet)
-      - "8020:8020"    # TTS server (Chatterbox)
       - "8080:8080"    # llama.cpp server
     volumes:
       - ./resources/data:/app/data
@@ -19,7 +18,7 @@ services:
       - ~/.cache/huggingface:/root/.cache/huggingface  # Cache HuggingFace models
     environment:
       - PYTHONUNBUFFERED=1
-      - FLASK_APP=app.py
+      - PYTHONPATH=/app/src
       - NVIDIA_VISIBLE_DEVICES=all
     deploy:
       resources:
@@ -35,42 +34,16 @@ services:
         echo 'Starting Parakeet STT Server...' &&
         python parakeet_stt_server.py &
         sleep 30 &&
-        echo 'Starting Chatterbox TTS Server...' &&
-        python chatterbox_tts_server.py &
-        sleep 15 &&
-        echo 'Waiting for TTS model to fully load...' &&
-        sleep 10 &&
         echo 'Starting llama.cpp Server...' &&
         chmod +x /app/start_llama_server.sh &&
         /app/start_llama_server.sh &
         sleep 5 &&
-        echo 'Starting Main App...' &&
-        python app.py
+        echo 'Starting Main App (FastAPI with WebSocket TTS)...' &&
+        python server_fastapi.py
       "
 
   # Note: llama.cpp server removed - use local installation or run separately
   # To enable LLM: download GGUF model to models/llm/ and run llama.cpp locally
-  # Optional: Separate TTS service (Chatterbox)
-  # Uncomment if running TTS as separate container
-  # chatterbox-tts:
-  #   build: .
-  #   container_name: chatterbox-tts
-  #   ports:
-  #     - "8020:8020"
-  #   volumes:
-  #     - ./resources/voice_clones:/app/voice_clones
-  #     - ~/.cache/huggingface:/root/.cache/huggingface
-  #   environment:
-  #     - NVIDIA_VISIBLE_DEVICES=all
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   command: python chatterbox_tts_server.py
-  #   restart: unless-stopped
 
   # Optional: Separate STT service (Parakeet)
   # Uncomment if running STT as separate container

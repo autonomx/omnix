@@ -107,12 +107,14 @@ def generate_ep():
                 if v_clone: req["voice_clone_id"] = v_clone
                 
                 try:
-                    r = requests.post(f"{shared.TTS_BASE_URL}/tts", json=req, timeout=60)
-                    if r.status_code == 200 and r.json().get('success'):
-                        adata, sr = r.json().get('audio'), r.json().get('sample_rate')
-                        yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i})}\n\n"
-                        transcript.append({"speaker": seg['speaker'], "text": seg['text']})
-                        audios.append(base64.b64decode(adata))
+                    tts_provider = shared.get_tts_provider()
+                    if tts_provider:
+                        result = tts_provider.generate_audio(text=shared.remove_emojis(seg['text']), speaker=v_clone, language="en")
+                        if result.get('success'):
+                            adata, sr = result.get('audio'), result.get('sample_rate')
+                            yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i})}\n\n"
+                            transcript.append({"speaker": seg['speaker'], "text": seg['text']})
+                            audios.append(base64.b64decode(adata))
                 except: pass
                 
             if audios:

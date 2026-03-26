@@ -11,7 +11,7 @@ echo ""
 echo "This will install all dependencies for:"
 echo "  - Chatbot Web Server"
 echo "  - Parakeet STT (Speech-to-Text)"
-echo "  - Chatterbox TTS TURBO (Text-to-Speech)"
+echo "  - FasterQwen3TTS (Text-to-Speech)"
 echo ""
 echo "Using Python virtual environment for isolation"
 read -p "Press Enter to continue..."
@@ -68,7 +68,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[4/7] Installing torchmetrics (required for Chatterbox TTS)..."
+echo "[4/7] Installing torchmetrics..."
 pip install torchmetrics==1.4.2
 
 echo ""
@@ -80,15 +80,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[6/8] Installing Chatterbox TTS TURBO..."
-pip install chatterbox-tts==0.1.6
-if [ $? -ne 0 ]; then
-    echo "WARNING: Failed to install Chatterbox TTS"
-    echo "You can try: pip install chatterbox-tts"
-fi
-
-echo ""
-echo "[7/8] Installing FasterQwen3TTS..."
+echo "[6/8] Installing FasterQwen3TTS..."
 pip install faster-qwen3-tts>=0.2.4
 if [ $? -ne 0 ]; then
     echo "WARNING: Failed to install FasterQwen3TTS"
@@ -96,7 +88,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[8/8] Installing NeMo ASR for Parakeet STT..."
+echo "[7/8] Installing NeMo ASR for Parakeet STT..."
 pip install "nemo_toolkit[asr]"
 if [ $? -ne 0 ]; then
     echo "WARNING: Failed to install NeMo ASR"
@@ -148,9 +140,9 @@ python -c "import torch; print(f'PyTorch: {torch.__version__}')" 2>/dev/null
 python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>/dev/null
 
 # Check TTS
-python -c "from chatterbox.tts_turbo import ChatterboxTurboTTS; print('Chatterbox TTS: OK')" 2>/dev/null
+python -c "import faster_qwen3_tts; print('FasterQwen3TTS: OK')" 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo "Chatterbox TTS: FAILED - check torch/torchvision versions"
+    echo "FasterQwen3TTS: FAILED - check faster-qwen3-tts installation"
 fi
 
 # Check STT
@@ -175,7 +167,6 @@ echo ""
 echo "To start services:"
 echo "  ./start_all.sh             - Start all services"
 echo "  ./start_parakeet_stt.sh    - Start STT only"
-echo "  python chatterbox_tts_server.py - Start TTS only"
 echo ""
 echo "To run with virtual environment:"
 echo "  source venv/bin/activate && ./start_all.sh"

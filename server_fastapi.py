@@ -2713,6 +2713,240 @@ async def tts_stream_cancel():
     return {"success": True, "message": "TTS stream cancellation requested"}
 
 
+# ============== STANDALONE TTS WEBSOCKET ==============
+#
+# /ws/tts — a dedicated WebSocket endpoint that accepts individual text
+# chunks and streams back int16 PCM audio at 24 kHz.  This gives the
+# VoiceEngine real-time streaming with sub-second first-chunk latency
+# instead of the 2-4 s round-trip of the batch HTTP /api/tts endpoint.
+#
+# Protocol:
+#   Client → Server  (JSON):
+#     {"text": "Hello", "voice": "default"}   — synthesise text
+#     {"type": "cancel"}                       — abort current generation
+#
+#   Server → Client:
+#     {"type": "start"}                        — first audio about to arrive
+#     binary frame  (int16 PCM @ 24 kHz)       — audio data
+#     {"type": "done"}                         — generation complete
+#     {"type": "error", "error": "..."}        — on failure
+#     {"type": "ready"}                        — sent once after connection
+
+# Semaphore limits concurrent /ws/tts generations (protects GPU)
+_ws_tts_semaphore = threading.Semaphore(2)
+
+
+def _generate_ws_tts(text: str, speaker: str, ws: WebSocket,
+                     loop: asyncio.AbstractEventLoop, abort_flag: list):
+    """Synchronous TTS generator — runs in a worker thread.
+
+    Streams int16 PCM frames to the WebSocket via ``run_coroutine_threadsafe``.
+    """
+    if not tts_provider or not hasattr(tts_provider, 'generate_audio_stream'):
+        err = "TTS streaming not supported by current provider" if tts_provider else "No TTS provider loaded"
+        asyncio.run_coroutine_threadsafe(
+            ws.send_json({"type": "error", "error": err}),
+            loop,
+        ).result()
+        return
+
+    first_sent = False
+    frames_sent = 0
+    buffer = np.array([], dtype=np.float32)
+    buffer_chunks: list = []
+    prev_audio = None
+    start_time = time.time()
+
+    try:
+        for audio_chunk, sr, timing in tts_provider.generate_audio_stream(
+            text=text,
+            speaker=speaker,
+            language="English",
+            chunk_size=TTS_CHUNK_SIZE,
+            non_streaming_mode=False,
+            temperature=0.6,
+            top_k=20,
+            top_p=0.85,
+            repetition_penalty=1.0,
+            append_silence=False,
+            max_new_tokens=180,
+        ):
+            if abort_flag[0]:
+                break
+
+            if audio_chunk is None or len(audio_chunk) == 0:
+                continue
+
+            audio = np.asarray(audio_chunk, dtype=np.float32)
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+
+            # DC offset correction
+            if len(audio) > 128:
+                mean = np.mean(audio)
+                if abs(mean) > 1e-4:
+                    audio = audio - mean
+
+            # Fade-in/out on the very first chunk
+            if prev_audio is None:
+                audio = apply_fade(audio, fade_samples=128)
+
+            # Cross-fade stitching with previous tail
+            if prev_audio is not None:
+                offset = find_best_offset(prev_audio, audio)
+                if offset > 0:
+                    audio = audio[offset:]
+                overlap = min(len(prev_audio), len(audio), XFADE_SAMPLES)
+                if overlap > 0:
+                    t = np.linspace(0.0, 1.0, overlap, dtype=np.float32)
+                    fade_in = 0.5 * (1.0 - np.cos(np.pi * t))
+                    fade_out = 1.0 - fade_in
+                    audio[:overlap] = (
+                        prev_audio[-overlap:] * fade_out + audio[:overlap] * fade_in
+                    )
+
+            # Soft-limit after crossfade
+            audio = soft_clip(audio * TTS_GAIN)
+
+            # Hold back tail for next crossfade
+            if len(audio) > XFADE_SAMPLES:
+                prev_audio = audio[-XFADE_SAMPLES:].copy()
+                audio = audio[:-XFADE_SAMPLES]
+            else:
+                prev_audio = audio.copy()
+                audio = np.array([], dtype=np.float32)
+
+            if len(audio) > 0:
+                buffer_chunks.append(audio)
+
+            # Flatten accumulated chunks
+            if buffer_chunks:
+                if len(buffer) > 0:
+                    buffer_chunks.insert(0, buffer)
+                buffer = np.concatenate(buffer_chunks)
+                buffer_chunks.clear()
+
+            # Send fixed-size frames for smooth playback
+            while len(buffer) >= FRAME_SIZE:
+                frame = buffer[:FRAME_SIZE]
+                buffer = buffer[FRAME_SIZE:]
+
+                if not first_sent:
+                    elapsed = (time.time() - start_time) * 1000
+                    asyncio.run_coroutine_threadsafe(
+                        ws.send_json({"type": "start"}), loop
+                    ).result()
+                    first_sent = True
+                    print(f"[WS-TTS] First chunk in {elapsed:.0f}ms for '{text[:25]}...'")
+
+                # Convert float32 → int16 PCM and send as binary
+                pcm = (np.clip(frame, -1.0, 1.0) * 32767).astype(np.int16)
+                asyncio.run_coroutine_threadsafe(
+                    ws.send_bytes(pcm.tobytes()), loop
+                ).result()
+                frames_sent += 1
+
+        # Flush crossfade tail + remaining buffer
+        if prev_audio is not None and len(prev_audio) > 0:
+            buffer_chunks.append(prev_audio)
+        if buffer_chunks:
+            if len(buffer) > 0:
+                buffer_chunks.insert(0, buffer)
+            buffer = np.concatenate(buffer_chunks)
+            buffer_chunks.clear()
+
+        if len(buffer) > 0:
+            fade_len = min(len(buffer), 256)
+            fade = np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
+            buffer[-fade_len:] *= fade
+            if len(buffer) < FRAME_SIZE:
+                buffer = np.pad(buffer, (0, FRAME_SIZE - len(buffer)))
+            pcm = (np.clip(buffer, -1.0, 1.0) * 32767).astype(np.int16)
+            asyncio.run_coroutine_threadsafe(
+                ws.send_bytes(pcm.tobytes()), loop
+            ).result()
+            frames_sent += 1
+
+    except Exception as e:
+        print(f"[WS-TTS] Generation error: {e}")
+        try:
+            asyncio.run_coroutine_threadsafe(
+                ws.send_json({"type": "error", "error": str(e)}), loop
+            ).result()
+        except Exception:
+            pass
+    finally:
+        elapsed_total = (time.time() - start_time) * 1000
+        print(f"[WS-TTS] Done '{text[:25]}...': frames={frames_sent}, time={elapsed_total:.0f}ms")
+        try:
+            asyncio.run_coroutine_threadsafe(
+                ws.send_json({"type": "done"}), loop
+            ).result()
+        except Exception:
+            pass
+
+
+@app.websocket("/ws/tts")
+async def websocket_tts(websocket: WebSocket):
+    """Standalone TTS WebSocket — send text, receive streaming PCM audio."""
+    await websocket.accept()
+    loop = asyncio.get_event_loop()
+    abort_flag = [False]
+
+    try:
+        await websocket.send_json({"type": "ready"})
+
+        while True:
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
+            except asyncio.TimeoutError:
+                continue
+
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json({"type": "error", "error": "Invalid JSON"})
+                continue
+
+            # Cancel in-flight generation
+            if msg.get("type") == "cancel":
+                abort_flag[0] = True
+                continue
+
+            text = msg.get("text", "").strip()
+            voice = msg.get("voice", "default")
+            if not text:
+                await websocket.send_json({"type": "done"})
+                continue
+
+            # Reset abort flag for the new request
+            abort_flag[0] = False
+
+            # Run TTS generation in a thread so we don't block the event loop
+            acquired = _ws_tts_semaphore.acquire(timeout=5)
+            if not acquired:
+                await websocket.send_json({"type": "error", "error": "TTS busy"})
+                continue
+
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    executor,
+                    _generate_ws_tts,
+                    text, voice, websocket, loop, abort_flag,
+                )
+            finally:
+                _ws_tts_semaphore.release()
+
+    except WebSocketDisconnect:
+        print("[WS-TTS] Client disconnected")
+    except Exception as e:
+        print(f"[WS-TTS] Error: {e}")
+        try:
+            await websocket.send_json({"type": "error", "error": str(e)})
+        except Exception:
+            pass
+
+
 # ============== AUDIOBOOK WEBSOCKET ==============
 
 # Semaphore allows up to 2 concurrent TTS generations (instead of a single Lock)
@@ -3033,6 +3267,7 @@ if __name__ == "__main__":
     print("Omnix FastAPI Server - Ultra Low Latency")
     print("=" * 50)
     print(f"WebSocket: ws://{HOST}:{PORT}/ws/conversation")
+    print(f"WebSocket: ws://{HOST}:{PORT}/ws/tts")
     print(f"WebSocket: ws://{HOST}:{PORT}/ws/audiobook")
     print("=" * 50 + "\n")
     
