@@ -1,4 +1,7 @@
 export const TIMELINE_GAP_OFFSET = 0.05;
+// Time constant (seconds) for volume ducking transitions via setTargetAtTime.
+// 30ms provides a fast but click-free ramp when ducking/restoring audio.
+const VOLUME_RAMP_TIME_CONSTANT = 0.03;
 
 export class AudioOutput {
   constructor() {
@@ -46,7 +49,7 @@ export class AudioOutput {
    */
   setVolume(vol) {
     if (this._masterGain) {
-      this._masterGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.03);
+      this._masterGain.gain.setTargetAtTime(vol, this.ctx.currentTime, VOLUME_RAMP_TIME_CONSTANT);
     }
   }
 

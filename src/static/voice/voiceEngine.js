@@ -126,6 +126,7 @@ export class VoiceEngine {
     this._interruptMinDuration = 350; // ms – minimum speech duration to validate interrupt
     this._interruptMinWords = 2;
     this._interruptEnabledAt = 0;
+    this._interruptGracePeriod = 800; // ms – delay before interrupts are accepted after AI starts
     this._isValidInterrupt = false;
   }
 
@@ -438,7 +439,7 @@ export class VoiceEngine {
       }
       // Prevent early self-interrupt: enable interrupt validation only after
       // AI audio has had time to start playing back.
-      this._interruptEnabledAt = Date.now() + 800;
+      this._interruptEnabledAt = Date.now() + this._interruptGracePeriod;
       console.log(`[VoiceEngine] LLM first token received (id=${this._activeLLMId})`);
     }
     
@@ -1004,7 +1005,9 @@ export class VoiceEngine {
    * an interrupt (e.g. "uh", "um", "hmm", or very short fragments).
    */
   _isNoise(text) {
-    return !text || text.trim().length < 2 || /^(uh|um|hmm)$/i.test(text.trim());
+    if (!text) return true;
+    const trimmed = text.trim();
+    return trimmed.length < 2 || /^(uh|um|hmm)$/i.test(trimmed);
   }
 
   interruptAI() {
