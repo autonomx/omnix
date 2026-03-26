@@ -70,6 +70,10 @@ export class VoiceEngine {
     this.FLUSH_MIN_LENGTH = 30;
     // Reduced dynamicMinLength when user interrupts frequently (adaptive pacing)
     this.IMPATIENT_MIN_CHUNK_LENGTH = 6;
+    // HTTP TTS mode thresholds – fewer, larger chunks because each HTTP round-trip
+    // costs 2-4 seconds regardless of text length.
+    this.HTTP_FIRST_CHUNK_MIN = 20;
+    this.HTTP_MIN_CHUNK_LENGTH = 60;
     // Count of TTS segments sent but not yet completed
     this._ttsInFlight = 0;
     // Ensure audio order when TTS resolves out-of-order
@@ -192,10 +196,6 @@ export class VoiceEngine {
     const isInterrupt = (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) 
                         && this.audioInput.hasEnoughAudioForInterrupt();
     
-    this.textBuffer = '';
-    this.responseFinished = false;
-    this.hasStartedSpeaking = false;
-    
     if (isInterrupt) {
       console.log('[VoiceEngine] User interrupted AI');
       
@@ -226,8 +226,15 @@ export class VoiceEngine {
       this.accumulatedResponse = '';
       this.textBuffer = '';
     } else if (this.state === VoiceState.AI_SPEAKING || this.state === VoiceState.THINKING) {
+      // Non-qualifying speech during AI turn – ignore entirely without
+      // resetting state variables (prevents corrupting the active response).
       return;
     }
+
+    // Safe to reset for a normal speech-start or post-interrupt continuation
+    this.textBuffer = '';
+    this.responseFinished = false;
+    this.hasStartedSpeaking = false;
 
     if (this.state !== VoiceState.INTERRUPTED) {
       this.setState(VoiceState.USER_SPEAKING);
@@ -290,7 +297,8 @@ export class VoiceEngine {
       // Speculative response: send a brief filler to eliminate dead air while
       // the LLM generates its first real content.  Guarded by _sentFillerThisTurn
       // so we never double-filler if onLLMToken also fires a pre-speech filler.
-      if (!this._sentFillerThisTurn) {
+      // Only for WebSocket TTS; in HTTP mode fillers waste a 3-4s round-trip.
+      if (this.ttsConnected && !this._sentFillerThisTurn) {
         this._sendTTS('Hmm,');
         this._sentFillerThisTurn = true;
         this._fillerType = 'speculative';
@@ -390,12 +398,13 @@ export class VoiceEngine {
       // Priority upgrade: if a speculative filler already fired, we still send
       // a contextual pre-speech filler to override it — feels more natural
       // because intent is clearer by the time the LLM starts responding.
-      if (!this._sentFillerThisTurn) {
+      // Only for WebSocket TTS; in HTTP mode each filler wastes a 3-4s round-trip.
+      if (this.ttsConnected && !this._sentFillerThisTurn) {
         const filler = this._fillers[Math.floor(Math.random() * this._fillers.length)];
         this._sendTTS(filler);
         this._sentFillerThisTurn = true;
         this._fillerType = 'prespeech';
-      } else if (this._fillerType === 'speculative') {
+      } else if (this.ttsConnected && this._fillerType === 'speculative') {
         // Upgrade speculative → pre-speech filler for better context awareness
         const filler = this._fillers[Math.floor(Math.random() * this._fillers.length)];
         this._sendTTS(filler);
@@ -404,7 +413,11 @@ export class VoiceEngine {
       // Full duplex: resume VAD so the user can interrupt by speaking.
       // Browser echo-cancellation (echoCancellation: true in getUserMedia)
       // plus hasEnoughAudioForInterrupt() guard prevents false triggers.
-      this.audioInput.resumeVAD();
+      // In HTTP mode, VAD stays paused during AI speech because the delayed
+      // audio playback causes echo that triggers false interrupts.
+      if (this.ttsConnected) {
+        this.audioInput.resumeVAD();
+      }
       console.log(`[VoiceEngine] LLM first token received (id=${this._activeLLMId})`);
     }
     
@@ -419,11 +432,14 @@ export class VoiceEngine {
     }
 
     // Early first chunk: speculative TTS for fastest perceived response
-    // Flush as soon as buffer exceeds 3 chars – even partial words are OK
+    // Flush as soon as buffer exceeds threshold – even partial words are OK
     // because latency matters more than perfection for the very first chunk.
     // Uses _dispatchTTS directly (bypassing backpressure) to shave ~50ms
     // by firing immediately without queue checks — first chunk is always urgent.
-    if (!this.hasSentFirstChunk && this.textBuffer.length > 3) {
+    // In HTTP mode, wait for more text (HTTP_FIRST_CHUNK_MIN) so the first
+    // request carries enough content for meaningful audio.
+    const firstChunkMin = this.ttsConnected ? 3 : this.HTTP_FIRST_CHUNK_MIN;
+    if (!this.hasSentFirstChunk && this.textBuffer.length > firstChunkMin) {
       const text = this.textBuffer;
       this.textBuffer = '';
       this.hasSentFirstChunk = true;
@@ -443,9 +459,12 @@ export class VoiceEngine {
     // low when idle.
     // Adaptive personality: if user has interrupted frequently (> 2 times),
     // use shorter chunks so the AI speaks more concisely and responsively.
-    const dynamicMinLength = this.interruptCount > 2
-      ? this.IMPATIENT_MIN_CHUNK_LENGTH
-      : Math.min(8 + this._ttsInFlight * 4, 24);
+    // In HTTP mode, use larger minimums to batch more text per request.
+    const dynamicMinLength = !this.ttsConnected
+      ? (this.interruptCount > 2 ? 20 : this.HTTP_MIN_CHUNK_LENGTH)
+      : this.interruptCount > 2
+        ? this.IMPATIENT_MIN_CHUNK_LENGTH
+        : Math.min(8 + this._ttsInFlight * 4, 24);
     if (token.endsWith(' ') && this.textBuffer.length > dynamicMinLength && this._wordCount >= 2) {
       const flushText = this.textBuffer;
       this.textBuffer = '';
@@ -475,7 +494,13 @@ export class VoiceEngine {
     // Flush on sentence-ending punctuation for natural speech boundaries.
     // Also flush on comma/semicolon when the buffer is long enough.
     if (this.shouldFlush(this.textBuffer)) {
-      const sentenceMatch = this.textBuffer.match(/(.+?[.!?])(\s|$)/);
+      // In HTTP mode, use greedy match to capture ALL complete sentences in the
+      // buffer as one chunk — reduces the number of expensive round-trips.
+      // In WebSocket mode, use non-greedy match to stream the first sentence.
+      const sentenceRegex = this.ttsConnected
+        ? /(.+?[.!?])(\s|$)/
+        : /(.+[.!?])(\s|$)/;
+      const sentenceMatch = this.textBuffer.match(sentenceRegex);
       if (sentenceMatch) {
         const sentence = sentenceMatch[1];
         this.textBuffer = this.textBuffer.slice(sentenceMatch.index + sentence.length);
@@ -485,8 +510,14 @@ export class VoiceEngine {
       }
 
       // Clause boundary flush
-      if (this.textBuffer.length > this.TTS_CLAUSE_FLUSH_MIN_LENGTH) {
-        const clauseMatch = this.textBuffer.match(/(.+?[,;])(\s|$)/);
+      const clauseFlushMin = this.ttsConnected
+        ? this.TTS_CLAUSE_FLUSH_MIN_LENGTH
+        : this.HTTP_MIN_CHUNK_LENGTH;
+      if (this.textBuffer.length > clauseFlushMin) {
+        const clauseRegex = this.ttsConnected
+          ? /(.+?[,;])(\s|$)/
+          : /(.+[,;])(\s|$)/;
+        const clauseMatch = this.textBuffer.match(clauseRegex);
         if (clauseMatch) {
           const clause = clauseMatch[1];
           this.textBuffer = this.textBuffer.slice(clauseMatch.index + clause.length);
@@ -508,6 +539,11 @@ export class VoiceEngine {
 
   /** Returns true when the text buffer should be flushed to TTS. */
   shouldFlush(text) {
+    // In HTTP TTS mode, require more text before flushing to reduce
+    // the number of expensive round-trips (each takes 2-4 seconds).
+    if (!this.ttsConnected && text.length < this.HTTP_MIN_CHUNK_LENGTH) {
+      return false;
+    }
     return (
       text.length > this.FLUSH_MIN_LENGTH ||
       /[.!?]$/.test(text) ||
@@ -924,6 +960,11 @@ export class VoiceEngine {
 
   handleUserSpeechStart() {
     if (this.state === VoiceState.AI_SPEAKING) {
+      // In HTTP TTS mode, skip barge-in entirely — the delayed audio playback
+      // causes echo that triggers false interrupts, cutting off responses.
+      // VAD is also paused during HTTP AI speech (see onLLMToken), so this
+      // serves as a belt-and-suspenders guard.
+      if (!this.ttsConnected) return;
       // Soft barge-in: delay interrupt by 120ms to prevent accidental cut-offs
       // from brief overlaps (e.g. backchannel "uh-huh").  If the user stops
       // speaking within the window, the interrupt is cancelled.
