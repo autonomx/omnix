@@ -177,7 +177,7 @@ class OmnixReportPlugin:
 def _suite_from_nodeid(nodeid: str) -> str:
     """Extract a human-readable suite name from a pytest nodeid."""
     parts = nodeid.split("::")
-    # tests/playwright/tests/test_foo.py::TestBar::test_baz  →  TestBar
+    # tests/e2e/test_foo.py::TestBar::test_baz  →  TestBar
     if len(parts) >= 2:
         return parts[-2]
     return parts[0]

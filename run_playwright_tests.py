@@ -34,19 +34,24 @@ import subprocess
 import sys
 from pathlib import Path
 
-PLAYWRIGHT_DIR = Path(__file__).parent / "src" / "tests" / "playwright"
+TESTS_DIR = Path(__file__).parent / "src" / "tests"
 
 SUITE_MAP = {
-    "all": str(PLAYWRIGHT_DIR / "tests"),
-    "smoke": str(PLAYWRIGHT_DIR / "tests" / "test_smoke.py"),
-    "api": " ".join([
-        str(PLAYWRIGHT_DIR / "tests" / "test_api_endpoints.py"),
-        str(PLAYWRIGHT_DIR / "tests" / "test_search.py"),
-        str(PLAYWRIGHT_DIR / "tests" / "test_healthcheck.py"),
+    "all": " ".join([
+        str(TESTS_DIR / "e2e"),
+        str(TESTS_DIR / "api"),
+        str(TESTS_DIR / "integration"),
     ]),
-    "frontend": str(PLAYWRIGHT_DIR / "tests" / "test_frontend.py"),
-    "js_analysis": str(PLAYWRIGHT_DIR / "tests" / "test_js_variables.py"),
-    "console": str(PLAYWRIGHT_DIR / "tests" / "test_js_console.py"),
+    "smoke": str(TESTS_DIR / "e2e" / "test_smoke.py"),
+    "api": " ".join([
+        str(TESTS_DIR / "api" / "sanity" / "test_api_endpoints.py"),
+        str(TESTS_DIR / "api" / "regression" / "test_search_api.py"),
+        str(TESTS_DIR / "api" / "healthcheck" / "test_health_responses.py"),
+    ]),
+    "healthcheck": str(TESTS_DIR / "api" / "healthcheck" / "test_health_responses.py"),
+    "frontend": str(TESTS_DIR / "e2e" / "test_frontend.py"),
+    "js_analysis": str(TESTS_DIR / "e2e" / "test_js_variables.py"),
+    "console": str(TESTS_DIR / "e2e" / "test_js_console.py"),
 }
 
 
@@ -69,8 +74,8 @@ def main():
 
     cmd = [
         sys.executable, "-m", "pytest",
-        "--rootdir", str(PLAYWRIGHT_DIR),
-        "-c", str(PLAYWRIGHT_DIR / "pytest.ini"),
+        "--rootdir", str(TESTS_DIR),
+        "-c", str(TESTS_DIR / "pytest.ini"),
     ]
 
     # Add test targets
@@ -102,9 +107,9 @@ def main():
     print("=" * 70)
     print()
 
-    result = subprocess.run(cmd, cwd=str(PLAYWRIGHT_DIR))
+    result = subprocess.run(cmd, cwd=str(TESTS_DIR))
 
-    report_path = PLAYWRIGHT_DIR / "reports" / "report.html"
+    report_path = TESTS_DIR / "reports" / "report.html"
     if report_path.exists() and not args.no_report:
         print(f"\n📊 HTML Report: {report_path}")
 

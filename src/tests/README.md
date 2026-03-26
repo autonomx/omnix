@@ -5,7 +5,7 @@ A professional, Playwright-based testing framework for the Omnix AI voice platfo
 ## 🏗️ Architecture
 
 ```
-src/tests/playwright/
+src/tests/
 ├── conftest.py                  # Fixtures, hooks, screenshot-on-failure
 ├── pytest.ini                   # Pytest configuration
 ├── pages/                       # Page Object Models
@@ -19,14 +19,19 @@ src/tests/playwright/
 │   ├── voice_studio_page.py     # Voice Studio TTS
 │   ├── voice_clone_page.py      # Voice cloning
 │   └── search_page.py           # Search & history modals
-├── tests/                       # Test suites
+├── e2e/                         # End-to-end Playwright browser tests
 │   ├── test_smoke.py            # UI smoke tests (page load, elements)
-│   ├── test_js_console.py       # JavaScript console error detection
-│   ├── test_js_variables.py     # JavaScript variable conflict analysis
 │   ├── test_frontend.py         # Frontend unit tests (JS evaluation)
-│   ├── test_api_endpoints.py    # API endpoint tests (Flask client)
-│   ├── test_search.py           # Chat search functionality
-│   └── test_healthcheck.py      # API healthcheck validation
+│   ├── test_js_console.py       # JavaScript console error detection
+│   └── test_js_variables.py     # JavaScript variable conflict analysis
+├── api/                         # Backend API tests
+│   ├── healthcheck/
+│   │   └── test_health_responses.py  # API healthcheck validation
+│   ├── sanity/
+│   │   └── test_api_endpoints.py     # API endpoint tests (Flask client)
+│   └── regression/
+│       └── test_search_api.py        # Chat search functionality
+├── integration/                 # Integration tests
 ├── utils/
 │   └── helpers.py               # Shared constants & JS analysis helpers
 └── reports/
@@ -90,21 +95,21 @@ python run_playwright_tests.py --verbose
 ### Run Directly With pytest
 
 ```bash
-cd src/tests/playwright
+cd src/tests
 
 # All tests
-python -m pytest tests/ -v --rootdir . -c pytest.ini
+python -m pytest -v --rootdir . -c pytest.ini
 
 # Single file
-python -m pytest tests/test_smoke.py -v --rootdir . -c pytest.ini
+python -m pytest e2e/test_smoke.py -v --rootdir . -c pytest.ini
 
 # With custom report
-python -m pytest tests/ -v --rootdir . -c pytest.ini -p reports.html_report
+python -m pytest -v --rootdir . -c pytest.ini -p reports.html_report
 ```
 
 ## 📊 Custom HTML Report
 
-A professional HTML report is auto-generated at `src/tests/playwright/reports/report.html`:
+A professional HTML report is auto-generated at `src/tests/reports/report.html`:
 
 - **Executive summary** with pass/fail/skip counts
 - **Animated donut chart** showing pass rate percentage
@@ -152,15 +157,15 @@ def test_send_message(self, chat_page: ChatPage):
 
 ## 🧪 Test Suites
 
-| Suite               | File                     | Tests | Needs Server? |
-| ------------------- | ------------------------ | ----- | ------------- |
-| Smoke Tests         | `test_smoke.py`          | 24    | ✅ Yes        |
-| JS Console Errors   | `test_js_console.py`     | 3     | ✅ Yes        |
-| Frontend Unit Tests | `test_frontend.py`       | 30    | ✅ Yes        |
-| JS Variable Analysis| `test_js_variables.py`   | 4     | ❌ No         |
-| API Endpoints       | `test_api_endpoints.py`  | 9     | ❌ No (Flask) |
-| Search              | `test_search.py`         | 14    | ❌ No (Flask) |
-| Healthcheck         | `test_healthcheck.py`    | 12    | ❌ No (Flask) |
+| Suite               | File                                       | Tests | Needs Server? |
+| ------------------- | ------------------------------------------ | ----- | ------------- |
+| Smoke Tests         | `e2e/test_smoke.py`                        | 24    | ✅ Yes        |
+| JS Console Errors   | `e2e/test_js_console.py`                   | 3     | ✅ Yes        |
+| Frontend Unit Tests | `e2e/test_frontend.py`                     | 30    | ✅ Yes        |
+| JS Variable Analysis| `e2e/test_js_variables.py`                 | 4     | ❌ No         |
+| API Endpoints       | `api/sanity/test_api_endpoints.py`         | 9     | ❌ No (Flask) |
+| Search              | `api/regression/test_search_api.py`        | 14    | ❌ No (Flask) |
+| Healthcheck         | `api/healthcheck/test_health_responses.py` | 12    | ❌ No (Flask) |
 
 ## 🔧 Fixtures
 

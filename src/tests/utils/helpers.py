@@ -12,7 +12,7 @@ from pathlib import Path
 # Paths
 # ---------------------------------------------------------------------------
 
-SRC_DIR = Path(__file__).resolve().parent.parent.parent.parent
+SRC_DIR = Path(__file__).resolve().parent.parent.parent
 PROJECT_ROOT = SRC_DIR.parent
 STATIC_DIR = SRC_DIR / "static"
 TEMPLATES_DIR = SRC_DIR / "templates"

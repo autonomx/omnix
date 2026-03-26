@@ -18,10 +18,12 @@ import pytest
 from playwright.sync_api import Page, APIRequestContext, BrowserContext
 
 # Add project roots to path for importing app modules
-SRC_DIR = Path(__file__).resolve().parent.parent.parent
+SRC_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = SRC_DIR.parent
+TESTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(SRC_DIR))
+sys.path.insert(0, str(TESTS_DIR))
 
 # ---------------------------------------------------------------------------
 # Page-object imports

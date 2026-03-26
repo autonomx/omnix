@@ -1,1 +1,0 @@
-"""Omnix Playwright Testing Framework."""
