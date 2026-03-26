@@ -18,7 +18,7 @@ services:
       - ~/.cache/huggingface:/root/.cache/huggingface  # Cache HuggingFace models
     environment:
       - PYTHONUNBUFFERED=1
-      - FLASK_APP=app.py
+      - PYTHONPATH=/app/src
       - NVIDIA_VISIBLE_DEVICES=all
     deploy:
       resources:
@@ -38,8 +38,8 @@ services:
         chmod +x /app/start_llama_server.sh &&
         /app/start_llama_server.sh &
         sleep 5 &&
-        echo 'Starting Main App...' &&
-        python app.py
+        echo 'Starting Main App (FastAPI with WebSocket TTS)...' &&
+        python server_fastapi.py
       "
 
   # Note: llama.cpp server removed - use local installation or run separately

@@ -171,13 +171,20 @@ export class VoiceEngine {
 
       await this.stt.connect();
       
-      // TTS uses HTTP only (no WebSocket TTS server)
+      // Try WebSocket TTS for low-latency streaming; fall back to HTTP if unavailable
+      try {
+        await this.tts.connect();
+        this.ttsConnected = true;
+      } catch (e) {
+        console.warn('[VoiceEngine] TTS WebSocket failed, will use HTTP fallback:', e.message);
+        this.ttsConnected = false;
+      }
       
       await this.audioInput.start();
 
       this.audioOutput.onPlaybackEnd = this.onPlaybackEnded.bind(this);
       
-      console.log('[VoiceEngine] Started successfully, TTS mode: HTTP');
+      console.log('[VoiceEngine] Started successfully, TTS WebSocket:', this.ttsConnected ? 'connected' : 'HTTP fallback');
     } catch (error) {
       console.error('[VoiceEngine] Failed to start:', error);
       this.onError(error);

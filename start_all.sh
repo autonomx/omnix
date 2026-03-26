@@ -6,7 +6,7 @@ echo "================================================"
 echo ""
 echo "This will start:"
 echo "  1. Parakeet STT Server (port 8000) - Voice recognition"
-echo "  2. Chatbot Web Server (port 5000) - Main application"
+echo "  2. Omnix FastAPI Server (port 5000) - Main application + WebSocket TTS"
 echo ""
 echo "Note: Make sure LM Studio is running with a model loaded."
 echo "      Or use Cerebras/OpenRouter API in settings."
@@ -79,10 +79,10 @@ fi
 sleep 5
 
 
-# Start Chatbot (foreground)
-echo "[2/2] Starting Chatbot on port 5000..."
+# Start Omnix FastAPI Server (supports WebSocket TTS streaming)
+echo "[2/2] Starting Omnix FastAPI Server on port 5000..."
 echo ""
-python app.py &
+python server_fastapi.py &
 CHATBOT_PID=$!
 
 # Wait for chatbot

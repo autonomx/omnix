@@ -31,8 +31,8 @@ export class TTSClient {
     this.ws = null;
     this.connected = false;
     this.connecting = false;
-    // TTS WebSocket is no longer used (TTS runs via HTTP /api/tts)
-    this.url = null;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    this.url = `${wsProtocol}//${window.location.hostname}:${window.location.port || '5000'}/ws/tts`;
     this.currentAudio = null;
   }
 

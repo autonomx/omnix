@@ -104,14 +104,14 @@ RUN chmod +x /app/start_llama_server.sh
 EXPOSE 5000 8000 8080
 
 # Set environment variables
-ENV FLASK_APP=app.py
+ENV PYTHONPATH=/app/src
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
-# Default command - run main app
-CMD ["python", "app.py"]
+# Default command - run FastAPI server (supports WebSocket TTS streaming)
+CMD ["python", "server_fastapi.py"]
 
 # ============================================================================
 # USAGE INSTRUCTIONS

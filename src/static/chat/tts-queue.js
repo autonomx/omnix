@@ -189,24 +189,106 @@ function enqueueAudio(audioBase64, sampleRate) {
 }
 
 // ============================================================
-// WEBSOCKET TTS (No longer available - TTS uses HTTP /api/tts)
+// WEBSOCKET TTS (Streaming via /ws/tts)
 // ============================================================
 
 /**
- * Connect to streaming TTS WebSocket (no longer available)
+ * Connect to streaming TTS WebSocket
  */
 function connectTTSWebSocket() {
-    return Promise.reject(new Error('TTS WebSocket not available'));
+    return new Promise((resolve, reject) => {
+        if (ttsWebSocket && ttsWebSocket.readyState === WebSocket.OPEN) {
+            resolve(ttsWebSocket);
+            return;
+        }
+        
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.hostname}:${window.location.port || '5000'}/ws/tts`;
+        ttsWebSocket = new WebSocket(wsUrl);
+        ttsWebSocket.binaryType = 'arraybuffer';
+        
+        ttsWebSocket.onopen = () => {
+            console.log('[TTS-WS] Connected');
+            resolve(ttsWebSocket);
+        };
+        
+        ttsWebSocket.onerror = (error) => {
+            console.error('[TTS-WS] Error:', error);
+            reject(error);
+        };
+        
+        ttsWebSocket.onclose = () => {
+            console.log('[TTS-WS] Closed');
+            ttsWebSocket = null;
+        };
+        
+        ttsWebSocket.onmessage = (event) => {
+            try {
+                if (event.data instanceof ArrayBuffer) {
+                    // Binary frame: int16 PCM audio — queue for playback
+                    window.AudioPlayer?.queueTTSChunk?.(event.data);
+                } else {
+                    const msg = JSON.parse(event.data);
+                    console.log('[TTS-WS] Message:', msg.type);
+                    
+                    if (msg.type === 'done') {
+                        console.log('[TTS-WS] Stream complete');
+                    } else if (msg.type === 'error') {
+                        console.error('[TTS-WS] Server error:', msg.error);
+                    }
+                }
+            } catch (e) {
+                console.error('[TTS-WS] Parse error:', e);
+            }
+        };
+    });
 }
 
 /**
- * Stream TTS via WebSocket (no longer available - falls back to HTTP)
+ * Stream TTS via WebSocket with HTTP fallback
  */
 async function speakTextViaWebSocket(text, voiceCloneId = null) {
-    console.log('[TTS-WS] WebSocket TTS not available, falling back to HTTP');
-    // Fall back to batch TTS
-    if (typeof speakText === 'function') {
-        await speakText(text, voiceCloneId);
+    console.log('[TTS-WS] speakTextViaWebSocket:', text.substring(0, 50));
+    
+    // Clear simple queue
+    if (typeof window.AudioPlayer?.clearTTSQueue === 'function') {
+        window.AudioPlayer.clearTTSQueue();
+    }
+    
+    // Reset stop flag
+    if (typeof stopAudioRequested !== 'undefined') {
+        stopAudioRequested = false;
+    }
+    
+    try {
+        await connectTTSWebSocket();
+        
+        const request = {
+            text: text,
+            voice: voiceCloneId || 'default'
+        };
+        ttsWebSocket.send(JSON.stringify(request));
+        console.log('[TTS-WS] Request sent');
+        
+        // Wait for completion (done message sets flag)
+        return new Promise((resolve) => {
+            const checkDone = () => {
+                if (!window.AudioPlayer?.ttsIsPlayingQueue && 
+                    window.AudioPlayer?.ttsAudioQueue?.length === 0) {
+                    resolve();
+                } else {
+                    setTimeout(checkDone, 100);
+                }
+            };
+            checkDone();
+        });
+        
+    } catch (error) {
+        console.error('[TTS-WS] WebSocket failed, falling back to HTTP:', error);
+        // Fall back to batch TTS
+        if (typeof speakText === 'function') {
+            await speakText(text, voiceCloneId);
+        }
     }
 }
 

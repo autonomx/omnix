@@ -18,10 +18,12 @@ let voiceAudioBuffer = [];
 
 // const VOICE_WS_URL = "ws://localhost:8001/ws/voice"; // Removed - no longer using realtime server
 
-// TTS WebSocket removed (TTS runs via HTTP /api/tts)
+// Streaming TTS WebSocket
 let ttsWs = null;
 let ttsWsConnected = false;
 let ttsAudioBuffer = [];
+
+const TTS_WS_URL = `${WS_PROTOCOL}//${window.location.hostname}:${window.location.port || '5000'}/ws/tts`;
 
 // Voice pipeline state
 let voiceResponseText = '';
@@ -164,10 +166,92 @@ function closeStreamingSTT() {
 // STREAMING TTS WEBSOCKET
 // ============================================================
 
-// Connect to streaming TTS WebSocket (no longer available - TTS uses HTTP)
+// Connect to streaming TTS WebSocket
 function connectStreamingTTS() {
-    return Promise.reject(new Error('TTS WebSocket not available'));
-}
+    return new Promise((resolve, reject) => {
+        if (ttsWs && ttsWs.readyState === WebSocket.OPEN) {
+            resolve();
+            return;
+        }
+        
+        try {
+            ttsWs = new WebSocket(TTS_WS_URL);
+            ttsWs.binaryType = 'arraybuffer';
+            
+            ttsWs.onopen = () => {
+                console.log('Streaming TTS WebSocket connected');
+                ttsWsConnected = true;
+                resolve();
+            };
+            
+            ttsWs.onmessage = (event) => {
+                try {
+                    if (event.data instanceof ArrayBuffer) {
+                        // Binary frame: int16 PCM audio
+                        const int16 = new Int16Array(event.data);
+                        const float32 = new Float32Array(int16.length);
+                        for (let i = 0; i < int16.length; i++) {
+                            float32[i] = int16[i] / 32768.0;
+                        }
+                        // Encode as base64 for playStreamingAudioChunk
+                        const bytes = new Uint8Array(event.data);
+                        let binary = '';
+                        for (let i = 0; i < bytes.length; i++) {
+                            binary += String.fromCharCode(bytes[i]);
+                        }
+                        const audioBase64 = btoa(binary);
+                        playStreamingAudioChunk(audioBase64, 24000);
+                    } else {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'done') {
+                            console.log('TTS streaming done');
+                            if (conversationMode) {
+                                if (alwaysListening) {
+                                    showCircleIndicator('listening');
+                                    updateConversationStatus('🎤 Auto-listening - Speak now!', 'listening');
+                                } else {
+                                    showCircleIndicator('idle');
+                                    updateConversationStatus('Ready to chat');
+                                }
+                            }
+                            ttsAudioBuffer = [];
+                        } else if (data.type === 'error') {
+                            console.error('TTS streaming error:', data.error);
+                            if (conversationMode) {
+                                showCircleIndicator('idle');
+                                updateConversationStatus('Ready to chat');
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing TTS message:', e);
+                }
+            };
+            
+            ttsWs.onerror = (error) => {
+                console.error('TTS WebSocket error:', error);
+                ttsWsConnected = false;
+                reject(error);
+            };
+            
+            ttsWs.onclose = () => {
+                console.log('TTS WebSocket closed');
+                ttsWsConnected = false;
+                ttsWs = null;
+            };
+            
+            // Timeout for connection
+            setTimeout(() => {
+                if (!ttsWsConnected) {
+                    reject(new Error('Connection timeout'));
+                }
+            }, 5000);
+            
+        } catch (e) {
+            reject(e);
+        }
+    });
 }
 
 // Play streaming audio chunk immediately (schedule directly, no queue wait)
