@@ -26,6 +26,10 @@ export class AudioInput {
     this._audioOutput = null;
     /** Correlation threshold above which a mic chunk is considered echo. */
     this.ECHO_SIMILARITY_THRESHOLD = 0.8;
+
+    // SpeakerFilter: multi-signal echo/user classification (replaces basic
+    // echo-only check when wired up via setSpeakerFilter).
+    this.speakerFilter = null;
   }
 
   async start() {
@@ -80,10 +84,15 @@ export class AudioInput {
   _processAudioChunk(samples) {
     if (this.vadPaused) return;
 
-    // Echo cancellation: attenuate (not drop) chunks that match audio we
-    // just played through AudioOutput.  Attenuating preserves any real user
-    // speech that overlaps with the echo instead of silencing it entirely.
-    if (this.isEcho(samples)) {
+    // Speaker classification: use multi-signal SpeakerFilter when available,
+    // falling back to the simpler correlation-based isEcho() check.
+    if (this.speakerFilter) {
+      const type = this.speakerFilter.classify(samples);
+      if (type === 'echo') return;           // AI voice — ignore entirely
+      if (type === 'uncertain') {
+        samples = this._attenuate(samples, 0.5); // ambiguous — attenuate
+      }
+    } else if (this.isEcho(samples)) {
       samples = this._attenuate(samples, 0.3);
     }
 
@@ -153,6 +162,16 @@ export class AudioInput {
    */
   setAudioOutput(audioOutput) {
     this._audioOutput = audioOutput;
+  }
+
+  /**
+   * Attach a SpeakerFilter for multi-signal echo/user classification.
+   * When set, _processAudioChunk uses the filter instead of the basic
+   * isEcho() correlation check.
+   * @param {import('./speakerFilter.js').SpeakerFilter} filter
+   */
+  setSpeakerFilter(filter) {
+    this.speakerFilter = filter;
   }
 
   /**

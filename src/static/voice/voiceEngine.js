@@ -5,6 +5,7 @@ import { STTClient } from './sttClient.js?v=2';
 import { LLMClient } from './llmClient.js?v=2';
 import { TTSClient } from './ttsClient.js?v=2';
 import { InterruptClassifier } from './interruptClassifier.js?v=2';
+import { SpeakerFilter } from './speakerFilter.js?v=2';
 
 export { VoiceState };
 export class VoiceEngine {
@@ -48,6 +49,9 @@ export class VoiceEngine {
     // Wire echo cancellation: let AudioInput compare mic chunks against
     // the most recently played TTS audio to suppress self-echo.
     this.audioInput.setAudioOutput(this.audioOutput);
+    // Wire multi-signal speaker filter for robust echo/user classification.
+    this.speakerFilter = new SpeakerFilter(this.audioOutput);
+    this.audioInput.setSpeakerFilter(this.speakerFilter);
 
     this.currentTranscript = '';
     this.accumulatedResponse = '';

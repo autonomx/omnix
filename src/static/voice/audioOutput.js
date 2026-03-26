@@ -25,6 +25,9 @@ export class AudioOutput {
     // Echo cancellation: store the most recent played audio samples so
     // AudioInput can compare incoming mic data against what we just played.
     this.lastPlayedSamples = null;
+    // Timestamp of the last time a source ended playback — used by
+    // SpeakerFilter to detect residual echo shortly after playback stops.
+    this._lastPlaybackTime = 0;
   }
 
   _ensureContext() {
@@ -173,6 +176,7 @@ export class AudioOutput {
       // Ignore callbacks from sources that belong to a previous (cancelled) session
       if (gen !== this._resetGeneration) return;
       this._activeSourceCount--;
+      this._lastPlaybackTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
       const idx = this._activeSources.indexOf(source);
       if (idx !== -1) this._activeSources.splice(idx, 1);
       if (this._activeSourceCount === 0 && this.hasPlayedSomething) {
