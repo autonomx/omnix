@@ -22,6 +22,12 @@ export class AudioOutput {
     this._recentPause = 0;
     // Master gain node for volume ducking during interrupt candidacy
     this._masterGain = null;
+    // Echo cancellation: store the most recent played audio samples so
+    // AudioInput can compare incoming mic data against what we just played.
+    this.lastPlayedSamples = null;
+    // Timestamp of the last time a source ended playback — used by
+    // SpeakerFilter to detect residual echo shortly after playback stops.
+    this._lastPlaybackTime = 0;
   }
 
   _ensureContext() {
@@ -105,6 +111,10 @@ export class AudioOutput {
     const audioBuffer = this.ctx.createBuffer(1, float32.length, sampleRate);
     audioBuffer.getChannelData(0).set(float32);
 
+    // Echo cancellation: store a fingerprint of the audio we are about to play
+    // so AudioInput can detect when the mic is hearing our own TTS output.
+    this.lastPlayedSamples = float32;
+
     this.bufferedTime += audioBuffer.duration;
 
     // Fast-start first audio (don't wait full buffer)
@@ -166,6 +176,7 @@ export class AudioOutput {
       // Ignore callbacks from sources that belong to a previous (cancelled) session
       if (gen !== this._resetGeneration) return;
       this._activeSourceCount--;
+      this._lastPlaybackTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
       const idx = this._activeSources.indexOf(source);
       if (idx !== -1) this._activeSources.splice(idx, 1);
       if (this._activeSourceCount === 0 && this.hasPlayedSomething) {
@@ -295,6 +306,7 @@ export class AudioOutput {
     this._activeSourceCount = 0;
     this.hasPlayedSomething = false;
     this._lastChunkText = null;
+    this.lastPlayedSamples = null;
   }
 
   /** Tear down the AudioContext and reset all scheduling state. */
@@ -317,6 +329,7 @@ export class AudioOutput {
     this._activeSourceCount = 0;
     this.hasPlayedSomething = false;
     this._lastChunkText = null;
+    this.lastPlayedSamples = null;
   }
 
   stop() {
