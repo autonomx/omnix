@@ -136,6 +136,16 @@ export class VoiceEngine {
     this.interruptClassifier = new InterruptClassifier();
     // Confidence threshold: scores above this trigger a real interrupt
     this._interruptScoreThreshold = 0.6;
+    // Debounce: minimum interval (ms) between interrupt score computations
+    this._lastScoreTime = 0;
+    this._scoreInterval = 200;
+    // Cooldown: minimum interval (ms) between consecutive interrupts to
+    // prevent rapid double-interrupts from jittery speech detection.
+    this._lastInterruptAt = 0;
+    this._interruptCooldown = 1000;
+    // Intent persistence: accumulated confidence that must reach the
+    // threshold before an interrupt fires, preventing flicker decisions.
+    this._intentConfidence = 0;
   }
 
   setState(newState) {
@@ -230,6 +240,7 @@ export class VoiceEngine {
     if (this._interruptCandidate) {
       this._interruptCandidate = false;
       this._isValidInterrupt = false;
+      this._intentConfidence = 0;
       // Restore volume after ducking
       this.audioOutput.setVolume?.(1.0);
     }
@@ -318,6 +329,15 @@ export class VoiceEngine {
     if (this._interruptCandidate && this.state === VoiceState.AI_SPEAKING) {
       if (this._isNoise(text)) return;
 
+      // Debounce: avoid recomputing the score on every transcript update
+      const now = Date.now();
+      if (now - this._lastScoreTime < this._scoreInterval) return;
+      this._lastScoreTime = now;
+
+      // Must still be actively speaking — prevents ghost interrupts after
+      // the user has already stopped.
+      if (!this.audioInput.isSpeaking) return;
+
       const duration = Date.now() - this._interruptStartTime;
       const words = text.trim().split(/\s+/).length;
 
@@ -328,17 +348,31 @@ export class VoiceEngine {
 
       const score = this._computeInterruptScore({ duration, words, text, isStrongIntent });
 
+      // Intent persistence: accumulate confidence across transcript updates
+      // to eliminate flicker decisions from jittery partial STT results.
+      this._intentConfidence += (isStrongIntent || score > this._interruptScoreThreshold) ? 1 : -1;
+      this._intentConfidence = Math.max(0, this._intentConfidence);
+
       if (isStrongIntent && this._isValidInterrupt) {
         // Stage 1 — instant: strong heuristic match, interrupt immediately
         this._executeInterrupt();
-      } else if (score > this._interruptScoreThreshold && this._isValidInterrupt) {
-        // Score already passes threshold (e.g. long duration + multiple words)
+      } else if (this._intentConfidence >= 2 && score > this._interruptScoreThreshold && this._isValidInterrupt) {
+        // Score passes threshold AND intent has persisted across updates
         this._executeInterrupt();
       } else if (this._isValidInterrupt && !isStrongIntent) {
-        // Stage 2 — async: ambiguous speech, ask the LLM classifier
+        // Stage 2 — async: ambiguous speech, ask the LLM classifier.
+        // Capture a snapshot of the candidate so stale .then() callbacks
+        // from a previous (now-invalid) candidate are silently ignored.
+        const candidateId = this._interruptStartTime;
+
         this.interruptClassifier.classify(text).then(isIntent => {
           // Re-check guards: the turn may have ended while the LLM was thinking
-          if (isIntent && this._interruptCandidate && this.state === VoiceState.AI_SPEAKING) {
+          if (
+            isIntent &&
+            this._interruptCandidate &&
+            this.state === VoiceState.AI_SPEAKING &&
+            this._interruptStartTime === candidateId
+          ) {
             this._executeInterrupt();
           }
         }).catch(() => {
@@ -353,10 +387,15 @@ export class VoiceEngine {
    * adaptive counters, and fires the actual interrupt.
    */
   _executeInterrupt() {
+    // Cooldown: prevent rapid double interrupts from jittery detection
+    if (Date.now() - this._lastInterruptAt < this._interruptCooldown) return;
+
     console.log('[VoiceEngine] Valid interrupt detected');
 
     this._interruptCandidate = false;
     this._isValidInterrupt = false;
+    this._intentConfidence = 0;
+    this._lastInterruptAt = Date.now();
 
     // Adaptive decay: reset interrupt count if >8s since last interrupt
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -398,7 +437,7 @@ export class VoiceEngine {
     }
 
     // Penalize lone fillers
-    if (/^(uh|um|hmm)$/i.test(text.trim())) {
+    if (/^(uh+|um+|hmm+|mm+|ah+|eh+)$/i.test(text.trim())) {
       score -= 0.5;
     }
 
@@ -923,6 +962,7 @@ export class VoiceEngine {
     // Reset interrupt arbitration state
     this._interruptCandidate = false;
     this._isValidInterrupt = false;
+    this._intentConfidence = 0;
     console.log(`[VoiceEngine] Cancelled ongoing response (ttsReqId=${this._ttsRequestId}, llmReqId=${this._llmRequestId})`);
   }
 
@@ -1081,7 +1121,7 @@ export class VoiceEngine {
   _isNoise(text) {
     if (!text) return true;
     const trimmed = text.trim();
-    return trimmed.length < 2 || /^(uh|um|hmm)$/i.test(trimmed);
+    return trimmed.length < 2 || /^(uh+|um+|hmm+|mm+|ah+|eh+)$/i.test(trimmed);
   }
 
   interruptAI() {

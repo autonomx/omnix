@@ -80,9 +80,12 @@ export class AudioInput {
   _processAudioChunk(samples) {
     if (this.vadPaused) return;
 
-    // Echo cancellation: skip this chunk if it matches the audio we just
-    // played through AudioOutput (mic hearing its own TTS output).
-    if (this.isEcho(samples)) return;
+    // Echo cancellation: attenuate (not drop) chunks that match audio we
+    // just played through AudioOutput.  Attenuating preserves any real user
+    // speech that overlaps with the echo instead of silencing it entirely.
+    if (this.isEcho(samples)) {
+      samples = this._attenuate(samples, 0.3);
+    }
 
     // Always forward audio to STT when the user is speaking
     if (this.isSpeaking) {
@@ -200,6 +203,23 @@ export class AudioInput {
 
     const denom = Math.sqrt(normA) * Math.sqrt(normB);
     return denom === 0 ? 0 : dot / denom;
+  }
+
+  /**
+   * Return a new Float32Array with every sample scaled by `factor`.
+   * Used for echo attenuation: reduces echo energy without dropping
+   * the chunk entirely so overlapping real speech is preserved.
+   *
+   * @param {Float32Array} samples
+   * @param {number} factor - Scaling factor (0–1)
+   * @returns {Float32Array}
+   */
+  _attenuate(samples, factor) {
+    const out = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      out[i] = samples[i] * factor;
+    }
+    return out;
   }
 
   hasEnoughAudioForInterrupt() {
