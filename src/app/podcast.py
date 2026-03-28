@@ -99,7 +99,16 @@ def generate_ep():
     def gen():
         try:
             yield f"data: {json.dumps({'type': 'phase', 'phase': 'script', 'message': 'Generating...'})}\n\n"
-            script = llm_generate(f"Write a podcast dialogue script for: {data.get('topic')}. Format lines exactly as 'SpeakerName: Text'")
+            speaker_names = [s.get('name', f'Speaker {i+1}') for i, s in enumerate(data.get('speakers', []))]
+            if not speaker_names:
+                speaker_names = ['Host', 'Guest']
+            speakers_str = ', '.join(speaker_names)
+            prompt = (
+                f"Write a podcast dialogue script for: {data.get('topic')}. "
+                f"Use exactly these speaker names: {speakers_str}. "
+                f"Format lines exactly as 'SpeakerName: Text'"
+            )
+            script = llm_generate(prompt)
             
             segments = []
             for line in script.split('\n'):
@@ -107,9 +116,16 @@ def generate_ep():
                     sp, txt = line.split(':', 1)
                     segments.append({"speaker": sp.strip(), "text": txt.strip()})
             
+            # Build speaker-to-voice mapping by name (case-insensitive)
+            input_speakers = data.get('speakers', [])
+            voice_by_name = {s.get('name', '').lower(): s.get('voice_id') for s in input_speakers}
+
             transcript, audios = [], []
             for i, seg in enumerate(segments):
-                vid = next((s.get('voice_id') for s in data.get('speakers', []) if s.get('name', '').lower() == seg['speaker'].lower()), None)
+                # Match by name first, fall back to round-robin by index
+                vid = voice_by_name.get(seg['speaker'].lower())
+                if vid is None and input_speakers:
+                    vid = input_speakers[i % len(input_speakers)].get('voice_id')
                 v_clone = shared.custom_voices.get(vid.replace(" (Custom)", "") if vid else "", {}).get('voice_clone_id', vid)
                 
                 req = {"text": shared.remove_emojis(seg['text']), "language": "en"}
