@@ -7,8 +7,8 @@
 console.log('[WS-CLIENT] Starting to load...');
 
 // ============== CONFIG ==============
-const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws/conversation`;
+const WS_CONV_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${WS_CONV_PROTOCOL}//${window.location.host}/ws/conversation`;
 const SAMPLE_RATE = 24000;
 let FRAME_SIZE = 1920;
 const START_BUFFER_SAMPLES = 6000;

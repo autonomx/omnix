@@ -41,7 +41,7 @@ def get_episodes():
     eps = load_data(EP_FILE, {})
     return jsonify({"success": True, "episodes": sorted(eps.values(), key=lambda x: x.get('created_at', ''), reverse=True)})
 
-@podcast_bp.route('/api/podcast/episodes/<ep_id>', methods=['GET', 'DELETE'])
+@podcast_bp.route('/api/podcast/episodes/<ep_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_episode(ep_id):
     eps = load_data(EP_FILE, {})
     if ep_id not in eps: return jsonify({"success": False, "error": "Not found"}), 404
@@ -50,6 +50,15 @@ def manage_episode(ep_id):
         ep = eps[ep_id]
         if os.path.exists(os.path.join(shared.DATA_DIR, 'podcasts', f"{ep_id}.wav")): ep['audio_url'] = f"/api/podcast/episodes/{ep_id}/audio"
         return jsonify({"success": True, "episode": ep})
+    
+    if request.method == 'PUT':
+        data = request.get_json()
+        if data:
+            allowed = {'title', 'topic', 'transcript', 'speakers', 'duration', 'format', 'length', 'status', 'points', 'outline'}
+            filtered = {k: v for k, v in data.items() if k in allowed}
+            eps[ep_id].update(filtered)
+            save_data(EP_FILE, eps)
+        return jsonify({"success": True, "episode": eps[ep_id]})
         
     del eps[ep_id]
     save_data(EP_FILE, eps)
@@ -118,12 +127,14 @@ def generate_ep():
                 except: pass
                 
             if audios:
+                podcasts_dir = os.path.join(shared.DATA_DIR, 'podcasts')
+                os.makedirs(podcasts_dir, exist_ok=True)
                 wav_io = io.BytesIO()
                 wav_io.write(b'RIFF'); wav_io.write(struct.pack('<I', 36 + sum(len(a) for a in audios))); wav_io.write(b'WAVEfmt ')
                 wav_io.write(struct.pack('<IHHIIHH', 16, 1, 1, shared.TTS_SAMPLE_RATE, shared.TTS_SAMPLE_RATE*2, 2, 16))
                 wav_io.write(b'data'); wav_io.write(struct.pack('<I', sum(len(a) for a in audios)))
                 for a in audios: wav_io.write(a)
-                with open(os.path.join(shared.DATA_DIR, 'podcasts', f"{ep_id}.wav"), 'wb') as f: f.write(wav_io.getvalue())
+                with open(os.path.join(podcasts_dir, f"{ep_id}.wav"), 'wb') as f: f.write(wav_io.getvalue())
             
             eps = load_data(EP_FILE, {})
             eps[ep_id] = {**data, "transcript": transcript, "status": "complete", "created_at": datetime.now().isoformat()}
