@@ -119,6 +119,11 @@ export class LLMClient {
       } catch (e) {}
     }
   }
+
+  /** Alias for cancel() – used by the interrupt system. */
+  abort() {
+    this.cancel();
+  }
 }
 
 export default LLMClient;

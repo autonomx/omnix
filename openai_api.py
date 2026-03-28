@@ -23,7 +23,9 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 # Import our existing components
-from chatterbox_tts_server import voice_manager
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+import app.shared as shared
 
 # Configure logging
 logging.basicConfig(
@@ -47,9 +49,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Use the existing managers from the imported modules
-tts_manager = None  # We'll use the functions directly from chatterbox_tts_server
-voice_manager = voice_manager  # Use the existing voice manager
+# TTS is handled via the audio provider system (e.g. faster-qwen3-tts)
 
 # Models available
 AVAILABLE_MODELS = [
@@ -128,26 +128,17 @@ class TranscriptionResponse(BaseModel):
 
 # Load available voices
 def load_voices():
-    """Load available voices from the voice manager"""
+    """Load available voices from custom voice clones"""
     voices = []
     try:
-        # Get voices from our voice manager
-        voice_files = voice_manager.get_available_voices()
-        
-        for voice_file in voice_files:
-            voice_id = Path(voice_file).stem
-            voice_name = voice_id.replace('_', ' ').title()
-            
-            # Try to load voice profile for additional info
-            profile = voice_manager.load_voice_profile(voice_id)
-            if profile:
-                voice_name = profile.get('name', voice_name)
-            
+        # Get voices from custom voice clones
+        for vid, vdata in shared.custom_voices.items():
+            voice_name = vid.replace('_', ' ').title()
             voices.append(Voice(
-                voice_id=voice_id,
+                voice_id=vid,
                 name=voice_name,
                 category="custom",
-                preview_url=f"/api/v1/audio/voices/{voice_id}/preview"
+                preview_url=f"/api/v1/audio/voices/{vid}/preview"
             ))
         
         # Add some standard voices for compatibility
@@ -219,63 +210,34 @@ async def create_speech(request: SpeechRequest, background_tasks: BackgroundTask
         # Generate unique ID for this request
         speech_id = str(uuid.uuid4())
         
-        # Determine voice file path
-        voice_file = None
-        if request.voice in [v.voice_id for v in AVAILABLE_VOICES]:
-            # Custom voice
-            voice_file = voice_manager.get_voice_file(request.voice)
-        else:
-            # Use default voice or first available
-            available_files = voice_manager.get_available_voices()
-            if available_files:
-                voice_file = available_files[0]
+        # Use the TTS provider system
+        tts_provider = shared.get_tts_provider()
+        if not tts_provider:
+            raise HTTPException(status_code=503, detail="TTS provider not available")
         
-        if not voice_file:
-            raise HTTPException(status_code=400, detail="No voice available")
-        
-        # Generate speech
-        output_path = f"audio/tts_{speech_id}.{request.response_format}"
-        
-        # Use our TTS functions directly from chatterbox_tts_server
-        # Import the generate_speech function
-        from chatterbox_tts_server import generate_speech
-        
-        # Generate speech using the existing function
-        audio_generator = generate_speech(
+        # Generate speech using the audio provider
+        result = tts_provider.generate_audio(
             text=request.input,
-            voice_clone_id=request.voice if request.voice in [v.voice_id for v in AVAILABLE_VOICES] else None,
-            stream=False
+            speaker=request.voice,
+            language="en"
         )
         
-        # Get the audio tensor
-        audio_tensor = next(audio_generator)
+        if not result.get('success'):
+            raise HTTPException(status_code=500, detail=result.get('error', 'TTS generation failed'))
         
-        # Convert to numpy and save
-        if hasattr(audio_tensor, 'cpu'):
-            wav = audio_tensor.cpu().numpy().flatten()
-        else:
-            wav = audio_tensor.flatten()
+        # Decode base64 audio to bytes
+        import base64 as b64
+        audio_bytes = b64.b64decode(result.get('audio', ''))
         
-        # Convert to int16 PCM
-        wav_int16 = (wav * 32767).astype(np.int16)
+        if not audio_bytes:
+            raise HTTPException(status_code=500, detail="No audio generated")
         
-        # Save to file
-        import scipy.io.wavfile
-        scipy.io.wavfile.write(output_path, 24000, wav_int16)
-        
-        success = True
-        
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to generate speech")
-        
-        # Return the audio file
-        def iterfile():
-            with open(output_path, 'rb') as f:
-                yield from f
-        
+        # Return the audio data
         content_type = f"audio/{request.response_format}"
-        return StreamingResponse(iterfile(), media_type=content_type)
+        return StreamingResponse(iter([audio_bytes]), media_type=content_type)
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating speech: {e}")
         logger.error(traceback.format_exc())
@@ -370,7 +332,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "tts_available": True,  # TTS is available via chatterbox_tts_server
+        "tts_available": shared.get_tts_provider() is not None,
         "stt_available": False,  # STT not integrated in this API
         "timestamp": datetime.now().isoformat()
     }

@@ -41,7 +41,7 @@ def get_episodes():
     eps = load_data(EP_FILE, {})
     return jsonify({"success": True, "episodes": sorted(eps.values(), key=lambda x: x.get('created_at', ''), reverse=True)})
 
-@podcast_bp.route('/api/podcast/episodes/<ep_id>', methods=['GET', 'DELETE'])
+@podcast_bp.route('/api/podcast/episodes/<ep_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_episode(ep_id):
     eps = load_data(EP_FILE, {})
     if ep_id not in eps: return jsonify({"success": False, "error": "Not found"}), 404
@@ -50,6 +50,15 @@ def manage_episode(ep_id):
         ep = eps[ep_id]
         if os.path.exists(os.path.join(shared.DATA_DIR, 'podcasts', f"{ep_id}.wav")): ep['audio_url'] = f"/api/podcast/episodes/{ep_id}/audio"
         return jsonify({"success": True, "episode": ep})
+    
+    if request.method == 'PUT':
+        data = request.get_json()
+        if data:
+            allowed = {'title', 'topic', 'transcript', 'speakers', 'duration', 'format', 'length', 'status', 'points', 'outline'}
+            filtered = {k: v for k, v in data.items() if k in allowed}
+            eps[ep_id].update(filtered)
+            save_data(EP_FILE, eps)
+        return jsonify({"success": True, "episode": eps[ep_id]})
         
     del eps[ep_id]
     save_data(EP_FILE, eps)
@@ -90,7 +99,16 @@ def generate_ep():
     def gen():
         try:
             yield f"data: {json.dumps({'type': 'phase', 'phase': 'script', 'message': 'Generating...'})}\n\n"
-            script = llm_generate(f"Write a podcast dialogue script for: {data.get('topic')}. Format lines exactly as 'SpeakerName: Text'")
+            speaker_names = [s.get('name', f'Speaker {i+1}') for i, s in enumerate(data.get('speakers', []))]
+            if not speaker_names:
+                speaker_names = ['Host', 'Guest']
+            speakers_str = ', '.join(speaker_names)
+            prompt = (
+                f"Write a podcast dialogue script for: {data.get('topic')}. "
+                f"Use exactly these speaker names: {speakers_str}. "
+                f"Format lines exactly as 'SpeakerName: Text'"
+            )
+            script = llm_generate(prompt)
             
             segments = []
             for line in script.split('\n'):
@@ -98,30 +116,41 @@ def generate_ep():
                     sp, txt = line.split(':', 1)
                     segments.append({"speaker": sp.strip(), "text": txt.strip()})
             
+            # Build speaker-to-voice mapping by name (case-insensitive)
+            input_speakers = data.get('speakers', [])
+            voice_by_name = {s.get('name', '').lower(): s.get('voice_id') for s in input_speakers}
+
             transcript, audios = [], []
             for i, seg in enumerate(segments):
-                vid = next((s.get('voice_id') for s in data.get('speakers', []) if s.get('name', '').lower() == seg['speaker'].lower()), None)
+                # Match by name first, fall back to round-robin by index
+                vid = voice_by_name.get(seg['speaker'].lower())
+                if vid is None and input_speakers:
+                    vid = input_speakers[i % len(input_speakers)].get('voice_id')
                 v_clone = shared.custom_voices.get(vid.replace(" (Custom)", "") if vid else "", {}).get('voice_clone_id', vid)
                 
                 req = {"text": shared.remove_emojis(seg['text']), "language": "en"}
                 if v_clone: req["voice_clone_id"] = v_clone
                 
                 try:
-                    r = requests.post(f"{shared.TTS_BASE_URL}/tts", json=req, timeout=60)
-                    if r.status_code == 200 and r.json().get('success'):
-                        adata, sr = r.json().get('audio'), r.json().get('sample_rate')
-                        yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i})}\n\n"
-                        transcript.append({"speaker": seg['speaker'], "text": seg['text']})
-                        audios.append(base64.b64decode(adata))
+                    tts_provider = shared.get_tts_provider()
+                    if tts_provider:
+                        result = tts_provider.generate_audio(text=shared.remove_emojis(seg['text']), speaker=v_clone, language="en")
+                        if result.get('success'):
+                            adata, sr = result.get('audio'), result.get('sample_rate')
+                            yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i})}\n\n"
+                            transcript.append({"speaker": seg['speaker'], "text": seg['text']})
+                            audios.append(base64.b64decode(adata))
                 except: pass
                 
             if audios:
+                podcasts_dir = os.path.join(shared.DATA_DIR, 'podcasts')
+                os.makedirs(podcasts_dir, exist_ok=True)
                 wav_io = io.BytesIO()
                 wav_io.write(b'RIFF'); wav_io.write(struct.pack('<I', 36 + sum(len(a) for a in audios))); wav_io.write(b'WAVEfmt ')
                 wav_io.write(struct.pack('<IHHIIHH', 16, 1, 1, shared.TTS_SAMPLE_RATE, shared.TTS_SAMPLE_RATE*2, 2, 16))
                 wav_io.write(b'data'); wav_io.write(struct.pack('<I', sum(len(a) for a in audios)))
                 for a in audios: wav_io.write(a)
-                with open(os.path.join(shared.DATA_DIR, 'podcasts', f"{ep_id}.wav"), 'wb') as f: f.write(wav_io.getvalue())
+                with open(os.path.join(podcasts_dir, f"{ep_id}.wav"), 'wb') as f: f.write(wav_io.getvalue())
             
             eps = load_data(EP_FILE, {})
             eps[ep_id] = {**data, "transcript": transcript, "status": "complete", "created_at": datetime.now().isoformat()}

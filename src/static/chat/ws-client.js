@@ -4,10 +4,16 @@
  * Replaces HTTP streaming with binary WebSocket for sub-500ms latency
  */
 
+if (window.__WS_CLIENT_LOADED__) {
+    console.warn('[WS-CLIENT] Already loaded, skipping duplicate injection');
+} else {
+window.__WS_CLIENT_LOADED__ = true;
+
 console.log('[WS-CLIENT] Starting to load...');
 
 // ============== CONFIG ==============
-const WS_URL = `ws://${window.location.host}/ws/conversation`;
+const WS_CONV_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${WS_CONV_PROTOCOL}//${window.location.host}/ws/conversation`;
 const SAMPLE_RATE = 24000;
 let FRAME_SIZE = 1920;
 const START_BUFFER_SAMPLES = 6000;
@@ -827,3 +833,5 @@ window.cancelLLMStream = cancelLLMStream;
 window.stopAudio = stopAudio;
 
 console.log('[WS-CLIENT] Loaded and ready');
+
+} // end __WS_CLIENT_LOADED__ guard

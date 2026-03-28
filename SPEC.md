@@ -13,7 +13,7 @@
 1. **Backend**: Python Flask server with WebSocket support
 2. **Frontend**: Modern HTML/CSS/JS web interface
 3. **LLM Providers**: Cerebras (fastest), OpenRouter (cloud), LM Studio (local)
-4. **TTS Engine**: Chatterbox for natural voice synthesis
+4. **TTS Engine**: Qwen3 TTS for natural voice synthesis
 5. **STT Engine**: Parakeet for speech-to-text transcription
 
 ### Connection Flow

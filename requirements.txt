@@ -40,21 +40,6 @@ librosa==0.11.0
 deepfilternet>=0.5.0
 
 # ============================================
-# CHATTERBOX TTS TURBO
-# ============================================
-chatterbox-tts==0.1.6
-s3tokenizer
-diffusers==0.29.0
-resemble-perth==1.0.1
-conformer==0.3.2
-safetensors==0.5.3
-spacy-pkuseg
-pykakasi==2.3.0
-gradio==5.44.1
-pyloudnorm
-omegaconf
-
-# ============================================
 # NEMO ASR (PARAKEET STT)
 # Install with: pip install nemo_toolkit[asr]
 # Note: This will update transformers to 4.53.x
@@ -79,3 +64,5 @@ pandas>=2.0.0
 # ============================================
 pytest>=7.0.0
 pytest-cov>=4.0.0
+playwright>=1.40.0
+pytest-playwright>=0.4.0

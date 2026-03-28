@@ -5,7 +5,8 @@ export class STTClient {
     this.ws = null;
     this.connected = false;
     this.connecting = false;
-    this.url = 'ws://localhost:8000/ws/transcribe';
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    this.url = `${wsProtocol}//${window.location.hostname}:8000/ws/transcribe`;
 
     // Audio chunks that arrive while reconnecting are queued and flushed
     // once the connection is re-established.

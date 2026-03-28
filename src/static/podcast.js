@@ -52,7 +52,8 @@ const PODCAST_FORMATS = {
 const EPISODE_LENGTHS = {
     short: { minutes: 5, name: 'Short (~5 min)' },
     medium: { minutes: 15, name: 'Medium (~15 min)' },
-    long: { minutes: 30, name: 'Long (~30 min)' }
+    long: { minutes: 30, name: 'Long (~30 min)' },
+    extended: { minutes: 60, name: 'Extended (~60 min)' }
 };
 
 // Initialize podcast feature
@@ -95,13 +96,45 @@ function openPodcastModal() {
 
 // Close podcast modal
 function closePodcastModal() {
+    // Stop streaming playback (closes AudioContext, kills all scheduled audio)
+    stopPodcastStreaming();
+
+    // Pause HTML <audio> element if present
+    if (podcastState.audioElement) {
+        podcastState.audioElement.pause();
+        podcastState.audioElement = null;
+    }
+
+    // Abort any ongoing generation
+    if (podcastState.abortController) {
+        podcastState.abortController.abort();
+        podcastState.abortController = null;
+    }
+
+    // Revoke blob URL to free memory
+    if (podcastState.combinedAudioUrl) {
+        URL.revokeObjectURL(podcastState.combinedAudioUrl);
+        podcastState.combinedAudioUrl = null;
+    }
+
+    // Reset all playback/generation state so reopening is a fresh instance
+    podcastState.episode = null;
+    podcastState.episodeId = null;
+    podcastState.isGenerating = false;
+    podcastState.isPlaying = false;
+    podcastState.isPaused = false;
+    podcastState.currentTime = 0;
+    podcastState.duration = 0;
+    podcastState.audioQueue = [];
+    podcastState.audioSegments = [];
+    podcastState.combinedAudioBlob = null;
+    podcastState.transcript = [];
+    podcastState.currentSegmentIndex = -1;
+    podcastState.bookmarks = [];
+
     if (podcastModal) {
         podcastModal.classList.remove('active');
     }
-    if (podcastState.audioElement) {
-        podcastState.audioElement.pause();
-    }
-    podcastState.isPlaying = false;
 }
 
 // Load voice profiles
@@ -315,7 +348,7 @@ async function generatePodcast() {
 function handlePodcastEvent(data) {
     switch (data.type) {
         case 'phase':
-            updatePodcastProgress(data.percent, data.message);
+            updatePodcastProgress(data.percent || 0, data.message);
             break;
             
         case 'audio':
@@ -328,9 +361,18 @@ function handlePodcastEvent(data) {
                 voice_used: data.voice_used
             });
             
-            // Update progress
-            const percent = Math.round(data.percent);
-            updatePodcastProgress(percent, `Generated ${data.percent}%`);
+            // Build transcript from audio events
+            if (podcastState.episode && data.speaker && data.text) {
+                podcastState.episode.transcript.push({
+                    speaker: data.speaker,
+                    text: data.text
+                });
+            }
+            
+            // Update progress using server-provided percent
+            const percent = typeof data.percent === 'number' ? Math.round(data.percent) : 0;
+            const segInfo = data.total_segments ? ` (${data.segment_index + 1}/${data.total_segments})` : '';
+            updatePodcastProgress(percent, `Generating audio${segInfo}...`);
             
             // Start streaming playback if first chunk - like audiobook!
             if (podcastState.audioQueue.length === 1 && !streamingPlaybackActive) {
@@ -662,13 +704,16 @@ async function finalizePodcastEpisode(data) {
     updatePodcastProgress(100, 'Episode complete!');
     
     podcastState.episode.status = 'complete';
-    podcastState.episode.duration = data.duration;
+    podcastState.episode.duration = data.duration || 0;
     
     // Combine audio for seeking
     await combinePodcastAudio();
     
     // Save episode
     await savePodcastEpisode();
+    
+    // Refresh episodes list so new episode appears in library
+    loadEpisodesList();
     
     // Show streaming player with stop button still available - user can stop playback
     // The full player will be available but we keep streaming controls until user stops or plays full
@@ -719,8 +764,12 @@ function showPodcastFullPlayer() {
     
     let html = '<div class="podcast-full-player">';
     
-    // Audio element
-    html += `<audio id="podcast-combined-audio" src="${podcastState.combinedAudioUrl}" preload="metadata"></audio>`;
+    // Audio element - only set src if URL is valid
+    if (podcastState.combinedAudioUrl) {
+        html += `<audio id="podcast-combined-audio" src="${podcastState.combinedAudioUrl}" preload="metadata"></audio>`;
+    } else {
+        html += `<audio id="podcast-combined-audio" preload="metadata"></audio>`;
+    }
     
     // Title
     html += `<h3>${episode.title}</h3>`;
@@ -774,8 +823,15 @@ function showPodcastFullPlayer() {
 // Play full combined audio
 function playPodcastFull() {
     if (!podcastState.audioElement) return;
+    if (!podcastState.combinedAudioUrl) {
+        console.warn('[PODCAST] No audio URL available for playback');
+        alert('Podcast audio not generated. Check TTS service.');
+        return;
+    }
     
-    podcastState.audioElement.play();
+    podcastState.audioElement.play().catch(err => {
+        console.error('[PODCAST] Playback error:', err);
+    });
     podcastState.isPlaying = true;
     
     const playBtn = document.getElementById('podcast-play-full-btn');
@@ -953,7 +1009,9 @@ async function playEpisode(episodeId) {
                 // Auto-play
                 setTimeout(() => {
                     if (podcastState.audioElement) {
-                        podcastState.audioElement.play();
+                        podcastState.audioElement.play().catch(err => {
+                            console.error('[PODCAST] Auto-play error:', err);
+                        });
                     }
                 }, 100);
             }
@@ -978,7 +1036,9 @@ async function playEpisode(episodeId) {
                 // Auto-play
                 setTimeout(() => {
                     if (podcastState.audioElement) {
-                        podcastState.audioElement.play();
+                        podcastState.audioElement.play().catch(err => {
+                            console.error('[PODCAST] Auto-play error:', err);
+                        });
                     }
                 }, 100);
             } else {
@@ -1064,16 +1124,35 @@ function initPodcastForm() {
         speakersContainer.innerHTML = '';
     }
     
+    // Stop any ongoing streaming playback and close AudioContext
+    stopPodcastStreaming();
+
+    // Pause and release HTML audio element
+    if (podcastState.audioElement) {
+        podcastState.audioElement.pause();
+        podcastState.audioElement = null;
+    }
+
+    // Revoke old blob URL to free memory
+    if (podcastState.combinedAudioUrl) {
+        URL.revokeObjectURL(podcastState.combinedAudioUrl);
+        podcastState.combinedAudioUrl = null;
+    }
+
     // Reset audio state
     podcastState.episode = null;
+    podcastState.episodeId = null;
     podcastState.audioQueue = [];
+    podcastState.audioSegments = [];
     podcastState.combinedAudioBlob = null;
-    podcastState.combinedAudioUrl = null;
-    podcastState.audioElement = null;
     podcastState.isPlaying = false;
+    podcastState.isPaused = false;
     podcastState.isGenerating = false;
-    streamingPlaybackActive = false;
-    streamingPlaybackIndex = 0;
+    podcastState.currentTime = 0;
+    podcastState.duration = 0;
+    podcastState.transcript = [];
+    podcastState.currentSegmentIndex = -1;
+    podcastState.bookmarks = [];
     
     // Load voices for speakers
     loadVoicesForPodcastSpeakers();
@@ -1124,6 +1203,25 @@ async function loadVoicesForPodcastSpeakers() {
         }
     } catch (error) {
         console.error('[PODCAST] Error loading voices:', error);
+        // Still show default speakers even if voice API is unavailable
+        if (speakersContainer && speakersContainer.children.length === 0) {
+            speakersContainer.innerHTML = `
+                <div class="podcast-speaker-row">
+                    <div class="speaker-inputs">
+                        <input type="text" class="podcast-speaker-name" value="Host" placeholder="Speaker Name">
+                        <select class="podcast-speaker-voice"><option value="">Select Voice...</option></select>
+                        <input type="text" class="podcast-speaker-prompt" placeholder="LLM Prompt (optional): e.g., 'Speaks in an enthusiastic, energetic manner'">
+                    </div>
+                </div>
+                <div class="podcast-speaker-row">
+                    <div class="speaker-inputs">
+                        <input type="text" class="podcast-speaker-name" value="Guest" placeholder="Speaker Name">
+                        <select class="podcast-speaker-voice"><option value="">Select Voice...</option></select>
+                        <input type="text" class="podcast-speaker-prompt" placeholder="LLM Prompt (optional): e.g., 'Provides expert technical insights'">
+                    </div>
+                </div>
+            `;
+        }
     }
 }
 

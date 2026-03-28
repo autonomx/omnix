@@ -11,7 +11,7 @@ A modern AI voice platform by Autonomx - featuring chat, audiobook generation, A
 - **🎙️ AI Podcast Generator**: Create AI-generated podcast episodes
 - **🎤 Live Conversation**: Real-time voice-based conversation with AI
 - **👤 Voice Cloning**: Clone your voice from audio recordings
-- **🗣️ Text-to-Speech (TTS)**: Using Chatterbox TTS Turbo for natural voice synthesis (~200ms latency)
+- **🗣️ Text-to-Speech (TTS)**: Using Qwen3 TTS for natural voice synthesis (~200ms latency)
 - **👂 Speech-to-Text (STT)**: Using NVIDIA Parakeet TDT 0.6B for fast, accurate voice transcription
 - **🎭 AI Roleplay** *(coming soon)*: Interactive role-playing experiences
 - **🔌 Multiple Providers**: Cerebras (fastest), OpenRouter (cloud), LM Studio (local), llama.cpp (local)
@@ -77,7 +77,7 @@ docker-compose up -d --no-build
 
 This will:
 - Start the Omnix container using the pre-built image
-- Expose ports 5000 (main app), 8000 (STT), 8020 (TTS)
+- Expose ports 5000 (main app), 8000 (STT)
 - Mount volumes for data persistence, voice clones, and models
 - Auto-restart on failure
 
@@ -94,7 +94,7 @@ This will automatically build the image if not present, then start the container
 ### Run with Plain Docker
 
 ```bash
-docker run -d -p 5000:5000 -p 8000:8000 -p 8001:8001 -p 8020:8020 \
+docker run -d -p 5000:5000 -p 8000:8000 \
   --name omnix \
   --gpus all \
   -v $(pwd)/resources/data:/app/data \
@@ -363,7 +363,6 @@ Omnix provides a comprehensive REST API for programmatic access to all features.
 - **Main API**: `http://localhost:5000/api/`
 - **OpenAI Compatible API**: `http://localhost:8001/v1/`
 - **STT Server**: `http://localhost:8000/`
-- **TTS Server**: `http://localhost:8020/`
 
 ### OpenAI Compatible API
 
@@ -720,7 +719,7 @@ curl -X POST http://localhost:8001/v1/audio/speech \
 - Install dependencies: `pip install -r requirements.txt`
 
 ### TTS not working
-- Make sure Chatterbox TTS server is running (port 8020)
+- Make sure the TTS provider is configured in settings (e.g. faster-qwen3-tts)
 - Check status in the header - click to manage
 - For Docker, ensure the container has GPU access
 

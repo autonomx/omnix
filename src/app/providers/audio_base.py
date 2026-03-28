@@ -53,7 +53,7 @@ class BaseService:
     """
     Base service class that handles lifecycle management for local audio providers.
     
-    This class standardizes how local Python scripts (like cosyvoice_tts_server.py)
+    This class standardizes how local audio provider processes
     are started, stopped, and health-checked.
     """
     

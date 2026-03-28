@@ -38,18 +38,23 @@ def run_tests(test_type="all", verbose=True, coverage=False):
         ],
         "integration": [
             "tests/test_openai_integration.py"
-        ]
+        ],
+        "api": [
+            "src/tests/api"
+        ],
+        "healthcheck": [
+            "src/tests/api/healthcheck"
+        ],
+        "e2e": [
+            "src/tests/e2e"
+        ],
     }
     
     # Determine which tests to run
     if test_type == "all":
         test_targets = test_files["unit"] + test_files["openai"] + test_files["integration"]
-    elif test_type == "unit":
-        test_targets = test_files["unit"]
-    elif test_type == "openai":
-        test_targets = test_files["openai"]
-    elif test_type == "integration":
-        test_targets = test_files["integration"]
+    elif test_type in test_files:
+        test_targets = test_files[test_type]
     else:
         print(f"Unknown test type: {test_type}")
         return False
@@ -114,7 +119,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run Omnix test suite")
     parser.add_argument(
         "--type", 
-        choices=["all", "unit", "openai", "integration"],
+        choices=["all", "unit", "openai", "integration", "api", "healthcheck", "e2e"],
         default="all",
         help="Type of tests to run (default: all)"
     )

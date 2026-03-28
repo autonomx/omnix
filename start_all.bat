@@ -10,7 +10,7 @@ echo   3. Chatbot Web Server (port 5000) - Main application
 echo.
 
 set SERVER_MODE=fastapi
-echo Starting in %SERVER_MODE% mode...
+echo Starting in %SERVER_MODE% mode (WebSocket TTS enabled)...
 echo.
 
 cd /d "%~dp0"

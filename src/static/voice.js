@@ -164,7 +164,8 @@ async function ensureWebSocketConnection() {
     sttWsConnecting = true;
     
     return new Promise((resolve, reject) => {
-        const wsUrl = `ws://localhost:8000/ws/transcribe`;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.hostname}:8000/ws/transcribe`;
         streamingSttWs = new WebSocket(wsUrl);
         
         const timeout = setTimeout(() => {

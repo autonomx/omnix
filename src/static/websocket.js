@@ -3,12 +3,18 @@
  * Streaming STT, TTS, and Voice Pipeline WebSocket connections
  */
 
+if (window.__WEBSOCKET_MODULE_LOADED__) {
+    console.warn('[WEBSOCKET] Already loaded, skipping duplicate injection');
+} else {
+window.__WEBSOCKET_MODULE_LOADED__ = true;
+
 // Streaming STT WebSocket
 let sttWs = null;
 let sttWsConnected = false;
 let sttStreamingAudioChunks = [];
 
-const STT_WS_URL = "ws://localhost:8000/ws/transcribe";
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const STT_WS_URL = `${WS_PROTOCOL}//${window.location.hostname}:8000/ws/transcribe`;
 
 // Unified Voice WebSocket (STT + LLM + TTS)
 let voiceWs = null;
@@ -22,7 +28,7 @@ let ttsWs = null;
 let ttsWsConnected = false;
 let ttsAudioBuffer = [];
 
-const TTS_WS_URL = "ws://localhost:8020/ws/tts";
+const TTS_WS_URL = `${WS_PROTOCOL}//${window.location.hostname}:${window.location.port || '5000'}/ws/tts`;
 
 // Voice pipeline state
 let voiceResponseText = '';
@@ -175,6 +181,7 @@ function connectStreamingTTS() {
         
         try {
             ttsWs = new WebSocket(TTS_WS_URL);
+            ttsWs.binaryType = 'arraybuffer';
             
             ttsWs.onopen = () => {
                 console.log('Streaming TTS WebSocket connected');
@@ -184,31 +191,42 @@ function connectStreamingTTS() {
             
             ttsWs.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    
-                    if (data.type === 'audio') {
-                        // Add audio chunk to buffer
-                        ttsAudioBuffer.push(data.data);
+                    if (event.data instanceof ArrayBuffer) {
+                        // Binary frame: int16 PCM audio
+                        const int16 = new Int16Array(event.data);
+                        const float32 = new Float32Array(int16.length);
+                        for (let i = 0; i < int16.length; i++) {
+                            float32[i] = int16[i] / 32768.0;
+                        }
+                        // Encode as base64 for playStreamingAudioChunk
+                        const bytes = new Uint8Array(event.data);
+                        let binary = '';
+                        for (let i = 0; i < bytes.length; i++) {
+                            binary += String.fromCharCode(bytes[i]);
+                        }
+                        const audioBase64 = btoa(binary);
+                        playStreamingAudioChunk(audioBase64, 24000);
+                    } else {
+                        const data = JSON.parse(event.data);
                         
-                        // Play audio chunk immediately (streaming playback)
-                        playStreamingAudioChunk(data.data, data.sample_rate);
-                    } else if (data.type === 'done') {
-                        console.log('TTS streaming done');
-                        if (conversationMode) {
-                            if (alwaysListening) {
-                                showCircleIndicator('listening');
-                                updateConversationStatus('🎤 Auto-listening - Speak now!', 'listening');
-                            } else {
+                        if (data.type === 'done') {
+                            console.log('TTS streaming done');
+                            if (conversationMode) {
+                                if (alwaysListening) {
+                                    showCircleIndicator('listening');
+                                    updateConversationStatus('🎤 Auto-listening - Speak now!', 'listening');
+                                } else {
+                                    showCircleIndicator('idle');
+                                    updateConversationStatus('Ready to chat');
+                                }
+                            }
+                            ttsAudioBuffer = [];
+                        } else if (data.type === 'error') {
+                            console.error('TTS streaming error:', data.error);
+                            if (conversationMode) {
                                 showCircleIndicator('idle');
                                 updateConversationStatus('Ready to chat');
                             }
-                        }
-                        ttsAudioBuffer = [];
-                    } else if (data.type === 'error') {
-                        console.error('TTS streaming error:', data.data);
-                        if (conversationMode) {
-                            showCircleIndicator('idle');
-                            updateConversationStatus('Ready to chat');
                         }
                     }
                 } catch (e) {
@@ -782,3 +800,8 @@ function closeVoiceWebSocket() {
         voiceWsConnected = false;
     }
 }
+
+// Expose functions needed by other modules
+window.speakTextStreaming = speakTextStreaming;
+
+} // end __WEBSOCKET_MODULE_LOADED__ guard

@@ -1293,7 +1293,10 @@ async def clear_session(request: Request):
 
 
 # ============== PODCAST ENDPOINTS ==============
+import io as _io
 import os as _os
+import re as _re_podcast
+import struct as _struct
 import time as _time
 from pathlib import Path
 
@@ -1351,6 +1354,21 @@ async def get_podcast_episode(ep_id: str):
     return {"success": True, "episode": ep}
 
 
+@app.put("/api/podcast/episodes/{ep_id}")
+async def update_podcast_episode(ep_id: str, request: Request):
+    """Update a podcast episode"""
+    eps = _load_json(EP_FILE, {})
+    if ep_id not in eps:
+        return JSONResponse({"success": False, "error": "Not found"}, status_code=404)
+    data = await request.json()
+    if data:
+        allowed = {'title', 'topic', 'transcript', 'speakers', 'duration', 'format', 'length', 'status', 'points', 'outline'}
+        filtered = {k: v for k, v in data.items() if k in allowed}
+        eps[ep_id].update(filtered)
+        _save_json(EP_FILE, eps)
+    return {"success": True, "episode": eps[ep_id]}
+
+
 @app.delete("/api/podcast/episodes/{ep_id}")
 async def delete_podcast_episode(ep_id: str):
     """Delete a podcast episode"""
@@ -1363,6 +1381,137 @@ async def delete_podcast_episode(ep_id: str):
     if audio_path.exists():
         audio_path.unlink()
     return {"success": True}
+
+
+@app.get("/api/podcast/episodes/{ep_id}/audio")
+async def get_podcast_episode_audio(ep_id: str):
+    """Stream podcast episode audio"""
+    audio_path = Path(shared.DATA_DIR) / 'podcasts' / f"{ep_id}.wav"
+    if not audio_path.exists():
+        return JSONResponse({"error": "No audio"}, status_code=404)
+    return FileResponse(str(audio_path), media_type='audio/wav')
+
+
+@app.post("/api/podcast/generate-outline")
+async def generate_podcast_outline(request: Request):
+    """Generate a podcast outline for a topic"""
+    data = await request.json()
+    prompt = (
+        f"Create a podcast outline JSON for Topic: {data.get('topic')}. "
+        f"Format: {{\"outline\": \"...\", \"sections\": [{{\"title\": \"...\", \"description\": \"...\"}}]}}"
+    )
+    try:
+        res = await asyncio.to_thread(_llm_generate_audiobook, prompt)
+        match = _re_podcast.search(r'\{[\s\S]*\}', res)
+        parsed = json.loads(match.group() if match else res)
+        return {"success": True, **parsed}
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/api/podcast/generate")
+async def generate_podcast_episode(request: Request):
+    """Generate a podcast episode with SSE streaming"""
+    from fastapi.responses import StreamingResponse
+
+    data = await request.json()
+    ep_id = data.get('id', f"ep_{int(_time.time())}")
+
+    async def gen():
+        try:
+            yield f"data: {json.dumps({'type': 'phase', 'phase': 'script', 'percent': 5, 'message': 'Generating script...'})}\n\n"
+            speaker_names = [s.get('name', f'Speaker {i+1}') for i, s in enumerate(data.get('speakers', []))]
+            if not speaker_names:
+                speaker_names = ['Host', 'Guest']
+            speakers_str = ', '.join(speaker_names)
+
+            # Map requested length to approximate duration and dialogue guidance
+            length = data.get('length', 'medium')
+            length_map = {
+                'short': ('5 minutes', '20-30 exchanges'),
+                'medium': ('15 minutes', '60-80 exchanges'),
+                'long': ('30 minutes', '120-160 exchanges'),
+                'extended': ('60 minutes', '240-320 exchanges'),
+            }
+            duration_str, exchanges_str = length_map.get(length, ('15 minutes', '60-80 exchanges'))
+
+            script = await asyncio.to_thread(
+                _llm_generate_audiobook,
+                f"Write a podcast dialogue script for: {data.get('topic')}. "
+                f"Use exactly these speaker names: {speakers_str}. "
+                f"The podcast should be approximately {duration_str} long with {exchanges_str} between the speakers. "
+                f"Write enough dialogue to fill the full {duration_str} duration. "
+                f"Format lines exactly as 'SpeakerName: Text'"
+            )
+
+            segments = []
+            for line in script.split('\n'):
+                if ':' in line:
+                    sp, txt = line.split(':', 1)
+                    segments.append({"speaker": sp.strip(), "text": txt.strip()})
+
+            # Build speaker-to-voice mapping by name (case-insensitive)
+            input_speakers = data.get('speakers', [])
+            voice_by_name = {s.get('name', '').lower(): s.get('voice_id') for s in input_speakers}
+
+            total_segments = len(segments)
+            yield f"data: {json.dumps({'type': 'phase', 'phase': 'audio', 'percent': 10, 'message': f'Generating audio for {total_segments} segments...'})}\n\n"
+
+            transcript, audios = [], []
+            for i, seg in enumerate(segments):
+                # Match by name first, fall back to round-robin by index
+                vid = voice_by_name.get(seg['speaker'].lower())
+                if vid is None and input_speakers:
+                    vid = input_speakers[i % len(input_speakers)].get('voice_id')
+                v_clone = shared.custom_voices.get(
+                    vid.replace(" (Custom)", "") if vid else "", {}
+                ).get('voice_clone_id', vid)
+
+                try:
+                    tts_provider = shared.get_tts_provider()
+                    if tts_provider:
+                        result = await asyncio.to_thread(
+                            tts_provider.generate_audio,
+                            text=shared.remove_emojis(seg['text']),
+                            speaker=v_clone,
+                            language="en"
+                        )
+                        if result.get('success'):
+                            adata, sr = result.get('audio'), result.get('sample_rate')
+                            pct = round(10 + (i + 1) / total_segments * 85) if total_segments else 95
+                            yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i, 'total_segments': total_segments, 'percent': pct, 'speaker': seg['speaker'], 'text': seg['text']})}\n\n"
+                            transcript.append({"speaker": seg['speaker'], "text": seg['text']})
+                            audios.append(base64.b64decode(adata))
+                except Exception:
+                    pass
+
+            duration = 0
+            if audios:
+                podcasts_dir = Path(shared.DATA_DIR) / 'podcasts'
+                podcasts_dir.mkdir(exist_ok=True)
+                wav_io = _io.BytesIO()
+                total = sum(len(a) for a in audios)
+                wav_io.write(b'RIFF')
+                wav_io.write(_struct.pack('<I', 36 + total))
+                wav_io.write(b'WAVEfmt ')
+                wav_io.write(_struct.pack('<IHHIIHH', 16, 1, 1, shared.TTS_SAMPLE_RATE, shared.TTS_SAMPLE_RATE * 2, 2, 16))
+                wav_io.write(b'data')
+                wav_io.write(_struct.pack('<I', total))
+                for a in audios:
+                    wav_io.write(a)
+                with open(podcasts_dir / f"{ep_id}.wav", 'wb') as f:
+                    f.write(wav_io.getvalue())
+                duration = total / 2 / shared.TTS_SAMPLE_RATE
+
+            eps = _load_json(EP_FILE, {})
+            eps[ep_id] = {**data, "transcript": transcript, "status": "complete", "duration": duration, "created_at": datetime.now().isoformat()}
+            _save_json(EP_FILE, eps)
+            yield f"data: {json.dumps({'type': 'done', 'duration': duration})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 # ============== AUDIOBOOK ENDPOINTS ==============
@@ -2713,6 +2862,240 @@ async def tts_stream_cancel():
     return {"success": True, "message": "TTS stream cancellation requested"}
 
 
+# ============== STANDALONE TTS WEBSOCKET ==============
+#
+# /ws/tts — a dedicated WebSocket endpoint that accepts individual text
+# chunks and streams back int16 PCM audio at 24 kHz.  This gives the
+# VoiceEngine real-time streaming with sub-second first-chunk latency
+# instead of the 2-4 s round-trip of the batch HTTP /api/tts endpoint.
+#
+# Protocol:
+#   Client → Server  (JSON):
+#     {"text": "Hello", "voice": "default"}   — synthesise text
+#     {"type": "cancel"}                       — abort current generation
+#
+#   Server → Client:
+#     {"type": "start"}                        — first audio about to arrive
+#     binary frame  (int16 PCM @ 24 kHz)       — audio data
+#     {"type": "done"}                         — generation complete
+#     {"type": "error", "error": "..."}        — on failure
+#     {"type": "ready"}                        — sent once after connection
+
+# Semaphore limits concurrent /ws/tts generations (protects GPU)
+_ws_tts_semaphore = threading.Semaphore(2)
+
+
+def _generate_ws_tts(text: str, speaker: str, ws: WebSocket,
+                     loop: asyncio.AbstractEventLoop, abort_flag: list):
+    """Synchronous TTS generator — runs in a worker thread.
+
+    Streams int16 PCM frames to the WebSocket via ``run_coroutine_threadsafe``.
+    """
+    if not tts_provider or not hasattr(tts_provider, 'generate_audio_stream'):
+        err = "TTS streaming not supported by current provider" if tts_provider else "No TTS provider loaded"
+        asyncio.run_coroutine_threadsafe(
+            ws.send_json({"type": "error", "error": err}),
+            loop,
+        ).result()
+        return
+
+    first_sent = False
+    frames_sent = 0
+    buffer = np.array([], dtype=np.float32)
+    buffer_chunks: list = []
+    prev_audio = None
+    start_time = time.time()
+
+    try:
+        for audio_chunk, sr, timing in tts_provider.generate_audio_stream(
+            text=text,
+            speaker=speaker,
+            language="English",
+            chunk_size=TTS_CHUNK_SIZE,
+            non_streaming_mode=False,
+            temperature=0.6,
+            top_k=20,
+            top_p=0.85,
+            repetition_penalty=1.0,
+            append_silence=False,
+            max_new_tokens=180,
+        ):
+            if abort_flag[0]:
+                break
+
+            if audio_chunk is None or len(audio_chunk) == 0:
+                continue
+
+            audio = np.asarray(audio_chunk, dtype=np.float32)
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+
+            # DC offset correction
+            if len(audio) > 128:
+                mean = np.mean(audio)
+                if abs(mean) > 1e-4:
+                    audio = audio - mean
+
+            # Fade-in/out on the very first chunk
+            if prev_audio is None:
+                audio = apply_fade(audio, fade_samples=128)
+
+            # Cross-fade stitching with previous tail
+            if prev_audio is not None:
+                offset = find_best_offset(prev_audio, audio)
+                if offset > 0:
+                    audio = audio[offset:]
+                overlap = min(len(prev_audio), len(audio), XFADE_SAMPLES)
+                if overlap > 0:
+                    t = np.linspace(0.0, 1.0, overlap, dtype=np.float32)
+                    fade_in = 0.5 * (1.0 - np.cos(np.pi * t))
+                    fade_out = 1.0 - fade_in
+                    audio[:overlap] = (
+                        prev_audio[-overlap:] * fade_out + audio[:overlap] * fade_in
+                    )
+
+            # Soft-limit after crossfade
+            audio = soft_clip(audio * TTS_GAIN)
+
+            # Hold back tail for next crossfade
+            if len(audio) > XFADE_SAMPLES:
+                prev_audio = audio[-XFADE_SAMPLES:].copy()
+                audio = audio[:-XFADE_SAMPLES]
+            else:
+                prev_audio = audio.copy()
+                audio = np.array([], dtype=np.float32)
+
+            if len(audio) > 0:
+                buffer_chunks.append(audio)
+
+            # Flatten accumulated chunks
+            if buffer_chunks:
+                if len(buffer) > 0:
+                    buffer_chunks.insert(0, buffer)
+                buffer = np.concatenate(buffer_chunks)
+                buffer_chunks.clear()
+
+            # Send fixed-size frames for smooth playback
+            while len(buffer) >= FRAME_SIZE:
+                frame = buffer[:FRAME_SIZE]
+                buffer = buffer[FRAME_SIZE:]
+
+                if not first_sent:
+                    elapsed = (time.time() - start_time) * 1000
+                    asyncio.run_coroutine_threadsafe(
+                        ws.send_json({"type": "start"}), loop
+                    ).result()
+                    first_sent = True
+                    print(f"[WS-TTS] First chunk in {elapsed:.0f}ms for '{text[:25]}...'")
+
+                # Convert float32 → int16 PCM and send as binary
+                pcm = (np.clip(frame, -1.0, 1.0) * 32767).astype(np.int16)
+                asyncio.run_coroutine_threadsafe(
+                    ws.send_bytes(pcm.tobytes()), loop
+                ).result()
+                frames_sent += 1
+
+        # Flush crossfade tail + remaining buffer
+        if prev_audio is not None and len(prev_audio) > 0:
+            buffer_chunks.append(prev_audio)
+        if buffer_chunks:
+            if len(buffer) > 0:
+                buffer_chunks.insert(0, buffer)
+            buffer = np.concatenate(buffer_chunks)
+            buffer_chunks.clear()
+
+        if len(buffer) > 0:
+            fade_len = min(len(buffer), 256)
+            fade = np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
+            buffer[-fade_len:] *= fade
+            if len(buffer) < FRAME_SIZE:
+                buffer = np.pad(buffer, (0, FRAME_SIZE - len(buffer)))
+            pcm = (np.clip(buffer, -1.0, 1.0) * 32767).astype(np.int16)
+            asyncio.run_coroutine_threadsafe(
+                ws.send_bytes(pcm.tobytes()), loop
+            ).result()
+            frames_sent += 1
+
+    except Exception as e:
+        print(f"[WS-TTS] Generation error: {e}")
+        try:
+            asyncio.run_coroutine_threadsafe(
+                ws.send_json({"type": "error", "error": str(e)}), loop
+            ).result()
+        except Exception:
+            pass
+    finally:
+        elapsed_total = (time.time() - start_time) * 1000
+        print(f"[WS-TTS] Done '{text[:25]}...': frames={frames_sent}, time={elapsed_total:.0f}ms")
+        try:
+            asyncio.run_coroutine_threadsafe(
+                ws.send_json({"type": "done"}), loop
+            ).result()
+        except Exception:
+            pass
+
+
+@app.websocket("/ws/tts")
+async def websocket_tts(websocket: WebSocket):
+    """Standalone TTS WebSocket — send text, receive streaming PCM audio."""
+    await websocket.accept()
+    loop = asyncio.get_event_loop()
+    abort_flag = [False]
+
+    try:
+        await websocket.send_json({"type": "ready"})
+
+        while True:
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
+            except asyncio.TimeoutError:
+                continue
+
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json({"type": "error", "error": "Invalid JSON"})
+                continue
+
+            # Cancel in-flight generation
+            if msg.get("type") == "cancel":
+                abort_flag[0] = True
+                continue
+
+            text = msg.get("text", "").strip()
+            voice = msg.get("voice", "default")
+            if not text:
+                await websocket.send_json({"type": "done"})
+                continue
+
+            # Reset abort flag for the new request
+            abort_flag[0] = False
+
+            # Run TTS generation in a thread so we don't block the event loop
+            acquired = _ws_tts_semaphore.acquire(timeout=5)
+            if not acquired:
+                await websocket.send_json({"type": "error", "error": "TTS busy"})
+                continue
+
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    executor,
+                    _generate_ws_tts,
+                    text, voice, websocket, loop, abort_flag,
+                )
+            finally:
+                _ws_tts_semaphore.release()
+
+    except WebSocketDisconnect:
+        print("[WS-TTS] Client disconnected")
+    except Exception as e:
+        print(f"[WS-TTS] Error: {e}")
+        try:
+            await websocket.send_json({"type": "error", "error": str(e)})
+        except Exception:
+            pass
+
+
 # ============== AUDIOBOOK WEBSOCKET ==============
 
 # Semaphore allows up to 2 concurrent TTS generations (instead of a single Lock)
@@ -3033,6 +3416,7 @@ if __name__ == "__main__":
     print("Omnix FastAPI Server - Ultra Low Latency")
     print("=" * 50)
     print(f"WebSocket: ws://{HOST}:{PORT}/ws/conversation")
+    print(f"WebSocket: ws://{HOST}:{PORT}/ws/tts")
     print(f"WebSocket: ws://{HOST}:{PORT}/ws/audiobook")
     print("=" * 50 + "\n")
     

@@ -37,9 +37,6 @@
     "non_streaming_mode": true,
     "append_silence": true
   },
-  "chatterbox": {
-    "base_url": "http://localhost:8020"
-  },
   "parakeet": {
     "base_url": "http://localhost:8000"
   }
