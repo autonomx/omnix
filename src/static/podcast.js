@@ -372,7 +372,7 @@ function handlePodcastEvent(data) {
             // Update progress using server-provided percent
             const percent = typeof data.percent === 'number' ? Math.round(data.percent) : 0;
             const segInfo = data.total_segments ? ` (${data.segment_index + 1}/${data.total_segments})` : '';
-            updatePodcastProgress(percent, `Generating audio${segInfo}... ${percent}%`);
+            updatePodcastProgress(percent, `Generating audio${segInfo}...`);
             
             // Start streaming playback if first chunk - like audiobook!
             if (podcastState.audioQueue.length === 1 && !streamingPlaybackActive) {
