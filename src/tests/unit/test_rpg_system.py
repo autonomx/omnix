@@ -583,6 +583,11 @@ class TestAgentJsonParsing:
         from app.rpg.agents import _parse_json_response
         assert _parse_json_response("not json at all") is None
 
+    def test_parse_empty_code_block(self):
+        from app.rpg.agents import _parse_json_response
+        assert _parse_json_response("```json\n```") is None
+        assert _parse_json_response("```\n```") is None
+
 
 # ---------------------------------------------------------------------------
 # Pipeline Helper Tests

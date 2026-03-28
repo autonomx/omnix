@@ -20,11 +20,13 @@ def _check_forbidden_items(text: str, forbidden: List[str]) -> Optional[str]:
     text_lower = text.lower()
     for item in forbidden:
         item_lower = item.lower()
-        # Check exact match and common singular/plural variations
+        # Check the item as-is and common singular/plural variations
         forms = {item_lower}
-        if item_lower.endswith("s"):
-            forms.add(item_lower[:-1])  # "guns" -> "gun"
-        else:
+        if item_lower.endswith("es") and len(item_lower) > 3:
+            forms.add(item_lower[:-2])  # "explosives" -> "explosiv" (approximate)
+        if item_lower.endswith("s") and not item_lower.endswith("ss"):
+            forms.add(item_lower[:-1])  # "guns" -> "gun", but not "glass" -> "glas"
+        if not item_lower.endswith("s"):
             forms.add(item_lower + "s")  # "gun" -> "guns"
         for form in forms:
             if form in text_lower:

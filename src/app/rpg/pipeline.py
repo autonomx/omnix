@@ -307,13 +307,6 @@ def _apply_state_updates(session: GameSession, intent: PlayerIntent,
         if target_loc:
             session.player.location = target_loc.name
             changes["player_location"] = target_loc.name
-        else:
-            # Try case-insensitive match
-            for loc in session.world.locations:
-                if loc.name.lower() == intent.target.lower():
-                    session.player.location = loc.name
-                    changes["player_location"] = loc.name
-                    break
 
     return changes
 

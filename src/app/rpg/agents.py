@@ -59,8 +59,9 @@ def _parse_json_response(text: str) -> Optional[Dict[str, Any]]:
         # Remove first and last lines (``` markers)
         if len(lines) >= 3:
             cleaned = "\n".join(lines[1:-1]).strip()
-        elif len(lines) == 2:
-            cleaned = lines[1].strip()
+        else:
+            # Only backtick markers with no content between them
+            return None
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
