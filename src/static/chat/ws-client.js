@@ -4,6 +4,11 @@
  * Replaces HTTP streaming with binary WebSocket for sub-500ms latency
  */
 
+if (window.__WS_CLIENT_LOADED__) {
+    console.warn('[WS-CLIENT] Already loaded, skipping duplicate injection');
+} else {
+window.__WS_CLIENT_LOADED__ = true;
+
 console.log('[WS-CLIENT] Starting to load...');
 
 // ============== CONFIG ==============
@@ -828,3 +833,5 @@ window.cancelLLMStream = cancelLLMStream;
 window.stopAudio = stopAudio;
 
 console.log('[WS-CLIENT] Loaded and ready');
+
+} // end __WS_CLIENT_LOADED__ guard
