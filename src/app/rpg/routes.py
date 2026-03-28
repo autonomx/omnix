@@ -114,6 +114,10 @@ def execute_rpg_turn(session_id):
         response["choices"] = result.choices
     if result.error:
         response["error"] = result.error
+    if result.dice_roll:
+        response["dice_roll"] = result.dice_roll
+    if result.fail_state:
+        response["fail_state"] = result.fail_state
 
     return jsonify(response)
 

@@ -3,6 +3,7 @@ Multi-agent system for the AI Role-Playing System.
 
 Implements logical agents using the same LLM with different prompt templates.
 Each agent has a specific responsibility and is invoked independently.
+Agents now support persistent identity profiles for consistent tone/style.
 """
 
 import json
@@ -77,6 +78,25 @@ def _parse_json_response(text: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _inject_agent_identity(base_prompt: str, agent_name: str,
+                           agent_profiles: Optional[Dict] = None) -> str:
+    """Inject agent identity/tone into a system prompt if a profile exists."""
+    if not agent_profiles:
+        return base_prompt
+    from app.rpg.models import AgentProfile
+    profile_data = agent_profiles.get(agent_name)
+    if not profile_data:
+        return base_prompt
+    if isinstance(profile_data, dict):
+        profile = AgentProfile.from_dict(profile_data)
+    else:
+        profile = profile_data
+    prefix = profile.to_prompt_prefix()
+    if prefix:
+        return base_prompt + "\n\n" + prefix
+    return base_prompt
+
+
 # ---------------------------------------------------------------------------
 # Agent: World Builder
 # ---------------------------------------------------------------------------
@@ -95,7 +115,8 @@ You must output ONLY valid JSON with this exact structure:
     "magic_system": "string describing magic availability",
     "allowed_items": ["list", "of", "allowed", "item", "types"],
     "forbidden_items": ["list", "of", "forbidden", "items"],
-    "custom_rules": ["list of special world rules"]
+    "custom_rules": ["list of special world rules"],
+    "existing_creatures": ["list of creatures/races that exist in this world"]
   },
   "locations": [
     {
@@ -103,7 +124,9 @@ You must output ONLY valid JSON with this exact structure:
       "description": "Brief description",
       "connected_to": ["Other Location"],
       "npcs_present": [],
-      "items_available": ["item1"]
+      "items_available": ["item1"],
+      "market_modifier": 1.0,
+      "shop_open_hours": [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
     }
   ],
   "factions": [
@@ -126,16 +149,26 @@ You must output ONLY valid JSON with this exact structure:
       "location": "Location Name",
       "secret": "A hidden secret",
       "fear": "What they fear",
-      "hidden_goal": "Their true hidden goal"
+      "hidden_goal": "Their true hidden goal",
+      "schedule": {"morning": "working at shop", "afternoon": "patrolling", "evening": "tavern", "night": "sleeping"}
     }
   ],
+  "items_catalog": [
+    {"name": "item name", "base_price": 10, "rarity": "common/uncommon/rare/legendary", "description": "brief desc"}
+  ],
+  "agent_profiles": {
+    "world_builder": {"name": "WorldBuilder", "tone": "describe the narrative tone for this world", "style_notes": ["consistency note 1"]},
+    "story_teller": {"name": "StoryTeller", "tone": "describe the narration style", "style_notes": ["style note 1"]},
+    "event_engine": {"name": "EventEngine", "tone": "describe outcome style", "style_notes": []}
+  },
   "starting_location": "Name of starting location",
   "opening_narration": "A 2-3 sentence opening narration for the player"
 }
 
-Generate 3-5 locations, 2-3 factions, and 4-6 NPCs. Make the world feel alive with
-interconnected locations, rival factions, and NPCs with conflicting goals. Use the seed
-number to create variation - different seeds should produce distinctly different worlds."""
+Generate 3-5 locations, 2-3 factions, 4-6 NPCs, and 5-10 items in the catalog.
+Make the world feel alive with interconnected locations, rival factions, and NPCs with
+conflicting goals and daily schedules. Use the seed number to create variation.
+Include agent_profiles that define the narrative tone matching the world's genre."""
 
 
 def build_world(seed: int, genre: str = "medieval fantasy") -> Optional[Dict[str, Any]]:
@@ -209,7 +242,8 @@ You must output ONLY valid JSON with this exact structure:
       "inventory_add": [],
       "inventory_remove": [],
       "location_change": "",
-      "mood": "current mood description"
+      "mood": "current mood description",
+      "current_action": "what the NPC is now doing"
     }
   ],
   "player_updates": {
@@ -219,12 +253,15 @@ You must output ONLY valid JSON with this exact structure:
     "wealth_change": 0,
     "reputation_local_change": 0,
     "reputation_global_change": 0,
-    "location_change": ""
+    "location_change": "",
+    "new_known_facts": []
   }
 }
 
 Consider NPC personalities, goals, and existing relationships when determining reactions.
-NPCs should act autonomously based on their traits - they never blindly agree with the player."""
+NPCs should act autonomously based on their traits - they never blindly agree with the player.
+NPCs with low trust (relationship < -20) will refuse favors and be hostile.
+NPCs follow their schedules and current goals."""
 
 
 def manage_characters(event_description: str, context: str) -> Optional[Dict[str, Any]]:
@@ -241,7 +278,7 @@ Determine how each affected character reacts and what state changes occur."""
 
 
 # ---------------------------------------------------------------------------
-# Agent: Event Engine
+# Agent: Event Engine (with dice rolls)
 # ---------------------------------------------------------------------------
 
 EVENT_ENGINE_SYSTEM = """You are the Event Engine agent in a role-playing game system.
@@ -251,7 +288,7 @@ You must:
 - Respect character personalities
 - Generate realistic outcomes
 - Do not allow exploits or unrealistic outcomes
-- Consider player stats when determining success/failure
+- Use the provided dice roll result to determine success/failure
 
 You must output ONLY valid JSON with this exact structure:
 {
@@ -261,38 +298,36 @@ You must output ONLY valid JSON with this exact structure:
     {"name": "NPC Name", "reaction": "What they do/say"}
   ],
   "world_impact": "Description of any world changes",
-  "stat_check": {
-    "stat_used": "strength/charisma/intelligence",
-    "difficulty": 5,
-    "player_value": 0,
-    "passed": true
-  }
+  "importance": 0.5,
+  "tags": ["relevant", "tags"]
 }
 
-Not all actions should succeed. Use stat checks for uncertain outcomes:
-- Easy tasks: difficulty 3
-- Medium tasks: difficulty 6
-- Hard tasks: difficulty 8
-- Near impossible: difficulty 10
+The "importance" field rates the event significance (0.0 = trivial like buying bread, 1.0 = major like killing a king).
+The "tags" field lists relevant keywords for memory retrieval.
 
-The player succeeds if their relevant stat >= difficulty."""
+The dice roll result has already been determined by the system. Use the provided
+skill_check result to inform whether the action succeeds or fails.
+A critical success (natural 20) should have an exceptionally good outcome.
+A critical failure (natural 1) should have a comically bad or dangerous outcome."""
 
 
-def generate_event(intent: Dict[str, Any], context: str) -> Optional[Dict[str, Any]]:
+def generate_event(intent: Dict[str, Any], context: str,
+                   agent_profiles: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
     """Generate an event outcome based on player intent."""
+    system = _inject_agent_identity(EVENT_ENGINE_SYSTEM, "event_engine", agent_profiles)
     prompt = f"""Current game context:
 {context}
 
 Player intent:
 {json.dumps(intent, indent=2)}
 
-Generate the event outcome. Be fair but realistic. Consider the player's stats."""
-    result = _call_llm(EVENT_ENGINE_SYSTEM, prompt)
+Generate the event outcome. Use the dice roll result provided in the intent to determine success."""
+    result = _call_llm(system, prompt)
     return _parse_json_response(result)
 
 
 # ---------------------------------------------------------------------------
-# Agent: Memory Manager
+# Agent: Memory Manager (with importance scoring)
 # ---------------------------------------------------------------------------
 
 MEMORY_MANAGER_SYSTEM = """You are the Memory Manager agent in a role-playing game system.
@@ -303,8 +338,15 @@ You must output ONLY valid JSON with this exact structure:
 {
   "event_summary": "One sentence summary of what happened this turn",
   "important_facts": ["fact1", "fact2"],
-  "mid_term_update": "Updated mid-term summary incorporating new events (2-4 sentences)"
+  "mid_term_update": "Updated mid-term summary incorporating new events (2-4 sentences)",
+  "importance": 0.5
 }
+
+The "importance" field rates the event significance:
+- 0.0-0.2: Trivial (buying bread, looking around)
+- 0.3-0.5: Normal (conversations, minor trades)
+- 0.6-0.8: Significant (quest progress, relationship changes, combat)
+- 0.9-1.0: Critical (death, betrayal, major quest completion, world-changing events)
 
 Focus on information that will be relevant for future turns:
 - Relationship changes
@@ -326,7 +368,7 @@ Recent events:
 New event this turn:
 {event_description}
 
-Generate updated memory summaries."""
+Generate updated memory summaries. Rate the importance of this event."""
     result = _call_llm(MEMORY_MANAGER_SYSTEM, prompt)
     return _parse_json_response(result)
 
@@ -344,11 +386,15 @@ For PRE-VALIDATION, check if the player's intended action is valid:
 - Is it physically possible given the player's location?
 - Does it involve forbidden items?
 - Is it economically realistic?
+- Does the player have the required trust/relationship with NPCs?
+- Does the player's stats support the action (e.g., jumping a canyon needs high strength)?
+- Is the player using knowledge they haven't actually discovered in-game?
 
 For POST-VALIDATION, check if the event outcome is consistent:
 - Does it match the world's lore?
 - Does it respect NPC personalities?
 - Is the economy maintained realistically?
+- Are creatures/entities consistent with world lore?
 
 You must output ONLY valid JSON with this exact structure:
 {
@@ -371,7 +417,8 @@ World context:
 Player intent:
 {json.dumps(intent, indent=2)}
 
-Is this action valid in the current world? Check rules, location, items, and realism."""
+Is this action valid in the current world? Check rules, location, items, realism,
+NPC trust levels, and whether the player is using meta-knowledge."""
     result = _call_llm(RULE_ENFORCER_SYSTEM, prompt)
     return _parse_json_response(result)
 
@@ -405,6 +452,8 @@ FORMAT RULES (MANDATORY):
 - "CharacterName:" for dialogue
 - Add atmospheric details
 - End with player choices when appropriate
+- Incorporate time-of-day atmosphere (dark nights, bright mornings, etc.)
+- If a dice roll occurred, weave the dramatic tension of success/failure into the narration
 
 Example output:
 Narrator: The tavern falls silent as you step through the doorway.
@@ -422,8 +471,10 @@ You must output the narration directly as text (NOT JSON). Write immersive, enga
 that brings the world to life. Keep it concise but atmospheric."""
 
 
-def narrate(event_outcome: Dict[str, Any], context: str) -> Optional[str]:
+def narrate(event_outcome: Dict[str, Any], context: str,
+            agent_profiles: Optional[Dict] = None) -> Optional[str]:
     """Generate narration for an event outcome."""
+    system = _inject_agent_identity(STORY_TELLER_SYSTEM, "story_teller", agent_profiles)
     prompt = f"""Current scene context:
 {context}
 
@@ -432,4 +483,96 @@ Event that occurred:
 
 Write the narration in Speaker: text format. Include NPC dialogue where relevant.
 End with 2-3 player choices if appropriate."""
-    return _call_llm(STORY_TELLER_SYSTEM, prompt)
+    return _call_llm(system, prompt)
+
+
+# ---------------------------------------------------------------------------
+# Agent: Narrative Director
+# ---------------------------------------------------------------------------
+
+NARRATIVE_DIRECTOR_SYSTEM = """You are the Narrative Director agent in a role-playing game system.
+
+Your job is to control story pacing and maintain narrative arcs across a 3-act structure:
+- Act 1 (Setup, turns 1-10): Introduce world, characters, initial conflicts
+- Act 2 (Conflict, turns 11-25): Escalate tension, introduce complications, betrayals
+- Act 3 (Resolution, turns 26+): Climax, resolution, consequences
+
+You must output ONLY valid JSON with this exact structure:
+{
+  "narrative_act": 1,
+  "tension_level": 0.3,
+  "suggested_event": "optional event to inject for pacing",
+  "pacing_note": "guidance for the story teller about current pacing"
+}
+
+tension_level: 0.0 (calm) to 1.0 (crisis). Should generally increase through Act 2
+and peak in Act 3.
+
+suggested_event: Leave empty string if no event needed. Otherwise suggest a world
+event (NPC betrayal, natural disaster, faction conflict, etc.) to keep the story engaging.
+
+Consider:
+- Don't let the story stagnate — inject events if player is idle
+- Build toward climactic moments
+- Allow quiet moments between action for character development
+- Track which NPCs have been underutilized and involve them"""
+
+
+def direct_narrative(session_summary: str, turn_count: int,
+                     current_act: int, current_tension: float) -> Optional[Dict[str, Any]]:
+    """Get narrative direction for the current turn."""
+    prompt = f"""Current story state:
+Turn: {turn_count}
+Current Act: {current_act}
+Tension Level: {current_tension:.1f}
+
+Story Summary:
+{session_summary}
+
+What should the narrative direction be for the next events?
+Should any world events be injected to maintain pacing?"""
+    result = _call_llm(NARRATIVE_DIRECTOR_SYSTEM, prompt)
+    return _parse_json_response(result)
+
+
+# ---------------------------------------------------------------------------
+# Agent: NPC Autonomy Simulator
+# ---------------------------------------------------------------------------
+
+NPC_AUTONOMY_SYSTEM = """You are the NPC Autonomy agent in a role-playing game system.
+
+Your job is to simulate what NPCs do independently between player turns.
+NPCs are autonomous beings with their own goals, schedules, and motivations.
+
+You must output ONLY valid JSON with this exact structure:
+{
+  "npc_actions": [
+    {
+      "name": "NPC Name",
+      "action": "what they did",
+      "location_change": "",
+      "current_action": "what they are doing now",
+      "goal_progress": "how this advances their goals",
+      "relationship_changes": {}
+    }
+  ],
+  "world_events": "any noteworthy background events (or empty string)"
+}
+
+Consider:
+- NPC schedules (merchants open shops in morning, close at night)
+- NPC goals (a thief might steal, a guard might patrol)
+- Time of day affects behavior
+- Season affects behavior (harsh winters, harvest festivals)
+- NPCs interact with EACH OTHER, not just the player"""
+
+
+def simulate_npcs(context: str) -> Optional[Dict[str, Any]]:
+    """Simulate NPC autonomous actions between turns."""
+    prompt = f"""Current world state:
+{context}
+
+Simulate what each NPC does during this time period. Consider their schedules,
+goals, and relationships with each other."""
+    result = _call_llm(NPC_AUTONOMY_SYSTEM, prompt)
+    return _parse_json_response(result)

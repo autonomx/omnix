@@ -4,6 +4,9 @@ Rule Enforcer for the AI Role-Playing System.
 Handles both pre-validation (reject invalid actions) and post-validation
 (ensure LLM output consistency). Includes hard-coded checks that don't
 require LLM calls for common violations.
+
+Enhanced with: trust-based NPC gating, time-based shop validation,
+meta-gaming prevention, and economy price enforcement.
 """
 
 import logging
@@ -13,6 +16,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.rpg.models import GameSession, PlayerIntent
 
 logger = logging.getLogger(__name__)
+
+# Trust threshold: NPCs with relationship below this refuse favors/trades
+NPC_TRUST_THRESHOLD = -30
 
 
 def _check_forbidden_items(text: str, forbidden: List[str]) -> Optional[str]:
@@ -76,6 +82,38 @@ def _check_npc_present(session: GameSession, npc_name: str) -> Optional[str]:
     return None
 
 
+def _check_npc_trust(session: GameSession, npc_name: str, intent_type: str) -> Optional[str]:
+    """Check if NPC trusts the player enough for the requested interaction."""
+    npc = session.get_npc(npc_name)
+    if not npc:
+        return None
+    relationship = npc.relationships.get("player", 0)
+    # Trust-gated actions: buy, sell, persuade, quest interactions
+    if intent_type in ("buy_item", "sell_item", "persuade") and relationship < NPC_TRUST_THRESHOLD:
+        return f"{npc.name} does not trust you enough (relationship: {relationship}). Improve your standing first."
+    return None
+
+
+def _check_shop_hours(session: GameSession, intent_type: str) -> Optional[str]:
+    """Check if shops/merchants are open at the current time."""
+    if intent_type not in ("buy_item", "sell_item"):
+        return None
+    current_hour = session.world.world_time.hour
+    loc = session.world.get_location(session.player.location)
+    if loc and current_hour not in loc.shop_open_hours:
+        return f"Shops at {loc.name} are closed at this hour ({current_hour:02d}:00). Try during business hours."
+    return None
+
+
+def _check_fail_state(session: GameSession) -> Optional[str]:
+    """Check if the player is in a fail state."""
+    if not session.player.is_alive:
+        return "You are dead. The adventure is over."
+    if session.player.fail_state:
+        return f"Game over: {session.player.fail_state}"
+    return None
+
+
 # Hard constraint patterns that are always rejected (no LLM needed)
 EXPLOIT_PATTERNS = [
     (re.compile(r"\bignore\b.*\brules?\b", re.IGNORECASE), "Cannot override world rules"),
@@ -85,16 +123,44 @@ EXPLOIT_PATTERNS = [
     (re.compile(r"\bteleport\b", re.IGNORECASE), "Teleportation is not available unless magic permits"),
 ]
 
+# Meta-gaming patterns (player using out-of-character knowledge)
+META_GAMING_PATTERNS = [
+    (re.compile(r"\bi know\b.*\bsecretly?\b", re.IGNORECASE), "meta_knowledge"),
+    (re.compile(r"\bin the game\b", re.IGNORECASE), "meta_reference"),
+    (re.compile(r"\bthe (ai|llm|system|algorithm)\b", re.IGNORECASE), "meta_reference"),
+]
+
+
+def _check_meta_gaming(raw_input: str, session: GameSession) -> Optional[str]:
+    """Detect meta-gaming attempts where player uses out-of-character knowledge."""
+    for pattern, category in META_GAMING_PATTERNS:
+        if pattern.search(raw_input):
+            if category == "meta_knowledge":
+                return "You can only act on knowledge your character has discovered in-game."
+            if category == "meta_reference":
+                return "Your character doesn't understand that concept."
+    return None
+
 
 def pre_validate_hard(raw_input: str, intent: Dict[str, Any], session: GameSession) -> Tuple[bool, Optional[str]]:
     """
     Hard pre-validation that doesn't require LLM.
     Returns (is_valid, error_message).
     """
+    # Check fail states first
+    fail_err = _check_fail_state(session)
+    if fail_err:
+        return False, fail_err
+
     # Check for prompt injection / exploit attempts
     for pattern, message in EXPLOIT_PATTERNS:
         if pattern.search(raw_input):
             return False, message
+
+    # Check for meta-gaming
+    meta_err = _check_meta_gaming(raw_input, session)
+    if meta_err:
+        return False, meta_err
 
     # Check forbidden items
     forbidden = session.world.rules.forbidden_items
@@ -116,11 +182,22 @@ def pre_validate_hard(raw_input: str, intent: Dict[str, Any], session: GameSessi
     if econ_err:
         return False, econ_err
 
+    # Shop hours check
+    shop_err = _check_shop_hours(session, intent_type)
+    if shop_err:
+        return False, shop_err
+
     # NPC presence checks for interaction intents
     if intent_type in ("talk", "buy_item", "sell_item", "persuade", "attack") and target:
         npc_err = _check_npc_present(session, target)
         if npc_err:
             return False, npc_err
+
+    # NPC trust checks
+    if intent_type in ("buy_item", "sell_item", "persuade") and target:
+        trust_err = _check_npc_trust(session, target, intent_type)
+        if trust_err:
+            return False, trust_err
 
     # Inventory checks for item usage
     if intent_type in ("use_item", "sell_item", "drop") and target:
@@ -145,7 +222,7 @@ def post_validate_hard(event_outcome: Dict[str, Any], session: GameSession) -> T
     if item_err:
         issues.append(f"Outcome references forbidden content: {item_err}")
 
-    # Verify stat check consistency
+    # Verify stat check consistency (legacy support for old-style stat checks)
     stat_check = event_outcome.get("stat_check", {})
     if stat_check:
         stat_name = stat_check.get("stat_used", "")
@@ -160,5 +237,20 @@ def post_validate_hard(event_outcome: Dict[str, Any], session: GameSession) -> T
                     f"Stat check inconsistency: {stat_name} {player_value} vs difficulty {difficulty} "
                     f"should {'pass' if expected_pass else 'fail'}"
                 )
+
+    # World consistency: check creatures/entities against lore
+    existing = session.world.rules.existing_creatures
+    if existing:
+        outcome_lower = outcome_text.lower()
+        # Only flag if the outcome introduces something clearly new and major
+        for creature_indicator in ["dragon", "demon", "angel", "undead", "ghost"]:
+            if creature_indicator in outcome_lower:
+                creature_in_lore = any(creature_indicator in c.lower() for c in existing)
+                if not creature_in_lore:
+                    lore_lower = session.world.lore.lower()
+                    if creature_indicator not in lore_lower:
+                        issues.append(
+                            f"Outcome mentions '{creature_indicator}' which is not established in world lore"
+                        )
 
     return len(issues) == 0, issues

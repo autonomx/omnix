@@ -5,10 +5,181 @@ Defines the persistent data structures for worlds, characters, players,
 history logs, and game sessions.
 """
 
+import random
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+
+# ---------------------------------------------------------------------------
+# Agent Identity
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AgentProfile:
+    """Persistent identity for an LLM agent, ensuring consistent tone/style."""
+    name: str = ""
+    tone: str = ""
+    style_notes: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "tone": self.tone,
+            "style_notes": list(self.style_notes),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentProfile":
+        return cls(
+            name=data.get("name", ""),
+            tone=data.get("tone", ""),
+            style_notes=data.get("style_notes", []),
+        )
+
+    def to_prompt_prefix(self) -> str:
+        """Generate a prompt prefix that injects agent identity."""
+        if not self.tone:
+            return ""
+        parts = [f"Your narrative tone is: {self.tone}."]
+        for note in self.style_notes:
+            parts.append(note)
+        return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# World Time
+# ---------------------------------------------------------------------------
+
+HOURS_PER_PERIOD = {"morning": (6, 11), "afternoon": (12, 16), "evening": (17, 20), "night": (21, 5)}
+SEASONS = ["spring", "summer", "autumn", "winter"]
+
+
+@dataclass
+class WorldTime:
+    """Granular world clock with hour, day, and season tracking."""
+    hour: int = 8
+    day: int = 1
+    season: str = "spring"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"hour": self.hour, "day": self.day, "season": self.season}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "WorldTime":
+        return cls(
+            hour=data.get("hour", 8),
+            day=data.get("day", 1),
+            season=data.get("season", "spring"),
+        )
+
+    @property
+    def period(self) -> str:
+        """Get time-of-day period from hour."""
+        if 6 <= self.hour <= 11:
+            return "morning"
+        if 12 <= self.hour <= 16:
+            return "afternoon"
+        if 17 <= self.hour <= 20:
+            return "evening"
+        return "night"
+
+    def advance(self, hours: int = 1) -> None:
+        """Advance time by a number of hours."""
+        self.hour += hours
+        while self.hour >= 24:
+            self.hour -= 24
+            self.day += 1
+            # Season changes every 30 days
+            if self.day % 30 == 1 and self.day > 1:
+                idx = SEASONS.index(self.season) if self.season in SEASONS else 0
+                self.season = SEASONS[(idx + 1) % len(SEASONS)]
+
+    def __str__(self) -> str:
+        return f"Day {self.day}, {self.hour:02d}:00 ({self.period}, {self.season})"
+
+
+# ---------------------------------------------------------------------------
+# Economy: Item Model
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Item:
+    """An item with economic properties."""
+    name: str
+    base_price: int = 10
+    rarity: str = "common"
+    description: str = ""
+
+    # Rarity multipliers for pricing
+    RARITY_MULTIPLIERS = {"common": 1.0, "uncommon": 1.5, "rare": 3.0, "legendary": 10.0}
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "base_price": self.base_price,
+            "rarity": self.rarity,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Item":
+        return cls(
+            name=data.get("name", "unknown"),
+            base_price=data.get("base_price", 10),
+            rarity=data.get("rarity", "common"),
+            description=data.get("description", ""),
+        )
+
+
+def calculate_price(item: Item, location_modifier: float = 1.0,
+                    relationship: int = 0) -> int:
+    """
+    Calculate the actual price of an item based on economy factors.
+
+    Formula: base_price * rarity_mult * location_mod * relationship_mod
+    """
+    rarity_mult = Item.RARITY_MULTIPLIERS.get(item.rarity, 1.0)
+    # Relationship modifier: friendly NPCs give discounts, hostile ones markup
+    # Range: 0.8 (friendly, rel=+100) to 1.3 (hostile, rel=-100)
+    rel_mod = 1.0 - (relationship / 500.0)
+    rel_mod = max(0.8, min(1.3, rel_mod))
+    price = item.base_price * rarity_mult * location_modifier * rel_mod
+    return max(1, int(round(price)))
+
+
+# ---------------------------------------------------------------------------
+# Dice / Probability System
+# ---------------------------------------------------------------------------
+
+def skill_check(stat_value: int, difficulty: int, seed: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Perform a d20 skill check.
+
+    Roll = random(1, 20) + stat_value
+    Success if roll >= difficulty + 10 (DC scale: easy=12, medium=15, hard=18, near-impossible=22)
+
+    Returns dict with roll, total, difficulty, passed, and critical flags.
+    """
+    rng = random.Random(seed) if seed is not None else random
+    roll = rng.randint(1, 20)
+    total = roll + stat_value
+    # Difficulty is on 1-10 scale in prompts; convert to DC: DC = difficulty + 10
+    dc = difficulty + 10
+    critical_success = roll == 20
+    critical_failure = roll == 1
+    passed = critical_success or (not critical_failure and total >= dc)
+    return {
+        "roll": roll,
+        "stat_value": stat_value,
+        "total": total,
+        "difficulty": difficulty,
+        "dc": dc,
+        "passed": passed,
+        "critical_success": critical_success,
+        "critical_failure": critical_failure,
+    }
 
 
 @dataclass
@@ -19,6 +190,7 @@ class WorldRules:
     allowed_items: List[str] = field(default_factory=lambda: ["swords", "bows", "magic artifacts"])
     forbidden_items: List[str] = field(default_factory=lambda: ["guns", "nuclear weapons"])
     custom_rules: List[str] = field(default_factory=list)
+    existing_creatures: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -27,6 +199,7 @@ class WorldRules:
             "allowed_items": list(self.allowed_items),
             "forbidden_items": list(self.forbidden_items),
             "custom_rules": list(self.custom_rules),
+            "existing_creatures": list(self.existing_creatures),
         }
 
     @classmethod
@@ -37,6 +210,7 @@ class WorldRules:
             allowed_items=data.get("allowed_items", ["swords", "bows", "magic artifacts"]),
             forbidden_items=data.get("forbidden_items", ["guns", "nuclear weapons"]),
             custom_rules=data.get("custom_rules", []),
+            existing_creatures=data.get("existing_creatures", []),
         )
 
 
@@ -48,6 +222,8 @@ class Location:
     connected_to: List[str] = field(default_factory=list)
     npcs_present: List[str] = field(default_factory=list)
     items_available: List[str] = field(default_factory=list)
+    market_modifier: float = 1.0
+    shop_open_hours: List[int] = field(default_factory=lambda: list(range(6, 21)))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -56,6 +232,8 @@ class Location:
             "connected_to": list(self.connected_to),
             "npcs_present": list(self.npcs_present),
             "items_available": list(self.items_available),
+            "market_modifier": self.market_modifier,
+            "shop_open_hours": list(self.shop_open_hours),
         }
 
     @classmethod
@@ -66,6 +244,8 @@ class Location:
             connected_to=data.get("connected_to", []),
             npcs_present=data.get("npcs_present", []),
             items_available=data.get("items_available", []),
+            market_modifier=data.get("market_modifier", 1.0),
+            shop_open_hours=data.get("shop_open_hours", list(range(6, 21))),
         )
 
 
@@ -112,6 +292,9 @@ class WorldState:
     lore: str = ""
     time_of_day: str = "morning"
     day_count: int = 1
+    world_time: WorldTime = field(default_factory=WorldTime)
+    agent_profiles: Dict[str, AgentProfile] = field(default_factory=dict)
+    items_catalog: List[Item] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -126,6 +309,9 @@ class WorldState:
             "lore": self.lore,
             "time_of_day": self.time_of_day,
             "day_count": self.day_count,
+            "world_time": self.world_time.to_dict(),
+            "agent_profiles": {k: v.to_dict() for k, v in self.agent_profiles.items()},
+            "items_catalog": [item.to_dict() for item in self.items_catalog],
         }
 
     @classmethod
@@ -142,6 +328,9 @@ class WorldState:
             lore=data.get("lore", ""),
             time_of_day=data.get("time_of_day", "morning"),
             day_count=data.get("day_count", 1),
+            world_time=WorldTime.from_dict(data.get("world_time", {})),
+            agent_profiles={k: AgentProfile.from_dict(v) for k, v in data.get("agent_profiles", {}).items()},
+            items_catalog=[Item.from_dict(i) for i in data.get("items_catalog", [])],
         )
 
     def get_location(self, name: str) -> Optional[Location]:
@@ -150,6 +339,14 @@ class WorldState:
         for loc in self.locations:
             if loc.name.lower() == name_lower:
                 return loc
+        return None
+
+    def get_item(self, name: str) -> Optional[Item]:
+        """Find an item in the catalog by name (case-insensitive)."""
+        name_lower = name.lower()
+        for item in self.items_catalog:
+            if item.name.lower() == name_lower:
+                return item
         return None
 
 
@@ -193,6 +390,10 @@ class NPCCharacter:
     secret: str = ""
     fear: str = ""
     hidden_goal: str = ""
+    # NPC Autonomy fields
+    current_action: str = "idle"
+    schedule: Dict[str, str] = field(default_factory=dict)
+    known_facts: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -207,6 +408,9 @@ class NPCCharacter:
             "secret": self.secret,
             "fear": self.fear,
             "hidden_goal": self.hidden_goal,
+            "current_action": self.current_action,
+            "schedule": dict(self.schedule),
+            "known_facts": list(self.known_facts),
         }
 
     @classmethod
@@ -223,6 +427,9 @@ class NPCCharacter:
             secret=data.get("secret", ""),
             fear=data.get("fear", ""),
             hidden_goal=data.get("hidden_goal", ""),
+            current_action=data.get("current_action", "idle"),
+            schedule=data.get("schedule", {}),
+            known_facts=data.get("known_facts", []),
         )
 
 
@@ -239,6 +446,9 @@ class PlayerState:
     reputation_global: int = 0
     quests_active: List[str] = field(default_factory=list)
     quests_completed: List[str] = field(default_factory=list)
+    known_facts: List[str] = field(default_factory=list)
+    is_alive: bool = True
+    fail_state: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -250,6 +460,9 @@ class PlayerState:
             "reputation_global": self.reputation_global,
             "quests_active": list(self.quests_active),
             "quests_completed": list(self.quests_completed),
+            "known_facts": list(self.known_facts),
+            "is_alive": self.is_alive,
+            "fail_state": self.fail_state,
         }
 
     @classmethod
@@ -265,16 +478,21 @@ class PlayerState:
             reputation_global=data.get("reputation_global", 0),
             quests_active=data.get("quests_active", []),
             quests_completed=data.get("quests_completed", []),
+            known_facts=data.get("known_facts", []),
+            is_alive=data.get("is_alive", True),
+            fail_state=data.get("fail_state", ""),
         )
 
 
 @dataclass
 class HistoryEvent:
-    """A single event in the game history log."""
+    """A single event in the game history log with importance scoring."""
     event: str
     impact: Dict[str, Any] = field(default_factory=dict)
     turn: int = 0
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    importance: float = 0.5
+    tags: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -282,6 +500,8 @@ class HistoryEvent:
             "impact": dict(self.impact),
             "turn": self.turn,
             "timestamp": self.timestamp,
+            "importance": self.importance,
+            "tags": list(self.tags),
         }
 
     @classmethod
@@ -291,12 +511,14 @@ class HistoryEvent:
             impact=data.get("impact", {}),
             turn=data.get("turn", 0),
             timestamp=data.get("timestamp", datetime.now().isoformat()),
+            importance=data.get("importance", 0.5),
+            tags=data.get("tags", []),
         )
 
 
 @dataclass
 class Quest:
-    """A quest or mission in the game."""
+    """A quest or mission in the game with stages and branching paths."""
     quest_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     title: str = ""
     description: str = ""
@@ -304,6 +526,10 @@ class Quest:
     objectives: List[str] = field(default_factory=list)
     rewards: Dict[str, Any] = field(default_factory=dict)
     status: str = "active"
+    stages: List[str] = field(default_factory=list)
+    current_stage: int = 0
+    failure_conditions: List[str] = field(default_factory=list)
+    branching_paths: List[Dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -314,6 +540,10 @@ class Quest:
             "objectives": list(self.objectives),
             "rewards": dict(self.rewards),
             "status": self.status,
+            "stages": list(self.stages),
+            "current_stage": self.current_stage,
+            "failure_conditions": list(self.failure_conditions),
+            "branching_paths": [dict(p) for p in self.branching_paths],
         }
 
     @classmethod
@@ -326,6 +556,10 @@ class Quest:
             objectives=data.get("objectives", []),
             rewards=data.get("rewards", {}),
             status=data.get("status", "active"),
+            stages=data.get("stages", []),
+            current_stage=data.get("current_stage", 0),
+            failure_conditions=data.get("failure_conditions", []),
+            branching_paths=data.get("branching_paths", []),
         )
 
 
@@ -363,6 +597,8 @@ class TurnResult:
     state_changes: Dict[str, Any] = field(default_factory=dict)
     choices: List[str] = field(default_factory=list)
     error: Optional[str] = None
+    dice_roll: Optional[Dict[str, Any]] = None
+    fail_state: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -373,6 +609,10 @@ class TurnResult:
         }
         if self.error:
             result["error"] = self.error
+        if self.dice_roll:
+            result["dice_roll"] = self.dice_roll
+        if self.fail_state:
+            result["fail_state"] = self.fail_state
         return result
 
 
@@ -389,6 +629,8 @@ class GameSession:
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     mid_term_summary: str = ""
+    narrative_act: int = 1
+    narrative_tension: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -402,6 +644,8 @@ class GameSession:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "mid_term_summary": self.mid_term_summary,
+            "narrative_act": self.narrative_act,
+            "narrative_tension": self.narrative_tension,
         }
 
     @classmethod
@@ -417,6 +661,8 @@ class GameSession:
             created_at=data.get("created_at", datetime.now().isoformat()),
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             mid_term_summary=data.get("mid_term_summary", ""),
+            narrative_act=data.get("narrative_act", 1),
+            narrative_tension=data.get("narrative_tension", 0.0),
         )
 
     def get_npc(self, name: str) -> Optional[NPCCharacter]:

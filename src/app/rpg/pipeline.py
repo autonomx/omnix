@@ -1,26 +1,33 @@
 """
 Turn Execution Pipeline for the AI Role-Playing System.
 
-Orchestrates the 7-step turn execution:
-1. Input Normalization
-2. Rule Validation (Pre-LLM)
-3. Context Assembly
-4. Event Generation
-5. State Update
-6. Memory Update
-7. Narration Output
+Orchestrates the turn execution with integrated systems:
+1. Fail state check
+2. Input Normalization
+3. Rule Validation (Pre-LLM)
+4. Dice Roll (skill check)
+5. Context Assembly
+6. Event Generation
+7. State Update + NPC Autonomy
+8. Memory Update (with importance scoring)
+9. Narrative Direction
+10. Narration Output
+11. Fail State Detection
 """
 
 import logging
 import random
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.rpg import agents
 from app.rpg.memory_manager import build_context
 from app.rpg.models import (
+    AgentProfile,
+    Faction,
     GameSession,
     HistoryEvent,
+    Item,
     Location,
     NPCCharacter,
     PlayerIntent,
@@ -29,11 +36,35 @@ from app.rpg.models import (
     TurnResult,
     WorldRules,
     WorldState,
+    WorldTime,
+    skill_check,
 )
 from app.rpg.persistence import save_game
 from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard
 
 logger = logging.getLogger(__name__)
+
+# Mapping of intents to the stat used for skill checks
+INTENT_STAT_MAP = {
+    "attack": "strength",
+    "persuade": "charisma",
+    "sneak": "intelligence",
+    "pick_up": "strength",
+    "use_item": "intelligence",
+}
+
+# Difficulty defaults for common actions
+INTENT_DIFFICULTY_MAP = {
+    "attack": 6,
+    "persuade": 6,
+    "sneak": 7,
+    "pick_up": 3,
+    "use_item": 4,
+}
+
+# Fail state thresholds
+BANKRUPTCY_THRESHOLD = -100
+REPUTATION_COLLAPSE_THRESHOLD = -50
 
 
 def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
@@ -64,11 +95,18 @@ def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
         lore=world_data.get("lore", ""),
         rules=WorldRules.from_dict(world_data.get("rules", {})),
         locations=[Location.from_dict(loc) for loc in world_data.get("locations", [])],
+        world_time=WorldTime(hour=8, day=1, season="spring"),
     )
 
     # Build factions
-    from app.rpg.models import Faction
     world.factions = [Faction.from_dict(fac) for fac in world_data.get("factions", [])]
+
+    # Build items catalog
+    world.items_catalog = [Item.from_dict(i) for i in world_data.get("items_catalog", [])]
+
+    # Build agent profiles for consistent tone
+    for key, profile_data in world_data.get("agent_profiles", {}).items():
+        world.agent_profiles[key] = AgentProfile.from_dict(profile_data)
 
     # Build NPCs
     npcs = [NPCCharacter.from_dict(npc) for npc in world_data.get("npcs", [])]
@@ -102,14 +140,7 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     """
     Execute a single turn of the game.
 
-    Follows the 7-step pipeline:
-    1. Input Normalization
-    2. Rule Validation (Pre-LLM)
-    3. Context Assembly
-    4. Event Generation
-    5. State Update
-    6. Memory Update
-    7. Narration Output
+    Enhanced pipeline with dice rolls, NPC autonomy, narrative direction, and fail states.
     """
     session.turn_count += 1
     logger.info("Turn %d: player input='%s'", session.turn_count, raw_input)
@@ -160,17 +191,31 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         )
 
     # -----------------------------------------------------------------------
-    # Step 3: Context Assembly (already done above, refresh with latest)
+    # Step 3: Dice Roll (skill check for applicable actions)
+    # -----------------------------------------------------------------------
+    dice_result = None
+    stat_name = INTENT_STAT_MAP.get(intent.intent)
+    if stat_name:
+        stat_value = getattr(session.player.stats, stat_name, 5)
+        difficulty = INTENT_DIFFICULTY_MAP.get(intent.intent, 5)
+        dice_result = skill_check(stat_value, difficulty)
+        intent_data["skill_check"] = dice_result
+        logger.info("Dice roll: d20=%d + %s(%d) = %d vs DC %d -> %s",
+                     dice_result["roll"], stat_name, stat_value,
+                     dice_result["total"], dice_result["dc"],
+                     "PASS" if dice_result["passed"] else "FAIL")
+
+    # -----------------------------------------------------------------------
+    # Step 4: Context Assembly (refresh with latest)
     # -----------------------------------------------------------------------
     context = build_context(session)
-
-    # Inject player stats into intent for stat checks
     intent_data["player_stats"] = session.player.stats.to_dict()
 
     # -----------------------------------------------------------------------
-    # Step 4: Event Generation
+    # Step 5: Event Generation
     # -----------------------------------------------------------------------
-    event_outcome = agents.generate_event(intent_data, context)
+    agent_profiles = {k: v.to_dict() for k, v in session.world.agent_profiles.items()}
+    event_outcome = agents.generate_event(intent_data, context, agent_profiles)
     if not event_outcome:
         return TurnResult(
             narration="Narrator: Something unexpected happens... the moment passes without consequence.",
@@ -183,44 +228,76 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     post_valid, post_issues = post_validate_hard(event_outcome, session)
     if not post_valid:
         logger.warning("Post-validation issues: %s", post_issues)
-        # Don't block, but log issues for debugging
 
     # -----------------------------------------------------------------------
-    # Step 5: State Update
+    # Step 6: State Update
     # -----------------------------------------------------------------------
     state_changes = _apply_state_updates(session, intent, event_outcome, context)
 
     # -----------------------------------------------------------------------
-    # Step 6: Memory Update
+    # Step 7: NPC Autonomy Simulation
+    # -----------------------------------------------------------------------
+    _simulate_npcs(session)
+
+    # -----------------------------------------------------------------------
+    # Step 8: Memory Update (with importance scoring)
     # -----------------------------------------------------------------------
     event_description = event_outcome.get("outcome", raw_input)
+    importance = event_outcome.get("importance", 0.5)
+    tags = event_outcome.get("tags", [])
     _update_memory(session, event_description)
 
     # -----------------------------------------------------------------------
-    # Step 7: Narration Output
+    # Step 9: Narrative Direction
+    # -----------------------------------------------------------------------
+    _update_narrative(session)
+
+    # -----------------------------------------------------------------------
+    # Step 10: Narration Output
     # -----------------------------------------------------------------------
     narration_context = build_context(session)
-    narration = agents.narrate(event_outcome, narration_context)
+    narration = agents.narrate(event_outcome, narration_context, agent_profiles)
     if not narration:
-        # Fallback narration from event outcome
         narration = f"Narrator: {event_outcome.get('outcome', 'Something happens...')}"
         npc_reactions = event_outcome.get("npc_reactions", [])
         for reaction in npc_reactions:
             narration += f"\n\n{reaction.get('name', 'Someone')}: {reaction.get('reaction', '...')}"
 
-    # Create history event
+    # Add dice roll info to narration if applicable
+    if dice_result:
+        roll_info = (
+            f"\n\n[Roll: d20({dice_result['roll']}) + "
+            f"{stat_name}({dice_result['stat_value']}) = "
+            f"{dice_result['total']} vs DC {dice_result['dc']}"
+        )
+        if dice_result["critical_success"]:
+            roll_info += " \u2014 CRITICAL SUCCESS!]"
+        elif dice_result["critical_failure"]:
+            roll_info += " \u2014 CRITICAL FAILURE!]"
+        elif dice_result["passed"]:
+            roll_info += " \u2014 Success]"
+        else:
+            roll_info += " \u2014 Failure]"
+        narration += roll_info
+
+    # Create history event with importance and tags
     history_event = HistoryEvent(
         event=event_description,
         impact=state_changes,
         turn=session.turn_count,
+        importance=importance,
+        tags=tags,
     )
     session.history.append(history_event)
 
-    # Update timestamp
+    # Update timestamp and advance time
     session.updated_at = datetime.now().isoformat()
-
-    # Advance time
     _advance_time(session)
+
+    # -----------------------------------------------------------------------
+    # Step 11: Fail State Detection
+    # -----------------------------------------------------------------------
+    fail_state = _check_fail_states(session)
 
     # Save game state
     save_game(session)
@@ -229,6 +306,8 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         narration=narration,
         events=[history_event],
         state_changes=state_changes,
+        dice_roll=dice_result,
+        fail_state=fail_state,
     )
 
 
@@ -259,6 +338,10 @@ def _apply_state_updates(session: GameSession, intent: PlayerIntent,
                 new_loc = npc_update.get("location_change", "")
                 if new_loc:
                     npc.location = new_loc
+
+                new_action = npc_update.get("current_action", "")
+                if new_action:
+                    npc.current_action = new_action
 
         # Apply player updates
         player_updates = char_updates.get("player_updates", {})
@@ -301,6 +384,11 @@ def _apply_state_updates(session: GameSession, intent: PlayerIntent,
                 session.player.location = loc_change
                 changes["player_location"] = loc_change
 
+            # New known facts (meta-gaming prevention)
+            for fact in player_updates.get("new_known_facts", []):
+                if fact not in session.player.known_facts:
+                    session.player.known_facts.append(fact)
+
     # Handle movement intent directly
     if intent.intent == "move" and intent.target:
         target_loc = session.world.get_location(intent.target)
@@ -309,6 +397,32 @@ def _apply_state_updates(session: GameSession, intent: PlayerIntent,
             changes["player_location"] = target_loc.name
 
     return changes
+
+
+def _simulate_npcs(session: GameSession) -> None:
+    """Run NPC autonomy simulation for background world events."""
+    # Only simulate every 2 turns to reduce LLM calls
+    if session.turn_count % 2 != 0:
+        return
+
+    context = build_context(session)
+    npc_data = agents.simulate_npcs(context)
+    if not npc_data:
+        return
+
+    for action in npc_data.get("npc_actions", []):
+        npc = session.get_npc(action.get("name", ""))
+        if npc:
+            new_loc = action.get("location_change", "")
+            if new_loc:
+                npc.location = new_loc
+            new_action = action.get("current_action", "")
+            if new_action:
+                npc.current_action = new_action
+            # NPC-to-NPC relationship changes
+            for target, change in action.get("relationship_changes", {}).items():
+                if isinstance(change, (int, float)):
+                    npc.relationships[target] = npc.relationships.get(target, 0) + int(change)
 
 
 def _update_memory(session: GameSession, event_description: str) -> None:
@@ -323,18 +437,47 @@ def _update_memory(session: GameSession, event_description: str) -> None:
             session.mid_term_summary = new_summary
 
 
-def _advance_time(session: GameSession) -> None:
-    """Advance the in-game time of day."""
-    time_cycle = ["morning", "afternoon", "evening", "night"]
-    current_idx = 0
-    for i, t in enumerate(time_cycle):
-        if session.world.time_of_day == t:
-            current_idx = i
-            break
+def _update_narrative(session: GameSession) -> None:
+    """Update narrative direction every 5 turns."""
+    if session.turn_count % 5 != 0:
+        return
 
-    # Advance every 3 turns
-    if session.turn_count % 3 == 0:
-        next_idx = (current_idx + 1) % len(time_cycle)
-        session.world.time_of_day = time_cycle[next_idx]
-        if next_idx == 0:
-            session.world.day_count += 1
+    direction = agents.direct_narrative(
+        session.mid_term_summary,
+        session.turn_count,
+        session.narrative_act,
+        session.narrative_tension,
+    )
+    if direction:
+        session.narrative_act = direction.get("narrative_act", session.narrative_act)
+        session.narrative_tension = direction.get("tension_level", session.narrative_tension)
+
+
+def _check_fail_states(session: GameSession) -> str:
+    """Check for game-over conditions. Returns fail state string or empty."""
+    # Death (health-related, set by event outcomes)
+    if not session.player.is_alive:
+        return "death"
+
+    # Bankruptcy
+    if session.player.stats.wealth <= BANKRUPTCY_THRESHOLD:
+        session.player.fail_state = "bankruptcy"
+        return "bankruptcy"
+
+    # Reputation collapse
+    if (session.player.reputation_local <= REPUTATION_COLLAPSE_THRESHOLD and
+            session.player.reputation_global <= REPUTATION_COLLAPSE_THRESHOLD):
+        session.player.fail_state = "reputation_collapse"
+        return "reputation_collapse"
+
+    return ""
+
+
+def _advance_time(session: GameSession) -> None:
+    """Advance the in-game time using the WorldTime system."""
+    # Advance 2 hours per turn
+    session.world.world_time.advance(hours=2)
+
+    # Keep legacy fields in sync for backward compatibility
+    session.world.time_of_day = session.world.world_time.period
+    session.world.day_count = session.world.world_time.day
