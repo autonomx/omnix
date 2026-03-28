@@ -1,1 +1,1 @@
-# Test package for LM Studio Chatbot
+"""Omnix test suite."""

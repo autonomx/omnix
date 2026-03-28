@@ -1,205 +1,195 @@
-# Test Suite for LM Studio Chatbot
+# Omnix Playwright Testing Framework
 
-This directory contains comprehensive tests for the chatbot application.
+A professional, Playwright-based testing framework for the Omnix AI voice platform. Built with **pytest-playwright**, the **Page Object Model (POM)** pattern, and a custom HTML test report.
 
-## Test Structure
+## 🏗️ Architecture
 
 ```
-tests/
-├── __init__.py              # Package marker
-├── conftest.py              # Pytest fixtures
-├── test_unit_backend.py     # Unit tests for backend functions
-├── test_api_endpoints.py    # API endpoint tests
-├── test_integration.py      # Integration tests for external services
-├── test_frontend.html       # Frontend JavaScript tests
-└── README.md                # This file
+src/tests/
+├── conftest.py                  # Fixtures, hooks, screenshot-on-failure
+├── pytest.ini                   # Pytest configuration
+├── pages/                       # Page Object Models
+│   ├── base_page.py             # Base class – navigation, waits, assertions
+│   ├── chat_page.py             # Chat area interactions
+│   ├── sidebar_page.py          # Sidebar navigation
+│   ├── header_page.py           # Header status & controls
+│   ├── settings_page.py         # Settings modal
+│   ├── audiobook_page.py        # Audiobook generator
+│   ├── podcast_page.py          # Podcast generator
+│   ├── voice_studio_page.py     # Voice Studio TTS
+│   ├── voice_clone_page.py      # Voice cloning
+│   └── search_page.py           # Search & history modals
+├── e2e/                         # End-to-end Playwright browser tests
+│   ├── test_smoke.py            # UI smoke tests (page load, elements)
+│   ├── test_frontend.py         # Frontend unit tests (JS evaluation)
+│   ├── test_js_console.py       # JavaScript console error detection
+│   └── test_js_variables.py     # JavaScript variable conflict analysis
+├── api/                         # Backend API tests
+│   ├── healthcheck/
+│   │   └── test_health_responses.py  # API healthcheck validation
+│   ├── sanity/
+│   │   └── test_api_endpoints.py     # API endpoint tests (Flask client)
+│   └── regression/
+│       └── test_search_api.py        # Chat search functionality
+├── integration/                 # Integration tests
+├── utils/
+│   └── helpers.py               # Shared constants & JS analysis helpers
+└── reports/
+    ├── html_report.py           # Custom HTML report generator plugin
+    └── .gitignore               # Exclude generated artifacts
 ```
 
-## Running Tests
+## 🚀 Quick Start
 
-### Quick Start
+### Prerequisites
 
 ```bash
-# Run all tests
-run_tests.bat
-
-# Or use pytest directly
-python -m pytest tests/ -v
+pip install playwright pytest-playwright
+python -m playwright install chromium
 ```
 
-### Test Categories
-
-#### 1. Unit Tests (`test_unit_backend.py`)
-Tests for individual functions without external dependencies.
+### Run All Tests
 
 ```bash
-run_tests.bat unit
-# or
-python -m pytest tests/test_unit_backend.py -v
+python run_playwright_tests.py
 ```
 
-**Coverage:**
-- Text processing (emoji removal, thinking extraction)
-- Dialogue parsing for audiobook
-- Speaker gender detection
-- Voice assignment logic
-- Token estimation
-- Settings management
-- WAV generation
-
-#### 2. API Endpoint Tests (`test_api_endpoints.py`)
-Tests for Flask HTTP endpoints using test client.
+### Run Specific Suites
 
 ```bash
-run_tests.bat api
-# or
-python -m pytest tests/test_api_endpoints.py -v
+# Smoke tests (UI element checks)
+python run_playwright_tests.py --suite smoke
+
+# API tests (Flask test client, no browser needed)
+python run_playwright_tests.py --suite api
+
+# Frontend JS unit tests (browser-evaluated)
+python run_playwright_tests.py --suite frontend
+
+# JS static analysis (no browser/server needed)
+python run_playwright_tests.py --suite js_analysis
+
+# Console error detection
+python run_playwright_tests.py --suite console
 ```
 
-**Coverage:**
-- Health endpoints
-- Settings CRUD
-- Session management
-- Model listing
-- Chat endpoint
-- TTS synthesis
-- STT transcription
-- Voice cloning
-- Audiobook generation
-- Service status
-- SSE streaming
-
-#### 3. Integration Tests (`test_integration.py`)
-Tests that verify actual external services work correctly.
+### Run With Options
 
 ```bash
-# Enable specific service tests with environment variables
-set TEST_LLM=1
-set TEST_TTS=1
-set TEST_STT=1
+# Headed browser (visible)
+python run_playwright_tests.py --headed
 
-run_tests.bat integration
+# Slow motion for debugging
+python run_playwright_tests.py --headed --slow-mo 500
+
+# Run specific tests by keyword
+python run_playwright_tests.py -k "test_token"
+
+# Skip HTML report
+python run_playwright_tests.py --no-report
+
+# Extra verbose
+python run_playwright_tests.py --verbose
 ```
 
-**Environment Variables:**
-- `TEST_LLM=1` - Enable LLM provider tests
-- `TEST_TTS=1` - Enable TTS server tests
-- `TEST_STT=1` - Enable STT server tests
-- `TTS_URL` - TTS server URL (default: http://localhost:8020)
-- `STT_URL` - STT server URL (default: http://localhost:8000)
-- `LLM_URL` - LM Studio URL (default: http://localhost:1234)
-- `CEREBRAS_API_KEY` - Cerebras API key for cloud tests
-- `OPENROUTER_API_KEY` - OpenRouter API key for cloud tests
-
-#### 4. Frontend Tests (`test_frontend.html`)
-JavaScript unit tests run in the browser.
+### Run Directly With pytest
 
 ```bash
-# Open in browser
-start tests/test_frontend.html
+cd src/tests
+
+# All tests
+python -m pytest -v --rootdir . -c pytest.ini
+
+# Single file
+python -m pytest e2e/test_smoke.py -v --rootdir . -c pytest.ini
+
+# With custom report
+python -m pytest -v --rootdir . -c pytest.ini -p reports.html_report
 ```
 
-**Coverage:**
-- Token estimation
-- Thinking extraction
-- WAV buffer creation
-- Speaker gender detection
-- Dialogue parsing
-- Emoji removal
-- Base64 encoding
-- SSE parsing
-- Voice profiles
-- Markdown rendering
-- Audio playback
+## 📊 Custom HTML Report
 
-### Coverage Reports
+A professional HTML report is auto-generated at `src/tests/reports/report.html`:
 
-Generate detailed coverage reports:
+- **Executive summary** with pass/fail/skip counts
+- **Animated donut chart** showing pass rate percentage
+- **Collapsible test suites** organized by class
+- **Search & filter** bar – filter by outcome or search by name
+- **Failure details** with stack traces and inline screenshots
+- **Timing data** per test
+- **Auto-expands** failed suites
 
-```bash
-run_tests.bat coverage
-```
+## 🧩 Page Object Model
 
-This creates:
-- Terminal output with coverage percentages
-- `htmlcov/index.html` - Detailed HTML coverage report
+All UI interactions are encapsulated in Page Objects under `pages/`. Each page object:
 
-## Writing New Tests
+- Inherits from `BasePage` with shared utilities
+- Defines element selectors as class constants
+- Provides action methods (click, fill, type)
+- Includes built-in assertion methods using Playwright's `expect`
 
-### Backend Tests
+### Example Usage
 
 ```python
-class TestNewFeature:
-    """Tests for new feature."""
-    
-    def test_basic_functionality(self):
-        """Test basic functionality."""
-        result = my_function("input")
-        assert result == "expected"
-    
-    def test_with_fixture(self, client):
-        """Test using Flask test client."""
-        response = client.get('/api/endpoint')
-        assert response.status_code == 200
+def test_send_message(self, chat_page: ChatPage):
+    chat_page.open()
+    chat_page.type_message("Hello, AI!")
+    chat_page.send_button.click()
+    chat_page.expect_typing_visible()
+    chat_page.expect_typing_hidden(timeout=30_000)
+    assert chat_page.get_message_count() >= 2
 ```
 
-### Frontend Tests
+### Available Page Objects
 
-```javascript
-describe('New Feature', {
-    'test basic functionality': () => {
-        const result = myFunction('input');
-        assertEqual(result, 'expected');
-    },
-    
-    'test edge case': () => {
-        const result = myFunction('');
-        assertEqual(result, null);
-    }
-});
-```
+| Page Object       | Covers                                      |
+| ----------------- | ------------------------------------------- |
+| `BasePage`        | Navigation, waits, assertions, screenshots  |
+| `ChatPage`        | Message input, send, clear, voice toggle    |
+| `SidebarPage`     | Navigation buttons, expand/collapse         |
+| `HeaderPage`      | Status dots, model select, theme toggle     |
+| `SettingsPage`    | Provider config, system prompts, VAD        |
+| `AudiobookPage`   | Text input, analyze, generate, library      |
+| `PodcastPage`     | Episode setup, speakers, generate           |
+| `VoiceStudioPage` | TTS with emotion/speed/pitch controls       |
+| `VoiceClonePage`  | Record/upload tabs, save voice              |
+| `SearchPage`      | Search modal, history modal                 |
 
-## Test Best Practices
+## 🧪 Test Suites
 
-1. **Isolation**: Each test should be independent
-2. **Cleanup**: Remove test data after tests complete
-3. **Mocking**: Use mocks for external services in unit tests
-4. **Descriptive names**: Test names should describe what they test
-5. **One assertion**: Focus on one thing per test when possible
+| Suite               | File                                       | Tests | Needs Server? |
+| ------------------- | ------------------------------------------ | ----- | ------------- |
+| Smoke Tests         | `e2e/test_smoke.py`                        | 24    | ✅ Yes        |
+| JS Console Errors   | `e2e/test_js_console.py`                   | 3     | ✅ Yes        |
+| Frontend Unit Tests | `e2e/test_frontend.py`                     | 30    | ✅ Yes        |
+| JS Variable Analysis| `e2e/test_js_variables.py`                 | 4     | ❌ No         |
+| API Endpoints       | `api/sanity/test_api_endpoints.py`         | 9     | ❌ No (Flask) |
+| Search              | `api/regression/test_search_api.py`        | 14    | ❌ No (Flask) |
+| Healthcheck         | `api/healthcheck/test_health_responses.py` | 12    | ❌ No (Flask) |
 
-## Continuous Integration
+## 🔧 Fixtures
 
-These tests can be integrated into CI/CD pipelines:
+| Fixture              | Scope    | Description                               |
+| -------------------- | -------- | ----------------------------------------- |
+| `page`               | function | Playwright browser page (from pytest-playwright) |
+| `chat_page`          | function | ChatPage instance                         |
+| `sidebar_page`       | function | SidebarPage instance                      |
+| `header_page`        | function | HeaderPage instance                       |
+| `settings_page`      | function | SettingsPage instance                     |
+| `audiobook_page`     | function | AudiobookPage instance                    |
+| `podcast_page`       | function | PodcastPage instance                      |
+| `voice_studio_page`  | function | VoiceStudioPage instance                  |
+| `voice_clone_page`   | function | VoiceClonePage instance                   |
+| `search_page`        | function | SearchPage instance                       |
+| `flask_app`          | session  | Flask test application                    |
+| `flask_client`       | session  | Flask test client                         |
+| `api_context`        | session  | Playwright API request context            |
+| `mock_llm_response`  | function | Mock LLM API response                     |
+| `mock_tts_response`  | function | Mock TTS API response                     |
+| `mock_stt_response`  | function | Mock STT API response                     |
 
-```yaml
-# Example GitHub Actions
-- name: Run tests
-  run: |
-    pip install -r requirements.txt
-    python -m pytest tests/ -v --tb=short
-```
+## 📸 Screenshots on Failure
 
-## Troubleshooting
-
-### Import Errors
-Make sure the parent directory is in the Python path. The conftest.py handles this automatically.
-
-### Service Not Running
-Integration tests will skip if services are not available. Start services before running:
-
-```bash
-# Start TTS
-python chatterbox_tts_server.py
-
-# Start STT
-cd parakeet-tdt-0.6b-v2 && python app.py
-
-# Start LLM (LM Studio)
-# Open LM Studio application
-```
-
-### Database Conflicts
-Tests create temporary sessions that are cleaned up after each test. If you see conflicts, clear the sessions file:
-
-```bash
-rm resources/data/sessions.json
+When any browser test fails, a full-page screenshot is automatically captured and:
+- Saved to `reports/screenshots/FAIL_<test_name>_<timestamp>.png`
+- Embedded inline (base64) in the HTML report
