@@ -52,7 +52,8 @@ const PODCAST_FORMATS = {
 const EPISODE_LENGTHS = {
     short: { minutes: 5, name: 'Short (~5 min)' },
     medium: { minutes: 15, name: 'Medium (~15 min)' },
-    long: { minutes: 30, name: 'Long (~30 min)' }
+    long: { minutes: 30, name: 'Long (~30 min)' },
+    extended: { minutes: 60, name: 'Extended (~60 min)' }
 };
 
 // Initialize podcast feature
@@ -347,7 +348,7 @@ async function generatePodcast() {
 function handlePodcastEvent(data) {
     switch (data.type) {
         case 'phase':
-            updatePodcastProgress(data.percent, data.message);
+            updatePodcastProgress(data.percent || 0, data.message);
             break;
             
         case 'audio':
@@ -360,9 +361,18 @@ function handlePodcastEvent(data) {
                 voice_used: data.voice_used
             });
             
-            // Update progress
-            const percent = Math.round(data.percent);
-            updatePodcastProgress(percent, `Generated ${data.percent}%`);
+            // Build transcript from audio events
+            if (podcastState.episode && data.speaker && data.text) {
+                podcastState.episode.transcript.push({
+                    speaker: data.speaker,
+                    text: data.text
+                });
+            }
+            
+            // Update progress using server-provided percent
+            const percent = typeof data.percent === 'number' ? Math.round(data.percent) : 0;
+            const segInfo = data.total_segments ? ` (${data.segment_index + 1}/${data.total_segments})` : '';
+            updatePodcastProgress(percent, `Generating audio${segInfo}... ${percent}%`);
             
             // Start streaming playback if first chunk - like audiobook!
             if (podcastState.audioQueue.length === 1 && !streamingPlaybackActive) {
@@ -694,13 +704,16 @@ async function finalizePodcastEpisode(data) {
     updatePodcastProgress(100, 'Episode complete!');
     
     podcastState.episode.status = 'complete';
-    podcastState.episode.duration = data.duration;
+    podcastState.episode.duration = data.duration || 0;
     
     // Combine audio for seeking
     await combinePodcastAudio();
     
     // Save episode
     await savePodcastEpisode();
+    
+    // Refresh episodes list so new episode appears in library
+    loadEpisodesList();
     
     // Show streaming player with stop button still available - user can stop playback
     // The full player will be available but we keep streaming controls until user stops or plays full
@@ -1190,6 +1203,25 @@ async function loadVoicesForPodcastSpeakers() {
         }
     } catch (error) {
         console.error('[PODCAST] Error loading voices:', error);
+        // Still show default speakers even if voice API is unavailable
+        if (speakersContainer && speakersContainer.children.length === 0) {
+            speakersContainer.innerHTML = `
+                <div class="podcast-speaker-row">
+                    <div class="speaker-inputs">
+                        <input type="text" class="podcast-speaker-name" value="Host" placeholder="Speaker Name">
+                        <select class="podcast-speaker-voice"><option value="">Select Voice...</option></select>
+                        <input type="text" class="podcast-speaker-prompt" placeholder="LLM Prompt (optional): e.g., 'Speaks in an enthusiastic, energetic manner'">
+                    </div>
+                </div>
+                <div class="podcast-speaker-row">
+                    <div class="speaker-inputs">
+                        <input type="text" class="podcast-speaker-name" value="Guest" placeholder="Speaker Name">
+                        <select class="podcast-speaker-voice"><option value="">Select Voice...</option></select>
+                        <input type="text" class="podcast-speaker-prompt" placeholder="LLM Prompt (optional): e.g., 'Provides expert technical insights'">
+                    </div>
+                </div>
+            `;
+        }
     }
 }
 

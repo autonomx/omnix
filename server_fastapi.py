@@ -1419,15 +1419,28 @@ async def generate_podcast_episode(request: Request):
 
     async def gen():
         try:
-            yield f"data: {json.dumps({'type': 'phase', 'phase': 'script', 'message': 'Generating...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'phase', 'phase': 'script', 'percent': 5, 'message': 'Generating script...'})}\n\n"
             speaker_names = [s.get('name', f'Speaker {i+1}') for i, s in enumerate(data.get('speakers', []))]
             if not speaker_names:
                 speaker_names = ['Host', 'Guest']
             speakers_str = ', '.join(speaker_names)
+
+            # Map requested length to approximate duration and dialogue guidance
+            length = data.get('length', 'medium')
+            length_map = {
+                'short': ('5 minutes', '20-30 exchanges'),
+                'medium': ('15 minutes', '60-80 exchanges'),
+                'long': ('30 minutes', '120-160 exchanges'),
+                'extended': ('60 minutes', '240-320 exchanges'),
+            }
+            duration_str, exchanges_str = length_map.get(length, ('15 minutes', '60-80 exchanges'))
+
             script = await asyncio.to_thread(
                 _llm_generate_audiobook,
                 f"Write a podcast dialogue script for: {data.get('topic')}. "
                 f"Use exactly these speaker names: {speakers_str}. "
+                f"The podcast should be approximately {duration_str} long with {exchanges_str} between the speakers. "
+                f"Write enough dialogue to fill the full {duration_str} duration. "
                 f"Format lines exactly as 'SpeakerName: Text'"
             )
 
@@ -1440,6 +1453,9 @@ async def generate_podcast_episode(request: Request):
             # Build speaker-to-voice mapping by name (case-insensitive)
             input_speakers = data.get('speakers', [])
             voice_by_name = {s.get('name', '').lower(): s.get('voice_id') for s in input_speakers}
+
+            total_segments = len(segments)
+            yield f"data: {json.dumps({'type': 'phase', 'phase': 'audio', 'percent': 10, 'message': f'Generating audio for {total_segments} segments...'})}\n\n"
 
             transcript, audios = [], []
             for i, seg in enumerate(segments):
@@ -1462,12 +1478,14 @@ async def generate_podcast_episode(request: Request):
                         )
                         if result.get('success'):
                             adata, sr = result.get('audio'), result.get('sample_rate')
-                            yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i, 'speaker': seg['speaker'], 'text': seg['text']})}\n\n"
+                            pct = round(10 + (i + 1) / total_segments * 85) if total_segments else 95
+                            yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i, 'total_segments': total_segments, 'percent': pct, 'speaker': seg['speaker'], 'text': seg['text']})}\n\n"
                             transcript.append({"speaker": seg['speaker'], "text": seg['text']})
                             audios.append(base64.b64decode(adata))
                 except Exception:
                     pass
 
+            duration = 0
             if audios:
                 podcasts_dir = Path(shared.DATA_DIR) / 'podcasts'
                 podcasts_dir.mkdir(exist_ok=True)
@@ -1483,11 +1501,12 @@ async def generate_podcast_episode(request: Request):
                     wav_io.write(a)
                 with open(podcasts_dir / f"{ep_id}.wav", 'wb') as f:
                     f.write(wav_io.getvalue())
+                duration = total / 2 / shared.TTS_SAMPLE_RATE
 
             eps = _load_json(EP_FILE, {})
-            eps[ep_id] = {**data, "transcript": transcript, "status": "complete", "created_at": datetime.now().isoformat()}
+            eps[ep_id] = {**data, "transcript": transcript, "status": "complete", "duration": duration, "created_at": datetime.now().isoformat()}
             _save_json(EP_FILE, eps)
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'duration': duration})}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
