@@ -1293,7 +1293,10 @@ async def clear_session(request: Request):
 
 
 # ============== PODCAST ENDPOINTS ==============
+import io as _io
 import os as _os
+import re as _re_podcast
+import struct as _struct
 import time as _time
 from pathlib import Path
 
@@ -1363,6 +1366,110 @@ async def delete_podcast_episode(ep_id: str):
     if audio_path.exists():
         audio_path.unlink()
     return {"success": True}
+
+
+@app.get("/api/podcast/episodes/{ep_id}/audio")
+async def get_podcast_episode_audio(ep_id: str):
+    """Stream podcast episode audio"""
+    audio_path = Path(shared.DATA_DIR) / 'podcasts' / f"{ep_id}.wav"
+    if not audio_path.exists():
+        return JSONResponse({"error": "No audio"}, status_code=404)
+    return FileResponse(str(audio_path), media_type='audio/wav')
+
+
+@app.post("/api/podcast/generate-outline")
+async def generate_podcast_outline(request: Request):
+    """Generate a podcast outline for a topic"""
+    data = await request.json()
+    prompt = (
+        f"Create a podcast outline JSON for Topic: {data.get('topic')}. "
+        f"Format: {{\"outline\": \"...\", \"sections\": [{{\"title\": \"...\", \"description\": \"...\"}}]}}"
+    )
+    try:
+        res = await asyncio.to_thread(_llm_generate_audiobook, prompt)
+        match = _re_podcast.search(r'\{[\s\S]*\}', res)
+        parsed = json.loads(match.group() if match else res)
+        return {"success": True, **parsed}
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/api/podcast/generate")
+async def generate_podcast_episode(request: Request):
+    """Generate a podcast episode with SSE streaming"""
+    from fastapi.responses import StreamingResponse
+
+    data = await request.json()
+    ep_id = data.get('id', f"ep_{int(_time.time())}")
+
+    async def gen():
+        try:
+            yield f"data: {json.dumps({'type': 'phase', 'phase': 'script', 'message': 'Generating...'})}\n\n"
+            script = await asyncio.to_thread(
+                _llm_generate_audiobook,
+                f"Write a podcast dialogue script for: {data.get('topic')}. "
+                f"Format lines exactly as 'SpeakerName: Text'"
+            )
+
+            segments = []
+            for line in script.split('\n'):
+                if ':' in line:
+                    sp, txt = line.split(':', 1)
+                    segments.append({"speaker": sp.strip(), "text": txt.strip()})
+
+            transcript, audios = [], []
+            for i, seg in enumerate(segments):
+                vid = next(
+                    (s.get('voice_id') for s in data.get('speakers', [])
+                     if s.get('name', '').lower() == seg['speaker'].lower()),
+                    None
+                )
+                v_clone = shared.custom_voices.get(
+                    vid.replace(" (Custom)", "") if vid else "", {}
+                ).get('voice_clone_id', vid)
+
+                try:
+                    tts_provider = shared.get_tts_provider()
+                    if tts_provider:
+                        result = await asyncio.to_thread(
+                            tts_provider.generate_audio,
+                            text=shared.remove_emojis(seg['text']),
+                            speaker=v_clone,
+                            language="en"
+                        )
+                        if result.get('success'):
+                            adata, sr = result.get('audio'), result.get('sample_rate')
+                            yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i, 'speaker': seg['speaker'], 'text': seg['text']})}\n\n"
+                            transcript.append({"speaker": seg['speaker'], "text": seg['text']})
+                            audios.append(base64.b64decode(adata))
+                except Exception:
+                    pass
+
+            if audios:
+                podcasts_dir = Path(shared.DATA_DIR) / 'podcasts'
+                podcasts_dir.mkdir(exist_ok=True)
+                wav_io = _io.BytesIO()
+                total = sum(len(a) for a in audios)
+                wav_io.write(b'RIFF')
+                wav_io.write(_struct.pack('<I', 36 + total))
+                wav_io.write(b'WAVEfmt ')
+                wav_io.write(_struct.pack('<IHHIIHH', 16, 1, 1, shared.TTS_SAMPLE_RATE, shared.TTS_SAMPLE_RATE * 2, 2, 16))
+                wav_io.write(b'data')
+                wav_io.write(_struct.pack('<I', total))
+                for a in audios:
+                    wav_io.write(a)
+                with open(podcasts_dir / f"{ep_id}.wav", 'wb') as f:
+                    f.write(wav_io.getvalue())
+
+            eps = _load_json(EP_FILE, {})
+            eps[ep_id] = {**data, "transcript": transcript, "status": "complete", "created_at": datetime.now().isoformat()}
+            _save_json(EP_FILE, eps)
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 # ============== AUDIOBOOK ENDPOINTS ==============
