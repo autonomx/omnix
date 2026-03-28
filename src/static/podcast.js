@@ -1128,10 +1128,18 @@ function initPodcastForm() {
 
     // Reset audio state
     podcastState.episode = null;
+    podcastState.episodeId = null;
     podcastState.audioQueue = [];
+    podcastState.audioSegments = [];
     podcastState.combinedAudioBlob = null;
     podcastState.isPlaying = false;
+    podcastState.isPaused = false;
     podcastState.isGenerating = false;
+    podcastState.currentTime = 0;
+    podcastState.duration = 0;
+    podcastState.transcript = [];
+    podcastState.currentSegmentIndex = -1;
+    podcastState.bookmarks = [];
     
     // Load voices for speakers
     loadVoicesForPodcastSpeakers();
