@@ -410,8 +410,8 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         try:
             # Get reference audio path
             ref_audio_path = None
+            voice_clones_dir = Path(VOICE_CLONES_DIR)
             if speaker:
-                voice_clones_dir = Path(VOICE_CLONES_DIR)
                 ref_path = voice_clones_dir / f"{speaker}.wav"
                 if ref_path.exists():
                     ref_audio_path = str(ref_path)
