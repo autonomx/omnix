@@ -1028,3 +1028,31 @@ if (document.readyState === 'loading') {
 } else {
     setupVoiceStudio();
 }
+
+// ============================================================
+// STORY TELLER
+// ============================================================
+
+const storyBtns = [
+    document.getElementById('storyBtn'),
+    document.getElementById('storyBtnOption'),
+    document.getElementById('storyBtnCollapsed')
+].filter(btn => btn !== null);
+
+function setupStoryTeller() {
+    if (storyBtns.length === 0) return;
+
+    storyBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (typeof openStoryModal === 'function') {
+                openStoryModal();
+            }
+        });
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupStoryTeller);
+} else {
+    setupStoryTeller();
+}

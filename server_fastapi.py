@@ -2143,6 +2143,160 @@ async def audiobook_get_library_book(filename: str):
     return FileResponse(full_path, media_type=media_type)
 
 
+# ============== STORY TELLER ENDPOINTS ==============
+
+_STORY_GENRES = {"fantasy", "horror", "sci-fi", "kids", "romance", "custom"}
+_STORY_TONES = {"dark", "funny", "emotional", "epic", "calm", "mysterious"}
+_STORY_LENGTHS = {
+    "short":  ("~2 minutes",  "15–25 lines"),
+    "medium": ("~5 minutes",  "40–60 lines"),
+    "long":   ("~10 minutes", "80–120 lines"),
+}
+
+# Maximum allowed characters in a speaker name (guards against mis-parsed lines).
+_MAX_SPEAKER_NAME_LEN = 50
+
+_STORY_PROMPT_TEMPLATE = """You are a professional storyteller.
+
+Write a complete story in the following STRICT format:
+
+Speaker: text
+
+Rules:
+- Use "Narrator" for narration.
+- Every line must start with a speaker name followed by a colon.
+- Do NOT use quotes around dialogue.
+- Do NOT include explanations or formatting outside the story.
+- Do NOT summarize.
+- Keep all storytelling rich and detailed.
+- Each line should be a natural spoken segment.
+- No multi-line segments.
+
+Characters:
+{character_list}
+
+Story type: {genre}
+Tone: {tone}
+Length: approximately {length_desc} ({length_lines})
+
+Output ONLY the story, nothing else."""
+
+
+def _parse_story_format(text: str) -> list:
+    """Parse Speaker: text format into list of segment dicts.
+
+    Splits on the FIRST colon only so that content such as
+    "Narrator: The time was 10:30 AM" is correctly handled –
+    speaker = "Narrator", text = "The time was 10:30 AM".
+    """
+    segments = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        speaker, content = line.split(":", 1)
+        speaker = speaker.strip()
+        content = content.strip()
+        # Validate: speaker must be a simple word/name (not a URL, timestamp, etc.)
+        if (
+            speaker
+            and content
+            and len(speaker) <= _MAX_SPEAKER_NAME_LEN
+            and not _re.search(r'[/\\<>]', speaker)
+        ):
+            segments.append({"speaker": speaker, "text": content})
+    return segments
+
+
+@app.post("/api/story/generate")
+async def story_generate(request: Request):
+    """Generate a structured story using the configured LLM."""
+    data = await request.json()
+    genre = data.get("genre", "fantasy")
+    tone = data.get("tone", "epic")
+    length = data.get("length", "short")
+    custom_prompt = data.get("custom_prompt", "")
+    characters = data.get("characters", [])
+
+    # Build character list string
+    if characters:
+        char_lines = []
+        for c in characters:
+            name = str(c.get("name", "")).strip()
+            traits = str(c.get("traits", "")).strip()
+            if name:
+                char_lines.append(f"- {name}" + (f" ({traits})" if traits else ""))
+        character_list = "\n".join(char_lines) if char_lines else "Auto-generate interesting characters"
+    else:
+        character_list = "Auto-generate 2–3 interesting characters with distinct personalities"
+
+    length_desc, length_lines = _STORY_LENGTHS.get(length, _STORY_LENGTHS["short"])
+
+    # Handle custom prompt by appending it to the genre description
+    genre_str = custom_prompt.strip() if genre == "custom" and custom_prompt else genre
+
+    prompt = _STORY_PROMPT_TEMPLATE.format(
+        character_list=character_list,
+        genre=genre_str,
+        tone=tone,
+        length_desc=length_desc,
+        length_lines=length_lines,
+    )
+
+    try:
+        story_text = await asyncio.to_thread(_llm_generate_audiobook, prompt)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+    if not story_text or not story_text.strip():
+        return JSONResponse({"success": False, "error": "LLM returned an empty story. Check your LLM provider settings."}, status_code=500)
+
+    segments = _parse_story_format(story_text)
+    if not segments:
+        return JSONResponse({"success": False, "error": "LLM output could not be parsed. Ensure the LLM is connected and responding correctly."}, status_code=500)
+
+    return {"success": True, "story": story_text, "segments": segments}
+
+
+@app.post("/api/story/parse")
+async def story_parse(request: Request):
+    """Parse a story text (Speaker: text format) and detect speakers with voice suggestions."""
+    data = await request.json()
+    text = data.get("text", "")
+
+    segments = _parse_story_format(text)
+
+    speakers: dict = {}
+    for seg in segments:
+        sp = seg.get("speaker")
+        if not sp:
+            continue
+        if sp not in speakers:
+            speakers[sp] = {
+                "name": sp,
+                "gender": _detect_gender(sp),
+                "segment_count": 1,
+            }
+        else:
+            speakers[sp]["segment_count"] += 1
+
+    avail = list(shared.custom_voices.keys())
+    for sp, info in speakers.items():
+        match = next(
+            (v for v in avail if sp.lower() in v.lower() or v.lower() in sp.lower()),
+            None,
+        )
+        if match:
+            info["suggested_voice"] = match
+        else:
+            info["suggested_voice"] = next(
+                (v for v in avail if info["gender"] in v.lower()),
+                avail[0] if avail else None,
+            )
+
+    return {"success": True, "segments": segments, "speakers": speakers, "available_voices": avail}
+
+
 # ============== LLAMACPP ENDPOINTS ==============
 @app.get("/api/llamacpp/server/status")
 async def llamacpp_status():

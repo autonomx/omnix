@@ -4723,3 +4723,92 @@ pre:hover .code-copy-btn {
     border-top: 1px solid var(--border-color, #333);
     padding-top: 12px;
 }
+
+/* ============================================================
+   STORY TELLER MODAL
+   ============================================================ */
+
+.story-modal-content {
+    max-width: 800px;
+    max-height: 90vh;
+}
+
+.story-section {
+    border-top: 1px solid var(--border-color);
+    padding-top: 16px;
+}
+
+.story-section:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+
+.story-section h4 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.story-section h5 {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.story-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+/* Speaker rows in voice assignment */
+.story-speaker-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.story-speaker-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 120px;
+}
+
+.story-speaker-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.story-speaker-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+.story-voice-select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    min-width: 160px;
+    flex: 1;
+}
+
+.story-voice-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
