@@ -23,6 +23,11 @@
         abortController: null,
     };
 
+    // Streaming playback state – play segments as they arrive
+    let _playbackCtx = null;
+    let _playbackEndTime = 0;
+    let _decodedBuffers = [];
+
     // ---------------------------------------------------------------------------
     // DOM references (populated in initStory)
     // ---------------------------------------------------------------------------
@@ -72,6 +77,8 @@
     // Reset
     // ---------------------------------------------------------------------------
     function _resetStoryState() {
+        _stopStreamingPlayback();
+
         storyState = {
             storyText: '',
             segments: [],
@@ -126,6 +133,7 @@
         }
         storyState.isGenerating = false;
         storyState.isGeneratingAudio = false;
+        _stopStreamingPlayback();
     }
 
     // ---------------------------------------------------------------------------
@@ -322,6 +330,42 @@
     }
 
     // ---------------------------------------------------------------------------
+    // Streaming playback – play each segment as soon as it arrives
+    // ---------------------------------------------------------------------------
+    function _stopStreamingPlayback() {
+        if (_playbackCtx && _playbackCtx.state !== 'closed') {
+            try { _playbackCtx.close(); } catch (_) { /* ignore */ }
+        }
+        _playbackCtx = null;
+        _playbackEndTime = 0;
+        _decodedBuffers = [];
+    }
+
+    async function _playSegmentImmediately(b64) {
+        if (!_playbackCtx) {
+            _playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
+            _playbackEndTime = _playbackCtx.currentTime;
+        }
+        try {
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            // slice(0) creates a copy because decodeAudioData detaches the buffer
+            const decoded = await _playbackCtx.decodeAudioData(bytes.buffer.slice(0));
+            _decodedBuffers.push(decoded);
+
+            const source = _playbackCtx.createBufferSource();
+            source.buffer = decoded;
+            source.connect(_playbackCtx.destination);
+            const startAt = Math.max(_playbackCtx.currentTime, _playbackEndTime);
+            source.start(startAt);
+            _playbackEndTime = startAt + decoded.duration;
+        } catch (e) {
+            console.warn('[STORY] Failed to play segment immediately:', e);
+        }
+    }
+
+    // ---------------------------------------------------------------------------
     // Generate Audiobook (TTS via SSE)
     // ---------------------------------------------------------------------------
     async function generateStoryAudiobook() {
@@ -364,6 +408,7 @@
         storyState.isGeneratingAudio = true;
         storyState.audioSegments = [];
         storyState.combinedAudioUrl = null;
+        _stopStreamingPlayback();
 
         const genBtn = _el('story-generate-audio-btn');
         if (genBtn) { genBtn.disabled = true; genBtn.textContent = '⏳ Generating Audio...'; }
@@ -413,10 +458,11 @@
 
                     if (evt.type === 'audio') {
                         storyState.audioSegments.push(evt.audio);
+                        await _playSegmentImmediately(evt.audio);
                         completed++;
                         const pct = Math.round((completed / segments.length) * 100);
                         if (progressBar) progressBar.style.width = pct + '%';
-                        if (progressText) progressText.textContent = `Generated ${completed} / ${segments.length} segments…`;
+                        if (progressText) progressText.textContent = `🔊 Playing… generated ${completed} / ${segments.length} segments`;
                     } else if (evt.type === 'done') {
                         if (progressBar) progressBar.style.width = '100%';
                         if (progressText) progressText.textContent = `Done! ${completed} segments generated.`;
@@ -443,21 +489,24 @@
     // Build combined audio and show player
     // ---------------------------------------------------------------------------
     async function _buildAndPlayAudio() {
-        const segs = storyState.audioSegments;
-        if (!segs.length) return;
+        // Use pre-decoded buffers from streaming playback when available,
+        // falling back to decoding from base64 if needed.
+        let buffers = _decodedBuffers.length ? _decodedBuffers.slice() : [];
 
-        // Decode each base64 WAV chunk and concatenate PCM data
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const buffers = [];
-
-        for (const b64 of segs) {
-            try {
-                const binary = atob(b64);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                const decoded = await audioCtx.decodeAudioData(bytes.buffer);
-                buffers.push(decoded);
-            } catch (_) { /* skip bad segment */ }
+        if (!buffers.length) {
+            const segs = storyState.audioSegments;
+            if (!segs.length) return;
+            const tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
+            for (const b64 of segs) {
+                try {
+                    const binary = atob(b64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    const decoded = await tmpCtx.decodeAudioData(bytes.buffer.slice(0));
+                    buffers.push(decoded);
+                } catch (_) { /* skip bad segment */ }
+            }
+            tmpCtx.close();
         }
 
         if (!buffers.length) return;
@@ -466,7 +515,9 @@
         const sampleRate = buffers[0].sampleRate;
         const channels = buffers[0].numberOfChannels;
         const totalLength = buffers.reduce((sum, b) => sum + b.length, 0);
-        const merged = audioCtx.createBuffer(channels, totalLength, sampleRate);
+
+        const mergeCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const merged = mergeCtx.createBuffer(channels, totalLength, sampleRate);
 
         let offset = 0;
         for (const buf of buffers) {
@@ -476,12 +527,13 @@
             offset += buf.length;
         }
 
-        // Encode back to WAV
+        // Encode back to WAV for the download / replay audio element
         const wavBlob = _audioBufferToWavBlob(merged);
         const url = URL.createObjectURL(wavBlob);
         storyState.combinedAudioUrl = url;
 
-        // Show player
+        // Show player (audio is already playing via streaming; this enables
+        // replay, seeking, and download once all segments are ready)
         const audioEl = _el('story-audio');
         if (audioEl) { audioEl.src = url; audioEl.load(); }
 
@@ -489,7 +541,7 @@
         if (dlLink) { dlLink.href = url; dlLink.download = 'story_audiobook.wav'; }
 
         _show('story-player-section');
-        audioCtx.close();
+        mergeCtx.close();
     }
 
     // ---------------------------------------------------------------------------
