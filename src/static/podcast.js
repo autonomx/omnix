@@ -780,6 +780,7 @@ function playPodcastFull() {
     if (!podcastState.audioElement) return;
     if (!podcastState.combinedAudioUrl) {
         console.warn('[PODCAST] No audio URL available for playback');
+        alert('Podcast audio not generated. Check TTS service.');
         return;
     }
     

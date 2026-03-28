@@ -3,6 +3,11 @@
  * Streaming STT, TTS, and Voice Pipeline WebSocket connections
  */
 
+if (window.__WEBSOCKET_MODULE_LOADED__) {
+    console.warn('[WEBSOCKET] Already loaded, skipping duplicate injection');
+} else {
+window.__WEBSOCKET_MODULE_LOADED__ = true;
+
 // Streaming STT WebSocket
 let sttWs = null;
 let sttWsConnected = false;
@@ -795,3 +800,8 @@ function closeVoiceWebSocket() {
         voiceWsConnected = false;
     }
 }
+
+// Expose functions needed by other modules
+window.speakTextStreaming = speakTextStreaming;
+
+} // end __WEBSOCKET_MODULE_LOADED__ guard
