@@ -91,8 +91,8 @@ class WorldTime:
         while self.hour >= 24:
             self.hour -= 24
             self.day += 1
-            # Season changes every 30 days
-            if self.day % 30 == 1 and self.day > 1:
+            # Season changes every 30 days (transitions at day 31, 61, 91, 121, ...)
+            if self.day > 30 and (self.day - 1) % 30 == 0:
                 idx = SEASONS.index(self.season) if self.season in SEASONS else 0
                 self.season = SEASONS[(idx + 1) % len(SEASONS)]
 
@@ -139,10 +139,16 @@ def calculate_price(item: Item, location_modifier: float = 1.0,
     Calculate the actual price of an item based on economy factors.
 
     Formula: base_price * rarity_mult * location_mod * relationship_mod
+
+    Relationship is expected in range -100 to +100.
+    Dividing by 500 maps this to a +-0.2 adjustment around 1.0:
+      rel=+100 -> mod=0.8 (20% discount)
+      rel=0    -> mod=1.0 (no change)
+      rel=-100 -> mod=1.2 (20% markup)
+    Clamped to [0.8, 1.3] to prevent extreme outliers.
     """
     rarity_mult = Item.RARITY_MULTIPLIERS.get(item.rarity, 1.0)
     # Relationship modifier: friendly NPCs give discounts, hostile ones markup
-    # Range: 0.8 (friendly, rel=+100) to 1.3 (hostile, rel=-100)
     rel_mod = 1.0 - (relationship / 500.0)
     rel_mod = max(0.8, min(1.3, rel_mod))
     price = item.base_price * rarity_mult * location_modifier * rel_mod
