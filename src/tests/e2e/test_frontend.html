@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Unit Tests</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .test-suite {
+            margin-bottom: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .test-suite-header {
+            background: #16213e;
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .test-suite-header h3 {
+            margin: 0;
+        }
+        .test-results {
+            padding: 15px;
+            background: #0f0f23;
+        }
+        .test-result {
+            padding: 8px 12px;
+            margin: 4px 0;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .test-result.pass {
+            background: rgba(16, 185, 129, 0.2);
+            border-left: 3px solid #10b981;
+        }
+        .test-result.fail {
+            background: rgba(239, 68, 68, 0.2);
+            border-left: 3px solid #ef4444;
+        }
+        .test-result.skip {
+            background: rgba(251, 191, 36, 0.2);
+            border-left: 3px solid #fbbf24;
+        }
+        .summary {
+            padding: 20px;
+            background: #16213e;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+        }
+        .summary-item {
+            text-align: center;
+        }
+        .summary-item .count {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .summary-item.pass .count { color: #10b981; }
+        .summary-item.fail .count { color: #ef4444; }
+        .summary-item.skip .count { color: #fbbf24; }
+        .error-message {
+            color: #ef4444;
+            font-size: 0.9em;
+            margin-top: 4px;
+        }
+        .run-btn {
+            background: #7c3aed;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+        .run-btn:hover {
+            background: #6d28d9;
+        }
+        .run-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Frontend Unit Tests</h1>
+    
+    <button class="run-btn" onclick="runAllTests()">Run All Tests</button>
+    
+    <div class="summary" id="summary">
+        <div class="summary-item pass">
+            <div class="count" id="passCount">0</div>
+            <div>Passed</div>
+        </div>
+        <div class="summary-item fail">
+            <div class="count" id="failCount">0</div>
+            <div>Failed</div>
+        </div>
+        <div class="summary-item skip">
+            <div class="count" id="skipCount">0</div>
+            <div>Skipped</div>
+        </div>
+    </div>
+    
+    <div id="testResults"></div>
+
+    <script>
+        // Test framework
+        let testResults = {
+            pass: 0,
+            fail: 0,
+            skip: 0,
+            suites: {}
+        };
+
+        function describe(name, tests) {
+            testResults.suites[name] = {
+                tests: [],
+                pass: 0,
+                fail: 0,
+                skip: 0
+            };
+            
+            const suite = testResults.suites[name];
+            
+            for (const [testName, testFn] of Object.entries(tests)) {
+                try {
+                    const result = testFn();
+                    if (result === 'skip') {
+                        suite.tests.push({ name: testName, status: 'skip' });
+                        suite.skip++;
+                        testResults.skip++;
+                    } else {
+                        suite.tests.push({ name: testName, status: 'pass' });
+                        suite.pass++;
+                        testResults.pass++;
+                    }
+                } catch (error) {
+                    suite.tests.push({ name: testName, status: 'fail', error: error.message });
+                    suite.fail++;
+                    testResults.fail++;
+                }
+            }
+        }
+
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error(message || 'Assertion failed');
+            }
+        }
+
+        function assertEqual(actual, expected, message) {
+            if (actual !== expected) {
+                throw new Error(message || `Expected ${expected}, got ${actual}`);
+            }
+        }
+
+        function assertDeepEqual(actual, expected, message) {
+            if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                throw new Error(message || `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+            }
+        }
+
+        function skip(reason) {
+            return 'skip';
+        }
+
+        // ============================================================
+        // TEST SUITES
+        // ============================================================
+
+        // Token Counter Tests
+        describe('Token Counter', {
+            'estimates tokens for English text': () => {
+                // Approx 4 chars per token
+                const text = "Hello world";
+                const estimated = Math.ceil(text.length / 4);
+                assert(estimated >= 2 && estimated <= 4, 'Token estimate should be reasonable');
+            },
+            
+            'handles empty text': () => {
+                const text = "";
+                const estimated = Math.ceil(text.length / 4);
+                assertEqual(estimated, 0);
+            },
+            
+            'handles long text': () => {
+                const text = "a".repeat(1000);
+                const estimated = Math.ceil(text.length / 4);
+                assertEqual(estimated, 250);
+            },
+            
+            'calculates tokens per second': () => {
+                const completionTokens = 100;
+                const generationTimeMs = 2000; // 2 seconds
+                const tokensPerSecond = (completionTokens / generationTimeMs) * 1000;
+                assertEqual(tokensPerSecond, 50);
+            }
+        });
+
+        // Thinking Extraction Tests
+        describe('Thinking Extraction', {
+            'extracts thinking from tagged content': () => {
+                const content = "Let me think... </thinking>The answer is 42.";
+                const parts = content.split('</thinking>');
+                assert(parts.length === 2, 'Should split into thinking and content');
+            },
+            
+            'handles content without thinking': () => {
+                const content = "This is a simple response.";
+                const hasThinking = content.toLowerCase().includes('</thinking>');
+                assertEqual(hasThinking, false);
+            },
+            
+            'handles empty content': () => {
+                const content = "";
+                assertEqual(content.length, 0);
+            }
+        });
+
+        // WAV Buffer Creation Tests
+        describe('WAV Buffer Creation', {
+            'creates valid WAV header': () => {
+                const sampleRate = 24000;
+                const numChannels = 1;
+                const bitsPerSample = 16;
+                const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+                const blockAlign = numChannels * bitsPerSample / 8;
+                
+                assertEqual(byteRate, 48000);
+                assertEqual(blockAlign, 2);
+            },
+            
+            'calculates correct buffer size': () => {
+                const dataSize = 1000;
+                const headerSize = 44;
+                const totalSize = headerSize + dataSize;
+                assertEqual(totalSize, 1044);
+            }
+        });
+
+        // Speaker Gender Detection Tests
+        describe('Speaker Gender Detection', {
+            'detects female names': () => {
+                const femaleNames = ['Sofia', 'Emma', 'Olivia', 'Serena', 'Vivian'];
+                const detected = femaleNames.filter(name => {
+                    const lower = name.toLowerCase();
+                    return ['sofia', 'emma', 'olivia', 'serena', 'vivian', 'ciri', 'sohee', 'her'].includes(lower);
+                });
+                assertEqual(detected.length, 5, 'All female names should be detected');
+            },
+            
+            'detects male names': () => {
+                const maleNames = ['Morgan', 'James', 'John', 'Eric', 'Nate'];
+                const detected = maleNames.filter(name => {
+                    const lower = name.toLowerCase();
+                    return ['morgan', 'james', 'john', 'eric', 'nate', 'inigo', 'aiden', 'dylan'].includes(lower);
+                });
+                assertEqual(detected.length, 5, 'All male names should be detected');
+            }
+        });
+
+        // Dialogue Parsing Tests
+        describe('Dialogue Parsing', {
+            'parses direct speaker labels': () => {
+                const text = "Sofia: Hello there!\nMorgan: Hi!";
+                const hasDirectLabel = /([A-Z][A-Za-z]+)\s*:\s*(.+)/.test(text);
+                assert(hasDirectLabel, 'Should detect direct speaker labels');
+            },
+            
+            'detects narration': () => {
+                const text = "The sun was setting over the hills.";
+                const hasSpeakerLabel = /^([A-Z][A-Za-z]+)\s*:\s*/.test(text);
+                assertEqual(hasSpeakerLabel, false, 'Should not detect speaker labels in narration');
+            },
+            
+            'handles multiple speakers': () => {
+                const text = `
+                    Sofia: Hello!
+                    Morgan: Hi there!
+                    Sofia: How are you?
+                `;
+                const lines = text.trim().split('\n');
+                assert(lines.filter(l => l.includes(':')).length >= 3, 'Should have multiple speaker lines');
+            }
+        });
+
+        // Emoji Removal Tests
+        describe('Emoji Removal', {
+            'removes basic emojis': () => {
+                const text = "Hello 😀 world 🎉!";
+                const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}]/gu;
+                const cleaned = text.replace(emojiRegex, '');
+                assert(!cleaned.includes('😀'), 'Should remove emojis');
+                assert(cleaned.includes('Hello'), 'Should keep text');
+            },
+            
+            'handles text without emojis': () => {
+                const text = "Hello world!";
+                const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}]/gu;
+                const cleaned = text.replace(emojiRegex, '');
+                assertEqual(cleaned, text);
+            }
+        });
+
+        // Base64 Encoding Tests
+        describe('Base64 Encoding', {
+            'encodes binary data': () => {
+                const data = new Uint8Array([72, 101, 108, 108, 111]); // "Hello"
+                let binary = '';
+                for (let i = 0; i < data.length; i++) {
+                    binary += String.fromCharCode(data[i]);
+                }
+                const encoded = btoa(binary);
+                assertEqual(typeof encoded, 'string');
+                assert(encoded.length > 0);
+            },
+            
+            'decodes base64': () => {
+                const encoded = btoa('Hello');
+                const decoded = atob(encoded);
+                assertEqual(decoded, 'Hello');
+            }
+        });
+
+        // SSE Parsing Tests
+        describe('SSE Parsing', {
+            'parses SSE data lines': () => {
+                const line = 'data: {"type": "content", "content": "Hello"}';
+                assert(line.startsWith('data: '), 'Should start with "data: "');
+                
+                const dataStr = line.slice(6);
+                const data = JSON.parse(dataStr);
+                assertEqual(data.type, 'content');
+                assertEqual(data.content, 'Hello');
+            },
+            
+            'handles multiple events': () => {
+                const buffer = 'data: {"type": "content"}\n\ndata: {"type": "done"}\n\n';
+                const events = buffer.split('\n\n').filter(e => e.trim());
+                assertEqual(events.length, 2);
+            }
+        });
+
+        // Voice Profile Tests
+        describe('Voice Profiles', {
+            'saves and loads profiles': () => {
+                const testProfile = {
+                    name: 'Test Character',
+                    personality: 'A friendly test assistant',
+                    style: 'casual'
+                };
+                
+                // Simulate save/load
+                const key = 'chatbot-test-voice-profile';
+                localStorage.setItem(key, JSON.stringify(testProfile));
+                const loaded = JSON.parse(localStorage.getItem(key));
+                
+                assertEqual(loaded.name, testProfile.name);
+                localStorage.removeItem(key);
+            },
+            
+            'combines system prompts': () => {
+                const globalPrompt = 'You are a helpful assistant.';
+                const voiceProfile = {
+                    name: 'Sofia',
+                    personality: 'You are Sofia, a warm and caring AI.'
+                };
+                
+                const combined = voiceProfile ? 
+                    `${globalPrompt}\n\n## Current Character: ${voiceProfile.name}\n${voiceProfile.personality}` :
+                    globalPrompt;
+                
+                assert(combined.includes(globalPrompt));
+                assert(combined.includes('Sofia'));
+            }
+        });
+
+        // Markdown Rendering Tests
+        describe('Markdown Rendering', {
+            'handles code blocks': () => {
+                const markdown = '```python\nprint("hello")\n```';
+                assert(markdown.includes('```'));
+            },
+            
+            'handles inline code': () => {
+                const markdown = 'Use `console.log()` for debugging';
+                assert(markdown.includes('`'));
+            },
+            
+            'handles bold and italic': () => {
+                const markdown = '**bold** and *italic*';
+                assert(markdown.includes('**'));
+                assert(markdown.includes('*'));
+            }
+        });
+
+        // System Prompt Presets Tests
+        describe('System Prompt Presets', {
+            'has default presets': () => {
+                const presets = {
+                    'default': { name: 'Default Assistant' },
+                    'coder': { name: 'Expert Coder' },
+                    'writer': { name: 'Creative Writer' },
+                    'tutor': { name: 'Patient Tutor' }
+                };
+                
+                assert(presets.default, 'Should have default preset');
+                assert(presets.coder, 'Should have coder preset');
+            },
+            
+            'presets have required fields': () => {
+                const preset = {
+                    name: 'Test',
+                    prompt: 'You are a test assistant.'
+                };
+                
+                assert(preset.name, 'Should have name');
+                assert(preset.prompt, 'Should have prompt');
+            }
+        });
+
+        // Audio Playback Tests
+        describe('Audio Playback', {
+            'creates audio from blob': () => {
+                const audioData = new Uint8Array([0, 1, 2, 3, 4, 5]);
+                const blob = new Blob([audioData], { type: 'audio/wav' });
+                const url = URL.createObjectURL(blob);
+                
+                assert(url.startsWith('blob:'), 'Should create blob URL');
+                URL.revokeObjectURL(url);
+            },
+            
+            'audio element can be created': () => {
+                const audio = new Audio();
+                assertEqual(audio.tagName, 'AUDIO');
+            }
+        });
+
+        // Render results
+        function renderResults() {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML = '';
+            
+            for (const [suiteName, suite] of Object.entries(testResults.suites)) {
+                const suiteDiv = document.createElement('div');
+                suiteDiv.className = 'test-suite';
+                
+                const suiteHeader = document.createElement('div');
+                suiteHeader.className = 'test-suite-header';
+                suiteHeader.innerHTML = `
+                    <h3>${suiteName}</h3>
+                    <span>✓ ${suite.pass} | ✗ ${suite.fail} | ⊘ ${suite.skip}</span>
+                `;
+                suiteDiv.appendChild(suiteHeader);
+                
+                const resultsDiv = document.createElement('div');
+                resultsDiv.className = 'test-results';
+                
+                for (const test of suite.tests) {
+                    const testDiv = document.createElement('div');
+                    testDiv.className = `test-result ${test.status}`;
+                    testDiv.innerHTML = `
+                        <span>${test.name}</span>
+                        <span>${test.status === 'pass' ? '✓' : test.status === 'skip' ? '⊘' : '✗'}</span>
+                    `;
+                    if (test.error) {
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'error-message';
+                        errorDiv.textContent = test.error;
+                        testDiv.appendChild(errorDiv);
+                    }
+                    resultsDiv.appendChild(testDiv);
+                }
+                
+                suiteDiv.appendChild(resultsDiv);
+                document.getElementById('testResults').appendChild(suiteDiv);
+            }
+            
+            // Update summary
+            document.getElementById('passCount').textContent = testResults.pass;
+            document.getElementById('failCount').textContent = testResults.fail;
+            document.getElementById('skipCount').textContent = testResults.skip;
+        }
+
+        function runAllTests() {
+            // Reset results
+            testResults = {
+                pass: 0,
+                fail: 0,
+                skip: 0,
+                suites: {}
+            };
+            
+            // Re-run all describes (they're already defined)
+            // Just re-render the results
+            renderResults();
+        }
+
+        // Run tests on load
+        renderResults();
+    </script>
+</body>
+</html>

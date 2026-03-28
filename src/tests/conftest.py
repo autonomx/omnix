@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 import pytest
 from playwright.sync_api import Page, APIRequestContext, BrowserContext
 
+<<<<<<< HEAD
 # Add project roots to path for importing app modules
 SRC_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = SRC_DIR.parent
@@ -56,6 +57,15 @@ def pytest_addoption(parser):
         default=BASE_URL,
         help="Base URL for the running Omnix application",
     )
+=======
+# Add parent directory and src to path for imports
+# Works whether conftest is at src/tests/ or when discovered from subdirectories
+_tests_dir = os.path.dirname(os.path.abspath(__file__))
+_src_dir = os.path.dirname(_tests_dir)
+_project_root = os.path.dirname(_src_dir)
+sys.path.insert(0, _src_dir)
+sys.path.insert(0, _project_root)
+>>>>>>> cb63dc998e1562d350c6448678bc91ab0705136f
 
 
 # ---------------------------------------------------------------------------
