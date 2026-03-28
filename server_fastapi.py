@@ -1354,6 +1354,21 @@ async def get_podcast_episode(ep_id: str):
     return {"success": True, "episode": ep}
 
 
+@app.put("/api/podcast/episodes/{ep_id}")
+async def update_podcast_episode(ep_id: str, request: Request):
+    """Update a podcast episode"""
+    eps = _load_json(EP_FILE, {})
+    if ep_id not in eps:
+        return JSONResponse({"success": False, "error": "Not found"}, status_code=404)
+    data = await request.json()
+    if data:
+        allowed = {'title', 'topic', 'transcript', 'speakers', 'duration', 'format', 'length', 'status', 'points', 'outline'}
+        filtered = {k: v for k, v in data.items() if k in allowed}
+        eps[ep_id].update(filtered)
+        _save_json(EP_FILE, eps)
+    return {"success": True, "episode": eps[ep_id]}
+
+
 @app.delete("/api/podcast/episodes/{ep_id}")
 async def delete_podcast_episode(ep_id: str):
     """Delete a podcast episode"""

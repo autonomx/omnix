@@ -719,8 +719,12 @@ function showPodcastFullPlayer() {
     
     let html = '<div class="podcast-full-player">';
     
-    // Audio element
-    html += `<audio id="podcast-combined-audio" src="${podcastState.combinedAudioUrl}" preload="metadata"></audio>`;
+    // Audio element - only set src if URL is valid
+    if (podcastState.combinedAudioUrl) {
+        html += `<audio id="podcast-combined-audio" src="${podcastState.combinedAudioUrl}" preload="metadata"></audio>`;
+    } else {
+        html += `<audio id="podcast-combined-audio" preload="metadata"></audio>`;
+    }
     
     // Title
     html += `<h3>${episode.title}</h3>`;
@@ -774,8 +778,14 @@ function showPodcastFullPlayer() {
 // Play full combined audio
 function playPodcastFull() {
     if (!podcastState.audioElement) return;
+    if (!podcastState.combinedAudioUrl) {
+        console.warn('[PODCAST] No audio URL available for playback');
+        return;
+    }
     
-    podcastState.audioElement.play();
+    podcastState.audioElement.play().catch(err => {
+        console.error('[PODCAST] Playback error:', err);
+    });
     podcastState.isPlaying = true;
     
     const playBtn = document.getElementById('podcast-play-full-btn');
@@ -953,7 +963,9 @@ async function playEpisode(episodeId) {
                 // Auto-play
                 setTimeout(() => {
                     if (podcastState.audioElement) {
-                        podcastState.audioElement.play();
+                        podcastState.audioElement.play().catch(err => {
+                            console.error('[PODCAST] Auto-play error:', err);
+                        });
                     }
                 }, 100);
             }
@@ -978,7 +990,9 @@ async function playEpisode(episodeId) {
                 // Auto-play
                 setTimeout(() => {
                     if (podcastState.audioElement) {
-                        podcastState.audioElement.play();
+                        podcastState.audioElement.play().catch(err => {
+                            console.error('[PODCAST] Auto-play error:', err);
+                        });
                     }
                 }, 100);
             } else {
