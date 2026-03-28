@@ -95,13 +95,45 @@ function openPodcastModal() {
 
 // Close podcast modal
 function closePodcastModal() {
+    // Stop streaming playback (closes AudioContext, kills all scheduled audio)
+    stopPodcastStreaming();
+
+    // Pause HTML <audio> element if present
+    if (podcastState.audioElement) {
+        podcastState.audioElement.pause();
+        podcastState.audioElement = null;
+    }
+
+    // Abort any ongoing generation
+    if (podcastState.abortController) {
+        podcastState.abortController.abort();
+        podcastState.abortController = null;
+    }
+
+    // Revoke blob URL to free memory
+    if (podcastState.combinedAudioUrl) {
+        URL.revokeObjectURL(podcastState.combinedAudioUrl);
+        podcastState.combinedAudioUrl = null;
+    }
+
+    // Reset all playback/generation state so reopening is a fresh instance
+    podcastState.episode = null;
+    podcastState.episodeId = null;
+    podcastState.isGenerating = false;
+    podcastState.isPlaying = false;
+    podcastState.isPaused = false;
+    podcastState.currentTime = 0;
+    podcastState.duration = 0;
+    podcastState.audioQueue = [];
+    podcastState.audioSegments = [];
+    podcastState.combinedAudioBlob = null;
+    podcastState.transcript = [];
+    podcastState.currentSegmentIndex = -1;
+    podcastState.bookmarks = [];
+
     if (podcastModal) {
         podcastModal.classList.remove('active');
     }
-    if (podcastState.audioElement) {
-        podcastState.audioElement.pause();
-    }
-    podcastState.isPlaying = false;
 }
 
 // Load voice profiles
@@ -1079,16 +1111,27 @@ function initPodcastForm() {
         speakersContainer.innerHTML = '';
     }
     
+    // Stop any ongoing streaming playback and close AudioContext
+    stopPodcastStreaming();
+
+    // Pause and release HTML audio element
+    if (podcastState.audioElement) {
+        podcastState.audioElement.pause();
+        podcastState.audioElement = null;
+    }
+
+    // Revoke old blob URL to free memory
+    if (podcastState.combinedAudioUrl) {
+        URL.revokeObjectURL(podcastState.combinedAudioUrl);
+        podcastState.combinedAudioUrl = null;
+    }
+
     // Reset audio state
     podcastState.episode = null;
     podcastState.audioQueue = [];
     podcastState.combinedAudioBlob = null;
-    podcastState.combinedAudioUrl = null;
-    podcastState.audioElement = null;
     podcastState.isPlaying = false;
     podcastState.isGenerating = false;
-    streamingPlaybackActive = false;
-    streamingPlaybackIndex = 0;
     
     // Load voices for speakers
     loadVoicesForPodcastSpeakers();
