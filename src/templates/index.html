@@ -88,6 +88,13 @@
                     </svg>
                     <span>Podcast</span>
                 </button>
+                <button id="storyBtnOption" class="sidebar-option-btn" title="AI Story Teller - Generate multi-voice audiobook stories">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>Story Teller</span>
+                </button>
                 <button id="voiceStudioBtnOption" class="sidebar-option-btn" title="Voice Studio - Generate speech with emotion controls">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                         <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -143,6 +150,12 @@
                         <path d="M19 10V12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12V10" stroke="currentColor" stroke-width="2"/>
                         <path d="M12 19V23M8 23H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         <circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+                <button id="storyBtnCollapsed" class="sidebar-collapsed-btn" title="Story Teller">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
                 <button id="voiceStudioBtnCollapsed" class="sidebar-collapsed-btn" title="Voice Studio">
@@ -847,6 +860,124 @@
         </div>
     </div>
 
+    <!-- Story Teller Modal -->
+    <div class="modal" id="story-modal">
+        <div class="modal-content story-modal-content">
+            <div class="modal-header">
+                <h3>📖 AI Story Teller</h3>
+                <button class="modal-close" onclick="closeStoryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+
+                <!-- Section 1: Story Setup -->
+                <div id="story-setup-section" class="story-section">
+                    <h4>1. Story Setup</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="story-genre">Genre</label>
+                            <select id="story-genre" class="podcast-select">
+                                <option value="fantasy">Fantasy</option>
+                                <option value="horror">Horror</option>
+                                <option value="sci-fi">Sci-Fi</option>
+                                <option value="kids">Kids Story</option>
+                                <option value="romance">Romance</option>
+                                <option value="custom">Custom Prompt</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="story-tone">Tone</label>
+                            <select id="story-tone" class="podcast-select">
+                                <option value="epic">Epic</option>
+                                <option value="dark">Dark</option>
+                                <option value="funny">Funny</option>
+                                <option value="emotional">Emotional</option>
+                                <option value="calm">Calm</option>
+                                <option value="mysterious">Mysterious</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="story-length">Length</label>
+                            <select id="story-length" class="podcast-select">
+                                <option value="short">Short (~2 min)</option>
+                                <option value="medium">Medium (~5 min)</option>
+                                <option value="long">Long (~10 min)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" id="story-custom-prompt-group" style="display:none;">
+                        <label for="story-custom-prompt">Custom Story Prompt</label>
+                        <textarea id="story-custom-prompt" class="podcast-textarea" rows="2" placeholder="Describe your custom story idea..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="story-characters">Characters (optional, one per line: Name - traits)</label>
+                        <textarea id="story-characters" class="podcast-textarea" rows="3" placeholder="Sofia - brave, curious&#10;John - skeptical, calm&#10;(Leave empty for auto-generated characters)"></textarea>
+                    </div>
+                    <div class="story-actions">
+                        <button id="story-generate-btn" class="btn-primary" onclick="generateStory()">✨ Generate Story</button>
+                    </div>
+                    <p id="story-generate-status" style="display:none; margin-top:8px; color:var(--text-muted); font-size:0.85rem;"></p>
+                </div>
+
+                <!-- Section 2: Story Text (editable) -->
+                <div class="story-section" style="margin-top:16px;">
+                    <h4>2. Story Script <span style="font-weight:normal; font-size:0.8rem; color:var(--text-muted)">(editable – format: Speaker: text)</span></h4>
+                    <textarea id="story-text" class="podcast-textarea" rows="10" placeholder="Your story will appear here in Speaker: text format.&#10;&#10;Example:&#10;Narrator: The wind howled through the forest.&#10;Sofia: Did you hear that?&#10;John: It's just the wind… I think."></textarea>
+                    <button class="btn-secondary" onclick="parseStoryText()" style="margin-top:6px;">🔍 Detect Speakers</button>
+                </div>
+
+                <!-- Section 3: Speaker Voice Assignment -->
+                <div id="story-speakers-section" class="story-section" style="display:none; margin-top:16px;">
+                    <h4>3. Assign Voices to Speakers</h4>
+                    <div id="story-speakers-list"></div>
+
+                    <div style="margin-top:12px;">
+                        <h5 style="margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);">Default Fallback Voices</h5>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Narrator Default</label>
+                                <select id="story-default-voice-narrator" class="podcast-select"></select>
+                            </div>
+                            <div class="form-group">
+                                <label>Female Default</label>
+                                <select id="story-default-voice-female" class="podcast-select"></select>
+                            </div>
+                            <div class="form-group">
+                                <label>Male Default</label>
+                                <select id="story-default-voice-male" class="podcast-select"></select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Generate Audiobook -->
+                <div id="story-generate-audio-section" class="story-section" style="display:none; margin-top:16px;">
+                    <div class="story-actions">
+                        <button id="story-generate-audio-btn" class="btn-primary" onclick="generateStoryAudiobook()">🎙️ Generate Audiobook</button>
+                    </div>
+                </div>
+
+                <!-- Progress -->
+                <div id="story-progress-section" class="story-section" style="display:none; margin-top:16px;">
+                    <h4>Generating Audio…</h4>
+                    <div class="progress-bar-container">
+                        <div id="story-progress-bar" class="progress-bar" style="width:0%;"></div>
+                    </div>
+                    <p id="story-progress-text" style="font-size:0.85rem; color:var(--text-muted); margin-top:6px;"></p>
+                </div>
+
+                <!-- Player -->
+                <div id="story-player-section" class="story-section" style="display:none; margin-top:16px;">
+                    <h4>🎧 Your Audiobook</h4>
+                    <audio id="story-audio" controls style="width:100%;"></audio>
+                    <div style="margin-top:8px;">
+                        <a id="story-audio-download" download="story_audiobook.wav" class="btn-secondary" style="display:inline-block; cursor:pointer; text-decoration:none;">⬇ Download Audio</a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
     <!-- Podcast Modal -->
     <div class="modal" id="podcast-modal">
         <div class="modal-content podcast-modal-content">
@@ -1350,6 +1481,7 @@ Morgan: Indeed, it reminds me of home."></textarea>
     <script src="{{ url_for('static', filename='chat/chat.js') }}"></script>
     <script src="{{ url_for('static', filename='audiobook.js') }}"></script>
     <script src="{{ url_for('static', filename='podcast.js') }}"></script>
+    <script src="{{ url_for('static', filename='story.js') }}"></script>
     <script src="{{ url_for('static', filename='voice_studio.js') }}"></script>
     <script src="{{ url_for('static', filename='controls.js') }}"></script>
 </body>
