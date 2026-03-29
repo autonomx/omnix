@@ -53,6 +53,7 @@ from app.rpg.persistence import save_game
 from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard
 from app.rpg.npc_decision import decide_npc_action
 from app.rpg.npc_brain import decide_action as brain_decide, evaluate_npc_interactions
+from app.rpg.npc_mind import npc_think, propagate_beliefs
 from app.rpg.system_triggers import evaluate_system_triggers, update_resources
 from app.rpg.story_engine import (
     enforce_story,
@@ -627,6 +628,31 @@ def _simulate_world_tick(session: GameSession) -> None:
             src = session.get_npc(interaction["source"])
             if src and src.current_action == "idle":
                 src.current_action = "confront"
+
+    # --- NPC Mind Pipeline (belief update + tiered LLM reasoning) ---------
+    for npc in session.npcs:
+        npc_data_dict = npc.to_dict()
+        mind_result = npc_think(
+            npc_data_dict,
+            player_location=session.player.location,
+            world_context="",
+            llm_call_fn=None,   # GOAP-only by default; wire LLM in production
+        )
+        if mind_result["action"] != "idle":
+            npc.current_action = mind_result["action"]
+        # Persist updated beliefs / memory_summary / expressed_state back
+        npc.beliefs = npc_data_dict.get("beliefs", npc.beliefs)
+        npc.memory_summary = npc_data_dict.get("memory_summary", npc.memory_summary)
+        npc.expressed_state = npc_data_dict.get("expressed_state", npc.expressed_state)
+
+    # --- NPC Belief Propagation (rumours, misinformation) -----------------
+    npc_dicts = [n.to_dict() for n in session.npcs]
+    for i, src_dict in enumerate(npc_dicts):
+        for j, tgt_dict in enumerate(npc_dicts):
+            if i != j:
+                if propagate_beliefs(src_dict, tgt_dict):
+                    tgt_npc = session.npcs[j]
+                    tgt_npc.beliefs = tgt_dict.get("beliefs", tgt_npc.beliefs)
 
     # --- NPC Goal Engine (progress structured goals) ----------------------
     goal_consequences = update_npc_goals(session)

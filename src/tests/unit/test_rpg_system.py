@@ -3711,3 +3711,680 @@ class TestConsequenceVisibility:
         _process_pending_consequences(session)
         last_event = session.history[-1]
         assert "chain:chain-abc" in last_event.tags
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NPC Mind System Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestNPCMindModelFields:
+    """Verify new NPC Mind fields on NPCCharacter."""
+
+    def test_default_beliefs_empty(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard")
+        assert npc.beliefs == {}
+
+    def test_default_secrets_knowledge_empty(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard")
+        assert npc.secrets_knowledge == []
+
+    def test_default_expressed_state_empty(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard")
+        assert npc.expressed_state == {}
+
+    def test_default_memory_summary_empty(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard")
+        assert npc.memory_summary == ""
+
+    def test_default_llm_profile_empty(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard")
+        assert npc.llm_profile == {}
+
+    def test_beliefs_roundtrip(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard",
+                           beliefs={"player_is_hostile": 0.8})
+        d = npc.to_dict()
+        npc2 = NPCCharacter.from_dict(d)
+        assert npc2.beliefs == {"player_is_hostile": 0.8}
+
+    def test_secrets_knowledge_roundtrip(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard",
+                           secrets_knowledge=["The king is ill"])
+        d = npc.to_dict()
+        npc2 = NPCCharacter.from_dict(d)
+        assert npc2.secrets_knowledge == ["The king is ill"]
+
+    def test_expressed_state_roundtrip(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard",
+                           expressed_state={"intent": "talk", "emotion": "calm"})
+        d = npc.to_dict()
+        npc2 = NPCCharacter.from_dict(d)
+        assert npc2.expressed_state == {"intent": "talk", "emotion": "calm"}
+
+    def test_llm_profile_roundtrip(self):
+        from app.rpg.models import NPCCharacter
+        profile = {"system_prompt": "You are a guard.", "temperature": 0.7, "style": "aggressive"}
+        npc = NPCCharacter(name="Guard", role="guard", llm_profile=profile)
+        d = npc.to_dict()
+        npc2 = NPCCharacter.from_dict(d)
+        assert npc2.llm_profile == profile
+
+    def test_memory_summary_roundtrip(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard",
+                           memory_summary="Player threatened me earlier.")
+        d = npc.to_dict()
+        npc2 = NPCCharacter.from_dict(d)
+        assert npc2.memory_summary == "Player threatened me earlier."
+
+
+class TestNPCMindBeliefs:
+    """Test the belief update system."""
+
+    def test_update_beliefs_hostile_from_threat(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {
+            "beliefs": {},
+            "memories": [{"actor": "player", "action": "threaten", "importance": 1.0}],
+            "opinions": {},
+            "emotional_state": {},
+        }
+        beliefs = update_beliefs(npc)
+        assert beliefs.get("player_is_hostile", 0) > 0.5
+
+    def test_update_beliefs_friendly_from_help(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {
+            "beliefs": {"player_is_hostile": 0.7},
+            "memories": [{"actor": "player", "action": "help", "importance": 1.0}],
+            "opinions": {},
+            "emotional_state": {},
+        }
+        beliefs = update_beliefs(npc)
+        assert beliefs["player_is_hostile"] < 0.7
+        assert beliefs.get("player_is_ally", 0) > 0.3
+
+    def test_update_beliefs_steal_reduces_trust(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {
+            "beliefs": {"player_is_trustworthy": 0.8},
+            "memories": [{"actor": "player", "action": "steal", "importance": 1.0}],
+            "opinions": {},
+            "emotional_state": {},
+        }
+        beliefs = update_beliefs(npc)
+        assert beliefs["player_is_trustworthy"] < 0.8
+
+    def test_update_beliefs_anger_raises_danger(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {
+            "beliefs": {},
+            "memories": [],
+            "opinions": {},
+            "emotional_state": {"anger": 0.9},
+        }
+        beliefs = update_beliefs(npc)
+        assert beliefs.get("world_is_dangerous", 0) > 0.3
+
+    def test_update_beliefs_negative_opinion(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {
+            "beliefs": {},
+            "memories": [],
+            "opinions": {"player": -50},
+            "emotional_state": {},
+        }
+        beliefs = update_beliefs(npc)
+        assert beliefs.get("player_is_hostile", 0) > 0.5
+
+    def test_update_beliefs_positive_opinion(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {
+            "beliefs": {},
+            "memories": [],
+            "opinions": {"player": 50},
+            "emotional_state": {},
+        }
+        beliefs = update_beliefs(npc)
+        assert beliefs.get("player_is_ally", 0) > 0.3
+
+    def test_beliefs_clamped_0_to_1(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {
+            "beliefs": {"player_is_hostile": 0.95},
+            "memories": [
+                {"actor": "player", "action": "threaten", "importance": 1.0},
+                {"actor": "player", "action": "threaten", "importance": 1.0},
+                {"actor": "player", "action": "attack", "importance": 1.0},
+            ],
+            "opinions": {},
+            "emotional_state": {},
+        }
+        beliefs = update_beliefs(npc)
+        assert beliefs["player_is_hostile"] <= 1.0
+        assert beliefs["player_is_hostile"] >= 0.0
+
+    def test_no_memories_no_crash(self):
+        from app.rpg.npc_mind import update_beliefs
+        npc = {"beliefs": {}, "memories": [], "opinions": {}, "emotional_state": {}}
+        beliefs = update_beliefs(npc)
+        assert isinstance(beliefs, dict)
+
+
+class TestNPCMindMemory:
+    """Test memory summarisation and decay."""
+
+    def test_summarize_memory_basic(self):
+        from app.rpg.npc_mind import summarize_memory
+        npc = {
+            "memories": [
+                {"actor": "player", "action": "threatened me", "importance": 0.9},
+                {"actor": "merchant", "action": "offered trade", "importance": 0.5},
+            ],
+        }
+        summary = summarize_memory(npc)
+        assert "player" in summary
+        assert "threatened me" in summary
+        assert "merchant" in summary
+        assert npc["memory_summary"] == summary
+
+    def test_summarize_memory_empty(self):
+        from app.rpg.npc_mind import summarize_memory
+        npc = {"memories": []}
+        summary = summarize_memory(npc)
+        assert summary == "No significant memories."
+
+    def test_summarize_memory_caps_at_max(self):
+        from app.rpg.npc_mind import summarize_memory
+        npc = {
+            "memories": [{"actor": "npc_%d" % i, "action": "act", "importance": 0.5}
+                         for i in range(20)],
+        }
+        summary = summarize_memory(npc, max_entries=3)
+        lines = [l for l in summary.split("\n") if l.strip()]
+        assert len(lines) == 3
+
+    def test_important_memory_marked(self):
+        from app.rpg.npc_mind import summarize_memory
+        npc = {
+            "memories": [{"actor": "player", "action": "attacked", "importance": 0.9}],
+        }
+        summary = summarize_memory(npc)
+        assert "!" in summary
+
+    def test_decay_memories_keeps_recent(self):
+        from app.rpg.npc_mind import decay_memories
+        npc = {
+            "memories": [
+                {"actor": "a", "action": "x", "importance": 0.1},
+                {"actor": "b", "action": "x", "importance": 0.1},
+                {"actor": "c", "action": "x", "importance": 0.1},
+                {"actor": "d", "action": "recent1", "importance": 0.1},
+                {"actor": "e", "action": "recent2", "importance": 0.1},
+                {"actor": "f", "action": "recent3", "importance": 0.1},
+            ],
+        }
+        decay_memories(npc, threshold=0.2)
+        # Last 3 always kept, older low-importance ones removed
+        assert len(npc["memories"]) == 3
+
+    def test_decay_preserves_important_old(self):
+        from app.rpg.npc_mind import decay_memories
+        npc = {
+            "memories": [
+                {"actor": "a", "action": "important", "importance": 0.9},
+                {"actor": "b", "action": "trivial", "importance": 0.1},
+                {"actor": "c", "action": "recent1", "importance": 0.5},
+                {"actor": "d", "action": "recent2", "importance": 0.5},
+                {"actor": "e", "action": "recent3", "importance": 0.5},
+            ],
+        }
+        decay_memories(npc, threshold=0.2)
+        actions = [m["action"] for m in npc["memories"]]
+        assert "important" in actions
+        assert "trivial" not in actions
+
+    def test_decay_small_list_no_change(self):
+        from app.rpg.npc_mind import decay_memories
+        npc = {
+            "memories": [{"actor": "a", "action": "x", "importance": 0.1}],
+        }
+        decay_memories(npc)
+        assert len(npc["memories"]) == 1
+
+
+class TestNPCMindGoalSelection:
+    """Test dynamic goal selection with belief adjustment."""
+
+    def test_select_highest_priority(self):
+        from app.rpg.npc_mind import select_goal
+        npc = {
+            "active_goals": [
+                {"type": "trade", "priority": 0.5},
+                {"type": "defend", "priority": 0.8},
+            ],
+            "beliefs": {},
+        }
+        goal = select_goal(npc)
+        assert goal["type"] == "defend"
+
+    def test_beliefs_boost_defend_priority(self):
+        from app.rpg.npc_mind import select_goal
+        npc = {
+            "active_goals": [
+                {"type": "trade", "priority": 0.7},
+                {"type": "defend", "priority": 0.6},
+            ],
+            "beliefs": {"world_is_dangerous": 0.9},
+        }
+        goal = select_goal(npc)
+        assert goal["type"] == "defend"
+
+    def test_no_goals_returns_none(self):
+        from app.rpg.npc_mind import select_goal
+        npc = {"active_goals": [], "beliefs": {}}
+        assert select_goal(npc) is None
+
+    def test_hostile_belief_boosts_confront(self):
+        from app.rpg.npc_mind import select_goal
+        npc = {
+            "active_goals": [
+                {"type": "trade", "priority": 0.7},
+                {"type": "confront", "priority": 0.55},
+            ],
+            "beliefs": {"player_is_hostile": 0.9},
+        }
+        goal = select_goal(npc)
+        assert goal["type"] == "confront"
+
+
+class TestNPCMindDeception:
+    """Test the deception / dual-state system."""
+
+    def test_should_lie_high_risk_low_honesty(self):
+        from app.rpg.npc_mind import should_lie
+        import random as rng
+        rng.seed(42)
+        npc = {"personality_traits": {"honest": 0.1}}
+        lies = sum(should_lie(npc, context_risk=0.9) for _ in range(100))
+        assert lies > 70
+
+    def test_should_lie_low_risk_high_honesty(self):
+        from app.rpg.npc_mind import should_lie
+        import random as rng
+        rng.seed(42)
+        npc = {"personality_traits": {"honest": 0.9}}
+        lies = sum(should_lie(npc, context_risk=0.1) for _ in range(100))
+        assert lies < 30
+
+    def test_build_expressed_state_honest_npc(self):
+        from app.rpg.npc_mind import build_expressed_state
+        import random as rng
+        rng.seed(42)
+        npc = {
+            "current_action": "guard",
+            "emotional_state": {"trust": 0.8},
+            "personality_traits": {"honest": 1.0},
+        }
+        expressed = build_expressed_state(npc, context_risk=0.0)
+        assert expressed["intent"] == "guard"
+
+
+class TestNPCMindTieredIntelligence:
+    """Test intelligence tier assignment."""
+
+    def test_same_location_tier_1(self):
+        from app.rpg.npc_mind import get_intelligence_tier, TIER_LLM
+        tier = get_intelligence_tier("market", "market")
+        assert tier == TIER_LLM
+
+    def test_nearby_tier_1(self):
+        from app.rpg.npc_mind import get_intelligence_tier, TIER_LLM
+        distances = {"barracks": {"market": 1}}
+        tier = get_intelligence_tier("barracks", "market", distances)
+        assert tier == TIER_LLM
+
+    def test_medium_distance_tier_2(self):
+        from app.rpg.npc_mind import get_intelligence_tier, TIER_GOAP
+        distances = {"forest": {"market": 3}}
+        tier = get_intelligence_tier("forest", "market", distances)
+        assert tier == TIER_GOAP
+
+    def test_far_distance_tier_3(self):
+        from app.rpg.npc_mind import get_intelligence_tier, TIER_SIM
+        distances = {"mountain": {"market": 10}}
+        tier = get_intelligence_tier("mountain", "market", distances)
+        assert tier == TIER_SIM
+
+    def test_no_distance_data_different_loc_tier_3(self):
+        from app.rpg.npc_mind import get_intelligence_tier, TIER_SIM
+        tier = get_intelligence_tier("unknown", "market")
+        assert tier == TIER_SIM
+
+
+class TestNPCMindBeliefPropagation:
+    """Test multi-NPC belief propagation."""
+
+    def test_propagates_when_trusted(self):
+        from app.rpg.npc_mind import propagate_beliefs
+        source = {
+            "name": "Scout",
+            "beliefs": {"player_is_hostile": 0.9},
+        }
+        target = {
+            "name": "Guard",
+            "opinions": {"Scout": 20},
+            "beliefs": {},
+        }
+        result = propagate_beliefs(source, target)
+        assert result is True
+        assert target["beliefs"].get("player_is_hostile", 0) > 0.5
+
+    def test_no_propagation_when_distrusted(self):
+        from app.rpg.npc_mind import propagate_beliefs
+        source = {
+            "name": "Thief",
+            "beliefs": {"player_is_hostile": 0.9},
+        }
+        target = {
+            "name": "Guard",
+            "opinions": {"Thief": -10},
+            "beliefs": {},
+        }
+        result = propagate_beliefs(source, target)
+        assert result is False
+
+    def test_low_confidence_not_propagated(self):
+        from app.rpg.npc_mind import propagate_beliefs
+        source = {
+            "name": "Merchant",
+            "beliefs": {"player_is_hostile": 0.3},
+        }
+        target = {
+            "name": "Guard",
+            "opinions": {"Merchant": 50},
+            "beliefs": {},
+        }
+        result = propagate_beliefs(source, target)
+        assert result is False
+
+    def test_propagation_reduced_confidence(self):
+        from app.rpg.npc_mind import propagate_beliefs
+        source = {
+            "name": "Scout",
+            "beliefs": {"player_is_hostile": 0.9},
+        }
+        target = {
+            "name": "Guard",
+            "opinions": {"Scout": 20},
+            "beliefs": {"player_is_hostile": 0.5},
+        }
+        propagate_beliefs(source, target)
+        val = target["beliefs"]["player_is_hostile"]
+        assert val > 0.5
+        assert val < 0.9
+
+
+class TestNPCMindPromptBuilder:
+    """Test LLM prompt construction."""
+
+    def test_build_prompt_basic(self):
+        from app.rpg.npc_mind import build_npc_prompt
+        npc = {
+            "name": "Guard Captain",
+            "role": "guard",
+            "personality_traits": {"aggressive": 0.7, "honest": 0.3},
+            "beliefs": {"player_is_hostile": 0.6},
+            "memory_summary": "Player threatened me.",
+            "expressed_state": {},
+            "llm_profile": {},
+        }
+        system, user = build_npc_prompt(npc, ["defend"], "attack the guard")
+        assert "Guard Captain" in system
+        assert "aggressive" in system
+        assert "Player threatened me." in user
+        assert "attack the guard" in user
+
+    def test_build_prompt_with_custom_system(self):
+        from app.rpg.npc_mind import build_npc_prompt
+        npc = {
+            "name": "Guard",
+            "role": "guard",
+            "personality_traits": {},
+            "beliefs": {},
+            "memory_summary": "",
+            "expressed_state": {},
+            "llm_profile": {"system_prompt": "Custom prompt here."},
+        }
+        system, user = build_npc_prompt(npc, ["idle"])
+        assert system == "Custom prompt here."
+
+    def test_build_prompt_includes_world_context(self):
+        from app.rpg.npc_mind import build_npc_prompt
+        npc = {
+            "name": "Guard",
+            "role": "guard",
+            "personality_traits": {},
+            "beliefs": {},
+            "memory_summary": "",
+            "expressed_state": {},
+            "llm_profile": {},
+        }
+        _, user = build_npc_prompt(npc, ["idle"], world_context="War has broken out")
+        assert "War has broken out" in user
+
+
+class TestNPCMindValidation:
+    """Test LLM output validation."""
+
+    def test_valid_action_passes(self):
+        from app.rpg.npc_mind import validate_npc_action
+        result = validate_npc_action({
+            "action": "attack",
+            "dialogue": "Die!",
+            "intent": "hostile",
+            "emotion": "anger",
+        })
+        assert result["action"] == "attack"
+
+    def test_invalid_action_falls_back(self):
+        from app.rpg.npc_mind import validate_npc_action
+        result = validate_npc_action({"action": "dance", "dialogue": "La la la"})
+        assert result["action"] == "idle"
+
+    def test_missing_fields_get_defaults(self):
+        from app.rpg.npc_mind import validate_npc_action
+        result = validate_npc_action({})
+        assert result["action"] == "idle"
+        assert result["dialogue"] == ""
+        assert result["intent"] == "idle"
+        assert result["emotion"] == "neutral"
+
+    def test_dialogue_capped_at_500(self):
+        from app.rpg.npc_mind import validate_npc_action
+        result = validate_npc_action({"action": "talk", "dialogue": "x" * 1000})
+        assert len(result["dialogue"]) == 500
+
+
+class TestNPCMindGOAPFallback:
+    """Test GOAP-only decision for non-LLM tiers."""
+
+    def test_goap_decide_returns_action(self):
+        from app.rpg.npc_mind import goap_decide
+        npc = {
+            "emotional_state": {"anger": 0.9},
+            "opinions": {"player": -50},
+            "personality_traits": {"aggressive": 0.9},
+            "needs": {"power": 0.8},
+            "location": "market",
+        }
+        result = goap_decide(npc)
+        assert result["action"] in (
+            "attack", "flee", "trade", "help", "scheme", "guard",
+            "confront", "talk", "deceive", "observe", "idle",
+        )
+        assert "dialogue" in result
+        assert "intent" in result
+        assert "emotion" in result
+
+
+class TestNPCMindThinkPipeline:
+    """Test the full npc_think() pipeline."""
+
+    def test_think_without_llm_uses_goap(self):
+        from app.rpg.npc_mind import npc_think
+        npc = {
+            "name": "Guard",
+            "beliefs": {},
+            "memories": [{"actor": "player", "action": "threaten", "importance": 0.9}],
+            "opinions": {},
+            "emotional_state": {"anger": 0.8},
+            "personality_traits": {"aggressive": 0.9},
+            "needs": {"power": 0.5},
+            "location": "market",
+            "current_action": "idle",
+            "expressed_state": {},
+            "memory_summary": "",
+            "active_goals": [],
+        }
+        result = npc_think(npc, player_location="market", llm_call_fn=None)
+        assert "action" in result
+        assert "dialogue" in result
+        assert npc.get("beliefs", {}).get("player_is_hostile", 0) > 0.5
+
+    def test_think_with_llm_returns_llm_result(self):
+        from app.rpg.npc_mind import npc_think
+        import json as _json
+
+        def mock_llm(system_prompt, user_prompt):
+            return _json.dumps({
+                "action": "confront",
+                "dialogue": "Halt!",
+                "intent": "hostile",
+                "emotion": "anger",
+            })
+
+        npc = {
+            "name": "Guard",
+            "beliefs": {},
+            "memories": [],
+            "opinions": {},
+            "emotional_state": {},
+            "personality_traits": {"aggressive": 0.5, "honest": 0.5},
+            "needs": {},
+            "location": "market",
+            "current_action": "idle",
+            "expressed_state": {},
+            "memory_summary": "",
+            "active_goals": [{"type": "defend", "priority": 0.8}],
+            "llm_profile": {},
+            "role": "guard",
+        }
+        result = npc_think(npc, player_location="market", llm_call_fn=mock_llm)
+        assert result["action"] == "confront"
+        assert result["dialogue"] == "Halt!"
+
+    def test_think_with_bad_llm_falls_back_to_goap(self):
+        from app.rpg.npc_mind import npc_think
+
+        def bad_llm(system_prompt, user_prompt):
+            return "This is not JSON at all!"
+
+        npc = {
+            "name": "Guard",
+            "beliefs": {},
+            "memories": [],
+            "opinions": {},
+            "emotional_state": {"anger": 0.7},
+            "personality_traits": {"aggressive": 0.8},
+            "needs": {"power": 0.5},
+            "location": "market",
+            "current_action": "idle",
+            "expressed_state": {},
+            "memory_summary": "",
+            "active_goals": [],
+        }
+        result = npc_think(npc, player_location="market", llm_call_fn=bad_llm)
+        assert "action" in result
+
+    def test_think_far_npc_skips_llm(self):
+        from app.rpg.npc_mind import npc_think
+
+        llm_called = {"count": 0}
+
+        def tracking_llm(system_prompt, user_prompt):
+            llm_called["count"] += 1
+            return '{"action": "idle"}'
+
+        npc = {
+            "name": "Hermit",
+            "beliefs": {},
+            "memories": [],
+            "opinions": {},
+            "emotional_state": {},
+            "personality_traits": {},
+            "needs": {},
+            "location": "mountain",
+            "current_action": "idle",
+            "expressed_state": {},
+            "memory_summary": "",
+            "active_goals": [],
+        }
+        distances = {"mountain": {"market": 20}}
+        result = npc_think(
+            npc,
+            player_location="market",
+            location_distances=distances,
+            llm_call_fn=tracking_llm,
+        )
+        assert llm_called["count"] == 0
+        assert "action" in result
+
+    def test_think_updates_memory_summary(self):
+        from app.rpg.npc_mind import npc_think
+        npc = {
+            "name": "Guard",
+            "beliefs": {},
+            "memories": [{"actor": "player", "action": "helped", "importance": 0.6}],
+            "opinions": {},
+            "emotional_state": {},
+            "personality_traits": {},
+            "needs": {},
+            "location": "market",
+            "current_action": "idle",
+            "expressed_state": {},
+            "memory_summary": "",
+            "active_goals": [],
+        }
+        npc_think(npc, player_location="elsewhere")
+        assert "player" in npc.get("memory_summary", "")
+
+
+class TestNPCMindClamp:
+    """Test the clamp utility."""
+
+    def test_clamp_within_range(self):
+        from app.rpg.npc_mind import clamp
+        assert clamp(0.5) == 0.5
+
+    def test_clamp_below_min(self):
+        from app.rpg.npc_mind import clamp
+        assert clamp(-0.5) == 0.0
+
+    def test_clamp_above_max(self):
+        from app.rpg.npc_mind import clamp
+        assert clamp(1.5) == 1.0
+
+    def test_clamp_custom_range(self):
+        from app.rpg.npc_mind import clamp
+        assert clamp(5, 0, 10) == 5
+        assert clamp(-1, 0, 10) == 0
+        assert clamp(15, 0, 10) == 10

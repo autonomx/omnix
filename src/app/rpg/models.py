@@ -456,6 +456,17 @@ class NPCCharacter:
     # Structured goals with progress tracking
     # e.g. [{"type": "gain_power", "target": "village", "progress": 0.3, "priority": 0.8}]
     active_goals: List[Dict[str, Any]] = field(default_factory=list)
+    # ── LLM-driven NPC Mind fields ──────────────────────────────────────────
+    # Beliefs: subjective confidence scores (e.g. {"player_is_hostile": 0.7})
+    beliefs: Dict[str, float] = field(default_factory=dict)
+    # Hidden knowledge the NPC possesses but may not reveal
+    secrets_knowledge: List[str] = field(default_factory=list)
+    # Expressed state: what the NPC *shows* (may differ from true intent)
+    expressed_state: Dict[str, str] = field(default_factory=dict)
+    # Condensed narrative summary of memories for LLM context
+    memory_summary: str = ""
+    # Per-NPC LLM profile (system_prompt, temperature, style)
+    llm_profile: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -479,6 +490,11 @@ class NPCCharacter:
             "personality_traits": dict(self.personality_traits),
             "needs": dict(self.needs),
             "active_goals": [dict(g) for g in self.active_goals],
+            "beliefs": dict(self.beliefs),
+            "secrets_knowledge": list(self.secrets_knowledge),
+            "expressed_state": dict(self.expressed_state),
+            "memory_summary": self.memory_summary,
+            "llm_profile": dict(self.llm_profile),
         }
 
     @classmethod
@@ -504,6 +520,11 @@ class NPCCharacter:
             personality_traits=data.get("personality_traits", {}),
             needs=data.get("needs", {}),
             active_goals=data.get("active_goals", []),
+            beliefs=data.get("beliefs", {}),
+            secrets_knowledge=data.get("secrets_knowledge", []),
+            expressed_state=data.get("expressed_state", {}),
+            memory_summary=data.get("memory_summary", ""),
+            llm_profile=data.get("llm_profile", {}),
         )
 
 
