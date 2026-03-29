@@ -289,6 +289,10 @@ class Faction:
     alignment: str = "neutral"
     members: List[str] = field(default_factory=list)
     goals: List[str] = field(default_factory=list)
+    # Faction ideology drives NPC behaviour via utility scoring
+    ideology: Dict[str, float] = field(default_factory=dict)
+    # Relations with other factions (-100..100)
+    relations: Dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -297,6 +301,8 @@ class Faction:
             "alignment": self.alignment,
             "members": list(self.members),
             "goals": list(self.goals),
+            "ideology": dict(self.ideology),
+            "relations": dict(self.relations),
         }
 
     @classmethod
@@ -307,6 +313,8 @@ class Faction:
             alignment=data.get("alignment", "neutral"),
             members=data.get("members", []),
             goals=data.get("goals", []),
+            ideology=data.get("ideology", {}),
+            relations=data.get("relations", {}),
         )
 
 
@@ -328,6 +336,12 @@ class WorldState:
     agent_profiles: Dict[str, AgentProfile] = field(default_factory=dict)
     items_catalog: List[Item] = field(default_factory=list)
     active_world_events: List["WorldEvent"] = field(default_factory=list)
+    # Global resources that drive emergent events (famine, unrest, etc.)
+    resources: Dict[str, int] = field(default_factory=lambda: {
+        "food": 100,
+        "gold": 100,
+        "security": 100,
+    })
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -346,6 +360,7 @@ class WorldState:
             "agent_profiles": {k: v.to_dict() for k, v in self.agent_profiles.items()},
             "items_catalog": [item.to_dict() for item in self.items_catalog],
             "active_world_events": [we.to_dict() for we in self.active_world_events],
+            "resources": dict(self.resources),
         }
 
     @classmethod
@@ -366,6 +381,7 @@ class WorldState:
             agent_profiles={k: AgentProfile.from_dict(v) for k, v in data.get("agent_profiles", {}).items()},
             items_catalog=[Item.from_dict(i) for i in data.get("items_catalog", [])],
             active_world_events=[WorldEvent.from_dict(we) for we in data.get("active_world_events", [])],
+            resources=data.get("resources", {"food": 100, "gold": 100, "security": 100}),
         )
 
     def get_location(self, name: str) -> Optional[Location]:
@@ -437,6 +453,9 @@ class NPCCharacter:
     personality_traits: Dict[str, float] = field(default_factory=dict)
     # Needs drive NPC goals (e.g. {"wealth": 0.7, "safety": 0.3, "power": 0.5})
     needs: Dict[str, float] = field(default_factory=dict)
+    # Structured goals with progress tracking
+    # e.g. [{"type": "gain_power", "target": "village", "progress": 0.3, "priority": 0.8}]
+    active_goals: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -459,6 +478,7 @@ class NPCCharacter:
             "opinions": dict(self.opinions),
             "personality_traits": dict(self.personality_traits),
             "needs": dict(self.needs),
+            "active_goals": [dict(g) for g in self.active_goals],
         }
 
     @classmethod
@@ -483,6 +503,7 @@ class NPCCharacter:
             opinions=data.get("opinions", {}),
             personality_traits=data.get("personality_traits", {}),
             needs=data.get("needs", {}),
+            active_goals=data.get("active_goals", []),
         )
 
 
@@ -591,6 +612,12 @@ class PendingConsequence:
     # Cascading consequences: follow-up consequences spawned when this one fires
     next_consequences: List[Dict[str, Any]] = field(default_factory=list)
     chain_id: Optional[str] = None
+    # Consequence classification: "world", "npc", "narrative", "hidden"
+    type: str = "world"
+    # Visibility: "visible", "hidden", "foreshadowed"
+    visibility: str = "visible"
+    # Decay rate: how much importance decreases per turn (0 = no decay)
+    decay_rate: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         result: Dict[str, Any] = {
@@ -601,6 +628,9 @@ class PendingConsequence:
             "narrative": self.narrative,
             "importance": self.importance,
             "next_consequences": [dict(nc) for nc in self.next_consequences],
+            "type": self.type,
+            "visibility": self.visibility,
+            "decay_rate": self.decay_rate,
         }
         if self.condition is not None:
             result["condition"] = self.condition
@@ -620,6 +650,9 @@ class PendingConsequence:
             importance=data.get("importance", 0.7),
             next_consequences=data.get("next_consequences", []),
             chain_id=data.get("chain_id"),
+            type=data.get("type", "world"),
+            visibility=data.get("visibility", "visible"),
+            decay_rate=data.get("decay_rate", 0.0),
         )
 
 
@@ -831,6 +864,44 @@ class TurnLog:
 
 
 @dataclass
+class StoryArc:
+    """
+    A dynamic story arc that progresses through stages.
+
+    Arcs are created from significant events and track narrative threads
+    (e.g. revenge plots, wars, mysteries) through setup → rising →
+    climax → resolution.
+    """
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    type: str = ""           # e.g. "revenge", "war", "mystery", "romance"
+    stage: str = "setup"     # setup, rising, climax, resolution
+    participants: List[str] = field(default_factory=list)
+    progress: float = 0.0   # 0.0 .. 1.0
+    description: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "stage": self.stage,
+            "participants": list(self.participants),
+            "progress": self.progress,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StoryArc":
+        return cls(
+            id=data.get("id", str(uuid.uuid4())),
+            type=data.get("type", ""),
+            stage=data.get("stage", "setup"),
+            participants=data.get("participants", []),
+            progress=data.get("progress", 0.0),
+            description=data.get("description", ""),
+        )
+
+
+@dataclass
 class GameSession:
     """A complete game session with all state."""
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -848,6 +919,7 @@ class GameSession:
     turn_logs: List[TurnLog] = field(default_factory=list)
     pending_consequences: List[PendingConsequence] = field(default_factory=list)
     story_flags: Dict[str, bool] = field(default_factory=dict)
+    story_arcs: List[StoryArc] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -866,6 +938,7 @@ class GameSession:
             "turn_logs": [tl.to_dict() for tl in self.turn_logs],
             "pending_consequences": [pc.to_dict() for pc in self.pending_consequences],
             "story_flags": dict(self.story_flags),
+            "story_arcs": [arc.to_dict() for arc in self.story_arcs],
         }
 
     @classmethod
@@ -886,6 +959,7 @@ class GameSession:
             turn_logs=[TurnLog.from_dict(tl) for tl in data.get("turn_logs", [])],
             pending_consequences=[PendingConsequence.from_dict(pc) for pc in data.get("pending_consequences", [])],
             story_flags=data.get("story_flags", {}),
+            story_arcs=[StoryArc.from_dict(a) for a in data.get("story_arcs", [])],
         )
 
     def get_npc(self, name: str) -> Optional[NPCCharacter]:

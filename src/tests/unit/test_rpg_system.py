@@ -3248,3 +3248,466 @@ class TestNarrativeEnforcement:
 
         directive = _enforce_narrative(session)
         assert directive is None
+
+
+# ---------------------------------------------------------------------------
+# NPC Brain (Utility Scoring) Tests
+# ---------------------------------------------------------------------------
+
+class TestNPCBrain:
+    """Tests for the utility-based NPC brain scoring system."""
+
+    def test_aggressive_npc_attacks(self):
+        from app.rpg.npc_brain import decide_action
+        npc = {"personality_traits": {"aggressive": 0.9}, "emotional_state": {"anger": 0.8}, "needs": {"power": 0.5}, "opinions": {}, "memories": []}
+        result = decide_action(npc, {})
+        assert result["intent"] == "attack"
+
+    def test_fearful_npc_flees(self):
+        from app.rpg.npc_brain import decide_action
+        npc = {"personality_traits": {"bravery": 0.0}, "emotional_state": {"fear": 0.9}, "needs": {"safety": 0.8}, "opinions": {}, "memories": []}
+        result = decide_action(npc, {})
+        assert result["intent"] == "flee"
+
+    def test_greedy_npc_trades(self):
+        from app.rpg.npc_brain import decide_action
+        npc = {"personality_traits": {"greedy": 0.9}, "emotional_state": {"trust": 0.5}, "needs": {"wealth": 0.9}, "opinions": {}, "memories": []}
+        result = decide_action(npc, {})
+        assert result["intent"] == "trade"
+
+    def test_kind_npc_helps(self):
+        from app.rpg.npc_brain import decide_action
+        npc = {"personality_traits": {"kind": 0.9, "loyal": 0.8}, "emotional_state": {}, "needs": {}, "opinions": {"player": 80}, "memories": []}
+        result = decide_action(npc, {})
+        assert result["intent"] == "help"
+
+    def test_empty_npc_idles(self):
+        from app.rpg.npc_brain import decide_action
+        result = decide_action({}, {})
+        assert result["intent"] == "idle"
+
+    def test_faction_ideology_boosts_attack(self):
+        from app.rpg.npc_brain import score_action
+        npc = {"personality_traits": {"aggressive": 0.5}, "emotional_state": {"anger": 0.3}, "needs": {}, "opinions": {}, "memories": []}
+        score_without = score_action(npc, "attack", {})
+        score_with = score_action(npc, "attack", {"faction": {"ideology": {"violence": 2.0}}})
+        assert score_with > score_without
+
+    def test_memory_weighting_anger(self):
+        from app.rpg.npc_brain import score_action
+        npc_no_mem = {"personality_traits": {}, "emotional_state": {}, "needs": {}, "opinions": {}, "memories": []}
+        npc_with_mem = {"personality_traits": {}, "emotional_state": {}, "needs": {}, "opinions": {}, "memories": [{"emotion": "anger", "intensity": 2.0}]}
+        s1 = score_action(npc_no_mem, "attack", {})
+        s2 = score_action(npc_with_mem, "attack", {})
+        assert s2 > s1
+
+    def test_npc_interactions_conflict(self):
+        from app.rpg.npc_brain import evaluate_npc_interactions
+        npcs = [
+            {"name": "A", "opinions": {"B": -10}},
+            {"name": "B", "opinions": {"A": -10}},
+        ]
+        interactions = evaluate_npc_interactions(npcs)
+        assert len(interactions) == 1
+        assert interactions[0]["type"] == "conflict"
+
+    def test_npc_interactions_alliance(self):
+        from app.rpg.npc_brain import evaluate_npc_interactions
+        npcs = [
+            {"name": "A", "opinions": {"B": 10}},
+            {"name": "B", "opinions": {"A": 10}},
+        ]
+        interactions = evaluate_npc_interactions(npcs)
+        assert len(interactions) == 1
+        assert interactions[0]["type"] == "alliance"
+
+    def test_scheme_scoring(self):
+        from app.rpg.npc_brain import decide_action
+        npc = {"personality_traits": {"ambition": 0.9}, "emotional_state": {}, "needs": {"power": 0.9}, "opinions": {}, "memories": []}
+        result = decide_action(npc, {})
+        assert result["intent"] == "scheme"
+
+
+# ---------------------------------------------------------------------------
+# System Triggers Tests
+# ---------------------------------------------------------------------------
+
+class TestSystemTriggers:
+    """Tests for the cross-system emergence engine."""
+
+    def test_economic_decline_triggers_crime(self):
+        from app.rpg.models import GameSession, Location
+        from app.rpg.system_triggers import evaluate_system_triggers
+        session = GameSession()
+        session.world.locations = [Location(name="Town", description="A town", market_modifier=0.5)]
+        events = evaluate_system_triggers(session)
+        assert any("Crime" in e.narrative for e in events)
+
+    def test_npc_anger_triggers_conflict(self):
+        from app.rpg.models import GameSession, NPCCharacter
+        from app.rpg.system_triggers import evaluate_system_triggers
+        session = GameSession()
+        session.npcs = [NPCCharacter(name="Angry", role="guard", emotional_state={"anger": 0.9})]
+        events = evaluate_system_triggers(session)
+        assert any("Angry" in e.narrative for e in events)
+
+    def test_low_food_triggers_famine(self):
+        from app.rpg.models import GameSession
+        from app.rpg.system_triggers import evaluate_system_triggers
+        session = GameSession()
+        session.world.resources["food"] = 20
+        events = evaluate_system_triggers(session)
+        assert any("Famine" in e.narrative or "famine" in e.source_event for e in events)
+
+    def test_low_security_triggers_bandits(self):
+        from app.rpg.models import GameSession
+        from app.rpg.system_triggers import evaluate_system_triggers
+        session = GameSession()
+        session.world.resources["security"] = 20
+        events = evaluate_system_triggers(session)
+        assert any("bandit" in e.source_event for e in events)
+
+    def test_faction_tension_triggers_event(self):
+        from app.rpg.models import GameSession, Faction
+        from app.rpg.system_triggers import evaluate_system_triggers
+        session = GameSession()
+        session.world.factions = [Faction(name="A", description="", relations={"B": -60})]
+        events = evaluate_system_triggers(session)
+        assert any("faction_tension" in e.source_event for e in events)
+
+    def test_no_triggers_on_healthy_world(self):
+        from app.rpg.models import GameSession
+        from app.rpg.system_triggers import evaluate_system_triggers
+        session = GameSession()
+        events = evaluate_system_triggers(session)
+        assert events == []
+
+    def test_update_resources_war(self):
+        from app.rpg.models import GameSession, WorldEvent
+        from app.rpg.system_triggers import update_resources
+        session = GameSession()
+        session.world.active_world_events = [WorldEvent(type="war", duration=5, affected_locations=[])]
+        old_sec = session.world.resources["security"]
+        update_resources(session)
+        assert session.world.resources["security"] < old_sec
+
+
+# ---------------------------------------------------------------------------
+# Story Engine Tests
+# ---------------------------------------------------------------------------
+
+class TestStoryEngine:
+    """Tests for the dynamic story arc system."""
+
+    def test_story_arc_defaults(self):
+        from app.rpg.models import StoryArc
+        arc = StoryArc()
+        assert arc.stage == "setup"
+        assert arc.progress == 0.0
+
+    def test_story_arc_roundtrip(self):
+        from app.rpg.models import StoryArc
+        arc = StoryArc(type="revenge", stage="rising", participants=["player"], progress=0.5)
+        d = arc.to_dict()
+        restored = StoryArc.from_dict(d)
+        assert restored.type == "revenge"
+        assert restored.stage == "rising"
+        assert restored.progress == 0.5
+
+    def test_update_story_arcs_progression(self):
+        from app.rpg.models import GameSession, StoryArc
+        from app.rpg.story_engine import update_story_arcs
+        session = GameSession()
+        session.story_arcs = [StoryArc(type="war", stage="setup", progress=0.0)]
+        update_story_arcs(session)
+        assert session.story_arcs[0].progress == 0.1
+
+    def test_update_story_arcs_stage_transition_rising(self):
+        from app.rpg.models import GameSession, StoryArc
+        from app.rpg.story_engine import update_story_arcs
+        session = GameSession()
+        session.story_arcs = [StoryArc(type="war", stage="setup", progress=0.25)]
+        update_story_arcs(session)
+        assert session.story_arcs[0].stage == "rising"
+
+    def test_update_story_arcs_stage_transition_climax(self):
+        from app.rpg.models import GameSession, StoryArc
+        from app.rpg.story_engine import update_story_arcs
+        session = GameSession()
+        session.story_arcs = [StoryArc(type="war", stage="rising", progress=0.65)]
+        consequences = update_story_arcs(session)
+        assert session.story_arcs[0].stage == "climax"
+        assert len(consequences) == 1
+
+    def test_update_story_arcs_resolution(self):
+        from app.rpg.models import GameSession, StoryArc
+        from app.rpg.story_engine import update_story_arcs
+        session = GameSession()
+        session.story_arcs = [StoryArc(type="war", stage="climax", progress=0.95)]
+        update_story_arcs(session)
+        assert session.story_arcs[0].stage == "resolution"
+
+    def test_maybe_create_arc_betrayal(self):
+        from app.rpg.models import GameSession
+        from app.rpg.story_engine import maybe_create_arc
+        session = GameSession()
+        arc = maybe_create_arc(session, "The merchant betrayed you!")
+        assert arc is not None
+        assert arc.type == "revenge"
+        assert len(session.story_arcs) == 1
+
+    def test_maybe_create_arc_war(self):
+        from app.rpg.models import GameSession
+        from app.rpg.story_engine import maybe_create_arc
+        session = GameSession()
+        arc = maybe_create_arc(session, "War has broken out between the kingdoms")
+        assert arc is not None
+        assert arc.type == "war"
+
+    def test_maybe_create_arc_no_match(self):
+        from app.rpg.models import GameSession
+        from app.rpg.story_engine import maybe_create_arc
+        session = GameSession()
+        arc = maybe_create_arc(session, "You bought some bread")
+        assert arc is None
+
+    def test_enforce_story_low_tension(self):
+        from app.rpg.models import GameSession, StoryArc
+        from app.rpg.story_engine import enforce_story
+        session = GameSession()
+        session.narrative_tension = 0.1
+        session.story_arcs = [StoryArc(type="revenge", stage="setup")]
+        directive = enforce_story(session)
+        assert directive is not None
+        assert directive["type"] == "inciting_incident"
+
+    def test_enforce_story_climax(self):
+        from app.rpg.models import GameSession, StoryArc
+        from app.rpg.story_engine import enforce_story
+        session = GameSession()
+        session.story_arcs = [StoryArc(type="war", stage="climax")]
+        directive = enforce_story(session)
+        assert directive is not None
+        assert directive["type"] == "major_conflict"
+
+    def test_npc_goal_progression(self):
+        from app.rpg.models import GameSession, NPCCharacter
+        from app.rpg.story_engine import update_npc_goals
+        session = GameSession()
+        session.npcs = [NPCCharacter(
+            name="Lord", role="noble",
+            personality_traits={"ambition": 1.0},
+            active_goals=[{"type": "gain_power", "target": "village", "progress": 0.0}]
+        )]
+        update_npc_goals(session)
+        assert session.npcs[0].active_goals[0]["progress"] == 0.1
+
+    def test_npc_goal_completion(self):
+        from app.rpg.models import GameSession, NPCCharacter
+        from app.rpg.story_engine import update_npc_goals
+        session = GameSession()
+        session.npcs = [NPCCharacter(
+            name="Lord", role="noble",
+            personality_traits={"ambition": 1.0},
+            active_goals=[{"type": "gain_power", "target": "village", "progress": 0.95}]
+        )]
+        consequences = update_npc_goals(session)
+        assert len(consequences) == 1
+        assert "Lord" in consequences[0].narrative
+        assert len(session.npcs[0].active_goals) == 0  # completed goal removed
+
+
+# ---------------------------------------------------------------------------
+# Upgraded Model Fields Tests
+# ---------------------------------------------------------------------------
+
+class TestFactionIdeologyRelations:
+    """Tests for Faction ideology and relations fields."""
+
+    def test_faction_ideology_to_dict(self):
+        from app.rpg.models import Faction
+        f = Faction(name="A", description="test", ideology={"violence": 0.8}, relations={"B": -50})
+        d = f.to_dict()
+        assert d["ideology"] == {"violence": 0.8}
+        assert d["relations"] == {"B": -50}
+
+    def test_faction_roundtrip(self):
+        from app.rpg.models import Faction
+        f = Faction(name="A", description="test", ideology={"commerce": 0.9}, relations={"B": 30})
+        d = f.to_dict()
+        restored = Faction.from_dict(d)
+        assert restored.ideology == {"commerce": 0.9}
+        assert restored.relations == {"B": 30}
+
+    def test_faction_backward_compat(self):
+        from app.rpg.models import Faction
+        old_data = {"name": "Old", "description": "test"}
+        f = Faction.from_dict(old_data)
+        assert f.ideology == {}
+        assert f.relations == {}
+
+
+class TestWorldStateResources:
+    """Tests for WorldState resources field."""
+
+    def test_default_resources(self):
+        from app.rpg.models import WorldState
+        ws = WorldState()
+        assert ws.resources == {"food": 100, "gold": 100, "security": 100}
+
+    def test_resources_to_dict(self):
+        from app.rpg.models import WorldState
+        ws = WorldState()
+        ws.resources["food"] = 50
+        d = ws.to_dict()
+        assert d["resources"]["food"] == 50
+
+    def test_resources_roundtrip(self):
+        from app.rpg.models import WorldState
+        ws = WorldState()
+        ws.resources = {"food": 20, "gold": 80, "security": 60}
+        d = ws.to_dict()
+        restored = WorldState.from_dict(d)
+        assert restored.resources == {"food": 20, "gold": 80, "security": 60}
+
+    def test_resources_backward_compat(self):
+        from app.rpg.models import WorldState
+        old_data = {"name": "Old"}
+        ws = WorldState.from_dict(old_data)
+        assert ws.resources == {"food": 100, "gold": 100, "security": 100}
+
+
+class TestPendingConsequenceUpgrade:
+    """Tests for PendingConsequence type, visibility, decay_rate."""
+
+    def test_consequence_type_visibility_defaults(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence()
+        assert pc.type == "world"
+        assert pc.visibility == "visible"
+        assert pc.decay_rate == 0.0
+
+    def test_consequence_type_visibility_roundtrip(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence(type="hidden", visibility="hidden", decay_rate=0.05)
+        d = pc.to_dict()
+        restored = PendingConsequence.from_dict(d)
+        assert restored.type == "hidden"
+        assert restored.visibility == "hidden"
+        assert restored.decay_rate == 0.05
+
+    def test_consequence_backward_compat(self):
+        from app.rpg.models import PendingConsequence
+        old_data = {"trigger_turn": 5, "narrative": "test"}
+        pc = PendingConsequence.from_dict(old_data)
+        assert pc.type == "world"
+        assert pc.visibility == "visible"
+        assert pc.decay_rate == 0.0
+
+
+class TestNPCActiveGoals:
+    """Tests for NPCCharacter active_goals field."""
+
+    def test_active_goals_default(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Test", role="villager")
+        assert npc.active_goals == []
+
+    def test_active_goals_roundtrip(self):
+        from app.rpg.models import NPCCharacter
+        goals = [{"type": "gain_power", "target": "village", "progress": 0.3, "priority": 0.8}]
+        npc = NPCCharacter(name="Test", role="noble", active_goals=goals)
+        d = npc.to_dict()
+        restored = NPCCharacter.from_dict(d)
+        assert restored.active_goals == goals
+
+    def test_active_goals_backward_compat(self):
+        from app.rpg.models import NPCCharacter
+        old_data = {"name": "Old", "role": "villager"}
+        npc = NPCCharacter.from_dict(old_data)
+        assert npc.active_goals == []
+
+
+class TestGameSessionStoryArcs:
+    """Tests for GameSession story_arcs field."""
+
+    def test_story_arcs_default(self):
+        from app.rpg.models import GameSession
+        session = GameSession()
+        assert session.story_arcs == []
+
+    def test_story_arcs_roundtrip(self):
+        from app.rpg.models import GameSession, StoryArc
+        session = GameSession()
+        session.story_arcs = [StoryArc(type="revenge", stage="rising", progress=0.5)]
+        d = session.to_dict()
+        restored = GameSession.from_dict(d)
+        assert len(restored.story_arcs) == 1
+        assert restored.story_arcs[0].type == "revenge"
+
+    def test_story_arcs_backward_compat(self):
+        from app.rpg.models import GameSession
+        old_data = {"session_id": "old"}
+        session = GameSession.from_dict(old_data)
+        assert session.story_arcs == []
+
+
+class TestConsequenceVisibility:
+    """Tests for hidden/foreshadowed consequence handling in pipeline."""
+
+    def test_hidden_consequence_no_narration(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 5
+        session.pending_consequences = [PendingConsequence(
+            trigger_turn=5, narrative="Secret effect", visibility="hidden"
+        )]
+        narrations = _process_pending_consequences(session)
+        assert narrations == []
+
+    def test_foreshadowed_consequence_hint(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 5
+        session.pending_consequences = [PendingConsequence(
+            trigger_turn=5, narrative="Prices will rise", visibility="foreshadowed"
+        )]
+        narrations = _process_pending_consequences(session)
+        assert len(narrations) == 1
+        assert "Something feels off" in narrations[0]
+
+    def test_visible_consequence_normal(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 5
+        session.pending_consequences = [PendingConsequence(
+            trigger_turn=5, narrative="Guards arrive", visibility="visible"
+        )]
+        narrations = _process_pending_consequences(session)
+        assert narrations == ["Guards arrive"]
+
+    def test_decay_removes_consequence(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 3
+        session.pending_consequences = [PendingConsequence(
+            trigger_turn=10, narrative="Decayed", importance=0.05, decay_rate=0.1
+        )]
+        _process_pending_consequences(session)
+        assert len(session.pending_consequences) == 0
+
+    def test_chain_id_in_history_tags(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 5
+        session.pending_consequences = [PendingConsequence(
+            trigger_turn=5, narrative="Chain event", chain_id="chain-abc"
+        )]
+        _process_pending_consequences(session)
+        last_event = session.history[-1]
+        assert "chain:chain-abc" in last_event.tags

@@ -52,6 +52,14 @@ from app.rpg.models import (
 from app.rpg.persistence import save_game
 from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard
 from app.rpg.npc_decision import decide_npc_action
+from app.rpg.npc_brain import decide_action as brain_decide, evaluate_npc_interactions
+from app.rpg.system_triggers import evaluate_system_triggers, update_resources
+from app.rpg.story_engine import (
+    enforce_story,
+    maybe_create_arc,
+    update_npc_goals,
+    update_story_arcs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -299,6 +307,12 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     _simulate_world_tick(session)
 
     # -----------------------------------------------------------------------
+    # Step 8a: System Triggers (cross-system emergence)
+    # -----------------------------------------------------------------------
+    emergent_events = evaluate_system_triggers(session)
+    session.pending_consequences.extend(emergent_events)
+
+    # -----------------------------------------------------------------------
     # Step 8b: Consequence Engine (delayed causality)
     # -----------------------------------------------------------------------
     consequence_narrations = _process_pending_consequences(session)
@@ -326,15 +340,27 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # Step 11b: Narrative Enforcement (director authority)
     # -----------------------------------------------------------------------
     narrative_directive = _enforce_narrative(session)
-    if narrative_directive:
-        logger.info("Narrative director forcing event: %s", narrative_directive)
+    # Also check story-arc-aware enforcement
+    story_directive = enforce_story(session)
+    effective_directive = narrative_directive or story_directive
+    if effective_directive:
+        logger.info("Narrative director forcing event: %s", effective_directive)
         # Inject a consequence that fires next turn to keep the story moving
         session.pending_consequences.append(PendingConsequence(
             trigger_turn=session.turn_count + 1,
-            source_event=f"narrative_director:{narrative_directive.get('type', 'event')}",
-            narrative=f"The world shifts... ({narrative_directive.get('type', 'event')})",
+            source_event=f"narrative_director:{effective_directive.get('type', 'event')}",
+            narrative=f"The world shifts... ({effective_directive.get('type', 'event')})",
             importance=0.8,
+            type="narrative",
         ))
+
+    # -----------------------------------------------------------------------
+    # Step 11c: Story Engine (arc progression + creation)
+    # -----------------------------------------------------------------------
+    arc_consequences = update_story_arcs(session)
+    session.pending_consequences.extend(arc_consequences)
+    # Detect if this turn's event should spawn a new arc
+    maybe_create_arc(session, event_description)
 
     # -----------------------------------------------------------------------
     # Step 12: Narration Output (with soft-failure tier)
@@ -567,6 +593,7 @@ def _simulate_world_tick(session: GameSession) -> None:
     Runs every 2 turns to reduce LLM calls.
     The NPC decision engine provides a deterministic pre-LLM intent for
     each NPC based on their emotional state, personality, and needs.
+    The NPC brain (utility scoring) enriches decisions with faction/memory data.
     """
     # Only simulate every 2 turns to reduce LLM calls
     if session.turn_count % 2 != 0:
@@ -581,6 +608,32 @@ def _simulate_world_tick(session: GameSession) -> None:
         )
         if decision["intent"] != "idle":
             npc.current_action = decision["intent"]
+
+    # --- NPC Brain (utility-based refinement with faction/memory) ----------
+    for npc in session.npcs:
+        faction_ctx: Dict[str, Any] = {}
+        for fac in session.world.factions:
+            if npc.name in fac.members:
+                faction_ctx = fac.to_dict()
+                break
+        brain_result = brain_decide(npc.to_dict(), {"faction": faction_ctx})
+        if brain_result["score"] > 2.0 and brain_result["intent"] != "idle":
+            npc.current_action = brain_result["intent"]
+
+    # --- NPC-to-NPC interactions (conflict / alliance detection) -----------
+    interactions = evaluate_npc_interactions([n.to_dict() for n in session.npcs])
+    for interaction in interactions:
+        if interaction["type"] == "conflict":
+            src = session.get_npc(interaction["source"])
+            if src and src.current_action == "idle":
+                src.current_action = "confront"
+
+    # --- NPC Goal Engine (progress structured goals) ----------------------
+    goal_consequences = update_npc_goals(session)
+    session.pending_consequences.extend(goal_consequences)
+
+    # --- Resource simulation (feeds into system triggers) ------------------
+    update_resources(session)
 
     context = build_context(session)
     npc_data = agents.simulate_npcs(context)
@@ -773,7 +826,8 @@ def _process_pending_consequences(session: GameSession) -> List[str]:
     Process pending consequences whose trigger turn has been reached.
 
     Applies effect diffs, spawns cascading follow-up consequences, and
-    removes triggered consequences.
+    removes triggered consequences.  Handles visibility (hidden consequences
+    produce no narration, foreshadowed ones add a hint) and decay.
     Returns a list of narrative strings for consequences that fired.
     """
     fired_narrations: List[str] = []
@@ -781,6 +835,13 @@ def _process_pending_consequences(session: GameSession) -> List[str]:
     spawned: List[PendingConsequence] = []
 
     for consequence in session.pending_consequences:
+        # Apply decay — importance decreases over time for decaying consequences
+        if consequence.decay_rate > 0 and session.turn_count < consequence.trigger_turn:
+            consequence.importance = max(0, consequence.importance - consequence.decay_rate)
+            if consequence.importance <= 0:
+                # Consequence faded before firing
+                continue
+
         if session.turn_count >= consequence.trigger_turn:
             # Check optional condition (simple keyword match against history)
             if consequence.condition:
@@ -796,17 +857,31 @@ def _process_pending_consequences(session: GameSession) -> List[str]:
                 logger.info("Consequence fired (turn %d): %s -> applied %s",
                             session.turn_count, consequence.source_event, applied)
 
+            # Build tags — include chain_id when present
+            tags = ["consequence"]
+            if consequence.chain_id:
+                tags.append(f"chain:{consequence.chain_id}")
+
             # Log as a history event
             session.history.append(HistoryEvent(
                 event=f"[Consequence] {consequence.narrative}",
                 impact=consequence.effect_diff,
                 turn=session.turn_count,
                 importance=consequence.importance,
-                tags=["consequence"],
+                tags=tags,
             ))
 
-            if consequence.narrative:
-                fired_narrations.append(consequence.narrative)
+            # Handle visibility for narration output
+            if consequence.visibility == "hidden":
+                pass  # Hidden consequences fire silently
+            elif consequence.visibility == "foreshadowed":
+                if consequence.narrative:
+                    fired_narrations.append(
+                        f"Something feels off... {consequence.narrative}"
+                    )
+            else:
+                if consequence.narrative:
+                    fired_narrations.append(consequence.narrative)
 
             # Spawn cascading follow-up consequences
             for next_c_data in consequence.next_consequences:
