@@ -2045,7 +2045,7 @@ class TestDeterministicReplayIntegrity:
         r1 = skill_check(stat_value=7, difficulty=5, seed=100)
         r2 = skill_check(stat_value=7, difficulty=5, seed=200)
         # With overwhelming probability these differ
-        assert r1["roll"] != r2["roll"] or r1["total"] != r2["total"]
+        assert r1 != r2
 
     def test_seed_per_turn_reproduces(self):
         """Verify that world.seed + turn_count gives deterministic dice."""

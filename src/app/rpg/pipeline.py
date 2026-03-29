@@ -216,7 +216,8 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # Step 3: Dice Roll (seed-based deterministic randomness)
     # -----------------------------------------------------------------------
     dice_result = None
-    # Always compute the per-turn seed for replay fidelity
+    # Per-turn seed: stored in TurnLog for deterministic replay even if the
+    # derivation formula changes in future versions.
     dice_seed = session.world.seed + session.turn_count
     stat_name = INTENT_STAT_MAP.get(intent.intent)
     if stat_name:
