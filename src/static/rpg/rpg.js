@@ -25,6 +25,10 @@
 
     const STORAGE_KEY = 'omnix_rpg_session_id';
     const DICE_HIDE_DELAY = 4000; // ms
+    // Defer init slightly past chat.js (which defers 500 ms) so that the chat
+    // module's event listeners are already attached before we add ours in
+    // capture phase.  650 ms > 500 ms + parse time.
+    const INIT_DELAY_MS = 650;
 
     // ─── State ─────────────────────────────────────────────────────────────────
 
@@ -492,7 +496,23 @@
         });
     }
 
-    // ─── New-session / reset ───────────────────────────────────────────────────
+    // ─── Welcome card helper ───────────────────────────────────────────────────
+    //
+    // Centralises the welcome-card HTML so that both the initial DOM (index.html)
+    // and the resetSession() rebuild produce identical markup, keeping the
+    // New Adventure button always present and delegated via the feed's click
+    // listener (set up once in init()).
+
+    function buildWelcomeHTML() {
+        return `<div class="rpg-welcome" id="rpgWelcome">
+                    <div class="rpg-welcome-icon">⚔️</div>
+                    <h3>RPG Mode</h3>
+                    <p>Type anything to begin your adventure…</p>
+                    <button class="rpg-new-session-btn" id="rpgNewSessionBtn" title="Start a fresh adventure">New Adventure</button>
+                </div>`;
+    }
+
+    // ─── Reset / new-session ───────────────────────────────────────────────────
 
     function resetSession() {
         rpgState.sessionId = null;
@@ -504,14 +524,9 @@
         localStorage.removeItem(STORAGE_KEY);
 
         const feed = el('rpgNarrativeFeed');
-        if (feed) {
-            feed.innerHTML = `
-                <div class="rpg-welcome" id="rpgWelcome">
-                    <div class="rpg-welcome-icon">⚔️</div>
-                    <h3>RPG Mode</h3>
-                    <p>Type anything to begin your adventure…</p>
-                </div>`;
-        }
+        if (feed) feed.innerHTML = buildWelcomeHTML();
+        // Note: the "New Adventure" button click is handled via event delegation
+        // on rpgNarrativeFeed (set up in init()), so no extra listener needed here.
 
         const choicePanel = el('rpgChoicePanel');
         if (choicePanel) { choicePanel.style.display = 'none'; choicePanel.innerHTML = ''; }
@@ -543,9 +558,14 @@
         if (chatModeBtn) chatModeBtn.addEventListener('click', () => switchMode('chat'));
         if (rpgModeBtn)  rpgModeBtn.addEventListener('click',  () => switchMode('rpg'));
 
-        // New adventure button
-        const newSessionBtn = el('rpgNewSessionBtn');
-        if (newSessionBtn) newSessionBtn.addEventListener('click', resetSession);
+        // "New Adventure" button — use event delegation on the feed so the
+        // listener survives the innerHTML replacement in resetSession().
+        const feed = el('rpgNarrativeFeed');
+        if (feed) {
+            feed.addEventListener('click', (e) => {
+                if (e.target && e.target.id === 'rpgNewSessionBtn') resetSession();
+            });
+        }
 
         // Sidebar shortcuts (expanded + collapsed)
         ['rpgBtnOption', 'rpgBtnCollapsed'].forEach(id => {
@@ -560,7 +580,7 @@
     }
 
     // Defer until after all other scripts have initialised
-    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 650));
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, INIT_DELAY_MS));
 
     // Public API (handy for debugging from the console)
     window.RPGMode = {
