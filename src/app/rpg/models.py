@@ -433,6 +433,10 @@ class NPCCharacter:
     emotional_state: Dict[str, float] = field(default_factory=dict)
     memories: List[Dict[str, Any]] = field(default_factory=list)
     opinions: Dict[str, int] = field(default_factory=dict)
+    # Personality traits (e.g. {"aggressive": 0.8, "greedy": 0.6, "loyal": 0.2})
+    personality_traits: Dict[str, float] = field(default_factory=dict)
+    # Needs drive NPC goals (e.g. {"wealth": 0.7, "safety": 0.3, "power": 0.5})
+    needs: Dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -453,6 +457,8 @@ class NPCCharacter:
             "emotional_state": dict(self.emotional_state),
             "memories": [dict(m) for m in self.memories],
             "opinions": dict(self.opinions),
+            "personality_traits": dict(self.personality_traits),
+            "needs": dict(self.needs),
         }
 
     @classmethod
@@ -475,6 +481,8 @@ class NPCCharacter:
             emotional_state=data.get("emotional_state", {}),
             memories=data.get("memories", []),
             opinions=data.get("opinions", {}),
+            personality_traits=data.get("personality_traits", {}),
+            needs=data.get("needs", {}),
         )
 
 
@@ -580,6 +588,9 @@ class PendingConsequence:
     effect_diff: Dict[str, Any] = field(default_factory=dict)
     narrative: str = ""
     importance: float = 0.7
+    # Cascading consequences: follow-up consequences spawned when this one fires
+    next_consequences: List[Dict[str, Any]] = field(default_factory=list)
+    chain_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         result: Dict[str, Any] = {
@@ -589,9 +600,12 @@ class PendingConsequence:
             "effect_diff": dict(self.effect_diff),
             "narrative": self.narrative,
             "importance": self.importance,
+            "next_consequences": [dict(nc) for nc in self.next_consequences],
         }
         if self.condition is not None:
             result["condition"] = self.condition
+        if self.chain_id is not None:
+            result["chain_id"] = self.chain_id
         return result
 
     @classmethod
@@ -604,6 +618,8 @@ class PendingConsequence:
             effect_diff=data.get("effect_diff", {}),
             narrative=data.get("narrative", ""),
             importance=data.get("importance", 0.7),
+            next_consequences=data.get("next_consequences", []),
+            chain_id=data.get("chain_id"),
         )
 
 
@@ -831,6 +847,7 @@ class GameSession:
     narrative_tension: float = 0.0
     turn_logs: List[TurnLog] = field(default_factory=list)
     pending_consequences: List[PendingConsequence] = field(default_factory=list)
+    story_flags: Dict[str, bool] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -848,6 +865,7 @@ class GameSession:
             "narrative_tension": self.narrative_tension,
             "turn_logs": [tl.to_dict() for tl in self.turn_logs],
             "pending_consequences": [pc.to_dict() for pc in self.pending_consequences],
+            "story_flags": dict(self.story_flags),
         }
 
     @classmethod
@@ -867,6 +885,7 @@ class GameSession:
             narrative_tension=data.get("narrative_tension", 0.0),
             turn_logs=[TurnLog.from_dict(tl) for tl in data.get("turn_logs", [])],
             pending_consequences=[PendingConsequence.from_dict(pc) for pc in data.get("pending_consequences", [])],
+            story_flags=data.get("story_flags", {}),
         )
 
     def get_npc(self, name: str) -> Optional[NPCCharacter]:

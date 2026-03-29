@@ -2820,3 +2820,431 @@ class TestLogIntegrityUnderFailure:
         restored = TurnLog.from_dict(d)
         assert restored.applied_diff == {}
         assert restored.diff_validation["valid"] is True
+
+
+# ---------------------------------------------------------------------------
+# NPC Decision Engine Tests
+# ---------------------------------------------------------------------------
+
+class TestNPCDecisionEngine:
+    """Tests for the deterministic NPC decision layer."""
+
+    def test_angry_aggressive_npc_confronts(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "emotional_state": {"anger": 0.8},
+            "personality_traits": {"aggressive": 0.9},
+            "needs": {"power": 0.5},
+        })
+        assert decision["intent"] == "confront"
+        assert decision["weight"] > 0.5
+
+    def test_fearful_npc_flees(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "emotional_state": {"fear": 0.9},
+            "personality_traits": {"aggressive": 0.0},
+            "needs": {"safety": 0.8},
+        })
+        assert decision["intent"] == "flee"
+        assert decision["weight"] > 0.4
+
+    def test_greedy_npc_trades(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "emotional_state": {"trust": 0.3},
+            "personality_traits": {"greedy": 0.8},
+            "needs": {"wealth": 0.9},
+        }, player_wealth=100)
+        assert decision["intent"] == "trade"
+
+    def test_loyal_trusting_npc_helps(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "emotional_state": {"trust": 0.7},
+            "opinions": {"player": 80},
+            "personality_traits": {"loyal": 0.9},
+        })
+        assert decision["intent"] == "help"
+
+    def test_empty_npc_idles(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({})
+        assert decision["intent"] == "idle"
+        assert decision["weight"] == 0.1
+
+    def test_greedy_npc_no_trade_without_player_wealth(self):
+        """Greedy NPC won't trade if player has no wealth."""
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "personality_traits": {"greedy": 0.9},
+            "needs": {"wealth": 0.9},
+        }, player_wealth=0)
+        # Should not be trade since player has no wealth
+        assert decision["intent"] != "trade"
+
+    def test_scheming_npc(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "personality_traits": {"greedy": 0.7, "loyal": 0.0},
+            "needs": {"power": 0.9},
+        })
+        assert decision["intent"] == "scheme"
+
+    def test_guard_npc(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "emotional_state": {"fear": 0.0},
+            "personality_traits": {"loyal": 0.9},
+            "needs": {"safety": 0.8},
+        })
+        assert decision["intent"] == "guard"
+
+    def test_decide_all_npcs(self):
+        from app.rpg.npc_decision import decide_all_npcs
+        npcs = [
+            {"name": "Guard", "emotional_state": {"anger": 0.9}, "personality_traits": {"aggressive": 0.9}},
+            {"name": "Merchant", "personality_traits": {"greedy": 0.8}, "needs": {"wealth": 0.9}},
+        ]
+        decisions = decide_all_npcs(npcs, player_wealth=50)
+        assert len(decisions) == 2
+        assert decisions[0]["name"] == "Guard"
+        assert decisions[0]["intent"] == "confront"
+        assert decisions[1]["name"] == "Merchant"
+
+    def test_weight_capped_at_one(self):
+        from app.rpg.npc_decision import decide_npc_action
+        decision = decide_npc_action({
+            "emotional_state": {"anger": 1.0},
+            "personality_traits": {"aggressive": 1.0},
+            "needs": {"power": 1.0},
+        })
+        assert decision["weight"] <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# NPC Personality Traits + Needs Model Tests
+# ---------------------------------------------------------------------------
+
+class TestNPCPersonalityTraits:
+    """Tests for personality_traits and needs fields on NPCCharacter."""
+
+    def test_npc_has_personality_traits_field(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard")
+        assert npc.personality_traits == {}
+
+    def test_npc_has_needs_field(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard")
+        assert npc.needs == {}
+
+    def test_npc_personality_traits_to_dict(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard",
+                           personality_traits={"aggressive": 0.8, "loyal": 0.3})
+        d = npc.to_dict()
+        assert d["personality_traits"] == {"aggressive": 0.8, "loyal": 0.3}
+
+    def test_npc_needs_to_dict(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Guard", role="guard",
+                           needs={"safety": 0.7, "power": 0.4})
+        d = npc.to_dict()
+        assert d["needs"] == {"safety": 0.7, "power": 0.4}
+
+    def test_npc_roundtrip_personality_traits(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Merchant", role="merchant",
+                           personality_traits={"greedy": 0.9},
+                           needs={"wealth": 0.8})
+        d = npc.to_dict()
+        restored = NPCCharacter.from_dict(d)
+        assert restored.personality_traits == {"greedy": 0.9}
+        assert restored.needs == {"wealth": 0.8}
+
+    def test_npc_backward_compat_no_traits(self):
+        """Old data without personality_traits/needs should still load."""
+        from app.rpg.models import NPCCharacter
+        old_data = {"name": "OldNPC", "role": "villager"}
+        npc = NPCCharacter.from_dict(old_data)
+        assert npc.personality_traits == {}
+        assert npc.needs == {}
+
+
+# ---------------------------------------------------------------------------
+# Cascading Consequences Tests
+# ---------------------------------------------------------------------------
+
+class TestCascadingConsequences:
+    """Tests for consequence chains and cascading follow-ups."""
+
+    def test_pending_consequence_has_chain_fields(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence()
+        assert pc.next_consequences == []
+        assert pc.chain_id is None
+
+    def test_pending_consequence_chain_to_dict(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence(
+            trigger_turn=5,
+            source_event="theft",
+            narrative="Guards investigate",
+            chain_id="chain-abc",
+            next_consequences=[
+                {"trigger_turn": 10, "narrative": "Merchants raise prices",
+                 "effect_diff": {"player_changes": {"reputation_local": -5}}}
+            ],
+        )
+        d = pc.to_dict()
+        assert d["chain_id"] == "chain-abc"
+        assert len(d["next_consequences"]) == 1
+        assert d["next_consequences"][0]["narrative"] == "Merchants raise prices"
+
+    def test_pending_consequence_chain_roundtrip(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence(
+            trigger_turn=5,
+            source_event="insult",
+            narrative="NPC gets angry",
+            chain_id="chain-xyz",
+            next_consequences=[
+                {"trigger_turn": 8, "narrative": "NPC refuses to trade"}
+            ],
+        )
+        d = pc.to_dict()
+        restored = PendingConsequence.from_dict(d)
+        assert restored.chain_id == "chain-xyz"
+        assert len(restored.next_consequences) == 1
+
+    def test_cascading_consequence_fires_follow_up(self):
+        """When a consequence fires, its next_consequences should be spawned."""
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+
+        session = GameSession()
+        session.turn_count = 5
+
+        parent = PendingConsequence(
+            trigger_turn=5,
+            source_event="theft",
+            narrative="Guards investigate",
+            next_consequences=[
+                {"trigger_turn": 10, "source_event": "investigation",
+                 "narrative": "Merchants raise prices",
+                 "effect_diff": {"player_changes": {"reputation_local": -5}}}
+            ],
+        )
+        session.pending_consequences = [parent]
+
+        narrations = _process_pending_consequences(session)
+
+        # Parent fired
+        assert "Guards investigate" in narrations
+        # Follow-up spawned
+        assert len(session.pending_consequences) == 1
+        follow_up = session.pending_consequences[0]
+        assert follow_up.narrative == "Merchants raise prices"
+        assert follow_up.trigger_turn == 10
+
+    def test_cascading_consequence_inherits_chain_id(self):
+        """Spawned consequences inherit chain_id from parent."""
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+
+        session = GameSession()
+        session.turn_count = 5
+
+        parent = PendingConsequence(
+            id="parent-id",
+            trigger_turn=5,
+            source_event="theft",
+            narrative="Guards come",
+            chain_id="theft-chain",
+            next_consequences=[
+                {"trigger_turn": 10, "narrative": "Prices rise"}
+            ],
+        )
+        session.pending_consequences = [parent]
+        _process_pending_consequences(session)
+
+        assert session.pending_consequences[0].chain_id == "theft-chain"
+
+    def test_cascading_consequence_relative_trigger(self):
+        """Follow-up with trigger_turn=0 gets converted to current_turn + 1."""
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+
+        session = GameSession()
+        session.turn_count = 7
+
+        parent = PendingConsequence(
+            trigger_turn=7,
+            source_event="event",
+            narrative="First",
+            next_consequences=[
+                {"trigger_turn": 0, "narrative": "Relative follow-up"}
+            ],
+        )
+        session.pending_consequences = [parent]
+        _process_pending_consequences(session)
+
+        follow_up = session.pending_consequences[0]
+        assert follow_up.trigger_turn == 8  # 7 + 0 + 1
+
+    def test_multi_level_cascade(self):
+        """Three-level cascade: parent -> child -> grandchild across turns."""
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+
+        session = GameSession()
+
+        # Set up: parent fires at turn 3, child at 6, grandchild at 9
+        parent = PendingConsequence(
+            trigger_turn=3,
+            source_event="theft",
+            narrative="Guards alerted",
+            next_consequences=[
+                {"trigger_turn": 6, "source_event": "investigation",
+                 "narrative": "Bounty posted",
+                 "next_consequences": [
+                     {"trigger_turn": 9, "narrative": "Bounty hunters arrive"}
+                 ]}
+            ],
+        )
+        session.pending_consequences = [parent]
+
+        # Turn 3: parent fires
+        session.turn_count = 3
+        narrations = _process_pending_consequences(session)
+        assert "Guards alerted" in narrations
+        assert len(session.pending_consequences) == 1
+        assert session.pending_consequences[0].narrative == "Bounty posted"
+
+        # Turn 6: child fires
+        session.turn_count = 6
+        narrations = _process_pending_consequences(session)
+        assert "Bounty posted" in narrations
+        assert len(session.pending_consequences) == 1
+        assert session.pending_consequences[0].narrative == "Bounty hunters arrive"
+
+        # Turn 9: grandchild fires
+        session.turn_count = 9
+        narrations = _process_pending_consequences(session)
+        assert "Bounty hunters arrive" in narrations
+        assert len(session.pending_consequences) == 0
+
+
+# ---------------------------------------------------------------------------
+# Story Flags Tests
+# ---------------------------------------------------------------------------
+
+class TestStoryFlags:
+    """Tests for story_flags field on GameSession."""
+
+    def test_session_has_story_flags(self):
+        from app.rpg.models import GameSession
+        session = GameSession()
+        assert session.story_flags == {}
+
+    def test_session_story_flags_serialization(self):
+        from app.rpg.models import GameSession
+        session = GameSession()
+        session.story_flags = {"met_villain": True, "war_started": False}
+        d = session.to_dict()
+        assert d["story_flags"] == {"met_villain": True, "war_started": False}
+
+    def test_session_story_flags_roundtrip(self):
+        from app.rpg.models import GameSession
+        session = GameSession()
+        session.story_flags = {"quest_complete": True}
+        d = session.to_dict()
+        restored = GameSession.from_dict(d)
+        assert restored.story_flags == {"quest_complete": True}
+
+    def test_session_backward_compat_no_story_flags(self):
+        from app.rpg.models import GameSession
+        old_data = {"session_id": "old-session", "turn_count": 10}
+        session = GameSession.from_dict(old_data)
+        assert session.story_flags == {}
+
+
+# ---------------------------------------------------------------------------
+# Narrative Enforcement Tests
+# ---------------------------------------------------------------------------
+
+class TestNarrativeEnforcement:
+    """Tests for _enforce_narrative director authority."""
+
+    def test_low_tension_triggers_conflict(self):
+        from app.rpg.models import GameSession, HistoryEvent
+        from app.rpg.pipeline import _enforce_narrative
+
+        session = GameSession()
+        session.narrative_tension = 0.1
+        session.turn_count = 10
+        # Add some bland history (no conflict/consequence tags)
+        for i in range(5):
+            session.history.append(HistoryEvent(
+                event=f"Nothing happened {i}",
+                turn=i + 5,
+                tags=["observation"],
+            ))
+
+        directive = _enforce_narrative(session)
+        assert directive is not None
+        assert directive["force_event"] == "conflict"
+        assert directive["type"] == "ambush"
+
+    def test_high_tension_triggers_resolution(self):
+        from app.rpg.models import GameSession
+        from app.rpg.pipeline import _enforce_narrative
+
+        session = GameSession()
+        session.narrative_tension = 0.9
+        session.turn_count = 10
+
+        directive = _enforce_narrative(session)
+        assert directive is not None
+        assert directive["force_event"] == "resolution"
+
+    def test_normal_tension_no_directive(self):
+        from app.rpg.models import GameSession
+        from app.rpg.pipeline import _enforce_narrative
+
+        session = GameSession()
+        session.narrative_tension = 0.5
+        session.turn_count = 10
+
+        directive = _enforce_narrative(session)
+        assert directive is None
+
+    def test_low_tension_early_game_no_trigger(self):
+        """Don't force conflict in the first 5 turns."""
+        from app.rpg.models import GameSession
+        from app.rpg.pipeline import _enforce_narrative
+
+        session = GameSession()
+        session.narrative_tension = 0.1
+        session.turn_count = 3
+
+        directive = _enforce_narrative(session)
+        assert directive is None
+
+    def test_low_tension_with_recent_conflict_no_trigger(self):
+        """Don't force conflict if conflict already happened recently."""
+        from app.rpg.models import GameSession, HistoryEvent
+        from app.rpg.pipeline import _enforce_narrative
+
+        session = GameSession()
+        session.narrative_tension = 0.1
+        session.turn_count = 10
+        session.history.append(HistoryEvent(
+            event="A battle occurred",
+            turn=9,
+            tags=["conflict"],
+        ))
+
+        directive = _enforce_narrative(session)
+        assert directive is None

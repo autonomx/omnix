@@ -51,6 +51,7 @@ from app.rpg.models import (
 )
 from app.rpg.persistence import save_game
 from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard
+from app.rpg.npc_decision import decide_npc_action
 
 logger = logging.getLogger(__name__)
 
@@ -322,6 +323,20 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     _update_narrative(session)
 
     # -----------------------------------------------------------------------
+    # Step 11b: Narrative Enforcement (director authority)
+    # -----------------------------------------------------------------------
+    narrative_directive = _enforce_narrative(session)
+    if narrative_directive:
+        logger.info("Narrative director forcing event: %s", narrative_directive)
+        # Inject a consequence that fires next turn to keep the story moving
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=session.turn_count + 1,
+            source_event=f"narrative_director:{narrative_directive.get('type', 'event')}",
+            narrative=f"The world shifts... ({narrative_directive.get('type', 'event')})",
+            importance=0.8,
+        ))
+
+    # -----------------------------------------------------------------------
     # Step 12: Narration Output (with soft-failure tier)
     # -----------------------------------------------------------------------
     narration_context = build_context(session)
@@ -550,10 +565,22 @@ def _simulate_world_tick(session: GameSession) -> None:
     Run enhanced world simulation: NPC autonomy + economy shifts + faction changes.
 
     Runs every 2 turns to reduce LLM calls.
+    The NPC decision engine provides a deterministic pre-LLM intent for
+    each NPC based on their emotional state, personality, and needs.
     """
     # Only simulate every 2 turns to reduce LLM calls
     if session.turn_count % 2 != 0:
         return
+
+    # --- NPC Decision Engine (pre-LLM deterministic intent) ----------------
+    for npc in session.npcs:
+        decision = decide_npc_action(
+            npc.to_dict(),
+            player_location=session.player.location,
+            player_wealth=session.player.stats.wealth,
+        )
+        if decision["intent"] != "idle":
+            npc.current_action = decision["intent"]
 
     context = build_context(session)
     npc_data = agents.simulate_npcs(context)
@@ -611,6 +638,32 @@ def _update_narrative(session: GameSession) -> None:
     if direction:
         session.narrative_act = direction.get("narrative_act", session.narrative_act)
         session.narrative_tension = direction.get("tension_level", session.narrative_tension)
+
+
+def _enforce_narrative(session: GameSession) -> Optional[Dict[str, Any]]:
+    """
+    Narrative Director authority layer: can force events to maintain pacing.
+
+    Returns a directive dict when action is needed, or ``None`` if the story
+    is pacing well.  Directives may include ``force_event`` and ``type``
+    keys that the caller should use to inject events.
+    """
+    tension = session.narrative_tension
+
+    # Low tension for too long — inject conflict
+    if tension < 0.3 and session.turn_count > 5:
+        # Check if there's been any conflict recently
+        recent_tags = []
+        for h in session.history[-5:]:
+            recent_tags.extend(h.tags)
+        if "consequence" not in recent_tags and "conflict" not in recent_tags:
+            return {"force_event": "conflict", "type": "ambush"}
+
+    # Extremely high tension — offer resolution opportunity
+    if tension > 0.8:
+        return {"force_event": "resolution", "type": "opportunity"}
+
+    return None
 
 
 def _compress_memory_if_needed(session: GameSession) -> None:
@@ -719,11 +772,13 @@ def _process_pending_consequences(session: GameSession) -> List[str]:
     """
     Process pending consequences whose trigger turn has been reached.
 
-    Applies effect diffs and removes triggered consequences.
+    Applies effect diffs, spawns cascading follow-up consequences, and
+    removes triggered consequences.
     Returns a list of narrative strings for consequences that fired.
     """
     fired_narrations: List[str] = []
     remaining: List[PendingConsequence] = []
+    spawned: List[PendingConsequence] = []
 
     for consequence in session.pending_consequences:
         if session.turn_count >= consequence.trigger_turn:
@@ -752,10 +807,23 @@ def _process_pending_consequences(session: GameSession) -> List[str]:
 
             if consequence.narrative:
                 fired_narrations.append(consequence.narrative)
+
+            # Spawn cascading follow-up consequences
+            for next_c_data in consequence.next_consequences:
+                next_c = PendingConsequence.from_dict(next_c_data)
+                # If trigger_turn is relative (0 or less), make it relative to current turn
+                if next_c.trigger_turn <= 0:
+                    next_c.trigger_turn = session.turn_count + abs(next_c.trigger_turn) + 1
+                # Inherit chain_id from parent if not set
+                if not next_c.chain_id:
+                    next_c.chain_id = consequence.chain_id or consequence.id
+                spawned.append(next_c)
+                logger.info("Cascading consequence spawned: %s (fires turn %d)",
+                            next_c.narrative, next_c.trigger_turn)
         else:
             remaining.append(consequence)
 
-    session.pending_consequences = remaining
+    session.pending_consequences = remaining + spawned
     return fired_narrations
 
 
