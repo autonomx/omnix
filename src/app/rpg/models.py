@@ -658,26 +658,40 @@ class TurnLog:
 
     Captures every pipeline artifact so that turns can be reproduced,
     debugged, and audited.
+
+    ``version`` tracks the schema revision so that older logs can be
+    migrated when the format changes.  ``seed`` stores the exact RNG
+    seed used for the turn's dice roll so replays are reproducible
+    even if the seed-derivation strategy changes.
+    ``diff_validation`` records any validation issues, rejected fields,
+    or clamped values produced when applying the diff.
     """
+    version: int = 1
     turn: int = 0
+    seed: Optional[int] = None
     raw_input: str = ""
     normalized_intent: Dict[str, Any] = field(default_factory=dict)
     dice_roll: Optional[Dict[str, Any]] = None
     event_output: Dict[str, Any] = field(default_factory=dict)
     canon_check: Dict[str, Any] = field(default_factory=dict)
     applied_diff: Dict[str, Any] = field(default_factory=dict)
+    diff_validation: Dict[str, Any] = field(default_factory=dict)
     narration: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         result: Dict[str, Any] = {
+            "version": self.version,
             "turn": self.turn,
             "raw_input": self.raw_input,
             "normalized_intent": dict(self.normalized_intent),
             "event_output": dict(self.event_output),
             "canon_check": dict(self.canon_check),
             "applied_diff": dict(self.applied_diff),
+            "diff_validation": dict(self.diff_validation),
             "narration": self.narration,
         }
+        if self.seed is not None:
+            result["seed"] = self.seed
         if self.dice_roll is not None:
             result["dice_roll"] = dict(self.dice_roll)
         return result
@@ -685,13 +699,16 @@ class TurnLog:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TurnLog":
         return cls(
+            version=data.get("version", 1),
             turn=data.get("turn", 0),
+            seed=data.get("seed"),
             raw_input=data.get("raw_input", ""),
             normalized_intent=data.get("normalized_intent", {}),
             dice_roll=data.get("dice_roll"),
             event_output=data.get("event_output", {}),
             canon_check=data.get("canon_check", {}),
             applied_diff=data.get("applied_diff", {}),
+            diff_validation=data.get("diff_validation", {}),
             narration=data.get("narration", ""),
         )
 
@@ -927,3 +944,48 @@ def apply_diff(session: GameSession, diff: WorldStateDiff) -> Dict[str, Any]:
         session.history.append(event)
 
     return applied
+
+
+def validate_diff(diff: WorldStateDiff, session: GameSession) -> Dict[str, Any]:
+    """
+    Validate a ``WorldStateDiff`` against a ``GameSession`` *without*
+    mutating state.
+
+    Returns a dict describing rejected fields, type mismatches, unknown
+    NPCs, and any values that would be clamped.
+    """
+    result: Dict[str, Any] = {
+        "valid": True,
+        "rejected_fields": [],
+        "unknown_npcs": [],
+        "type_errors": [],
+        "clamped_values": [],
+    }
+
+    pc = diff.player_changes
+    if pc:
+        for stat, delta in pc.get("stat_changes", {}).items():
+            if stat not in _STAT_FIELDS:
+                result["rejected_fields"].append(f"stat_changes.{stat}")
+                result["valid"] = False
+            elif not isinstance(delta, (int, float)):
+                result["type_errors"].append(f"stat_changes.{stat}: expected number, got {type(delta).__name__}")
+                result["valid"] = False
+
+        for fld in _PLAYER_DELTA_FIELDS:
+            delta = pc.get(fld, 0)
+            if delta and not isinstance(delta, (int, float)):
+                result["type_errors"].append(f"{fld}: expected number, got {type(delta).__name__}")
+                result["valid"] = False
+
+        wealth_delta = pc.get("wealth", 0)
+        if wealth_delta and not isinstance(wealth_delta, (int, float)):
+            result["type_errors"].append(f"wealth: expected number, got {type(wealth_delta).__name__}")
+            result["valid"] = False
+
+    for npc_name in diff.npc_changes:
+        if not session.get_npc(npc_name):
+            result["unknown_npcs"].append(npc_name)
+            result["valid"] = False
+
+    return result

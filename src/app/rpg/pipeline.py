@@ -45,6 +45,7 @@ from app.rpg.models import (
     WorldTime,
     apply_diff,
     skill_check,
+    validate_diff,
 )
 from app.rpg.persistence import save_game
 from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard
@@ -215,13 +216,14 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # Step 3: Dice Roll (seed-based deterministic randomness)
     # -----------------------------------------------------------------------
     dice_result = None
+    # Always compute the per-turn seed for replay fidelity
+    dice_seed = session.world.seed + session.turn_count
     stat_name = INTENT_STAT_MAP.get(intent.intent)
     if stat_name:
         stat_value = getattr(session.player.stats, stat_name, 5)
         # Use risk-scored difficulty from normalizer if available, else default
         difficulty = intent_difficulty if intent_difficulty > 0 else INTENT_DIFFICULTY_MAP.get(intent.intent, 5)
         # Seed-based deterministic randomness for replayability
-        dice_seed = session.world.seed + session.turn_count
         dice_result = skill_check(stat_value, difficulty, seed=dice_seed)
         intent_data["skill_check"] = dice_result
         logger.info("Dice roll: d20=%d + %s(%d) = %d vs DC %d -> %s (%s)",
@@ -278,8 +280,10 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # -----------------------------------------------------------------------
     diff_data = event_outcome.get("diff", {})
     state_changes = {}
+    diff_validation_result: Dict[str, Any] = {}
     if diff_data:
         world_diff = WorldStateDiff.from_dict(diff_data)
+        diff_validation_result = validate_diff(world_diff, session)
         state_changes = apply_diff(session, world_diff)
     else:
         # Fallback: use legacy Character Manager path for backward compatibility
@@ -362,12 +366,14 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # -----------------------------------------------------------------------
     turn_log = TurnLog(
         turn=session.turn_count,
+        seed=dice_seed,
         raw_input=raw_input,
         normalized_intent=intent_data,
         dice_roll=dice_result,
         event_output=event_outcome,
         canon_check=canon_check_data,
         applied_diff=state_changes,
+        diff_validation=diff_validation_result,
         narration=narration,
     )
     session.turn_logs.append(turn_log)
@@ -381,6 +387,58 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         state_changes=state_changes,
         dice_roll=dice_result,
         fail_state=fail_state,
+    )
+
+
+def replay_turn(turn_log: TurnLog, session: GameSession) -> TurnResult:
+    """
+    Re-execute a turn from a ``TurnLog`` entry deterministically.
+
+    Uses the stored seed and normalized intent to reproduce the dice roll
+    and re-applies the stored diff to the session.  No LLM calls are made
+    -- this is a pure-data replay for debugging and verification.
+
+    Returns a ``TurnResult`` with the replayed narration and state changes.
+    """
+    session.turn_count += 1
+    logger.info("Replay turn %d: raw_input='%s'", turn_log.turn, turn_log.raw_input)
+
+    # Reproduce dice roll using stored seed
+    replayed_dice = None
+    intent_data = dict(turn_log.normalized_intent)
+    stat_name = INTENT_STAT_MAP.get(intent_data.get("intent", ""))
+    if stat_name and turn_log.seed is not None:
+        stat_value = getattr(session.player.stats, stat_name, 5)
+        difficulty = intent_data.get("difficulty", 5)
+        if difficulty <= 0:
+            difficulty = INTENT_DIFFICULTY_MAP.get(intent_data.get("intent", ""), 5)
+        replayed_dice = skill_check(stat_value, difficulty, seed=turn_log.seed)
+
+    # Re-apply stored diff
+    diff_data = turn_log.event_output.get("diff", {})
+    state_changes: Dict[str, Any] = {}
+    if diff_data:
+        world_diff = WorldStateDiff.from_dict(diff_data)
+        state_changes = apply_diff(session, world_diff)
+
+    # Reconstruct history event from log
+    event_description = turn_log.event_output.get("outcome", turn_log.raw_input)
+    importance = turn_log.event_output.get("importance", 0.5)
+    history_event = HistoryEvent(
+        event=event_description,
+        impact=state_changes,
+        turn=turn_log.turn,
+        importance=importance,
+    )
+    session.history.append(history_event)
+
+    session.updated_at = datetime.now().isoformat()
+
+    return TurnResult(
+        narration=turn_log.narration,
+        events=[history_event],
+        state_changes=state_changes,
+        dice_roll=replayed_dice,
     )
 
 

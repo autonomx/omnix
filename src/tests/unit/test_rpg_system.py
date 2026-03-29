@@ -1866,3 +1866,340 @@ class TestGameSessionTurnLogs:
         assert tl.normalized_intent["intent"] == "buy_item"
         assert tl.dice_roll is None
         assert tl.applied_diff["wealth_change"] == -10
+
+
+# ---------------------------------------------------------------------------
+# TurnLog New Fields (seed, version, diff_validation)
+# ---------------------------------------------------------------------------
+
+class TestTurnLogNewFields:
+    """Test the seed, version, and diff_validation fields added to TurnLog."""
+
+    def test_turn_log_has_seed_field(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog()
+        assert tl.seed is None
+
+    def test_turn_log_has_version_field(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog()
+        assert tl.version == 1
+
+    def test_turn_log_has_diff_validation_field(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog()
+        assert tl.diff_validation == {}
+
+    def test_turn_log_seed_serialization(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog(turn=3, seed=42042, raw_input="look around")
+        d = tl.to_dict()
+        assert d["seed"] == 42042
+        restored = TurnLog.from_dict(d)
+        assert restored.seed == 42042
+
+    def test_turn_log_seed_none_omitted(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog(turn=1, seed=None, raw_input="look around")
+        d = tl.to_dict()
+        assert "seed" not in d
+
+    def test_turn_log_version_serialization(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog(turn=1, raw_input="look")
+        d = tl.to_dict()
+        assert d["version"] == 1
+        restored = TurnLog.from_dict(d)
+        assert restored.version == 1
+
+    def test_turn_log_diff_validation_serialization(self):
+        from app.rpg.models import TurnLog
+        validation = {
+            "valid": False,
+            "rejected_fields": ["stat_changes.magic"],
+            "unknown_npcs": [],
+            "type_errors": [],
+            "clamped_values": [],
+        }
+        tl = TurnLog(turn=2, diff_validation=validation)
+        d = tl.to_dict()
+        assert d["diff_validation"]["valid"] is False
+        assert d["diff_validation"]["rejected_fields"] == ["stat_changes.magic"]
+        restored = TurnLog.from_dict(d)
+        assert restored.diff_validation["rejected_fields"] == ["stat_changes.magic"]
+
+    def test_turn_log_backward_compat_from_dict(self):
+        """Old TurnLog dicts without seed/version/diff_validation load fine."""
+        from app.rpg.models import TurnLog
+        data = {
+            "turn": 5,
+            "raw_input": "look around",
+            "normalized_intent": {},
+            "event_output": {},
+            "canon_check": {},
+            "applied_diff": {},
+            "narration": "Something happens.",
+        }
+        tl = TurnLog.from_dict(data)
+        assert tl.version == 1
+        assert tl.seed is None
+        assert tl.diff_validation == {}
+
+    def test_turn_log_full_roundtrip_new_fields(self):
+        from app.rpg.models import TurnLog
+        original = TurnLog(
+            version=1,
+            turn=4,
+            seed=12345,
+            raw_input="attack orc",
+            normalized_intent={"intent": "attack", "target": "orc"},
+            dice_roll={"roll": 12, "total": 17, "dc": 15, "passed": True, "outcome": "success"},
+            event_output={"outcome": "Hit the orc", "diff": {"player_changes": {"stat_changes": {"strength": 1}}}},
+            canon_check={"valid": True},
+            applied_diff={"player_strength": 1},
+            diff_validation={"valid": True, "rejected_fields": [], "unknown_npcs": []},
+            narration="Narrator: You strike!",
+        )
+        restored = TurnLog.from_dict(original.to_dict())
+        assert restored.version == original.version
+        assert restored.seed == original.seed
+        assert restored.diff_validation == original.diff_validation
+
+
+# ---------------------------------------------------------------------------
+# validate_diff function
+# ---------------------------------------------------------------------------
+
+class TestValidateDiff:
+    """Test the validate_diff function for diff validation reporting."""
+
+    def test_valid_diff(self):
+        from app.rpg.models import GameSession, NPCCharacter, WorldStateDiff, validate_diff
+        session = GameSession()
+        session.npcs.append(NPCCharacter(name="Goblin", role="enemy"))
+        diff = WorldStateDiff(
+            player_changes={"stat_changes": {"strength": 2}},
+            npc_changes={"Goblin": {"relationship": 5}},
+        )
+        result = validate_diff(diff, session)
+        assert result["valid"] is True
+        assert result["rejected_fields"] == []
+        assert result["unknown_npcs"] == []
+
+    def test_rejected_stat_field(self):
+        from app.rpg.models import GameSession, WorldStateDiff, validate_diff
+        session = GameSession()
+        diff = WorldStateDiff(
+            player_changes={"stat_changes": {"magic_power": 10}},
+        )
+        result = validate_diff(diff, session)
+        assert result["valid"] is False
+        assert "stat_changes.magic_power" in result["rejected_fields"]
+
+    def test_unknown_npc(self):
+        from app.rpg.models import GameSession, WorldStateDiff, validate_diff
+        session = GameSession()
+        diff = WorldStateDiff(
+            npc_changes={"NonexistentNPC": {"relationship": 5}},
+        )
+        result = validate_diff(diff, session)
+        assert result["valid"] is False
+        assert "NonexistentNPC" in result["unknown_npcs"]
+
+    def test_type_error_in_stat(self):
+        from app.rpg.models import GameSession, WorldStateDiff, validate_diff
+        session = GameSession()
+        diff = WorldStateDiff(
+            player_changes={"stat_changes": {"strength": "not_a_number"}},
+        )
+        result = validate_diff(diff, session)
+        assert result["valid"] is False
+        assert any("strength" in te for te in result["type_errors"])
+
+    def test_empty_diff_is_valid(self):
+        from app.rpg.models import GameSession, WorldStateDiff, validate_diff
+        session = GameSession()
+        diff = WorldStateDiff()
+        result = validate_diff(diff, session)
+        assert result["valid"] is True
+
+
+# ---------------------------------------------------------------------------
+# Deterministic Replay Integrity
+# ---------------------------------------------------------------------------
+
+class TestDeterministicReplayIntegrity:
+    """Test that same input + same seed produces same dice outcome."""
+
+    def test_same_seed_same_roll(self):
+        """skill_check with identical seed must produce identical results."""
+        from app.rpg.models import skill_check
+        seed = 42042
+        r1 = skill_check(stat_value=7, difficulty=5, seed=seed)
+        r2 = skill_check(stat_value=7, difficulty=5, seed=seed)
+        assert r1 == r2
+
+    def test_different_seed_different_roll(self):
+        """Different seeds should (with high probability) produce different rolls."""
+        from app.rpg.models import skill_check
+        r1 = skill_check(stat_value=7, difficulty=5, seed=100)
+        r2 = skill_check(stat_value=7, difficulty=5, seed=200)
+        # With overwhelming probability these differ
+        assert r1["roll"] != r2["roll"] or r1["total"] != r2["total"]
+
+    def test_seed_per_turn_reproduces(self):
+        """Verify that world.seed + turn_count gives deterministic dice."""
+        from app.rpg.models import GameSession, skill_check
+        session = GameSession()
+        session.world.seed = 999
+        for turn in range(1, 4):
+            dice_seed = session.world.seed + turn
+            r1 = skill_check(5, 5, seed=dice_seed)
+            r2 = skill_check(5, 5, seed=dice_seed)
+            assert r1 == r2, f"Turn {turn} replay mismatch"
+
+
+# ---------------------------------------------------------------------------
+# Replay Turn Function
+# ---------------------------------------------------------------------------
+
+class TestReplayTurn:
+    """Test the replay_turn() function for turn re-execution."""
+
+    def test_replay_turn_applies_diff(self):
+        from app.rpg.models import GameSession, TurnLog
+        from app.rpg.pipeline import replay_turn
+        session = GameSession()
+        session.player.stats.wealth = 100
+        turn_log = TurnLog(
+            turn=1,
+            seed=42,
+            raw_input="buy sword",
+            normalized_intent={"intent": "buy_item", "target": "sword"},
+            event_output={
+                "outcome": "You bought a sword",
+                "diff": {
+                    "player_changes": {"wealth": -10},
+                },
+            },
+            canon_check={"valid": True},
+            applied_diff={"wealth_change": -10},
+            narration="Narrator: You purchase a fine blade.",
+        )
+        result = replay_turn(turn_log, session)
+        assert session.player.stats.wealth == 90
+        assert result.narration == "Narrator: You purchase a fine blade."
+        assert result.state_changes.get("wealth_change") == -10
+
+    def test_replay_turn_reproduces_dice(self):
+        from app.rpg.models import GameSession, TurnLog, skill_check
+        from app.rpg.pipeline import replay_turn
+        session = GameSession()
+        session.player.stats.strength = 7
+        seed = 42042
+        expected = skill_check(7, 5, seed=seed)
+        turn_log = TurnLog(
+            turn=1,
+            seed=seed,
+            raw_input="attack goblin",
+            normalized_intent={"intent": "attack", "target": "goblin", "difficulty": 5},
+            dice_roll=expected,
+            event_output={"outcome": "You hit", "diff": {}},
+            canon_check={"valid": True},
+            applied_diff={},
+            narration="Narrator: Strike!",
+        )
+        result = replay_turn(turn_log, session)
+        assert result.dice_roll is not None
+        assert result.dice_roll["roll"] == expected["roll"]
+        assert result.dice_roll["total"] == expected["total"]
+
+    def test_replay_turn_increments_turn_count(self):
+        from app.rpg.models import GameSession, TurnLog
+        from app.rpg.pipeline import replay_turn
+        session = GameSession()
+        assert session.turn_count == 0
+        turn_log = TurnLog(turn=1, raw_input="look around", event_output={"outcome": "You see"}, narration="Narrator: You see.")
+        replay_turn(turn_log, session)
+        assert session.turn_count == 1
+
+    def test_replay_turn_appends_history(self):
+        from app.rpg.models import GameSession, TurnLog
+        from app.rpg.pipeline import replay_turn
+        session = GameSession()
+        turn_log = TurnLog(
+            turn=1,
+            raw_input="look",
+            event_output={"outcome": "You look around", "importance": 0.3},
+            narration="Narrator: You look around.",
+        )
+        replay_turn(turn_log, session)
+        assert len(session.history) == 1
+        assert session.history[0].event == "You look around"
+
+
+# ---------------------------------------------------------------------------
+# Partial Failure Logging
+# ---------------------------------------------------------------------------
+
+class TestPartialFailureLogging:
+    """Test that TurnLog is correctly created even for edge cases."""
+
+    def test_turn_log_with_empty_canon_check(self):
+        """Canon guard returning nothing should still log cleanly."""
+        from app.rpg.models import TurnLog
+        tl = TurnLog(
+            turn=1,
+            raw_input="look",
+            canon_check={},
+            narration="Something happens.",
+        )
+        d = tl.to_dict()
+        assert d["canon_check"] == {}
+        restored = TurnLog.from_dict(d)
+        assert restored.canon_check == {}
+
+    def test_turn_log_with_invalid_canon(self):
+        """Canon guard rejection should be fully logged."""
+        from app.rpg.models import TurnLog
+        canon = {
+            "valid": False,
+            "severity": "major",
+            "issues": ["Player cannot fly without wings"],
+            "fix_suggestions": ["Remove flight reference"],
+        }
+        tl = TurnLog(turn=2, raw_input="fly away", canon_check=canon, narration="Narrator: ...")
+        d = tl.to_dict()
+        assert d["canon_check"]["valid"] is False
+        assert d["canon_check"]["severity"] == "major"
+        restored = TurnLog.from_dict(d)
+        assert restored.canon_check["issues"] == ["Player cannot fly without wings"]
+
+    def test_turn_log_with_diff_validation_failures(self):
+        """Diff validation failures should be fully captured."""
+        from app.rpg.models import TurnLog
+        validation = {
+            "valid": False,
+            "rejected_fields": ["stat_changes.magic_power"],
+            "unknown_npcs": ["GhostNPC"],
+            "type_errors": ["wealth: expected number, got str"],
+            "clamped_values": [],
+        }
+        tl = TurnLog(turn=3, raw_input="cast spell", diff_validation=validation, narration="Narrator: ...")
+        d = tl.to_dict()
+        assert d["diff_validation"]["valid"] is False
+        assert len(d["diff_validation"]["rejected_fields"]) == 1
+        assert len(d["diff_validation"]["unknown_npcs"]) == 1
+
+    def test_turn_log_preserves_failed_event_output(self):
+        """Even when event fails, the output should be logged."""
+        from app.rpg.models import TurnLog
+        tl = TurnLog(
+            turn=4,
+            raw_input="summon dragon",
+            event_output={"error": "Event generation failed", "raw_response": "invalid json..."},
+            narration="Narrator: Something unexpected...",
+        )
+        d = tl.to_dict()
+        assert "error" in d["event_output"]
+        assert d["event_output"]["raw_response"] == "invalid json..."

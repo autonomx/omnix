@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request
 
 from app.rpg.models import GameSession
 from app.rpg.persistence import delete_game, list_games, load_game, save_game
-from app.rpg.pipeline import create_new_game, execute_turn
+from app.rpg.pipeline import create_new_game, execute_turn, replay_turn
 
 logger = logging.getLogger(__name__)
 
@@ -235,3 +235,46 @@ def get_replay(session_id):
         "turn_logs": [tl.to_dict() for tl in session.turn_logs],
         "turn_count": session.turn_count,
     })
+
+
+@rpg_bp.route("/api/rpg/games/<session_id>/replay", methods=["POST"])
+def run_replay(session_id):
+    """Re-execute a turn deterministically from its stored TurnLog.
+
+    Request body:
+        turn (int, required): The turn number to replay.
+    """
+    session = load_game(session_id)
+    if not session:
+        return jsonify({"success": False, "error": "Game not found"}), 404
+
+    data = request.get_json() or {}
+    turn = data.get("turn")
+    if turn is None:
+        return jsonify({"success": False, "error": "Missing 'turn' in request body"}), 400
+
+    try:
+        turn = int(turn)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "'turn' must be an integer"}), 400
+
+    logs = [tl for tl in session.turn_logs if tl.turn == turn]
+    if not logs:
+        return jsonify({"success": False, "error": f"No log for turn {turn}"}), 404
+
+    result = replay_turn(logs[0], session)
+    save_game(session)
+
+    response = {
+        "success": result.error is None,
+        "narration": result.narration,
+        "turn": turn,
+        "state_changes": result.state_changes,
+        "events": [e.to_dict() for e in result.events],
+    }
+    if result.dice_roll:
+        response["dice_roll"] = result.dice_roll
+    if result.error:
+        response["error"] = result.error
+
+    return jsonify(response)
