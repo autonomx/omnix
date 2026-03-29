@@ -68,7 +68,7 @@ def create_rpg_game():
         opening_parts.append(session.world.description)
     if session.world.lore:
         opening_parts.append(session.world.lore)
-    opening = "\n\n".join(opening_parts)
+    opening = "\n\n".join(opening_parts) if opening_parts else "Your adventure begins\u2026"
 
     return jsonify({
         "success": True,

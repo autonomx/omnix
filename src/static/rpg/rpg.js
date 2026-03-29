@@ -790,7 +790,7 @@
             updateState({ sessionId: game.session_id });
             localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
 
-            if (game.opening) {
+            if (game.opening && game.opening.trim()) {
                 applyUpdate(transformResponse({ narration: game.opening }));
             }
         } catch (err) {
