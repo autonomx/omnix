@@ -158,6 +158,144 @@ def calculate_price(item: Item, location_modifier: float = 1.0,
 
 
 # ---------------------------------------------------------------------------
+# Crafting System
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CraftingRecipe:
+    """A recipe that transforms input items into an output item."""
+    name: str
+    inputs: Dict[str, int] = field(default_factory=dict)  # item_name → quantity
+    output: str = ""
+    output_quantity: int = 1
+    required_skill: str = ""       # e.g. "blacksmithing"
+    required_skill_level: int = 0
+    difficulty: int = 5            # DC for crafting skill check
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "inputs": dict(self.inputs),
+            "output": self.output,
+            "output_quantity": self.output_quantity,
+            "required_skill": self.required_skill,
+            "required_skill_level": self.required_skill_level,
+            "difficulty": self.difficulty,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "CraftingRecipe":
+        return cls(
+            name=data.get("name", ""),
+            inputs=data.get("inputs", {}),
+            output=data.get("output", ""),
+            output_quantity=data.get("output_quantity", 1),
+            required_skill=data.get("required_skill", ""),
+            required_skill_level=data.get("required_skill_level", 0),
+            difficulty=data.get("difficulty", 5),
+        )
+
+
+@dataclass
+class SkillNode:
+    """A node in a skill tree, representing a learnable ability."""
+    name: str
+    description: str = ""
+    max_level: int = 5
+    prerequisites: List[str] = field(default_factory=list)  # other skill names
+    stat_bonus: Dict[str, int] = field(default_factory=dict)  # stat → bonus per level
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "max_level": self.max_level,
+            "prerequisites": list(self.prerequisites),
+            "stat_bonus": dict(self.stat_bonus),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SkillNode":
+        return cls(
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+            max_level=data.get("max_level", 5),
+            prerequisites=data.get("prerequisites", []),
+            stat_bonus=data.get("stat_bonus", {}),
+        )
+
+
+def can_learn_skill(
+    current_skills: Dict[str, Dict[str, int]],
+    skill_node: SkillNode,
+) -> bool:
+    """Check if a character meets prerequisites and level cap for a skill."""
+    current = current_skills.get(skill_node.name, {})
+    if current.get("level", 0) >= skill_node.max_level:
+        return False
+    for prereq in skill_node.prerequisites:
+        if prereq not in current_skills or current_skills[prereq].get("level", 0) < 1:
+            return False
+    return True
+
+
+def attempt_craft(
+    recipe: CraftingRecipe,
+    inventory: List[str],
+    skills: Dict[str, Dict[str, int]],
+    seed: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Attempt to craft an item from a recipe.
+
+    Checks inventory for required inputs, validates skill requirements,
+    and performs a skill check.  Does NOT mutate inventory — caller
+    should apply the result.
+
+    Returns dict with keys: success, outcome, missing_items, skill_too_low.
+    """
+    # Check skill requirement
+    if recipe.required_skill:
+        skill_data = skills.get(recipe.required_skill, {})
+        if skill_data.get("level", 0) < recipe.required_skill_level:
+            return {
+                "success": False,
+                "outcome": "skill_too_low",
+                "missing_items": [],
+                "skill_too_low": True,
+            }
+
+    # Check inventory
+    inv_counts: Dict[str, int] = {}
+    for item in inventory:
+        inv_counts[item] = inv_counts.get(item, 0) + 1
+
+    missing: List[str] = []
+    for item_name, qty in recipe.inputs.items():
+        if inv_counts.get(item_name, 0) < qty:
+            missing.append(item_name)
+
+    if missing:
+        return {
+            "success": False,
+            "outcome": "missing_materials",
+            "missing_items": missing,
+            "skill_too_low": False,
+        }
+
+    # Skill check for crafting
+    stat_value = skills.get(recipe.required_skill, {}).get("level", 0)
+    result = skill_check(stat_value, recipe.difficulty, seed=seed)
+
+    return {
+        "success": result["outcome"] in ("success", "critical_success"),
+        "outcome": result["outcome"],
+        "missing_items": [],
+        "skill_too_low": False,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Dice / Probability System
 # ---------------------------------------------------------------------------
 
@@ -293,6 +431,8 @@ class Faction:
     ideology: Dict[str, float] = field(default_factory=dict)
     # Relations with other factions (-100..100)
     relations: Dict[str, int] = field(default_factory=dict)
+    # Faction-level strategy: "expand", "defend", "deceive", "trade", "neutral"
+    strategy: str = "neutral"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -303,6 +443,7 @@ class Faction:
             "goals": list(self.goals),
             "ideology": dict(self.ideology),
             "relations": dict(self.relations),
+            "strategy": self.strategy,
         }
 
     @classmethod
@@ -315,6 +456,7 @@ class Faction:
             goals=data.get("goals", []),
             ideology=data.get("ideology", {}),
             relations=data.get("relations", {}),
+            strategy=data.get("strategy", "neutral"),
         )
 
 
@@ -342,6 +484,8 @@ class WorldState:
         "gold": 100,
         "security": 100,
     })
+    # Global event log that NPCs can consume for shared world awareness
+    world_events_log: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -361,6 +505,7 @@ class WorldState:
             "items_catalog": [item.to_dict() for item in self.items_catalog],
             "active_world_events": [we.to_dict() for we in self.active_world_events],
             "resources": dict(self.resources),
+            "world_events_log": list(self.world_events_log),
         }
 
     @classmethod
@@ -382,6 +527,7 @@ class WorldState:
             items_catalog=[Item.from_dict(i) for i in data.get("items_catalog", [])],
             active_world_events=[WorldEvent.from_dict(we) for we in data.get("active_world_events", [])],
             resources=data.get("resources", {"food": 100, "gold": 100, "security": 100}),
+            world_events_log=data.get("world_events_log", []),
         )
 
     def get_location(self, name: str) -> Optional[Location]:
@@ -456,6 +602,27 @@ class NPCCharacter:
     # Structured goals with progress tracking
     # e.g. [{"type": "gain_power", "target": "village", "progress": 0.3, "priority": 0.8}]
     active_goals: List[Dict[str, Any]] = field(default_factory=list)
+    # ── LLM-driven NPC Mind fields ──────────────────────────────────────────
+    # Beliefs: subjective confidence scores (e.g. {"player_is_hostile": 0.7})
+    beliefs: Dict[str, float] = field(default_factory=dict)
+    # Hidden knowledge the NPC possesses but may not reveal
+    secrets_knowledge: List[str] = field(default_factory=list)
+    # Expressed state: what the NPC *shows* (may differ from true intent)
+    expressed_state: Dict[str, str] = field(default_factory=dict)
+    # Condensed narrative summary of memories for LLM context
+    memory_summary: str = ""
+    # Per-NPC LLM profile (system_prompt, temperature, style)
+    llm_profile: Dict[str, Any] = field(default_factory=dict)
+    # ── Advanced NPC Intelligence fields ─────────────────────────────────────
+    # Causal belief graph: belief_key → [{"source": str, "weight": float}]
+    belief_sources: Dict[str, List[Dict[str, float]]] = field(default_factory=dict)
+    # Deception mode: "none", "conceal", "distort", "fabricate", "signal"
+    deception_mode: str = "none"
+    # Theory of mind: what this NPC thinks others believe
+    # e.g. {"player": {"guard_is_friendly": 0.6}, "merchant": {"city_is_safe": 0.8}}
+    theory_of_mind: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # Skill tree: skill_name → {"level": int, "xp": int, "max_level": int}
+    skills: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -479,6 +646,15 @@ class NPCCharacter:
             "personality_traits": dict(self.personality_traits),
             "needs": dict(self.needs),
             "active_goals": [dict(g) for g in self.active_goals],
+            "beliefs": dict(self.beliefs),
+            "secrets_knowledge": list(self.secrets_knowledge),
+            "expressed_state": dict(self.expressed_state),
+            "memory_summary": self.memory_summary,
+            "llm_profile": dict(self.llm_profile),
+            "belief_sources": {k: [dict(s) for s in v] for k, v in self.belief_sources.items()},
+            "deception_mode": self.deception_mode,
+            "theory_of_mind": {k: dict(v) for k, v in self.theory_of_mind.items()},
+            "skills": {k: dict(v) for k, v in self.skills.items()},
         }
 
     @classmethod
@@ -504,6 +680,15 @@ class NPCCharacter:
             personality_traits=data.get("personality_traits", {}),
             needs=data.get("needs", {}),
             active_goals=data.get("active_goals", []),
+            beliefs=data.get("beliefs", {}),
+            secrets_knowledge=data.get("secrets_knowledge", []),
+            expressed_state=data.get("expressed_state", {}),
+            memory_summary=data.get("memory_summary", ""),
+            llm_profile=data.get("llm_profile", {}),
+            belief_sources=data.get("belief_sources", {}),
+            deception_mode=data.get("deception_mode", "none"),
+            theory_of_mind=data.get("theory_of_mind", {}),
+            skills=data.get("skills", {}),
         )
 
 
