@@ -5,6 +5,8 @@ Provides ``create_app`` so that other code (tests, WSGI servers) can build a
 fully-configured Flask application without reaching for the root ``app.py``.
 """
 
+from pathlib import Path
+
 from flask import Flask
 
 
@@ -21,10 +23,11 @@ def create_app() -> Flask:
     from app.voice_studio import voice_studio_bp
     from app.rpg.routes import rpg_bp
 
+    pkg_dir = Path(__file__).resolve().parent
     app = Flask(
         __name__,
-        template_folder=str(__import__("pathlib").Path(__file__).resolve().parent.parent / "templates"),
-        static_folder=str(__import__("pathlib").Path(__file__).resolve().parent.parent / "static"),
+        template_folder=str(pkg_dir.parent / "templates"),
+        static_folder=str(pkg_dir.parent / "static"),
     )
 
     # Pre-load TTS provider on app startup for immediate availability

@@ -6,6 +6,11 @@ that RPG HTTP routes respond correctly and game lifecycle operations work.
 
 Run with:
     PYTHONPATH="src" python -m pytest src/tests/api/sanity/test_rpg_api.py -v --noconftest
+
+Note: ``--noconftest`` is used because the shared conftest.py imports
+Playwright page-objects at module level, which are not needed (and may not
+be installed) for pure API tests.  The flask_app / flask_client fixtures
+are therefore defined locally.
 """
 
 from __future__ import annotations
