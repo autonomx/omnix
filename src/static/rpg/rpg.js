@@ -132,8 +132,13 @@
 
     // ─── API ───────────────────────────────────────────────────────────────────
 
-    async function apiCreateGame() {
-        var res = await fetch('/api/rpg/games', { method: 'POST' });
+    async function apiCreateGame(payload) {
+        var body = payload || {};
+        var res = await fetch('/api/rpg/games', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
         if (!res.ok) throw new Error('Failed to create game (' + res.status + ')');
         return res.json();
     }
@@ -681,9 +686,119 @@
         return '<div class="rpg-welcome" id="rpgWelcome">' +
                     '<div class="rpg-welcome-icon">\u2694\uFE0F</div>' +
                     '<h3>RPG Mode</h3>' +
-                    '<p>Type anything to begin your adventure\u2026</p>' +
+                    '<p>Type anything to begin your adventure, or set up a custom world\u2026</p>' +
                     '<button class="rpg-new-session-btn" id="rpgNewSessionBtn" title="Start a fresh adventure">New Adventure</button>' +
+                    '<button class="rpg-setup-btn" id="rpgSetupBtn" title="Customise your world before starting">⚙️ Adventure Setup</button>' +
                 '</div>';
+    }
+
+    // ─── Adventure Setup Modal ─────────────────────────────────────────────────
+    //
+    // Shows a Game-Master-style form that lets the player shape the world
+    // before it is generated.  Fields: genre, player name, lore, rules,
+    // story hook, and freeform world prompt.  All fields are optional.
+
+    function buildSetupModal() {
+        var overlay = document.createElement('div');
+        overlay.className = 'rpg-setup-overlay';
+        overlay.id = 'rpgSetupOverlay';
+
+        overlay.innerHTML =
+            '<div class="rpg-setup-modal">' +
+                '<h3 class="rpg-setup-title">\uD83C\uDFAD Adventure Setup</h3>' +
+                '<p class="rpg-setup-subtitle">Shape your world — all fields are optional</p>' +
+                '<div class="rpg-setup-fields">' +
+                    '<label class="rpg-setup-label">' +
+                        'Theme / Genre' +
+                        '<input type="text" id="rpgSetupGenre" class="rpg-setup-input" placeholder="medieval fantasy, sci-fi, noir\u2026">' +
+                    '</label>' +
+                    '<label class="rpg-setup-label">' +
+                        'Player Name' +
+                        '<input type="text" id="rpgSetupPlayerName" class="rpg-setup-input" placeholder="Player">' +
+                    '</label>' +
+                    '<label class="rpg-setup-label">' +
+                        'World Lore <span class="rpg-setup-hint">(optional)</span>' +
+                        '<textarea id="rpgSetupLore" class="rpg-setup-textarea" rows="3" placeholder="Background history, mythology, ancient events\u2026"></textarea>' +
+                    '</label>' +
+                    '<label class="rpg-setup-label">' +
+                        'Rules / Constraints <span class="rpg-setup-hint">(optional)</span>' +
+                        '<textarea id="rpgSetupRules" class="rpg-setup-textarea" rows="2" placeholder="No magic, permadeath, limited inventory\u2026"></textarea>' +
+                    '</label>' +
+                    '<label class="rpg-setup-label">' +
+                        'Story Hook <span class="rpg-setup-hint">(optional)</span>' +
+                        '<textarea id="rpgSetupStory" class="rpg-setup-textarea" rows="3" placeholder="You awaken in a ruined library with no memory\u2026"></textarea>' +
+                    '</label>' +
+                    '<label class="rpg-setup-label">' +
+                        'Additional Instructions <span class="rpg-setup-hint">(optional)</span>' +
+                        '<textarea id="rpgSetupPrompt" class="rpg-setup-textarea" rows="2" placeholder="Dark tone, lots of humor, political intrigue\u2026"></textarea>' +
+                    '</label>' +
+                '</div>' +
+                '<div class="rpg-setup-actions">' +
+                    '<button class="rpg-setup-cancel" id="rpgSetupCancel">Cancel</button>' +
+                    '<button class="rpg-setup-start" id="rpgSetupStart">\u2694\uFE0F Begin Adventure</button>' +
+                '</div>' +
+            '</div>';
+
+        document.body.appendChild(overlay);
+
+        // Close on cancel or overlay backdrop click
+        var cancelBtn = overlay.querySelector('#rpgSetupCancel');
+        cancelBtn.addEventListener('click', function () { closeSetupModal(); });
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) closeSetupModal();
+        });
+
+        // Start game with custom payload
+        var startBtn = overlay.querySelector('#rpgSetupStart');
+        startBtn.addEventListener('click', function () {
+            var genre = (document.getElementById('rpgSetupGenre').value || '').trim();
+            var playerName = (document.getElementById('rpgSetupPlayerName').value || '').trim();
+            var lore = (document.getElementById('rpgSetupLore').value || '').trim();
+            var rules = (document.getElementById('rpgSetupRules').value || '').trim();
+            var story = (document.getElementById('rpgSetupStory').value || '').trim();
+            var prompt = (document.getElementById('rpgSetupPrompt').value || '').trim();
+
+            var payload = {};
+            if (genre) payload.genre = genre;
+            if (playerName) payload.player_name = playerName;
+            if (lore) payload.lore = lore;
+            if (rules) payload.rules = rules;
+            if (story) payload.story = story;
+            if (prompt) payload.world_prompt = prompt;
+
+            closeSetupModal();
+            startGameWithPayload(payload);
+        });
+    }
+
+    function showSetupModal() {
+        var existing = document.getElementById('rpgSetupOverlay');
+        if (existing) existing.remove();
+        buildSetupModal();
+    }
+
+    function closeSetupModal() {
+        var overlay = document.getElementById('rpgSetupOverlay');
+        if (overlay) overlay.remove();
+    }
+
+    /** Start a new game with custom parameters from the setup modal. */
+    async function startGameWithPayload(payload) {
+        setLoading(true);
+        try {
+            var game = await apiCreateGame(payload);
+            updateState({ sessionId: game.session_id });
+            localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
+
+            if (game.opening && game.opening.trim()) {
+                applyUpdate(transformResponse({ narration: game.opening }));
+            }
+        } catch (err) {
+            appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
+        } finally {
+            setLoading(false);
+            persistSnapshot();
+        }
     }
 
     // ─── Frontend state persistence ────────────────────────────────────────────
@@ -805,12 +920,13 @@
         if (chatModeBtn) chatModeBtn.addEventListener('click', function () { switchMode('chat'); });
         if (rpgModeBtn)  rpgModeBtn.addEventListener('click',  function () { switchMode('rpg'); });
 
-        // "New Adventure" button — use event delegation on the feed so the
-        // listener survives the innerHTML replacement in resetSession().
+        // "New Adventure" and "Adventure Setup" buttons — use event delegation on
+        // the feed so the listener survives the innerHTML replacement in resetSession().
         var feed = el('rpgNarrativeFeed');
         if (feed) {
             feed.addEventListener('click', function (e) {
                 if (e.target && e.target.id === 'rpgNewSessionBtn') resetSession();
+                if (e.target && e.target.id === 'rpgSetupBtn') showSetupModal();
             });
         }
 

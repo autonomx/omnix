@@ -5260,3 +5260,138 @@ pre:hover .code-copy-btn {
 .rpg-memory-list--events:empty {
     display: none;
 }
+
+/* ─── RPG: Adventure Setup Button ─────────────────────────────── */
+
+.rpg-setup-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 5px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-family: inherit;
+    margin-top: 6px;
+    margin-left: 6px;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.rpg-setup-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ─── RPG: Adventure Setup Modal ──────────────────────────────── */
+
+.rpg-setup-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.rpg-setup-modal {
+    background: var(--bg-primary, #1a1a2e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 14px;
+    padding: 24px 28px;
+    width: min(460px, 92vw);
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.rpg-setup-title {
+    margin: 0 0 2px;
+    font-size: 1.15rem;
+    color: var(--text-primary, #eee);
+}
+
+.rpg-setup-subtitle {
+    margin: 0 0 16px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #888);
+}
+
+.rpg-setup-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rpg-setup-label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #bbb);
+    gap: 3px;
+}
+
+.rpg-setup-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted, #666);
+}
+
+.rpg-setup-input,
+.rpg-setup-textarea {
+    background: var(--bg-secondary, #16213e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 8px;
+    color: var(--text-primary, #eee);
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 7px 10px;
+    resize: vertical;
+    transition: border-color 0.2s;
+}
+
+.rpg-setup-input:focus,
+.rpg-setup-textarea:focus {
+    outline: none;
+    border-color: var(--accent, #6366f1);
+}
+
+.rpg-setup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.rpg-setup-cancel {
+    background: none;
+    border: 1px solid var(--border-color, #333);
+    color: var(--text-muted, #888);
+    padding: 7px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.rpg-setup-cancel:hover {
+    border-color: var(--text-secondary, #bbb);
+    color: var(--text-secondary, #bbb);
+}
+
+.rpg-setup-start {
+    background: var(--accent, #6366f1);
+    border: none;
+    color: #fff;
+    padding: 7px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: opacity 0.2s;
+}
+
+.rpg-setup-start:hover {
+    opacity: 0.85;
+}
