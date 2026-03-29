@@ -76,6 +76,9 @@ REPUTATION_COLLAPSE_THRESHOLD = -50
 # Memory compression trigger interval
 MEMORY_COMPRESSION_INTERVAL = 15
 
+# Events at or above this importance are preserved during compression
+IMPORTANCE_THRESHOLD_PRESERVE = 0.8
+
 
 def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
                     player_name: str = "Player") -> Optional[GameSession]:
@@ -549,7 +552,7 @@ def _compress_memory_if_needed(session: GameSession) -> None:
                 session.player.known_facts.append(fact)
 
         # Trim history: keep only events from the last 10 turns + high-importance old events
-        important_old = [h for h in old_events if h.importance >= 0.8]
+        important_old = [h for h in old_events if h.importance >= IMPORTANCE_THRESHOLD_PRESERVE]
         recent = session.history[-10:] if len(session.history) > 10 else session.history
         session.history = important_old + recent
         logger.info("Memory compressed: %d events -> %d (kept %d important + %d recent)",
