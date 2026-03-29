@@ -72,8 +72,9 @@ def base_url(request):
 def flask_app():
     """Create a Flask test application (for API-only tests that don't need a browser)."""
     try:
-        from app import app as flask_app
+        from app import create_app
 
+        flask_app = create_app()
         flask_app.config["TESTING"] = True
         yield flask_app
     except ImportError:
