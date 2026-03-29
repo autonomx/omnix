@@ -55,6 +55,17 @@ def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
 
 # ── Causal Belief System ──────────────────────────────────────────────────
 
+# Belief weight constants for tuning
+_HOSTILE_ACTION_WEIGHT = 0.3
+_FRIENDLY_HOSTILE_REDUCTION = -0.2
+_FRIENDLY_ALLY_BOOST = 0.2
+_UNTRUST_WEIGHT = -0.3
+_FEAR_DANGER_WEIGHT = 0.15
+_ANGER_HOSTILE_WEIGHT = 0.1
+_TRUST_ALLY_WEIGHT = 0.1
+_EMOTIONAL_STATE_DANGER_WEIGHT = 0.1
+_OPINION_SOURCE_WEIGHT = 0.1
+
 def recompute_belief(npc: Dict[str, Any], key: str) -> float:
     """
     Recompute a single belief from its causal sources.
@@ -114,41 +125,41 @@ def update_beliefs(npc: Dict[str, Any]) -> Dict[str, float]:
         if actor == "player":
             if action in ("threaten", "attack"):
                 add_belief_source(npc, "player_is_hostile",
-                                  f"memory:{action}", 0.3 * importance)
+                                  f"memory:{action}", _HOSTILE_ACTION_WEIGHT * importance)
             elif action in ("help", "gift", "heal"):
                 add_belief_source(npc, "player_is_hostile",
-                                  f"memory:{action}", -0.2 * importance)
+                                  f"memory:{action}", _FRIENDLY_HOSTILE_REDUCTION * importance)
                 add_belief_source(npc, "player_is_ally",
-                                  f"memory:{action}", 0.2 * importance)
+                                  f"memory:{action}", _FRIENDLY_ALLY_BOOST * importance)
             elif action in ("steal", "lie"):
                 add_belief_source(npc, "player_is_trustworthy",
-                                  f"memory:{action}", -0.3 * importance)
+                                  f"memory:{action}", _UNTRUST_WEIGHT * importance)
 
         # Emotional memory influence on beliefs
         if emotion == "fear" and intensity > 0.3:
             add_belief_source(npc, "world_is_dangerous",
-                              f"emotion:fear:{actor}", 0.15 * intensity)
+                              f"emotion:fear:{actor}", _FEAR_DANGER_WEIGHT * intensity)
         elif emotion == "anger" and intensity > 0.3:
             add_belief_source(npc, "player_is_hostile",
-                              f"emotion:anger:{actor}", 0.1 * intensity)
+                              f"emotion:anger:{actor}", _ANGER_HOSTILE_WEIGHT * intensity)
         elif emotion == "trust" and intensity > 0.3:
             add_belief_source(npc, "player_is_ally",
-                              f"emotion:trust:{actor}", 0.1 * intensity)
+                              f"emotion:trust:{actor}", _TRUST_ALLY_WEIGHT * intensity)
 
     # Emotional reinforcement: high anger → raise hostile belief
     anger = npc.get("emotional_state", {}).get("anger", 0)
     if anger > 0.5:
         add_belief_source(npc, "world_is_dangerous",
-                          "emotion:anger_state", 0.1 * anger)
+                          "emotion:anger_state", _EMOTIONAL_STATE_DANGER_WEIGHT * anger)
 
     # Player opinion → trust belief
     player_opinion = opinions.get("player", 0)
     if player_opinion < -30:
         add_belief_source(npc, "player_is_hostile",
-                          "opinion:player_negative", 0.1)
+                          "opinion:player_negative", _OPINION_SOURCE_WEIGHT)
     elif player_opinion > 30:
         add_belief_source(npc, "player_is_ally",
-                          "opinion:player_positive", 0.1)
+                          "opinion:player_positive", _OPINION_SOURCE_WEIGHT)
 
     npc["beliefs"] = npc.get("beliefs", beliefs)
     return npc["beliefs"]
@@ -163,7 +174,7 @@ def summarize_memory(npc: Dict[str, Any], max_entries: int = 5) -> str:
     Includes emotional tags when present, keeping token usage low.
     """
     memories = npc.get("memories", [])
-    recent = memories[-max_entries:] if len(memories) > max_entries else memories
+    recent = memories[-max_entries:]
 
     if not recent:
         return "No significant memories."
@@ -423,6 +434,9 @@ def propagate_beliefs(
 
 # ── Theory of Mind ────────────────────────────────────────────────────────
 
+# How much noise is added to ToM observations (lower intelligence = more noise)
+_TOM_NOISE_FACTOR = 0.4
+
 def update_theory_of_mind(npc: Dict[str, Any], other_npcs: List[Dict[str, Any]]) -> None:
     """
     Update this NPC's model of what *others* believe.
@@ -448,7 +462,7 @@ def update_theory_of_mind(npc: Dict[str, Any], other_npcs: List[Dict[str, Any]])
         if intelligence > 0.6:
             for key, val in other_beliefs.items():
                 # Noisy observation: accuracy scales with intelligence
-                noise = (1.0 - intelligence) * (random.random() - 0.5) * 0.4
+                noise = (1.0 - intelligence) * (random.random() - 0.5) * _TOM_NOISE_FACTOR
                 model[key] = clamp(val + noise)
         else:
             # Low intelligence: infer from expressed state only

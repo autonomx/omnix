@@ -638,7 +638,7 @@ def _simulate_world_tick(session: GameSession) -> None:
             npc_data_dict,
             player_location=session.player.location,
             world_context="",
-            llm_call_fn=None,   # GOAP-only by default; wire LLM in production
+            llm_call_fn=None,   # GOAP-only in testing; set via LLM provider in production
             world_events=world_events,
             other_npcs=npc_dicts_for_tom,
         )
