@@ -161,21 +161,44 @@ def calculate_price(item: Item, location_modifier: float = 1.0,
 
 def skill_check(stat_value: int, difficulty: int, seed: Optional[int] = None) -> Dict[str, Any]:
     """
-    Perform a d20 skill check.
+    Perform a d20 skill check with tiered outcomes (soft failure system).
 
     Roll = random(1, 20) + stat_value
-    Success if roll >= difficulty + 10 (DC scale: easy=12, medium=15, hard=18, near-impossible=22)
+    DC = difficulty + 10
 
-    Returns dict with roll, total, difficulty, passed, and critical flags.
+    Outcome tiers:
+      critical_fail   — natural 1
+      fail            — total < DC - 3
+      partial_success — total in [DC-3, DC-1]
+      success         — total >= DC
+      critical_success— natural 20
+
+    Returns dict with roll, total, difficulty, passed, outcome tier, and critical flags.
     """
     rng = random.Random(seed) if seed is not None else random
     roll = rng.randint(1, 20)
     total = roll + stat_value
-    # Difficulty is on 1-10 scale in prompts; convert to DC: DC = difficulty + 10
     dc = difficulty + 10
     critical_success = roll == 20
     critical_failure = roll == 1
-    passed = critical_success or (not critical_failure and total >= dc)
+
+    # Determine outcome tier
+    if critical_failure:
+        outcome = "critical_fail"
+        passed = False
+    elif critical_success:
+        outcome = "critical_success"
+        passed = True
+    elif total >= dc:
+        outcome = "success"
+        passed = True
+    elif total >= dc - 3:
+        outcome = "partial_success"
+        passed = True  # partial counts as passed with consequences
+    else:
+        outcome = "fail"
+        passed = False
+
     return {
         "roll": roll,
         "stat_value": stat_value,
@@ -183,6 +206,7 @@ def skill_check(stat_value: int, difficulty: int, seed: Optional[int] = None) ->
         "difficulty": difficulty,
         "dc": dc,
         "passed": passed,
+        "outcome": outcome,
         "critical_success": critical_success,
         "critical_failure": critical_failure,
     }
@@ -455,6 +479,7 @@ class PlayerState:
     known_facts: List[str] = field(default_factory=list)
     is_alive: bool = True
     fail_state: str = ""
+    reputation_factions: Dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -469,6 +494,7 @@ class PlayerState:
             "known_facts": list(self.known_facts),
             "is_alive": self.is_alive,
             "fail_state": self.fail_state,
+            "reputation_factions": dict(self.reputation_factions),
         }
 
     @classmethod
@@ -487,6 +513,7 @@ class PlayerState:
             known_facts=data.get("known_facts", []),
             is_alive=data.get("is_alive", True),
             fail_state=data.get("fail_state", ""),
+            reputation_factions=data.get("reputation_factions", {}),
         )
 
 
@@ -694,3 +721,159 @@ class GameSession:
         """Get all NPCs at a given location."""
         loc_lower = location.lower()
         return [npc for npc in self.npcs if npc.location.lower() == loc_lower]
+
+
+# ---------------------------------------------------------------------------
+# World State Diff (diff-based state mutation)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class WorldStateDiff:
+    """
+    A diff-based state update — agents produce diffs, not full state mutations.
+
+    Fields use ``None`` for no change and explicit values for updates.
+    Numeric values are *deltas* (e.g. ``health: -10`` means "subtract 10").
+    """
+    player_changes: Dict[str, Any] = field(default_factory=dict)
+    npc_changes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    world_changes: Dict[str, Any] = field(default_factory=dict)
+    events: List[HistoryEvent] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "player_changes": dict(self.player_changes),
+            "npc_changes": {k: dict(v) for k, v in self.npc_changes.items()},
+            "world_changes": dict(self.world_changes),
+            "events": [e.to_dict() for e in self.events],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "WorldStateDiff":
+        return cls(
+            player_changes=data.get("player_changes", {}),
+            npc_changes=data.get("npc_changes", {}),
+            world_changes=data.get("world_changes", {}),
+            events=[HistoryEvent.from_dict(e) for e in data.get("events", [])],
+        )
+
+
+# Whitelisted mutable stat fields on CharacterStats
+_STAT_FIELDS = {"strength", "charisma", "intelligence", "wealth"}
+
+# Whitelisted mutable fields on PlayerState that accept delta ints
+_PLAYER_DELTA_FIELDS = {"reputation_local", "reputation_global"}
+
+# Whitelisted mutable fields on NPCCharacter that accept replacement values
+_NPC_REPLACE_FIELDS = {"location", "current_action"}
+
+
+def apply_diff(session: GameSession, diff: WorldStateDiff) -> Dict[str, Any]:
+    """
+    Apply a ``WorldStateDiff`` to a ``GameSession`` safely.
+
+    - Validates field names before applying.
+    - Numeric changes are *additive* (deltas).
+    - Returns a summary dict of the changes actually applied.
+    """
+    applied: Dict[str, Any] = {}
+
+    # --- Player changes -------------------------------------------------------
+    pc = diff.player_changes
+    if pc:
+        # Stat deltas
+        for stat, delta in pc.get("stat_changes", {}).items():
+            if stat in _STAT_FIELDS and isinstance(delta, (int, float)):
+                current = getattr(session.player.stats, stat, 0)
+                setattr(session.player.stats, stat, current + int(delta))
+                applied[f"player_{stat}"] = int(delta)
+
+        # Reputation deltas
+        for fld in _PLAYER_DELTA_FIELDS:
+            delta = pc.get(fld, 0)
+            if isinstance(delta, (int, float)) and delta:
+                current = getattr(session.player, fld, 0)
+                setattr(session.player, fld, current + int(delta))
+                applied[fld] = int(delta)
+
+        # Inventory
+        for item in pc.get("inventory_add", []):
+            if isinstance(item, str):
+                session.player.inventory.append(item)
+                applied.setdefault("inventory_gained", []).append(item)
+        for item in pc.get("inventory_remove", []):
+            if isinstance(item, str) and item in session.player.inventory:
+                session.player.inventory.remove(item)
+                applied.setdefault("inventory_lost", []).append(item)
+
+        # Wealth delta shorthand
+        wealth_delta = pc.get("wealth", 0)
+        if isinstance(wealth_delta, (int, float)) and wealth_delta:
+            session.player.stats.wealth += int(wealth_delta)
+            applied["wealth_change"] = int(wealth_delta)
+
+        # Location (replacement)
+        new_loc = pc.get("location", "")
+        if new_loc and isinstance(new_loc, str):
+            session.player.location = new_loc
+            applied["player_location"] = new_loc
+
+        # Known facts (append)
+        for fact in pc.get("new_known_facts", []):
+            if isinstance(fact, str) and fact not in session.player.known_facts:
+                session.player.known_facts.append(fact)
+
+        # Faction reputation deltas
+        for faction, delta in pc.get("reputation_factions", {}).items():
+            if isinstance(delta, (int, float)):
+                current = session.player.reputation_factions.get(faction, 0)
+                session.player.reputation_factions[faction] = current + int(delta)
+                applied[f"faction_{faction}"] = int(delta)
+
+        # Alive flag
+        if "is_alive" in pc:
+            session.player.is_alive = bool(pc["is_alive"])
+            if not session.player.is_alive:
+                applied["player_died"] = True
+
+    # --- NPC changes ----------------------------------------------------------
+    for npc_name, changes in diff.npc_changes.items():
+        npc = session.get_npc(npc_name)
+        if not npc:
+            continue
+        rel_delta = changes.get("relationship", 0)
+        if isinstance(rel_delta, (int, float)) and rel_delta:
+            npc.relationships["player"] = npc.relationships.get("player", 0) + int(rel_delta)
+            applied[f"{npc_name}_relationship"] = int(rel_delta)
+
+        for fld in _NPC_REPLACE_FIELDS:
+            val = changes.get(fld, "")
+            if val and isinstance(val, str):
+                setattr(npc, fld, val)
+                applied[f"{npc_name}_{fld}"] = val
+
+        for item in changes.get("inventory_add", []):
+            if isinstance(item, str):
+                npc.inventory.append(item)
+        for item in changes.get("inventory_remove", []):
+            if isinstance(item, str) and item in npc.inventory:
+                npc.inventory.remove(item)
+
+        # NPC-to-NPC relationship changes
+        for target, delta in changes.get("relationship_changes", {}).items():
+            if isinstance(delta, (int, float)):
+                npc.relationships[target] = npc.relationships.get(target, 0) + int(delta)
+
+    # --- World changes --------------------------------------------------------
+    wc = diff.world_changes
+    if wc:
+        time_advance = wc.get("time_advance_hours", 0)
+        if isinstance(time_advance, (int, float)) and time_advance > 0:
+            session.world.world_time.advance(hours=int(time_advance))
+            applied["time_advance"] = int(time_advance)
+
+    # --- Events ---------------------------------------------------------------
+    for event in diff.events:
+        session.history.append(event)
+
+    return applied

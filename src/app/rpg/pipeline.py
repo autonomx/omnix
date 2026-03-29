@@ -3,16 +3,19 @@ Turn Execution Pipeline for the AI Role-Playing System.
 
 Orchestrates the turn execution with integrated systems:
 1. Fail state check
-2. Input Normalization
+2. Input Normalization (with risk scoring)
 3. Rule Validation (Pre-LLM)
-4. Dice Roll (skill check)
+4. Dice Roll (skill check with seed-based randomness)
 5. Context Assembly
-6. Event Generation
-7. State Update + NPC Autonomy
-8. Memory Update (with importance scoring)
-9. Narrative Direction
-10. Narration Output
-11. Fail State Detection
+6. Event Generation (with diff output)
+7. Canon Guard (consistency check)
+8. Apply Diff (safe state mutation)
+9. NPC Autonomy (background world simulation)
+10. Memory Update (with importance scoring)
+11. Memory Compression (every 15 turns)
+12. Narrative Direction
+13. Narration Output (with soft-failure tier)
+14. Fail State Detection
 """
 
 import logging
@@ -36,7 +39,9 @@ from app.rpg.models import (
     TurnResult,
     WorldRules,
     WorldState,
+    WorldStateDiff,
     WorldTime,
+    apply_diff,
     skill_check,
 )
 from app.rpg.persistence import save_game
@@ -51,6 +56,7 @@ INTENT_STAT_MAP = {
     "sneak": "intelligence",
     "pick_up": "strength",
     "use_item": "intelligence",
+    "steal": "intelligence",
 }
 
 # Difficulty defaults for common actions
@@ -60,11 +66,15 @@ INTENT_DIFFICULTY_MAP = {
     "sneak": 7,
     "pick_up": 3,
     "use_item": 4,
+    "steal": 8,
 }
 
 # Fail state thresholds
 BANKRUPTCY_THRESHOLD = -100
 REPUTATION_COLLAPSE_THRESHOLD = -50
+
+# Memory compression trigger interval
+MEMORY_COMPRESSION_INTERVAL = 15
 
 
 def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
@@ -140,13 +150,15 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     """
     Execute a single turn of the game.
 
-    Enhanced pipeline with dice rolls, NPC autonomy, narrative direction, and fail states.
+    Enhanced pipeline:
+      Input → Risk Score → Rules → Dice (seeded) → Event → Canon Guard →
+      Diff Apply → NPC Simulation → Memory → Compression → Narrative → Narrate
     """
     session.turn_count += 1
     logger.info("Turn %d: player input='%s'", session.turn_count, raw_input)
 
     # -----------------------------------------------------------------------
-    # Step 1: Input Normalization
+    # Step 1: Input Normalization (with risk scoring)
     # -----------------------------------------------------------------------
     context = build_context(session)
     intent_data = agents.normalize_input(raw_input, context)
@@ -163,7 +175,11 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         target=intent_data.get("target", ""),
         details=intent_data.get("details", {}),
     )
-    logger.info("Intent: %s -> %s", intent.intent, intent.target)
+    # Extract risk scoring from normalizer
+    intent_risk = intent_data.get("risk", 0.0)
+    intent_difficulty = intent_data.get("difficulty", 5)
+    logger.info("Intent: %s -> %s (risk=%.2f, difficulty=%d)",
+                intent.intent, intent.target, intent_risk, intent_difficulty)
 
     # -----------------------------------------------------------------------
     # Step 2: Rule Validation (Pre-LLM hard checks)
@@ -191,28 +207,33 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         )
 
     # -----------------------------------------------------------------------
-    # Step 3: Dice Roll (skill check for applicable actions)
+    # Step 3: Dice Roll (seed-based deterministic randomness)
     # -----------------------------------------------------------------------
     dice_result = None
     stat_name = INTENT_STAT_MAP.get(intent.intent)
     if stat_name:
         stat_value = getattr(session.player.stats, stat_name, 5)
-        difficulty = INTENT_DIFFICULTY_MAP.get(intent.intent, 5)
-        dice_result = skill_check(stat_value, difficulty)
+        # Use risk-scored difficulty from normalizer if available, else default
+        difficulty = intent_difficulty if intent_difficulty > 0 else INTENT_DIFFICULTY_MAP.get(intent.intent, 5)
+        # Seed-based deterministic randomness for replayability
+        dice_seed = session.world.seed + session.turn_count
+        dice_result = skill_check(stat_value, difficulty, seed=dice_seed)
         intent_data["skill_check"] = dice_result
-        logger.info("Dice roll: d20=%d + %s(%d) = %d vs DC %d -> %s",
+        logger.info("Dice roll: d20=%d + %s(%d) = %d vs DC %d -> %s (%s)",
                      dice_result["roll"], stat_name, stat_value,
                      dice_result["total"], dice_result["dc"],
-                     "PASS" if dice_result["passed"] else "FAIL")
+                     "PASS" if dice_result["passed"] else "FAIL",
+                     dice_result["outcome"])
 
     # -----------------------------------------------------------------------
     # Step 4: Context Assembly (refresh with latest)
     # -----------------------------------------------------------------------
     context = build_context(session)
     intent_data["player_stats"] = session.player.stats.to_dict()
+    intent_data["risk"] = intent_risk
 
     # -----------------------------------------------------------------------
-    # Step 5: Event Generation
+    # Step 5: Event Generation (with diff output)
     # -----------------------------------------------------------------------
     agent_profiles = {k: v.to_dict() for k, v in session.world.agent_profiles.items()}
     event_outcome = agents.generate_event(intent_data, context, agent_profiles)
@@ -223,37 +244,67 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         )
 
     # -----------------------------------------------------------------------
-    # Post-validation of event outcome
+    # Step 6: Canon Guard (consistency check)
+    # -----------------------------------------------------------------------
+    canon_result = agents.canon_guard(event_outcome, context)
+    if canon_result and not canon_result.get("valid", True):
+        severity = canon_result.get("severity", "minor")
+        if severity in ("major", "critical"):
+            logger.warning("Canon guard flagged event (severity=%s): %s",
+                           severity, canon_result.get("issues", []))
+            # Retry event generation with feedback
+            feedback = "; ".join(canon_result.get("fix_suggestions", []))
+            if feedback:
+                intent_data["canon_feedback"] = feedback
+                event_outcome_retry = agents.generate_event(intent_data, context, agent_profiles)
+                if event_outcome_retry:
+                    event_outcome = event_outcome_retry
+
+    # -----------------------------------------------------------------------
+    # Post-validation of event outcome (hard checks)
     # -----------------------------------------------------------------------
     post_valid, post_issues = post_validate_hard(event_outcome, session)
     if not post_valid:
         logger.warning("Post-validation issues: %s", post_issues)
 
     # -----------------------------------------------------------------------
-    # Step 6: State Update
+    # Step 7: Apply Diff (safe state mutation)
     # -----------------------------------------------------------------------
-    state_changes = _apply_state_updates(session, intent, event_outcome, context)
+    diff_data = event_outcome.get("diff", {})
+    state_changes = {}
+    if diff_data:
+        world_diff = WorldStateDiff.from_dict(diff_data)
+        state_changes = apply_diff(session, world_diff)
+    else:
+        # Fallback: use legacy Character Manager path for backward compatibility
+        state_changes = _apply_state_updates_legacy(session, intent, event_outcome, context)
 
     # -----------------------------------------------------------------------
-    # Step 7: NPC Autonomy Simulation
+    # Step 8: NPC Autonomy Simulation (enhanced world tick)
     # -----------------------------------------------------------------------
-    _simulate_npcs(session)
+    _simulate_world_tick(session)
 
     # -----------------------------------------------------------------------
-    # Step 8: Memory Update (with importance scoring)
+    # Step 9: Memory Update (with importance scoring)
     # -----------------------------------------------------------------------
     event_description = event_outcome.get("outcome", raw_input)
     importance = event_outcome.get("importance", 0.5)
-    tags = event_outcome.get("tags", [])
+    # Build structured tags: include npc:, location:, quest: prefixes
+    tags = _build_structured_tags(event_outcome, intent, session)
     _update_memory(session, event_description)
 
     # -----------------------------------------------------------------------
-    # Step 9: Narrative Direction
+    # Step 10: Memory Compression (every N turns)
+    # -----------------------------------------------------------------------
+    _compress_memory_if_needed(session)
+
+    # -----------------------------------------------------------------------
+    # Step 11: Narrative Direction
     # -----------------------------------------------------------------------
     _update_narrative(session)
 
     # -----------------------------------------------------------------------
-    # Step 10: Narration Output
+    # Step 12: Narration Output (with soft-failure tier)
     # -----------------------------------------------------------------------
     narration_context = build_context(session)
     narration = agents.narrate(event_outcome, narration_context, agent_profiles)
@@ -265,22 +316,23 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
 
     # Add dice roll info to narration if applicable
     if dice_result:
+        outcome_tier = dice_result.get("outcome", "success")
         roll_info = (
             f"\n\n[Roll: d20({dice_result['roll']}) + "
             f"{stat_name}({dice_result['stat_value']}) = "
             f"{dice_result['total']} vs DC {dice_result['dc']}"
         )
-        if dice_result["critical_success"]:
-            roll_info += " \u2014 CRITICAL SUCCESS!]"
-        elif dice_result["critical_failure"]:
-            roll_info += " \u2014 CRITICAL FAILURE!]"
-        elif dice_result["passed"]:
-            roll_info += " \u2014 Success]"
-        else:
-            roll_info += " \u2014 Failure]"
+        tier_labels = {
+            "critical_fail": " \u2014 CRITICAL FAILURE!]",
+            "fail": " \u2014 Failure]",
+            "partial_success": " \u2014 Partial Success]",
+            "success": " \u2014 Success]",
+            "critical_success": " \u2014 CRITICAL SUCCESS!]",
+        }
+        roll_info += tier_labels.get(outcome_tier, " \u2014 " + outcome_tier + "]")
         narration += roll_info
 
-    # Create history event with importance and tags
+    # Create history event with importance and structured tags
     history_event = HistoryEvent(
         event=event_description,
         impact=state_changes,
@@ -295,7 +347,7 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     _advance_time(session)
 
     # -----------------------------------------------------------------------
-    # Step 11: Fail State Detection
+    # Step 13: Fail State Detection
     # -----------------------------------------------------------------------
     fail_state = _check_fail_states(session)
 
@@ -311,9 +363,13 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     )
 
 
-def _apply_state_updates(session: GameSession, intent: PlayerIntent,
-                         event_outcome: Dict, context: str) -> Dict[str, Any]:
-    """Apply state changes from the Character Manager agent."""
+def _apply_state_updates_legacy(session: GameSession, intent: PlayerIntent,
+                               event_outcome: Dict, context: str) -> Dict[str, Any]:
+    """
+    Legacy state update path — used when Event Engine doesn't return a diff.
+
+    Calls the Character Manager agent to determine changes and applies them directly.
+    """
     changes = {}
 
     # Ask Character Manager for updates
@@ -399,8 +455,12 @@ def _apply_state_updates(session: GameSession, intent: PlayerIntent,
     return changes
 
 
-def _simulate_npcs(session: GameSession) -> None:
-    """Run NPC autonomy simulation for background world events."""
+def _simulate_world_tick(session: GameSession) -> None:
+    """
+    Run enhanced world simulation: NPC autonomy + economy shifts + faction changes.
+
+    Runs every 2 turns to reduce LLM calls.
+    """
     # Only simulate every 2 turns to reduce LLM calls
     if session.turn_count % 2 != 0:
         return
@@ -423,6 +483,13 @@ def _simulate_npcs(session: GameSession) -> None:
             for target, change in action.get("relationship_changes", {}).items():
                 if isinstance(change, (int, float)):
                     npc.relationships[target] = npc.relationships.get(target, 0) + int(change)
+
+    # Apply economy shifts (market_modifier changes per location)
+    for loc_name, modifier_delta in npc_data.get("economy_shifts", {}).items():
+        if isinstance(modifier_delta, (int, float)):
+            loc = session.world.get_location(loc_name)
+            if loc:
+                loc.market_modifier = max(0.5, min(2.0, loc.market_modifier + modifier_delta))
 
 
 def _update_memory(session: GameSession, event_description: str) -> None:
@@ -451,6 +518,74 @@ def _update_narrative(session: GameSession) -> None:
     if direction:
         session.narrative_act = direction.get("narrative_act", session.narrative_act)
         session.narrative_tension = direction.get("tension_level", session.narrative_tension)
+
+
+def _compress_memory_if_needed(session: GameSession) -> None:
+    """
+    Compress old history events into mid-term summary every N turns.
+
+    This prevents context from growing unboundedly over long sessions.
+    """
+    if session.turn_count % MEMORY_COMPRESSION_INTERVAL != 0:
+        return
+    if len(session.history) < MEMORY_COMPRESSION_INTERVAL:
+        return
+
+    # Take events older than the short-term window for compression
+    old_events = session.history[:-10] if len(session.history) > 10 else []
+    if not old_events:
+        return
+
+    event_texts = [h.event for h in old_events]
+    compressed = agents.compress_memory(event_texts, session.mid_term_summary)
+    if compressed:
+        new_summary = compressed.get("compressed_summary", "")
+        if new_summary:
+            session.mid_term_summary = new_summary
+
+        # Preserve critical facts
+        for fact in compressed.get("preserved_facts", []):
+            if isinstance(fact, str) and fact not in session.player.known_facts:
+                session.player.known_facts.append(fact)
+
+        # Trim history: keep only events from the last 10 turns + high-importance old events
+        important_old = [h for h in old_events if h.importance >= 0.8]
+        recent = session.history[-10:] if len(session.history) > 10 else session.history
+        session.history = important_old + recent
+        logger.info("Memory compressed: %d events -> %d (kept %d important + %d recent)",
+                     len(old_events), len(session.history),
+                     len(important_old), len(recent))
+
+
+def _build_structured_tags(event_outcome: Dict, intent: PlayerIntent,
+                           session: GameSession) -> List[str]:
+    """Build structured tags with npc:, location:, quest: prefixes for memory retrieval."""
+    tags = list(event_outcome.get("tags", []))
+
+    # Auto-tag based on intent target
+    if intent.target:
+        npc = session.get_npc(intent.target)
+        if npc and f"npc:{npc.name}" not in tags:
+            tags.append(f"npc:{npc.name}")
+        loc = session.world.get_location(intent.target)
+        if loc and f"location:{loc.name}" not in tags:
+            tags.append(f"location:{loc.name}")
+
+    # Auto-tag player location
+    if session.player.location and f"location:{session.player.location}" not in tags:
+        tags.append(f"location:{session.player.location}")
+
+    # Auto-tag intent type
+    if intent.intent and intent.intent not in tags:
+        tags.append(intent.intent)
+
+    # Auto-tag NPCs mentioned in reactions
+    for reaction in event_outcome.get("npc_reactions", []):
+        npc_name = reaction.get("name", "")
+        if npc_name and f"npc:{npc_name}" not in tags:
+            tags.append(f"npc:{npc_name}")
+
+    return tags
 
 
 def _check_fail_states(session: GameSession) -> str:

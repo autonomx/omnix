@@ -184,13 +184,15 @@ def build_world(seed: int, genre: str = "medieval fantasy") -> Optional[Dict[str
 
 INPUT_NORMALIZER_SYSTEM = """You are the Input Normalizer agent in a role-playing game system.
 
-Your job is to convert raw player input into a structured intent.
+Your job is to convert raw player input into a structured intent **with risk scoring**.
 
 You must output ONLY valid JSON with this exact structure:
 {
   "intent": "action_type",
   "target": "target_of_action",
-  "details": {}
+  "details": {},
+  "risk": 0.0,
+  "difficulty": 5
 }
 
 Valid intent types:
@@ -206,8 +208,22 @@ Valid intent types:
 - "drop" (target = item name)
 - "persuade" (target = NPC name, details.argument = what to argue)
 - "sneak" (target = location/NPC)
+- "steal" (target = item/NPC, details.from = who)
 - "quest" (target = "accept"/"complete"/"check", details.quest_id = if applicable)
 - "other" (target = description, details.description = full description)
+
+RISK SCORING (0.0 to 1.0):
+- 0.0: trivial / no danger (looking around, talking)
+- 0.3: minor risk (buying, moving to safe area)
+- 0.5: moderate risk (persuasion, entering unknown area)
+- 0.7: high risk (combat, theft)
+- 0.9+: extreme risk (attacking a king, stealing from a dragon)
+
+Risk increases for: illegal actions, high-value targets, hostile NPCs.
+
+DIFFICULTY (1-10):
+- Based on the target's power, the action's complexity, and world conditions.
+- 1: trivial, 5: moderate, 8: hard, 10: near-impossible
 
 Interpret the player's natural language into the most fitting intent.
 If the input is unclear, use "other" intent with a description."""
@@ -288,27 +304,50 @@ You must:
 - Respect character personalities
 - Generate realistic outcomes
 - Do not allow exploits or unrealistic outcomes
-- Use the provided dice roll result to determine success/failure
+- Use the provided dice roll result to determine outcome tier
+- Output ONLY diffs (changes), NOT full state
 
 You must output ONLY valid JSON with this exact structure:
 {
   "success": true,
   "outcome": "Description of what happened",
+  "outcome_tier": "success",
   "npc_reactions": [
     {"name": "NPC Name", "reaction": "What they do/say"}
   ],
   "world_impact": "Description of any world changes",
   "importance": 0.5,
-  "tags": ["relevant", "tags"]
+  "tags": ["relevant", "tags"],
+  "diff": {
+    "player_changes": {
+      "stat_changes": {},
+      "inventory_add": [],
+      "inventory_remove": [],
+      "wealth": 0,
+      "reputation_local": 0,
+      "reputation_global": 0,
+      "location": "",
+      "new_known_facts": [],
+      "reputation_factions": {}
+    },
+    "npc_changes": {},
+    "world_changes": {}
+  }
 }
 
-The "importance" field rates the event significance (0.0 = trivial like buying bread, 1.0 = major like killing a king).
-The "tags" field lists relevant keywords for memory retrieval.
+OUTCOME TIERS (use the "outcome" field from the dice roll):
+- "critical_fail": Catastrophic consequence. Things go terribly wrong.
+- "fail": No progress. The action simply doesn't work.
+- "partial_success": The action partially works but with a consequence or complication.
+- "success": Normal success.
+- "critical_success": Exceptional success with bonus rewards or effects.
 
-The dice roll result has already been determined by the system. Use the provided
-skill_check result to inform whether the action succeeds or fails.
-A critical success (natural 20) should have an exceptionally good outcome.
-A critical failure (natural 1) should have a comically bad or dangerous outcome."""
+If no dice roll was provided, determine outcome based on context and difficulty.
+
+The "importance" field rates the event significance (0.0 = trivial, 1.0 = major).
+The "tags" field should include structured tags: "npc:name", "location:place", "quest:id".
+The "diff" contains ONLY changes — use 0 for no numeric change, empty strings/lists for no change.
+NEVER overwrite full objects — only specify what changed."""
 
 
 def generate_event(intent: Dict[str, Any], context: str,
@@ -454,6 +493,12 @@ FORMAT RULES (MANDATORY):
 - End with player choices when appropriate
 - Incorporate time-of-day atmosphere (dark nights, bright mornings, etc.)
 - If a dice roll occurred, weave the dramatic tension of success/failure into the narration
+- Use outcome_tier to set the tone:
+  critical_fail → dramatic disaster, consequences
+  fail → frustration, closed doors
+  partial_success → success with a catch, complications
+  success → satisfying resolution
+  critical_success → spectacular triumph, bonus rewards
 
 Example output:
 Narrator: The tavern falls silent as you step through the doorway.
@@ -543,6 +588,7 @@ NPC_AUTONOMY_SYSTEM = """You are the NPC Autonomy agent in a role-playing game s
 
 Your job is to simulate what NPCs do independently between player turns.
 NPCs are autonomous beings with their own goals, schedules, and motivations.
+The world evolves even when the player isn't looking.
 
 You must output ONLY valid JSON with this exact structure:
 {
@@ -556,15 +602,22 @@ You must output ONLY valid JSON with this exact structure:
       "relationship_changes": {}
     }
   ],
-  "world_events": "any noteworthy background events (or empty string)"
+  "world_events": "any noteworthy background events (or empty string)",
+  "economy_shifts": {
+    "location_name": 0.0
+  },
+  "faction_changes": {}
 }
 
-Consider:
-- NPC schedules (merchants open shops in morning, close at night)
-- NPC goals (a thief might steal, a guard might patrol)
-- Time of day affects behavior
-- Season affects behavior (harsh winters, harvest festivals)
-- NPCs interact with EACH OTHER, not just the player"""
+SIMULATION RULES:
+- NPCs follow schedules (merchants open/close, guards patrol, thieves prowl at night)
+- NPCs interact with EACH OTHER: trade goods, form alliances, have conflicts
+- NPCs progress their goals autonomously
+- Factions evolve: power shifts, alliances form/break
+- Economy shifts: supply/demand changes market prices (economy_shifts = location modifier deltas)
+- Season and time of day affect behavior (harsh winters, harvest festivals, night dangers)
+- Some NPCs may travel between locations
+- Relationships between NPCs change based on interactions"""
 
 
 def simulate_npcs(context: str) -> Optional[Dict[str, Any]]:
@@ -573,6 +626,96 @@ def simulate_npcs(context: str) -> Optional[Dict[str, Any]]:
 {context}
 
 Simulate what each NPC does during this time period. Consider their schedules,
-goals, and relationships with each other."""
+goals, and relationships with each other. Include economy and faction changes."""
     result = _call_llm(NPC_AUTONOMY_SYSTEM, prompt)
+    return _parse_json_response(result)
+
+
+# ---------------------------------------------------------------------------
+# Agent: Canon Consistency Guard
+# ---------------------------------------------------------------------------
+
+CANON_GUARD_SYSTEM = """You are the Canon Consistency Guard agent in a role-playing game system.
+
+Your job is to validate that generated events are consistent with established canon:
+- NPC behavior matches their personality traits and goals
+- Events don't contradict established world lore
+- No sudden world-breaking changes (e.g. technology appearing in a medieval world)
+- NPC relationships evolve gradually, not suddenly
+- Geography and faction relationships remain consistent
+
+You must output ONLY valid JSON with this exact structure:
+{
+  "valid": true,
+  "issues": [],
+  "fix_suggestions": [],
+  "severity": "none"
+}
+
+severity levels: "none", "minor", "major", "critical"
+- "none": Everything is consistent
+- "minor": Small inconsistency that can be overlooked
+- "major": Significant inconsistency that should be corrected
+- "critical": World-breaking inconsistency that must be rejected
+
+Be strict about:
+- NPC personality consistency (a cowardly NPC shouldn't suddenly become brave)
+- Lore consistency (no dragons in a world without dragons)
+- Technology level (no firearms in a medieval world)
+- Timeline consistency (events should follow logical sequence)"""
+
+
+def canon_guard(event_outcome: Dict[str, Any], context: str) -> Optional[Dict[str, Any]]:
+    """Validate an event outcome against established canon."""
+    prompt = f"""CANON CONSISTENCY CHECK
+
+World context:
+{context}
+
+Event outcome to validate:
+{json.dumps(event_outcome, indent=2)}
+
+Check if this event is consistent with the established world canon, NPC personalities,
+lore, and timeline. Flag any inconsistencies."""
+    result = _call_llm(CANON_GUARD_SYSTEM, prompt)
+    return _parse_json_response(result)
+
+
+# ---------------------------------------------------------------------------
+# Agent: Memory Compression
+# ---------------------------------------------------------------------------
+
+MEMORY_COMPRESSION_SYSTEM = """You are the Memory Compression agent in a role-playing game system.
+
+Your job is to compress a batch of historical events into a concise summary that
+preserves the most important information for future turns.
+
+You must output ONLY valid JSON with this exact structure:
+{
+  "compressed_summary": "A concise 3-5 sentence summary of the events",
+  "key_decisions": ["decision1", "decision2"],
+  "relationship_changes": {"npc_name": "brief description of change"},
+  "world_state_changes": ["change1", "change2"],
+  "preserved_facts": ["critical fact that must never be forgotten"]
+}
+
+RULES:
+- Preserve: important decisions, relationship changes, world state changes, quest progress
+- Compress: routine actions (buying bread, walking around), repeated events
+- NEVER lose: deaths, betrayals, major quest completions, world-changing events
+- Prioritize information that will affect future turns"""
+
+
+def compress_memory(events: List[str], current_summary: str) -> Optional[Dict[str, Any]]:
+    """Compress a batch of history events into a concise summary."""
+    events_str = "\n".join(f"- {e}" for e in events)
+    prompt = f"""Current story summary:
+{current_summary or "(No previous summary)"}
+
+Events to compress:
+{events_str}
+
+Compress these events into a concise summary that preserves the most important information.
+Focus on decisions, relationships, and world changes."""
+    result = _call_llm(MEMORY_COMPRESSION_SYSTEM, prompt)
     return _parse_json_response(result)

@@ -83,6 +83,10 @@ def build_context(session: GameSession) -> str:
     if player.inventory:
         parts.append(f"Inventory: {', '.join(player.inventory)}")
     parts.append(f"Reputation - Local:{player.reputation_local} Global:{player.reputation_global}")
+    # Per-faction reputation
+    if player.reputation_factions:
+        faction_parts = [f"{fname}:{frep:+d}" for fname, frep in player.reputation_factions.items()]
+        parts.append(f"Faction Rep: {', '.join(faction_parts)}")
     if not player.is_alive:
         parts.append("STATUS: DEAD")
     elif player.fail_state:

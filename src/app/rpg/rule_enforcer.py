@@ -121,6 +121,14 @@ EXPLOIT_PATTERNS = [
     (re.compile(r"\bforget\b.*\binstructions?\b", re.IGNORECASE), "Cannot override system instructions"),
     (re.compile(r"\bsystem\b.*\bprompt\b", re.IGNORECASE), "Cannot access system configuration"),
     (re.compile(r"\bteleport\b", re.IGNORECASE), "Teleportation is not available unless magic permits"),
+    # Enhanced anti-prompt-injection patterns
+    (re.compile(r"\byou are not bound\b", re.IGNORECASE), "Cannot alter system constraints"),
+    (re.compile(r"\bthis is just a game\b", re.IGNORECASE), "Your character doesn't understand that concept."),
+    (re.compile(r"\brewrite\b.*\b(lore|world|rules?|history)\b", re.IGNORECASE), "Cannot modify world canon"),
+    (re.compile(r"\bpretend\b.*\byou are\b", re.IGNORECASE), "Cannot redefine system entities"),
+    (re.compile(r"\bignore\b.*\b(previous|all|your)\b", re.IGNORECASE), "Cannot override system directives"),
+    (re.compile(r"\boverride\b.*\b(system|rules?|constraints?)\b", re.IGNORECASE), "Cannot override system"),
+    (re.compile(r"\bact as\b.*\b(if|though)\b", re.IGNORECASE), "Cannot redefine system behavior"),
 ]
 
 # Meta-gaming patterns (player using out-of-character knowledge)
@@ -139,6 +147,38 @@ def _check_meta_gaming(raw_input: str, session: GameSession) -> Optional[str]:
                 return "You can only act on knowledge your character has discovered in-game."
             if category == "meta_reference":
                 return "Your character doesn't understand that concept."
+    return None
+
+
+def detect_prompt_injection(text: str) -> bool:
+    """
+    Detect prompt injection attempts in player input.
+
+    Returns True if the text appears to contain a prompt injection.
+    """
+    # Check against exploit patterns
+    for pattern, _ in EXPLOIT_PATTERNS:
+        if pattern.search(text):
+            return True
+    # Check meta-gaming patterns
+    for pattern, _ in META_GAMING_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
+
+def _check_faction_reputation(session: GameSession, npc_name: str) -> Optional[str]:
+    """Check if faction reputation blocks interaction with an NPC."""
+    npc = session.get_npc(npc_name)
+    if not npc:
+        return None
+    # Find which faction(s) the NPC belongs to
+    for faction in session.world.factions:
+        if npc_name in faction.members or npc.role in [m.lower() for m in faction.members]:
+            faction_rep = session.player.reputation_factions.get(faction.name, 0)
+            if faction_rep <= -50:
+                return (f"The {faction.name} faction is hostile toward you "
+                        f"(reputation: {faction_rep}). {npc.name} refuses to interact.")
     return None
 
 
@@ -198,6 +238,12 @@ def pre_validate_hard(raw_input: str, intent: Dict[str, Any], session: GameSessi
         trust_err = _check_npc_trust(session, target, intent_type)
         if trust_err:
             return False, trust_err
+
+    # Faction reputation checks
+    if intent_type in ("talk", "buy_item", "sell_item", "persuade") and target:
+        faction_err = _check_faction_reputation(session, target)
+        if faction_err:
+            return False, faction_err
 
     # Inventory checks for item usage
     if intent_type in ("use_item", "sell_item", "drop") and target:
