@@ -53,7 +53,7 @@ from app.rpg.persistence import save_game
 from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard
 from app.rpg.npc_decision import decide_npc_action
 from app.rpg.npc_brain import decide_action as brain_decide, evaluate_npc_interactions
-from app.rpg.npc_mind import npc_think, propagate_beliefs
+from app.rpg.npc_mind import npc_think, propagate_beliefs, evolve_personality, update_faction_strategy, absorb_world_events
 from app.rpg.system_triggers import evaluate_system_triggers, update_resources
 from app.rpg.story_engine import (
     enforce_story,
@@ -630,6 +630,8 @@ def _simulate_world_tick(session: GameSession) -> None:
                 src.current_action = "confront"
 
     # --- NPC Mind Pipeline (belief update + tiered LLM reasoning) ---------
+    npc_dicts_for_tom = [n.to_dict() for n in session.npcs]
+    world_events = list(session.world.world_events_log[-5:])
     for npc in session.npcs:
         npc_data_dict = npc.to_dict()
         mind_result = npc_think(
@@ -637,13 +639,20 @@ def _simulate_world_tick(session: GameSession) -> None:
             player_location=session.player.location,
             world_context="",
             llm_call_fn=None,   # GOAP-only by default; wire LLM in production
+            world_events=world_events,
+            other_npcs=npc_dicts_for_tom,
         )
         if mind_result["action"] != "idle":
             npc.current_action = mind_result["action"]
-        # Persist updated beliefs / memory_summary / expressed_state back
+        # Persist updated beliefs / memory_summary / expressed_state /
+        # belief_sources / deception_mode / theory_of_mind / personality_traits
         npc.beliefs = npc_data_dict.get("beliefs", npc.beliefs)
         npc.memory_summary = npc_data_dict.get("memory_summary", npc.memory_summary)
         npc.expressed_state = npc_data_dict.get("expressed_state", npc.expressed_state)
+        npc.belief_sources = npc_data_dict.get("belief_sources", npc.belief_sources)
+        npc.deception_mode = npc_data_dict.get("deception_mode", npc.deception_mode)
+        npc.theory_of_mind = npc_data_dict.get("theory_of_mind", npc.theory_of_mind)
+        npc.personality_traits = npc_data_dict.get("personality_traits", npc.personality_traits)
 
     # --- NPC Belief Propagation (rumours, misinformation) -----------------
     npc_dicts = [n.to_dict() for n in session.npcs]
@@ -653,6 +662,12 @@ def _simulate_world_tick(session: GameSession) -> None:
                 if propagate_beliefs(src_dict, tgt_dict):
                     tgt_npc = session.npcs[j]
                     tgt_npc.beliefs = tgt_dict.get("beliefs", tgt_npc.beliefs)
+
+    # --- Faction Strategy Update ------------------------------------------
+    for fac in session.world.factions:
+        fac_dict = fac.to_dict()
+        update_faction_strategy(fac_dict)
+        fac.strategy = fac_dict.get("strategy", fac.strategy)
 
     # --- NPC Goal Engine (progress structured goals) ----------------------
     goal_consequences = update_npc_goals(session)
