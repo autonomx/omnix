@@ -652,6 +652,51 @@ class TurnResult:
 
 
 @dataclass
+class TurnLog:
+    """
+    Deterministic replay log entry for a single turn.
+
+    Captures every pipeline artifact so that turns can be reproduced,
+    debugged, and audited.
+    """
+    turn: int = 0
+    raw_input: str = ""
+    normalized_intent: Dict[str, Any] = field(default_factory=dict)
+    dice_roll: Optional[Dict[str, Any]] = None
+    event_output: Dict[str, Any] = field(default_factory=dict)
+    canon_check: Dict[str, Any] = field(default_factory=dict)
+    applied_diff: Dict[str, Any] = field(default_factory=dict)
+    narration: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "turn": self.turn,
+            "raw_input": self.raw_input,
+            "normalized_intent": dict(self.normalized_intent),
+            "event_output": dict(self.event_output),
+            "canon_check": dict(self.canon_check),
+            "applied_diff": dict(self.applied_diff),
+            "narration": self.narration,
+        }
+        if self.dice_roll is not None:
+            result["dice_roll"] = dict(self.dice_roll)
+        return result
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TurnLog":
+        return cls(
+            turn=data.get("turn", 0),
+            raw_input=data.get("raw_input", ""),
+            normalized_intent=data.get("normalized_intent", {}),
+            dice_roll=data.get("dice_roll"),
+            event_output=data.get("event_output", {}),
+            canon_check=data.get("canon_check", {}),
+            applied_diff=data.get("applied_diff", {}),
+            narration=data.get("narration", ""),
+        )
+
+
+@dataclass
 class GameSession:
     """A complete game session with all state."""
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -666,6 +711,7 @@ class GameSession:
     mid_term_summary: str = ""
     narrative_act: int = 1
     narrative_tension: float = 0.0
+    turn_logs: List[TurnLog] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -681,6 +727,7 @@ class GameSession:
             "mid_term_summary": self.mid_term_summary,
             "narrative_act": self.narrative_act,
             "narrative_tension": self.narrative_tension,
+            "turn_logs": [tl.to_dict() for tl in self.turn_logs],
         }
 
     @classmethod
@@ -698,6 +745,7 @@ class GameSession:
             mid_term_summary=data.get("mid_term_summary", ""),
             narrative_act=data.get("narrative_act", 1),
             narrative_tension=data.get("narrative_tension", 0.0),
+            turn_logs=[TurnLog.from_dict(tl) for tl in data.get("turn_logs", [])],
         )
 
     def get_npc(self, name: str) -> Optional[NPCCharacter]:

@@ -1712,3 +1712,157 @@ class TestPipelineNewFeatures:
         """_apply_state_updates_legacy should still be importable for backward compat."""
         from app.rpg.pipeline import _apply_state_updates_legacy
         assert callable(_apply_state_updates_legacy)
+
+
+# ---------------------------------------------------------------------------
+# TurnLog Deterministic Replay Tests
+# ---------------------------------------------------------------------------
+
+class TestTurnLog:
+    """Test TurnLog model for deterministic replay."""
+
+    def test_turn_log_defaults(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog()
+        assert tl.turn == 0
+        assert tl.raw_input == ""
+        assert tl.normalized_intent == {}
+        assert tl.dice_roll is None
+        assert tl.event_output == {}
+        assert tl.canon_check == {}
+        assert tl.applied_diff == {}
+        assert tl.narration == ""
+
+    def test_turn_log_to_dict(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog(
+            turn=3,
+            raw_input="attack goblin",
+            normalized_intent={"intent": "attack", "target": "goblin"},
+            dice_roll={"roll": 15, "total": 20, "dc": 16, "passed": True, "outcome": "success"},
+            event_output={"outcome": "You hit the goblin", "importance": 0.7},
+            canon_check={"valid": True, "issues": []},
+            applied_diff={"player_strength": 1},
+            narration="Narrator: You strike the goblin!",
+        )
+        d = tl.to_dict()
+        assert d["turn"] == 3
+        assert d["raw_input"] == "attack goblin"
+        assert d["normalized_intent"]["intent"] == "attack"
+        assert d["dice_roll"]["roll"] == 15
+        assert d["event_output"]["importance"] == 0.7
+        assert d["canon_check"]["valid"] is True
+        assert d["applied_diff"]["player_strength"] == 1
+        assert d["narration"] == "Narrator: You strike the goblin!"
+
+    def test_turn_log_to_dict_no_dice(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog(turn=1, raw_input="look around")
+        d = tl.to_dict()
+        assert "dice_roll" not in d
+
+    def test_turn_log_from_dict(self):
+        from app.rpg.models import TurnLog
+        data = {
+            "turn": 5,
+            "raw_input": "steal gem",
+            "normalized_intent": {"intent": "steal", "target": "gem", "risk": 0.9},
+            "dice_roll": {"roll": 3, "total": 9, "dc": 18, "passed": False, "outcome": "fail"},
+            "event_output": {"outcome": "You fumble", "importance": 0.6},
+            "canon_check": {"valid": True, "issues": [], "severity": "none"},
+            "applied_diff": {},
+            "narration": "Narrator: Your hand slips.",
+        }
+        tl = TurnLog.from_dict(data)
+        assert tl.turn == 5
+        assert tl.raw_input == "steal gem"
+        assert tl.normalized_intent["risk"] == 0.9
+        assert tl.dice_roll["outcome"] == "fail"
+        assert tl.narration == "Narrator: Your hand slips."
+
+    def test_turn_log_roundtrip(self):
+        from app.rpg.models import TurnLog
+        original = TurnLog(
+            turn=7,
+            raw_input="persuade merchant",
+            normalized_intent={"intent": "persuade", "target": "merchant"},
+            dice_roll={"roll": 18, "total": 21, "dc": 16, "passed": True},
+            event_output={"outcome": "The merchant agrees"},
+            canon_check={"valid": True},
+            applied_diff={"wealth_change": -5},
+            narration="Narrator: The merchant nods.",
+        )
+        restored = TurnLog.from_dict(original.to_dict())
+        assert restored.turn == original.turn
+        assert restored.raw_input == original.raw_input
+        assert restored.normalized_intent == original.normalized_intent
+        assert restored.dice_roll == original.dice_roll
+        assert restored.event_output == original.event_output
+        assert restored.applied_diff == original.applied_diff
+        assert restored.narration == original.narration
+
+    def test_turn_log_from_dict_defaults(self):
+        from app.rpg.models import TurnLog
+        tl = TurnLog.from_dict({})
+        assert tl.turn == 0
+        assert tl.raw_input == ""
+        assert tl.dice_roll is None
+
+
+class TestGameSessionTurnLogs:
+    """Test GameSession integration with turn_logs field."""
+
+    def test_session_has_turn_logs_field(self):
+        from app.rpg.models import GameSession
+        session = GameSession()
+        assert hasattr(session, "turn_logs")
+        assert isinstance(session.turn_logs, list)
+        assert len(session.turn_logs) == 0
+
+    def test_session_to_dict_includes_turn_logs(self):
+        from app.rpg.models import GameSession, TurnLog
+        session = GameSession()
+        session.turn_logs.append(TurnLog(turn=1, raw_input="look"))
+        d = session.to_dict()
+        assert "turn_logs" in d
+        assert len(d["turn_logs"]) == 1
+        assert d["turn_logs"][0]["turn"] == 1
+
+    def test_session_from_dict_restores_turn_logs(self):
+        from app.rpg.models import GameSession, TurnLog
+        session = GameSession()
+        session.turn_logs.append(TurnLog(turn=1, raw_input="look"))
+        session.turn_logs.append(TurnLog(turn=2, raw_input="attack"))
+        d = session.to_dict()
+        restored = GameSession.from_dict(d)
+        assert len(restored.turn_logs) == 2
+        assert restored.turn_logs[0].raw_input == "look"
+        assert restored.turn_logs[1].raw_input == "attack"
+
+    def test_session_from_dict_no_turn_logs(self):
+        """Backward compat: old sessions without turn_logs should load fine."""
+        from app.rpg.models import GameSession
+        data = {"session_id": "test-123", "turn_count": 5}
+        session = GameSession.from_dict(data)
+        assert session.turn_logs == []
+
+    def test_session_roundtrip_preserves_turn_logs(self):
+        from app.rpg.models import GameSession, TurnLog
+        session = GameSession()
+        session.turn_logs.append(TurnLog(
+            turn=1,
+            raw_input="buy sword",
+            normalized_intent={"intent": "buy_item", "target": "sword"},
+            dice_roll=None,
+            event_output={"outcome": "You bought a sword"},
+            canon_check={"valid": True},
+            applied_diff={"wealth_change": -10},
+            narration="Narrator: You purchase a fine blade.",
+        ))
+        restored = GameSession.from_dict(session.to_dict())
+        tl = restored.turn_logs[0]
+        assert tl.turn == 1
+        assert tl.raw_input == "buy sword"
+        assert tl.normalized_intent["intent"] == "buy_item"
+        assert tl.dice_roll is None
+        assert tl.applied_diff["wealth_change"] == -10

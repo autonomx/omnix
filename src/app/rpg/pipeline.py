@@ -16,6 +16,7 @@ Orchestrates the turn execution with integrated systems:
 12. Narrative Direction
 13. Narration Output (with soft-failure tier)
 14. Fail State Detection
+15. Turn Log (deterministic replay)
 """
 
 import logging
@@ -36,6 +37,7 @@ from app.rpg.models import (
     PlayerIntent,
     PlayerState,
     Quest,
+    TurnLog,
     TurnResult,
     WorldRules,
     WorldState,
@@ -154,8 +156,8 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     Execute a single turn of the game.
 
     Enhanced pipeline:
-      Input → Risk Score → Rules → Dice (seeded) → Event → Canon Guard →
-      Diff Apply → NPC Simulation → Memory → Compression → Narrative → Narrate
+      Input -> Risk Score -> Rules -> Dice (seeded) -> Event -> Canon Guard ->
+      Diff Apply -> NPC Simulation -> Memory -> Compression -> Narrative -> Narrate
     """
     session.turn_count += 1
     logger.info("Turn %d: player input='%s'", session.turn_count, raw_input)
@@ -250,6 +252,7 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # Step 6: Canon Guard (consistency check)
     # -----------------------------------------------------------------------
     canon_result = agents.canon_guard(event_outcome, context)
+    canon_check_data = canon_result if canon_result else {}
     if canon_result and not canon_result.get("valid", True):
         severity = canon_result.get("severity", "minor")
         if severity in ("major", "critical"):
@@ -354,6 +357,21 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # -----------------------------------------------------------------------
     fail_state = _check_fail_states(session)
 
+    # -----------------------------------------------------------------------
+    # Step 14: Turn Log (deterministic replay)
+    # -----------------------------------------------------------------------
+    turn_log = TurnLog(
+        turn=session.turn_count,
+        raw_input=raw_input,
+        normalized_intent=intent_data,
+        dice_roll=dice_result,
+        event_output=event_outcome,
+        canon_check=canon_check_data,
+        applied_diff=state_changes,
+        narration=narration,
+    )
+    session.turn_logs.append(turn_log)
+
     # Save game state
     save_game(session)
 
@@ -368,8 +386,7 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
 
 def _apply_state_updates_legacy(session: GameSession, intent: PlayerIntent,
                                event_outcome: Dict, context: str) -> Dict[str, Any]:
-    """
-    Legacy state update path — used when Event Engine doesn't return a diff.
+    """Legacy state update path for when Event Engine has no diff.
 
     Calls the Character Manager agent to determine changes and applies them directly.
     """

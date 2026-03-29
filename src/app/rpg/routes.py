@@ -207,3 +207,31 @@ def get_history(session_id):
         "history": [h.to_dict() for h in history],
         "turn_count": session.turn_count,
     })
+
+
+@rpg_bp.route("/api/rpg/games/<session_id>/replay", methods=["GET"])
+def get_replay(session_id):
+    """Get the deterministic replay log for a game session.
+
+    Query parameters:
+        turn (int, optional): Return only the log for a specific turn number.
+    """
+    session = load_game(session_id)
+    if not session:
+        return jsonify({"success": False, "error": "Game not found"}), 404
+
+    turn = request.args.get("turn", type=int)
+    if turn is not None:
+        logs = [tl for tl in session.turn_logs if tl.turn == turn]
+        if not logs:
+            return jsonify({"success": False, "error": f"No log for turn {turn}"}), 404
+        return jsonify({
+            "success": True,
+            "turn_log": logs[0].to_dict(),
+        })
+
+    return jsonify({
+        "success": True,
+        "turn_logs": [tl.to_dict() for tl in session.turn_logs],
+        "turn_count": session.turn_count,
+    })
