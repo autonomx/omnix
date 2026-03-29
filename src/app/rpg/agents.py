@@ -171,9 +171,33 @@ conflicting goals and daily schedules. Use the seed number to create variation.
 Include agent_profiles that define the narrative tone matching the world's genre."""
 
 
-def build_world(seed: int, genre: str = "medieval fantasy") -> Optional[Dict[str, Any]]:
-    """Generate a new game world using the World Builder agent."""
-    prompt = f"Generate a unique {genre} world using seed number {seed}. Be creative and make locations, factions, and NPCs interconnected with conflicts and opportunities."
+def build_world(seed: int, genre: str = "medieval fantasy",
+                custom_lore: Optional[str] = None,
+                custom_rules: Optional[str] = None,
+                custom_story: Optional[str] = None,
+                world_prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Generate a new game world using the World Builder agent.
+
+    Optional parameters allow the player to shape the generated world:
+      custom_lore   – background lore the world should incorporate
+      custom_rules  – gameplay rules or constraints
+      custom_story  – story hook or initial scenario
+      world_prompt  – freeform additional instructions
+    """
+    parts = [
+        f"Generate a unique {genre} world using seed number {seed}.",
+        "Be creative and make locations, factions, and NPCs interconnected with conflicts and opportunities.",
+    ]
+    if custom_lore:
+        parts.append(f"\nCustom Lore to incorporate:\n{custom_lore}")
+    if custom_rules:
+        parts.append(f"\nSpecial Rules / Constraints:\n{custom_rules}")
+    if custom_story:
+        parts.append(f"\nStory Hook / Initial Scenario:\n{custom_story}")
+    if world_prompt:
+        parts.append(f"\nAdditional Instructions:\n{world_prompt}")
+
+    prompt = "\n".join(parts)
     result = _call_llm(WORLD_BUILDER_SYSTEM, prompt)
     return _parse_json_response(result)
 

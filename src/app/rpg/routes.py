@@ -36,20 +36,39 @@ def create_rpg_game():
     genre = data.get("genre", "medieval fantasy")
     player_name = data.get("player_name", "Player")
 
+    # Custom world-building inputs
+    custom_lore = data.get("lore")
+    custom_rules = data.get("rules")
+    custom_story = data.get("story")
+    world_prompt = data.get("world_prompt")
+
     if seed is not None:
         try:
             seed = int(seed)
         except (TypeError, ValueError):
             return jsonify({"success": False, "error": "Seed must be an integer"}), 400
 
-    session = create_new_game(seed=seed, genre=genre, player_name=player_name)
+    session = create_new_game(
+        seed=seed,
+        genre=genre,
+        player_name=player_name,
+        custom_lore=custom_lore,
+        custom_rules=custom_rules,
+        custom_story=custom_story,
+        world_prompt=world_prompt,
+    )
     if not session:
         return jsonify({"success": False, "error": "Failed to generate game world"}), 500
 
     # Build opening narration
-    opening = session.world.description
+    opening_parts = []
+    if session.world.name:
+        opening_parts.append(session.world.name)
+    if session.world.description:
+        opening_parts.append(session.world.description)
     if session.world.lore:
-        opening += "\n\n" + session.world.lore
+        opening_parts.append(session.world.lore)
+    opening = "\n\n".join(opening_parts)
 
     return jsonify({
         "success": True,

@@ -96,12 +96,22 @@ IMPORTANCE_THRESHOLD_PRESERVE = 0.8
 
 
 def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
-                    player_name: str = "Player") -> Optional[GameSession]:
+                    player_name: str = "Player",
+                    custom_lore: Optional[str] = None,
+                    custom_rules: Optional[str] = None,
+                    custom_story: Optional[str] = None,
+                    world_prompt: Optional[str] = None) -> Optional[GameSession]:
     """
     Create a new game session with a freshly generated world.
 
     Uses the World Builder agent to generate the world, then initializes
     the game session with all state.
+
+    Optional parameters allow the player to shape the generated world:
+      custom_lore   – background lore the world should incorporate
+      custom_rules  – gameplay rules or constraints
+      custom_story  – story hook or initial scenario
+      world_prompt  – freeform additional instructions
     """
     if seed is None:
         seed = random.randint(1, 999999)
@@ -109,7 +119,13 @@ def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
     logger.info("Creating new game with seed=%d, genre=%s", seed, genre)
 
     # Step 1: Generate world via World Builder agent
-    world_data = agents.build_world(seed, genre)
+    world_data = agents.build_world(
+        seed, genre,
+        custom_lore=custom_lore,
+        custom_rules=custom_rules,
+        custom_story=custom_story,
+        world_prompt=world_prompt,
+    )
     if not world_data:
         logger.error("World Builder agent failed to generate world")
         return None
