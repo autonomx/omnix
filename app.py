@@ -18,6 +18,7 @@ from app.podcast import podcast_bp
 from app.llm import llm_bp
 from app.llamacpp import llamacpp_bp
 from app.voice_studio import voice_studio_bp
+from app.rpg.routes import rpg_bp
 
 def create_app():
     # Force Flask to look for templates and static files in the src directory
@@ -46,6 +47,7 @@ def create_app():
     app.register_blueprint(llm_bp)
     app.register_blueprint(llamacpp_bp)
     app.register_blueprint(voice_studio_bp)
+    app.register_blueprint(rpg_bp)
     
     return app
 
