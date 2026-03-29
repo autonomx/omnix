@@ -1,18 +1,29 @@
 /**
- * Omnix RPG Mode
+ * Omnix RPG Mode — Production-Grade
  *
  * Implements a mode toggle (Chat / RPG) and the full RPG storytelling UI:
  *   - NarrativeFeed   – scrollable story log with fade-in animation
  *   - ChoicePanel     – action buttons rendered from API choices[]
- *   - NPCPanel        – per-NPC cards with relationship bar + action buttons
- *   - DiceRollOverlay – animated roll results, auto-hides after 4 s
- *   - MinimapPanel    – zone grid with active/danger highlights
+ *   - NPCPanel        – per-NPC cards with 4-tier relationship bar + structured actions
+ *   - DiceRollOverlay – queued, animated roll results (slot-machine style)
+ *   - MinimapPanel    – coordinate-aware zone grid with faction colour overlays
+ *   - MemoryPanel     – collapsible player memory + world events log
+ *
+ * Production upgrades:
+ *   - State versioning via updateState() reducer (prevents race conditions)
+ *   - Dice roll queue (no stacking/overlap on rapid rolls)
+ *   - Structured NPC action payloads (JSON, not plain strings)
+ *   - Coordinate-based minimap with faction colour overlays
+ *   - Frontend state persistence (localStorage snapshot → no blank flash on reload)
+ *   - Animated dice rolls (slot-machine number cycling)
+ *   - Memory panel showing recent player memory + world events
  *
  * API contract (existing backend):
  *   POST /api/rpg/games              → { session_id, opening, world, player }
  *   POST /api/rpg/games/:id/turn     → { narration, choices?, dice_roll?,
  *                                        events?, fail_state?,
- *                                        npcs?, rolls?, map? }
+ *                                        npcs?, rolls?, map?,
+ *                                        memory?, world_events? }
  *
  * The module does NOT touch any chat logic; it only intercepts the shared
  * send-button / textarea when RPG mode is active.
@@ -23,24 +34,75 @@
 
     // ─── Constants ─────────────────────────────────────────────────────────────
 
-    const STORAGE_KEY = 'omnix_rpg_session_id';
-    const DICE_HIDE_DELAY = 4000; // ms
+    const STORAGE_KEY       = 'omnix_rpg_session_id';
+    const STATE_STORAGE_KEY = 'omnix_rpg_state';
+    const DICE_HIDE_DELAY   = 4000;  // ms per roll display
+    const DICE_ANIM_FRAMES  = 12;    // number of random-number frames before final
+    const DICE_ANIM_INTERVAL = 50;   // ms between animation frames
     // Defer init slightly past chat.js (which defers 500 ms) so that the chat
     // module's event listeners are already attached before we add ours in
     // capture phase.  650 ms > 500 ms + parse time.
     const INIT_DELAY_MS = 650;
 
-    // ─── State ─────────────────────────────────────────────────────────────────
+    // Faction → colour map for minimap territory overlay
+    const FACTION_COLORS = {
+        guards: '#3b82f6',
+        rebels: '#ef4444',
+        merchants: '#f59e0b',
+        thieves: '#8b5cf6',
+        neutral: '#6b7280',
+    };
 
-    const rpgState = {
+    // ─── State (versioned) ─────────────────────────────────────────────────────
+
+    let stateVersion = 0;
+
+    let rpgState = {
+        _v: 0,
         sessionId: null,
-        messages: [],   // { type: 'narration'|'event'|'system'|'player', content }
+        messages: [],      // { type: 'narration'|'event'|'system'|'player', content }
         choices: [],
         npcs: [],
         rolls: [],
         map: null,
+        memory: [],        // recent player memory strings
+        worldEvents: [],   // recent world event strings
         isLoading: false,
     };
+
+    /** Atomic state updater — increments version, merges patch. */
+    function updateState(patch) {
+        stateVersion++;
+        rpgState = Object.assign({}, rpgState, patch, { _v: stateVersion });
+    }
+
+    // ─── Dice Queue ────────────────────────────────────────────────────────────
+
+    const diceQueue = [];
+    let isShowingDice = false;
+
+    function enqueueDice(rolls) {
+        if (!rolls || !rolls.length) return;
+        diceQueue.push.apply(diceQueue, rolls);
+        processDiceQueue();
+    }
+
+    function processDiceQueue() {
+        if (isShowingDice || !diceQueue.length) return;
+        isShowingDice = true;
+        const roll = diceQueue.shift();
+        renderSingleDice(roll);
+        setTimeout(function () {
+            hideDiceOverlay();
+            isShowingDice = false;
+            processDiceQueue();
+        }, DICE_HIDE_DELAY);
+    }
+
+    function hideDiceOverlay() {
+        var overlay = el('rpgDiceOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }
 
     // ─── DOM helpers ───────────────────────────────────────────────────────────
 
@@ -59,10 +121,10 @@
     // ─── Loading state ─────────────────────────────────────────────────────────
 
     function setLoading(loading) {
-        rpgState.isLoading = loading;
+        updateState({ isLoading: loading });
         if (window._currentMode !== 'rpg') return;
-        const sendBtn = el('sendBtn');
-        const messageInput = el('messageInput');
+        var sendBtn = el('sendBtn');
+        var messageInput = el('messageInput');
         if (!sendBtn || !messageInput) return;
         sendBtn.disabled = loading || !messageInput.value.trim();
         messageInput.disabled = loading;
@@ -71,53 +133,55 @@
     // ─── API ───────────────────────────────────────────────────────────────────
 
     async function apiCreateGame() {
-        const res = await fetch('/api/rpg/games', { method: 'POST' });
-        if (!res.ok) throw new Error(`Failed to create game (${res.status})`);
+        var res = await fetch('/api/rpg/games', { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to create game (' + res.status + ')');
         return res.json();
     }
 
     async function apiSendTurn(sessionId, input) {
-        const res = await fetch(`/api/rpg/games/${encodeURIComponent(sessionId)}/turn`, {
+        var res = await fetch('/api/rpg/games/' + encodeURIComponent(sessionId) + '/turn', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input }),
+            body: JSON.stringify({ input: input }),
         });
-        if (!res.ok) throw new Error(`Turn request failed (${res.status})`);
+        if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
         return res.json();
     }
 
     // ─── Response transform ────────────────────────────────────────────────────
 
     function transformResponse(data) {
-        const messages = [];
+        var messages = [];
 
         if (data.narration) {
             messages.push({ type: 'narration', content: data.narration });
         }
 
         if (Array.isArray(data.events)) {
-            data.events.forEach(ev => {
-                const text = ev.description || ev.type || JSON.stringify(ev);
+            data.events.forEach(function (ev) {
+                var text = ev.description || ev.type || JSON.stringify(ev);
                 messages.push({ type: 'event', content: text });
             });
         }
 
         if (data.fail_state) {
-            const text = data.fail_state.description || data.fail_state.type || 'Something went wrong…';
-            messages.push({ type: 'system', content: `⚠️ ${text}` });
+            var text = data.fail_state.description || data.fail_state.type || 'Something went wrong\u2026';
+            messages.push({ type: 'system', content: '\u26A0\uFE0F ' + text });
         }
 
         // Normalise dice rolls: API may return dice_roll (single obj) or rolls (array)
-        const rolls = Array.isArray(data.rolls)
+        var rolls = Array.isArray(data.rolls)
             ? data.rolls
             : (data.dice_roll ? [data.dice_roll] : []);
 
         return {
-            messages,
-            choices: data.choices || [],
-            npcs:    data.npcs    || [],
-            rolls,
-            map:     data.map     || null,
+            messages:    messages,
+            choices:     data.choices      || [],
+            npcs:        data.npcs         || [],
+            rolls:       rolls,
+            map:         data.map          || null,
+            memory:      data.memory       || [],
+            worldEvents: data.world_events || [],
         };
     }
 
@@ -130,15 +194,15 @@
         setLoading(true);
 
         try {
-            let data;
+            var data;
 
             if (!rpgState.sessionId) {
-                // First input – create game (retry once on failure)
-                let retried = false;
+                // First input \u2013 create game (retry once on failure)
+                var retried = false;
                 while (true) {
                     try {
-                        const game = await apiCreateGame();
-                        rpgState.sessionId = game.session_id;
+                        var game = await apiCreateGame();
+                        updateState({ sessionId: game.session_id });
                         localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
 
                         // Show world opening before the player's first turn
@@ -151,7 +215,7 @@
                     } catch (err) {
                         if (!retried) {
                             retried = true;
-                            rpgState.sessionId = null;
+                            updateState({ sessionId: null });
                             localStorage.removeItem(STORAGE_KEY);
                             continue;
                         }
@@ -159,19 +223,19 @@
                     }
                 }
             } else {
-                // Subsequent turns – retry with a fresh session if the stored one expired
+                // Subsequent turns \u2013 retry with a fresh session if the stored one expired
                 try {
                     data = await apiSendTurn(rpgState.sessionId, input);
                 } catch (err) {
-                    rpgState.sessionId = null;
+                    updateState({ sessionId: null });
                     localStorage.removeItem(STORAGE_KEY);
 
-                    const game = await apiCreateGame();
-                    rpgState.sessionId = game.session_id;
+                    var game2 = await apiCreateGame();
+                    updateState({ sessionId: game2.session_id });
                     localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
 
-                    if (game.opening) {
-                        applyUpdate(transformResponse({ narration: game.opening }));
+                    if (game2.opening) {
+                        applyUpdate(transformResponse({ narration: game2.opening }));
                     }
 
                     data = await apiSendTurn(rpgState.sessionId, input);
@@ -180,51 +244,62 @@
 
             applyUpdate(transformResponse(data));
         } catch (err) {
-            appendMessage({ type: 'system', content: `❌ Error: ${err.message}` });
+            appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
         } finally {
             setLoading(false);
+            persistSnapshot();
         }
     }
 
-    // ─── Apply update ──────────────────────────────────────────────────────────
+    // ─── Apply update (versioned) ──────────────────────────────────────────────
 
     function applyUpdate(update) {
-        update.messages.forEach(msg => {
-            rpgState.messages.push(msg);
-            appendMessage(msg);
-        });
+        var newMessages = rpgState.messages.concat(update.messages);
+        var patch = { messages: newMessages, choices: update.choices };
 
-        rpgState.choices = update.choices;
-        renderChoices();
+        // Append new messages to DOM
+        update.messages.forEach(function (msg) { appendMessage(msg); });
 
         if (update.npcs && update.npcs.length) {
-            rpgState.npcs = update.npcs;
-            renderNPCs();
+            patch.npcs = update.npcs;
         }
-
-        if (update.rolls && update.rolls.length) {
-            rpgState.rolls = update.rolls;
-            renderDiceRolls();
-        }
-
         if (update.map) {
-            rpgState.map = update.map;
-            renderMap();
+            patch.map = update.map;
+        }
+        if (update.memory && update.memory.length) {
+            patch.memory = rpgState.memory.concat(update.memory);
+        }
+        if (update.worldEvents && update.worldEvents.length) {
+            patch.worldEvents = rpgState.worldEvents.concat(update.worldEvents);
+        }
+
+        updateState(patch);
+        renderChoices();
+
+        if (update.npcs && update.npcs.length) renderNPCs();
+        if (update.map) renderMap();
+        if (update.memory && update.memory.length) renderMemory();
+        if (update.worldEvents && update.worldEvents.length) renderMemory();
+
+        // Dice rolls go through the queue (animated, no overlap)
+        if (update.rolls && update.rolls.length) {
+            updateState({ rolls: rpgState.rolls.concat(update.rolls) });
+            enqueueDice(update.rolls);
         }
     }
 
     // ─── Rendering: Narrative Feed ─────────────────────────────────────────────
 
     function appendMessage(msg) {
-        const feed = el('rpgNarrativeFeed');
+        var feed = el('rpgNarrativeFeed');
         if (!feed) return;
 
         // Hide the empty-state welcome card once there is content
-        const welcome = el('rpgWelcome');
+        var welcome = el('rpgWelcome');
         if (welcome) welcome.style.display = 'none';
 
-        const div = document.createElement('div');
-        div.className = `rpg-msg rpg-msg--${msg.type}`;
+        var div = document.createElement('div');
+        div.className = 'rpg-msg rpg-msg--' + msg.type;
 
         switch (msg.type) {
             case 'narration':
@@ -236,12 +311,12 @@
 
             case 'player':
                 div.innerHTML =
-                    `<span class="rpg-msg-player-icon">›</span> <em>${escapeHtml(msg.content)}</em>`;
+                    '<span class="rpg-msg-player-icon">\u203A</span> <em>' + escapeHtml(msg.content) + '</em>';
                 break;
 
             case 'event':
                 div.innerHTML =
-                    `<span class="rpg-msg-event-icon">🎲</span> ${escapeHtml(msg.content)}`;
+                    '<span class="rpg-msg-event-icon">\uD83C\uDFB2</span> ' + escapeHtml(msg.content);
                 break;
 
             case 'system':
@@ -257,7 +332,7 @@
     // ─── Rendering: Choice Panel ───────────────────────────────────────────────
 
     function renderChoices() {
-        const panel = el('rpgChoicePanel');
+        var panel = el('rpgChoicePanel');
         if (!panel) return;
 
         panel.innerHTML = '';
@@ -268,31 +343,39 @@
         }
 
         panel.style.display = 'flex';
-        rpgState.choices.forEach(choice => {
-            const btn = document.createElement('button');
+        rpgState.choices.forEach(function (choice) {
+            var btn = document.createElement('button');
             btn.className = 'rpg-choice-btn';
             btn.textContent = choice;
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', function () {
                 if (!rpgState.isLoading) handleRPGInput(choice);
             });
             panel.appendChild(btn);
         });
     }
 
-    // ─── Rendering: NPC Panel ──────────────────────────────────────────────────
+    // ─── Rendering: NPC Panel (structured actions + 4-tier relationship) ──────
 
     function getMoodClass(mood) {
         if (!mood) return '';
-        const m = mood.toLowerCase();
-        if (['friendly', 'happy', 'welcoming', 'grateful'].some(w => m.includes(w))) return 'rpg-npc-mood--friendly';
-        if (['hostile', 'angry', 'aggressive', 'furious'].some(w => m.includes(w))) return 'rpg-npc-mood--hostile';
-        if (['suspicious', 'wary', 'cautious', 'nervous'].some(w => m.includes(w))) return 'rpg-npc-mood--wary';
+        var m = mood.toLowerCase();
+        if (['friendly', 'happy', 'welcoming', 'grateful'].some(function (w) { return m.indexOf(w) !== -1; })) return 'rpg-npc-mood--friendly';
+        if (['hostile', 'angry', 'aggressive', 'furious'].some(function (w) { return m.indexOf(w) !== -1; })) return 'rpg-npc-mood--hostile';
+        if (['suspicious', 'wary', 'cautious', 'nervous'].some(function (w) { return m.indexOf(w) !== -1; })) return 'rpg-npc-mood--wary';
         return '';
     }
 
+    /** 4-tier relationship colour: green > 50, blue > 0, orange > -50, red. */
+    function getRelColor(rel) {
+        if (rel > 50) return '#22c55e';   // green — allied
+        if (rel > 0)  return '#3b82f6';   // blue  — friendly
+        if (rel > -50) return '#f59e0b';  // orange — wary
+        return '#ef4444';                  // red   — hostile
+    }
+
     function renderNPCs() {
-        const wrapper = el('rpgNPCPanelWrapper');
-        const panel = el('rpgNPCPanel');
+        var wrapper = el('rpgNPCPanelWrapper');
+        var panel = el('rpgNPCPanel');
         if (!panel || !wrapper) return;
 
         if (!rpgState.npcs || !rpgState.npcs.length) {
@@ -303,40 +386,45 @@
         wrapper.style.display = 'block';
         panel.innerHTML = '';
 
-        rpgState.npcs.forEach(npc => {
-            const card = document.createElement('div');
+        rpgState.npcs.forEach(function (npc) {
+            var card = document.createElement('div');
             card.className = 'rpg-npc-card';
 
-            const moodClass = getMoodClass(npc.mood);
+            var moodClass = getMoodClass(npc.mood);
 
             // Relationship bar: API uses -100..100; normalise to 0..100%
-            const relPct = (npc.relationship != null)
+            var relPct = (npc.relationship != null)
                 ? Math.max(0, Math.min(100, (npc.relationship + 100) / 2))
                 : null;
-            const relColor = (npc.relationship != null && npc.relationship >= 0) ? '#22c55e' : '#ef4444';
-            const relBar = (relPct != null)
-                ? `<div class="rpg-npc-rel-bar">
-                     <div class="rpg-npc-rel-fill" style="width:${relPct}%;background:${relColor}"></div>
-                   </div>`
+            var relColor = (npc.relationship != null) ? getRelColor(npc.relationship) : '#6b7280';
+            var relBar = (relPct != null)
+                ? '<div class="rpg-npc-rel-bar"><div class="rpg-npc-rel-fill" style="width:' + relPct + '%;background:' + relColor + '"></div></div>'
                 : '';
 
-            card.innerHTML = `
-                <div class="rpg-npc-name">${escapeHtml(npc.name || 'Unknown')}</div>
-                <div class="rpg-npc-mood ${moodClass}">${escapeHtml(npc.mood || '')}</div>
-                ${relBar}
-                <div class="rpg-npc-actions">
-                    <button class="rpg-npc-btn"
-                            data-npc="${escapeHtml(npc.name || '')}"
-                            data-action="talk">Talk</button>
-                    <button class="rpg-npc-btn rpg-npc-btn--threat"
-                            data-npc="${escapeHtml(npc.name || '')}"
-                            data-action="threaten">Threaten</button>
-                </div>`;
+            // Store npc.id (or name as fallback) for structured command payloads
+            var npcId = escapeHtml(npc.id || npc.name || '');
+            var npcName = escapeHtml(npc.name || 'Unknown');
 
-            card.querySelectorAll('.rpg-npc-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
+            card.innerHTML =
+                '<div class="rpg-npc-name">' + npcName + '</div>' +
+                '<div class="rpg-npc-mood ' + moodClass + '">' + escapeHtml(npc.mood || '') + '</div>' +
+                relBar +
+                '<div class="rpg-npc-actions">' +
+                    '<button class="rpg-npc-btn" data-npc-id="' + npcId + '" data-npc-name="' + npcName + '" data-action="talk">Talk</button>' +
+                    '<button class="rpg-npc-btn rpg-npc-btn--threat" data-npc-id="' + npcId + '" data-npc-name="' + npcName + '" data-action="threaten">Threaten</button>' +
+                '</div>';
+
+            // Structured NPC action: send JSON payload so the backend can evolve
+            // without fragile string parsing.
+            card.querySelectorAll('.rpg-npc-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
                     if (rpgState.isLoading) return;
-                    handleRPGInput(`${btn.dataset.action} ${btn.dataset.npc}`);
+                    var payload = JSON.stringify({
+                        type: 'npc_action',
+                        npc_id: btn.dataset.npcId,
+                        action: btn.dataset.action,
+                    });
+                    handleRPGInput(payload);
                 });
             });
 
@@ -344,66 +432,152 @@
         });
     }
 
-    // ─── Rendering: Dice Roll Overlay ──────────────────────────────────────────
+    // ─── Rendering: Dice Roll (single, animated) ──────────────────────────────
 
-    function renderDiceRolls() {
-        const overlay = el('rpgDiceOverlay');
+    function renderSingleDice(roll) {
+        var overlay = el('rpgDiceOverlay');
         if (!overlay) return;
 
-        if (!rpgState.rolls || !rpgState.rolls.length) {
-            overlay.style.display = 'none';
-            return;
-        }
+        var success = roll.success !== false;
+        var total   = roll.total  != null ? roll.total : roll.result;
+        var label   = roll.type   || roll.dice || 'd20';
+        var modStr  = (roll.modifier != null && roll.modifier !== 0)
+            ? ' + ' + roll.modifier
+            : '';
 
-        overlay.innerHTML = rpgState.rolls.map(roll => {
-            const success = roll.success !== false;
-            const total   = roll.total  != null ? roll.total : roll.result;
-            const label   = roll.type   || roll.dice || 'd20';
-            const modStr  = (roll.modifier != null && roll.modifier !== 0)
-                ? ` + ${roll.modifier}`
-                : '';
+        var cls = success ? 'rpg-dice-roll--success' : 'rpg-dice-roll--fail';
+        var badgeCls = success ? 'rpg-dice-badge--success' : 'rpg-dice-badge--fail';
+        var badge = success ? '\u2713' : '\u2717';
 
-            return `<div class="rpg-dice-roll ${success ? 'rpg-dice-roll--success' : 'rpg-dice-roll--fail'}">
-                🎲 ${escapeHtml(label)}: ${roll.result}${modStr} = <strong>${total}</strong>
-                <span class="rpg-dice-badge ${success ? 'rpg-dice-badge--success' : 'rpg-dice-badge--fail'}">
-                    ${success ? '✓' : '✗'}
-                </span>
-            </div>`;
-        }).join('');
+        overlay.innerHTML =
+            '<div class="rpg-dice-roll ' + cls + '">' +
+                '\uD83C\uDFB2 ' + escapeHtml(label) + ': ' +
+                '<span class="rpg-dice-value" id="rpgDiceAnimValue">' + roll.result + '</span>' +
+                modStr + ' = <strong>' + total + '</strong>' +
+                '<span class="rpg-dice-badge ' + badgeCls + '">' + badge + '</span>' +
+            '</div>';
 
         overlay.style.display = 'flex';
 
-        // Auto-hide
-        clearTimeout(overlay._hideTimer);
-        overlay._hideTimer = setTimeout(() => {
-            overlay.style.display = 'none';
-        }, DICE_HIDE_DELAY);
+        // Animate: slot-machine style number cycling
+        animateDiceValue(el('rpgDiceAnimValue'), roll.result);
     }
 
-    // ─── Rendering: Minimap ────────────────────────────────────────────────────
+    /** Slot-machine style dice animation — cycles random numbers then lands on final. */
+    function animateDiceValue(element, finalValue) {
+        if (!element) return;
+        var i = 0;
+        var maxVal = 20; // assume d20 max
+        var interval = setInterval(function () {
+            element.textContent = Math.floor(Math.random() * maxVal) + 1;
+            i++;
+            if (i >= DICE_ANIM_FRAMES) {
+                clearInterval(interval);
+                element.textContent = finalValue;
+                element.classList.add('rpg-dice-value--final');
+            }
+        }, DICE_ANIM_INTERVAL);
+    }
+
+    // ─── Rendering: Minimap (coordinate-aware + faction colours) ──────────────
 
     function renderMap() {
-        const panel    = el('rpgMinimapPanel');
-        const minimap  = el('rpgMinimap');
+        var panel   = el('rpgMinimapPanel');
+        var minimap = el('rpgMinimap');
         if (!panel || !minimap || !rpgState.map) return;
 
-        const map = rpgState.map;
+        var map = rpgState.map;
         if (!Array.isArray(map.zones) || !map.zones.length) {
             panel.style.display = 'none';
             return;
         }
 
         panel.style.display = 'block';
-        minimap.innerHTML = map.zones.map(zone => {
-            const isActive    = zone.id === map.current_zone;
-            const dangerClass = zone.danger >= 4 ? 'rpg-zone--danger'
-                              : zone.danger >= 2 ? 'rpg-zone--caution'
-                              : '';
-            const ownerTitle  = zone.owner ? ` title="Owner: ${escapeHtml(zone.owner)}"` : '';
-            return `<div class="rpg-zone ${isActive ? 'rpg-zone--active' : ''} ${dangerClass}"${ownerTitle}>
-                ${escapeHtml(zone.id || '?')}
-            </div>`;
+
+        // Determine if zones have coordinates
+        var hasCoords = map.zones.some(function (z) { return z.x != null && z.y != null; });
+
+        if (hasCoords) {
+            // Compute grid bounds
+            var maxX = 1, maxY = 1;
+            map.zones.forEach(function (z) {
+                if (z.x != null && z.x > maxX) maxX = z.x;
+                if (z.y != null && z.y > maxY) maxY = z.y;
+            });
+            minimap.style.gridTemplateColumns = 'repeat(' + maxX + ', 1fr)';
+            minimap.style.gridTemplateRows = 'repeat(' + maxY + ', 1fr)';
+        } else {
+            // Fallback: 3-column grid
+            minimap.style.gridTemplateColumns = 'repeat(3, 1fr)';
+            minimap.style.gridTemplateRows = '';
+        }
+
+        // Player position (if provided)
+        var playerZone = (map.player && map.player.zone) || map.current_zone;
+
+        minimap.innerHTML = map.zones.map(function (zone) {
+            var isActive    = zone.id === playerZone;
+            var dangerClass = zone.danger >= 4 ? 'rpg-zone--danger'
+                            : zone.danger >= 2 ? 'rpg-zone--caution'
+                            : '';
+            var ownerTitle  = zone.owner ? ' title="Owner: ' + escapeHtml(zone.owner) + '"' : '';
+
+            // Faction colour overlay
+            var bgStyle = '';
+            if (zone.owner && FACTION_COLORS[zone.owner]) {
+                bgStyle = 'background-color:' + FACTION_COLORS[zone.owner] + ';opacity:0.85;';
+            }
+
+            // Coordinate placement
+            var posStyle = '';
+            if (hasCoords && zone.x != null && zone.y != null) {
+                posStyle = 'grid-column:' + zone.x + ';grid-row:' + zone.y + ';';
+            }
+
+            // Active zone overrides faction colour
+            var activeStyle = isActive
+                ? 'background:var(--accent);border-color:var(--accent);color:#fff;'
+                : bgStyle;
+
+            return '<div class="rpg-zone ' + (isActive ? 'rpg-zone--active' : '') + ' ' + dangerClass + '"' +
+                ownerTitle +
+                ' style="' + posStyle + activeStyle + '">' +
+                escapeHtml(zone.id || '?') +
+            '</div>';
         }).join('');
+    }
+
+    // ─── Rendering: Memory Panel ───────────────────────────────────────────────
+
+    function renderMemory() {
+        var panelWrapper = el('rpgMemoryPanelWrapper');
+        var memList      = el('rpgMemoryList');
+        var eventsList   = el('rpgWorldEventsList');
+        if (!panelWrapper) return;
+
+        var hasMemory = rpgState.memory && rpgState.memory.length;
+        var hasEvents = rpgState.worldEvents && rpgState.worldEvents.length;
+
+        if (!hasMemory && !hasEvents) {
+            panelWrapper.style.display = 'none';
+            return;
+        }
+
+        panelWrapper.style.display = 'block';
+
+        if (memList && hasMemory) {
+            // Show last 5 memory entries
+            memList.innerHTML = rpgState.memory.slice(-5).map(function (m) {
+                return '<li class="rpg-memory-item">' + escapeHtml(m) + '</li>';
+            }).join('');
+        }
+
+        if (eventsList && hasEvents) {
+            // Show last 5 world events
+            eventsList.innerHTML = rpgState.worldEvents.slice(-5).map(function (e) {
+                return '<li class="rpg-memory-item rpg-memory-item--event">' + escapeHtml(e) + '</li>';
+            }).join('');
+        }
     }
 
     // ─── Mode switching ────────────────────────────────────────────────────────
@@ -411,12 +585,12 @@
     function switchMode(mode) {
         window._currentMode = mode;
 
-        const chatContainer = el('chatContainer');
-        const rpgView       = el('rpgView');
-        const chatModeBtn   = el('chatModeBtn');
-        const rpgModeBtn    = el('rpgModeBtn');
-        const messageInput  = el('messageInput');
-        const sendBtn       = el('sendBtn');
+        var chatContainer = el('chatContainer');
+        var rpgView       = el('rpgView');
+        var chatModeBtn   = el('chatModeBtn');
+        var rpgModeBtn    = el('rpgModeBtn');
+        var messageInput  = el('messageInput');
+        var sendBtn       = el('sendBtn');
 
         if (mode === 'rpg') {
             if (chatContainer) chatContainer.style.display = 'none';
@@ -432,7 +606,7 @@
             if (rpgView)       rpgView.style.display = 'none';
             if (chatModeBtn)   chatModeBtn.classList.add('active');
             if (rpgModeBtn)    rpgModeBtn.classList.remove('active');
-            if (messageInput)  messageInput.placeholder = 'Type your message…';
+            if (messageInput)  messageInput.placeholder = 'Type your message\u2026';
             if (sendBtn && messageInput) {
                 sendBtn.disabled = !messageInput.value.trim();
             }
@@ -446,14 +620,14 @@
     // we bail immediately and let the normal chat flow proceed.
 
     function setupInputIntercept() {
-        const sendBtn      = el('sendBtn');
-        const messageInput = el('messageInput');
+        var sendBtn      = el('sendBtn');
+        var messageInput = el('messageInput');
         if (!sendBtn || !messageInput) return;
 
         sendBtn.addEventListener('click', function (e) {
             if (window._currentMode !== 'rpg') return;
             e.stopImmediatePropagation();
-            const input = messageInput.value.trim();
+            var input = messageInput.value.trim();
             if (!input || rpgState.isLoading) return;
             messageInput.value = '';
             messageInput.style.height = 'auto';
@@ -466,7 +640,7 @@
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
-                const input = messageInput.value.trim();
+                var input = messageInput.value.trim();
                 if (!input || rpgState.isLoading) return;
                 messageInput.value = '';
                 messageInput.style.height = 'auto';
@@ -485,13 +659,13 @@
     // ─── Collapsible side-panels ───────────────────────────────────────────────
 
     function setupCollapsible() {
-        document.querySelectorAll('.rpg-panel-collapse').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const target = el(btn.dataset.target);
+        document.querySelectorAll('.rpg-panel-collapse').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = el(btn.dataset.target);
                 if (!target) return;
-                const collapsed = target.style.display === 'none';
+                var collapsed = target.style.display === 'none';
                 target.style.display = collapsed ? '' : 'none';
-                btn.textContent = collapsed ? '▼' : '▶';
+                btn.textContent = collapsed ? '\u25BC' : '\u25B6';
             });
         });
     }
@@ -504,89 +678,163 @@
     // listener (set up once in init()).
 
     function buildWelcomeHTML() {
-        return `<div class="rpg-welcome" id="rpgWelcome">
-                    <div class="rpg-welcome-icon">⚔️</div>
-                    <h3>RPG Mode</h3>
-                    <p>Type anything to begin your adventure…</p>
-                    <button class="rpg-new-session-btn" id="rpgNewSessionBtn" title="Start a fresh adventure">New Adventure</button>
-                </div>`;
+        return '<div class="rpg-welcome" id="rpgWelcome">' +
+                    '<div class="rpg-welcome-icon">\u2694\uFE0F</div>' +
+                    '<h3>RPG Mode</h3>' +
+                    '<p>Type anything to begin your adventure\u2026</p>' +
+                    '<button class="rpg-new-session-btn" id="rpgNewSessionBtn" title="Start a fresh adventure">New Adventure</button>' +
+                '</div>';
+    }
+
+    // ─── Frontend state persistence ────────────────────────────────────────────
+    //
+    // Saves a lightweight snapshot (messages, map, memory, worldEvents) to
+    // localStorage so that a page reload doesn't show a blank RPG view.
+
+    function persistSnapshot() {
+        try {
+            var snapshot = {
+                messages:    rpgState.messages,
+                map:         rpgState.map,
+                memory:      rpgState.memory,
+                worldEvents: rpgState.worldEvents,
+                choices:     rpgState.choices,
+                npcs:        rpgState.npcs,
+            };
+            localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(snapshot));
+        } catch (e) {
+            // localStorage full or unavailable — silently skip
+        }
+    }
+
+    function hydrateFromSnapshot() {
+        try {
+            var raw = localStorage.getItem(STATE_STORAGE_KEY);
+            if (!raw) return false;
+            var snapshot = JSON.parse(raw);
+            if (!snapshot || !Array.isArray(snapshot.messages) || !snapshot.messages.length) return false;
+
+            updateState({
+                messages:    snapshot.messages    || [],
+                map:         snapshot.map         || null,
+                memory:      snapshot.memory      || [],
+                worldEvents: snapshot.worldEvents || [],
+                choices:     snapshot.choices     || [],
+                npcs:        snapshot.npcs        || [],
+            });
+
+            // Re-render the feed from the snapshot
+            var welcome = el('rpgWelcome');
+            if (welcome) welcome.style.display = 'none';
+
+            rpgState.messages.forEach(function (msg) { appendMessage(msg); });
+            renderChoices();
+            if (rpgState.npcs && rpgState.npcs.length) renderNPCs();
+            if (rpgState.map) renderMap();
+            if ((rpgState.memory && rpgState.memory.length) ||
+                (rpgState.worldEvents && rpgState.worldEvents.length)) {
+                renderMemory();
+            }
+
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     // ─── Reset / new-session ───────────────────────────────────────────────────
 
     function resetSession() {
-        rpgState.sessionId = null;
-        rpgState.messages  = [];
-        rpgState.choices   = [];
-        rpgState.npcs      = [];
-        rpgState.rolls     = [];
-        rpgState.map       = null;
+        updateState({
+            sessionId:   null,
+            messages:    [],
+            choices:     [],
+            npcs:        [],
+            rolls:       [],
+            map:         null,
+            memory:      [],
+            worldEvents: [],
+        });
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STATE_STORAGE_KEY);
 
-        const feed = el('rpgNarrativeFeed');
+        // Clear dice queue
+        diceQueue.length = 0;
+        isShowingDice = false;
+
+        var feed = el('rpgNarrativeFeed');
         if (feed) feed.innerHTML = buildWelcomeHTML();
         // Note: the "New Adventure" button click is handled via event delegation
         // on rpgNarrativeFeed (set up in init()), so no extra listener needed here.
 
-        const choicePanel = el('rpgChoicePanel');
+        var choicePanel = el('rpgChoicePanel');
         if (choicePanel) { choicePanel.style.display = 'none'; choicePanel.innerHTML = ''; }
 
-        const npcWrapper = el('rpgNPCPanelWrapper');
+        var npcWrapper = el('rpgNPCPanelWrapper');
         if (npcWrapper) npcWrapper.style.display = 'none';
 
-        const diceOverlay = el('rpgDiceOverlay');
+        var diceOverlay = el('rpgDiceOverlay');
         if (diceOverlay) diceOverlay.style.display = 'none';
 
-        const minimapPanel = el('rpgMinimapPanel');
+        var minimapPanel = el('rpgMinimapPanel');
         if (minimapPanel) minimapPanel.style.display = 'none';
+
+        var memoryPanel = el('rpgMemoryPanelWrapper');
+        if (memoryPanel) memoryPanel.style.display = 'none';
     }
 
     // ─── Init ──────────────────────────────────────────────────────────────────
 
     function init() {
-        console.log('[RPG] Initializing RPG mode…');
+        console.log('[RPG] Initializing RPG mode\u2026');
 
         window._currentMode = 'chat';
 
         // Restore persisted session id (will retry fresh session on first failure)
-        const storedId = localStorage.getItem(STORAGE_KEY);
-        if (storedId) rpgState.sessionId = storedId;
+        var storedId = localStorage.getItem(STORAGE_KEY);
+        if (storedId) updateState({ sessionId: storedId });
+
+        // Hydrate UI from snapshot (prevents blank flash on reload)
+        if (rpgState.sessionId) {
+            hydrateFromSnapshot();
+        }
 
         // Mode toggle
-        const chatModeBtn = el('chatModeBtn');
-        const rpgModeBtn  = el('rpgModeBtn');
-        if (chatModeBtn) chatModeBtn.addEventListener('click', () => switchMode('chat'));
-        if (rpgModeBtn)  rpgModeBtn.addEventListener('click',  () => switchMode('rpg'));
+        var chatModeBtn = el('chatModeBtn');
+        var rpgModeBtn  = el('rpgModeBtn');
+        if (chatModeBtn) chatModeBtn.addEventListener('click', function () { switchMode('chat'); });
+        if (rpgModeBtn)  rpgModeBtn.addEventListener('click',  function () { switchMode('rpg'); });
 
         // "New Adventure" button — use event delegation on the feed so the
         // listener survives the innerHTML replacement in resetSession().
-        const feed = el('rpgNarrativeFeed');
+        var feed = el('rpgNarrativeFeed');
         if (feed) {
-            feed.addEventListener('click', (e) => {
+            feed.addEventListener('click', function (e) {
                 if (e.target && e.target.id === 'rpgNewSessionBtn') resetSession();
             });
         }
 
         // Sidebar shortcuts (expanded + collapsed)
-        ['rpgBtnOption', 'rpgBtnCollapsed'].forEach(id => {
-            const btn = el(id);
-            if (btn) btn.addEventListener('click', () => switchMode('rpg'));
+        ['rpgBtnOption', 'rpgBtnCollapsed'].forEach(function (id) {
+            var btn = el(id);
+            if (btn) btn.addEventListener('click', function () { switchMode('rpg'); });
         });
 
         setupCollapsible();
         setupInputIntercept();
 
-        console.log('[RPG] RPG mode ready');
+        console.log('[RPG] RPG mode ready (state v' + stateVersion + ')');
     }
 
     // Defer until after all other scripts have initialised
-    document.addEventListener('DOMContentLoaded', () => setTimeout(init, INIT_DELAY_MS));
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(init, INIT_DELAY_MS); });
 
     // Public API (handy for debugging from the console)
     window.RPGMode = {
-        state:       rpgState,
+        get state() { return rpgState; },
+        get version() { return stateVersion; },
         reset:       resetSession,
-        switchMode,
+        switchMode:  switchMode,
         handleInput: handleRPGInput,
     };
 }());

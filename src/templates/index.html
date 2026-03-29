@@ -357,6 +357,18 @@
                         </div>
                     </div>
 
+                    <!-- Memory panel (player memory + world events, collapsible) -->
+                    <div class="rpg-memory-panel-wrapper" id="rpgMemoryPanelWrapper" style="display: none;">
+                        <div class="rpg-panel-header">
+                            <span>🧠 Memory</span>
+                            <button class="rpg-panel-collapse" data-target="rpgMemoryContent" title="Collapse">▼</button>
+                        </div>
+                        <div class="rpg-panel-content" id="rpgMemoryContent">
+                            <ul class="rpg-memory-list" id="rpgMemoryList"></ul>
+                            <ul class="rpg-memory-list rpg-memory-list--events" id="rpgWorldEventsList"></ul>
+                        </div>
+                    </div>
+
                     <!-- Dice roll overlay (absolute-positioned, auto-hides) -->
                     <div class="rpg-dice-overlay" id="rpgDiceOverlay" style="display: none;"></div>
 

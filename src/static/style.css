@@ -5197,3 +5197,66 @@ pre:hover .code-copy-btn {
     border-color: var(--accent);
     color: var(--accent);
 }
+
+/* ─── RPG: Dice Animation ─────────────────────────────────────── */
+
+.rpg-dice-value {
+    display: inline-block;
+    min-width: 1.2em;
+    text-align: center;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.rpg-dice-value--final {
+    animation: rpg-dice-pop 0.25s ease;
+}
+
+@keyframes rpg-dice-pop {
+    0%   { transform: scale(1.5); opacity: 0.7; }
+    100% { transform: scale(1);   opacity: 1; }
+}
+
+/* ─── RPG: Memory Panel ───────────────────────────────────────── */
+
+.rpg-memory-panel-wrapper {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+}
+
+.rpg-memory-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.rpg-memory-item {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    padding: 3px 0;
+    border-bottom: 1px solid var(--border-color);
+    line-height: 1.4;
+}
+
+.rpg-memory-item:last-child {
+    border-bottom: none;
+}
+
+.rpg-memory-item--event {
+    color: #f59e0b;
+    font-style: italic;
+}
+
+.rpg-memory-list--events {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.rpg-memory-list--events:empty {
+    display: none;
+}
