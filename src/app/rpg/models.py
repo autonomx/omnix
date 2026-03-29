@@ -327,6 +327,7 @@ class WorldState:
     world_time: WorldTime = field(default_factory=WorldTime)
     agent_profiles: Dict[str, AgentProfile] = field(default_factory=dict)
     items_catalog: List[Item] = field(default_factory=list)
+    active_world_events: List["WorldEvent"] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -344,6 +345,7 @@ class WorldState:
             "world_time": self.world_time.to_dict(),
             "agent_profiles": {k: v.to_dict() for k, v in self.agent_profiles.items()},
             "items_catalog": [item.to_dict() for item in self.items_catalog],
+            "active_world_events": [we.to_dict() for we in self.active_world_events],
         }
 
     @classmethod
@@ -363,6 +365,7 @@ class WorldState:
             world_time=WorldTime.from_dict(data.get("world_time", {})),
             agent_profiles={k: AgentProfile.from_dict(v) for k, v in data.get("agent_profiles", {}).items()},
             items_catalog=[Item.from_dict(i) for i in data.get("items_catalog", [])],
+            active_world_events=[WorldEvent.from_dict(we) for we in data.get("active_world_events", [])],
         )
 
     def get_location(self, name: str) -> Optional[Location]:
@@ -426,6 +429,10 @@ class NPCCharacter:
     current_action: str = "idle"
     schedule: Dict[str, str] = field(default_factory=dict)
     known_facts: List[str] = field(default_factory=list)
+    # Emotional memory model
+    emotional_state: Dict[str, float] = field(default_factory=dict)
+    memories: List[Dict[str, Any]] = field(default_factory=list)
+    opinions: Dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -443,6 +450,9 @@ class NPCCharacter:
             "current_action": self.current_action,
             "schedule": dict(self.schedule),
             "known_facts": list(self.known_facts),
+            "emotional_state": dict(self.emotional_state),
+            "memories": [dict(m) for m in self.memories],
+            "opinions": dict(self.opinions),
         }
 
     @classmethod
@@ -462,6 +472,9 @@ class NPCCharacter:
             current_action=data.get("current_action", "idle"),
             schedule=data.get("schedule", {}),
             known_facts=data.get("known_facts", []),
+            emotional_state=data.get("emotional_state", {}),
+            memories=data.get("memories", []),
+            opinions=data.get("opinions", {}),
         )
 
 
@@ -548,6 +561,94 @@ class HistoryEvent:
             timestamp=data.get("timestamp", datetime.now().isoformat()),
             importance=data.get("importance", 0.5),
             tags=data.get("tags", []),
+        )
+
+
+@dataclass
+class PendingConsequence:
+    """
+    A delayed consequence that triggers on a future turn.
+
+    Represents causality chains: something happens now, and a resulting
+    effect fires later when ``trigger_turn`` is reached (and, optionally,
+    when ``condition`` evaluates truthy against the session state).
+    """
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    trigger_turn: int = 0
+    source_event: str = ""
+    condition: Optional[str] = None
+    effect_diff: Dict[str, Any] = field(default_factory=dict)
+    narrative: str = ""
+    importance: float = 0.7
+
+    def to_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "id": self.id,
+            "trigger_turn": self.trigger_turn,
+            "source_event": self.source_event,
+            "effect_diff": dict(self.effect_diff),
+            "narrative": self.narrative,
+            "importance": self.importance,
+        }
+        if self.condition is not None:
+            result["condition"] = self.condition
+        return result
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PendingConsequence":
+        return cls(
+            id=data.get("id", str(uuid.uuid4())),
+            trigger_turn=data.get("trigger_turn", 0),
+            source_event=data.get("source_event", ""),
+            condition=data.get("condition"),
+            effect_diff=data.get("effect_diff", {}),
+            narrative=data.get("narrative", ""),
+            importance=data.get("importance", 0.7),
+        )
+
+
+@dataclass
+class WorldEvent:
+    """
+    A world-level event that affects locations, NPCs, and the economy.
+
+    Events like wars, plagues, and festivals create macro-level world
+    changes that persist for ``duration`` turns and apply ``effects``
+    to ``affected_locations``.
+    """
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    type: str = ""
+    description: str = ""
+    duration: int = 1
+    remaining_turns: int = 0
+    effects: Dict[str, Any] = field(default_factory=dict)
+    affected_locations: List[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.remaining_turns == 0:
+            self.remaining_turns = self.duration
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "description": self.description,
+            "duration": self.duration,
+            "remaining_turns": self.remaining_turns,
+            "effects": dict(self.effects),
+            "affected_locations": list(self.affected_locations),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "WorldEvent":
+        return cls(
+            id=data.get("id", str(uuid.uuid4())),
+            type=data.get("type", ""),
+            description=data.get("description", ""),
+            duration=data.get("duration", 1),
+            remaining_turns=data.get("remaining_turns", 0),
+            effects=data.get("effects", {}),
+            affected_locations=data.get("affected_locations", []),
         )
 
 
@@ -729,6 +830,7 @@ class GameSession:
     narrative_act: int = 1
     narrative_tension: float = 0.0
     turn_logs: List[TurnLog] = field(default_factory=list)
+    pending_consequences: List[PendingConsequence] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -745,6 +847,7 @@ class GameSession:
             "narrative_act": self.narrative_act,
             "narrative_tension": self.narrative_tension,
             "turn_logs": [tl.to_dict() for tl in self.turn_logs],
+            "pending_consequences": [pc.to_dict() for pc in self.pending_consequences],
         }
 
     @classmethod
@@ -763,6 +866,7 @@ class GameSession:
             narrative_act=data.get("narrative_act", 1),
             narrative_tension=data.get("narrative_tension", 0.0),
             turn_logs=[TurnLog.from_dict(tl) for tl in data.get("turn_logs", [])],
+            pending_consequences=[PendingConsequence.from_dict(pc) for pc in data.get("pending_consequences", [])],
         )
 
     def get_npc(self, name: str) -> Optional[NPCCharacter]:
@@ -930,6 +1034,25 @@ def apply_diff(session: GameSession, diff: WorldStateDiff) -> Dict[str, Any]:
         for target, delta in changes.get("relationship_changes", {}).items():
             if isinstance(delta, (int, float)):
                 npc.relationships[target] = npc.relationships.get(target, 0) + int(delta)
+
+        # NPC emotional state changes (deltas, clamped to [-1.0, 1.0])
+        for emotion, delta in changes.get("emotional_state", {}).items():
+            if isinstance(delta, (int, float)):
+                current = npc.emotional_state.get(emotion, 0.0)
+                npc.emotional_state[emotion] = max(-1.0, min(1.0, current + float(delta)))
+                applied[f"{npc_name}_emotion_{emotion}"] = float(delta)
+
+        # NPC memory additions
+        for memory in changes.get("add_memories", []):
+            if isinstance(memory, dict):
+                npc.memories.append(memory)
+
+        # NPC opinion changes (deltas)
+        for opinion_key, delta in changes.get("opinions", {}).items():
+            if isinstance(delta, (int, float)):
+                current = npc.opinions.get(opinion_key, 0)
+                npc.opinions[opinion_key] = current + int(delta)
+                applied[f"{npc_name}_opinion_{opinion_key}"] = int(delta)
 
     # --- World changes --------------------------------------------------------
     wc = diff.world_changes

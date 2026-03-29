@@ -2203,3 +2203,620 @@ class TestPartialFailureLogging:
         d = tl.to_dict()
         assert "error" in d["event_output"]
         assert d["event_output"]["raw_response"] == "invalid json..."
+
+
+# ---------------------------------------------------------------------------
+# Consequence Engine Tests
+# ---------------------------------------------------------------------------
+
+class TestPendingConsequence:
+    """Test PendingConsequence model."""
+
+    def test_pending_consequence_defaults(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence()
+        assert pc.trigger_turn == 0
+        assert pc.source_event == ""
+        assert pc.condition is None
+        assert pc.effect_diff == {}
+        assert pc.narrative == ""
+        assert pc.importance == 0.7
+        assert pc.id  # UUID auto-generated
+
+    def test_pending_consequence_to_dict(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence(
+            trigger_turn=10,
+            source_event="player stole from merchant",
+            condition="merchant",
+            effect_diff={"player_changes": {"reputation_local": -20}},
+            narrative="Guards arrive to confront you about the theft!",
+            importance=0.9,
+        )
+        d = pc.to_dict()
+        assert d["trigger_turn"] == 10
+        assert d["source_event"] == "player stole from merchant"
+        assert d["condition"] == "merchant"
+        assert d["narrative"] == "Guards arrive to confront you about the theft!"
+        assert d["importance"] == 0.9
+        assert "id" in d
+
+    def test_pending_consequence_condition_omitted_when_none(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence(trigger_turn=5, source_event="test")
+        d = pc.to_dict()
+        assert "condition" not in d
+
+    def test_pending_consequence_roundtrip(self):
+        from app.rpg.models import PendingConsequence
+        original = PendingConsequence(
+            trigger_turn=15,
+            source_event="insulted noble",
+            condition="noble district",
+            effect_diff={"npc_changes": {"Guard Captain": {"relationship": -30}}},
+            narrative="The noble sends guards after you.",
+            importance=0.8,
+        )
+        restored = PendingConsequence.from_dict(original.to_dict())
+        assert restored.trigger_turn == original.trigger_turn
+        assert restored.source_event == original.source_event
+        assert restored.condition == original.condition
+        assert restored.effect_diff == original.effect_diff
+        assert restored.narrative == original.narrative
+        assert restored.importance == original.importance
+
+    def test_pending_consequence_from_dict_defaults(self):
+        from app.rpg.models import PendingConsequence
+        pc = PendingConsequence.from_dict({})
+        assert pc.trigger_turn == 0
+        assert pc.source_event == ""
+        assert pc.condition is None
+
+
+class TestConsequenceEngine:
+    """Test consequence processing in the pipeline."""
+
+    def test_consequence_fires_on_trigger_turn(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 10
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10,
+            source_event="stole gold",
+            narrative="Bounty hunters find you!",
+            importance=0.8,
+        ))
+        narrations = _process_pending_consequences(session)
+        assert len(narrations) == 1
+        assert "Bounty hunters" in narrations[0]
+        assert len(session.pending_consequences) == 0
+        # Check history event was created
+        assert any("[Consequence]" in h.event for h in session.history)
+
+    def test_consequence_does_not_fire_early(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 5
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10,
+            source_event="stole gold",
+            narrative="Bounty hunters find you!",
+        ))
+        narrations = _process_pending_consequences(session)
+        assert len(narrations) == 0
+        assert len(session.pending_consequences) == 1
+
+    def test_consequence_with_condition_met(self):
+        from app.rpg.models import GameSession, HistoryEvent, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 10
+        session.history.append(HistoryEvent(event="Player visited the merchant district", turn=8))
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10,
+            source_event="stole from merchant",
+            condition="merchant",
+            narrative="The merchant recognizes you!",
+        ))
+        narrations = _process_pending_consequences(session)
+        assert len(narrations) == 1
+        assert len(session.pending_consequences) == 0
+
+    def test_consequence_with_condition_not_met(self):
+        from app.rpg.models import GameSession, HistoryEvent, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 10
+        session.history.append(HistoryEvent(event="Player went to the forest", turn=8))
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10,
+            source_event="stole from merchant",
+            condition="merchant",
+            narrative="The merchant recognizes you!",
+        ))
+        narrations = _process_pending_consequences(session)
+        assert len(narrations) == 0
+        # Consequence stays pending (condition not met)
+        assert len(session.pending_consequences) == 1
+
+    def test_consequence_applies_effect_diff(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 10
+        session.player.stats.wealth = 100
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10,
+            source_event="gambling debt",
+            effect_diff={"player_changes": {"wealth": -50}},
+            narrative="Debt collectors arrive!",
+        ))
+        _process_pending_consequences(session)
+        assert session.player.stats.wealth == 50
+
+    def test_multiple_consequences_same_turn(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        from app.rpg.pipeline import _process_pending_consequences
+        session = GameSession()
+        session.turn_count = 10
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10, source_event="a", narrative="First!",
+        ))
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10, source_event="b", narrative="Second!",
+        ))
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=15, source_event="c", narrative="Not yet!",
+        ))
+        narrations = _process_pending_consequences(session)
+        assert len(narrations) == 2
+        assert len(session.pending_consequences) == 1
+        assert session.pending_consequences[0].source_event == "c"
+
+
+class TestGameSessionPendingConsequences:
+    """Test pending_consequences field on GameSession."""
+
+    def test_session_has_pending_consequences(self):
+        from app.rpg.models import GameSession
+        session = GameSession()
+        assert hasattr(session, "pending_consequences")
+        assert session.pending_consequences == []
+
+    def test_session_serializes_pending_consequences(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        session = GameSession()
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=10, source_event="theft", narrative="guards arrive",
+        ))
+        d = session.to_dict()
+        assert "pending_consequences" in d
+        assert len(d["pending_consequences"]) == 1
+        assert d["pending_consequences"][0]["source_event"] == "theft"
+
+    def test_session_deserializes_pending_consequences(self):
+        from app.rpg.models import GameSession, PendingConsequence
+        session = GameSession()
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=12, source_event="insult", narrative="revenge",
+        ))
+        restored = GameSession.from_dict(session.to_dict())
+        assert len(restored.pending_consequences) == 1
+        assert restored.pending_consequences[0].trigger_turn == 12
+
+    def test_session_backward_compat_no_consequences(self):
+        from app.rpg.models import GameSession
+        data = {"session_id": "test-123", "turn_count": 5}
+        session = GameSession.from_dict(data)
+        assert session.pending_consequences == []
+
+
+# ---------------------------------------------------------------------------
+# NPC Emotional Memory Model Tests
+# ---------------------------------------------------------------------------
+
+class TestNPCEmotionalModel:
+    """Test NPC emotional_state, memories, and opinions fields."""
+
+    def test_npc_has_emotional_fields(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(name="Bob", role="guard")
+        assert npc.emotional_state == {}
+        assert npc.memories == []
+        assert npc.opinions == {}
+
+    def test_npc_emotional_state_serialization(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(
+            name="Alice", role="merchant",
+            emotional_state={"anger": 0.5, "trust": -0.3, "fear": 0.1},
+        )
+        d = npc.to_dict()
+        assert d["emotional_state"]["anger"] == 0.5
+        assert d["emotional_state"]["trust"] == -0.3
+
+    def test_npc_memories_serialization(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(
+            name="Bob", role="guard",
+            memories=[
+                {"event": "player lied", "emotion": "anger", "intensity": 0.8},
+                {"event": "player helped", "emotion": "gratitude", "intensity": 0.5},
+            ],
+        )
+        d = npc.to_dict()
+        assert len(d["memories"]) == 2
+        assert d["memories"][0]["event"] == "player lied"
+
+    def test_npc_opinions_serialization(self):
+        from app.rpg.models import NPCCharacter
+        npc = NPCCharacter(
+            name="Eve", role="noble",
+            opinions={"trust": -20, "fear": 30, "respect": 10},
+        )
+        d = npc.to_dict()
+        assert d["opinions"]["trust"] == -20
+        assert d["opinions"]["respect"] == 10
+
+    def test_npc_emotional_roundtrip(self):
+        from app.rpg.models import NPCCharacter
+        original = NPCCharacter(
+            name="Guard", role="guard",
+            emotional_state={"anger": 0.7, "fear": 0.2},
+            memories=[{"event": "player threatened", "emotion": "fear", "intensity": 0.9}],
+            opinions={"trust": -30, "respect": 5},
+        )
+        restored = NPCCharacter.from_dict(original.to_dict())
+        assert restored.emotional_state == original.emotional_state
+        assert restored.memories == original.memories
+        assert restored.opinions == original.opinions
+
+    def test_npc_backward_compat_no_emotional_fields(self):
+        from app.rpg.models import NPCCharacter
+        data = {"name": "OldNPC", "role": "villager"}
+        npc = NPCCharacter.from_dict(data)
+        assert npc.emotional_state == {}
+        assert npc.memories == []
+        assert npc.opinions == {}
+
+
+class TestApplyDiffEmotionalChanges:
+    """Test apply_diff with NPC emotional state, memories, and opinions."""
+
+    def test_apply_diff_emotional_state_delta(self):
+        from app.rpg.models import GameSession, NPCCharacter, WorldStateDiff, apply_diff
+        session = GameSession()
+        npc = NPCCharacter(name="Guard", role="guard", emotional_state={"anger": 0.3})
+        session.npcs.append(npc)
+        diff = WorldStateDiff(npc_changes={
+            "Guard": {"emotional_state": {"anger": 0.4, "fear": 0.2}},
+        })
+        applied = apply_diff(session, diff)
+        assert npc.emotional_state["anger"] == 0.7  # 0.3 + 0.4
+        assert npc.emotional_state["fear"] == 0.2  # 0.0 + 0.2
+        assert "Guard_emotion_anger" in applied
+
+    def test_apply_diff_emotional_state_clamped(self):
+        from app.rpg.models import GameSession, NPCCharacter, WorldStateDiff, apply_diff
+        session = GameSession()
+        npc = NPCCharacter(name="Guard", role="guard", emotional_state={"anger": 0.9})
+        session.npcs.append(npc)
+        diff = WorldStateDiff(npc_changes={
+            "Guard": {"emotional_state": {"anger": 0.5}},
+        })
+        apply_diff(session, diff)
+        assert npc.emotional_state["anger"] == 1.0  # Clamped to 1.0
+
+    def test_apply_diff_add_memories(self):
+        from app.rpg.models import GameSession, NPCCharacter, WorldStateDiff, apply_diff
+        session = GameSession()
+        npc = NPCCharacter(name="Merchant", role="merchant")
+        session.npcs.append(npc)
+        diff = WorldStateDiff(npc_changes={
+            "Merchant": {
+                "add_memories": [
+                    {"event": "player lied about price", "emotion": "anger", "intensity": 0.6},
+                ],
+            },
+        })
+        apply_diff(session, diff)
+        assert len(npc.memories) == 1
+        assert npc.memories[0]["event"] == "player lied about price"
+
+    def test_apply_diff_opinion_changes(self):
+        from app.rpg.models import GameSession, NPCCharacter, WorldStateDiff, apply_diff
+        session = GameSession()
+        npc = NPCCharacter(name="Noble", role="noble", opinions={"trust": 10})
+        session.npcs.append(npc)
+        diff = WorldStateDiff(npc_changes={
+            "Noble": {"opinions": {"trust": -30, "fear": 20}},
+        })
+        applied = apply_diff(session, diff)
+        assert npc.opinions["trust"] == -20  # 10 + (-30)
+        assert npc.opinions["fear"] == 20  # 0 + 20
+        assert "Noble_opinion_trust" in applied
+
+
+# ---------------------------------------------------------------------------
+# World Event Engine Tests
+# ---------------------------------------------------------------------------
+
+class TestWorldEvent:
+    """Test WorldEvent model."""
+
+    def test_world_event_defaults(self):
+        from app.rpg.models import WorldEvent
+        we = WorldEvent()
+        assert we.type == ""
+        assert we.duration == 1
+        assert we.remaining_turns == 1
+        assert we.effects == {}
+        assert we.affected_locations == []
+
+    def test_world_event_remaining_auto_set(self):
+        from app.rpg.models import WorldEvent
+        we = WorldEvent(type="war", duration=10)
+        assert we.remaining_turns == 10
+
+    def test_world_event_remaining_explicit(self):
+        from app.rpg.models import WorldEvent
+        we = WorldEvent(type="plague", duration=10, remaining_turns=3)
+        assert we.remaining_turns == 3
+
+    def test_world_event_to_dict(self):
+        from app.rpg.models import WorldEvent
+        we = WorldEvent(
+            type="festival",
+            description="Annual harvest celebration",
+            duration=3,
+            effects={"market_modifier_delta": -0.1},
+            affected_locations=["Town Square", "Market"],
+        )
+        d = we.to_dict()
+        assert d["type"] == "festival"
+        assert d["duration"] == 3
+        assert d["remaining_turns"] == 3
+        assert d["effects"]["market_modifier_delta"] == -0.1
+        assert "Town Square" in d["affected_locations"]
+
+    def test_world_event_roundtrip(self):
+        from app.rpg.models import WorldEvent
+        original = WorldEvent(
+            type="war",
+            description="Border conflict",
+            duration=10,
+            remaining_turns=7,
+            effects={"market_modifier_delta": 0.2},
+            affected_locations=["Border Town"],
+        )
+        restored = WorldEvent.from_dict(original.to_dict())
+        assert restored.type == original.type
+        assert restored.duration == original.duration
+        assert restored.remaining_turns == original.remaining_turns
+        assert restored.effects == original.effects
+        assert restored.affected_locations == original.affected_locations
+
+
+class TestWorldEventProcessing:
+    """Test world event processing in the pipeline."""
+
+    def test_world_event_decrements_remaining(self):
+        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.pipeline import _process_world_events
+        session = GameSession()
+        session.world.locations.append(Location(name="Town", description="A town"))
+        session.world.active_world_events.append(WorldEvent(
+            type="festival", duration=3, remaining_turns=3,
+            affected_locations=["Town"],
+        ))
+        _process_world_events(session)
+        assert len(session.world.active_world_events) == 1
+        assert session.world.active_world_events[0].remaining_turns == 2
+
+    def test_world_event_expires(self):
+        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.pipeline import _process_world_events
+        session = GameSession()
+        session.turn_count = 5
+        session.world.locations.append(Location(name="Town", description="A town"))
+        session.world.active_world_events.append(WorldEvent(
+            type="plague", duration=3, remaining_turns=1,
+            affected_locations=["Town"],
+        ))
+        _process_world_events(session)
+        assert len(session.world.active_world_events) == 0
+        assert any("[World Event Ended]" in h.event for h in session.history)
+
+    def test_world_event_applies_market_modifier(self):
+        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.pipeline import _process_world_events
+        session = GameSession()
+        loc = Location(name="Town", description="A town", market_modifier=1.0)
+        session.world.locations.append(loc)
+        session.world.active_world_events.append(WorldEvent(
+            type="war", duration=5, remaining_turns=5,
+            effects={"market_modifier_delta": 0.2},
+            affected_locations=["Town"],
+        ))
+        _process_world_events(session)
+        assert loc.market_modifier == 1.2
+
+    def test_world_event_market_modifier_clamped(self):
+        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.pipeline import _process_world_events
+        session = GameSession()
+        loc = Location(name="Town", description="A town", market_modifier=1.9)
+        session.world.locations.append(loc)
+        session.world.active_world_events.append(WorldEvent(
+            type="war", duration=5, remaining_turns=5,
+            effects={"market_modifier_delta": 0.3},
+            affected_locations=["Town"],
+        ))
+        _process_world_events(session)
+        assert loc.market_modifier == 2.0  # Clamped
+
+
+class TestWorldStateWorldEvents:
+    """Test WorldState integration with active_world_events."""
+
+    def test_world_state_has_events_field(self):
+        from app.rpg.models import WorldState
+        ws = WorldState()
+        assert hasattr(ws, "active_world_events")
+        assert ws.active_world_events == []
+
+    def test_world_state_serializes_events(self):
+        from app.rpg.models import WorldState, WorldEvent
+        ws = WorldState()
+        ws.active_world_events.append(WorldEvent(type="war", duration=5))
+        d = ws.to_dict()
+        assert "active_world_events" in d
+        assert len(d["active_world_events"]) == 1
+
+    def test_world_state_deserializes_events(self):
+        from app.rpg.models import WorldState, WorldEvent
+        ws = WorldState()
+        ws.active_world_events.append(WorldEvent(type="plague", duration=3))
+        restored = WorldState.from_dict(ws.to_dict())
+        assert len(restored.active_world_events) == 1
+        assert restored.active_world_events[0].type == "plague"
+
+    def test_world_state_backward_compat_no_events(self):
+        from app.rpg.models import WorldState
+        data = {"name": "Old World"}
+        ws = WorldState.from_dict(data)
+        assert ws.active_world_events == []
+
+
+# ---------------------------------------------------------------------------
+# Replay vs Original Consistency Test
+# ---------------------------------------------------------------------------
+
+class TestReplayConsistency:
+    """Test that replay produces identical state as original execution."""
+
+    def test_replay_state_matches_original(self):
+        """Full state equivalence: same diff applied to same initial state
+        must produce identical state whether applied directly or via replay."""
+        from app.rpg.models import GameSession, NPCCharacter, TurnLog, WorldStateDiff, apply_diff
+        from app.rpg.pipeline import replay_turn
+
+        # Setup identical sessions
+        def make_session():
+            s = GameSession()
+            s.player.stats.wealth = 100
+            s.player.stats.strength = 5
+            s.player.location = "Market"
+            s.npcs.append(NPCCharacter(name="Merchant", role="merchant"))
+            return s
+
+        session_original = make_session()
+        session_replay = make_session()
+
+        # "Original" turn: apply diff directly
+        diff_data = {
+            "player_changes": {"wealth": -20, "stat_changes": {"strength": 1}},
+            "npc_changes": {"Merchant": {"relationship": -5}},
+        }
+        diff = WorldStateDiff.from_dict(diff_data)
+        original_changes = apply_diff(session_original, diff)
+        session_original.turn_count = 1
+
+        # Create a TurnLog representing this turn
+        turn_log = TurnLog(
+            turn=1,
+            seed=42042,
+            raw_input="steal from merchant",
+            normalized_intent={"intent": "steal", "target": "merchant", "difficulty": 8},
+            dice_roll={"roll": 15, "total": 20, "dc": 18, "passed": True, "outcome": "success",
+                        "stat_value": 5, "critical_success": False, "critical_failure": False},
+            event_output={"outcome": "You steal gold", "diff": diff_data},
+            canon_check={"valid": True},
+            applied_diff=original_changes,
+            narration="Narrator: You steal gold from the merchant.",
+        )
+
+        # Replay this turn on the second session
+        replay_turn(turn_log, session_replay)
+
+        # Verify state equivalence
+        assert session_replay.player.stats.wealth == session_original.player.stats.wealth
+        assert session_replay.player.stats.strength == session_original.player.stats.strength
+        merchant_orig = session_original.get_npc("Merchant")
+        merchant_replay = session_replay.get_npc("Merchant")
+        assert merchant_replay.relationships == merchant_orig.relationships
+
+
+# ---------------------------------------------------------------------------
+# Log Integrity Under Failure Tests
+# ---------------------------------------------------------------------------
+
+class TestLogIntegrityUnderFailure:
+    """Test that TurnLog is complete even in failure scenarios."""
+
+    def test_turn_log_complete_on_rule_rejection(self):
+        """TurnLog fields are all present even when pre-validation fails."""
+        from app.rpg.models import TurnLog
+        tl = TurnLog(
+            turn=3,
+            raw_input="fly to the moon",
+            normalized_intent={"intent": "other", "target": "moon"},
+            event_output={},
+            canon_check={},
+            applied_diff={},
+            diff_validation={},
+            narration="Narrator: That's not possible.",
+        )
+        d = tl.to_dict()
+        # All expected keys should exist
+        for key in ["version", "turn", "raw_input", "normalized_intent",
+                     "event_output", "canon_check", "applied_diff",
+                     "diff_validation", "narration"]:
+            assert key in d, f"Missing key: {key}"
+
+    def test_turn_log_complete_on_canon_rejection(self):
+        """TurnLog captures canon rejection details."""
+        from app.rpg.models import TurnLog
+        tl = TurnLog(
+            turn=5,
+            raw_input="use magic wand",
+            normalized_intent={"intent": "use_item", "target": "magic wand"},
+            event_output={"outcome": "Magic does not exist in this world"},
+            canon_check={
+                "valid": False,
+                "severity": "critical",
+                "issues": ["Magic system disallowed by world rules"],
+                "fix_suggestions": ["Remove magical elements"],
+            },
+            applied_diff={},
+            narration="Narrator: Nothing happens...",
+        )
+        d = tl.to_dict()
+        assert d["canon_check"]["valid"] is False
+        assert d["canon_check"]["severity"] == "critical"
+        # Roundtrip preserves all details
+        restored = TurnLog.from_dict(d)
+        assert restored.canon_check["issues"] == ["Magic system disallowed by world rules"]
+
+    def test_turn_log_complete_on_empty_diff(self):
+        """TurnLog is valid when no state changes happen."""
+        from app.rpg.models import TurnLog
+        tl = TurnLog(
+            turn=2,
+            raw_input="look around",
+            normalized_intent={"intent": "observe"},
+            event_output={"outcome": "You see a quiet village"},
+            canon_check={"valid": True},
+            applied_diff={},
+            diff_validation={"valid": True, "rejected_fields": [], "unknown_npcs": [],
+                             "type_errors": [], "clamped_values": []},
+            narration="Narrator: The village is peaceful.",
+        )
+        d = tl.to_dict()
+        assert d["applied_diff"] == {}
+        assert d["diff_validation"]["valid"] is True
+        restored = TurnLog.from_dict(d)
+        assert restored.applied_diff == {}
+        assert restored.diff_validation["valid"] is True

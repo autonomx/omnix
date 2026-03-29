@@ -34,11 +34,13 @@ from app.rpg.models import (
     Item,
     Location,
     NPCCharacter,
+    PendingConsequence,
     PlayerIntent,
     PlayerState,
     Quest,
     TurnLog,
     TurnResult,
+    WorldEvent,
     WorldRules,
     WorldState,
     WorldStateDiff,
@@ -296,6 +298,11 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     _simulate_world_tick(session)
 
     # -----------------------------------------------------------------------
+    # Step 8b: Consequence Engine (delayed causality)
+    # -----------------------------------------------------------------------
+    consequence_narrations = _process_pending_consequences(session)
+
+    # -----------------------------------------------------------------------
     # Step 9: Memory Update (with importance scoring)
     # -----------------------------------------------------------------------
     event_description = event_outcome.get("outcome", raw_input)
@@ -342,6 +349,10 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         }
         roll_info += tier_labels.get(outcome_tier, " \u2014 " + outcome_tier + "]")
         narration += roll_info
+
+    # Append consequence narrations if any triggered this turn
+    if consequence_narrations:
+        narration += "\n\n" + "\n\n".join(consequence_narrations)
 
     # Create history event with importance and structured tags
     history_event = HistoryEvent(
@@ -570,6 +581,9 @@ def _simulate_world_tick(session: GameSession) -> None:
             if loc:
                 loc.market_modifier = max(0.5, min(2.0, loc.market_modifier + modifier_delta))
 
+    # Process active world events (war, plague, festival, etc.)
+    _process_world_events(session)
+
 
 def _update_memory(session: GameSession, event_description: str) -> None:
     """Update the memory system with the latest event."""
@@ -695,3 +709,89 @@ def _advance_time(session: GameSession) -> None:
     # Keep legacy fields in sync for backward compatibility
     session.world.time_of_day = session.world.world_time.period
     session.world.day_count = session.world.world_time.day
+
+
+# ---------------------------------------------------------------------------
+# Consequence Engine (delayed causality)
+# ---------------------------------------------------------------------------
+
+def _process_pending_consequences(session: GameSession) -> List[str]:
+    """
+    Process pending consequences whose trigger turn has been reached.
+
+    Applies effect diffs and removes triggered consequences.
+    Returns a list of narrative strings for consequences that fired.
+    """
+    fired_narrations: List[str] = []
+    remaining: List[PendingConsequence] = []
+
+    for consequence in session.pending_consequences:
+        if session.turn_count >= consequence.trigger_turn:
+            # Check optional condition (simple keyword match against history)
+            if consequence.condition:
+                recent_events = " ".join(h.event for h in session.history[-20:])
+                if consequence.condition.lower() not in recent_events.lower():
+                    remaining.append(consequence)
+                    continue
+
+            # Apply the stored effect diff
+            if consequence.effect_diff:
+                diff = WorldStateDiff.from_dict(consequence.effect_diff)
+                applied = apply_diff(session, diff)
+                logger.info("Consequence fired (turn %d): %s -> applied %s",
+                            session.turn_count, consequence.source_event, applied)
+
+            # Log as a history event
+            session.history.append(HistoryEvent(
+                event=f"[Consequence] {consequence.narrative}",
+                impact=consequence.effect_diff,
+                turn=session.turn_count,
+                importance=consequence.importance,
+                tags=["consequence"],
+            ))
+
+            if consequence.narrative:
+                fired_narrations.append(consequence.narrative)
+        else:
+            remaining.append(consequence)
+
+    session.pending_consequences = remaining
+    return fired_narrations
+
+
+# ---------------------------------------------------------------------------
+# World Event Processing
+# ---------------------------------------------------------------------------
+
+def _process_world_events(session: GameSession) -> None:
+    """
+    Tick active world events: apply per-turn effects and expire completed ones.
+
+    Called from ``_simulate_world_tick`` alongside NPC autonomy.
+    """
+    still_active: List[WorldEvent] = []
+
+    for event in session.world.active_world_events:
+        # Apply recurring effects
+        for loc_name in event.affected_locations:
+            loc = session.world.get_location(loc_name)
+            if loc:
+                modifier_delta = event.effects.get("market_modifier_delta", 0)
+                if isinstance(modifier_delta, (int, float)) and modifier_delta:
+                    loc.market_modifier = max(0.5, min(2.0, loc.market_modifier + float(modifier_delta)))
+
+        # Decrement remaining turns
+        event.remaining_turns -= 1
+        if event.remaining_turns > 0:
+            still_active.append(event)
+        else:
+            logger.info("World event expired: %s (%s)", event.type, event.description)
+            session.history.append(HistoryEvent(
+                event=f"[World Event Ended] {event.type}: {event.description}",
+                impact={"event_type": event.type, "affected": event.affected_locations},
+                turn=session.turn_count,
+                importance=0.6,
+                tags=["world_event"],
+            ))
+
+    session.world.active_world_events = still_active
