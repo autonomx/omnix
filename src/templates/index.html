@@ -336,6 +336,8 @@
                     <!-- RPG Toolbar: Stats button + TTS toggle -->
                     <div class="rpg-toolbar" id="rpgToolbar">
                         <button class="rpg-toolbar-btn" id="rpgStatsBtn" title="View character stats & inventory">📊 Stats &amp; Inventory</button>
+                        <button class="rpg-toolbar-btn" id="rpgVoiceBtn" title="Assign voices to characters">🎭 Voices</button>
+                        <button class="rpg-toolbar-btn" id="rpgSettingsBtn" title="Game settings and management">⚙️ Settings</button>
                         <div class="rpg-tts-controls">
                             <label class="rpg-tts-label" title="Enable voice narration">
                                 <input type="checkbox" id="rpgTtsToggle" class="rpg-tts-checkbox">
@@ -385,6 +387,13 @@
 
                     <!-- Dice roll overlay (absolute-positioned, auto-hides) -->
                     <div class="rpg-dice-overlay" id="rpgDiceOverlay" style="display: none;"></div>
+                    <div class="rpg-loading-overlay" id="rpgLoadingOverlay" style="display: none;">
+                        <div class="rpg-loading-spinner"></div>
+                        <div class="rpg-loading-text">Processing...</div>
+                        <div class="rpg-loading-progress">
+                            <div class="rpg-loading-bar" id="rpgLoadingBar"></div>
+                        </div>
+                    </div>
 
                     <!-- Narrative feed -->
                     <div class="rpg-narrative-feed" id="rpgNarrativeFeed">

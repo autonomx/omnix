@@ -111,7 +111,7 @@ def build_context(session: GameSession) -> str:
     npcs_here = session.get_npcs_at_location(player.location)
     if npcs_here:
         parts.append("\nNPCs present:")
-        for npc in npcs_here:
+        for npc in npcs_here[:5]:  # Limit to 5 NPCs
             rel = npc.relationships.get("player", 0)
             rel_str = f"(trust: {rel:+d})" if rel != 0 else ""
             action_str = f"[{npc.current_action}]" if npc.current_action != "idle" else ""
@@ -121,7 +121,7 @@ def build_context(session: GameSession) -> str:
     active_quests = session.get_active_quests()
     if active_quests:
         parts.append("\nActive quests:")
-        for quest in active_quests:
+        for quest in active_quests[:3]:  # Limit to 3 quests
             stage_info = ""
             if quest.stages and quest.current_stage < len(quest.stages):
                 stage_info = f" [Stage {quest.current_stage + 1}/{len(quest.stages)}: {quest.stages[quest.current_stage]}]"
@@ -133,7 +133,7 @@ def build_context(session: GameSession) -> str:
         parts.append(f"\nStory so far: {mid_summary}")
 
     # Important past events (high importance, from long-term memory)
-    important = get_important_events(session, min_importance=0.7, limit=3)
+    important = get_important_events(session, min_importance=0.7, limit=2)
     if important:
         parts.append("\nKey past events:")
         for event in important:
@@ -143,7 +143,7 @@ def build_context(session: GameSession) -> str:
     recent = get_short_term_events(session)
     if recent:
         parts.append("\nRecent events:")
-        for event in recent[-5:]:
+        for event in recent[-3:]:
             parts.append(f"  - {event.event}")
 
     return "\n".join(parts)

@@ -1105,6 +1105,7 @@ class GameSession:
     pending_consequences: List[PendingConsequence] = field(default_factory=list)
     story_flags: Dict[str, bool] = field(default_factory=dict)
     story_arcs: List[StoryArc] = field(default_factory=list)
+    voice_assignments: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -1124,6 +1125,7 @@ class GameSession:
             "pending_consequences": [pc.to_dict() for pc in self.pending_consequences],
             "story_flags": dict(self.story_flags),
             "story_arcs": [arc.to_dict() for arc in self.story_arcs],
+            "voice_assignments": dict(self.voice_assignments),
         }
 
     @classmethod
@@ -1145,6 +1147,7 @@ class GameSession:
             pending_consequences=[PendingConsequence.from_dict(pc) for pc in data.get("pending_consequences", [])],
             story_flags=data.get("story_flags", {}),
             story_arcs=[StoryArc.from_dict(a) for a in data.get("story_arcs", [])],
+            voice_assignments=data.get("voice_assignments", {}),
         )
 
     def get_npc(self, name: str) -> Optional[NPCCharacter]:

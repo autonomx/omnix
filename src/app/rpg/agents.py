@@ -281,9 +281,9 @@ def build_world(seed: int, genre: str = "medieval fantasy",
                 "existing_creatures": ["humans", "monsters"] if "fantasy" in genre else ["humans", "animals"]
             },
             "locations": [
-                {"name": "Starting Village", "description": "A peaceful village where adventurers begin their journey.", "type": "settlement", "coordinates": [0, 0], "connections": ["Dark Forest"]},
-                {"name": "Dark Forest", "description": "A mysterious forest with hidden treasures and unknown dangers.", "type": "wilderness", "coordinates": [1, 0], "connections": ["Starting Village", "Ancient Ruins"]},
-                {"name": "Ancient Ruins", "description": "Forgotten ruins holding secrets of the past.", "type": "dungeon", "coordinates": [2, 0], "connections": ["Dark Forest"]}
+                {"name": "Starting Village", "description": "A peaceful village where adventurers begin their journey.", "connected_to": ["Dark Forest"]},
+                {"name": "Dark Forest", "description": "A mysterious forest with hidden treasures and unknown dangers.", "connected_to": ["Starting Village", "Ancient Ruins"]},
+                {"name": "Ancient Ruins", "description": "Forgotten ruins holding secrets of the past.", "connected_to": ["Dark Forest"]}
             ],
             "factions": [
                 {"name": "Village Council", "description": "The wise leaders who govern the starting village.", "reputation": 0, "goals": ["Maintain peace", "Protect villagers"]},

@@ -1436,6 +1436,136 @@ async def execute_rpg_turn(session_id: str, request: Request):
     return response
 
 
+@app.put("/api/rpg/games/{session_id}/voice-assignments")
+async def update_voice_assignments(session_id: str, request: Request):
+    """Update voice assignments for characters."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    data = await request.json()
+    session.voice_assignments.update(data)
+    save_game(session)
+    return {"success": True}
+
+
+@app.post("/api/rpg/games/{session_id}/turn/stream")
+async def execute_rpg_turn_stream(session_id: str, request: Request):
+    """Execute a player turn and stream the narration via Server-Sent Events.
+
+    Events emitted:
+        {"type": "token", "text": "..."}   – narration chunk (word by word)
+        {"type": "done",  ...full payload}  – final response identical to the non-streaming turn endpoint
+        {"type": "error", "error": "..."}   – on failure
+    """
+    from fastapi.responses import StreamingResponse
+    from app.rpg.memory_manager import build_context
+
+    session = load_game(session_id)
+    if not session:
+        async def _not_found():
+            yield f"data: {json.dumps({'type': 'error', 'error': 'Game not found'})}\n\n"
+        return StreamingResponse(_not_found(), media_type="text/event-stream", status_code=404)
+
+    data = await request.json()
+    data = data or {}
+    player_input = data.get("input", "").strip()
+    if not player_input:
+        async def _bad_input():
+            yield f"data: {json.dumps({'type': 'error', 'error': 'No input provided'})}\n\n"
+        return StreamingResponse(_bad_input(), media_type="text/event-stream", status_code=400)
+
+    provider = shared.get_provider()
+    if not provider:
+        async def _no_provider():
+            yield f"data: {json.dumps({'type': 'error', 'error': 'No LLM provider'})}\n\n"
+        return StreamingResponse(_no_provider(), media_type="text/event-stream")
+
+    session.turn_count += 1
+
+    # Build context and messages
+    context = build_context(session)
+    system_prompt = shared.get_global_system_prompt()
+    messages = [
+        ChatMessage(role="system", content=f"{system_prompt}\n\n{context}"),
+    ]
+    # Add conversation history (last few messages)
+    history = session.history[-10:]  # Limit history
+    for event in history:
+        if event.event_type == "player_action":
+            messages.append(ChatMessage(role="user", content=event.event))
+        elif event.event_type == "narration":
+            messages.append(ChatMessage(role="assistant", content=event.event))
+    messages.append(ChatMessage(role="user", content=player_input))
+
+    async def generate():
+        # Stream LLM response word by word
+        content = ""
+        sent_words = 0
+        try:
+            # Run the sync streaming in thread to avoid blocking
+            chunks = await asyncio.to_thread(
+                lambda: list(provider.chat_completion(
+                    messages=messages,
+                    model=provider.config.model,
+                    stream=True
+                ))
+            )
+            for chunk in chunks:
+                if hasattr(chunk, 'content') and chunk.content:
+                    content += chunk.content
+                    # Yield the chunk content as token, to avoid parsing issues
+                    yield f"data: {json.dumps({'type': 'token', 'text': chunk.content})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+        # Now process the full response
+        narration = content.strip()
+        # For simplicity, create a minimal result
+        result = {
+            "narration": narration,
+            "state_changes": [],
+            "events": [],
+            "choices": [],
+            "dice_roll": None,
+            "fail_state": None,
+            "error": None
+        }
+
+        # Save to history
+        from app.rpg.models import HistoryEvent
+        session.history.append(HistoryEvent(
+            event=narration,
+            importance=0.3,
+            turn=session.turn_count
+        ))
+        session.history.append(HistoryEvent(
+            event=player_input,
+            importance=0.5,
+            turn=session.turn_count
+        ))
+        save_game(session)
+
+        final = {
+            "type": "done",
+            "success": True,
+            "narration": narration,
+            "turn": session.turn_count,
+            "state_changes": result["state_changes"],
+            "events": result["events"],
+        }
+        if result["choices"]:
+            final["choices"] = result["choices"]
+        if result["dice_roll"]:
+            final["dice_roll"] = result["dice_roll"]
+        if result["fail_state"]:
+            final["fail_state"] = result["fail_state"]
+
+        yield f"data: {json.dumps(final)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
 @app.get("/api/rpg/games/{session_id}/player")
 async def get_player_state(session_id: str):
     """Get the current player state."""

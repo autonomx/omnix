@@ -89,6 +89,7 @@
         worldEvents: [],   // recent world event strings
         player: null,      // latest player state from API
         isLoading: false,
+        voice_assignments: {}, // speaker -> voice_id
     };
 
     // TTS settings
@@ -165,13 +166,36 @@
         if (availableVoices.length > 0) return availableVoices;
         try {
             var res = await fetch('/api/tts/speakers');
-            if (!res.ok) return [];
+            if (!res.ok) throw new Error('Failed to fetch voices');
             var data = await res.json();
             availableVoices = Array.isArray(data.speakers) ? data.speakers : [];
+            // Fallback if empty
+            if (availableVoices.length === 0) {
+                availableVoices = [
+                    {"id": "Maya", "name": "Maya"},
+                    {"id": "en", "name": "English Male"},
+                    {"id": "en-US", "name": "English Female"},
+                    {"id": "es", "name": "Spanish"},
+                    {"id": "fr", "name": "French"},
+                    {"id": "de", "name": "German"},
+                    {"id": "it", "name": "Italian"},
+                    {"id": "pt", "name": "Portuguese"},
+                    {"id": "ja", "name": "Japanese"},
+                    {"id": "ko", "name": "Korean"},
+                    {"id": "zh", "name": "Chinese"}
+                ];
+            }
             populateVoiceSelect();
             return availableVoices;
         } catch (e) {
-            return [];
+            // Fallback voices
+            availableVoices = [
+                {"id": "Maya", "name": "Maya"},
+                {"id": "en", "name": "English"},
+                {"id": "es", "name": "Spanish"}
+            ];
+            populateVoiceSelect();
+            return availableVoices;
         }
     }
 
@@ -184,8 +208,8 @@
         sel.innerHTML = '<option value="">Default</option>';
         availableVoices.forEach(function (v) {
             var opt = document.createElement('option');
-            opt.value = v;
-            opt.textContent = v;
+            opt.value = v.id || v;
+            opt.textContent = v.name || v;
             sel.appendChild(opt);
         });
         if (current) sel.value = current;
@@ -247,6 +271,18 @@
     async function speakNarration(narration) {
         if (!ttsEnabled || !narration) return;
 
+        // Ensure voices are loaded
+        await fetchVoices();
+
+        // Find default voices
+        var defaultMale = 'en';
+        var defaultFemale = 'Maya';
+        availableVoices.forEach(function(v) {
+            var name = (v.name || v).toLowerCase();
+            if (name.includes('male') || name.includes('man') || name.includes('boy')) defaultMale = v.id || v;
+            if (name.includes('female') || name.includes('woman') || name.includes('girl')) defaultFemale = v.id || v;
+        });
+
         // Build per-speaker voice map from current NPC list (gender-based)
         var npcVoiceMap = {};
         if (rpgState.npcs && rpgState.npcs.length) {
@@ -274,22 +310,377 @@
             }
         });
 
-        // For simplicity, play the full narration with a single TTS call.
-        // Voice: narrator voice for Narrator lines, gender-based default for characters.
-        // We use the narrator voice for the full text since mixing requires sequential calls.
-        await speakText(narration, narratorVoice || undefined);
+        // Play each segment with appropriate voice
+        for (var seg of segments) {
+            var speaker = seg.speaker;
+            var text = seg.text;
+            var voice = rpgState.voice_assignments[speaker];
+            if (!voice) {
+                if (speaker === 'Narrator') {
+                    voice = narratorVoice;
+                } else {
+                    var gender = npcVoiceMap[speaker.toLowerCase()] || detectGender(speaker);
+                    voice = gender === 'male' ? defaultMale : defaultFemale;
+                }
+            }
+            await speakText(text, voice);
+        }
     }
 
     // ─── Loading state ─────────────────────────────────────────────────────────
+
+    var loadingInterval = null;
+    var adventureSetup = { lore: '', rules: '', story: '', prompt: '' };
 
     function setLoading(loading) {
         updateState({ isLoading: loading });
         if (window._currentMode !== 'rpg') return;
         var sendBtn = el('sendBtn');
         var messageInput = el('messageInput');
+        var overlay = el('rpgLoadingOverlay');
         if (!sendBtn || !messageInput) return;
         sendBtn.disabled = loading || !messageInput.value.trim();
         messageInput.disabled = loading;
+        if (overlay) {
+            if (loading) {
+                overlay.style.display = 'flex';
+                startLoadingProgress();
+            } else {
+                overlay.style.display = 'none';
+                stopLoadingProgress();
+            }
+        }
+    }
+
+    function startLoadingProgress() {
+        if (loadingInterval) clearInterval(loadingInterval);
+        var phaseIndex = 0;
+        var phases = ["Initializing world...", "Generating locations...", "Creating characters...", "Setting up story...", "Finalizing adventure..."];
+        var textEl = el('rpgLoadingText');
+        var bar = el('rpgLoadingBar');
+        if (textEl) textEl.textContent = phases[0];
+        if (bar) bar.style.width = '0%';
+        loadingInterval = setInterval(function() {
+            phaseIndex = (phaseIndex + 1) % phases.length;
+            if (textEl) textEl.textContent = phases[phaseIndex];
+            if (bar) bar.style.width = ((phaseIndex + 1) / phases.length * 100) + '%';
+        }, 2000);
+    }
+
+    function stopLoadingProgress() {
+        if (loadingInterval) {
+            clearInterval(loadingInterval);
+            loadingInterval = null;
+        }
+        var bar = el('rpgLoadingBar');
+        if (bar) bar.style.width = '100%';
+        var textEl = el('rpgLoadingText');
+        if (textEl) textEl.textContent = "Adventure ready!";
+        // Hide after a short delay
+        setTimeout(function() {
+            var overlay = el('rpgLoadingOverlay');
+            if (overlay) overlay.style.display = 'none';
+        }, 500);
+    }
+
+    // ─── Voice assignments ────────────────────────────────────────────────────
+
+    function showVoicePanel() {
+        closeAllPanels();
+        var panel = el('rpgVoicePanel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'rpgVoicePanel';
+            panel.className = 'modal';
+            panel.innerHTML = '<div class="modal-content" id="rpgVoiceContent"></div>';
+            document.body.appendChild(panel);
+            panel.addEventListener('click', function(e) {
+                if (e.target === panel) panel.classList.remove('active');
+            });
+        }
+        var content = el('rpgVoiceContent');
+        content.innerHTML = '<div class="modal-header"><h3>Voice Assignments</h3><button class="modal-close" onclick="document.getElementById(\'rpgVoicePanel\').classList.remove(\'active\');">&times;</button></div><div class="modal-body" id="rpgVoiceBody"></div>';
+        var body = el('rpgVoiceBody');
+        body.innerHTML = '';
+        var speakers = new Set(['Narrator']);
+        rpgState.npcs.forEach(function(npc) { if (npc.name) speakers.add(npc.name); });
+        speakers.forEach(function(speaker) {
+            var div = document.createElement('div');
+            div.className = 'voice-assignment';
+            var label = document.createElement('label');
+            label.textContent = speaker + ': ';
+            var sel = document.createElement('select');
+            sel.className = 'rpg-voice-select';
+            sel.innerHTML = '<option value="">Default</option>';
+            availableVoices.forEach(function(v) {
+                var opt = document.createElement('option');
+                opt.value = v.id || v;
+                opt.textContent = v.name || v;
+                sel.appendChild(opt);
+            });
+            sel.value = rpgState.voice_assignments[speaker] || '';
+            sel.addEventListener('change', function() {
+                rpgState.voice_assignments[speaker] = sel.value || undefined;
+                saveVoiceAssignments();
+            });
+            label.appendChild(sel);
+            div.appendChild(label);
+            body.appendChild(div);
+        });
+        panel.classList.add('active');
+    }
+
+    async function saveVoiceAssignments() {
+        if (!rpgState.sessionId) return;
+        try {
+            await fetch('/api/rpg/games/' + encodeURIComponent(rpgState.sessionId) + '/voice-assignments', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rpgState.voice_assignments),
+            });
+        } catch (e) {}
+    }
+
+    // ─── Panel management ─────────────────────────────────────────────────────
+
+    function closeAllPanels() {
+        var panels = ['rpgSettingsPanel', 'rpgVoicePanel'];
+        panels.forEach(function(id) {
+            var p = el(id);
+            if (p) p.classList.remove('active');
+        });
+    }
+
+    // ─── Settings panel ───────────────────────────────────────────────────────
+
+    function showSettingsPanel() {
+        closeAllPanels();
+        var panel = el('rpgSettingsPanel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'rpgSettingsPanel';
+            panel.className = 'modal'; // Use app's modal style
+            panel.innerHTML = '<div class="modal-content" id="rpgSettingsContent"></div>';
+            document.body.appendChild(panel);
+            // Close on backdrop click
+            panel.addEventListener('click', function(e) {
+                if (e.target === panel) panel.classList.remove('active');
+            });
+        }
+        var content = el('rpgSettingsContent');
+        content.innerHTML = '<div class="modal-header"><h3>RPG Settings</h3><button class="modal-close" onclick="document.getElementById(\'rpgSettingsPanel\').classList.remove(\'active\');">&times;</button></div><div class="modal-body" id="rpgSettingsBody"></div>';
+        var body = el('rpgSettingsBody');
+        body.innerHTML = '';
+
+        // New Game
+        var newBtn = document.createElement('button');
+        newBtn.className = 'btn btn-primary';
+        newBtn.textContent = 'Start New Game';
+        newBtn.addEventListener('click', function() {
+            resetSession();
+            panel.classList.remove('active');
+        });
+        body.appendChild(newBtn);
+
+        // Load Game
+        var loadSection = document.createElement('div');
+        loadSection.innerHTML = '<h4>Load Game</h4>';
+        var loadContainer = document.createElement('div');
+        loadContainer.style.maxHeight = '200px';
+        loadContainer.style.overflowY = 'auto';
+        fetch('/api/rpg/games').then(r => r.json()).then(data => {
+            if (data.games && data.games.length) {
+                data.games.forEach(game => {
+                    if (!game.id) return; // Skip invalid games
+                    var item = document.createElement('div');
+                    item.className = 'game-item';
+                    item.innerHTML = '<span>' + (game.title || 'Untitled') + ' (' + (game.updated_at || 'Unknown') + ')</span>';
+                    var loadBtn = document.createElement('button');
+                    loadBtn.className = 'btn btn-secondary';
+                    loadBtn.textContent = 'Load';
+                    loadBtn.addEventListener('click', function() {
+                        loadGame(game.id);
+                        panel.classList.remove('active');
+                    });
+                    var deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'btn btn-danger';
+                    deleteBtn.textContent = 'Delete';
+                    deleteBtn.addEventListener('click', function() {
+                        if (confirm('Delete this game?')) {
+                            deleteGame(game.id);
+                        }
+                    });
+                    item.appendChild(loadBtn);
+                    item.appendChild(deleteBtn);
+                    loadContainer.appendChild(item);
+                });
+            } else {
+                loadContainer.innerHTML = '<p>No saved games</p>';
+            }
+        }).catch(() => {
+            loadContainer.innerHTML = '<p>Failed to load games</p>';
+        });
+        loadSection.appendChild(loadContainer);
+        body.appendChild(loadSection);
+
+        // Export and Title
+        if (rpgState.sessionId) {
+            var manageSection = document.createElement('div');
+            manageSection.innerHTML = '<h4>Current Game</h4>';
+            var exportBtn = document.createElement('button');
+            exportBtn.className = 'btn btn-secondary';
+            exportBtn.textContent = 'Export Game';
+            exportBtn.addEventListener('click', function() {
+                apiGetGame(rpgState.sessionId).then(game => {
+                    var blob = new Blob([JSON.stringify(game, null, 2)], {type: 'application/json'});
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'rpg_game_' + rpgState.sessionId + '.json';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
+            });
+            manageSection.appendChild(exportBtn);
+
+            // Game Title
+            var titleDiv = document.createElement('div');
+            titleDiv.style.marginTop = '10px';
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Enter game title';
+            input.style.width = '100%';
+            input.style.marginBottom = '5px';
+            apiGetGame(rpgState.sessionId).then(game => {
+                input.value = game.title || '';
+            }).catch(() => {});
+            var saveTitleBtn = document.createElement('button');
+            saveTitleBtn.className = 'btn btn-primary';
+            saveTitleBtn.textContent = 'Save Title';
+            saveTitleBtn.addEventListener('click', async function() {
+                try {
+                    await fetch('/api/rpg/games/' + encodeURIComponent(rpgState.sessionId), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: input.value }),
+                    });
+                    alert('Title saved');
+                } catch (e) {
+                    alert('Failed to save title');
+                }
+            });
+            titleDiv.appendChild(input);
+            titleDiv.appendChild(saveTitleBtn);
+            manageSection.appendChild(titleDiv);
+            body.appendChild(manageSection);
+        }
+
+        panel.classList.add('active');
+    }
+
+    async function loadGame(gameId) {
+        if (!gameId) return;
+        setLoading(true);
+        updateState({ sessionId: gameId });
+        localStorage.setItem(STORAGE_KEY, gameId);
+        try {
+            var game = await apiGetGame(gameId);
+            updateState({
+                player: game.player,
+                npcs: game.npcs,
+                voice_assignments: game.voice_assignments || {},
+                messages: [], // Clear messages for fresh start
+            });
+            // Clear the feed
+            var feed = el('rpgNarrativeFeed');
+            if (feed) feed.innerHTML = '<div class="rpg-msg rpg-msg--system">Game loaded. Continue your adventure!</div>';
+        } catch (e) {
+            alert('Failed to load game');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function deleteGame(gameId) {
+        if (!gameId) return;
+        if (gameId === rpgState.sessionId) {
+            alert('Cannot delete the currently loaded game');
+            return;
+        }
+        try {
+            await fetch('/api/rpg/games/' + encodeURIComponent(gameId), { method: 'DELETE' });
+            // Refresh the list
+            showSettingsPanel();
+        } catch (e) {
+            alert('Failed to delete game');
+        }
+    }
+
+    // ─── Adventure setup ───────────────────────────────────────────────────────
+
+    function showAdventureSetup() {
+        closeAllPanels();
+        var panel = el('rpgAdventureSetupPanel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'rpgAdventureSetupPanel';
+            panel.className = 'modal';
+            panel.innerHTML = '<div class="modal-content" id="rpgAdventureSetupContent"></div>';
+            document.body.appendChild(panel);
+            panel.addEventListener('click', function(e) {
+                if (e.target === panel) panel.classList.remove('active');
+            });
+        }
+        var content = el('rpgAdventureSetupContent');
+        content.innerHTML = '<div class="modal-header"><h3>Adventure Setup</h3><button class="modal-close" onclick="document.getElementById(\'rpgAdventureSetupPanel\').classList.remove(\'active\');">&times;</button></div><div class="modal-body" id="rpgAdventureSetupBody"></div>';
+        var body = el('rpgAdventureSetupBody');
+        body.innerHTML = `
+
+            <div class="setup-field">
+
+                <label>Custom Lore:</label>
+
+                <textarea id="setupLore" placeholder="Enter background lore for the world">${adventureSetup.lore}</textarea>
+
+            </div>
+
+            <div class="setup-field">
+
+                <label>Custom Rules:</label>
+
+                <textarea id="setupRules" placeholder="Enter special gameplay rules">${adventureSetup.rules}</textarea>
+
+            </div>
+
+            <div class="setup-field">
+
+                <label>Story Hook:</label>
+
+                <textarea id="setupStory" placeholder="Enter initial story or scenario">${adventureSetup.story}</textarea>
+
+            </div>
+
+            <div class="setup-field">
+
+                <label>World Prompt:</label>
+
+                <textarea id="setupPrompt" placeholder="Additional instructions for world generation">${adventureSetup.prompt}</textarea>
+
+            </div>
+
+            <button class="btn btn-primary" id="setupSaveBtn">Save Settings</button>
+
+        `;
+        var saveBtn = el('setupSaveBtn');
+        if (saveBtn) saveBtn.addEventListener('click', function() {
+            adventureSetup.lore = el('setupLore').value;
+            adventureSetup.rules = el('setupRules').value;
+            adventureSetup.story = el('setupStory').value;
+            adventureSetup.prompt = el('setupPrompt').value;
+            panel.classList.remove('active');
+            alert('Settings saved!');
+        });
+        panel.classList.add('active');
     }
 
     // ─── API ───────────────────────────────────────────────────────────────────
@@ -302,6 +693,12 @@
             body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error('Failed to create game (' + res.status + ')');
+        return res.json();
+    }
+
+    async function apiGetGame(sessionId) {
+        var res = await fetch('/api/rpg/games/' + encodeURIComponent(sessionId));
+        if (!res.ok) throw new Error('Failed to get game');
         return res.json();
     }
 
@@ -450,7 +847,9 @@
                 var retried = false;
                 while (true) {
                     try {
-                        var game = await apiCreateGame();
+                        setLoading(true);
+                        var game = await apiCreateGame(adventureSetup);
+                        setLoading(false);
                         updateState({ sessionId: game.session_id });
                         localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
 
@@ -463,6 +862,7 @@
                         data = await doSendTurn(rpgState.sessionId);
                         break;
                     } catch (err) {
+                        setLoading(false);
                         if (!retried) {
                             retried = true;
                             updateState({ sessionId: null });
@@ -483,6 +883,8 @@
                     var game2 = await apiCreateGame();
                     updateState({ sessionId: game2.session_id });
                     localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
+
+                    var game2 = await apiCreateGame(adventureSetup);
 
                     if (game2.opening) {
                         applyUpdate(transformResponse({ narration: game2.opening }));
@@ -963,6 +1365,24 @@
             if (sendBtn && messageInput) {
                 sendBtn.disabled = !messageInput.value.trim() || rpgState.isLoading;
             }
+
+            // Load game state if session exists
+            if (rpgState.sessionId) {
+                apiGetGame(rpgState.sessionId).then(function(game) {
+                    updateState({
+                        player: game.player,
+                        npcs: game.npcs,
+                        voice_assignments: game.voice_assignments || {},
+                    });
+                }).catch(function() {});
+            }
+
+            // Set up toolbar buttons
+            var voiceBtn = el('rpgVoiceBtn');
+            if (voiceBtn) voiceBtn.addEventListener('click', showVoicePanel);
+
+            var settingsBtn = el('rpgSettingsBtn');
+            if (settingsBtn) settingsBtn.addEventListener('click', showSettingsPanel);
         } else {
             if (chatContainer) chatContainer.style.display = '';
             if (rpgView)       rpgView.style.display = 'none';
@@ -1289,6 +1709,10 @@
         // "New Adventure" and "Adventure Setup" buttons — use event delegation on
         // the feed so the listener survives the innerHTML replacement in resetSession().
         var feed = el('rpgNarrativeFeed');
+
+        // Adventure Setup button
+        var rpgSetupBtn = el('rpgSetupBtn');
+        if (rpgSetupBtn) rpgSetupBtn.addEventListener('click', showAdventureSetup);
         if (feed) {
             feed.addEventListener('click', function (e) {
                 if (e.target && e.target.id === 'rpgNewSessionBtn') resetSession();
