@@ -776,10 +776,10 @@
                 for (var i = 0; i < lines.length; i++) {
                     var line = lines[i].trim();
                     if (!line.startsWith('data:')) continue;
-                    var json_str = line.substring(5).trim();
-                    if (!json_str) continue;
+                    var jsonStr = line.substring(5).trim();
+                    if (!jsonStr) continue;
                     try {
-                        var data = JSON.parse(json_str);
+                        var data = JSON.parse(jsonStr);
                     } catch (e) { continue; }
 
                     if (data.error) throw new Error(data.error);

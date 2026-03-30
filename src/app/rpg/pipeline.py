@@ -418,7 +418,6 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
             difficulty_tier = "elite"
         engine_check = stat_check(stat_value, skill_value, difficulty_tier, seed=dice_seed)
         intent_data["engine_check"] = engine_check
-        intent_data["engine_success"] = engine_check["success"]
 
         logger.info("Dice roll: d20=%d + %s(%d) = %d vs DC %d -> %s (%s)",
                      dice_result["roll"], stat_name, stat_value,
