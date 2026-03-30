@@ -29,6 +29,7 @@ from app.rpg import agents
 from app.rpg.memory_manager import build_context
 from app.rpg.models import (
     AgentProfile,
+    CHARACTER_CLASSES,
     Faction,
     GameSession,
     HistoryEvent,
@@ -47,7 +48,9 @@ from app.rpg.models import (
     WorldStateDiff,
     WorldTime,
     apply_diff,
+    gain_xp,
     skill_check,
+    stat_check,
     validate_diff,
 )
 from app.rpg.persistence import save_game
@@ -73,6 +76,25 @@ INTENT_STAT_MAP = {
     "pick_up": "strength",
     "use_item": "intelligence",
     "steal": "intelligence",
+}
+
+# Mapping of intents to the player skill used for stat_check
+INTENT_SKILL_MAP = {
+    "attack": "swordsmanship",
+    "persuade": "persuasion",
+    "sneak": "stealth",
+    "steal": "stealth",
+    "use_item": "magic",
+}
+
+# XP rewards for successful actions by intent
+INTENT_XP_REWARDS = {
+    "attack": 15,
+    "persuade": 10,
+    "sneak": 12,
+    "steal": 12,
+    "use_item": 8,
+    "pick_up": 5,
 }
 
 # Difficulty defaults for common actions
@@ -124,42 +146,61 @@ def _extract_choices(narration: str) -> Tuple[str, List[str]]:
     return clean_narration, choices
 
 
-def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
-                    player_name: str = "Player",
-                    custom_lore: Optional[str] = None,
-                    custom_rules: Optional[str] = None,
-                    custom_story: Optional[str] = None,
-                    world_prompt: Optional[str] = None) -> Optional[GameSession]:
-    """
-    Create a new game session with a freshly generated world.
+# ---------------------------------------------------------------------------
+# Staged Game Creation Pipeline
+# ---------------------------------------------------------------------------
 
-    Uses the World Builder agent to generate the world, then initializes
-    the game session with all state.
+def build_game_context(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the initial context dict for staged game creation.
 
-    Optional parameters allow the player to shape the generated world:
-      custom_lore   – background lore the world should incorporate
-      custom_rules  – gameplay rules or constraints
-      custom_story  – story hook or initial scenario
-      world_prompt  – freeform additional instructions
+    Parameters are extracted from the request data dict and normalised so
+    that every downstream stage can rely on a consistent shape.
     """
+    seed = data.get("seed")
+    if seed is not None:
+        try:
+            seed = int(seed)
+        except (TypeError, ValueError):
+            seed = None
     if seed is None:
         seed = random.randint(1, 999999)
 
-    logger.info("Creating new game with seed=%d, genre=%s", seed, genre)
+    return {
+        "seed": seed,
+        "genre": data.get("genre", "medieval fantasy"),
+        "player_name": data.get("player_name", "Player"),
+        "character_class": data.get("character_class", ""),
+        "custom_lore": data.get("lore") or data.get("custom_lore"),
+        "custom_rules": data.get("rules") or data.get("custom_rules"),
+        "custom_story": data.get("story") or data.get("custom_story"),
+        "world_prompt": data.get("world_prompt"),
+        "world_data": None,
+        "world": None,
+        "npcs": [],
+        "player": None,
+        "session": None,
+    }
 
-    # Step 1: Generate world via World Builder agent
+
+def stage_world(ctx: Dict[str, Any]) -> None:
+    """Stage 1 — call the World Builder LLM agent to generate raw world data."""
     world_data = agents.build_world(
-        seed, genre,
-        custom_lore=custom_lore,
-        custom_rules=custom_rules,
-        custom_story=custom_story,
-        world_prompt=world_prompt,
+        ctx["seed"],
+        ctx["genre"],
+        custom_lore=ctx.get("custom_lore"),
+        custom_rules=ctx.get("custom_rules"),
+        custom_story=ctx.get("custom_story"),
+        world_prompt=ctx.get("world_prompt"),
     )
-    if not world_data:
-        logger.error("World Builder agent failed to generate world")
-        return None
+    ctx["world_data"] = world_data
 
-    # Build world state from LLM output
+
+def stage_environment(ctx: Dict[str, Any]) -> None:
+    """Stage 2 — construct the WorldState from the raw LLM data."""
+    world_data = ctx.get("world_data") or {}
+    seed = ctx["seed"]
+    genre = ctx["genre"]
+
     world = WorldState(
         seed=seed,
         genre=genre,
@@ -171,42 +212,118 @@ def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
         world_time=WorldTime(hour=8, day=1, season="spring"),
     )
 
-    # Build factions
-    world.factions = [Faction.from_dict(fac) for fac in world_data.get("factions", [])]
-
-    # Build items catalog
+    # Items catalog
     world.items_catalog = [Item.from_dict(i) for i in world_data.get("items_catalog", [])]
 
-    # Build agent profiles for consistent tone
+    # Agent profiles for consistent tone
     for key, profile_data in world_data.get("agent_profiles", {}).items():
         world.agent_profiles[key] = AgentProfile.from_dict(profile_data)
 
-    # Build NPCs
-    npcs = [NPCCharacter.from_dict(npc) for npc in world_data.get("npcs", [])]
+    ctx["world"] = world
 
-    # Determine starting location
+
+def stage_factions(ctx: Dict[str, Any]) -> None:
+    """Stage 3 — populate factions on the world."""
+    world_data = ctx.get("world_data") or {}
+    world = ctx["world"]
+    if world is not None:
+        world.factions = [Faction.from_dict(fac) for fac in world_data.get("factions", [])]
+
+
+def stage_npcs(ctx: Dict[str, Any]) -> None:
+    """Stage 4 — build NPC characters from the world data."""
+    world_data = ctx.get("world_data") or {}
+    ctx["npcs"] = [NPCCharacter.from_dict(npc) for npc in world_data.get("npcs", [])]
+
+
+def stage_story(ctx: Dict[str, Any]) -> None:
+    """Stage 5 — create the player, apply class bonuses, determine starting location."""
+    world_data = ctx.get("world_data") or {}
+    world = ctx["world"]
+
     starting_location = world_data.get("starting_location", "")
-    if not starting_location and world.locations:
+    if not starting_location and world is not None and world.locations:
         starting_location = world.locations[0].name
 
-    # Create player
     player = PlayerState(
-        name=player_name,
+        name=ctx.get("player_name", "Player"),
+        character_class=ctx.get("character_class", ""),
         location=starting_location,
     )
 
-    # Create session
+    # Apply character class stat bonuses
+    class_bonuses = CHARACTER_CLASSES.get(player.character_class.lower(), {})
+    for stat_name, bonus in class_bonuses.items():
+        current = getattr(player.stats, stat_name, 0)
+        setattr(player.stats, stat_name, current + bonus)
+
+    ctx["player"] = player
+
+
+def finalize_game(ctx: Dict[str, Any]) -> Optional[GameSession]:
+    """Stage 6 — assemble the GameSession and persist it.
+
+    Returns the session, or ``None`` if the world builder failed.
+    """
+    if ctx.get("world") is None:
+        return None
+
     session = GameSession(
-        world=world,
-        player=player,
-        npcs=npcs,
+        world=ctx["world"],
+        player=ctx["player"],
+        npcs=ctx.get("npcs", []),
     )
 
-    # Save immediately
     save_game(session)
-
-    logger.info("New game created: session_id=%s, world=%s", session.session_id, world.name)
+    logger.info("New game created: session_id=%s, world=%s",
+                session.session_id, session.world.name)
+    ctx["session"] = session
     return session
+
+
+def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
+                    player_name: str = "Player",
+                    character_class: str = "",
+                    custom_lore: Optional[str] = None,
+                    custom_rules: Optional[str] = None,
+                    custom_story: Optional[str] = None,
+                    world_prompt: Optional[str] = None) -> Optional[GameSession]:
+    """
+    Create a new game session with a freshly generated world.
+
+    Uses the World Builder agent to generate the world, then initializes
+    the game session with all state.
+
+    Optional parameters allow the player to shape the generated world:
+      character_class – player class (warrior / mage / rogue)
+      custom_lore   – background lore the world should incorporate
+      custom_rules  – gameplay rules or constraints
+      custom_story  – story hook or initial scenario
+      world_prompt  – freeform additional instructions
+    """
+    logger.info("Creating new game with seed=%s, genre=%s", seed, genre)
+
+    ctx = build_game_context({
+        "seed": seed,
+        "genre": genre,
+        "player_name": player_name,
+        "character_class": character_class,
+        "custom_lore": custom_lore,
+        "custom_rules": custom_rules,
+        "custom_story": custom_story,
+        "world_prompt": world_prompt,
+    })
+
+    stage_world(ctx)
+    if not ctx.get("world_data"):
+        logger.error("World Builder agent failed to generate world")
+        return None
+
+    stage_environment(ctx)
+    stage_factions(ctx)
+    stage_npcs(ctx)
+    stage_story(ctx)
+    return finalize_game(ctx)
 
 
 def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
@@ -273,6 +390,7 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # Step 3: Dice Roll (seed-based deterministic randomness)
     # -----------------------------------------------------------------------
     dice_result = None
+    engine_check = None
     # Per-turn seed: stored in TurnLog for deterministic replay even if the
     # derivation formula changes in future versions.
     dice_seed = session.world.seed + session.turn_count
@@ -284,11 +402,32 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         # Seed-based deterministic randomness for replayability
         dice_result = skill_check(stat_value, difficulty, seed=dice_seed)
         intent_data["skill_check"] = dice_result
+
+        # Also run the stat+skill engine check so the *engine* decides the
+        # outcome and the LLM merely narrates.
+        skill_name = INTENT_SKILL_MAP.get(intent.intent, "")
+        skill_value = session.player.skills.get(skill_name, 0) if skill_name else 0
+        # Map numeric difficulty to a named tier for stat_check
+        if difficulty <= 4:
+            difficulty_tier = "easy"
+        elif difficulty <= 7:
+            difficulty_tier = "normal"
+        elif difficulty <= 10:
+            difficulty_tier = "hard"
+        else:
+            difficulty_tier = "elite"
+        engine_check = stat_check(stat_value, skill_value, difficulty_tier, seed=dice_seed)
+        intent_data["engine_check"] = engine_check
+
         logger.info("Dice roll: d20=%d + %s(%d) = %d vs DC %d -> %s (%s)",
                      dice_result["roll"], stat_name, stat_value,
                      dice_result["total"], dice_result["dc"],
                      "PASS" if dice_result["passed"] else "FAIL",
                      dice_result["outcome"])
+        logger.info("Engine check: d20=%d + stat(%d) + skill(%d) = %d vs %d -> %s",
+                     engine_check["roll"], stat_value, skill_value,
+                     engine_check["total"], engine_check["target"],
+                     "SUCCESS" if engine_check["success"] else "FAIL")
 
     # -----------------------------------------------------------------------
     # Step 4: Context Assembly (refresh with latest)
@@ -346,6 +485,17 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     else:
         # Fallback: use legacy Character Manager path for backward compatibility
         state_changes = _apply_state_updates_legacy(session, intent, event_outcome, context)
+
+    # -----------------------------------------------------------------------
+    # Step 7b: XP Rewards (engine decides → LLM narrates)
+    # -----------------------------------------------------------------------
+    levelup_messages: List[str] = []
+    if engine_check and engine_check.get("success"):
+        xp_reward = INTENT_XP_REWARDS.get(intent.intent, 5)
+        levelup_messages = gain_xp(session.player, xp_reward)
+        state_changes["xp_gained"] = xp_reward
+        if levelup_messages:
+            state_changes["level_up"] = session.player.level
 
     # -----------------------------------------------------------------------
     # Step 8: NPC Autonomy Simulation (enhanced world tick)
@@ -440,6 +590,10 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     # Append consequence narrations if any triggered this turn
     if consequence_narrations:
         narration += "\n\n" + "\n\n".join(consequence_narrations)
+
+    # Append level-up messages
+    if levelup_messages:
+        narration += "\n\n🎉 " + " ".join(levelup_messages)
 
     # Extract structured choices from the narration (numbered list at the end)
     narration, choices = _extract_choices(narration)
