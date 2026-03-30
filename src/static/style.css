@@ -5395,3 +5395,238 @@ pre:hover .code-copy-btn {
 .rpg-setup-start:hover {
     opacity: 0.85;
 }
+
+/* ─── RPG Toolbar ────────────────────────────────────────────────────────── */
+
+.rpg-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--bg-secondary, #1a1a2e);
+    border-bottom: 1px solid var(--border-color, #2a2a3e);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.rpg-toolbar-btn {
+    background: var(--bg-tertiary, #252540);
+    border: 1px solid var(--border-color, #2a2a3e);
+    color: var(--text-primary, #e2e8f0);
+    padding: 5px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.8rem;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.rpg-toolbar-btn:hover {
+    background: var(--bg-message-ai, #1e1e38);
+    border-color: var(--accent, #6366f1);
+}
+
+.rpg-tts-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.rpg-tts-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #a0aec0);
+    cursor: pointer;
+    user-select: none;
+}
+
+.rpg-tts-checkbox {
+    accent-color: var(--accent, #6366f1);
+    cursor: pointer;
+}
+
+.rpg-voice-select {
+    background: var(--bg-tertiary, #252540);
+    border: 1px solid var(--border-color, #2a2a3e);
+    color: var(--text-primary, #e2e8f0);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+    max-width: 130px;
+}
+
+.rpg-voice-select:focus {
+    outline: none;
+    border-color: var(--accent, #6366f1);
+}
+
+/* ─── Streaming narration ────────────────────────────────────────────────── */
+
+.rpg-msg--streaming {
+    opacity: 0.85;
+    border-left: 3px solid var(--accent, #6366f1);
+    padding: 10px 14px;
+    font-size: 0.95rem;
+    color: var(--text-primary, #e2e8f0);
+    background: var(--bg-message-ai, #1e1e38);
+    white-space: pre-wrap;
+}
+
+/* ─── Player Stats / Inventory Overlay ──────────────────────────────────── */
+
+.rpg-player-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 16px;
+}
+
+.rpg-player-modal {
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border-color, #2a2a3e);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 420px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.rpg-player-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color, #2a2a3e);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #e2e8f0);
+    flex-shrink: 0;
+}
+
+.rpg-player-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted, #888);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.15s;
+}
+
+.rpg-player-modal-close:hover {
+    color: var(--text-primary, #e2e8f0);
+}
+
+.rpg-player-modal-body {
+    padding: 14px 16px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.rpg-player-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent, #6366f1);
+    margin-bottom: 8px;
+}
+
+.rpg-player-location {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #a0aec0);
+    margin-bottom: 10px;
+}
+
+.rpg-player-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.rpg-stat {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-tertiary, #252540);
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+.rpg-stat-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary, #a0aec0);
+}
+
+.rpg-stat-value {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary, #e2e8f0);
+}
+
+.rpg-player-rep {
+    font-size: 0.78rem;
+    color: var(--text-secondary, #a0aec0);
+    margin-bottom: 10px;
+}
+
+.rpg-player-factions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 12px;
+}
+
+.rpg-faction-badge {
+    font-size: 0.72rem;
+    background: var(--bg-tertiary, #252540);
+    border-radius: 12px;
+    padding: 2px 8px;
+    color: var(--text-secondary, #a0aec0);
+    border: 1px solid var(--border-color, #2a2a3e);
+}
+
+.rpg-player-section-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary, #a0aec0);
+    margin: 10px 0 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.rpg-inventory-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 6px;
+}
+
+.rpg-inventory-item {
+    font-size: 0.82rem;
+    color: var(--text-primary, #e2e8f0);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-color, #2a2a3e);
+}
+
+.rpg-inventory-item:last-child {
+    border-bottom: none;
+}
+
+.rpg-empty-note {
+    font-size: 0.8rem;
+    color: var(--text-muted, #888);
+    font-style: italic;
+    margin: 4px 0;
+}

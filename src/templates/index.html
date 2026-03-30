@@ -333,6 +333,20 @@
             <div class="rpg-view" id="rpgView" style="display: none;">
                 <div class="rpg-container">
 
+                    <!-- RPG Toolbar: Stats button + TTS toggle -->
+                    <div class="rpg-toolbar" id="rpgToolbar">
+                        <button class="rpg-toolbar-btn" id="rpgStatsBtn" title="View character stats & inventory">📊 Stats &amp; Inventory</button>
+                        <div class="rpg-tts-controls">
+                            <label class="rpg-tts-label" title="Enable voice narration">
+                                <input type="checkbox" id="rpgTtsToggle" class="rpg-tts-checkbox">
+                                🔊 Voice
+                            </label>
+                            <select id="rpgVoiceSelect" class="rpg-voice-select" title="Narrator voice">
+                                <option value="">Default</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <!-- Top info panels: Minimap + NPC (only shown when data arrives) -->
                     <div class="rpg-top-panels" id="rpgTopPanels">
                         <!-- Minimap panel -->
@@ -385,6 +399,19 @@
 
                     <!-- Choice buttons (rendered from API choices[]) -->
                     <div class="rpg-choice-panel" id="rpgChoicePanel" style="display: none;"></div>
+                </div>
+
+                <!-- Player Stats / Inventory overlay modal -->
+                <div class="rpg-player-overlay" id="rpgPlayerPanelOverlay" style="display: none;">
+                    <div class="rpg-player-modal">
+                        <div class="rpg-player-modal-header">
+                            <span>📊 Character Sheet</span>
+                            <button class="rpg-player-modal-close" id="rpgPlayerPanelClose" title="Close">✕</button>
+                        </div>
+                        <div class="rpg-player-modal-body" id="rpgPlayerPanel">
+                            <p class="rpg-empty-note">Start an adventure to see your character stats.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 

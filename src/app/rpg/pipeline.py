@@ -20,9 +20,10 @@ Orchestrates the turn execution with integrated systems:
 """
 
 import logging
+import re
 import random
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.rpg import agents
 from app.rpg.memory_manager import build_context
@@ -93,6 +94,34 @@ MEMORY_COMPRESSION_INTERVAL = 15
 
 # Events at or above this importance are preserved during compression
 IMPORTANCE_THRESHOLD_PRESERVE = 0.8
+
+
+def _extract_choices(narration: str) -> Tuple[str, List[str]]:
+    """Extract numbered choices from the end of a narration string.
+
+    Looks for trailing lines of the form ``N. Choice text`` and returns
+    them as a structured list.  The returned narration has the choice block
+    (and any blank separator line above it) stripped out.
+    """
+    lines = narration.rstrip().split('\n')
+    choices: List[str] = []
+    cutoff = len(lines)
+
+    # Walk backwards collecting consecutive numbered-list entries
+    for i in range(len(lines) - 1, -1, -1):
+        stripped = lines[i].strip()
+        m = re.match(r'^\d+\.\s+(.+)$', stripped)
+        if m:
+            choices.insert(0, m.group(1).strip())
+            cutoff = i
+        elif stripped == '':
+            # Allow a blank separator between narration body and choices
+            continue
+        else:
+            break
+
+    clean_narration = '\n'.join(lines[:cutoff]).rstrip()
+    return clean_narration, choices
 
 
 def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
@@ -412,6 +441,9 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     if consequence_narrations:
         narration += "\n\n" + "\n\n".join(consequence_narrations)
 
+    # Extract structured choices from the narration (numbered list at the end)
+    narration, choices = _extract_choices(narration)
+
     # Create history event with importance and structured tags
     history_event = HistoryEvent(
         event=event_description,
@@ -457,6 +489,7 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         state_changes=state_changes,
         dice_roll=dice_result,
         fail_state=fail_state,
+        choices=choices,
     )
 
 

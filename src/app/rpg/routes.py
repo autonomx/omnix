@@ -4,9 +4,10 @@ Flask Blueprint for the AI Role-Playing System API routes.
 Provides REST endpoints for game management, turn execution, and state queries.
 """
 
+import json
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from app.rpg.models import GameSession
 from app.rpg.persistence import delete_game, list_games, load_game, save_game
@@ -128,6 +129,7 @@ def execute_rpg_turn(session_id):
         "turn": session.turn_count,
         "state_changes": result.state_changes,
         "events": [e.to_dict() for e in result.events],
+        "player": session.player.to_dict(),
     }
     if result.choices:
         response["choices"] = result.choices
@@ -139,6 +141,73 @@ def execute_rpg_turn(session_id):
         response["fail_state"] = result.fail_state
 
     return jsonify(response)
+
+
+@rpg_bp.route("/api/rpg/games/<session_id>/turn/stream", methods=["POST"])
+def execute_rpg_turn_stream(session_id):
+    """Execute a player turn and stream the narration via Server-Sent Events.
+
+    Events emitted:
+        ``{"type": "token", "text": "..."}``   – narration chunk (word by word)
+        ``{"type": "done",  ...full payload}``  – final response identical to
+                                                  the non-streaming turn endpoint
+        ``{"type": "error", "error": "..."}``   – on failure
+    """
+    session = load_game(session_id)
+    if not session:
+        def _not_found():
+            yield f"data: {json.dumps({'type': 'error', 'error': 'Game not found'})}\n\n"
+        return Response(_not_found(), mimetype="text/event-stream"), 404
+
+    data = request.get_json() or {}
+    player_input = data.get("input", "").strip()
+    if not player_input:
+        def _bad_input():
+            yield f"data: {json.dumps({'type': 'error', 'error': 'No input provided'})}\n\n"
+        return Response(_bad_input(), mimetype="text/event-stream"), 400
+
+    # Execute the full turn (blocking) then stream narration token-by-token so
+    # the client can start rendering text without waiting for the full JSON.
+    result = execute_turn(session, player_input)
+
+    def generate():
+        if result.error:
+            yield f"data: {json.dumps({'type': 'error', 'error': result.error})}\n\n"
+            return
+
+        # Stream narration word by word (split on any whitespace for robustness)
+        words = result.narration.split()
+        for i, word in enumerate(words):
+            chunk = word + (' ' if i < len(words) - 1 else '')
+            yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"
+
+        # Final event: full structured payload (mirrors regular turn endpoint)
+        final: dict = {
+            "type": "done",
+            "success": True,
+            "narration": result.narration,
+            "turn": session.turn_count,
+            "state_changes": result.state_changes,
+            "events": [e.to_dict() for e in result.events],
+            "player": session.player.to_dict(),
+        }
+        if result.choices:
+            final["choices"] = result.choices
+        if result.dice_roll:
+            final["dice_roll"] = result.dice_roll
+        if result.fail_state:
+            final["fail_state"] = result.fail_state
+
+        yield f"data: {json.dumps(final)}\n\n"
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

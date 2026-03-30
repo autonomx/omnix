@@ -53,6 +53,26 @@
         neutral: '#6b7280',
     };
 
+    // Gender detection heuristics (mirrors audiobook backend)
+    const FEMALE_NAMES = new Set([
+        'sofia','emma','olivia','ava','mia','charlotte','amelia','luna','harper','aria',
+        'ella','elizabeth','camila','gianna','abigail','emily','ella','scarlett','victoria',
+        'madison','luna','grace','chloe','penelope','layla','riley','zoey','nora','lily',
+        'eleanor','hannah','lillian','addison','aubrey','ellie','stella','natalie','zoe',
+        'leah','hazel','violet','aurora','savannah','audrey','brooklyn','bella','claire',
+        'skylar','lucy','paisley','everly','anna','alice','freya','lyra','eve','diana',
+    ]);
+    const MALE_NAMES = new Set([
+        'morgan','james','john','robert','michael','david','william','richard','joseph',
+        'thomas','charles','christopher','daniel','matthew','anthony','mark','donald',
+        'steven','paul','andrew','kenneth','joshua','george','kevin','brian','edward',
+        'ronald','timothy','jason','jeffrey','ryan','jacob','gary','nicholas','eric',
+        'jonathan','stephen','larry','justin','scott','brandon','benjamin','samuel',
+        'frank','gregory','raymond','patrick','alexander','jack','dennis','jerry',
+        'liam','noah','ethan','mason','oliver','elijah','aiden','lucas','logan','owen',
+        'caleb','henry','wyatt','sebastian','finn','eli','arthur','leo','theo','max',
+    ]);
+
     // ─── State (versioned) ─────────────────────────────────────────────────────
 
     let stateVersion = 0;
@@ -67,8 +87,16 @@
         map: null,
         memory: [],        // recent player memory strings
         worldEvents: [],   // recent world event strings
+        player: null,      // latest player state from API
         isLoading: false,
     };
+
+    // TTS settings
+    let ttsEnabled = false;
+    let narratorVoice = null;    // null = server default
+    let availableVoices = [];    // populated on first use
+    let currentAudioCtx = null;
+    let currentAudioSource = null;
 
     /** Atomic state updater — increments version, merges patch. */
     function updateState(patch) {
@@ -118,6 +146,140 @@
             .replace(/'/g, '&#039;');
     }
 
+    // ─── TTS / Voice ───────────────────────────────────────────────────────────
+
+    /** Detect a character's probable gender from their name. */
+    function detectGender(name) {
+        if (!name) return 'neutral';
+        var lower = name.toLowerCase().trim();
+        if (['ms.', 'mrs.', 'she', 'her', 'woman', 'queen', 'princess', 'lady', 'witch'].some(function (w) { return lower.indexOf(w) !== -1; })) return 'female';
+        if (['mr.', 'he', 'him', 'man', 'king', 'prince', 'lord', 'wizard', 'knight'].some(function (w) { return lower.indexOf(w) !== -1; })) return 'male';
+        var firstName = lower.split(/\s+/)[0].replace(/[^a-z]/g, '');
+        if (FEMALE_NAMES.has(firstName)) return 'female';
+        if (MALE_NAMES.has(firstName)) return 'male';
+        return 'neutral';
+    }
+
+    /** Fetch available TTS voices once and cache them. */
+    async function fetchVoices() {
+        if (availableVoices.length > 0) return availableVoices;
+        try {
+            var res = await fetch('/api/tts/speakers');
+            if (!res.ok) return [];
+            var data = await res.json();
+            availableVoices = Array.isArray(data.speakers) ? data.speakers : [];
+            populateVoiceSelect();
+            return availableVoices;
+        } catch (e) {
+            return [];
+        }
+    }
+
+    /** Fill the voice selector dropdown with available speakers. */
+    function populateVoiceSelect() {
+        var sel = el('rpgVoiceSelect');
+        if (!sel || !availableVoices.length) return;
+        // Keep the current value if possible
+        var current = sel.value;
+        sel.innerHTML = '<option value="">Default</option>';
+        availableVoices.forEach(function (v) {
+            var opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v;
+            sel.appendChild(opt);
+        });
+        if (current) sel.value = current;
+    }
+
+    /** Play base64-encoded WAV/audio bytes via Web Audio API. */
+    function playBase64Audio(b64, sampleRate) {
+        try {
+            var binary = atob(b64);
+            var bytes = Uint8Array.from(binary, function (c) { return c.charCodeAt(0); });
+
+            // Stop any currently playing audio
+            if (currentAudioSource) {
+                try { currentAudioSource.stop(); } catch (_) {}
+                currentAudioSource = null;
+            }
+
+            if (!currentAudioCtx || currentAudioCtx.state === 'closed') {
+                currentAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            currentAudioCtx.decodeAudioData(bytes.buffer, function (buf) {
+                var src = currentAudioCtx.createBufferSource();
+                src.buffer = buf;
+                src.connect(currentAudioCtx.destination);
+                src.start(0);
+                currentAudioSource = src;
+            });
+        } catch (e) {
+            console.warn('[RPG TTS] Audio playback error:', e);
+        }
+    }
+
+    /**
+     * Send text to the TTS endpoint and play the result.
+     * speaker – TTS voice name (null = server default / current setting).
+     */
+    async function speakText(text, speaker) {
+        if (!ttsEnabled || !text) return;
+        var voiceName = speaker || narratorVoice || undefined;
+        try {
+            var res = await fetch('/api/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text, speaker: voiceName }),
+            });
+            if (!res.ok) return;
+            var data = await res.json();
+            if (data.audio) playBase64Audio(data.audio, data.sample_rate || 24000);
+        } catch (e) {
+            console.warn('[RPG TTS] Request failed:', e);
+        }
+    }
+
+    /**
+     * Speak the narration text.  Strips markdown/speaker-label prefixes for a
+     * cleaner listening experience and resolves NPC voices by gender.
+     */
+    async function speakNarration(narration) {
+        if (!ttsEnabled || !narration) return;
+
+        // Build per-speaker voice map from current NPC list (gender-based)
+        var npcVoiceMap = {};
+        if (rpgState.npcs && rpgState.npcs.length) {
+            rpgState.npcs.forEach(function (npc) {
+                if (!npc.name) return;
+                var gender = (npc.gender) ? npc.gender.toLowerCase() : detectGender(npc.name + ' ' + (npc.role || ''));
+                npcVoiceMap[npc.name.toLowerCase()] = gender;
+            });
+        }
+
+        // Split narration into segments by speaker label ("Name: text")
+        var segments = [];
+        var lines = narration.split('\n');
+        lines.forEach(function (line) {
+            var m = line.match(/^([A-Z][^:]{0,30}):\s*(.+)/);
+            if (m) {
+                segments.push({ speaker: m[1].trim(), text: m[2].trim() });
+            } else if (line.trim()) {
+                // Plain narration line — append to last narrator segment or create new one
+                if (segments.length && segments[segments.length - 1].speaker === 'Narrator') {
+                    segments[segments.length - 1].text += ' ' + line.trim();
+                } else {
+                    segments.push({ speaker: 'Narrator', text: line.trim() });
+                }
+            }
+        });
+
+        // For simplicity, play the full narration with a single TTS call.
+        // Voice: narrator voice for Narrator lines, gender-based default for characters.
+        // We use the narrator voice for the full text since mixing requires sequential calls.
+        await speakText(narration, narratorVoice || undefined);
+    }
+
     // ─── Loading state ─────────────────────────────────────────────────────────
 
     function setLoading(loading) {
@@ -151,6 +313,58 @@
         });
         if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
         return res.json();
+    }
+
+    /**
+     * Send a turn via the SSE streaming endpoint.
+     * Calls onToken(text) for each streamed token, then returns the full data
+     * payload from the final "done" event.
+     */
+    async function apiSendTurnStream(sessionId, input, onToken) {
+        var res = await fetch(
+            '/api/rpg/games/' + encodeURIComponent(sessionId) + '/turn/stream',
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: input }),
+            }
+        );
+        if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
+
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var buf = '';
+        var finalData = null;
+
+        while (true) {
+            var readResult = await reader.read();
+            if (readResult.done) break;
+            buf += decoder.decode(readResult.value, { stream: true });
+
+            // Parse complete SSE messages (delimited by \n\n)
+            var parts = buf.split('\n\n');
+            buf = parts.pop(); // keep trailing incomplete chunk
+
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i];
+                if (part.startsWith('data: ')) {
+                    try {
+                        var evt = JSON.parse(part.slice(6));
+                        if (evt.type === 'token' && onToken) {
+                            onToken(evt.text);
+                        } else if (evt.type === 'done') {
+                            finalData = evt;
+                        } else if (evt.type === 'error') {
+                            throw new Error(evt.error || 'Stream error');
+                        }
+                    } catch (parseErr) {
+                        // ignore malformed SSE line
+                    }
+                }
+            }
+        }
+
+        return finalData;
     }
 
     // ─── Response transform ────────────────────────────────────────────────────
@@ -187,6 +401,7 @@
             map:         data.map          || null,
             memory:      data.memory       || [],
             worldEvents: data.world_events || [],
+            player:      data.player       || null,
         };
     }
 
@@ -198,11 +413,40 @@
         appendMessage({ type: 'player', content: input });
         setLoading(true);
 
+        // Create a streaming narration element that fills as tokens arrive
+        var streamingDiv = null;
+        var streamingText = '';
+
+        function onToken(text) {
+            var feed = el('rpgNarrativeFeed');
+            if (!feed) return;
+            var welcome = el('rpgWelcome');
+            if (welcome) welcome.style.display = 'none';
+            if (!streamingDiv) {
+                streamingDiv = document.createElement('div');
+                streamingDiv.className = 'rpg-msg rpg-msg--narration rpg-msg--streaming';
+                feed.appendChild(streamingDiv);
+            }
+            streamingText += text;
+            streamingDiv.textContent = streamingText;
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        /**
+         * Send a turn via streaming, falling back to the regular endpoint if
+         * the stream returns no data (e.g. on older servers without the endpoint).
+         */
+        async function doSendTurn(sid) {
+            var d = await apiSendTurnStream(sid, input, onToken);
+            if (!d) d = await apiSendTurn(sid, input);
+            return d;
+        }
+
         try {
             var data;
 
             if (!rpgState.sessionId) {
-                // First input \u2013 create game (retry once on failure)
+                // First input – create game (retry once on failure)
                 var retried = false;
                 while (true) {
                     try {
@@ -213,9 +457,10 @@
                         // Show world opening before the player's first turn
                         if (game.opening) {
                             applyUpdate(transformResponse({ narration: game.opening }));
+                            speakNarration(game.opening);
                         }
 
-                        data = await apiSendTurn(rpgState.sessionId, input);
+                        data = await doSendTurn(rpgState.sessionId);
                         break;
                     } catch (err) {
                         if (!retried) {
@@ -228,9 +473,9 @@
                     }
                 }
             } else {
-                // Subsequent turns \u2013 retry with a fresh session if the stored one expired
+                // Subsequent turns – retry with a fresh session if the stored one expired
                 try {
-                    data = await apiSendTurn(rpgState.sessionId, input);
+                    data = await doSendTurn(rpgState.sessionId);
                 } catch (err) {
                     updateState({ sessionId: null });
                     localStorage.removeItem(STORAGE_KEY);
@@ -241,14 +486,31 @@
 
                     if (game2.opening) {
                         applyUpdate(transformResponse({ narration: game2.opening }));
+                        speakNarration(game2.opening);
                     }
 
-                    data = await apiSendTurn(rpgState.sessionId, input);
+                    data = await doSendTurn(rpgState.sessionId);
                 }
             }
 
-            applyUpdate(transformResponse(data));
+            // Remove the streaming placeholder — applyUpdate will add the final
+            // narration with markdown rendering
+            if (streamingDiv) {
+                streamingDiv.remove();
+                streamingDiv = null;
+                streamingText = '';
+            }
+
+            var update = transformResponse(data);
+            applyUpdate(update);
+            if (update.player) {
+                updateState({ player: update.player });
+                renderPlayerPanel(update.player);
+            }
+            // Speak narration after response is complete
+            if (data && data.narration) speakNarration(data.narration);
         } catch (err) {
+            if (streamingDiv) { streamingDiv.remove(); streamingDiv = null; }
             appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
         } finally {
             setLoading(false);
@@ -585,6 +847,101 @@
         }
     }
 
+    // ─── Rendering: Player Stats / Inventory Panel ─────────────────────────────
+
+    function renderPlayerPanel(player) {
+        var panel = el('rpgPlayerPanel');
+        if (!panel || !player) return;
+
+        var stats = player.stats || {};
+        var inventory = Array.isArray(player.inventory) ? player.inventory : [];
+        var quests = Array.isArray(player.quests_active) ? player.quests_active : [];
+        var factionRep = player.reputation_factions || {};
+
+        // Stats rows
+        var statsHtml =
+            '<div class="rpg-player-stats">' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">⚔️ STR</span><span class="rpg-stat-value">' + (stats.strength || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">💬 CHA</span><span class="rpg-stat-value">' + (stats.charisma || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">🧠 INT</span><span class="rpg-stat-value">' + (stats.intelligence || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">💰 Gold</span><span class="rpg-stat-value">' + (stats.wealth || 0) + '</span></div>' +
+            '</div>';
+
+        // Location
+        var locHtml = player.location
+            ? '<div class="rpg-player-location">📍 ' + escapeHtml(player.location) + '</div>'
+            : '';
+
+        // Reputation
+        var repHtml = '';
+        if (player.reputation_local || player.reputation_global) {
+            repHtml = '<div class="rpg-player-rep">Local rep: <strong>' + (player.reputation_local || 0) +
+                      '</strong> &nbsp; Global: <strong>' + (player.reputation_global || 0) + '</strong></div>';
+        }
+
+        // Faction reputations
+        var factionHtml = '';
+        var factionKeys = Object.keys(factionRep);
+        if (factionKeys.length) {
+            factionHtml = '<div class="rpg-player-factions">' +
+                factionKeys.map(function (f) {
+                    return '<span class="rpg-faction-badge">' + escapeHtml(f) + ': ' + factionRep[f] + '</span>';
+                }).join('') + '</div>';
+        }
+
+        // Inventory
+        var invHtml = '<div class="rpg-player-section-title">🎒 Inventory</div>';
+        if (inventory.length) {
+            invHtml += '<ul class="rpg-inventory-list">' +
+                inventory.map(function (item) {
+                    return '<li class="rpg-inventory-item">' + escapeHtml(item) + '</li>';
+                }).join('') + '</ul>';
+        } else {
+            invHtml += '<p class="rpg-empty-note">Empty</p>';
+        }
+
+        // Active quests
+        var questHtml = '';
+        if (quests.length) {
+            questHtml = '<div class="rpg-player-section-title">📜 Quests</div>' +
+                '<ul class="rpg-inventory-list">' +
+                quests.map(function (q) {
+                    return '<li class="rpg-inventory-item">' + escapeHtml(q) + '</li>';
+                }).join('') + '</ul>';
+        }
+
+        panel.innerHTML =
+            '<div class="rpg-player-name">' + escapeHtml(player.name || 'Player') + '</div>' +
+            locHtml + statsHtml + repHtml + factionHtml + invHtml + questHtml;
+    }
+
+    /** Open the player stats/inventory modal overlay. */
+    function openPlayerPanel() {
+        // Refresh from current state, or fetch fresh from API if no data yet
+        var overlay = el('rpgPlayerPanelOverlay');
+        if (!overlay) return;
+        if (rpgState.player) {
+            renderPlayerPanel(rpgState.player);
+        } else if (rpgState.sessionId) {
+            fetch('/api/rpg/games/' + encodeURIComponent(rpgState.sessionId) + '/player')
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.player) {
+                        updateState({ player: data.player });
+                        renderPlayerPanel(data.player);
+                    }
+                })
+                .catch(function () {});
+        }
+        overlay.style.display = 'flex';
+    }
+
+    /** Close the player stats/inventory overlay. */
+    function closePlayerPanel() {
+        var overlay = el('rpgPlayerPanelOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
     // ─── Mode switching ────────────────────────────────────────────────────────
 
     function switchMode(mode) {
@@ -815,6 +1172,7 @@
                 worldEvents: rpgState.worldEvents,
                 choices:     rpgState.choices,
                 npcs:        rpgState.npcs,
+                player:      rpgState.player,
             };
             localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(snapshot));
         } catch (e) {
@@ -836,6 +1194,7 @@
                 worldEvents: snapshot.worldEvents || [],
                 choices:     snapshot.choices     || [],
                 npcs:        snapshot.npcs        || [],
+                player:      snapshot.player      || null,
             });
 
             // Re-render the feed from the snapshot
@@ -850,6 +1209,7 @@
                 (rpgState.worldEvents && rpgState.worldEvents.length)) {
                 renderMemory();
             }
+            if (rpgState.player) renderPlayerPanel(rpgState.player);
 
             return true;
         } catch (e) {
@@ -869,6 +1229,7 @@
             map:         null,
             memory:      [],
             worldEvents: [],
+            player:      null,
         });
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STATE_STORAGE_KEY);
@@ -896,6 +1257,11 @@
 
         var memoryPanel = el('rpgMemoryPanelWrapper');
         if (memoryPanel) memoryPanel.style.display = 'none';
+
+        var playerPanel = el('rpgPlayerPanel');
+        if (playerPanel) playerPanel.innerHTML = '';
+
+        closePlayerPanel();
     }
 
     // ─── Init ──────────────────────────────────────────────────────────────────
@@ -928,6 +1294,39 @@
                 if (e.target && e.target.id === 'rpgNewSessionBtn') resetSession();
                 if (e.target && e.target.id === 'rpgSetupBtn') showSetupModal();
             });
+        }
+
+        // Stats / inventory panel button
+        var statsBtn = el('rpgStatsBtn');
+        if (statsBtn) statsBtn.addEventListener('click', openPlayerPanel);
+
+        // Close player panel overlay on backdrop click or close button
+        var playerOverlay = el('rpgPlayerPanelOverlay');
+        if (playerOverlay) {
+            playerOverlay.addEventListener('click', function (e) {
+                if (e.target === playerOverlay) closePlayerPanel();
+            });
+        }
+        var playerCloseBtn = el('rpgPlayerPanelClose');
+        if (playerCloseBtn) playerCloseBtn.addEventListener('click', closePlayerPanel);
+
+        // TTS toggle
+        var ttsToggle = el('rpgTtsToggle');
+        if (ttsToggle) {
+            ttsEnabled = ttsToggle.checked;
+            ttsToggle.addEventListener('change', function () {
+                ttsEnabled = ttsToggle.checked;
+                if (ttsEnabled) fetchVoices();
+            });
+        }
+
+        // Voice selector
+        var voiceSel = el('rpgVoiceSelect');
+        if (voiceSel) {
+            voiceSel.addEventListener('change', function () {
+                narratorVoice = voiceSel.value || null;
+            });
+            if (ttsEnabled) fetchVoices();
         }
 
         // Sidebar shortcuts (expanded + collapsed)
