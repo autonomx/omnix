@@ -904,7 +904,7 @@
 
                     var game2 = await apiCreateGame(adventureSetup);
                     updateState({ sessionId: game2.session_id });
-                    localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
+                    localStorage.setItem(STORAGE_KEY, game2.session_id);
 
                     if (game2.opening) {
                         applyUpdate(transformResponse({ narration: game2.opening }));
@@ -1297,7 +1297,7 @@
         // HP / Stamina / Mana bars
         var vitalsHtml = '';
         if (player.max_hp !== undefined) {
-            var hpPct = player.max_hp > 0 ? Math.floor((player.hp / player.max_hp) * 100) : 0;
+            var hpPct = player.max_hp > 0 ? Math.floor(((player.hp || 0) / player.max_hp) * 100) : 0;
             var stPct = player.max_stamina > 0 ? Math.floor(((player.stamina || 0) / player.max_stamina) * 100) : 0;
             var mpPct = player.max_mana > 0 ? Math.floor(((player.mana || 0) / player.max_mana) * 100) : 0;
             vitalsHtml =
