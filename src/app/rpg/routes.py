@@ -175,8 +175,8 @@ def execute_rpg_turn_stream(session_id):
             yield f"data: {json.dumps({'type': 'error', 'error': result.error})}\n\n"
             return
 
-        # Stream narration word by word
-        words = result.narration.split(' ')
+        # Stream narration word by word (split on any whitespace for robustness)
+        words = result.narration.split()
         for i, word in enumerate(words):
             chunk = word + (' ' if i < len(words) - 1 else '')
             yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"

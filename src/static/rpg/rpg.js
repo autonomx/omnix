@@ -195,8 +195,7 @@
     function playBase64Audio(b64, sampleRate) {
         try {
             var binary = atob(b64);
-            var bytes = new Uint8Array(binary.length);
-            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            var bytes = Uint8Array.from(binary, function (c) { return c.charCodeAt(0); });
 
             // Stop any currently playing audio
             if (currentAudioSource) {
@@ -433,6 +432,16 @@
             feed.scrollTop = feed.scrollHeight;
         }
 
+        /**
+         * Send a turn via streaming, falling back to the regular endpoint if
+         * the stream returns no data (e.g. on older servers without the endpoint).
+         */
+        async function doSendTurn(sid) {
+            var d = await apiSendTurnStream(sid, input, onToken);
+            if (!d) d = await apiSendTurn(sid, input);
+            return d;
+        }
+
         try {
             var data;
 
@@ -451,8 +460,7 @@
                             speakNarration(game.opening);
                         }
 
-                        data = await apiSendTurnStream(rpgState.sessionId, input, onToken);
-                        if (!data) data = await apiSendTurn(rpgState.sessionId, input);
+                        data = await doSendTurn(rpgState.sessionId);
                         break;
                     } catch (err) {
                         if (!retried) {
@@ -467,8 +475,7 @@
             } else {
                 // Subsequent turns – retry with a fresh session if the stored one expired
                 try {
-                    data = await apiSendTurnStream(rpgState.sessionId, input, onToken);
-                    if (!data) data = await apiSendTurn(rpgState.sessionId, input);
+                    data = await doSendTurn(rpgState.sessionId);
                 } catch (err) {
                     updateState({ sessionId: null });
                     localStorage.removeItem(STORAGE_KEY);
@@ -482,8 +489,7 @@
                         speakNarration(game2.opening);
                     }
 
-                    data = await apiSendTurnStream(rpgState.sessionId, input, onToken);
-                    if (!data) data = await apiSendTurn(rpgState.sessionId, input);
+                    data = await doSendTurn(rpgState.sessionId);
                 }
             }
 
