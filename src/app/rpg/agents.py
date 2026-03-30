@@ -50,8 +50,8 @@ def _call_llm(system_prompt: str, user_prompt: str, max_retries: int = 2) -> Opt
     return None
 
 
-def _parse_json_response(text: str) -> Optional[Dict[str, Any]]:
-    """Parse a JSON response from the LLM, handling markdown code blocks."""
+def _parse_json_response(text: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Parse a JSON response from the LLM, handling markdown code blocks and attempting to fix common issues."""
     if not text:
         return None
     cleaned = text.strip()
@@ -63,19 +63,80 @@ def _parse_json_response(text: str) -> Optional[Dict[str, Any]]:
         else:
             # Only backtick markers with no content between them
             return None
+
+    # First try direct parsing
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        # Try to find JSON within the text
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                return json.loads(cleaned[start:end + 1])
-            except json.JSONDecodeError:
-                pass
-        logger.warning("Failed to parse JSON from LLM response: %.200s", cleaned)
+        pass
+
+    # Try to find JSON within the text
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        json_candidate = cleaned[start:end + 1]
+        try:
+            return json.loads(json_candidate)
+        except json.JSONDecodeError:
+            # Try to fix common issues
+            fixed = _fix_incomplete_json(json_candidate)
+            if fixed:
+                try:
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    pass
+
+    logger.warning("Failed to parse JSON from LLM response: %.200s", cleaned)
+    return None
+
+
+def _fix_incomplete_json(json_str: str) -> Optional[str]:
+    """Attempt to fix incomplete JSON by completing truncated strings and objects."""
+    if not json_str:
         return None
+
+    # Remove trailing commas before closing braces/brackets
+    json_str = json_str.replace(',}', '}').replace(',]', ']')
+
+    # Find incomplete strings (unclosed quotes)
+    in_string = False
+    escape_next = False
+    result = []
+    for char in json_str:
+        if escape_next:
+            result.append(char)
+            escape_next = False
+            continue
+
+        if char == '\\':
+            escape_next = True
+            result.append(char)
+        elif char == '"' and not in_string:
+            in_string = True
+            result.append(char)
+        elif char == '"' and in_string:
+            in_string = False
+            result.append(char)
+        else:
+            result.append(char)
+
+    # If we're still in a string at the end, close it
+    if in_string:
+        result.append('"')
+
+    # If the JSON doesn't end with } or ], try to close it
+    fixed = ''.join(result)
+    if not fixed.endswith('}') and not fixed.endswith(']'):
+        # Count braces to see what's unclosed
+        brace_count = fixed.count('{') - fixed.count('}')
+        bracket_count = fixed.count('[') - fixed.count(']')
+
+        if brace_count > 0:
+            fixed += '}' * brace_count
+        elif bracket_count > 0:
+            fixed += ']' * bracket_count
+
+    return fixed
 
 
 def _inject_agent_identity(base_prompt: str, agent_name: str,
@@ -199,7 +260,46 @@ def build_world(seed: int, genre: str = "medieval fantasy",
 
     prompt = "\n".join(parts)
     result = _call_llm(WORLD_BUILDER_SYSTEM, prompt)
-    return _parse_json_response(result)
+    parsed = _parse_json_response(result) if result else None
+
+    # If parsing failed, create a fallback world
+    if not parsed:
+        logger.warning("World building failed, using fallback world for seed %d", seed)
+        fallback_name = f"Mysterious {genre.title()} Realm"
+        fallback_description = f"A {genre} world shrouded in mystery, where adventure awaits around every corner."
+        parsed = {
+            "name": fallback_name,
+            "genre": genre,
+            "description": fallback_description,
+            "lore": f"This realm was created with seed {seed} when the ancient magic of world-building faltered. Legends speak of powerful artifacts and hidden dangers.",
+            "rules": {
+                "technology_level": "medieval" if "fantasy" in genre else "modern",
+                "magic_system": "high" if "fantasy" in genre else "none",
+                "allowed_items": ["weapons", "armor", "potions"] if "fantasy" in genre else ["weapons", "tools", "technology"],
+                "forbidden_items": ["nuclear weapons", "reality-warping artifacts"],
+                "custom_rules": [f"Standard {genre} adventure rules apply"],
+                "existing_creatures": ["humans", "monsters"] if "fantasy" in genre else ["humans", "animals"]
+            },
+            "locations": [
+                {"name": "Starting Village", "description": "A peaceful village where adventurers begin their journey.", "type": "settlement", "coordinates": [0, 0], "connections": ["Dark Forest"]},
+                {"name": "Dark Forest", "description": "A mysterious forest with hidden treasures and unknown dangers.", "type": "wilderness", "coordinates": [1, 0], "connections": ["Starting Village", "Ancient Ruins"]},
+                {"name": "Ancient Ruins", "description": "Forgotten ruins holding secrets of the past.", "type": "dungeon", "coordinates": [2, 0], "connections": ["Dark Forest"]}
+            ],
+            "factions": [
+                {"name": "Village Council", "description": "The wise leaders who govern the starting village.", "reputation": 0, "goals": ["Maintain peace", "Protect villagers"]},
+                {"name": "Forest Outlaws", "description": "A band of outlaws who hide in the dark forest.", "reputation": -20, "goals": ["Survive", "Amass wealth"]}
+            ],
+            "npcs": [
+                {"name": "Elder Thorne", "location": "Starting Village", "role": "Quest Giver", "description": "A wise old man with many stories to tell.", "personality": "wise, helpful", "goals": ["Help adventurers", "Preserve knowledge"]},
+                {"name": "Bandit Chief", "location": "Dark Forest", "role": "Antagonist", "description": "A cunning leader of the forest outlaws.", "personality": "greedy, ruthless", "goals": ["Control the forest", "Get rich"]}
+            ],
+            "quests": [
+                {"name": "Welcome to Adventure", "description": "Speak with Elder Thorne to learn about the world.", "status": "available", "objectives": ["Talk to Elder Thorne"], "rewards": ["Information", "Basic equipment"]},
+                {"name": "Clear the Forest Path", "description": "Deal with the bandits blocking safe passage through the forest.", "status": "available", "objectives": ["Defeat bandits", "Clear the road"], "rewards": ["Safe passage", "Gold"]}
+            ]
+        }
+
+    return parsed
 
 
 # ---------------------------------------------------------------------------

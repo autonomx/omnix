@@ -37,6 +37,11 @@ import app.shared as shared
 from app.providers.base import ChatMessage
 from app.providers.faster_qwen3_tts_provider import apply_fade, soft_clip, find_best_offset
 
+# RPG imports
+from app.rpg.models import GameSession
+from app.rpg.persistence import delete_game, list_games, load_game, save_game
+from app.rpg.pipeline import create_new_game, execute_turn, replay_turn
+
 
 # ============== CONFIG ==============
 HOST = "0.0.0.0"
@@ -1290,6 +1295,288 @@ async def clear_session(request: Request):
         shared.sessions_data[sid]['updated_at'] = datetime.now().isoformat()
         shared.save_sessions(shared.sessions_data)
     return {"success": True}
+
+
+# ============== RPG ENDPOINTS ==============
+
+@app.get("/api/rpg/games")
+async def list_rpg_games():
+    """List all saved RPG game sessions."""
+    try:
+        games = list_games()
+        return {"success": True, "games": games}
+    except Exception as e:
+        print(f"[RPG] Error in list_rpg_games: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/rpg/games")
+async def create_rpg_game(request: Request):
+    """Create a new RPG game session."""
+    try:
+        print("[DEBUG] create_rpg_game called")
+        data = await request.json()
+        data = data or {}
+        print(f"[DEBUG] Request data: {data}")
+        seed = data.get("seed")
+        genre = data.get("genre", "medieval fantasy")
+        player_name = data.get("player_name", "Player")
+
+        # Custom world-building inputs
+        custom_lore = data.get("lore")
+        custom_rules = data.get("rules")
+        custom_story = data.get("story")
+        world_prompt = data.get("world_prompt")
+
+        if seed is not None:
+            try:
+                seed = int(seed)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Seed must be an integer")
+
+        print(f"[DEBUG] Calling create_new_game with seed={seed}, genre={genre}, player_name={player_name}")
+        session = create_new_game(
+            seed=seed,
+            genre=genre,
+            player_name=player_name,
+            custom_lore=custom_lore,
+            custom_rules=custom_rules,
+            custom_story=custom_story,
+            world_prompt=world_prompt,
+        )
+        print(f"[DEBUG] create_new_game returned: {session}")
+        if not session:
+            print("[DEBUG] Session is None, raising 500")
+            raise HTTPException(status_code=500, detail="Failed to generate game world")
+
+        # Build opening narration
+        opening_parts = []
+        if session.world.name:
+            opening_parts.append(session.world.name)
+        if session.world.description:
+            opening_parts.append(session.world.description)
+        if session.world.lore:
+            opening_parts.append(session.world.lore)
+        opening = "\n\n".join(opening_parts) if opening_parts else "Your adventure begins\u2026"
+
+        result = {
+            "success": True,
+            "session_id": session.session_id,
+            "world": {
+                "name": session.world.name,
+                "genre": session.world.genre,
+                "description": session.world.description,
+            },
+            "player": session.player.to_dict(),
+            "opening": opening,
+        }
+        print(f"[DEBUG] Returning result: {result}")
+        return result
+    except Exception as e:
+        print(f"[DEBUG] Exception in create_rpg_game: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
+@app.get("/api/rpg/games/{session_id}")
+async def get_rpg_game(session_id: str):
+    """Get the full state of an RPG game session."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    return {
+        "success": True,
+        "game": session.to_dict(),
+    }
+
+
+@app.delete("/api/rpg/games/{session_id}")
+async def delete_rpg_game(session_id: str):
+    """Delete an RPG game session."""
+    if delete_game(session_id):
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="Game not found")
+
+
+@app.post("/api/rpg/games/{session_id}/turn")
+async def execute_rpg_turn(session_id: str, request: Request):
+    """Execute a player turn in an RPG game."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    data = await request.json()
+    data = data or {}
+    player_input = data.get("input", "").strip()
+    if not player_input:
+        raise HTTPException(status_code=400, detail="No input provided")
+
+    result = execute_turn(session, player_input)
+
+    response = {
+        "success": result.error is None,
+        "narration": result.narration,
+        "turn": session.turn_count,
+        "state_changes": result.state_changes,
+        "events": [e.to_dict() for e in result.events],
+    }
+    if result.choices:
+        response["choices"] = result.choices
+    if result.error:
+        response["error"] = result.error
+    if result.dice_roll:
+        response["dice_roll"] = result.dice_roll
+    if result.fail_state:
+        response["fail_state"] = result.fail_state
+
+    return response
+
+
+@app.get("/api/rpg/games/{session_id}/player")
+async def get_player_state(session_id: str):
+    """Get the current player state."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    return {
+        "success": True,
+        "player": session.player.to_dict(),
+    }
+
+
+@app.get("/api/rpg/games/{session_id}/world")
+async def get_world_state(session_id: str):
+    """Get the current world state."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    return {
+        "success": True,
+        "world": session.world.to_dict(),
+    }
+
+
+@app.get("/api/rpg/games/{session_id}/npcs")
+async def get_npcs(session_id: str, location: str = None):
+    """Get all NPCs, optionally filtered by location."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if location:
+        npcs = session.get_npcs_at_location(location)
+    else:
+        npcs = session.npcs
+
+    return {
+        "success": True,
+        "npcs": [npc.to_dict() for npc in npcs],
+    }
+
+
+@app.get("/api/rpg/games/{session_id}/quests")
+async def get_quests(session_id: str, status: str = None):
+    """Get quests, optionally filtered by status."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if status == "active":
+        quests = session.get_active_quests()
+    else:
+        quests = session.quests
+
+    return {
+        "success": True,
+        "quests": [q.to_dict() for q in quests],
+    }
+
+
+@app.get("/api/rpg/games/{session_id}/history")
+async def get_history(session_id: str, limit: int = None):
+    """Get the game history log."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    history = session.history
+    if limit and limit > 0:
+        history = history[-limit:]
+
+    return {
+        "success": True,
+        "history": [h.to_dict() for h in history],
+        "turn_count": session.turn_count,
+    }
+
+
+@app.get("/api/rpg/games/{session_id}/replay")
+async def get_replay(session_id: str, turn: int = None):
+    """Get the deterministic replay log for a game session."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if turn is not None:
+        logs = [tl for tl in session.turn_logs if tl.turn == turn]
+        if not logs:
+            raise HTTPException(status_code=404, detail=f"No log for turn {turn}")
+        return {
+            "success": True,
+            "turn_log": logs[0].to_dict(),
+        }
+
+    return {
+        "success": True,
+        "turn_logs": [tl.to_dict() for tl in session.turn_logs],
+        "turn_count": session.turn_count,
+    }
+
+
+@app.post("/api/rpg/games/{session_id}/replay")
+async def run_replay(session_id: str, request: Request):
+    """Re-execute a turn deterministically from its stored TurnLog."""
+    session = load_game(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    data = await request.json()
+    data = data or {}
+    turn = data.get("turn")
+    if turn is None:
+        raise HTTPException(status_code=400, detail="Missing 'turn' in request body")
+
+    try:
+        turn = int(turn)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="'turn' must be an integer")
+
+    logs = [tl for tl in session.turn_logs if tl.turn == turn]
+    if not logs:
+        raise HTTPException(status_code=404, detail=f"No log for turn {turn}")
+
+    result = replay_turn(logs[0], session)
+    save_game(session)
+
+    response = {
+        "success": result.error is None,
+        "narration": result.narration,
+        "turn": turn,
+        "state_changes": result.state_changes,
+        "events": [e.to_dict() for e in result.events],
+    }
+    if result.dice_roll:
+        response["dice_roll"] = result.dice_roll
+    if result.error:
+        response["error"] = result.error
+
+    return response
 
 
 # ============== PODCAST ENDPOINTS ==============

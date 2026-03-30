@@ -374,3 +374,242 @@ class TestRPGTurnExecution:
                 json={},
             )
             assert resp.status_code == 400
+
+
+class TestRPGFunctional:
+    """Functional tests for RPG game lifecycle."""
+
+    @patch('app.rpg.routes.create_new_game')
+    @patch('app.rpg.routes.load_game')
+    def test_start_game_and_send_turn(self, mock_load_game, mock_create_game, flask_client):
+        """Test the full flow: create game, send a turn, get response."""
+        from app.rpg.models import GameSession, WorldState, PlayerState, TurnResult
+
+        # Mock the create_new_game function
+        mock_session = GameSession()
+        mock_session.session_id = "test_session_123"
+        mock_session.world = WorldState(name="Test World", genre="fantasy", description="A test world")
+        mock_session.player = PlayerState(name="TestPlayer")
+        mock_create_game.return_value = mock_session
+        mock_load_game.return_value = mock_session
+
+        # Create a new game
+        resp = flask_client.post("/api/rpg/games", json={"genre": "fantasy"})
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["success"] is True
+        session_id = data["session_id"]
+        assert session_id == "test_session_123"
+        assert "world" in data
+        assert "player" in data
+        assert "opening" in data
+
+        # Verify game was created
+        resp = flask_client.get(f"/api/rpg/games/{session_id}")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["game"]["session_id"] == session_id
+
+        # Send a turn (mock execute_turn)
+        with patch('app.rpg.routes.execute_turn') as mock_execute, \
+             patch('app.rpg.routes.save_game') as mock_save:
+
+            def mock_execute_turn(session, input_text):
+                session.turn_count += 1
+                return TurnResult(
+                    narration="You look around and see a beautiful forest.",
+                    state_changes={},
+                    events=[],
+                    error=None
+                )
+
+            mock_execute.side_effect = mock_execute_turn
+
+            resp = flask_client.post(
+                f"/api/rpg/games/{session_id}/turn",
+                json={"input": "I look around and see what is here."}
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["success"] is True
+            assert "narration" in data
+            assert "turn" in data
+            assert data["turn"] == 1
+            assert "state_changes" in data
+
+        # Verify turn was recorded (mock history)
+        resp = flask_client.get(f"/api/rpg/games/{session_id}/history")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["turn_count"] == 1
+
+    @patch('app.rpg.routes.create_new_game')
+    @patch('app.rpg.routes.load_game')
+    def test_multiple_turns_conversation(self, mock_load_game, mock_create_game, flask_client):
+        """Test sending multiple turns in a conversation."""
+        from app.rpg.models import GameSession, WorldState, PlayerState, TurnResult
+
+        # Mock the functions
+        mock_session = GameSession()
+        mock_session.session_id = "test_session_multi"
+        mock_session.world = WorldState(name="Sci-Fi World", genre="sci-fi", description="A futuristic world")
+        mock_session.player = PlayerState(name="Alex")
+        mock_create_game.return_value = mock_session
+        mock_load_game.return_value = mock_session
+
+        # Create game
+        resp = flask_client.post("/api/rpg/games", json={"genre": "sci-fi", "player_name": "Alex"})
+        assert resp.status_code == 201
+        session_id = resp.get_json()["session_id"]
+        assert session_id == "test_session_multi"
+
+        turn_count = 0
+
+        def mock_execute_turn(session, input_text):
+            nonlocal turn_count
+            turn_count += 1
+            session.turn_count = turn_count
+            return TurnResult(
+                narration=f"Response to: {input_text}",
+                state_changes={},
+                events=[],
+                error=None
+            )
+
+        # First turn
+        with patch('app.rpg.routes.execute_turn', side_effect=mock_execute_turn), \
+             patch('app.rpg.routes.save_game'):
+            resp = flask_client.post(
+                f"/api/rpg/games/{session_id}/turn",
+                json={"input": "Hello, where am I?"}
+            )
+            assert resp.status_code == 200
+            first_turn = resp.get_json()
+            assert first_turn["turn"] == 1
+
+        # Second turn
+        with patch('app.rpg.routes.execute_turn', side_effect=mock_execute_turn), \
+             patch('app.rpg.routes.save_game'):
+            resp = flask_client.post(
+                f"/api/rpg/games/{session_id}/turn",
+                json={"input": "What should I do next?"}
+            )
+            assert resp.status_code == 200
+            second_turn = resp.get_json()
+            assert second_turn["turn"] == 2
+
+        # Check history has both turns
+        resp = flask_client.get(f"/api/rpg/games/{session_id}/history")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["turn_count"] == 2
+
+    @patch('app.rpg.routes.create_new_game')
+    @patch('app.rpg.routes.load_game')
+    def test_game_state_queries(self, mock_load_game, mock_create_game, flask_client):
+        """Test querying game state after turns."""
+        from app.rpg.models import GameSession, WorldState, PlayerState
+
+        # Mock the functions
+        mock_session = GameSession()
+        mock_session.session_id = "test_session_state"
+        mock_session.world = WorldState(name="Medieval World", genre="medieval fantasy", description="A medieval world")
+        mock_session.player = PlayerState(name="Player")
+        mock_create_game.return_value = mock_session
+        mock_load_game.return_value = mock_session
+
+        # Create and play a bit
+        resp = flask_client.post("/api/rpg/games", json={"genre": "medieval fantasy"})
+        assert resp.status_code == 201
+        session_id = resp.get_json()["session_id"]
+
+        with patch('app.rpg.routes.execute_turn') as mock_execute, \
+             patch('app.rpg.routes.save_game'):
+            from app.rpg.models import TurnResult
+            mock_execute.return_value = TurnResult(
+                narration='You enter the tavern.',
+                state_changes={},
+                events=[],
+                error=None
+            )
+            flask_client.post(
+                f"/api/rpg/games/{session_id}/turn",
+                json={"input": "I enter the tavern."}
+            )
+
+        # Test player state
+        resp = flask_client.get(f"/api/rpg/games/{session_id}/player")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "player" in data
+        assert data["player"]["name"] == "Player"
+
+        # Test world state
+        resp = flask_client.get(f"/api/rpg/games/{session_id}/world")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "world" in data
+        assert data["world"]["genre"] == "medieval fantasy"
+
+        # Test NPCs
+        resp = flask_client.get(f"/api/rpg/games/{session_id}/npcs")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "npcs" in data
+
+        # Test quests
+        resp = flask_client.get(f"/api/rpg/games/{session_id}/quests")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "quests" in data
+
+    @patch('app.rpg.routes.create_new_game')
+    @patch('app.rpg.routes.load_game')
+    @patch('app.rpg.routes.list_games')
+    @patch('app.rpg.routes.delete_game')
+    def test_game_deletion(self, mock_delete_game, mock_list_games, mock_load_game, mock_create_game, flask_client):
+        """Test creating and deleting a game."""
+        from app.rpg.models import GameSession, WorldState, PlayerState
+
+        # Mock the functions
+        mock_session = GameSession()
+        mock_session.session_id = "test_session_delete"
+        mock_session.world = WorldState(name="Test World", genre="fantasy", description="A test world")
+        mock_session.player = PlayerState(name="Player")
+        mock_create_game.return_value = mock_session
+        mock_load_game.return_value = mock_session
+        mock_delete_game.return_value = True
+        mock_list_games.return_value = []
+
+        # Create game
+        resp = flask_client.post("/api/rpg/games", json={})
+        assert resp.status_code == 201
+        data = resp.get_json()
+        session_id = data["session_id"]
+
+        # Verify it exists
+        resp = flask_client.get(f"/api/rpg/games/{session_id}")
+        assert resp.status_code == 200
+
+        # Delete it
+        resp = flask_client.delete(f"/api/rpg/games/{session_id}")
+        assert resp.status_code == 200
+
+        # Mock load_game to return None for deleted game
+        mock_load_game.return_value = None
+
+        # Verify it's gone
+        resp = flask_client.get(f"/api/rpg/games/{session_id}")
+        assert resp.status_code == 404
+
+        # Verify it's not in the list
+        resp = flask_client.get("/api/rpg/games")
+        data = resp.get_json()
+        session_ids = [game["session_id"] for game in data["games"]]
+        assert session_id not in session_ids

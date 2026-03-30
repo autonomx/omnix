@@ -13,8 +13,8 @@ from app.rpg.models import GameSession
 
 def _get_data_path() -> str:
     """Get the path to the RPG data file."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    data_dir = os.path.join(base_dir, "resources", "data")
+    from app.shared import RESOURCES_DIR
+    data_dir = os.path.join(RESOURCES_DIR, "data")
     os.makedirs(data_dir, exist_ok=True)
     return os.path.join(data_dir, "rpg_games.json")
 
