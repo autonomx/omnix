@@ -126,6 +126,7 @@ def _extract_choices(narration: str) -> Tuple[str, List[str]]:
 
 def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
                     player_name: str = "Player",
+                    character_class: str = "",
                     custom_lore: Optional[str] = None,
                     custom_rules: Optional[str] = None,
                     custom_story: Optional[str] = None,
@@ -137,6 +138,7 @@ def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
     the game session with all state.
 
     Optional parameters allow the player to shape the generated world:
+      character_class – player class (warrior / mage / rogue)
       custom_lore   – background lore the world should incorporate
       custom_rules  – gameplay rules or constraints
       custom_story  – story hook or initial scenario
@@ -192,8 +194,16 @@ def create_new_game(seed: Optional[int] = None, genre: str = "medieval fantasy",
     # Create player
     player = PlayerState(
         name=player_name,
+        character_class=character_class,
         location=starting_location,
     )
+
+    # Apply character class stat bonuses
+    from app.rpg.models import CHARACTER_CLASSES
+    class_bonuses = CHARACTER_CLASSES.get(character_class.lower(), {})
+    for stat_name, bonus in class_bonuses.items():
+        current = getattr(player.stats, stat_name, 0)
+        setattr(player.stats, stat_name, current + bonus)
 
     # Create session
     session = GameSession(

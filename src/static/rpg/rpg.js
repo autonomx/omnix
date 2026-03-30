@@ -330,7 +330,14 @@
     // ─── Loading state ─────────────────────────────────────────────────────────
 
     var loadingInterval = null;
-    var adventureSetup = { custom_lore: '', custom_rules: '', custom_story: '', world_prompt: '' };
+    var ADVENTURE_SETUP_KEY = 'omnix_rpg_adventure_setup';
+    var adventureSetup = (function() {
+        try {
+            var stored = localStorage.getItem(ADVENTURE_SETUP_KEY);
+            if (stored) return JSON.parse(stored);
+        } catch (e) { /* ignore parse errors */ }
+        return { custom_lore: '', custom_rules: '', custom_story: '', world_prompt: '' };
+    })();
 
     function setLoading(loading) {
         updateState({ isLoading: loading });
@@ -352,19 +359,36 @@
         }
     }
 
+    var generationProgress = { current: 0, total: 5, stage: "Initializing" };
+
+    function updateProgress(stage, step) {
+        generationProgress.current = step;
+        generationProgress.stage = stage;
+        var percent = (step / generationProgress.total) * 100;
+        var bar = el('rpgLoadingBar');
+        var textEl = el('rpgLoadingText');
+        if (bar) bar.style.width = percent + '%';
+        if (textEl) textEl.textContent = stage + ' (' + Math.floor(percent) + '%)';
+    }
+
     function startLoadingProgress() {
         if (loadingInterval) clearInterval(loadingInterval);
-        var phaseIndex = 0;
-        var phases = ["Initializing world...", "Generating locations...", "Creating characters...", "Setting up story...", "Finalizing adventure..."];
-        var textEl = el('rpgLoadingText');
+        generationProgress.current = 0;
+        var phases = [
+            "Building world",
+            "Generating environment",
+            "Creating factions",
+            "Spawning NPCs",
+            "Finalizing story"
+        ];
         var bar = el('rpgLoadingBar');
-        if (textEl) textEl.textContent = phases[0];
         if (bar) bar.style.width = '0%';
+        updateProgress(phases[0], 0);
+        var phaseIndex = 0;
         loadingInterval = setInterval(function() {
             if (phaseIndex < phases.length - 1) {
                 phaseIndex++;
-                if (textEl) textEl.textContent = phases[phaseIndex];
-                if (bar) bar.style.width = ((phaseIndex + 1) / phases.length * 100) + '%';
+                updateProgress(phases[phaseIndex], phaseIndex + 1);
             }
         }, 2000);
     }
@@ -374,11 +398,7 @@
             clearInterval(loadingInterval);
             loadingInterval = null;
         }
-        var bar = el('rpgLoadingBar');
-        if (bar) bar.style.width = '100%';
-        var textEl = el('rpgLoadingText');
-        if (textEl) textEl.textContent = "Adventure ready!";
-        // Hide after a short delay
+        updateProgress("Adventure ready!", generationProgress.total);
         setTimeout(function() {
             var overlay = el('rpgLoadingOverlay');
             if (overlay) overlay.style.display = 'none';
@@ -679,8 +699,8 @@
             adventureSetup.custom_rules = el('setupCustomRules').value;
             adventureSetup.custom_story = el('setupCustomStory').value;
             adventureSetup.world_prompt = el('setupWorldPrompt').value;
+            localStorage.setItem(ADVENTURE_SETUP_KEY, JSON.stringify(adventureSetup));
             panel.classList.remove('active');
-            // Don't alert, just close
         });
         panel.classList.add('active');
     }
@@ -882,11 +902,9 @@
                     updateState({ sessionId: null });
                     localStorage.removeItem(STORAGE_KEY);
 
-                    var game2 = await apiCreateGame();
+                    var game2 = await apiCreateGame(adventureSetup);
                     updateState({ sessionId: game2.session_id });
                     localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
-
-                    var game2 = await apiCreateGame(adventureSetup);
 
                     if (game2.opening) {
                         applyUpdate(transformResponse({ narration: game2.opening }));
@@ -1261,15 +1279,63 @@
         var inventory = Array.isArray(player.inventory) ? player.inventory : [];
         var quests = Array.isArray(player.quests_active) ? player.quests_active : [];
         var factionRep = player.reputation_factions || {};
+        var skills = player.skills || {};
+
+        // Level / XP bar
+        var levelHtml = '';
+        if (player.level !== undefined) {
+            var xpPercent = player.xp_to_next > 0 ? Math.floor((player.xp / player.xp_to_next) * 100) : 0;
+            levelHtml =
+                '<div class="rpg-player-level">' +
+                    '<span class="rpg-level-badge">Lv ' + (player.level || 1) + '</span>' +
+                    (player.character_class ? '<span class="rpg-class-badge">' + escapeHtml(player.character_class) + '</span>' : '') +
+                    '<div class="rpg-xp-bar"><div class="rpg-xp-fill" style="width:' + xpPercent + '%"></div>' +
+                    '<span class="rpg-xp-text">XP ' + (player.xp || 0) + '/' + (player.xp_to_next || 100) + '</span></div>' +
+                '</div>';
+        }
+
+        // HP / Stamina / Mana bars
+        var vitalsHtml = '';
+        if (player.max_hp !== undefined) {
+            var hpPct = player.max_hp > 0 ? Math.floor((player.hp / player.max_hp) * 100) : 0;
+            var stPct = player.max_stamina > 0 ? Math.floor(((player.stamina || 0) / player.max_stamina) * 100) : 0;
+            var mpPct = player.max_mana > 0 ? Math.floor(((player.mana || 0) / player.max_mana) * 100) : 0;
+            vitalsHtml =
+                '<div class="rpg-player-vitals">' +
+                    '<div class="rpg-vital-row">❤️ HP <div class="rpg-vital-bar rpg-vital-hp"><div class="rpg-vital-fill" style="width:' + hpPct + '%"></div></div> ' + (player.hp || 0) + '/' + (player.max_hp || 0) + '</div>' +
+                    '<div class="rpg-vital-row">⚡ STA <div class="rpg-vital-bar rpg-vital-sta"><div class="rpg-vital-fill" style="width:' + stPct + '%"></div></div> ' + (player.stamina || 0) + '/' + (player.max_stamina || 0) + '</div>' +
+                    '<div class="rpg-vital-row">🔮 MP <div class="rpg-vital-bar rpg-vital-mp"><div class="rpg-vital-fill" style="width:' + mpPct + '%"></div></div> ' + (player.mana || 0) + '/' + (player.max_mana || 0) + '</div>' +
+                '</div>';
+        }
 
         // Stats rows
         var statsHtml =
             '<div class="rpg-player-stats">' +
                 '<div class="rpg-stat"><span class="rpg-stat-label">⚔️ STR</span><span class="rpg-stat-value">' + (stats.strength || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">💬 CHA</span><span class="rpg-stat-value">' + (stats.charisma || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">🏹 DEX</span><span class="rpg-stat-value">' + (stats.dexterity || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">🛡️ CON</span><span class="rpg-stat-value">' + (stats.constitution || 0) + '</span></div>' +
                 '<div class="rpg-stat"><span class="rpg-stat-label">🧠 INT</span><span class="rpg-stat-value">' + (stats.intelligence || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">🔮 WIS</span><span class="rpg-stat-value">' + (stats.wisdom || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">💬 CHA</span><span class="rpg-stat-value">' + (stats.charisma || 0) + '</span></div>' +
                 '<div class="rpg-stat"><span class="rpg-stat-label">💰 Gold</span><span class="rpg-stat-value">' + (stats.wealth || 0) + '</span></div>' +
             '</div>';
+
+        // Skills section
+        var skillKeys = Object.keys(skills);
+        var skillHtml = '';
+        if (skillKeys.length) {
+            skillHtml = '<div class="rpg-player-section-title">🎯 Skills</div><div class="rpg-player-skills">' +
+                skillKeys.map(function(sk) {
+                    var lvl = typeof skills[sk] === 'number' ? skills[sk] : (skills[sk] && skills[sk].level || 0);
+                    return '<span class="rpg-skill-badge">' + escapeHtml(sk) + ' <strong>' + lvl + '</strong></span>';
+                }).join('') + '</div>';
+        }
+
+        // Unspent stat points
+        var pointsHtml = '';
+        if (player.unspent_points && player.unspent_points > 0) {
+            pointsHtml = '<div class="rpg-unspent-points">🌟 Unspent stat points: <strong>' + player.unspent_points + '</strong></div>';
+        }
 
         // Location
         var locHtml = player.location
@@ -1316,7 +1382,7 @@
 
         panel.innerHTML =
             '<div class="rpg-player-name">' + escapeHtml(player.name || 'Player') + '</div>' +
-            locHtml + statsHtml + repHtml + factionHtml + invHtml + questHtml;
+            levelHtml + vitalsHtml + locHtml + statsHtml + pointsHtml + skillHtml + repHtml + factionHtml + invHtml + questHtml;
     }
 
     /** Open the player stats/inventory modal overlay. */

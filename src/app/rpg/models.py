@@ -551,15 +551,21 @@ class WorldState:
 class CharacterStats:
     """Stats for an NPC or player character."""
     strength: int = 5
-    charisma: int = 5
+    dexterity: int = 5
+    constitution: int = 5
     intelligence: int = 5
+    wisdom: int = 5
+    charisma: int = 5
     wealth: int = 0
 
     def to_dict(self) -> Dict[str, int]:
         return {
             "strength": self.strength,
-            "charisma": self.charisma,
+            "dexterity": self.dexterity,
+            "constitution": self.constitution,
             "intelligence": self.intelligence,
+            "wisdom": self.wisdom,
+            "charisma": self.charisma,
             "wealth": self.wealth,
         }
 
@@ -567,8 +573,11 @@ class CharacterStats:
     def from_dict(cls, data: Dict[str, Any]) -> "CharacterStats":
         return cls(
             strength=data.get("strength", 5),
-            charisma=data.get("charisma", 5),
+            dexterity=data.get("dexterity", 5),
+            constitution=data.get("constitution", 5),
             intelligence=data.get("intelligence", 5),
+            wisdom=data.get("wisdom", 5),
+            charisma=data.get("charisma", 5),
             wealth=data.get("wealth", 0),
         )
 
@@ -692,13 +701,109 @@ class NPCCharacter:
         )
 
 
+# ---------------------------------------------------------------------------
+# Character Classes
+# ---------------------------------------------------------------------------
+
+CHARACTER_CLASSES: Dict[str, Dict[str, int]] = {
+    "warrior": {"strength": 3, "constitution": 2},
+    "mage": {"intelligence": 3, "wisdom": 2},
+    "rogue": {"dexterity": 3, "charisma": 2},
+}
+
+DEFAULT_SKILLS: Dict[str, int] = {
+    "swordsmanship": 1,
+    "stealth": 1,
+    "persuasion": 1,
+    "magic": 1,
+}
+
+# ---------------------------------------------------------------------------
+# Stat Check (d20 + stat + skill)
+# ---------------------------------------------------------------------------
+
+DIFFICULTY_TABLE: Dict[str, int] = {
+    "easy": 8,
+    "normal": 12,
+    "hard": 16,
+    "elite": 20,
+}
+
+
+def stat_check(
+    stat_value: int,
+    skill_value: int,
+    difficulty: str = "normal",
+    seed: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Perform a d20 stat check: roll = d20 + stat + skill vs difficulty target.
+
+    Returns dict with roll, stat, skill, total, target, success, and critical flags.
+    """
+    rng = random.Random(seed) if seed is not None else random
+    roll = rng.randint(1, 20)
+    total = roll + stat_value + skill_value
+    target = DIFFICULTY_TABLE.get(difficulty, 12)
+    return {
+        "roll": roll,
+        "stat": stat_value,
+        "skill": skill_value,
+        "total": total,
+        "target": target,
+        "success": total >= target,
+        "critical_success": roll == 20,
+        "critical_fail": roll == 1,
+    }
+
+
+# ---------------------------------------------------------------------------
+# XP / Leveling
+# ---------------------------------------------------------------------------
+
+def gain_xp(player: "PlayerState", amount: int) -> List[str]:
+    """
+    Award XP to a player.  Automatically triggers level-ups.
+
+    Returns a list of messages describing any level-ups that occurred.
+    """
+    messages: List[str] = []
+    player.xp += amount
+    while player.xp >= player.xp_to_next:
+        player.xp -= player.xp_to_next
+        _level_up(player)
+        messages.append(f"Level up! Now level {player.level}.")
+    return messages
+
+
+def _level_up(player: "PlayerState") -> None:
+    """Apply a single level-up to *player*."""
+    player.level += 1
+    player.xp_to_next = int(player.xp_to_next * 1.5)
+    player.max_hp += 10
+    player.hp = player.max_hp
+    player.unspent_points += 3
+
+
 @dataclass
 class PlayerState:
     """The player's character state."""
     name: str = "Player"
+    character_class: str = ""
+    level: int = 1
+    xp: int = 0
+    xp_to_next: int = 100
+    hp: int = 100
+    max_hp: int = 100
+    stamina: int = 100
+    max_stamina: int = 100
+    mana: int = 50
+    max_mana: int = 50
+    unspent_points: int = 0
     stats: CharacterStats = field(default_factory=lambda: CharacterStats(
-        strength=8, charisma=3, intelligence=6, wealth=50
+        strength=8, dexterity=5, constitution=5, intelligence=6, wisdom=5, charisma=3, wealth=50
     ))
+    skills: Dict[str, int] = field(default_factory=lambda: dict(DEFAULT_SKILLS))
     inventory: List[str] = field(default_factory=list)
     location: str = ""
     reputation_local: int = 0
@@ -713,7 +818,19 @@ class PlayerState:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "name": self.name,
+            "character_class": self.character_class,
+            "level": self.level,
+            "xp": self.xp,
+            "xp_to_next": self.xp_to_next,
+            "hp": self.hp,
+            "max_hp": self.max_hp,
+            "stamina": self.stamina,
+            "max_stamina": self.max_stamina,
+            "mana": self.mana,
+            "max_mana": self.max_mana,
+            "unspent_points": self.unspent_points,
             "stats": self.stats.to_dict(),
+            "skills": dict(self.skills),
             "inventory": list(self.inventory),
             "location": self.location,
             "reputation_local": self.reputation_local,
@@ -730,9 +847,22 @@ class PlayerState:
     def from_dict(cls, data: Dict[str, Any]) -> "PlayerState":
         return cls(
             name=data.get("name", "Player"),
+            character_class=data.get("character_class", ""),
+            level=data.get("level", 1),
+            xp=data.get("xp", 0),
+            xp_to_next=data.get("xp_to_next", 100),
+            hp=data.get("hp", 100),
+            max_hp=data.get("max_hp", 100),
+            stamina=data.get("stamina", 100),
+            max_stamina=data.get("max_stamina", 100),
+            mana=data.get("mana", 50),
+            max_mana=data.get("max_mana", 50),
+            unspent_points=data.get("unspent_points", 0),
             stats=CharacterStats.from_dict(data.get("stats", {
-                "strength": 8, "charisma": 3, "intelligence": 6, "wealth": 50
+                "strength": 8, "dexterity": 5, "constitution": 5,
+                "intelligence": 6, "wisdom": 5, "charisma": 3, "wealth": 50
             })),
+            skills=data.get("skills", dict(DEFAULT_SKILLS)),
             inventory=data.get("inventory", []),
             location=data.get("location", ""),
             reputation_local=data.get("reputation_local", 0),
@@ -1211,10 +1341,10 @@ class WorldStateDiff:
 
 
 # Whitelisted mutable stat fields on CharacterStats
-_STAT_FIELDS = {"strength", "charisma", "intelligence", "wealth"}
+_STAT_FIELDS = {"strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma", "wealth"}
 
 # Whitelisted mutable fields on PlayerState that accept delta ints
-_PLAYER_DELTA_FIELDS = {"reputation_local", "reputation_global"}
+_PLAYER_DELTA_FIELDS = {"reputation_local", "reputation_global", "hp", "stamina", "mana", "xp"}
 
 # Whitelisted mutable fields on NPCCharacter that accept replacement values
 _NPC_REPLACE_FIELDS = {"location", "current_action"}

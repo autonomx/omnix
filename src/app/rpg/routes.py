@@ -36,11 +36,12 @@ def create_rpg_game():
     seed = data.get("seed")
     genre = data.get("genre", "medieval fantasy")
     player_name = data.get("player_name", "Player")
+    character_class = data.get("character_class", "")
 
     # Custom world-building inputs
-    custom_lore = data.get("lore")
-    custom_rules = data.get("rules")
-    custom_story = data.get("story")
+    custom_lore = data.get("lore") or data.get("custom_lore")
+    custom_rules = data.get("rules") or data.get("custom_rules")
+    custom_story = data.get("story") or data.get("custom_story")
     world_prompt = data.get("world_prompt")
 
     if seed is not None:
@@ -53,6 +54,7 @@ def create_rpg_game():
         seed=seed,
         genre=genre,
         player_name=player_name,
+        character_class=character_class,
         custom_lore=custom_lore,
         custom_rules=custom_rules,
         custom_story=custom_story,
