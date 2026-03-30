@@ -330,7 +330,7 @@
     // ─── Loading state ─────────────────────────────────────────────────────────
 
     var loadingInterval = null;
-    var adventureSetup = { lore: '', rules: '', story: '', prompt: '' };
+    var adventureSetup = { custom_lore: '', custom_rules: '', custom_story: '', world_prompt: '' };
 
     function setLoading(loading) {
         updateState({ isLoading: loading });
@@ -361,9 +361,11 @@
         if (textEl) textEl.textContent = phases[0];
         if (bar) bar.style.width = '0%';
         loadingInterval = setInterval(function() {
-            phaseIndex = (phaseIndex + 1) % phases.length;
-            if (textEl) textEl.textContent = phases[phaseIndex];
-            if (bar) bar.style.width = ((phaseIndex + 1) / phases.length * 100) + '%';
+            if (phaseIndex < phases.length - 1) {
+                phaseIndex++;
+                if (textEl) textEl.textContent = phases[phaseIndex];
+                if (bar) bar.style.width = ((phaseIndex + 1) / phases.length * 100) + '%';
+            }
         }, 2000);
     }
 
@@ -640,7 +642,7 @@
 
                 <label>Custom Lore:</label>
 
-                <textarea id="setupLore" placeholder="Enter background lore for the world">${adventureSetup.lore}</textarea>
+                <textarea id="setupCustomLore" placeholder="Enter background lore for the world">${adventureSetup.custom_lore}</textarea>
 
             </div>
 
@@ -648,7 +650,7 @@
 
                 <label>Custom Rules:</label>
 
-                <textarea id="setupRules" placeholder="Enter special gameplay rules">${adventureSetup.rules}</textarea>
+                <textarea id="setupCustomRules" placeholder="Enter special gameplay rules">${adventureSetup.custom_rules}</textarea>
 
             </div>
 
@@ -656,7 +658,7 @@
 
                 <label>Story Hook:</label>
 
-                <textarea id="setupStory" placeholder="Enter initial story or scenario">${adventureSetup.story}</textarea>
+                <textarea id="setupCustomStory" placeholder="Enter initial story or scenario">${adventureSetup.custom_story}</textarea>
 
             </div>
 
@@ -664,7 +666,7 @@
 
                 <label>World Prompt:</label>
 
-                <textarea id="setupPrompt" placeholder="Additional instructions for world generation">${adventureSetup.prompt}</textarea>
+                <textarea id="setupWorldPrompt" placeholder="Additional instructions for world generation">${adventureSetup.world_prompt}</textarea>
 
             </div>
 
@@ -673,12 +675,12 @@
         `;
         var saveBtn = el('setupSaveBtn');
         if (saveBtn) saveBtn.addEventListener('click', function() {
-            adventureSetup.lore = el('setupLore').value;
-            adventureSetup.rules = el('setupRules').value;
-            adventureSetup.story = el('setupStory').value;
-            adventureSetup.prompt = el('setupPrompt').value;
+            adventureSetup.custom_lore = el('setupCustomLore').value;
+            adventureSetup.custom_rules = el('setupCustomRules').value;
+            adventureSetup.custom_story = el('setupCustomStory').value;
+            adventureSetup.world_prompt = el('setupWorldPrompt').value;
             panel.classList.remove('active');
-            alert('Settings saved!');
+            // Don't alert, just close
         });
         panel.classList.add('active');
     }
