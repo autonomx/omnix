@@ -5423,3 +5423,236 @@ class TestApplyDiffNewStats:
         result = validate_diff(diff, session)
         assert result["valid"] is False
         assert "stat_changes.luck" in result["rejected_fields"]
+
+
+# ---------------------------------------------------------------------------
+# Level-up: critical missing test
+# ---------------------------------------------------------------------------
+
+class TestLevelUpHPReset:
+    def test_level_up_increases_stats_and_resets_hp(self):
+        from app.rpg.models import PlayerState, gain_xp
+        player = PlayerState()
+        player.hp = 50  # damaged
+        player.xp = player.xp_to_next  # exactly at threshold
+        gain_xp(player, 0)
+        assert player.level == 2
+        assert player.hp == player.max_hp
+        assert player.max_hp == 110  # 100 + 10
+        assert player.unspent_points == 3
+
+
+# ---------------------------------------------------------------------------
+# Action Resolver
+# ---------------------------------------------------------------------------
+
+class TestActionResolver:
+    def test_resolve_attack_returns_expected_keys(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import resolve_action
+        player = PlayerState()
+        outcome = resolve_action(player, "attack", "normal", seed=42)
+        assert "type" in outcome
+        assert "result" in outcome
+        assert "damage" in outcome
+        assert "stat" in outcome
+        assert "skill" in outcome
+        assert outcome["type"] == "attack"
+        assert outcome["stat"] == "strength"
+        assert outcome["skill"] == "swordsmanship"
+
+    def test_resolve_attack_damage_on_success(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import resolve_action
+        player = PlayerState()
+        # Try many seeds until we find a success
+        for s in range(200):
+            outcome = resolve_action(player, "attack", "easy", seed=s)
+            if outcome["result"]["success"]:
+                assert outcome["damage"] == 5 + player.stats.strength
+                return
+        assert False, "No successful attack found in 200 seeds"
+
+    def test_resolve_attack_no_damage_on_failure(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import resolve_action
+        player = PlayerState()
+        for s in range(200):
+            outcome = resolve_action(player, "attack", "elite", seed=s)
+            if not outcome["result"]["success"]:
+                assert outcome["damage"] == 0
+                return
+        assert False, "No failed attack found in 200 seeds"
+
+    def test_resolve_persuade(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import resolve_action
+        player = PlayerState()
+        outcome = resolve_action(player, "persuade", "normal", seed=1)
+        assert outcome["stat"] == "charisma"
+        assert outcome["skill"] == "persuasion"
+        assert outcome["damage"] == 0  # persuade never deals damage
+
+    def test_resolve_sneak(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import resolve_action
+        player = PlayerState()
+        outcome = resolve_action(player, "sneak", "normal", seed=5)
+        assert outcome["stat"] == "dexterity"
+        assert outcome["skill"] == "stealth"
+
+    def test_resolve_unknown_action_falls_back(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import resolve_action
+        player = PlayerState()
+        outcome = resolve_action(player, "dance", "easy", seed=1)
+        assert outcome["type"] == "dance"
+        assert "result" in outcome
+
+
+class TestApplyDamage:
+    def test_apply_damage_to_player(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import apply_damage
+        player = PlayerState()
+        actual = apply_damage(player, 30)
+        assert player.hp == 70
+        assert actual == 30
+
+    def test_apply_damage_clamps_at_zero(self):
+        from app.rpg.models import PlayerState
+        from app.rpg.action_resolver import apply_damage
+        player = PlayerState()
+        player.hp = 10
+        actual = apply_damage(player, 50)
+        assert player.hp == 0
+        assert actual == 10
+
+    def test_apply_damage_to_dict_npc(self):
+        from app.rpg.action_resolver import apply_damage
+        npc = {"hp": 40, "name": "goblin"}
+        actual = apply_damage(npc, 15)
+        assert npc["hp"] == 25
+        assert actual == 15
+
+    def test_apply_damage_no_hp_field(self):
+        from app.rpg.action_resolver import apply_damage
+        npc = {"name": "ghost"}
+        actual = apply_damage(npc, 10)
+        assert actual == 0
+
+
+# ---------------------------------------------------------------------------
+# Pipeline staged creation
+# ---------------------------------------------------------------------------
+
+class TestStagedPipeline:
+    def test_build_game_context_defaults(self):
+        from app.rpg.pipeline import build_game_context
+        ctx = build_game_context({})
+        assert "seed" in ctx
+        assert ctx["genre"] == "medieval fantasy"
+        assert ctx["player_name"] == "Player"
+        assert ctx["character_class"] == ""
+        assert ctx["world_data"] is None
+        assert ctx["world"] is None
+        assert ctx["npcs"] == []
+        assert ctx["player"] is None
+
+    def test_build_game_context_custom_values(self):
+        from app.rpg.pipeline import build_game_context
+        ctx = build_game_context({
+            "seed": 123,
+            "genre": "sci-fi",
+            "player_name": "Hero",
+            "character_class": "warrior",
+            "custom_lore": "Ancient tech",
+        })
+        assert ctx["seed"] == 123
+        assert ctx["genre"] == "sci-fi"
+        assert ctx["player_name"] == "Hero"
+        assert ctx["character_class"] == "warrior"
+        assert ctx["custom_lore"] == "Ancient tech"
+
+    def test_build_game_context_accepts_both_lore_keys(self):
+        from app.rpg.pipeline import build_game_context
+        ctx1 = build_game_context({"lore": "Ancient"})
+        assert ctx1["custom_lore"] == "Ancient"
+        ctx2 = build_game_context({"custom_lore": "Modern"})
+        assert ctx2["custom_lore"] == "Modern"
+
+    def test_stage_environment_from_world_data(self):
+        from app.rpg.pipeline import build_game_context, stage_environment
+        ctx = build_game_context({"seed": 1})
+        ctx["world_data"] = {
+            "name": "TestWorld",
+            "description": "A test world",
+            "lore": "Ancient lore",
+        }
+        stage_environment(ctx)
+        assert ctx["world"] is not None
+        assert ctx["world"].name == "TestWorld"
+        assert ctx["world"].description == "A test world"
+
+    def test_stage_factions(self):
+        from app.rpg.pipeline import build_game_context, stage_environment, stage_factions
+        ctx = build_game_context({"seed": 2})
+        ctx["world_data"] = {
+            "name": "FactionWorld",
+            "factions": [{"name": "Guards", "influence": 5}],
+        }
+        stage_environment(ctx)
+        stage_factions(ctx)
+        assert len(ctx["world"].factions) == 1
+        assert ctx["world"].factions[0].name == "Guards"
+
+    def test_stage_npcs(self):
+        from app.rpg.pipeline import build_game_context, stage_npcs
+        ctx = build_game_context({})
+        ctx["world_data"] = {
+            "npcs": [{"name": "Alice", "role": "merchant"}],
+        }
+        stage_npcs(ctx)
+        assert len(ctx["npcs"]) == 1
+        assert ctx["npcs"][0].name == "Alice"
+
+    def test_stage_story_applies_class_bonuses(self):
+        from app.rpg.pipeline import build_game_context, stage_environment, stage_story
+        ctx = build_game_context({"character_class": "warrior"})
+        ctx["world_data"] = {
+            "name": "W",
+            "starting_location": "Town",
+        }
+        stage_environment(ctx)
+        stage_story(ctx)
+        player = ctx["player"]
+        assert player.character_class == "warrior"
+        # Warrior gets +3 str, +2 con on top of defaults (8, 5)
+        assert player.stats.strength == 11
+        assert player.stats.constitution == 7
+
+    def test_finalize_game_returns_none_without_world(self):
+        from app.rpg.pipeline import build_game_context, finalize_game
+        ctx = build_game_context({})
+        result = finalize_game(ctx)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Pipeline maps
+# ---------------------------------------------------------------------------
+
+class TestPipelineMaps:
+    def test_intent_skill_map_keys(self):
+        from app.rpg.pipeline import INTENT_SKILL_MAP
+        assert "attack" in INTENT_SKILL_MAP
+        assert INTENT_SKILL_MAP["attack"] == "swordsmanship"
+        assert "persuade" in INTENT_SKILL_MAP
+        assert INTENT_SKILL_MAP["persuade"] == "persuasion"
+
+    def test_intent_xp_rewards_keys(self):
+        from app.rpg.pipeline import INTENT_XP_REWARDS
+        assert "attack" in INTENT_XP_REWARDS
+        assert INTENT_XP_REWARDS["attack"] == 15
+        assert "persuade" in INTENT_XP_REWARDS
+        assert INTENT_XP_REWARDS["persuade"] == 10

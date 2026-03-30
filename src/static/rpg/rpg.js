@@ -336,8 +336,20 @@
             var stored = localStorage.getItem(ADVENTURE_SETUP_KEY);
             if (stored) return JSON.parse(stored);
         } catch (e) { /* ignore parse errors */ }
-        return { custom_lore: '', custom_rules: '', custom_story: '', world_prompt: '' };
+        return { custom_lore: '', custom_rules: '', custom_story: '', world_prompt: '', character_class: '' };
     })();
+
+    /** Always read fresh values from the DOM (if open) or fall back to the
+     *  persisted adventureSetup object.  Prevents stale-object bugs. */
+    function getAdventureSetupFromUI() {
+        return {
+            custom_lore: (el('setupCustomLore') ? el('setupCustomLore').value : adventureSetup.custom_lore) || '',
+            custom_rules: (el('setupCustomRules') ? el('setupCustomRules').value : adventureSetup.custom_rules) || '',
+            custom_story: (el('setupCustomStory') ? el('setupCustomStory').value : adventureSetup.custom_story) || '',
+            world_prompt: (el('setupWorldPrompt') ? el('setupWorldPrompt').value : adventureSetup.world_prompt) || '',
+            character_class: (el('setupCharacterClass') ? el('setupCharacterClass').value : adventureSetup.character_class) || ''
+        };
+    }
 
     function setLoading(loading) {
         updateState({ isLoading: loading });
@@ -359,7 +371,7 @@
         }
     }
 
-    var generationProgress = { current: 0, total: 5, stage: "Initializing" };
+    var generationProgress = { current: 0, total: 6, stage: "Initializing" };
 
     function updateProgress(stage, step) {
         generationProgress.current = step;
@@ -379,7 +391,8 @@
             "Generating environment",
             "Creating factions",
             "Spawning NPCs",
-            "Finalizing story"
+            "Creating story",
+            "Finalizing"
         ];
         var bar = el('rpgLoadingBar');
         if (bar) bar.style.width = '0%';
@@ -660,6 +673,19 @@
 
             <div class="setup-field">
 
+                <label>Character Class:</label>
+
+                <select id="setupCharacterClass">
+                    <option value="" ${!adventureSetup.character_class ? 'selected' : ''}>None (Default)</option>
+                    <option value="warrior" ${adventureSetup.character_class === 'warrior' ? 'selected' : ''}>⚔️ Warrior (+3 STR, +2 CON)</option>
+                    <option value="mage" ${adventureSetup.character_class === 'mage' ? 'selected' : ''}>🔮 Mage (+3 INT, +2 WIS)</option>
+                    <option value="rogue" ${adventureSetup.character_class === 'rogue' ? 'selected' : ''}>🗡️ Rogue (+3 DEX, +2 CHA)</option>
+                </select>
+
+            </div>
+
+            <div class="setup-field">
+
                 <label>Custom Lore:</label>
 
                 <textarea id="setupCustomLore" placeholder="Enter background lore for the world">${adventureSetup.custom_lore}</textarea>
@@ -699,6 +725,7 @@
             adventureSetup.custom_rules = el('setupCustomRules').value;
             adventureSetup.custom_story = el('setupCustomStory').value;
             adventureSetup.world_prompt = el('setupWorldPrompt').value;
+            adventureSetup.character_class = el('setupCharacterClass').value;
             localStorage.setItem(ADVENTURE_SETUP_KEY, JSON.stringify(adventureSetup));
             panel.classList.remove('active');
         });
@@ -716,6 +743,68 @@
         });
         if (!res.ok) throw new Error('Failed to create game (' + res.status + ')');
         return res.json();
+    }
+
+    /**
+     * Create a game via the SSE streaming endpoint.  Progress events
+     * drive the loading bar in real-time.  Falls back to the standard
+     * apiCreateGame if the streaming endpoint is unavailable.
+     */
+    async function apiCreateGameStream(payload) {
+        var body = payload || {};
+        try {
+            var res = await fetch('/api/rpg/games/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) throw new Error('Stream endpoint returned ' + res.status);
+
+            var reader = res.body.getReader();
+            var decoder = new TextDecoder();
+            var result = null;
+            var buffer = '';
+
+            while (true) {
+                var chunk = await reader.read();
+                if (chunk.done) break;
+                buffer += decoder.decode(chunk.value, { stream: true });
+
+                var lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (var i = 0; i < lines.length; i++) {
+                    var line = lines[i].trim();
+                    if (!line.startsWith('data:')) continue;
+                    var json_str = line.substring(5).trim();
+                    if (!json_str) continue;
+                    try {
+                        var data = JSON.parse(json_str);
+                    } catch (e) { continue; }
+
+                    if (data.error) throw new Error(data.error);
+
+                    if (data.stage && data.progress) {
+                        // Stop the fake fallback timer — real events are arriving
+                        if (loadingInterval) {
+                            clearInterval(loadingInterval);
+                            loadingInterval = null;
+                        }
+                        updateProgress(data.stage, data.progress);
+                    }
+
+                    if (data.result) {
+                        result = data.result;
+                    }
+                }
+            }
+
+            if (!result) throw new Error('Stream ended without result');
+            return result;
+        } catch (err) {
+            // Fallback to standard endpoint
+            return apiCreateGame(body);
+        }
     }
 
     async function apiGetGame(sessionId) {
@@ -870,7 +959,7 @@
                 while (true) {
                     try {
                         setLoading(true);
-                        var game = await apiCreateGame(adventureSetup);
+                        var game = await apiCreateGameStream(getAdventureSetupFromUI());
                         setLoading(false);
                         updateState({ sessionId: game.session_id });
                         localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
@@ -902,7 +991,7 @@
                     updateState({ sessionId: null });
                     localStorage.removeItem(STORAGE_KEY);
 
-                    var game2 = await apiCreateGame(adventureSetup);
+                    var game2 = await apiCreateGameStream(getAdventureSetupFromUI());
                     updateState({ sessionId: game2.session_id });
                     localStorage.setItem(STORAGE_KEY, game2.session_id);
 

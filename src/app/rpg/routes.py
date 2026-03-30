@@ -11,7 +11,18 @@ from flask import Blueprint, Response, jsonify, request
 
 from app.rpg.models import GameSession
 from app.rpg.persistence import delete_game, list_games, load_game, save_game
-from app.rpg.pipeline import create_new_game, execute_turn, replay_turn
+from app.rpg.pipeline import (
+    build_game_context,
+    create_new_game,
+    execute_turn,
+    finalize_game,
+    replay_turn,
+    stage_environment,
+    stage_factions,
+    stage_npcs,
+    stage_story,
+    stage_world,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +95,84 @@ def create_rpg_game():
         "player": session.player.to_dict(),
         "opening": opening,
     }), 201
+
+
+def _sse(data: dict) -> str:
+    """Format a dict as a Server-Sent Event data line."""
+    return f"data: {json.dumps(data)}\n\n"
+
+
+@rpg_bp.route("/api/rpg/games/stream", methods=["POST"])
+def stream_game_creation():
+    """Create a new RPG game session with streamed progress via SSE.
+
+    Events emitted during creation:
+        ``{"stage": "...", "progress": N}`` — progress update (1-5)
+        ``{"stage": "Done", "progress": 6, "result": {...}}`` — final result
+        ``{"error": "..."}`` — on failure
+    """
+    data = request.get_json() or {}
+
+    def generate():
+        ctx = build_game_context(data)
+
+        yield _sse({"stage": "Building world", "progress": 1})
+        stage_world(ctx)
+
+        if not ctx.get("world_data"):
+            yield _sse({"error": "World generation failed"})
+            return
+
+        yield _sse({"stage": "Generating environment", "progress": 2})
+        stage_environment(ctx)
+
+        yield _sse({"stage": "Creating factions", "progress": 3})
+        stage_factions(ctx)
+
+        yield _sse({"stage": "Spawning NPCs", "progress": 4})
+        stage_npcs(ctx)
+
+        yield _sse({"stage": "Creating story", "progress": 5})
+        stage_story(ctx)
+
+        session = finalize_game(ctx)
+        if not session:
+            yield _sse({"error": "Failed to finalize game"})
+            return
+
+        # Build opening narration
+        opening_parts = []
+        if session.world.name:
+            opening_parts.append(session.world.name)
+        if session.world.description:
+            opening_parts.append(session.world.description)
+        if session.world.lore:
+            opening_parts.append(session.world.lore)
+        opening = "\n\n".join(opening_parts) if opening_parts else "Your adventure begins\u2026"
+
+        yield _sse({
+            "stage": "Done",
+            "progress": 6,
+            "result": {
+                "session_id": session.session_id,
+                "world": {
+                    "name": session.world.name,
+                    "genre": session.world.genre,
+                    "description": session.world.description,
+                },
+                "player": session.player.to_dict(),
+                "opening": opening,
+            },
+        })
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @rpg_bp.route("/api/rpg/games/<session_id>", methods=["GET"])
