@@ -41,3 +41,35 @@ def decide_action(npc: NPC, goal, scene, memory):
         return Action("scan", "intelligence")
 
     return Action("wait", "none")
+
+
+def generate_npc_dialogue(npc, context, emotional_state):
+    """
+    Generate consistent character dialogue using LLM.
+    """
+    # Cache to avoid duplicate calls per turn
+    if not hasattr(npc, '_dialogue_cache'):
+        npc._dialogue_cache = {}
+
+    cache_key = f"{context}_{emotional_state}"
+    if cache_key in npc._dialogue_cache:
+        return npc._dialogue_cache[cache_key]
+
+    # LLM prompt
+    prompt = f"""
+    You are roleplaying a character.
+
+    Personality: {npc.personality}
+    Voice style: {npc.voice_style}
+    Speaking patterns: {npc.speaking_patterns}
+    Emotional state: {emotional_state}
+    Context: {context}
+
+    Generate one line of dialogue.
+    """
+
+    # Placeholder LLM call - in real implementation, call actual LLM
+    dialogue = f"[{npc.voice_style}] {prompt.split('Generate one line')[0].strip()}"  # Mock
+
+    npc._dialogue_cache[cache_key] = dialogue
+    return dialogue

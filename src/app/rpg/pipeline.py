@@ -27,6 +27,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.rpg import agents
 from app.rpg.memory_manager import build_context
+from app.rpg.narrative_director import NarrativeDirector
+from app.rpg.intent_translator import translate_intent
+from app.rpg.scene_generator import generate_scene
+from app.rpg.story_manager import update_story_arcs
+from app.rpg.event_engine import inject_event
+from app.rpg.narrative_memory import update_narrative_memory
 from app.rpg.models import (
     AgentProfile,
     CHARACTER_CLASSES,
@@ -54,7 +60,7 @@ from app.rpg.models import (
     validate_diff,
 )
 from app.rpg.persistence import save_game
-from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard
+from app.rpg.rule_enforcer import post_validate_hard, pre_validate_hard, soft_validate, should_override_rules
 from app.rpg.npc_decision import decide_npc_action
 from app.rpg.npc_brain import decide_action as brain_decide, evaluate_npc_interactions
 from app.rpg.npc_mind import npc_think, propagate_beliefs, evolve_personality, update_faction_strategy, absorb_world_events
@@ -330,18 +336,38 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     """
     Execute a single turn of the game.
 
-    Enhanced pipeline:
-      Input -> Risk Score -> Rules -> Dice (seeded) -> Event -> Canon Guard ->
-      Diff Apply -> NPC Simulation -> Memory -> Compression -> Narrative -> Narrate
+    New narrative pipeline:
+      Input -> Narrative Director -> Intent Translator -> Simulation Pipeline ->
+      Story Manager -> Event Injection -> Scene Generator -> Narrative Memory
     """
     session.turn_count += 1
     logger.info("Turn %d: player input='%s'", session.turn_count, raw_input)
 
     # -----------------------------------------------------------------------
-    # Step 1: Input Normalization (with risk scoring)
+    # NEW NARRATIVE PIPELINE
+    # -----------------------------------------------------------------------
+
+    # Step 1: Narrative Director
+    director = NarrativeDirector()
+    director_output = director.decide_next_step(session, raw_input)
+
+    # Step 2: Intent Translator
+    translated_intent = translate_intent(raw_input)
+
+    # Legacy compatibility: create intent_data structure
+    intent_data = {
+        "raw_input": raw_input,
+        "intent": translated_intent.get("action", "other"),
+        "target": translated_intent.get("target", ""),
+        "details": translated_intent,
+        "style": translated_intent.get("style", "normal"),
+        "emotion": translated_intent.get("emotion", "neutral"),
+    }
+
+    # -----------------------------------------------------------------------
+    # Step 3: Simulation Pipeline (existing with modifications)
     # -----------------------------------------------------------------------
     context = build_context(session)
-    intent_data = agents.normalize_input(raw_input, context)
 
     if not intent_data:
         return TurnResult(
@@ -362,29 +388,36 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
                 intent.intent, intent.target, intent_risk, intent_difficulty)
 
     # -----------------------------------------------------------------------
-    # Step 2: Rule Validation (Pre-LLM hard checks)
+    # Step 2: Soft Rule Validation (allow with consequences)
     # -----------------------------------------------------------------------
-    is_valid, error_msg = pre_validate_hard(raw_input, intent_data, session)
-    if not is_valid:
-        logger.info("Pre-validation failed: %s", error_msg)
+    allow_action, consequence = soft_validate(intent_data, session)
+    if not allow_action:
+        # Hard blocks still exist for critical violations
+        logger.info("Hard validation failed: %s", consequence)
         return TurnResult(
-            narration=f"Narrator: {error_msg}",
-            error=error_msg,
+            narration=f"Narrator: {consequence}",
+            error=consequence,
         )
 
-    # LLM-based pre-validation for edge cases
+    # Check if rules should be overridden for narrative interest
+    if consequence:
+        override_context = {
+            "world_state": session.world.description,
+            "player_state": session.player.location,
+            "recent_events": [h.event for h in session.history[-3:]]
+        }
+        should_override = should_override_rules(intent_data, override_context)
+        if not should_override:
+            # Add consequence to the action
+            intent_data["narrative_consequence"] = consequence
+            logger.info("Soft validation consequence added: %s", consequence)
+
+    # LLM-based validation for complex cases (keep as additional check)
     validation = agents.validate_pre(intent_data, context)
     if validation and not validation.get("valid", True):
         reason = validation.get("reason", "Action not permitted")
-        corrections = validation.get("corrections", [])
-        msg = reason
-        if corrections:
-            msg += " " + "; ".join(corrections)
-        logger.info("LLM pre-validation failed: %s", msg)
-        return TurnResult(
-            narration=f"Narrator: {msg}",
-            error=msg,
-        )
+        # Allow but add consequence
+        intent_data["narrative_consequence"] = intent_data.get("narrative_consequence", "") + " " + reason
 
     # -----------------------------------------------------------------------
     # Step 3: Dice Roll (seed-based deterministic randomness)
@@ -551,12 +584,24 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
         ))
 
     # -----------------------------------------------------------------------
-    # Step 11c: Story Engine (arc progression + creation)
+    # Step 11c: Story Manager (LLM-driven arc management)
     # -----------------------------------------------------------------------
     arc_consequences = update_story_arcs(session)
     session.pending_consequences.extend(arc_consequences)
-    # Detect if this turn's event should spawn a new arc
-    maybe_create_arc(session, event_description)
+
+    # -----------------------------------------------------------------------
+    # NEW: Event Injection
+    # -----------------------------------------------------------------------
+    injected_event = inject_event(session, director_output)
+    if injected_event:
+        # Add injected event as a consequence
+        session.pending_consequences.append(PendingConsequence(
+            trigger_turn=session.turn_count + 1,
+            source_event="event_injection",
+            narrative=injected_event["narrative"],
+            importance=injected_event["importance"],
+            type="event",
+        ))
 
     # -----------------------------------------------------------------------
     # Step 12: Narration Output (with soft-failure tier)
@@ -584,7 +629,7 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
             "success": " \u2014 Success]",
             "critical_success": " \u2014 CRITICAL SUCCESS!]",
         }
-        roll_info += tier_labels.get(outcome_tier, " \u2014 " + outcome_tier + "]")
+        roll_info += tier_labels.get(outcome_tier, f" \u2014 {outcome_tier}]")
         narration += roll_info
 
     # Append consequence narrations if any triggered this turn
@@ -634,16 +679,33 @@ def execute_turn(session: GameSession, raw_input: str) -> TurnResult:
     )
     session.turn_logs.append(turn_log)
 
+    # -----------------------------------------------------------------------
+    # NEW: Scene Generation (cinematic output)
+    # -----------------------------------------------------------------------
+    # Prepare simulation result for scene generator
+    simulation_result = {
+        "outcome": event_description,
+        "state_changes": state_changes,
+        "dice_roll": dice_result,
+        "npcs_involved": [npc.name for npc in session.npcs if npc.location == session.player.location],
+    }
+
+    scene = generate_scene(session, director_output, simulation_result)
+
+    # Update narrative memory
+    update_narrative_memory(session, scene)
+
     # Save game state
     save_game(session)
 
+    # Convert scene to TurnResult for compatibility
     return TurnResult(
-        narration=narration,
+        narration=scene.get("narration", narration),
         events=[history_event],
         state_changes=state_changes,
         dice_roll=dice_result,
         fail_state=fail_state,
-        choices=choices,
+        choices=scene.get("choices", choices),
     )
 
 

@@ -845,3 +845,47 @@ def npc_think(
     evolve_personality(npc, validated["action"])
 
     return validated
+
+
+# ── NPC Dialogue Generation ──────────────────────────────────────────────────
+
+def generate_npc_dialogue(npc: Dict[str, Any], context: Dict[str, Any]) -> str:
+    """
+    Generate dialogue for an NPC based on their personality, current emotion,
+    and the conversation context.
+
+    Uses LLM to create consistent, character-appropriate dialogue.
+    """
+    from app.rpg.agents import _call_llm, _parse_json_response
+
+    personality = npc.get("personality", [])
+    goals = npc.get("goals", [])
+    relationship = npc.get("relationships", {}).get("player", 0)
+    emotional_state = npc.get("emotional_state", {})
+    voice_style = npc.get("voice_style", "")
+    speaking_patterns = npc.get("speaking_patterns", [])
+
+    prompt = f"""You are roleplaying this character:
+
+Personality: {', '.join(personality)}
+Goals: {', '.join(goals)}
+Relationship to player: {relationship} (-100 to +100)
+Current emotion: {emotional_state}
+Voice style: {voice_style}
+Speaking patterns: {', '.join(speaking_patterns)}
+
+Context: {context.get('situation', 'general conversation')}
+Recent events: {context.get('recent_events', [])}
+
+Generate dialogue consistent with character voice. Keep it concise (1-3 sentences).
+
+Return JSON: {{"dialogue": "the dialogue text"}}"""
+
+    result = _call_llm("You are an NPC dialogue generator.", prompt)
+    parsed = _parse_json_response(result)
+
+    if parsed and "dialogue" in parsed:
+        return parsed["dialogue"]
+    else:
+        # Fallback dialogue
+        return f"{npc.get('name', 'NPC')}: {'Hello there.' if relationship >= 0 else 'What do you want?'}"

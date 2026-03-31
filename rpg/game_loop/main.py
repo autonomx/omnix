@@ -1,107 +1,63 @@
-from rpg.models.game_state import GameState
-from rpg.npc.brain import npc_decide
-from rpg.actions.resolution import resolve_action
-from rpg.memory.memory import remember_event
-from rpg.scene.scene import remove_dead
-from rpg.narration.generator import generate_narration
-from rpg.models.action_result import ActionResult
+from rpg.simulation import process, apply_events
+from rpg.pipeline_adapter import adapt_pipeline_result
+from rpg.brain.unified_brain import unified_brain
+from rpg.narrative_context import build_context, update_tension
+from rpg.scene_generator import generate_scene
+from rpg.memory import update_memory
 
-def get_player_input():
-    # Stub: return a basic action
-    return {"type": "wait", "stat": "none"}
+def execute_turn(session, player_input):
+    context = build_context(session)
 
-def apply_player_action(state: GameState, player_action):
-    # Stub: apply player action to state
-    pass
+    # 1. Unified brain
+    brain_output = unified_brain(session, player_input, context)
 
-def apply_outcome(state: GameState, npc, action, outcome):
-    # Apply combat outcomes properly
-    if action.type == "attack" and action.target:
-        if outcome in ["success", "critical_success"]:
-            action.target.hp -= 10
-        elif outcome == "failure":
-            npc.hp -= 2  # recoil penalty (optional)
+    intent = brain_output["intent"]
+    director = brain_output["director"]
+    event = brain_output["event"]
+    npc_actions = brain_output["npc_actions"]
 
-def update_scene(scene):
-    # Build meaningful scene summary
-    summary_parts = []
-    for c in scene.characters:
-        summary_parts.append(f"{c.name}(HP:{c.hp}, faction:{c.faction})")
-    scene.summary = " | ".join(summary_parts)
+    # 2. Simulation (player)
+    raw_result = process(session, intent)
+    result = adapt_pipeline_result(raw_result)
 
-def game_tick(state: GameState):
-    player_action = get_player_input()
-    apply_player_action(state, player_action)
+    # 2.5 Simulation (NPC actions)
+    npc_events = []
+    for action in npc_actions:
+        npc_intent = {
+            "action": action["action"],
+            "target": "player",
+            "source": action["npc_id"]
+        }
+        npc_raw = process(session, npc_intent)
+        npc_result = adapt_pipeline_result(npc_raw)
+        npc_events.extend(npc_result["events"])
 
-    results = []
+    # 3. Apply events
+    all_events = result["events"] + npc_events
+    apply_events(session, all_events)
 
-    for npc in list(state.scene.characters):
-        action = npc_decide(npc, state.scene)
-        outcome = resolve_action(npc, action, difficulty=get_action_difficulty(action))
+    # 4. Memory update
+    session.recent_events.extend(all_events)
+    session.recent_events = session.recent_events[-100:]
 
-        apply_outcome(state, npc, action, outcome)
+    update_memory(session, all_events)
 
-        memory = npc.memory["events"][-5:]
+    # 5. Advance world time
+    session.world.time += 1
 
-        narration = generate_narration(
-            npc,
-            action,
-            outcome,
-            state.scene,
-            memory
-        )
+    # 7. Scene
+    scene = generate_scene(
+        session=session,
+        director=director,
+        result=result,
+        event=event,
+        npc_actions=npc_actions
+    )
 
-        result = ActionResult(
-            actor_id=npc.id,
-            action_type=action.type,
-            outcome=outcome,
-            description=narration["description"],
-            dialogue=narration["dialogue"],
-            emotion=narration["emotion"]
-        )
+    # 8. Update tension
+    session.narrative_state["tension"] = update_tension(
+        session.narrative_state["tension"],
+        director["tension"]
+    )
 
-        # Update emotional state with decay
-        npc.update_emotions(narration["emotion"])
-
-        # Emotion affects relationships
-        if narration["emotion"] == "angry" and action.target:
-            npc.opinions[action.target.name] = npc.opinions.get(action.target.name, 0) - 1
-
-        results.append(result.to_dict())
-
-        remember_event(npc, {
-            "actor": npc.id,
-            "action": action.type,
-            "target": action.target.id if action.target else None,
-            "outcome": outcome,
-            "description": narration["description"],
-            "emotion": narration["emotion"]
-        })
-
-    remove_dead(state.scene)
-    update_scene(state.scene)
-
-    return results
-
-
-def get_action_difficulty(action):
-    if action.type == "attack":
-        return 10
-    if action.type == "flee":
-        return 8
-    return 10
-
-
-def game_loop(state: GameState, max_turns: int = 10):
-    turn = 0
-    turn_results = []
-
-    while state.active and turn < max_turns:
-        results = game_tick(state)
-        turn_results.append({
-            "turn": turn,
-            "actions": results
-        })
-        turn += 1
-
-    return turn_results
+    return scene

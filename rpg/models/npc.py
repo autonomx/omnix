@@ -20,6 +20,8 @@ class NPC:
             "fearful": 0.0
         }
         self.opinions = {}  # opinions of other characters, affected by emotions
+        self.voice_style = "neutral"  # calm, aggressive, formal, casual, etc.
+        self.speaking_patterns = ["direct", "concise"]  # List of speaking patterns
 
     def update_emotions(self, new_emotion):
         """Update emotional state with decay and new emotion."""

@@ -632,6 +632,9 @@ class NPCCharacter:
     theory_of_mind: Dict[str, Dict[str, float]] = field(default_factory=dict)
     # Skill tree: skill_name → {"level": int, "xp": int, "max_level": int}
     skills: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    # Voice and dialogue style for narrative performance
+    voice_style: str = ""
+    speaking_patterns: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -664,6 +667,8 @@ class NPCCharacter:
             "deception_mode": self.deception_mode,
             "theory_of_mind": {k: dict(v) for k, v in self.theory_of_mind.items()},
             "skills": {k: dict(v) for k, v in self.skills.items()},
+            "voice_style": self.voice_style,
+            "speaking_patterns": list(self.speaking_patterns),
         }
 
     @classmethod
@@ -698,6 +703,8 @@ class NPCCharacter:
             deception_mode=data.get("deception_mode", "none"),
             theory_of_mind=data.get("theory_of_mind", {}),
             skills=data.get("skills", {}),
+            voice_style=data.get("voice_style", ""),
+            speaking_patterns=data.get("speaking_patterns", []),
         )
 
 
@@ -1520,6 +1527,35 @@ def validate_diff(diff: WorldStateDiff, session: GameSession) -> Dict[str, Any]:
     for npc_name in diff.npc_changes:
         if not session.get_npc(npc_name):
             result["unknown_npcs"].append(npc_name)
-            result["valid"] = False
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Scene-based Output (UI Contract)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SceneOutput:
+    """Structured output for scene-based UI rendering."""
+    scene: Dict[str, Any]  # location, tone, summary
+    narration: str
+    characters: List[Dict[str, Any]]  # name, dialogue, emotion, action
+    choices: List[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "scene": dict(self.scene),
+            "narration": self.narration,
+            "characters": list(self.characters),
+            "choices": list(self.choices),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SceneOutput":
+        return cls(
+            scene=data.get("scene", {}),
+            narration=data.get("narration", ""),
+            characters=data.get("characters", []),
+            choices=data.get("choices", []),
+        )

@@ -182,6 +182,86 @@ def _check_faction_reputation(session: GameSession, npc_name: str) -> Optional[s
     return None
 
 
+def soft_validate(action: Dict[str, Any], session: GameSession) -> Tuple[bool, Optional[str]]:
+    """
+    Soft validation that allows actions but may add consequences.
+
+    Instead of rejecting invalid actions, this allows them but suggests
+    narrative consequences. Returns (allow_action, consequence_description).
+    """
+    intent = action.get("intent", "")
+    target = action.get("target", "")
+
+    # Check fail states - these are still hard blocks
+    fail_err = _check_fail_state(session)
+    if fail_err:
+        return False, fail_err
+
+    # Check for prompt injection / exploit attempts - still hard block
+    for pattern, message in EXPLOIT_PATTERNS:
+        if pattern.search(action.get("raw_input", "")):
+            return False, message
+
+    # Check forbidden items - allow but with consequence
+    forbidden = session.world.rules.forbidden_items
+    item_err = _check_forbidden_items(action.get("raw_input", ""), forbidden)
+    if item_err:
+        return True, f"The item doesn't exist in this world, but your character attempts it anyway, drawing unwanted attention."
+
+    # Location checks for movement - allow with difficulty
+    if intent == "move" and target:
+        loc_err = _check_location_valid(session, target)
+        if loc_err:
+            return True, f"The path is treacherous and difficult to traverse."
+
+    # Economy checks - allow with consequences
+    econ_err = _check_economy(action, session)
+    if econ_err:
+        return True, f"You proceed despite the economic constraints, but it comes at a cost."
+
+    # Shop hours - allow but with consequence
+    shop_err = _check_shop_hours(session, intent)
+    if shop_err:
+        return True, f"The shop is closed, but you find a way to proceed anyway."
+
+    # NPC presence - allow with consequence
+    if intent in ("talk", "buy_item", "sell_item", "persuade", "attack") and target:
+        npc_err = _check_npc_present(session, target)
+        if npc_err:
+            return True, f"The target isn't present, but your action still has repercussions."
+
+    return True, None
+
+
+def should_override_rules(action: Dict[str, Any], context: Dict[str, Any]) -> bool:
+    """
+    Use LLM to decide if rules should be overridden for narrative interest.
+
+    Returns True if the action should be allowed despite rules.
+    """
+    from app.rpg.agents import _call_llm, _parse_json_response
+
+    prompt = f"""Is this action narratively interesting enough to allow despite rules?
+
+Action: {action}
+Context: {context}
+
+Consider:
+- Does it create interesting conflict?
+- Does it advance the story?
+- Is it creatively clever?
+- Would blocking it harm the narrative flow?
+
+Return JSON: {{"override": true/false, "reason": "brief explanation"}}"""
+
+    result = _call_llm("You are a narrative rule adjudicator.", prompt)
+    parsed = _parse_json_response(result)
+
+    if parsed:
+        return parsed.get("override", False)
+    return False
+
+
 def pre_validate_hard(raw_input: str, intent: Dict[str, Any], session: GameSession) -> Tuple[bool, Optional[str]]:
     """
     Hard pre-validation that doesn't require LLM.
