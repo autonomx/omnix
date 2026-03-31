@@ -1,0 +1,295 @@
+📘 AI RPG ENGINE – FULL IMPLEMENTATION SPEC
+🎯 Objective
+
+Transform current system from:
+
+input → LLM → response
+
+Into:
+
+Game Loop:
+state → goals → decisions → actions → resolution → memory → update world
+🧱 GLOBAL ARCHITECTURE
+Core Modules (must exist)
+/rpg
+  /models
+  /engine
+  /npc
+  /memory
+  /scene
+  /actions
+  /world
+  /prompting
+  /game_loop
+🔥 PHASE 1 — CORE GAME SYSTEMS
+1. NPC GOAL SYSTEM (GOAP-lite)
+File
+npc/goals.py
+Data Model
+class Goal:
+    def __init__(self, type: str, priority: int, target=None):
+        self.type = type
+        self.priority = priority
+        self.target = target
+NPC Update
+
+Add to NPC model:
+
+npc.goals: List[Goal]
+npc.current_goal: Optional[Goal]
+Goal Selection Function
+def select_goal(npc, scene):
+    scored_goals = []
+
+    for goal in npc.goals:
+        score = goal.priority
+
+        # Context modifiers
+        if goal.type == "survive" and npc.hp < 30:
+            score += 10
+
+        if goal.type == "attack" and scene.has_enemy(npc):
+            score += 5
+
+        scored_goals.append((goal, score))
+
+    scored_goals.sort(key=lambda x: x[1], reverse=True)
+
+    npc.current_goal = scored_goals[0][0]
+    return npc.current_goal
+Acceptance Criteria
+NPC always has current_goal
+Changing environment changes selected goal
+No randomness unless explicitly added
+2. ACTION RESOLUTION ENGINE
+File
+actions/resolution.py
+Core Function
+import random
+
+def resolve_action(actor, action, difficulty: int):
+    roll = random.randint(1, 20)
+
+    stat_mod = get_stat_modifier(actor, action.stat)
+
+    total = roll + stat_mod
+
+    if total >= difficulty + 5:
+        return "critical_success"
+    elif total >= difficulty:
+        return "success"
+    elif total >= difficulty - 5:
+        return "partial_success"
+    else:
+        return "failure"
+Action Model
+class Action:
+    def __init__(self, type: str, stat: str, target=None):
+        self.type = type
+        self.stat = stat
+        self.target = target
+Acceptance Criteria
+All actions go through this function
+Output is one of:
+critical_success
+success
+partial_success
+failure
+3. SCENE SYSTEM
+File
+scene/scene.py
+Scene Model
+class Scene:
+    def __init__(self):
+        self.location = None
+        self.characters = []
+        self.active_conflicts = []
+        self.summary = ""
+Required Functions
+def add_character(scene, npc):
+    scene.characters.append(npc)
+
+def remove_character(scene, npc):
+    scene.characters.remove(npc)
+
+def get_enemies(scene, npc):
+    return [c for c in scene.characters if c.faction != npc.faction]
+Acceptance Criteria
+Scene holds all active entities
+Scene is the ONLY context passed to LLM
+🧠 PHASE 2 — INTELLIGENCE LAYER
+4. MEMORY SYSTEM
+File
+memory/memory.py
+Structure
+npc.memory = {
+    "events": [],
+    "facts": [],
+    "relationships": {}
+}
+Memory Functions
+def remember_event(npc, event):
+    npc.memory["events"].append(event)
+
+def remember_fact(npc, fact):
+    npc.memory["facts"].append(fact)
+
+def update_relationship(npc, other, delta):
+    npc.memory["relationships"].setdefault(other.id, 0)
+    npc.memory["relationships"][other.id] += delta
+Retrieval
+def retrieve_relevant(npc, scene):
+    return npc.memory["events"][-5:]
+Acceptance Criteria
+Memory persists across turns
+Retrieval returns max 5 items
+5. DIALOGUE SYSTEM
+File
+npc/dialogue.py
+Tone Derivation
+def derive_tone(npc, target):
+    rel = npc.memory["relationships"].get(target.id, 0)
+
+    if rel > 5:
+        return "friendly"
+    elif rel < -5:
+        return "hostile"
+    else:
+        return "neutral"
+Dialogue Generation Input
+def build_dialogue_input(npc, target, scene):
+    return {
+        "npc_personality": npc.personality,
+        "npc_goal": npc.current_goal.type,
+        "tone": derive_tone(npc, target),
+        "scene_summary": scene.summary
+    }
+Acceptance Criteria
+Dialogue changes based on relationship
+Dialogue reflects goal
+6. PROMPT BUILDER
+File
+prompting/builder.py
+Function
+def build_prompt(npc, scene, memory):
+    return f"""
+NPC Personality: {npc.personality}
+Goal: {npc.current_goal.type}
+Scene: {scene.summary}
+Recent Memory: {memory}
+
+Respond with action and dialogue.
+"""
+Acceptance Criteria
+ALL LLM calls go through this builder
+No raw prompts allowed elsewhere
+🎮 PHASE 3 — GAME EXPERIENCE
+7. GAME LOOP
+File
+game_loop/main.py
+Loop
+def game_loop(state):
+    while state.active:
+
+        player_action = get_player_input()
+
+        apply_player_action(state, player_action)
+
+        for npc in state.scene.characters:
+            goal = select_goal(npc, state.scene)
+            action = decide_action(npc, goal, state.scene)
+            outcome = resolve_action(npc, action, difficulty=10)
+
+            apply_outcome(state, npc, action, outcome)
+
+            remember_event(npc, {
+                "action": action.type,
+                "outcome": outcome
+            })
+
+        update_scene(state.scene)
+Acceptance Criteria
+Loop runs deterministically
+NPCs act every turn
+8. PLAYER FEEDBACK
+Output Format
+{
+  "action": "attack",
+  "roll": 15,
+  "outcome": "success",
+  "description": "You strike the enemy."
+}
+Acceptance Criteria
+Every action produces structured output
+No raw text-only responses
+🌍 PHASE 4 — ADVANCED SYSTEMS
+9. FACTION SYSTEM
+Model
+class Faction:
+    def __init__(self, name):
+        self.name = name
+        self.relations = {}
+Relationship
+faction.relations[other_faction] = -10 to +10
+10. TERRITORY CONTROL
+Model
+class Territory:
+    def __init__(self, name, owner):
+        self.name = name
+        self.owner = owner
+Update Logic
+def resolve_territory_control(territory, attackers):
+    if len(attackers) > 2:
+        territory.owner = attackers[0].faction
+🧠 NPC DECISION PIPELINE (FINAL FORM)
+File
+npc/brain.py
+Pipeline
+def npc_decide(npc, scene):
+    memory = retrieve_relevant(npc, scene)
+
+    goal = select_goal(npc, scene)
+
+    action = decide_action(npc, goal, scene)
+
+    return action
+decide_action
+def decide_action(npc, goal, scene):
+    if goal.type == "attack":
+        target = scene.get_enemies(npc)[0]
+        return Action("attack", "strength", target)
+
+    if goal.type == "survive":
+        return Action("flee", "dexterity")
+
+    return Action("wait", "none")
+Acceptance Criteria
+No LLM required for basic decisions
+LLM enhances, not replaces logic
+🚨 HARD RULES (IMPORTANT FOR LOW-QUALITY LLM)
+NEVER skip the game loop
+NEVER call LLM directly — always use prompt builder
+ALWAYS:
+select goal
+decide action
+resolve action
+NO hidden state outside models
+ALL updates must mutate state
+✅ FINAL IMPLEMENTATION CHECKLIST
+ NPC goals working
+ Action resolution used everywhere
+ Scene is central context
+ Memory persists and retrieves correctly
+ Prompt builder enforced
+ Game loop runs continuously
+ Dialogue reflects personality + relationship
+ Factions affect behavior
+ Territory changes over time
+🔥 FINAL NOTE
+
+This spec is designed so even a weak coding LLM can:
+
+Implement step-by-step
+Avoid ambiguity
+Produce deterministic systems first
+Layer intelligence later
