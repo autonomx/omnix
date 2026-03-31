@@ -13,3 +13,23 @@ class NPC:
             "facts": [],
             "relationships": {}
         }
+        self.emotional_state = {
+            "neutral": 0.0,
+            "angry": 0.0,
+            "happy": 0.0,
+            "fearful": 0.0
+        }
+        self.opinions = {}  # opinions of other characters, affected by emotions
+
+    def update_emotions(self, new_emotion):
+        """Update emotional state with decay and new emotion."""
+        # Decay all emotions
+        for emotion in self.emotional_state:
+            self.emotional_state[emotion] *= 0.9
+
+        # Apply new emotion
+        if new_emotion in self.emotional_state:
+            self.emotional_state[new_emotion] = min(
+                1.0,
+                self.emotional_state[new_emotion] + 0.3
+            )

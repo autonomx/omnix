@@ -16,11 +16,18 @@ state = GameState()
 add_character(state.scene, npc1)
 add_character(state.scene, npc2)
 
-# Run game loop
-game_loop(state)
+# Run multiple turns
+results = game_loop(state, max_turns=5)
 
 # Print results
 print("NPC1 HP:", npc1.hp)
 print("NPC1 Memory:", npc1.memory)
 print("NPC2 HP:", npc2.hp)
 print("NPC2 Memory:", npc2.memory)
+
+print("\n--- GAME LOG ---")
+
+for turn in results:
+    print(f"\nTurn {turn['turn']}:")
+    for action in turn["actions"]:
+        print(action["description"])

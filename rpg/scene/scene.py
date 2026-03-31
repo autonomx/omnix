@@ -18,3 +18,6 @@ def get_enemies(scene: Scene, npc: NPC):
 
 def has_enemy(scene: Scene, npc: NPC):
     return len(get_enemies(scene, npc)) > 0
+
+def remove_dead(scene: Scene):
+    scene.characters = [c for c in scene.characters if c.hp > 0]

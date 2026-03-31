@@ -24,5 +24,10 @@ def select_goal(npc: NPC, scene):
 
     scored_goals.sort(key=lambda x: x[1], reverse=True)
 
+    if not scored_goals:
+        default_goal = Goal("wait", 0)
+        npc.current_goal = default_goal
+        return default_goal
+
     npc.current_goal = scored_goals[0][0]
     return npc.current_goal
