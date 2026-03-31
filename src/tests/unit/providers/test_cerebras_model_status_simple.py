@@ -1,11 +1,13 @@
 """Simple test for Cerebras model status and connection using settings.json API key."""
 
-import pytest
 import json
 import os
 import tempfile
-from unittest.mock import patch, Mock
-from app.providers import CerebrasProvider, ProviderConfig, ModelInfo
+from unittest.mock import Mock, patch
+
+import pytest
+
+from app.providers import CerebrasProvider, ModelInfo, ProviderConfig
 from app.providers.base import AuthenticationError, ConnectionError, ModelNotFoundError
 
 

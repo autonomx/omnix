@@ -7,9 +7,9 @@ with CUDA support. This is more reliable than downloading pre-built
 binaries which may not be available for all platforms.
 """
 import os
+import platform
 import subprocess
 import sys
-import platform
 import tempfile
 
 # Set paths based on platform

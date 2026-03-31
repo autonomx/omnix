@@ -5,25 +5,26 @@ Provides drop-in replacement for OpenAI TTS and Chat APIs
 Compatible with OpenWebUI, SillyTavern, and other clients
 """
 
-import os
-import json
-import time
-import uuid
 import asyncio
+import json
 import logging
-import traceback
-from typing import Dict, List, Any, Optional
-from datetime import datetime
-from pathlib import Path
-
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-import uvicorn
+import os
 
 # Import our existing components
 import sys
+import time
+import traceback
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 import app.shared as shared
 

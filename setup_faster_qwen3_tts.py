@@ -9,12 +9,13 @@ This script helps users:
 4. Configure the system for optimal performance
 """
 
-import os
-import sys
-import subprocess
 import json
+import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
+
 
 def run_command(cmd, description=""):
     """Run a command and handle errors."""

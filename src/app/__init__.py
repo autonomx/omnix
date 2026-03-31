@@ -12,16 +12,16 @@ from flask import Flask
 
 def create_app() -> Flask:
     """Create and configure the Flask application with all blueprints."""
-    from app.core import core_bp
-    from app.chat import chat_bp
-    from app.services import services_bp
     from app.audio import audio_bp
     from app.audiobook import audiobook_bp
-    from app.podcast import podcast_bp
-    from app.llm import llm_bp
+    from app.chat import chat_bp
+    from app.core import core_bp
     from app.llamacpp import llamacpp_bp
-    from app.voice_studio import voice_studio_bp
+    from app.llm import llm_bp
+    from app.podcast import podcast_bp
     from app.rpg.routes import rpg_bp
+    from app.services import services_bp
+    from app.voice_studio import voice_studio_bp
 
     pkg_dir = Path(__file__).resolve().parent
     app = Flask(

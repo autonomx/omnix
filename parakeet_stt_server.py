@@ -5,25 +5,34 @@ FastAPI server for speech-to-text using NVIDIA NeMo Parakeet model
 This file is placed in the root to avoid import conflicts with the 
 local nemo folder in models/stt/parakeet-tdt-0.6b-v2/
 """
-from nemo.collections.asr.models import ASRModel
-import torch
-import gc
-import shutil
-from pathlib import Path
-from pydub import AudioSegment
-from pydub.silence import detect_nonsilent
-import numpy as np
-import datetime
-import tempfile
-import uuid
-from typing import List, Optional
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
-import uvicorn
 import asyncio
 import base64
+import datetime
+import gc
 import os
+import shutil
+import tempfile
 import traceback
+import uuid
+from pathlib import Path
+from typing import List, Optional
+
+import numpy as np
+import torch
+import uvicorn
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from nemo.collections.asr.models import ASRModel
+from pydantic import BaseModel, Field
+from pydub import AudioSegment
+from pydub.silence import detect_nonsilent
 
 # Configuration
 device = "cpu"  # Default to CPU to avoid GPU conflicts with LLM
@@ -143,6 +152,7 @@ app = FastAPI(
 
 # Add CORS middleware to allow cross-origin requests from the main app
 from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -176,8 +186,8 @@ def process_audio_for_transcription(audio_path: str, session_dir: Path) -> tuple
             print(f"[STT] pydub failed (likely ffprobe missing: {e}), trying soundfile fallback...")
             use_pydub = False
             
-            import soundfile as sf
             import numpy as np
+            import soundfile as sf
             
             # Read audio with soundfile
             data, samplerate = sf.read(audio_path, dtype='float32')

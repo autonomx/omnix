@@ -1,14 +1,16 @@
 
 
+import base64
+import json
 import os
 import re
-import sys
-import json
-import time
 import struct
-import base64
+import sys
+import time
+
 import requests
-from flask import Blueprint, request, jsonify, Response, send_file
+from flask import Blueprint, Response, jsonify, request, send_file
+
 import app.shared as shared
 
 # Make the src/audiobook package importable from within src/app/
@@ -233,8 +235,9 @@ def upload():
         f = request.files['file']
         if f.filename and f.filename.lower().endswith('.pdf'):
             try:
-                import PyPDF2
                 import uuid
+
+                import PyPDF2
                 reader = PyPDF2.PdfReader(f)
                 valid_pages = extract_valid_pages(reader)
             except Exception as e:

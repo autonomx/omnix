@@ -5,16 +5,17 @@ This module defines the abstract base classes for Text-to-Speech (TTS) and
 Speech-to-Text (STT) providers, following the Plugin-Based Provider Pattern.
 """
 
-import subprocess
-import requests
-import time
-import threading
+import logging
 import queue
+import subprocess
+import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Any, Union, Iterator
 from enum import Enum
-import logging
+from typing import Any, Dict, Iterator, List, Optional, Union
+
+import requests
 
 logger = logging.getLogger(__name__)
 

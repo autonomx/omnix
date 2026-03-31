@@ -11,11 +11,12 @@ Also tests the fix for URLs with query parameters:
 were incorrectly resulting in filenames with query params
 """
 
-import pytest
 import json
 import os
 import sys
-from urllib.parse import urlparse, unquote
+from urllib.parse import unquote, urlparse
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

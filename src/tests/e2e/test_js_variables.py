@@ -8,14 +8,14 @@ variable declarations across files.
 from __future__ import annotations
 
 import re
-import pytest
 from pathlib import Path
 
+import pytest
 from utils.helpers import (
-    get_js_files,
-    extract_global_vars,
     COMMON_LOCAL_VARS,
     STATIC_DIR,
+    extract_global_vars,
+    get_js_files,
 )
 
 

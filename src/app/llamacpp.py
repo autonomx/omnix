@@ -1,12 +1,14 @@
-import os
-import time
-import threading
-import urllib.request
 import json
-import zipfile
-import tarfile
+import os
 import ssl
-from flask import Blueprint, request, jsonify
+import tarfile
+import threading
+import time
+import urllib.request
+import zipfile
+
+from flask import Blueprint, jsonify, request
+
 import app.shared as shared
 
 llamacpp_bp = Blueprint('llamacpp', __name__)

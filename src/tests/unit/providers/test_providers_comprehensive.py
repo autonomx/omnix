@@ -1,23 +1,25 @@
 """Comprehensive tests for provider implementations."""
 
+import json
+from unittest.mock import MagicMock, Mock, mock_open, patch
+
 import pytest
 import requests
-from unittest.mock import Mock, patch, MagicMock, mock_open
+
 from app.providers import (
-    LMStudioProvider,
-    OpenRouterProvider,
+    AuthenticationError,
     CerebrasProvider,
-    LlamaCppProvider,
-    ProviderConfig,
     ChatMessage,
     ChatResponse,
-    ModelInfo,
-    ProviderCapability,
-    AuthenticationError,
     ConnectionError,
-    ModelNotFoundError
+    LlamaCppProvider,
+    LMStudioProvider,
+    ModelInfo,
+    ModelNotFoundError,
+    OpenRouterProvider,
+    ProviderCapability,
+    ProviderConfig,
 )
-import json
 
 
 class TestChatMessageFull:

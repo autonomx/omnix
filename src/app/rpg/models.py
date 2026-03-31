@@ -24,9 +24,16 @@ class SceneOutput:
 
 class GameSession:
     def __init__(self):
+        from rpg.event_bus import EventBus
+        self.event_bus = EventBus()
+
+        self.event_log = []
         self.world = World()
         self.player = Player()
         self.npcs: list[NPC] = []
+
+        for npc in self.npcs:
+            npc.session = self  # type: ignore
 
         self.story_arcs = []
         self.recent_events = []
@@ -65,3 +72,5 @@ class NPC:
         self.memory = []
         self.relationships = {}
         self.emotional_state = {"mood": "neutral"}
+        self.position = (0, 0)
+        self.session = None

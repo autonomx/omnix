@@ -7,15 +7,15 @@ console-error capture, and automatic screenshot-on-failure.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
-import json
 import time
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
-from playwright.sync_api import Page, APIRequestContext, BrowserContext
+from playwright.sync_api import APIRequestContext, BrowserContext, Page
 
 # Add project roots to path for importing app modules
 SRC_DIR = Path(__file__).resolve().parent.parent
@@ -28,16 +28,16 @@ sys.path.insert(0, str(TESTS_DIR))
 # ---------------------------------------------------------------------------
 # Page-object imports
 # ---------------------------------------------------------------------------
+from pages.audiobook_page import AudiobookPage
 from pages.base_page import BasePage
 from pages.chat_page import ChatPage
-from pages.sidebar_page import SidebarPage
 from pages.header_page import HeaderPage
-from pages.settings_page import SettingsPage
-from pages.audiobook_page import AudiobookPage
 from pages.podcast_page import PodcastPage
-from pages.voice_studio_page import VoiceStudioPage
-from pages.voice_clone_page import VoiceClonePage
 from pages.search_page import SearchPage
+from pages.settings_page import SettingsPage
+from pages.sidebar_page import SidebarPage
+from pages.voice_clone_page import VoiceClonePage
+from pages.voice_studio_page import VoiceStudioPage
 
 # ---------------------------------------------------------------------------
 # Constants

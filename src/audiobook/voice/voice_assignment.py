@@ -1,8 +1,8 @@
 import hashlib
 from typing import Dict, List, Optional
 
-from audiobook.voice.character_voice_memory import CharacterVoiceMemory
 from audiobook.voice.character_normalizer import CharacterNormalizer
+from audiobook.voice.character_voice_memory import CharacterVoiceMemory
 
 _DEFAULT_VOICE_MAP: Dict[str, str] = {
     "narrator": "deep_male",

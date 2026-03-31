@@ -5,20 +5,20 @@ Handles automatic installation of precompiled llama.cpp wheels and binaries.
 Provides both Python wheel installation and binary download capabilities.
 """
 
-import os
-import sys
-import subprocess
-import platform
 import json
-import urllib.request
-import urllib.error
-import zipfile
-import tarfile
+import os
+import platform
 import shutil
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+import subprocess
+import sys
+import tarfile
 import threading
 import time
+import urllib.error
+import urllib.request
+import zipfile
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.shared import BASE_DIR
 

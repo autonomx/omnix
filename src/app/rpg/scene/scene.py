@@ -1,5 +1,6 @@
 from rpg.models.npc import NPC
 
+
 class Scene:
     def __init__(self):
         self.location = None

@@ -1,5 +1,6 @@
 from rpg.scene.scene import Scene
 
+
 class SceneOutput:
     def __init__(self, location, tone, scene_type, tension, characters, narration, choices, event=None):
         self.location = location

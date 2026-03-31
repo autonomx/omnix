@@ -5,12 +5,12 @@ This module implements a registry that automatically discovers provider plugins
 in the providers directory and provides a factory for creating provider instances.
 """
 
-import os
-import sys
 import importlib
 import inspect
-from typing import Dict, Type, Optional, List, Any
+import os
+import sys
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Type
 
 from .base import BaseProvider, ProviderConfig
 from .exceptions import ProviderRegistrationError

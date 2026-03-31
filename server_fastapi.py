@@ -14,7 +14,9 @@ import asyncio
 import base64
 import json
 import queue
-import requests
+
+# Import existing infrastructure
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -24,24 +26,26 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import requests
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# Import existing infrastructure
-import sys
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 import app.shared as shared
 from app.providers.base import ChatMessage
-from app.providers.faster_qwen3_tts_provider import apply_fade, soft_clip, find_best_offset
+from app.providers.faster_qwen3_tts_provider import (
+    apply_fade,
+    find_best_offset,
+    soft_clip,
+)
 
 # RPG imports
 from app.rpg.models import GameSession
 from app.rpg.persistence import delete_game, list_games, load_game, save_game
 from app.rpg.pipeline import create_new_game, execute_turn, replay_turn
-
 
 # ============== CONFIG ==============
 HOST = "0.0.0.0"
@@ -399,8 +403,9 @@ def _generate_tts_stream(session: ConversationSession, text: str):
 app = FastAPI(title="Omnix FastAPI", lifespan=lifespan)
 
 # Serve static files directly
-from fastapi.responses import FileResponse, HTMLResponse, Response
 from pathlib import Path
+
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 BASE_DIR = Path(__file__).parent
 static_dir = BASE_DIR / 'src' / 'static'
@@ -735,7 +740,8 @@ async def _process_conversation(session: ConversationSession, user_text: str):
 # ============== REST API ENDPOINTS ==============
 import uuid
 from datetime import datetime
-from fastapi import Request, HTTPException
+
+from fastapi import HTTPException, Request
 
 
 @app.get("/api/settings")
@@ -1458,8 +1464,8 @@ async def execute_rpg_turn_stream(session_id: str, request: Request):
         {"type": "done",  ...full payload}  – final response identical to the non-streaming turn endpoint
         {"type": "error", "error": "..."}   – on failure
     """
-    from fastapi.responses import StreamingResponse
     from app.rpg.memory_manager import build_context
+    from fastapi.responses import StreamingResponse
 
     session = load_game(session_id)
     if not session:
@@ -1934,7 +1940,6 @@ async def generate_podcast_episode(request: Request):
 # ============== AUDIOBOOK ENDPOINTS ==============
 import re as _re
 
-
 # ---------------------------------------------------------------------------
 # Inline dialogue parsing helpers (mirrors app/audiobook.py but avoids a
 # Flask import so server_fastapi.py can run without the Flask dependency).
@@ -2158,7 +2163,10 @@ async def audiobook_upload(request: Request):
             raw = await file.read()
             if file.filename and file.filename.lower().endswith(".pdf"):
                 try:
-                    import PyPDF2, io, uuid as _uuid
+                    import io
+                    import uuid as _uuid
+
+                    import PyPDF2
                     reader = PyPDF2.PdfReader(io.BytesIO(raw))
                     valid_pages = _extract_valid_pages(reader)
                 except Exception as e:
@@ -2807,8 +2815,8 @@ async def llamacpp_start(request: Request):
         )
         
         # Start thread to read and log server output to file
-        import threading
         import logging
+        import threading
         
         log_file = Path(shared.BASE_DIR) / "logs" / "llama-server.log"
         log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -2849,8 +2857,9 @@ async def llamacpp_stop():
 @app.post("/api/llamacpp/server/download")
 async def llamacpp_download(request: Request):
     """Download and install llama.cpp server binary"""
-    from app.llamacpp_installer import get_installer
     import uuid
+
+    from app.llamacpp_installer import get_installer
     
     data = await request.json()
     release_id = data.get('release_id', 'default')
@@ -3019,6 +3028,7 @@ async def get_llm_models():
 async def delete_llm_model(filename):
     """Delete a local LLM model file"""
     import os
+
     # URL decode the filename
     from urllib.parse import unquote
     filename = unquote(filename)
@@ -3033,9 +3043,10 @@ async def delete_llm_model(filename):
 @app.post("/api/chat/stream")
 async def chat_stream(request: Request):
     """Streaming chat endpoint (HTTP fallback for Flask compatibility)."""
-    from fastapi.responses import StreamingResponse
-    import json
     import asyncio
+    import json
+
+    from fastapi.responses import StreamingResponse
     
     data = await request.json()
     user_message = data.get('message', '')
@@ -3177,7 +3188,8 @@ async def stt_float32(request: Request):
             return JSONResponse({"detail": "No audio data provided"}, status_code=400)
         
         # Convert raw Float32 PCM bytes to WAV so the STT service accepts it
-        import io, wave
+        import io
+        import wave
         float32_data = np.frombuffer(audio_bytes, dtype=np.float32)
         int16_data = (np.clip(float32_data, -1.0, 1.0) * 32767).astype(np.int16)
         wav_buf = io.BytesIO()
@@ -3301,8 +3313,9 @@ async def tts_stream_endpoint(request: Request):
         if not hasattr(tts_provider, 'generate_audio_stream'):
             return JSONResponse({"success": False, "error": "Provider doesn't support streaming"}, status_code=500)
         
-        from fastapi.responses import StreamingResponse
         import io
+
+        from fastapi.responses import StreamingResponse
         
         async def generate():
             try:
@@ -3333,8 +3346,9 @@ async def tts_stream_endpoint(request: Request):
 @app.post("/api/tts/stream/server-sent-events")
 async def tts_stream_sse_endpoint(request: Request):
     """SSE streaming TTS endpoint."""
-    from fastapi.responses import StreamingResponse
     import asyncio
+
+    from fastapi.responses import StreamingResponse
     
     print(f"[TTS SSE] Request received")
     

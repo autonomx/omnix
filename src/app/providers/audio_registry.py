@@ -5,14 +5,14 @@ This module implements a registry that automatically discovers audio provider pl
 and provides a factory for creating TTS and STT provider instances.
 """
 
-import os
-import sys
 import importlib
 import inspect
-from typing import Dict, Type, Optional, List, Any, Union
+import os
+import sys
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Type, Union
 
-from .audio_base import BaseTTSProvider, BaseSTTProvider, AudioProviderConfig
+from .audio_base import AudioProviderConfig, BaseSTTProvider, BaseTTSProvider
 from .exceptions import ProviderRegistrationError
 
 

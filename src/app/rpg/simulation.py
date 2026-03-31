@@ -10,7 +10,6 @@ def process(session, intent):
             return {"success": False, "events": []}
 
         damage = 10
-        target.hp -= damage
 
         events.append({
             "type": "damage",
@@ -19,12 +18,7 @@ def process(session, intent):
             "amount": damage
         })
 
-        if target.hp <= 0:
-            target.is_active = False
-            events.append({
-                "type": "death",
-                "target": target.id
-            })
+        # DO NOT check death here — handled in combat_system
 
     return {
         "success": True,

@@ -4,17 +4,18 @@ Integration tests for OpenAI Compatible API
 Tests real-world usage scenarios and client compatibility
 """
 
+import asyncio
+import json
+import os
+import subprocess
+import tempfile
+import threading
+import time
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 import requests
-import json
-import time
-import tempfile
-import os
-from pathlib import Path
-import subprocess
-import threading
-import asyncio
-from unittest.mock import patch
 
 # Test configuration
 API_BASE_URL = "http://localhost:8001/v1"

@@ -1,7 +1,9 @@
 import os
-import requests
 from datetime import datetime
-from flask import Blueprint, render_template, request, jsonify, send_from_directory
+
+import requests
+from flask import Blueprint, jsonify, render_template, request, send_from_directory
+
 import app.shared as shared
 from app.providers import get_registry
 

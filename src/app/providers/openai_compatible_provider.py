@@ -6,11 +6,22 @@ This provider allows users to connect to any OpenAI-compatible API (Azure OpenAI
 by providing a URL, API key, model ID, and custom headers.
 """
 
-import requests
 import json
-from typing import List, Optional, Dict, Any, Iterator, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
-from .base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig, ProviderCapability, AuthenticationError, ConnectionError, ModelNotFoundError
+import requests
+
+from .base import (
+    AuthenticationError,
+    BaseProvider,
+    ChatMessage,
+    ChatResponse,
+    ConnectionError,
+    ModelInfo,
+    ModelNotFoundError,
+    ProviderCapability,
+    ProviderConfig,
+)
 
 
 class OpenAICompatibleProvider(BaseProvider):

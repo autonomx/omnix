@@ -6,17 +6,28 @@ This provider manages the llama.cpp binary and model serving.
 """
 
 import os
-import time
 import subprocess
 import threading
-import requests
-from typing import List, Optional, Dict, Any, Iterator, Union
+import time
 from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Union
 
-from .base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig, ProviderCapability, AuthenticationError, ConnectionError, ModelNotFoundError
+import requests
 
 # Import the installer
 from app.llamacpp_installer import get_installer
+
+from .base import (
+    AuthenticationError,
+    BaseProvider,
+    ChatMessage,
+    ChatResponse,
+    ConnectionError,
+    ModelInfo,
+    ModelNotFoundError,
+    ProviderCapability,
+    ProviderConfig,
+)
 
 
 class LlamaCppProvider(BaseProvider):

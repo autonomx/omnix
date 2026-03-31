@@ -4,21 +4,24 @@ Modular version using Blueprints
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
+from app.rpg.routes import rpg_bp
 from flask import Flask
+
+from app.audio import audio_bp
+from app.audiobook import audiobook_bp
+from app.chat import chat_bp
 
 # Import Blueprints
 from app.core import core_bp
-from app.chat import chat_bp
-from app.services import services_bp
-from app.audio import audio_bp
-from app.audiobook import audiobook_bp
-from app.podcast import podcast_bp
-from app.llm import llm_bp
 from app.llamacpp import llamacpp_bp
+from app.llm import llm_bp
+from app.podcast import podcast_bp
+from app.services import services_bp
 from app.voice_studio import voice_studio_bp
-from app.rpg.routes import rpg_bp
+
 
 def create_app():
     # Force Flask to look for templates and static files in the src directory

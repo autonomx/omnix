@@ -1,6 +1,6 @@
 import json
 import re
-from typing import List, Dict, Optional, Callable
+from typing import Callable, Dict, List, Optional
 
 _CHARACTER_PROMPT = """Extract all character names that appear in this story text.
 

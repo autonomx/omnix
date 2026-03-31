@@ -1,5 +1,5 @@
 import re
-from typing import List, Dict, Optional, Callable
+from typing import Callable, Dict, List, Optional
 
 VALID_MOODS = {"calm", "suspense", "action", "romantic", "comedic"}
 

@@ -18,9 +18,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 # Ensure src/ is on the path so ``import app`` resolves to the package,
 # not the root-level ``app.py`` script.
@@ -279,7 +279,7 @@ class TestRPGGetGame:
             session_id = create_resp.get_json()["session_id"]
 
             # Build a GameSession to return from load_game
-            from app.rpg.models import GameSession, WorldState, PlayerState
+            from app.rpg.models import GameSession, PlayerState, WorldState
             fake_session = GameSession(
                 session_id=session_id,
                 world=WorldState(name="Eldoria", genre="medieval fantasy"),
@@ -383,7 +383,7 @@ class TestRPGFunctional:
     @patch('app.rpg.routes.load_game')
     def test_start_game_and_send_turn(self, mock_load_game, mock_create_game, flask_client):
         """Test the full flow: create game, send a turn, get response."""
-        from app.rpg.models import GameSession, WorldState, PlayerState, TurnResult
+        from app.rpg.models import GameSession, PlayerState, TurnResult, WorldState
 
         # Mock the create_new_game function
         mock_session = GameSession()
@@ -449,7 +449,7 @@ class TestRPGFunctional:
     @patch('app.rpg.routes.load_game')
     def test_multiple_turns_conversation(self, mock_load_game, mock_create_game, flask_client):
         """Test sending multiple turns in a conversation."""
-        from app.rpg.models import GameSession, WorldState, PlayerState, TurnResult
+        from app.rpg.models import GameSession, PlayerState, TurnResult, WorldState
 
         # Mock the functions
         mock_session = GameSession()
@@ -510,7 +510,7 @@ class TestRPGFunctional:
     @patch('app.rpg.routes.load_game')
     def test_game_state_queries(self, mock_load_game, mock_create_game, flask_client):
         """Test querying game state after turns."""
-        from app.rpg.models import GameSession, WorldState, PlayerState
+        from app.rpg.models import GameSession, PlayerState, WorldState
 
         # Mock the functions
         mock_session = GameSession()
@@ -575,7 +575,7 @@ class TestRPGFunctional:
     @patch('app.rpg.routes.delete_game')
     def test_game_deletion(self, mock_delete_game, mock_list_games, mock_load_game, mock_create_game, flask_client):
         """Test creating and deleting a game."""
-        from app.rpg.models import GameSession, WorldState, PlayerState
+        from app.rpg.models import GameSession, PlayerState, WorldState
 
         # Mock the functions
         mock_session = GameSession()

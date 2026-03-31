@@ -1,15 +1,17 @@
 """Tests for individual provider implementations."""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
 from app.providers import (
+    CerebrasProvider,
+    ChatMessage,
+    ChatResponse,
+    LlamaCppProvider,
     LMStudioProvider,
     OpenRouterProvider,
-    CerebrasProvider,
-    LlamaCppProvider,
     ProviderConfig,
-    ChatMessage,
-    ChatResponse
 )
 
 

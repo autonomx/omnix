@@ -1,10 +1,11 @@
-from .simulation import process, apply_events
-from .pipeline_adapter import adapt_pipeline_result
 from .brain.unified_brain import unified_brain
-from .narrative_context import build_context, update_tension
-from .scene_generator import generate_scene
 from .memory import update_memory
-from .models import GameSession, NPC
+from .models import NPC, GameSession
+from .narrative_context import build_context, update_tension
+from .pipeline_adapter import adapt_pipeline_result
+from .scene_generator import generate_scene
+from .simulation import apply_events, process
+
 
 def create_new_game(seed=None, genre="fantasy", player_name="Player", character_class="", custom_lore=None, custom_rules=None, custom_story=None, world_prompt=None):
     session = GameSession()

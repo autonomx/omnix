@@ -1,10 +1,12 @@
+import base64
 import json
 import re
-import base64
 from datetime import datetime
+from io import BytesIO, StringIO
+
 import numpy as np
-from io import StringIO, BytesIO
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, Response, jsonify, request
+
 import app.shared as shared
 from app.providers import ChatMessage, ChatResponse
 
@@ -32,9 +34,9 @@ def process_attachment(attachment):
 
 def extract_document_text(file_data, filename):
     """Extract text from document files."""
-    import PyPDF2
     import docx
     import pandas as pd
+    import PyPDF2
     
     text = ''
     ext = filename.lower().split('.')[-1] if '.' in filename else ''

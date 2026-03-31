@@ -7,12 +7,12 @@ Flask endpoints enqueue jobs, background workers process them,
 results are stored in cache, and clients poll for completion.
 """
 
+import logging
 import threading
 import time
 import uuid
-import logging
 from collections import OrderedDict
-from typing import Dict, List, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

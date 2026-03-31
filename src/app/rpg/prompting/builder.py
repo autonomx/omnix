@@ -1,5 +1,6 @@
 from rpg.models.npc import NPC
 
+
 def build_prompt(npc, scene, memory):
     # Determine tone based on emotional state
     dominant_emotion = max(npc.emotional_state.items(), key=lambda x: x[1])

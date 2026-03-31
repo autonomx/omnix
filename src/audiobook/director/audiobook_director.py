@@ -1,11 +1,11 @@
-from typing import List, Dict, Optional, Callable
+from typing import Callable, Dict, List, Optional
 
+from audiobook.ai.emotion_detector import EmotionDetector
 from audiobook.constants import NARRATOR
-from audiobook.director.pacing_engine import PacingEngine
 from audiobook.director.emphasis_engine import EmphasisEngine
+from audiobook.director.pacing_engine import PacingEngine
 from audiobook.director.scene_mood_engine import SceneMoodEngine
 from audiobook.director.sfx_engine import SFXEngine
-from audiobook.ai.emotion_detector import EmotionDetector
 
 
 class AudiobookDirector:

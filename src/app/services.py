@@ -1,12 +1,14 @@
 
-import os
-import time
 import json
+import os
 import queue
-import threading
 import subprocess
+import threading
+import time
+
 import requests
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
+
 import app.shared as shared
 
 services_bp = Blueprint('services', __name__)

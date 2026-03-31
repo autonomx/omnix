@@ -6,8 +6,9 @@ Tests session search workflow using the Flask test client.
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 
 def _mock_llm_post():

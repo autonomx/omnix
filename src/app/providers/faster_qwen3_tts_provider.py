@@ -5,19 +5,25 @@ Implements the BaseTTSProvider interface for the faster-qwen3-tts library
 with CUDA graph acceleration for real-time voice cloning.
 """
 
+import logging
 import os
 import sys
-import logging
 import threading
 import time
-from pathlib import Path
-from io import BytesIO
-from typing import List, Optional, Dict, Any, Iterator, Union
 from dataclasses import dataclass, field
+from io import BytesIO
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Union
+
 import numpy as np
 
-from .audio_base import BaseTTSProvider, AudioProviderConfig, TTSAudioResponse, AudioProviderCapability
 from ..shared import MODELS_DIR, VOICE_CLONES_DIR
+from .audio_base import (
+    AudioProviderCapability,
+    AudioProviderConfig,
+    BaseTTSProvider,
+    TTSAudioResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -284,9 +290,10 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         Returns:
             Float32 mono audio array normalized to [-1, 1]
         """
+        from io import BytesIO
+
         import numpy as np
         import soundfile as io
-        from io import BytesIO
         
         if isinstance(audio_data, bytes):
             # Decode WAV bytes
@@ -320,8 +327,9 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         Returns:
             WAV file as bytes
         """
-        import soundfile as io
         from io import BytesIO
+
+        import soundfile as io
         
         with BytesIO() as bio:
             io.write(bio, audio, sample_rate, format='WAV', subtype='PCM_16')
@@ -750,6 +758,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                     
                     # Force garbage collection
                     import gc
+
                     import torch
                     gc.collect()
                     if torch.cuda.is_available():

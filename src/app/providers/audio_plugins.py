@@ -5,23 +5,27 @@ This module contains concrete implementations of audio providers:
 - ParakeetSTT: Wraps FasterWhisper/Parakeet STT service
 """
 
-import subprocess
-import requests
-import time
-import os
 import base64
-import numpy as np
-import soundfile as sf
 import io
-import wave
-from typing import Optional, Dict, List, Any, Union, Iterator
-from pathlib import Path
 import logging
+import os
+import subprocess
+import time
+import wave
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Union
+
+import numpy as np
+import requests
+import soundfile as sf
 
 from .audio_base import (
-    BaseTTSProvider, BaseSTTProvider, 
-    AudioProviderConfig, TTSAudioResponse, STTTranscriptionResponse,
-    AudioProviderCapability
+    AudioProviderCapability,
+    AudioProviderConfig,
+    BaseSTTProvider,
+    BaseTTSProvider,
+    STTTranscriptionResponse,
+    TTSAudioResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -150,8 +154,9 @@ class ParakeetSTT(BaseSTTProvider):
             base_url = self.config.get("base_url", "http://localhost:8000")
             
             import tempfile
-            import numpy as np
             import wave
+
+            import numpy as np
             
             # Convert raw Float32 audio to proper WAV file
             float32_data = np.frombuffer(audio_data, dtype=np.float32)
@@ -298,8 +303,8 @@ class FasterQwen3TTSTTS(BaseTTSProvider):
         
         try:
             # Import the faster-qwen3-tts library
-            from faster_qwen3_tts import FasterQwen3TTS
             import torch
+            from faster_qwen3_tts import FasterQwen3TTS
             
             logger.info(f"Loading FasterQwen3TTS model: {self.model_name}")
             

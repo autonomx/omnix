@@ -1,7 +1,9 @@
 import os
 import threading
 import time
-from flask import Blueprint, request, jsonify
+
+from flask import Blueprint, jsonify, request
+
 import app.shared as shared
 
 llm_bp = Blueprint('llm', __name__)
@@ -54,7 +56,8 @@ def llm_download():
     
     def dl():
         try:
-            import urllib.request, ssl
+            import ssl
+            import urllib.request
             ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
             req = urllib.request.Request(url, headers={'User-Agent': 'Omnix/1.0'})
             

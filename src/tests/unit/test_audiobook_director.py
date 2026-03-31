@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+
 import pytest
 
 # Ensure src/ is on the path so the audiobook package is importable
@@ -511,8 +512,8 @@ class TestCharacterNormalizer:
 
 class TestVoiceAssignmentWithMemory:
     def _get(self, tmp_path, voices=None):
-        from audiobook.voice.character_voice_memory import CharacterVoiceMemory
         from audiobook.voice.character_normalizer import CharacterNormalizer
+        from audiobook.voice.character_voice_memory import CharacterVoiceMemory
         from audiobook.voice.voice_assignment import VoiceAssignment
         mem = CharacterVoiceMemory("test", base_dir=str(tmp_path))
         norm = CharacterNormalizer()
@@ -543,8 +544,8 @@ class TestVoiceAssignmentWithMemory:
         voice1 = va1.get_voice("SomeCharacter")
 
         # New instance, same memory store
-        from audiobook.voice.character_voice_memory import CharacterVoiceMemory
         from audiobook.voice.character_normalizer import CharacterNormalizer
+        from audiobook.voice.character_voice_memory import CharacterVoiceMemory
         from audiobook.voice.voice_assignment import VoiceAssignment
         mem2 = CharacterVoiceMemory("test", base_dir=str(tmp_path))
         va2 = VoiceAssignment(
@@ -562,8 +563,8 @@ class TestVoiceAssignmentWithMemory:
         assert mem.get_voice("Alice") == "custom_voice"
 
     def test_alias_uses_canonical_memory(self, tmp_path):
-        from audiobook.voice.character_voice_memory import CharacterVoiceMemory
         from audiobook.voice.character_normalizer import CharacterNormalizer
+        from audiobook.voice.character_voice_memory import CharacterVoiceMemory
         from audiobook.voice.voice_assignment import VoiceAssignment
         mem = CharacterVoiceMemory("test", base_dir=str(tmp_path))
         norm = CharacterNormalizer({"Mr. Darcy": "Darcy"})

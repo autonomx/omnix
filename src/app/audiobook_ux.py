@@ -4,15 +4,15 @@ Audiobook UX backend features: bookmarks, resume position, playback state, chapt
 All data is persisted in JSON files under DATA_DIR/audiobooks/ux/<user_id>/.
 """
 
+import json
+import logging
 import os
 import re
-import json
 import time
 import uuid
-import logging
-from typing import List, Dict, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 
 import app.shared as shared
 

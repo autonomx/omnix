@@ -1,6 +1,7 @@
 from rpg.models.npc import NPC
 from rpg.scene.scene import has_enemy
 
+
 class Goal:
     def __init__(self, type: str, priority: int, target=None):
         self.type = type

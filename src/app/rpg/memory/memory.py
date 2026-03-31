@@ -1,5 +1,6 @@
 from rpg.models.npc import NPC
 
+
 def remember_event(npc: NPC, event):
     # Add importance weighting based on emotion
     importance_weights = {

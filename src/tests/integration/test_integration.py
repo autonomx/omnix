@@ -7,12 +7,12 @@ Set environment variables to enable real service tests:
     TEST_STT=1 - Test STT server
 """
 
-import pytest
+import base64
 import os
 import time
-import base64
-import requests
 
+import pytest
+import requests
 
 # Service endpoints
 TTS_URL = os.environ.get('TTS_URL', 'http://localhost:8020')
@@ -182,8 +182,8 @@ class TestSTTIntegration:
         # Generate a simple test audio (silence)
         # In real tests, you'd use a pre-recorded audio file
         import io
-        import wave
         import struct
+        import wave
         
         # Create a simple WAV file with silence
         sample_rate = 16000

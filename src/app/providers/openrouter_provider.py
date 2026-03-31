@@ -5,10 +5,21 @@ Implements the BaseProvider interface for OpenRouter API.
 OpenRouter provides access to various LLM models through a unified API.
 """
 
-import requests
-from typing import List, Optional, Dict, Any, Iterator, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
-from .base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig, ProviderCapability, AuthenticationError, ConnectionError, ModelNotFoundError
+import requests
+
+from .base import (
+    AuthenticationError,
+    BaseProvider,
+    ChatMessage,
+    ChatResponse,
+    ConnectionError,
+    ModelInfo,
+    ModelNotFoundError,
+    ProviderCapability,
+    ProviderConfig,
+)
 
 
 class OpenRouterProvider(BaseProvider):

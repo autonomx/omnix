@@ -349,11 +349,11 @@ class TestVoiceManager:
 class TestTTSProviderAbstraction:
     def test_register_and_get(self):
         from app.providers.tts_abstraction import (
-            register_provider,
+            LocalModelTTSProvider,
             get_provider,
             list_providers,
+            register_provider,
             unregister_provider,
-            LocalModelTTSProvider,
         )
 
         p = LocalModelTTSProvider(base_url="http://localhost:9999")
@@ -778,31 +778,37 @@ class TestAudioHardeningHelpers:
 
     def test_is_valid_audio_rejects_empty(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _is_valid_audio
         assert _is_valid_audio(np.array([])) is False
 
     def test_is_valid_audio_rejects_nan(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _is_valid_audio
         assert _is_valid_audio(np.array([1.0, float('nan'), 0.5])) is False
 
     def test_is_valid_audio_rejects_silence(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _is_valid_audio
         assert _is_valid_audio(np.zeros(100)) is False
 
     def test_is_valid_audio_rejects_explosion(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _is_valid_audio
         assert _is_valid_audio(np.array([10.0, -10.0])) is False
 
     def test_is_valid_audio_accepts_good(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _is_valid_audio
         assert _is_valid_audio(np.array([0.5, -0.3, 0.1])) is True
 
     def test_normalize_audio(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _normalize_audio, soft_clip
         audio = np.array([0.5, -0.5, 1.5], dtype=np.float32)
         result = _normalize_audio(audio)
@@ -817,6 +823,7 @@ class TestAudioHardeningHelpers:
     def test_normalize_audio_peak_preserves_quiet(self):
         """Peak-based normalisation must NOT amplify a quiet signal."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _normalize_audio, soft_clip
         audio = np.array([0.1, -0.1], dtype=np.float32)
         result = _normalize_audio(audio)
@@ -836,6 +843,7 @@ class TestCrossfadeAudio:
 
     def test_crossfade_basic(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import crossfade_audio
         prev = np.ones(1024, dtype=np.float32)
         curr = np.ones(1024, dtype=np.float32) * -1
@@ -846,6 +854,7 @@ class TestCrossfadeAudio:
     def test_crossfade_short_arrays_concat(self):
         """Arrays shorter than fade_samples should just concatenate."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import crossfade_audio
         prev = np.ones(100, dtype=np.float32)
         curr = np.ones(100, dtype=np.float32) * 2
@@ -856,6 +865,7 @@ class TestCrossfadeAudio:
 
     def test_crossfade_none_prev(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import crossfade_audio
         curr = np.ones(100, dtype=np.float32)
         result = crossfade_audio(None, curr, fade_samples=512)
@@ -864,6 +874,7 @@ class TestCrossfadeAudio:
     def test_crossfade_smooth_transition(self):
         """Midpoint of crossfade should be roughly the average of the two signals."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import crossfade_audio
         prev = np.ones(1024, dtype=np.float32)
         curr = np.zeros(1024, dtype=np.float32)
@@ -879,6 +890,7 @@ class TestApplyFade:
 
     def test_fade_edges_near_zero(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import apply_fade
         audio = np.ones(1024, dtype=np.float32)
         result = apply_fade(audio, fade_samples=256)
@@ -890,6 +902,7 @@ class TestApplyFade:
     def test_fade_short_audio_passthrough(self):
         """Audio shorter than 2*fade_samples should pass through as a copy."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import apply_fade
         audio = np.ones(100, dtype=np.float32)
         result = apply_fade(audio, fade_samples=256)
@@ -899,6 +912,7 @@ class TestApplyFade:
 
     def test_fade_does_not_mutate_input(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import apply_fade
         audio = np.ones(1024, dtype=np.float32)
         original = audio.copy()
@@ -911,6 +925,7 @@ class TestSilencePad:
 
     def test_silence_appended(self):
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import silence_pad
         audio = np.ones(100, dtype=np.float32)
         result = silence_pad(audio, sample_rate=24000, duration_sec=0.05)
@@ -926,6 +941,7 @@ class TestFindBestOffset:
     def test_identical_signals_zero_offset(self):
         """Two identical signals should produce offset 0."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import find_best_offset
         sig = np.sin(np.linspace(0, 4 * np.pi, 1024, dtype=np.float32))
         offset = find_best_offset(sig, sig)
@@ -934,6 +950,7 @@ class TestFindBestOffset:
     def test_shifted_signal_detected(self):
         """A known shift should be detected."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import find_best_offset
         # Create a sine wave and a shifted copy
         t = np.linspace(0, 8 * np.pi, 2048, dtype=np.float32)
@@ -948,6 +965,7 @@ class TestFindBestOffset:
     def test_short_arrays_no_crash(self):
         """Very short arrays should not crash."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import find_best_offset
         prev = np.array([0.1, 0.2], dtype=np.float32)
         curr = np.array([0.1, 0.2, 0.3], dtype=np.float32)
@@ -962,6 +980,7 @@ class TestSoftLimiter:
     def test_soft_clip_smoother_than_clip(self):
         """soft_clip should produce a value < 32767 for a signal at exactly 1.0."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _normalize_audio
         audio = np.array([1.0], dtype=np.float32)
         result = _normalize_audio(audio)
@@ -973,6 +992,7 @@ class TestSoftLimiter:
     def test_soft_clip_preserves_small_signals(self):
         """For small values soft_clip(x) ≈ x, so quiet audio is not distorted."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import _normalize_audio, soft_clip
         audio = np.array([0.05, -0.05], dtype=np.float32)
         result = _normalize_audio(audio)
@@ -983,6 +1003,7 @@ class TestSoftLimiter:
     def test_soft_clip_function(self):
         """Direct test of the soft_clip helper."""
         import numpy as np
+
         from app.providers.faster_qwen3_tts_provider import soft_clip
         x = np.array([0.0, 0.5, 1.0, 2.0, -1.0], dtype=np.float32)
         result = soft_clip(x)
@@ -1129,6 +1150,7 @@ class TestChunkTextDefault:
 
     def test_default_max_chars_is_300(self):
         import inspect
+
         from audiobook.segmentation.chunk_text import chunk_text
         sig = inspect.signature(chunk_text)
         default = sig.parameters["max_chars"].default
@@ -1274,7 +1296,10 @@ class TestIsSystemCharacter:
 
 class TestSystemCharacterClassification:
     def _classify(self, name):
-        from audiobook.voice.voice_classifier import classify_character_voice, clear_voice_cache
+        from audiobook.voice.voice_classifier import (
+            classify_character_voice,
+            clear_voice_cache,
+        )
         clear_voice_cache()
         return classify_character_voice(name=name)
 

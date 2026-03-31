@@ -4,14 +4,16 @@ Handles text-to-speech functionality with streaming support
 """
 import base64
 import json
+import os
 import queue
+import tempfile
 import threading
 import time
-import numpy as np
-import tempfile
-import os
 import wave
-from flask import Blueprint, request, jsonify, Response
+
+import numpy as np
+from flask import Blueprint, Response, jsonify, request
+
 import app.shared as shared
 
 audio_bp = Blueprint('audio', __name__)

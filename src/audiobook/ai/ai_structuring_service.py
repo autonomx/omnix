@@ -1,13 +1,13 @@
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Optional, Callable
+from typing import Callable, Dict, List, Optional
 
-from audiobook.segmentation.text_segmenter import TextSegmenter
-from audiobook.segmentation.scene_detector import SceneDetector
-from audiobook.ai.speaker_tracker import SpeakerTracker
 from audiobook.ai.character_extractor import CharacterExtractor
 from audiobook.ai.emotion_detector import EmotionDetector
+from audiobook.ai.speaker_tracker import SpeakerTracker
+from audiobook.segmentation.scene_detector import SceneDetector
+from audiobook.segmentation.text_segmenter import TextSegmenter
 
 STRUCTURE_PROMPT = """You are converting story text into an audiobook dialogue format.
 

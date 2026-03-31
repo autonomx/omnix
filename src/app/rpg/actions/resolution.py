@@ -1,5 +1,7 @@
 import random
+
 from rpg.models.npc import NPC
+
 
 class Action:
     def __init__(self, type: str, stat: str, target=None):

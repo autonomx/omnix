@@ -1,8 +1,9 @@
-from rpg.models.npc import NPC
 from rpg.actions.resolution import Action
-from rpg.scene.scene import get_enemies
-from rpg.npc.goals import select_goal
 from rpg.memory.memory import retrieve_relevant
+from rpg.models.npc import NPC
+from rpg.npc.goals import select_goal
+from rpg.scene.scene import get_enemies
+
 
 def npc_decide(npc: NPC, scene):
     memory = retrieve_relevant(npc, scene)

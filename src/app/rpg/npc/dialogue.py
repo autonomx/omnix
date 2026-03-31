@@ -1,5 +1,6 @@
 from rpg.models.npc import NPC
 
+
 def derive_tone(npc: NPC, target: NPC):
     rel = npc.memory["relationships"].get(target.id, 0)
 

@@ -4,9 +4,9 @@ Run with: python -m pytest tests/test_js_variables.py -v
 """
 import os
 import re
-import pytest
 from pathlib import Path
 
+import pytest
 
 BASE_DIR = Path(__file__).parent.parent.parent
 STATIC_DIR = BASE_DIR / "static"

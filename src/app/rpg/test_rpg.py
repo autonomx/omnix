@@ -1,8 +1,8 @@
-from rpg.models.npc import NPC
+from rpg.game_loop.main import game_loop
 from rpg.models.game_state import GameState
+from rpg.models.npc import NPC
 from rpg.npc.goals import Goal
 from rpg.scene.scene import add_character
-from rpg.game_loop.main import game_loop
 
 # Create NPCs
 npc1 = NPC("1", "Warrior", "Brave warrior", "heroes", hp=50)

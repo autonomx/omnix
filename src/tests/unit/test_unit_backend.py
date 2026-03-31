@@ -3,10 +3,11 @@ Unit tests for backend utility functions.
 Tests do not require external services (LLM, TTS, STT).
 """
 
-import pytest
 import json
 import os
 import sys
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -212,8 +213,9 @@ class TestSessionManagement:
     
     def test_session_structure(self):
         """Test that sessions have correct structure."""
-        from app import load_sessions, save_sessions
         import tempfile
+
+        from app import load_sessions, save_sessions
         
         # Sessions should be a dict
         sessions = load_sessions()

@@ -84,7 +84,7 @@ class TestNPCCharacter:
     """Test NPCCharacter data model."""
 
     def test_create_npc(self):
-        from app.rpg.models import NPCCharacter, CharacterStats
+        from app.rpg.models import CharacterStats, NPCCharacter
         npc = NPCCharacter(
             name="Sofia",
             role="merchant",
@@ -136,7 +136,7 @@ class TestPlayerState:
         assert player.fail_state == ""
 
     def test_custom_player(self):
-        from app.rpg.models import PlayerState, CharacterStats
+        from app.rpg.models import CharacterStats, PlayerState
         player = PlayerState(
             name="Hero",
             stats=CharacterStats(strength=10, charisma=7, intelligence=4, wealth=100),
@@ -167,8 +167,17 @@ class TestGameSession:
 
     def _create_test_session(self):
         from app.rpg.models import (
-            CharacterStats, Faction, GameSession, HistoryEvent, Location,
-            NPCCharacter, PlayerState, Quest, WorldRules, WorldState, WorldTime,
+            CharacterStats,
+            Faction,
+            GameSession,
+            HistoryEvent,
+            Location,
+            NPCCharacter,
+            PlayerState,
+            Quest,
+            WorldRules,
+            WorldState,
+            WorldTime,
         )
         world = WorldState(
             seed=42, name="Test World", genre="medieval fantasy",
@@ -535,7 +544,7 @@ class TestPersistence:
         )
 
     def test_save_and_load(self):
-        from app.rpg.persistence import save_game, load_game, delete_game
+        from app.rpg.persistence import delete_game, load_game, save_game
         session = self._create_test_session()
         save_game(session)
 
@@ -548,7 +557,7 @@ class TestPersistence:
         delete_game(session.session_id)
 
     def test_delete(self):
-        from app.rpg.persistence import save_game, load_game, delete_game
+        from app.rpg.persistence import delete_game, load_game, save_game
         session = self._create_test_session()
         save_game(session)
         assert delete_game(session.session_id) is True
@@ -556,7 +565,7 @@ class TestPersistence:
         assert delete_game(session.session_id) is False
 
     def test_list_games(self):
-        from app.rpg.persistence import save_game, list_games, delete_game
+        from app.rpg.persistence import delete_game, list_games, save_game
         session = self._create_test_session()
         save_game(session)
 
@@ -582,8 +591,16 @@ class TestMemoryManager:
 
     def _create_test_session(self):
         from app.rpg.models import (
-            CharacterStats, GameSession, HistoryEvent, Location,
-            NPCCharacter, PlayerState, Quest, WorldRules, WorldState, WorldTime,
+            CharacterStats,
+            GameSession,
+            HistoryEvent,
+            Location,
+            NPCCharacter,
+            PlayerState,
+            Quest,
+            WorldRules,
+            WorldState,
+            WorldTime,
         )
         world = WorldState(
             seed=42, name="Memory World", genre="sci-fi",
@@ -736,8 +753,14 @@ class TestRuleEnforcer:
 
     def _create_test_session(self):
         from app.rpg.models import (
-            CharacterStats, GameSession, Location, NPCCharacter,
-            PlayerState, WorldRules, WorldState, WorldTime,
+            CharacterStats,
+            GameSession,
+            Location,
+            NPCCharacter,
+            PlayerState,
+            WorldRules,
+            WorldState,
+            WorldTime,
         )
         world = WorldState(
             seed=1, name="Rule World",
@@ -1137,8 +1160,15 @@ class TestWorldStateDiff:
 
     def _create_test_session(self):
         from app.rpg.models import (
-            CharacterStats, Faction, GameSession, Location,
-            NPCCharacter, PlayerState, WorldRules, WorldState, WorldTime,
+            CharacterStats,
+            Faction,
+            GameSession,
+            Location,
+            NPCCharacter,
+            PlayerState,
+            WorldRules,
+            WorldState,
+            WorldTime,
         )
         world = WorldState(
             seed=42, name="Diff World", genre="medieval fantasy",
@@ -1449,10 +1479,14 @@ class TestFactionReputation:
         assert restored.reputation_factions["Thieves"] == -30
 
     def test_faction_reputation_in_context(self):
-        from app.rpg.models import (
-            CharacterStats, GameSession, PlayerState, WorldState,
-        )
         from app.rpg.memory_manager import build_context
+
+        from app.rpg.models import (
+            CharacterStats,
+            GameSession,
+            PlayerState,
+            WorldState,
+        )
         session = GameSession(
             world=WorldState(seed=1, name="Test"),
             player=PlayerState(
@@ -1467,8 +1501,12 @@ class TestFactionReputation:
 
     def test_faction_reputation_check_hostile(self):
         from app.rpg.models import (
-            Faction, GameSession, Location, NPCCharacter,
-            PlayerState, WorldState,
+            Faction,
+            GameSession,
+            Location,
+            NPCCharacter,
+            PlayerState,
+            WorldState,
         )
         from app.rpg.rule_enforcer import _check_faction_reputation
         world = WorldState(
@@ -1487,8 +1525,12 @@ class TestFactionReputation:
 
     def test_faction_reputation_check_friendly(self):
         from app.rpg.models import (
-            Faction, GameSession, Location, NPCCharacter,
-            PlayerState, WorldState,
+            Faction,
+            GameSession,
+            Location,
+            NPCCharacter,
+            PlayerState,
+            WorldState,
         )
         from app.rpg.rule_enforcer import _check_faction_reputation
         world = WorldState(
@@ -1562,8 +1604,12 @@ class TestStructuredTagging:
 
     def test_build_structured_tags(self):
         from app.rpg.models import (
-            GameSession, Location, NPCCharacter, PlayerIntent,
-            PlayerState, WorldState,
+            GameSession,
+            Location,
+            NPCCharacter,
+            PlayerIntent,
+            PlayerState,
+            WorldState,
         )
         from app.rpg.pipeline import _build_structured_tags
         session = GameSession(
@@ -1598,8 +1644,9 @@ class TestStructuredTagging:
         assert tags.count("location:Town") == 1
 
     def test_events_by_structured_tag(self):
-        from app.rpg.models import GameSession, HistoryEvent, PlayerState, WorldState
         from app.rpg.memory_manager import get_events_by_tag
+
+        from app.rpg.models import GameSession, HistoryEvent, PlayerState, WorldState
         session = GameSession(
             world=WorldState(),
             player=PlayerState(),
@@ -1682,7 +1729,7 @@ class TestSeedBasedRandomness:
 
     def test_steal_in_stat_map(self):
         """Steal intent should use intelligence stat."""
-        from app.rpg.pipeline import INTENT_STAT_MAP, INTENT_DIFFICULTY_MAP
+        from app.rpg.pipeline import INTENT_DIFFICULTY_MAP, INTENT_STAT_MAP
         assert INTENT_STAT_MAP["steal"] == "intelligence"
         assert INTENT_DIFFICULTY_MAP["steal"] == 8
 
@@ -1974,7 +2021,12 @@ class TestValidateDiff:
     """Test the validate_diff function for diff validation reporting."""
 
     def test_valid_diff(self):
-        from app.rpg.models import GameSession, NPCCharacter, WorldStateDiff, validate_diff
+        from app.rpg.models import (
+            GameSession,
+            NPCCharacter,
+            WorldStateDiff,
+            validate_diff,
+        )
         session = GameSession()
         session.npcs.append(NPCCharacter(name="Goblin", role="enemy"))
         diff = WorldStateDiff(
@@ -2603,7 +2655,7 @@ class TestWorldEventProcessing:
     """Test world event processing in the pipeline."""
 
     def test_world_event_decrements_remaining(self):
-        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.models import GameSession, Location, WorldEvent
         from app.rpg.pipeline import _process_world_events
         session = GameSession()
         session.world.locations.append(Location(name="Town", description="A town"))
@@ -2616,7 +2668,7 @@ class TestWorldEventProcessing:
         assert session.world.active_world_events[0].remaining_turns == 2
 
     def test_world_event_expires(self):
-        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.models import GameSession, Location, WorldEvent
         from app.rpg.pipeline import _process_world_events
         session = GameSession()
         session.turn_count = 5
@@ -2630,7 +2682,7 @@ class TestWorldEventProcessing:
         assert any("[World Event Ended]" in h.event for h in session.history)
 
     def test_world_event_applies_market_modifier(self):
-        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.models import GameSession, Location, WorldEvent
         from app.rpg.pipeline import _process_world_events
         session = GameSession()
         loc = Location(name="Town", description="A town", market_modifier=1.0)
@@ -2644,7 +2696,7 @@ class TestWorldEventProcessing:
         assert loc.market_modifier == 1.2
 
     def test_world_event_market_modifier_clamped(self):
-        from app.rpg.models import GameSession, WorldEvent, Location
+        from app.rpg.models import GameSession, Location, WorldEvent
         from app.rpg.pipeline import _process_world_events
         session = GameSession()
         loc = Location(name="Town", description="A town", market_modifier=1.9)
@@ -2668,7 +2720,7 @@ class TestWorldStateWorldEvents:
         assert ws.active_world_events == []
 
     def test_world_state_serializes_events(self):
-        from app.rpg.models import WorldState, WorldEvent
+        from app.rpg.models import WorldEvent, WorldState
         ws = WorldState()
         ws.active_world_events.append(WorldEvent(type="war", duration=5))
         d = ws.to_dict()
@@ -2676,7 +2728,7 @@ class TestWorldStateWorldEvents:
         assert len(d["active_world_events"]) == 1
 
     def test_world_state_deserializes_events(self):
-        from app.rpg.models import WorldState, WorldEvent
+        from app.rpg.models import WorldEvent, WorldState
         ws = WorldState()
         ws.active_world_events.append(WorldEvent(type="plague", duration=3))
         restored = WorldState.from_dict(ws.to_dict())
@@ -2700,7 +2752,13 @@ class TestReplayConsistency:
     def test_replay_state_matches_original(self):
         """Full state equivalence: same diff applied to same initial state
         must produce identical state whether applied directly or via replay."""
-        from app.rpg.models import GameSession, NPCCharacter, TurnLog, WorldStateDiff, apply_diff
+        from app.rpg.models import (
+            GameSession,
+            NPCCharacter,
+            TurnLog,
+            WorldStateDiff,
+            apply_diff,
+        )
         from app.rpg.pipeline import replay_turn
 
         # Setup identical sessions
@@ -3336,55 +3394,62 @@ class TestSystemTriggers:
     """Tests for the cross-system emergence engine."""
 
     def test_economic_decline_triggers_crime(self):
-        from app.rpg.models import GameSession, Location
         from app.rpg.system_triggers import evaluate_system_triggers
+
+        from app.rpg.models import GameSession, Location
         session = GameSession()
         session.world.locations = [Location(name="Town", description="A town", market_modifier=0.5)]
         events = evaluate_system_triggers(session)
         assert any("Crime" in e.narrative for e in events)
 
     def test_npc_anger_triggers_conflict(self):
-        from app.rpg.models import GameSession, NPCCharacter
         from app.rpg.system_triggers import evaluate_system_triggers
+
+        from app.rpg.models import GameSession, NPCCharacter
         session = GameSession()
         session.npcs = [NPCCharacter(name="Angry", role="guard", emotional_state={"anger": 0.9})]
         events = evaluate_system_triggers(session)
         assert any("Angry" in e.narrative for e in events)
 
     def test_low_food_triggers_famine(self):
-        from app.rpg.models import GameSession
         from app.rpg.system_triggers import evaluate_system_triggers
+
+        from app.rpg.models import GameSession
         session = GameSession()
         session.world.resources["food"] = 20
         events = evaluate_system_triggers(session)
         assert any("Famine" in e.narrative or "famine" in e.source_event for e in events)
 
     def test_low_security_triggers_bandits(self):
-        from app.rpg.models import GameSession
         from app.rpg.system_triggers import evaluate_system_triggers
+
+        from app.rpg.models import GameSession
         session = GameSession()
         session.world.resources["security"] = 20
         events = evaluate_system_triggers(session)
         assert any("bandit" in e.source_event for e in events)
 
     def test_faction_tension_triggers_event(self):
-        from app.rpg.models import GameSession, Faction
         from app.rpg.system_triggers import evaluate_system_triggers
+
+        from app.rpg.models import Faction, GameSession
         session = GameSession()
         session.world.factions = [Faction(name="A", description="", relations={"B": -60})]
         events = evaluate_system_triggers(session)
         assert any("faction_tension" in e.source_event for e in events)
 
     def test_no_triggers_on_healthy_world(self):
-        from app.rpg.models import GameSession
         from app.rpg.system_triggers import evaluate_system_triggers
+
+        from app.rpg.models import GameSession
         session = GameSession()
         events = evaluate_system_triggers(session)
         assert events == []
 
     def test_update_resources_war(self):
-        from app.rpg.models import GameSession, WorldEvent
         from app.rpg.system_triggers import update_resources
+
+        from app.rpg.models import GameSession, WorldEvent
         session = GameSession()
         session.world.active_world_events = [WorldEvent(type="war", duration=5, affected_locations=[])]
         old_sec = session.world.resources["security"]
@@ -3415,24 +3480,27 @@ class TestStoryEngine:
         assert restored.progress == 0.5
 
     def test_update_story_arcs_progression(self):
-        from app.rpg.models import GameSession, StoryArc
         from app.rpg.story_engine import update_story_arcs
+
+        from app.rpg.models import GameSession, StoryArc
         session = GameSession()
         session.story_arcs = [StoryArc(type="war", stage="setup", progress=0.0)]
         update_story_arcs(session)
         assert session.story_arcs[0].progress == 0.1
 
     def test_update_story_arcs_stage_transition_rising(self):
-        from app.rpg.models import GameSession, StoryArc
         from app.rpg.story_engine import update_story_arcs
+
+        from app.rpg.models import GameSession, StoryArc
         session = GameSession()
         session.story_arcs = [StoryArc(type="war", stage="setup", progress=0.25)]
         update_story_arcs(session)
         assert session.story_arcs[0].stage == "rising"
 
     def test_update_story_arcs_stage_transition_climax(self):
-        from app.rpg.models import GameSession, StoryArc
         from app.rpg.story_engine import update_story_arcs
+
+        from app.rpg.models import GameSession, StoryArc
         session = GameSession()
         session.story_arcs = [StoryArc(type="war", stage="rising", progress=0.65)]
         consequences = update_story_arcs(session)
@@ -3440,16 +3508,18 @@ class TestStoryEngine:
         assert len(consequences) == 1
 
     def test_update_story_arcs_resolution(self):
-        from app.rpg.models import GameSession, StoryArc
         from app.rpg.story_engine import update_story_arcs
+
+        from app.rpg.models import GameSession, StoryArc
         session = GameSession()
         session.story_arcs = [StoryArc(type="war", stage="climax", progress=0.95)]
         update_story_arcs(session)
         assert session.story_arcs[0].stage == "resolution"
 
     def test_maybe_create_arc_betrayal(self):
-        from app.rpg.models import GameSession
         from app.rpg.story_engine import maybe_create_arc
+
+        from app.rpg.models import GameSession
         session = GameSession()
         arc = maybe_create_arc(session, "The merchant betrayed you!")
         assert arc is not None
@@ -3457,23 +3527,26 @@ class TestStoryEngine:
         assert len(session.story_arcs) == 1
 
     def test_maybe_create_arc_war(self):
-        from app.rpg.models import GameSession
         from app.rpg.story_engine import maybe_create_arc
+
+        from app.rpg.models import GameSession
         session = GameSession()
         arc = maybe_create_arc(session, "War has broken out between the kingdoms")
         assert arc is not None
         assert arc.type == "war"
 
     def test_maybe_create_arc_no_match(self):
-        from app.rpg.models import GameSession
         from app.rpg.story_engine import maybe_create_arc
+
+        from app.rpg.models import GameSession
         session = GameSession()
         arc = maybe_create_arc(session, "You bought some bread")
         assert arc is None
 
     def test_enforce_story_low_tension(self):
-        from app.rpg.models import GameSession, StoryArc
         from app.rpg.story_engine import enforce_story
+
+        from app.rpg.models import GameSession, StoryArc
         session = GameSession()
         session.narrative_tension = 0.1
         session.story_arcs = [StoryArc(type="revenge", stage="setup")]
@@ -3482,8 +3555,9 @@ class TestStoryEngine:
         assert directive["type"] == "inciting_incident"
 
     def test_enforce_story_climax(self):
-        from app.rpg.models import GameSession, StoryArc
         from app.rpg.story_engine import enforce_story
+
+        from app.rpg.models import GameSession, StoryArc
         session = GameSession()
         session.story_arcs = [StoryArc(type="war", stage="climax")]
         directive = enforce_story(session)
@@ -3491,8 +3565,9 @@ class TestStoryEngine:
         assert directive["type"] == "major_conflict"
 
     def test_npc_goal_progression(self):
-        from app.rpg.models import GameSession, NPCCharacter
         from app.rpg.story_engine import update_npc_goals
+
+        from app.rpg.models import GameSession, NPCCharacter
         session = GameSession()
         session.npcs = [NPCCharacter(
             name="Lord", role="noble",
@@ -3503,8 +3578,9 @@ class TestStoryEngine:
         assert session.npcs[0].active_goals[0]["progress"] == 0.1
 
     def test_npc_goal_completion(self):
-        from app.rpg.models import GameSession, NPCCharacter
         from app.rpg.story_engine import update_npc_goals
+
+        from app.rpg.models import GameSession, NPCCharacter
         session = GameSession()
         session.npcs = [NPCCharacter(
             name="Lord", role="noble",
@@ -4017,24 +4093,27 @@ class TestNPCMindDeception:
     """Test the deception / dual-state system."""
 
     def test_should_lie_high_risk_low_honesty(self):
-        from app.rpg.npc_mind import should_lie
         import random as rng
+
+        from app.rpg.npc_mind import should_lie
         rng.seed(42)
         npc = {"personality_traits": {"honest": 0.1}}
         lies = sum(should_lie(npc, context_risk=0.9) for _ in range(100))
         assert lies > 70
 
     def test_should_lie_low_risk_high_honesty(self):
-        from app.rpg.npc_mind import should_lie
         import random as rng
+
+        from app.rpg.npc_mind import should_lie
         rng.seed(42)
         npc = {"personality_traits": {"honest": 0.9}}
         lies = sum(should_lie(npc, context_risk=0.1) for _ in range(100))
         assert lies < 30
 
     def test_build_expressed_state_honest_npc(self):
-        from app.rpg.npc_mind import build_expressed_state
         import random as rng
+
+        from app.rpg.npc_mind import build_expressed_state
         rng.seed(42)
         npc = {
             "current_action": "guard",
@@ -4049,30 +4128,30 @@ class TestNPCMindTieredIntelligence:
     """Test intelligence tier assignment."""
 
     def test_same_location_tier_1(self):
-        from app.rpg.npc_mind import get_intelligence_tier, TIER_LLM
+        from app.rpg.npc_mind import TIER_LLM, get_intelligence_tier
         tier = get_intelligence_tier("market", "market")
         assert tier == TIER_LLM
 
     def test_nearby_tier_1(self):
-        from app.rpg.npc_mind import get_intelligence_tier, TIER_LLM
+        from app.rpg.npc_mind import TIER_LLM, get_intelligence_tier
         distances = {"barracks": {"market": 1}}
         tier = get_intelligence_tier("barracks", "market", distances)
         assert tier == TIER_LLM
 
     def test_medium_distance_tier_2(self):
-        from app.rpg.npc_mind import get_intelligence_tier, TIER_GOAP
+        from app.rpg.npc_mind import TIER_GOAP, get_intelligence_tier
         distances = {"forest": {"market": 3}}
         tier = get_intelligence_tier("forest", "market", distances)
         assert tier == TIER_GOAP
 
     def test_far_distance_tier_3(self):
-        from app.rpg.npc_mind import get_intelligence_tier, TIER_SIM
+        from app.rpg.npc_mind import TIER_SIM, get_intelligence_tier
         distances = {"mountain": {"market": 10}}
         tier = get_intelligence_tier("mountain", "market", distances)
         assert tier == TIER_SIM
 
     def test_no_distance_data_different_loc_tier_3(self):
-        from app.rpg.npc_mind import get_intelligence_tier, TIER_SIM
+        from app.rpg.npc_mind import TIER_SIM, get_intelligence_tier
         tier = get_intelligence_tier("unknown", "market")
         assert tier == TIER_SIM
 
@@ -4269,8 +4348,9 @@ class TestNPCMindThinkPipeline:
         assert npc.get("beliefs", {}).get("player_is_hostile", 0) > 0
 
     def test_think_with_llm_returns_llm_result(self):
-        from app.rpg.npc_mind import npc_think
         import json as _json
+
+        from app.rpg.npc_mind import npc_think
 
         def mock_llm(system_prompt, user_prompt):
             return _json.dumps({
@@ -4611,8 +4691,9 @@ class TestTheoryOfMind:
     """Test NPC modeling of what others believe."""
 
     def test_update_tom_high_intelligence(self):
-        from app.rpg.npc_mind import update_theory_of_mind
         import random as _random
+
+        from app.rpg.npc_mind import update_theory_of_mind
         _random.seed(42)
 
         npc = {
@@ -4785,8 +4866,9 @@ class TestLLMPlanOverride:
         assert result["reason"] == ""
 
     def test_think_with_llm_override(self):
-        from app.rpg.npc_mind import npc_think
         import json as _json
+
+        from app.rpg.npc_mind import npc_think
 
         def mock_llm(system_prompt, user_prompt):
             return _json.dumps({
@@ -5046,8 +5128,9 @@ class TestThinkPipelineAdvanced:
         assert len(world_mems) == 1
 
     def test_think_updates_theory_of_mind(self):
-        from app.rpg.npc_mind import npc_think
         import random as _random
+
+        from app.rpg.npc_mind import npc_think
         _random.seed(42)
 
         npc = {
@@ -5448,8 +5531,9 @@ class TestLevelUpHPReset:
 
 class TestActionResolver:
     def test_resolve_attack_returns_expected_keys(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import resolve_action
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         outcome = resolve_action(player, "attack", "normal", seed=42)
         assert "type" in outcome
@@ -5462,8 +5546,9 @@ class TestActionResolver:
         assert outcome["skill"] == "swordsmanship"
 
     def test_resolve_attack_damage_on_success(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import resolve_action
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         # Try many seeds until we find a success
         for s in range(200):
@@ -5474,8 +5559,9 @@ class TestActionResolver:
         assert False, "No successful attack found in 200 seeds"
 
     def test_resolve_attack_no_damage_on_failure(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import resolve_action
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         for s in range(200):
             outcome = resolve_action(player, "attack", "elite", seed=s)
@@ -5485,8 +5571,9 @@ class TestActionResolver:
         assert False, "No failed attack found in 200 seeds"
 
     def test_resolve_persuade(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import resolve_action
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         outcome = resolve_action(player, "persuade", "normal", seed=1)
         assert outcome["stat"] == "charisma"
@@ -5494,16 +5581,18 @@ class TestActionResolver:
         assert outcome["damage"] == 0  # persuade never deals damage
 
     def test_resolve_sneak(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import resolve_action
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         outcome = resolve_action(player, "sneak", "normal", seed=5)
         assert outcome["stat"] == "dexterity"
         assert outcome["skill"] == "stealth"
 
     def test_resolve_unknown_action_falls_back(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import resolve_action
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         outcome = resolve_action(player, "dance", "easy", seed=1)
         assert outcome["type"] == "dance"
@@ -5512,16 +5601,18 @@ class TestActionResolver:
 
 class TestApplyDamage:
     def test_apply_damage_to_player(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import apply_damage
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         actual = apply_damage(player, 30)
         assert player.hp == 70
         assert actual == 30
 
     def test_apply_damage_clamps_at_zero(self):
-        from app.rpg.models import PlayerState
         from app.rpg.action_resolver import apply_damage
+
+        from app.rpg.models import PlayerState
         player = PlayerState()
         player.hp = 10
         actual = apply_damage(player, 50)
@@ -5595,7 +5686,11 @@ class TestStagedPipeline:
         assert ctx["world"].description == "A test world"
 
     def test_stage_factions(self):
-        from app.rpg.pipeline import build_game_context, stage_environment, stage_factions
+        from app.rpg.pipeline import (
+            build_game_context,
+            stage_environment,
+            stage_factions,
+        )
         ctx = build_game_context({"seed": 2})
         ctx["world_data"] = {
             "name": "FactionWorld",

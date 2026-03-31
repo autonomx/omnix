@@ -4,9 +4,9 @@ Audio preloading/buffering system for zero-gap audiobook playback.
 While playing chunk N, generates chunk N+1 asynchronously in the background.
 """
 
-import threading
 import logging
-from typing import Callable, Dict, Optional, Any
+import threading
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

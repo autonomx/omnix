@@ -5,12 +5,26 @@ Implements the BaseProvider interface for local LM Studio servers.
 LM Studio provides an OpenAI-compatible API on a configurable port.
 """
 
-import requests
-from requests.exceptions import ConnectionError as RequestsConnectionError, Timeout as RequestsTimeout, HTTPError as RequestsHTTPError
-from typing import List, Optional, Dict, Any, Iterator, Union
 from dataclasses import field
+from typing import Any, Dict, Iterator, List, Optional, Union
 
-from .base import BaseProvider, ChatMessage, ChatResponse, ModelInfo, ProviderConfig, ProviderCapability, AuthenticationError, ConnectionError, ModelNotFoundError, ProviderError
+import requests
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import HTTPError as RequestsHTTPError
+from requests.exceptions import Timeout as RequestsTimeout
+
+from .base import (
+    AuthenticationError,
+    BaseProvider,
+    ChatMessage,
+    ChatResponse,
+    ConnectionError,
+    ModelInfo,
+    ModelNotFoundError,
+    ProviderCapability,
+    ProviderConfig,
+    ProviderError,
+)
 
 
 class LMStudioProvider(BaseProvider):

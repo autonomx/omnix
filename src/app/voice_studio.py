@@ -7,7 +7,7 @@ import base64
 import json
 import os
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 
 import app.shared as shared
 

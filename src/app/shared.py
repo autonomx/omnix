@@ -1,7 +1,7 @@
-import os
 import json
+import os
 import re
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 # Base paths - project root (parent of src/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -42,8 +42,12 @@ _stt_provider_instance = None
 _stt_provider_name = None
 
 # Provider system
-from app.providers import get_registry, BaseProvider, ProviderConfig
-from app.providers.audio_registry import get_audio_registry, get_tts_provider, get_stt_provider
+from app.providers import BaseProvider, ProviderConfig, get_registry
+from app.providers.audio_registry import (
+    get_audio_registry,
+    get_stt_provider,
+    get_tts_provider,
+)
 
 DEFAULT_SETTINGS = {
     "provider": "lmstudio",

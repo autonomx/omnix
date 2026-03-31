@@ -1,9 +1,11 @@
 """Test for Cerebras real connection using API key from settings.json."""
 
-import pytest
 import json
 import os
-from app.providers import CerebrasProvider, ProviderConfig, ModelInfo
+
+import pytest
+
+from app.providers import CerebrasProvider, ModelInfo, ProviderConfig
 from app.providers.base import AuthenticationError, ConnectionError, ModelNotFoundError
 
 

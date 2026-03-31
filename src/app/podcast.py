@@ -1,12 +1,14 @@
-import os
-import json
-import time
 import base64
-import requests
 import io
+import json
+import os
 import struct
+import time
 from datetime import datetime
-from flask import Blueprint, request, jsonify, Response, send_file
+
+import requests
+from flask import Blueprint, Response, jsonify, request, send_file
+
 import app.shared as shared
 
 podcast_bp = Blueprint('podcast', __name__)
