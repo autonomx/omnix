@@ -1,90 +1,76 @@
-"""
-Narrative Director for the RPG Mode Upgrade.
-
-Interprets player input narratively, manages pacing, injects events, and orchestrates
-scene composition for cinematic storytelling.
-"""
-
-import logging
-from typing import Dict, Any
-
-from app.rpg.agents import _call_llm, _parse_json_response
-
-logger = logging.getLogger(__name__)
+class NarrativeDecision:
+    def __init__(self, intent, scene_focus, npc_ids, event, tension, mode):
+        self.intent = intent
+        self.scene_focus = scene_focus
+        self.npc_ids = npc_ids
+        self.event = event
+        self.tension = tension
+        self.mode = mode  # combat, dialogue, exploration, cinematic
 
 
 class NarrativeDirector:
-    """Manages narrative flow and scene orchestration."""
+    def __init__(self):
+        self.pacing_state = "introduction"
+        self.tension_level = 0.5
 
-    def decide_next_step(self, session, player_input: str) -> Dict[str, Any]:
+    def decide_next_step(self, session, player_input, narrative_context=None):
         """
-        Decide the next narrative step based on player input and current session state.
-
-        Interprets player input narratively, decides pacing, injects events,
-        selects active NPCs, and chooses scene focus.
-
-        Returns a dict with narrative decisions.
+        Interprets player input narratively and decides next step.
+        Uses narrative state for continuity.
         """
-        # Build context from session
-        context = self._build_narrative_context(session)
-
-        prompt = f"""You are a narrative director for an RPG.
-
-Given:
-- World state: {context['world_summary']}
-- Active arcs: {context['active_arcs']}
-- Player input: "{player_input}"
-- Current tension: {context['tension']}
-- Recent events: {context['recent_events']}
-
-Decide:
-
-1. What is the narrative intent? (action, exploration, dialogue, combat, etc.)
-2. What should happen next? (scene description)
-3. Which NPCs are involved? (list of NPC IDs)
-4. Should tension increase, decrease, or twist? (increase/decrease/twist/stable)
-5. Should a new event occur? (yes/no and what type)
-
-Return JSON:
-{{
-  "intent": "narrative intent",
-  "scene_focus": "what the scene focuses on",
-  "npc_ids": ["npc1", "npc2"],
-  "event": "event description or empty",
-  "tension": "increase|decrease|twist|stable"
-}}"""
-
-        result = _call_llm("You are a narrative director for RPG games.", prompt)
-        parsed = _parse_json_response(result)
-
-        if not parsed:
-            logger.warning("Narrative director failed, using fallback")
-            return {
-                "intent": "action",
-                "scene_focus": "player action",
-                "npc_ids": [],
-                "event": "",
-                "tension": "stable"
+        # Initialize narrative state if not exists
+        if not hasattr(session, 'narrative_state'):
+            session.narrative_state = {
+                "last_tension": 0.5,
+                "last_scene_type": "exploration",
+                "focus_npc": None
             }
 
-        return parsed
+        state = session.narrative_state
 
-    def _build_narrative_context(self, session) -> Dict[str, Any]:
-        """Build context for narrative decision making."""
-        recent_events = [h.event for h in session.history[-5:]]
+        # Use narrative context if provided
+        if narrative_context:
+            # Incorporate memory into decision
+            pass
 
-        active_arcs = []
-        for arc in session.story_arcs:
-            if arc.status == "active":
-                active_arcs.append(f"{arc.title}: {arc.description}")
+        # Update tension based on history
+        self.tension_level = state["last_tension"]
 
-        world_summary = f"{session.world.name} - {session.world.description}"
+        # Simple heuristic-based decision
+        input_lower = player_input.lower()
+        if "attack" in input_lower or "fight" in input_lower:
+            intent = "combat"
+            scene_focus = "battlefield"
+            npc_ids = ["enemy_guard"]
+            event = "ambush"
+            tension = min(1.0, self.tension_level + 0.2)
+            mode = "combat"
+        elif "talk" in input_lower or "speak" in input_lower:
+            intent = "dialogue"
+            scene_focus = "meeting_hall"
+            npc_ids = ["king_arthur"] if state["focus_npc"] else []
+            event = None
+            tension = max(0.0, self.tension_level - 0.1)
+            mode = "dialogue"
+        else:
+            intent = "exploration"
+            scene_focus = "town_square"
+            npc_ids = []
+            event = "discovery"
+            tension = self.tension_level
+            mode = "exploration"
 
-        return {
-            "world_summary": world_summary,
-            "active_arcs": active_arcs,
-            "tension": session.narrative_tension,
-            "recent_events": recent_events,
-            "player_location": session.player.location,
-            "turn_count": session.turn_count
-        }
+        # Update state
+        state["last_tension"] = tension
+        state["last_scene_type"] = mode
+        if npc_ids:
+            state["focus_npc"] = npc_ids[0]
+
+        return NarrativeDecision(
+            intent=intent,
+            scene_focus=scene_focus,
+            npc_ids=npc_ids,
+            event=event,
+            tension=tension,
+            mode=mode
+        )

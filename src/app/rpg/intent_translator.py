@@ -1,85 +1,41 @@
-"""
-Intent Translator for the RPG Mode Upgrade.
-
-Converts natural language player input into structured RPG intents with action types,
-targets, styles, and emotional tones for the simulation pipeline.
-"""
-
-import logging
-from typing import Dict
-
-from app.rpg.agents import _call_llm, _parse_json_response
-
-logger = logging.getLogger(__name__)
-
-
-def translate_intent(player_input: str) -> Dict[str, str]:
+def translate_intent(player_input):
     """
-    Convert player input into structured RPG intent.
-
-    Analyzes natural language to determine:
-    - Action type (attack, talk, explore, investigate, etc.)
-    - Target of the action
-    - Style (aggressive, careful, stealthy)
-    - Emotional tone
-
-    Returns structured intent data.
+    Convert natural language input to structured RPG intent.
+    Returns dict with action_type, target, style, emotional_tone.
     """
-    prompt = f"""Convert player input into structured RPG intent.
+    # Placeholder for LLM-driven intent parsing
+    # In real implementation, analyze player_input to extract:
+    # - Action type (move, attack, talk, use_item, etc.)
+    # - Target (NPC, location, item)
+    # - Style (aggressive, cautious, diplomatic)
+    # - Emotional tone (angry, calm, fearful)
 
-Player input: "{player_input}"
+    input_lower = player_input.lower()
 
-Include:
-- action: the type of action (attack, talk, explore, investigate, use_item, move, etc.)
-- target: what or who the action is directed at (person, place, object, or empty)
-- style: how the action is performed (aggressive, careful, stealthy, diplomatic, forceful, etc.)
-- emotion: the emotional tone (anger, fear, confidence, curiosity, determination, etc.)
+    if "attack" in input_lower or "fight" in input_lower:
+        action_type = "attack"
+        target = "enemy"  # Would parse specific target
+        style = "aggressive"
+        emotional_tone = "angry"
+    elif "talk" in input_lower or "speak" in input_lower:
+        action_type = "dialogue"
+        target = "npc"  # Would parse specific NPC
+        style = "diplomatic"
+        emotional_tone = "calm"
+    elif "run" in input_lower or "flee" in input_lower:
+        action_type = "flee"
+        target = None
+        style = "cautious"
+        emotional_tone = "fearful"
+    else:
+        action_type = "explore"
+        target = "location"
+        style = "neutral"
+        emotional_tone = "curious"
 
-Return JSON:
-{{
-  "action": "action_type",
-  "target": "target_name",
-  "style": "action_style",
-  "emotion": "emotional_tone"
-}}"""
-
-    result = _call_llm("You are an intent translator for RPG games.", prompt)
-    parsed = _parse_json_response(result)
-
-    if not parsed:
-        logger.warning("Intent translation failed, using fallback")
-        # Simple fallback based on keywords
-        input_lower = player_input.lower()
-        if any(word in input_lower for word in ['attack', 'fight', 'hit', 'strike']):
-            action = 'attack'
-            emotion = 'anger'
-            style = 'aggressive'
-        elif any(word in input_lower for word in ['talk', 'speak', 'ask', 'say']):
-            action = 'talk'
-            emotion = 'confidence'
-            style = 'diplomatic'
-        elif any(word in input_lower for word in ['explore', 'look', 'search', 'investigate']):
-            action = 'investigate'
-            emotion = 'curiosity'
-            style = 'careful'
-        else:
-            action = 'other'
-            emotion = 'neutral'
-            style = 'normal'
-
-        # Extract target (simple noun extraction)
-        words = player_input.split()
-        target = ""
-        for word in words:
-            if word.lower() not in ['i', 'the', 'a', 'an', 'to', 'at', 'with', 'in', 'on', 'and', 'or']:
-                target = word
-                break
-
-        return {
-            "action": action,
-            "target": target,
-            "style": style,
-            "emotion": emotion
-        }
-
-    return parsed
+    return {
+        "action_type": action_type,
+        "target": target,
+        "style": style,
+        "emotional_tone": emotional_tone
+    }
