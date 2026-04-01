@@ -84,6 +84,7 @@ class NarrativeGenerator:
         llm: Optional[Callable[[str], str]] = None,
         style: str = "cinematic",
         max_words: int = 200,
+        dialogue_engine: Any = None,
     ):
         """Initialize the NarrativeGenerator.
         
@@ -92,10 +93,12 @@ class NarrativeGenerator:
             style: Narrative style ("cinematic", "dramatic", "literary",
                    "minimal", "first_person", "epic").
             max_words: Maximum word count for generated narrative.
+            dialogue_engine: Optional DialogueEngine for belief-driven dialogue.
         """
         self.llm = llm
         self.style = style
         self.max_words = max_words
+        self.dialogue_engine = dialogue_engine
         
     def generate(
         self,
@@ -121,6 +124,103 @@ class NarrativeGenerator:
             return self._generate_with_llm(events, scene_context)
         else:
             return self._generate_with_templates(events)
+    
+    def generate_with_dialogue(
+        self,
+        events: List[NarrativeEvent],
+        scene_context: Dict[str, Any],
+    ) -> str:
+        """Generate narrative with dialogue integration.
+        
+        If a DialogueEngine is available, generates dialogue lines for
+        'speak' events before generating the main narrative.
+        
+        Args:
+            events: List of NarrativeEvent objects to narrate.
+            scene_context: Dict with scene context (location, mood, etc).
+            
+        Returns:
+            Generated narrative text with dialogue.
+        """
+        if not events:
+            return ""
+        
+        dialogue_lines: List[str] = []
+        
+        if self.dialogue_engine:
+            for event in events:
+                if event.type == "speak" and event.actors:
+                    speaker = str(event.actors[0])
+                    target = str(event.actors[1]) if len(event.actors) > 1 else None
+                    line = self.dialogue_engine.generate_dialogue(speaker, target)
+                    dialogue_lines.append(line)
+        
+        if self.llm and self.style != "minimal":
+            return self._generate_with_llm_and_dialogue(
+                events, scene_context, dialogue_lines
+            )
+        else:
+            return self._generate_with_templates(events, dialogue_lines)
+    
+    def _generate_with_llm_and_dialogue(
+        self,
+        events: List[NarrativeEvent],
+        scene_context: Dict[str, Any],
+        dialogue_lines: List[str],
+    ) -> str:
+        """Generate narrative using LLM with dialogue integration.
+        
+        Args:
+            events: Narrative events to narrate.
+            scene_context: Scene context for atmosphere.
+            dialogue_lines: Pre-generated dialogue lines.
+            
+        Returns:
+            LLM-generated narrative text including dialogue.
+        """
+        event_descriptions = self._format_events(events)
+        location = scene_context.get("location", "unknown")
+        participants = ", ".join(
+            str(p) for p in scene_context.get("participants", [])
+        )
+        mood = scene_context.get("mood", "neutral")
+        
+        style_instruction = STYLE_PROMPTS.get(self.style, STYLE_PROMPTS["cinematic"])
+        
+        dialogue_text = "\n".join(dialogue_lines) if dialogue_lines else ""
+        
+        prompt = f"""You are a cinematic RPG narrator.
+
+Scene:
+- Location: {location}
+- Participants: {participants}
+- Mood: {mood}
+
+Events that occur:
+{event_descriptions}
+
+Dialogue:
+{dialogue_text}
+
+{style_instruction}
+
+Rules:
+- Write a vivid, immersive narration of what happens
+- Include the dialogue naturally within the narrative
+- Focus on clarity, flow, and emotional impact
+- Do not contradict the events
+- Do not add events that aren't listed
+- Keep it under {self.max_words} words
+- Use present tense
+- Second person ('you') if the player is involved
+
+Narrative:"""
+        
+        try:
+            result = self.llm(prompt)
+            return self._trim_to_max(result.strip())
+        except Exception:
+            return self._generate_with_templates(events, dialogue_lines)
     
     def generate_from_dicts(
         self,
@@ -198,6 +298,7 @@ Narrative:"""
     def _generate_with_templates(
         self,
         events: List[NarrativeEvent],
+        dialogue_lines: Optional[List[str]] = None,
     ) -> str:
         """Generate narrative using event templates.
         
@@ -205,7 +306,8 @@ Narrative:"""
         
         Args:
             events: Narrative events to narrate.
-            
+            dialogue_lines: Optional pre-generated dialogue lines.
+        
         Returns:
             Template-generated narrative text.
         """
@@ -217,6 +319,10 @@ Narrative:"""
             sentence = self._template_event_narrative(event)
             if sentence:
                 sentences.append(sentence)
+        
+        # Add dialogue lines
+        if dialogue_lines:
+            sentences.extend(dialogue_lines)
         
         if not sentences:
             return "Time passes uneventfully."

@@ -6,6 +6,10 @@ This module implements the narrative layer from the RPG design spec:
 - SceneManager: Tracks active scenes and scene context
 - NarrativeGenerator: Turns events into narrative prose
 - StoryArc: Story arc management
+- TIER 5 Experience Orchestration:
+  - AIDirector: Controls narrative tension and event shaping
+  - DialogueEngine: Belief-driven dialogue generation
+  - PacingController: Controls narrative length and density
 
 Architecture:
     World Events → NarrativeDirector → NarrativeEvents → Focus Selection
@@ -13,6 +17,10 @@ Architecture:
                                         SceneManager → Scene Context
                                               ↓
                                     NarrativeGenerator → Prose
+                                              ↓
+                                   AIDirector → Tension Shaping
+                                   DialogueEngine → Character Dialogue
+                                   PacingController → Output Control
 """
 
 from .narrative_event import NarrativeEvent
@@ -20,6 +28,9 @@ from .narrative_director import NarrativeDirector
 from .scene_manager import Scene, SceneManager
 from .narrative_generator import NarrativeGenerator
 from .story_arc import StoryArc, StoryArcManager
+from .ai_director import AIDirector
+from .dialogue_engine import DialogueEngine
+from .pacing_controller import PacingController, NarrativeBeat
 
 __all__ = [
     "NarrativeEvent",
@@ -29,4 +40,8 @@ __all__ = [
     "NarrativeGenerator",
     "StoryArc",
     "StoryArcManager",
+    "AIDirector",
+    "DialogueEngine",
+    "PacingController",
+    "NarrativeBeat",
 ]

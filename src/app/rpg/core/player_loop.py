@@ -35,6 +35,28 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 from rpg.narrative.narrative_event import NarrativeEvent
+from rpg.narrative.ai_director import AIDirector
+from rpg.narrative.pacing_controller import PacingController
+
+# TIER 6: Narrative Intelligence Systems
+from rpg.story.plot_engine import PlotEngine
+from rpg.player.agency_system import AgencySystem
+
+# TIER 7: Faction Simulation + Reputation Economy
+from rpg.world.faction_system import FactionSystem
+from rpg.world.reputation_engine import ReputationEngine
+
+# TIER 8: World Complexity Layer
+from rpg.world.economy_system import EconomySystem
+from rpg.world.political_system import PoliticalSystem
+from rpg.story.dynamic_quest_generator import DynamicQuestGenerator
+
+# TIER 9: Narrative Intelligence Layer
+from rpg.story.scene_engine import SceneEngine
+from rpg.character.character_engine import CharacterEngine
+from rpg.memory.narrative_memory import NarrativeMemory
+from rpg.story.story_arc_engine import StoryArcEngine
+from rpg.story.narrative_renderer import NarrativeRenderer
 
 
 class PlayerLoop:
@@ -66,6 +88,24 @@ class PlayerLoop:
         scene_manager: Any = None,
         narrator: Any = None,
         simulate_fn: Optional[Callable[[], List[Dict[str, Any]]]] = None,
+        ai_director: Any = None,
+        dialogue_engine: Any = None,
+        pacing_controller: Any = None,
+        plot_engine: Any = None,
+        agency_system: Any = None,
+        # TIER 7: Faction Simulation + Reputation Economy
+        faction_system: Any = None,
+        reputation_engine: Any = None,
+        # TIER 8: World Complexity Layer
+        economy_system: Any = None,
+        political_system: Any = None,
+        quest_generator: Any = None,
+        # TIER 9: Narrative Intelligence Layer
+        scene_engine: Any = None,
+        character_engine: Any = None,
+        narrative_memory: Any = None,
+        story_arc_engine: Any = None,
+        narrative_renderer: Any = None,
     ):
         """Initialize the PlayerLoop.
         
@@ -79,6 +119,13 @@ class PlayerLoop:
                       method. If callable, should take events+context.
             simulate_fn: Optional custom world tick function. Signature:
                          simulate_fn() -> list_of_event_dicts.
+            ai_director: AIDirector for tension-based event shaping.
+            dialogue_engine: DialogueEngine for belief-driven dialogue.
+            pacing_controller: PacingController for output length control.
+            plot_engine: PlotEngine for long-term narrative structure.
+            agency_system: AgencySystem for player choice tracking.
+            faction_system: FactionSystem for faction simulation.
+            reputation_engine: ReputationEngine for faction reputation.
         """
         self.world = world
         self.director = director
@@ -86,6 +133,33 @@ class PlayerLoop:
         self.narrator = narrator
         self.simulate_fn = simulate_fn
         self._last_result: Dict[str, Any] = {}
+        
+        # TIER 5: Experience Orchestration
+        self.ai_director = ai_director or AIDirector()
+        self.dialogue_engine = dialogue_engine
+        self.pacing_controller = pacing_controller or PacingController()
+        
+        # TIER 6: Narrative Intelligence Systems
+        self.plot_engine = plot_engine or PlotEngine()
+        self.agency = agency_system or AgencySystem()
+        
+        # TIER 7: Faction Simulation + Reputation Economy
+        self.factions = faction_system or FactionSystem()
+        self.reputation = reputation_engine or ReputationEngine()
+        
+        # TIER 8: World Complexity Layer
+        self.economy = economy_system or EconomySystem()
+        self.politics = political_system or PoliticalSystem()
+        self.quest_gen = quest_generator or DynamicQuestGenerator()
+        
+        # TIER 9: Narrative Intelligence Layer
+        self.scenes = scene_engine or SceneEngine()
+        self.characters = character_engine or CharacterEngine()
+        self.memory = narrative_memory or NarrativeMemory()
+        self.story_arcs = story_arc_engine or StoryArcEngine()
+        self.renderer = narrative_renderer or NarrativeRenderer()
+        
+        self._tick = 0
         
     def step(self, player_input: str) -> Dict[str, Any]:
         """Execute one complete game loop step.
@@ -99,8 +173,10 @@ class PlayerLoop:
         3. Run world simulation tick
         4. Convert raw events to narrative events
         5. Select focus events for narration
-        6. Update scene
-        7. Generate narrative
+        6. TIER 5: AI Director shapes events based on tension
+        7. Update scene
+        8. Generate narrative
+        9. TIER 5: Pacing Controller adjusts output length
         
         Args:
             player_input: Raw text input from the player (e.g., "I attack").
@@ -125,6 +201,61 @@ class PlayerLoop:
         # Add player event to world events for context
         world_events.insert(0, player_event)
         
+        # TIER 6: Record player agency (after world tick for result)
+        result = {"effects": {}, "weight": 0.5}
+        self.agency.record(player_input, result, timestamp=self._tick)
+        
+        # TIER 7: Apply reputation changes from action
+        self.reputation.apply_action(player_input, result, tick=self._tick)
+        
+        self._tick += 1
+        
+        # TIER 6: Update plot engine with world events and agency flags
+        plot_update = self.plot_engine.update(world_events, self.agency.flags)
+        
+        # TIER 6: Inject arc-driven events into the event stream
+        arc_events = plot_update.get("injected_events", [])
+        world_events.extend(arc_events)
+        
+        # TIER 7: Faction simulation tick (world evolves without player)
+        faction_events = self.factions.update()
+        world_events.extend(faction_events)
+        
+        # TIER 7: Update faction relations based on player reputation
+        self._update_faction_relations()
+        
+        # TIER 8: Economy simulation tick
+        economy_events = self.economy.update()
+        world_events.extend(economy_events)
+        
+        # TIER 8: Political simulation tick
+        political_events = self.politics.update(self.factions)
+        world_events.extend(political_events)
+        
+        # TIER 8: Generate dynamic quests from world state
+        new_quests = self.quest_gen.generate(
+            self.factions,
+            self.economy,
+            political_events,
+        )
+        for quest in new_quests:
+            quest_type = quest.get("type", "unknown")
+            objectives = self._quest_to_objectives(quest)
+            self.plot_engine.add_quest(quest["id"], quest_type, objectives)
+        
+        # TIER 9: Generate scenes from all events
+        scenes = self.scenes.generate_from_events(world_events)
+        
+        # TIER 9: Update character beliefs from events
+        self.characters.update_from_events(world_events)
+        
+        # TIER 9: Store events in narrative memory
+        self.memory.add_events(world_events)
+        
+        # TIER 9: Check story arcs for completion
+        completed_arcs = self.story_arcs.update({"tick": self._tick})
+        world_events.extend(completed_arcs)
+        
         # 4. Convert to narrative events
         if self.director:
             narrative_events = self.director.convert_events(world_events)
@@ -147,7 +278,11 @@ class PlayerLoop:
         else:
             focus_events = narrative_events  # All events if no director
         
-        # 6. Update scene
+        # 6. TIER 5: AI Director shapes events based on tension (event-driven)
+        self.ai_director.update(focus_events)
+        focus_events = self.ai_director.filter_events(focus_events)
+        
+        # 7. Update scene
         if self.scene_manager:
             self.scene_manager.update_scene([e.raw_event for e in focus_events])
         
@@ -157,8 +292,21 @@ class PlayerLoop:
             else {}
         )
         
-        # 7. Generate narration
+        # 8. Generate narration
         narration = self._generate_narration(focus_events, scene_context)
+        
+        # 9. TIER 5: Pacing Controller adjusts output length
+        narration = self.pacing_controller.adjust(
+            narration, self.ai_director.tension
+        )
+        
+        # TIER 9: Render narrative output
+        narrative = self.renderer.render(
+            scenes=self.scenes.get_active_scenes(),
+            memory=self.memory,
+            characters=self.characters.characters,
+            world_state=self._get_world_state_for_renderer(),
+        )
         
         # Build result
         result = {
@@ -166,6 +314,9 @@ class PlayerLoop:
             "events": focus_events,
             "scene_context": scene_context,
             "raw_events": world_events,
+            "scenes": scenes,
+            "narrative": narrative,
+            "completed_arcs": completed_arcs,
         }
         self._last_result = result
         return result
@@ -335,7 +486,129 @@ class PlayerLoop:
     def reset(self) -> None:
         """Reset the player loop state."""
         self._last_result = {}
+        self._tick = 0
         if self.scene_manager and hasattr(self.scene_manager, "end_scene"):
             self.scene_manager.end_scene()
         if self.director and hasattr(self.director, "clear_buffer"):
             self.director.clear_buffer()
+        
+        # TIER 5: Reset new systems
+        self.ai_director.reset()
+        
+        # TIER 6: Reset Narrative Intelligence Systems
+        self.plot_engine.reset()
+        self.agency.reset()
+        
+        # TIER 7: Reset Faction Simulation + Reputation Economy
+        self.factions.reset()
+        self.reputation.reset()
+        
+        # TIER 8: Reset World Complexity Layer
+        self.economy.reset()
+        self.politics.reset()
+        self.quest_gen.clear_generated()
+        
+        # TIER 9: Reset Narrative Intelligence Layer
+        self.scenes.reset()
+        self.characters.reset()
+        self.memory.reset()
+        self.story_arcs.reset()
+        self.renderer.reset()
+        
+    def _quest_to_objectives(self, quest: Dict[str, Any]) -> List[str]:
+        """Convert a quest dict to objectives list for PlotEngine.
+        
+        Args:
+            quest: Quest dict from DynamicQuestGenerator.
+            
+        Returns:
+            List of objective strings.
+        """
+        quest_type = quest.get("type", "unknown")
+        
+        if quest_type == "war":
+            return [
+                f"Assist {quest.get('faction_name', quest.get('faction', 'ally'))} against {quest.get('target_name', quest.get('target', 'enemy'))}",
+                "Prepare for battle",
+            ]
+        elif quest_type == "supply":
+            return [
+                f"Gather {quest.get('good', 'supplies')} for {quest.get('location', 'the settlement')}",
+                "Deliver supplies to the location",
+            ]
+        elif quest_type == "crisis":
+            return [
+                f"URGENT: {quest.get('location', 'Location')} is critically low on {quest.get('good', 'supplies')}",
+                "Find immediate supply sources",
+            ]
+        elif quest_type == "trade":
+            return [
+                f"Transport {quest.get('good', 'goods')} from {quest.get('from', 'source')} to {quest.get('to', 'destination')}",
+                "Complete the trade for profit",
+            ]
+        elif quest_type == "rebellion":
+            return [
+                f"Investigate leadership change in {quest.get('faction', 'faction')}",
+                "Determine your stance on the new leadership",
+            ]
+        elif quest_type == "diplomacy":
+            return [
+                f"Facilitate alliance between {quest.get('faction', 'faction')} and {quest.get('target', 'target')}",
+                "Negotiate terms",
+            ]
+        else:
+            return ["Investigate the situation"]
+        
+    def _update_faction_relations(self) -> None:
+        """Update faction relations based on player reputation.
+        
+        High reputation with a faction improves relations with its allies
+        and worsens relations with its enemies. Low reputation has the
+        opposite effect.
+        """
+        for faction_id, faction in self.factions.factions.items():
+            rep = self.reputation.get(faction_id)
+            
+            # Reputation affects faction's view of player's allies/enemies
+            if rep > 0.5:
+                # Player is ally - improve relations with player's allies
+                for ally in self.reputation.reputation:
+                    if self.reputation.get(ally) > 0.5 and ally != faction_id:
+                        faction.adjust_relation(ally, 0.05)
+                        
+            elif rep < -0.5:
+                # Player is enemy - worsen relations
+                faction.morale *= 0.98  # Low reputation hurts faction morale
+    
+    def _get_world_state_for_renderer(self) -> Dict[str, Any]:
+        """Get world state summary for the narrative renderer.
+        
+        Returns:
+            Dict with relevant world state data.
+        """
+        state: Dict[str, Any] = {
+            "tick": self._tick,
+            "faction_conflicts": 0,
+            "shortages": {},
+            "economy_state": "stable",
+        }
+        
+        # Count active faction conflicts
+        for faction in self.factions.factions.values():
+            for relation in faction.relations.values():
+                if relation < -0.6:
+                    state["faction_conflicts"] += 1
+        
+        # Get economy state
+        if hasattr(self.economy, "get_summary"):
+            econ = self.economy.get_summary()
+            state["economy_state"] = econ.get("state", "stable")
+        
+        # Get shortage info from plot engine
+        quests = self.plot_engine.quest_manager.get_active_quests()
+        for quest in quests:
+            if quest.get("type") == "crisis":
+                loc = quest.get("objectives", ["unknown"])[0]
+                state["shortages"][loc] = {"severity": 0.8}
+        
+        return state

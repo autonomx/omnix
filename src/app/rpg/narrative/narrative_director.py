@@ -89,15 +89,63 @@ class NarrativeDirector:
         self.recent_events: List[NarrativeEvent] = []
         self.max_buffer = max_buffer
         
+    def assign_intent(self, event: NarrativeEvent) -> str:
+        """Assign narrative purpose to event.
+
+        Maps event types to narrative intents that determine
+        their role in the story arc:
+        - escalate: Increase tension/conflict
+        - reveal: Expose information/character
+        - resolve: Bring closure to a situation
+        - complicate: Add complexity to existing situation
+        - progress: Move story forward
+
+        Args:
+            event: NarrativeEvent to analyze.
+            
+        Returns:
+            Intent type string.
+        """
+        if event.type in ("combat", "critical_hit", "damage"):
+            return "escalate"
+        if event.type == "death":
+            return "resolve"
+        if event.type in ("speak", "dialogue"):
+            return "reveal"
+        if event.type in ("betrayal", "flee"):
+            return "complicate"
+        return "progress"
+    
+    def compute_urgency(self, event: NarrativeEvent) -> float:
+        """Compute how urgently an event's intent needs addressing.
+        
+        Args:
+            event: NarrativeEvent to analyze.
+            
+        Returns:
+            Urgency score [0, 1].
+        """
+        intent = event.intent if event.intent else self.assign_intent(event)
+        base_urgency = {
+            "escalate": 0.7,
+            "complicate": 0.6,
+            "resolve": 0.5,
+            "reveal": 0.4,
+            "progress": 0.3,
+        }.get(intent, 0.3)
+        
+        # Scale by emotional weight
+        return min(1.0, base_urgency + event.emotional_weight * 0.3)
+    
     def convert_events(
         self,
         world_events: List[Dict[str, Any]],
     ) -> List[NarrativeEvent]:
         """Convert raw world events into narrative events.
-        
+
         Each world event is transformed into a NarrativeEvent with
         calculated importance and emotional_weight scores.
-        
+
         Args:
             world_events: List of raw event dicts from the world simulation.
             
@@ -118,6 +166,9 @@ class NarrativeDirector:
                 tags=event.get("tags", []),
                 raw_event=event,
             )
+            # Assign narrative intent and urgency
+            ne.intent = self.assign_intent(ne)
+            ne.urgency = self.compute_urgency(ne)
             output.append(ne)
         
         # Update buffer

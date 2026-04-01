@@ -57,6 +57,8 @@ class NarrativeEvent:
     emotional_weight: float = 0.0
     tags: List[str] = field(default_factory=list)
     raw_event: Dict[str, Any] = field(default_factory=dict)
+    intent: str = "progress"  # Narrative purpose: escalate, reveal, resolve, complicate, progress
+    urgency: float = 0.0  # How urgently this intent needs to be addressed
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization.
