@@ -1,11 +1,5 @@
-from rpg.scene.grounding import build_grounding_block
-from rpg.scene.renderer import render_scene_deterministic, render_event_summary, render_with_llm_flavor
-from rpg.scene.validator import validate_scene
+# Scene module for RPG system
 
-__all__ = [
-    "build_grounding_block",
-    "render_event_summary",
-    "render_scene_deterministic",
-    "render_with_llm_flavor",
-    "validate_scene",
-]
+from rpg.scene.scene_manager import Scene, SceneManager
+
+__all__ = ["Scene", "SceneManager"]

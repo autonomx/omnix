@@ -1,229 +1,230 @@
-🎬 STORY DIRECTOR SYSTEM (FULL PRODUCTION DIFF)
+🔥 STEP 1 — Add Narrative Event Model
+✅ New File
 
-This is plug-and-play into your current architecture.
+src/app/rpg/narrative/narrative_event.py
 
-1. 🧠 Core Design
-What it controls
-pacing (slow / tense / climax)
-arcs (conflict, mystery, alliance)
-tension level
-allowed behaviors
-What it NEVER does
-override logic completely
-force impossible actions
-2. 📁 New File: rpg/story/story_director.py
-class StoryDirector:
+from dataclasses import dataclass, field
+from typing import List, Dict, Any
+
+@dataclass
+class NarrativeEvent:
+    id: str
+    type: str
+    description: str
+    actors: List[str]
+    location: str | None = None
+    importance: float = 0.5
+    emotional_weight: float = 0.0
+    tags: List[str] = field(default_factory=list)
+    raw_event: Dict[str, Any] = field(default_factory=dict)
+🔥 STEP 2 — Narrative Director (CORE SYSTEM)
+✅ New File
+
+src/app/rpg/narrative/narrative_director.py
+
+from typing import List, Dict, Any
+from .narrative_event import NarrativeEvent
+import uuid
+
+
+class NarrativeDirector:
+
     def __init__(self):
-        self.phase = "intro"   # intro → build → tension → climax → resolution
-        self.tension = 0.0     # 0 → 1
-        self.arc = None
+        self.recent_events: List[NarrativeEvent] = []
 
-        self.history = []
-        self.cooldowns = {}
+    def convert_events(self, world_events: List[Dict[str, Any]]) -> List[NarrativeEvent]:
+        """Convert raw world events into narrative events."""
+        output = []
 
-    # -------------------------
-    # MAIN ENTRY POINT
-    # -------------------------
-    def adjust_goal(self, npc, proposed_goal, context):
-        self._update_tension(context)
-        self._update_phase()
+        for e in world_events:
+            ne = NarrativeEvent(
+                id=str(uuid.uuid4()),
+                type=e.get("type", "unknown"),
+                description=e.get("description", ""),
+                actors=e.get("actors", []),
+                location=e.get("location"),
+                importance=self._score_importance(e),
+                emotional_weight=self._score_emotion(e),
+                tags=e.get("tags", []),
+                raw_event=e,
+            )
+            output.append(ne)
 
-        goal = proposed_goal
+        return output
 
-        # Apply arc shaping
-        if self.arc == "conflict":
-            goal = self._bias_conflict(npc, goal)
+    def _score_importance(self, event: Dict[str, Any]) -> float:
+        base = 0.5
 
-        elif self.arc == "alliance":
-            goal = self._bias_alliance(npc, goal)
+        if event.get("type") in ["combat", "death"]:
+            base += 0.4
+        if "player" in event.get("actors", []):
+            base += 0.3
 
-        elif self.arc == "mystery":
-            goal = self._bias_mystery(npc, goal)
+        return min(base, 1.0)
 
-        # Apply pacing rules
-        goal = self._apply_pacing(npc, goal)
+    def _score_emotion(self, event: Dict[str, Any]) -> float:
+        if event.get("type") == "death":
+            return 1.0
+        if event.get("type") == "combat":
+            return 0.7
+        return 0.2
 
-        return goal
-3. 🎯 Tension System
-def _update_tension(self, context):
-    events = context.get("recent_events", [])
+    def select_focus_events(self, events: List[NarrativeEvent], max_events: int = 5) -> List[NarrativeEvent]:
+        """Pick most important events for narration."""
+        events.sort(key=lambda e: (e.importance + e.emotional_weight), reverse=True)
+        return events[:max_events]
+🔥 STEP 3 — Scene Engine (CRITICAL MISSING PIECE)
+✅ New File
 
-    delta = 0.0
+src/app/rpg/narrative/scene_manager.py
 
-    for e in events:
-        if e["type"] == "damage":
-            delta += 0.05
-        elif e["type"] == "death":
-            delta += 0.2
-        elif e["type"] == "assist":
-            delta -= 0.03
+from typing import List, Dict
+from dataclasses import dataclass, field
 
-    self.tension = max(0.0, min(1.0, self.tension + delta))
-4. 🎬 Phase Progression
-def _update_phase(self):
-    if self.tension < 0.2:
-        self.phase = "intro"
-    elif self.tension < 0.5:
-        self.phase = "build"
-    elif self.tension < 0.8:
-        self.phase = "tension"
-    elif self.tension >= 0.8:
-        self.phase = "climax"
-5. ⚖️ Goal Shaping (CORE MAGIC)
-Conflict Bias
-def _bias_conflict(self, npc, goal):
-    if "attack" in goal["name"]:
-        goal["priority"] *= 1.3
 
-    if "talk" in goal["name"]:
-        goal["priority"] *= 0.7
+@dataclass
+class Scene:
+    id: str
+    location: str
+    participants: List[str]
+    recent_events: List[Dict] = field(default_factory=list)
+    mood: str = "neutral"
 
-    return goal
-Alliance Bias
-def _bias_alliance(self, npc, goal):
-    if "assist" in goal["name"]:
-        goal["priority"] *= 1.5
 
-    if "attack" in goal["name"]:
-        goal["priority"] *= 0.6
+class SceneManager:
 
-    return goal
-Mystery Bias
-def _bias_mystery(self, npc, goal):
-    if "explore" in goal["name"]:
-        goal["priority"] *= 1.4
+    def __init__(self):
+        self.active_scene: Scene | None = None
 
-    if "attack" in goal["name"]:
-        goal["priority"] *= 0.8
+    def update_scene(self, events: List[Dict]):
+        if not events:
+            return
 
-    return goal
-6. ⏱️ Pacing Control (VERY IMPORTANT)
-def _apply_pacing(self, npc, goal):
-    if self.phase == "intro":
-        if "attack" in goal["name"]:
-            goal["priority"] *= 0.3
+        primary = events[0]
 
-    elif self.phase == "tension":
-        goal["priority"] *= 1.2
+        if not self.active_scene:
+            self.active_scene = Scene(
+                id="scene_1",
+                location=primary.get("location", "unknown"),
+                participants=primary.get("actors", []),
+            )
 
-    elif self.phase == "climax":
-        if "attack" in goal["name"]:
-            goal["priority"] *= 1.5
+        self.active_scene.recent_events.extend(events)
 
-    return goal
-7. 🧩 Hook Into GOAP
-File: rpg/goap/planner.py
-BEFORE
-best_goal = select_best_goal(goals)
-AFTER
-best_goal = select_best_goal(goals)
+        # Keep memory small
+        self.active_scene.recent_events = self.active_scene.recent_events[-10:]
 
-if session.story_director:
-    best_goal = session.story_director.adjust_goal(
-        npc,
-        best_goal,
-        context={
-            "recent_events": session.event_log[-10:]
+    def get_scene_context(self) -> Dict:
+        if not self.active_scene:
+            return {}
+
+        return {
+            "location": self.active_scene.location,
+            "participants": self.active_scene.participants,
+            "recent_events": self.active_scene.recent_events,
         }
-    )
-8. 🌍 Hook Into Session
-File: rpg/core/session.py
-from rpg.story.story_director import StoryDirector
+🔥 STEP 4 — Narrative Generator (LLM Layer)
+✅ New File
 
-class Session:
-    def __init__(self):
-        ...
-        self.story_director = StoryDirector()
-9. 🧠 Optional: Dynamic Arc Switching (BIG UPGRADE)
-def auto_select_arc(self):
-    if self.tension < 0.2:
-        self.arc = "mystery"
-    elif self.tension < 0.6:
-        self.arc = "alliance"
-    else:
-        self.arc = "conflict"
+src/app/rpg/narrative/narrative_generator.py
 
-Call inside _update_phase().
+from typing import List
+from .narrative_event import NarrativeEvent
 
-10. 🎭 LLM Grounding Integration (CRITICAL)
-File: scene_grounding.py
 
-Add:
+class NarrativeGenerator:
 
-base["story"] = {
-    "phase": session.story_director.phase,
-    "tension": session.story_director.tension,
-    "arc": session.story_director.arc,
-}
-Prompt Injection
-Story State:
-- Phase: {phase}
-- Tension: {tension}
-- Arc: {arc}
+    def __init__(self, llm):
+        self.llm = llm
 
-Follow tone:
-- intro → calm, exploratory
-- tension → cautious, reactive
-- climax → decisive, emotional
-11. 🚨 Anti-Repetition Guard (VERY IMPORTANT)
-def prevent_repetition(self, npc, goal):
-    key = (npc.id, goal["name"])
+    def generate(self, events: List[NarrativeEvent], scene_context: dict) -> str:
+        """Turn structured events into narrative text."""
 
-    if self.cooldowns.get(key, 0) > 0:
-        goal["priority"] *= 0.2
+        event_descriptions = "\n".join(
+            f"- {e.description}" for e in events
+        )
 
-    self.cooldowns[key] = 3
-    return goal
+        prompt = f"""
+You are a cinematic RPG narrator.
 
-Tick down each frame.
+Scene:
+Location: {scene_context.get("location")}
+Participants: {scene_context.get("participants")}
 
-12. 🧪 Example Outcome
-WITHOUT director:
-NPC attacks randomly
-pacing chaotic
-no narrative arc
-WITH director:
-Phase: intro
-NPCs observe, talk
-Phase: build
-suspicion rises
-Phase: tension
-small fights
-Phase: climax
-full conflict
-Phase: resolution (extendable)
-alliances form / aftermath
-🔥 Why This Is Powerful
+Events:
+{event_descriptions}
 
-You now have:
+Write a vivid, immersive narration of what happens.
+Focus on clarity, flow, and emotional impact.
+"""
 
-Simulation (bottom-up realism)
-+
-Narrative control (top-down shaping)
-=
-Emergent storytelling engine
-⚠️ Final Warning (Important)
+        return self.llm.generate(prompt)
+🔥 STEP 5 — Player Loop (THE MISSING LINK)
+✅ New File
 
-Do NOT let StoryDirector:
+src/app/rpg/core/player_loop.py
 
-inject actions
-override physics
-fabricate events
+class PlayerLoop:
 
-It should ONLY:
+    def __init__(self, world, director, scene_manager, narrator):
+        self.world = world
+        self.director = director
+        self.scene_manager = scene_manager
+        self.narrator = narrator
 
-bias decisions, not control outcomes
+    def step(self, player_input: str) -> dict:
+        """Main game loop step."""
 
-🚀 Next Level (If You Want)
+        # 1. Inject player action into world
+        player_event = self._convert_input(player_input)
+        self.world.inject_event(player_event)
 
-If you want to go beyond Talemate:
+        # 2. Run world simulation tick
+        world_events = self.world.world_tick()
 
-👉 Multi-arc system (parallel storylines)
-👉 Character-specific arcs (hero vs villain paths)
-👉 Director memory (remembers story beats)
-👉 LLM-generated arcs (dynamic storytelling)
+        # 3. Convert to narrative events
+        narrative_events = self.director.convert_events(world_events)
 
-🧠 Final Truth
+        # 4. Select important ones
+        focus_events = self.director.select_focus_events(narrative_events)
 
-Without this system, your AI is smart but directionless
-With it, your AI becomes a storyteller
+        # 5. Update scene
+        self.scene_manager.update_scene([e.raw_event for e in focus_events])
+
+        # 6. Generate narration
+        scene_context = self.scene_manager.get_scene_context()
+        narration = self.narrator.generate(focus_events, scene_context)
+
+        return {
+            "narration": narration,
+            "events": focus_events,
+        }
+
+    def _convert_input(self, text: str) -> dict:
+        return {
+            "type": "player_action",
+            "description": text,
+            "actors": ["player"],
+        }
+🔥 STEP 6 — Hook Into Existing World Loop
+Modify:
+
+world_loop.py
+
+Add at end of world_tick()
+# Ensure events include structured fields
+for e in tick_events:
+    e.setdefault("description", e.get("type", "unknown event"))
+    e.setdefault("actors", [])
+🧪 STEP 7 — Minimal Integration Test
+New Test:
+
+test_player_loop.py
+
+def test_player_loop_runs():
+    loop = PlayerLoop(world, director, scene_manager, narrator)
+
+    result = loop.step("I attack the guard")
+
+    assert "narration" in result
+    assert len(result["events"]) > 0
