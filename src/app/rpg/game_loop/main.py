@@ -1,32 +1,59 @@
+import random
+
+from rpg.ai.npc_planner import choose_target
+from rpg.spatial import distance
 from rpg.brain.unified_brain import unified_brain
 from rpg.memory import update_memory
 from rpg.narrative_context import build_context, update_tension
 from rpg.pipeline_adapter import adapt_pipeline_result
 from rpg.scene_generator import generate_scene
-from rpg.simulation import process
+from rpg.simulation import find_npc, process
 from rpg.systems import combat_system
 
 
 def process_npc_actions(session, npc_actions):
     events = []
 
-    def choose_target(npc):
-        recent = [e for e in npc.memory if e["type"] == "damage"]
-        if recent:
-            return recent[-1]["actor"]
-        return "player"
-
     for action in npc_actions:
+        npc = next((n for n in session.npcs if n.id == action["npc_id"]), None)
+        if not npc:
+            continue
+
         if action["action"] == "attack":
-            npc = next(n for n in session.npcs if n.id == action["npc_id"])
-            events.append({
-                "type": "damage",
-                "source": action["npc_id"],
-                "target": choose_target(npc),
-                "amount": 5
-            })
+            target = choose_target(npc, session)
+            # Only attack if in range (spatial constraint)
+            attack_target = find_npc(session, target)
+            if attack_target and attack_target.is_active and distance(npc.position, attack_target.position) <= 1:
+                events.append({
+                    "type": "damage",
+                    "source": action["npc_id"],
+                    "target": target,
+                    "amount": 5
+                })
+        elif action["action"] == "move_toward":
+            from rpg.ai.npc_planner import move_toward
+            move_toward(npc, session)
+        elif action["action"] == "wander":
+            _npc_wander(npc, session)
+        elif action["action"] == "observe":
+            pass  # Observe: no state change, just perception
 
     return events
+
+
+def _npc_wander(npc, session):
+    """Random wandering behavior for idle NPCs."""
+    x, y = npc.position
+    max_x, max_y = session.world.size
+
+    options = [
+        (x + dx, y + dy)
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        if 0 <= x + dx < max_x and 0 <= y + dy < max_y
+    ]
+
+    if options:
+        npc.position = random.choice(options)
 
 
 def execute_turn(session, player_input):

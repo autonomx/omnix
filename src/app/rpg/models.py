@@ -32,9 +32,6 @@ class GameSession:
         self.player = Player()
         self.npcs: list[NPC] = []
 
-        for npc in self.npcs:
-            npc.session = self  # type: ignore
-
         self.story_arcs = []
         self.recent_events = []
         self.config = type('Config', (), {'tone': 'neutral'})()
@@ -45,12 +42,18 @@ class GameSession:
             "phase": "setup"
         }
 
+    def add_npc(self, npc):
+        """Add an NPC to the session and attach the session reference."""
+        npc.session = self
+        self.npcs.append(npc)
+
 
 class World:
-    def __init__(self):
+    def __init__(self, size=(20, 20)):
         self.entities = {}
         self.locations = {}
         self.time = 0
+        self.size = size
 
 
 class Player:
@@ -71,6 +74,12 @@ class NPC:
         self.plan = []
         self.memory = []
         self.relationships = {}
-        self.emotional_state = {"mood": "neutral"}
+        self.emotional_state = {
+            "anger": 0.0,
+            "fear": 0.0,
+            "loyalty": 0.0,
+            "last_update": 0,
+            "top_threat": None
+        }
         self.position = (0, 0)
         self.session = None
