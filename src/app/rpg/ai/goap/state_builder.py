@@ -226,13 +226,14 @@ def select_goal(npc, session=None):
     6. Revenge (against hostile entities)
     7. Protection/Assistance (for allies)
     8. Exploration (default idle behavior)
+    9. DESIGN SPEC: adjust_goal() from StoryDirector applies final bias
 
     Args:
         npc: The NPC selecting a goal.
         session: Optional session for story director access.
 
     Returns:
-        Dict representing the selected goal with type and optional target.
+        Dict representing the selected goal with type, optional target, and priority.
     """
     relationships = npc.relationships if hasattr(npc, 'relationships') else {}
 
@@ -368,3 +369,37 @@ def select_goal(npc, session=None):
 
     # Default: explore/wander
     return {"type": "explore"}
+
+
+def select_goal_with_story_bias(npc, session, recent_events=None):
+    """Select goal and apply StoryDirector.adjust_goal() for final story bias.
+    
+    This implements design spec item 7: Hook Into GOAP.
+    After selecting a goal based on beliefs, mandates, and emotions,
+    the Story Director applies arc-based biasing and pacing.
+    
+    Usage (replace existing select_goal calls):
+        goal = select_goal_with_story_bias(npc, session, events)
+    
+    Args:
+        npc: The NPC selecting a goal.
+        session: The game session with story_director.
+        recent_events: Optional list of recent events for tension update.
+        
+    Returns:
+        Goal dict with priority adjusted by StoryDirector.
+    """
+    # First, select goal using existing logic
+    goal = select_goal(npc, session)
+    
+    # Add default priority and name for adjust_goal
+    goal.setdefault("priority", 1.0)
+    goal.setdefault("name", goal.get("type", "unknown"))
+    
+    # Apply StoryDirector bias if available
+    if session and hasattr(session, 'story_director'):
+        director = session.story_director
+        context = {"recent_events": recent_events or []}
+        goal = director.adjust_goal(npc, goal, context)
+    
+    return goal

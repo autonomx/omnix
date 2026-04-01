@@ -146,6 +146,7 @@ def build_grounding_block(session, events, npc_actions):
     - Entity relationships
     - Entity recent memories
     - Memory-based relationship data
+    - DESIGN SPEC ITEM 10: Story Director state (phase, tension, arc)
 
     Args:
         session: The current game session.
@@ -154,7 +155,7 @@ def build_grounding_block(session, events, npc_actions):
 
     Returns:
         Dict containing entities, relationships, distances,
-        visibility, intentions, memories, and events.
+        visibility, intentions, memories, events, and story state.
     """
     entities = []
     npc_positions = {}
@@ -271,7 +272,7 @@ def build_grounding_block(session, events, npc_actions):
             "plan": action.get("plan", []),
         })
 
-    return {
+    grounding = {
         "entities": entities,
         "relationships": relationships,
         "distances": distances,
@@ -280,5 +281,22 @@ def build_grounding_block(session, events, npc_actions):
         "events": events,
         "npc_actions": npc_actions,
         "actions": npc_actions,  # Alias for compatibility
-        "time": session.world.time if hasattr(session, 'world') else 0
+        "time": session.world.time if hasattr(session, 'world') else 0,
     }
+    
+    # DESIGN SPEC ITEM 10: LLM Grounding Integration - Story State
+    # Injects phase, tension, and arc from StoryDirector for scene generation
+    # This allows the LLM to follow tone:
+    #   - intro -> calm, exploratory
+    #   - tension -> cautious, reactive
+    #   - climax -> decisive, emotional
+    if hasattr(session, 'story_director') and session.story_director:
+        grounding["story"] = session.story_director.get_story_state()
+    else:
+        grounding["story"] = {
+            "phase": "intro",
+            "tension": 0.0,
+            "arc": None,
+        }
+    
+    return grounding

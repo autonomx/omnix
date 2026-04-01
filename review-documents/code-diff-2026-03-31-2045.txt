@@ -1,0 +1,1433 @@
+warning: in the working copy of 'src/app/rpg/ai/npc_planner.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/event_bus.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/game_loop/main.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/memory.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/memory/retrieval.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/models.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/models/npc.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/scene_generator.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/rpg/systems/combat_system.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/src/app/rpg/ai/npc_planner.py b/src/app/rpg/ai/npc_planner.py
+index 50d4eee..4cb82c2 100644
+--- a/src/app/rpg/ai/npc_planner.py
++++ b/src/app/rpg/ai/npc_planner.py
+@@ -1,6 +1,10 @@
+ import random
+ 
+-from rpg.ai.goap import Action, GOAPPlanner
++from rpg.ai.goap import Action
++from rpg.ai.goap.planner import plan as goap_plan
++from rpg.ai.goap.actions import default_actions as goap_default_actions
++from rpg.ai.goap.state_builder import build_world_state, select_goal
++from rpg.ai.memory_context import build_memory_context, summarize_relationships
+ from rpg.spatial import distance, astar
+ from rpg.emotion import decay_emotions
+ from rpg.simulation import find_npc
+@@ -110,6 +114,31 @@ def update_npc_emotions(npc):
+     npc.emotional_state["mood"] = "angry" if npc.emotional_state["anger"] > 1.5 else "calm"
+ 
+ 
++def build_decision_context(npc, session):
++    """
++    Build rich context for memory retrieval.
++    This is CRITICAL for relevant memory recall.
++    """
++    top_threat = npc.emotional_state.get("top_threat")
++    anger = npc.emotional_state.get("anger", 0)
++
++    # Infer intent
++    if npc.hp < 30:
++        intent = "survive"
++    elif anger > 1.5:
++        intent = "attack"
++    else:
++        intent = "explore"
++
++    return {
++        "type": "decision",
++        "source": npc.id,
++        "target": top_threat,
++        "location": npc.position,
++        "intent": intent,
++    }
++
++
+ def choose_target(npc, session):
+     """Choose attack target based on anger map with distance weighting.
+ 
+@@ -146,20 +175,41 @@ def choose_target(npc, session):
+ def decide(npc, session):
+     update_npc_emotions(npc)
+ 
+-    planner = GOAPPlanner()
++    # Build rich context for memory retrieval
++    current_context = build_decision_context(npc, session)
++
++    npc.emotional_state["memory_context"] = build_memory_context(
++        npc,
++        current_context,
++        session
++    )
++    
++    # Get relationship summaries for better decision making
++    relationships = summarize_relationships(npc, session)
++    npc.emotional_state["relationships"] = relationships
+ 
+-    state = build_state(npc, session)
+-    goal = build_goal(npc)
+-    actions = build_actions(npc, session)
++    # Use new GOAP planner from design spec
++    state = build_world_state(npc, session)
++    goal = select_goal(npc)
++    actions = goap_default_actions()
+ 
+-    plan = planner.plan(state, goal, actions)
++    plan_result = goap_plan(state, goal, actions)
+ 
+-    if not plan:
++    if not plan_result:
+         # Default idle behavior: wander or observe to avoid frozen NPCs
+         # Add jitter prevention: if last action was move and position didn't change, idle
+-        if npc.memory and npc.memory[-1].get("action") == "move":
+-            if npc.memory[-1].get("pos") == npc.position:
++        
++        # Check memory for last action (support both list and dict memory)
++        memories = npc.memory.get("events", []) if isinstance(npc.memory, dict) else npc.memory
++        if memories and memories[-1].get("action") == "move":
++            if memories[-1].get("pos") == npc.position:
+                 return {"action": "idle"}
+         return {"action": random.choice(["wander", "observe"])}
+ 
+-    return {"action": plan[0].name}
+\ No newline at end of file
++    next_action = plan_result[0].name
++
++    return {
++        "action": next_action,
++        "plan": [a.name for a in plan_result],
++        "goal": goal
++    }
+diff --git a/src/app/rpg/emotion.py b/src/app/rpg/emotion.py
+index a5a61ab..02e231c 100644
+--- a/src/app/rpg/emotion.py
++++ b/src/app/rpg/emotion.py
+@@ -22,19 +22,25 @@ def decay_emotions(npc, world_time):
+     npc.emotional_state["last_update"] = world_time
+ 
+ 
+-def apply_event_emotion(npc, event):
++def apply_event_emotion(npc, event, intensity=1.0):
+     """Apply emotional response to a perceived event.
+ 
+     Different event types trigger different emotional responses:
+     - damage when targeted: increases anger and fear
+     - ally killed: increases fear significantly
++
++    Args:
++        npc: The NPC receiving the emotional response.
++        event: The event that triggered the response.
++        intensity: Multiplier for emotional response strength.
++            1.0 = normal, 2.0 = doubled (direct victim), 0.5 = halved (attacker)
+     """
+     if event["type"] == "damage" and event.get("target") == npc.id:
+-        npc.emotional_state["anger"] += 2.0
+-        npc.emotional_state["fear"] += 0.5
++        npc.emotional_state["anger"] += 2.0 * intensity
++        npc.emotional_state["fear"] += 0.5 * intensity
+ 
+     if event["type"] == "ally_killed":
+-        npc.emotional_state["fear"] += 1.5
++        npc.emotional_state["fear"] += 1.5 * intensity
+ 
+ 
+ def apply_event_emotion_with_relationships(npc, event, session):
+diff --git a/src/app/rpg/event_bus.py b/src/app/rpg/event_bus.py
+index 56cc435..01f2f6d 100644
+--- a/src/app/rpg/event_bus.py
++++ b/src/app/rpg/event_bus.py
+@@ -1,20 +1,102 @@
+-from collections import defaultdict
++"""
++Event Bus - Core event system for the RPG.
++
++Provides a queue-based event distribution system where:
++- Events are published (queued) rather than immediately processed
++- Systems subscribe to specific event types or wildcard "*"
++- Events are processed in batch at the end of each game tick
++- Priority-based handler ordering for deterministic execution
++
++This architecture provides:
++- Decoupled systems (no direct dependencies between subsystems)
++- Deterministic simulation order (priority-based handler execution)
++- Extensibility (add new systems without modifying core)
++- Debug/Replay capability via event log
++- Safety (immutable events, tick-bound processing, schema validation)
++"""
++
++from collections import defaultdict, deque
++from types import MappingProxyType
++from typing import Callable, Dict, List, Any, Tuple
++
++
++# Event schema: required fields per event type
++REQUIRED_FIELDS = {
++    "damage": ["type", "source", "target", "amount"],
++    "death": ["type", "target"],
++    "move": ["type", "source", "position"],
++    "heal": ["type", "source", "target", "amount"],
++}
+ 
+ 
+ class EventBus:
+     def __init__(self):
+-        self.listeners = defaultdict(list)
++        # Store (priority, handler) tuples, sorted by priority on insert
++        self._subscribers: Dict[str, List[Tuple[int, Callable]]] = defaultdict(list)
++        # Use deque for O(1) popleft
++        self._queue: deque = deque()
++
++    def subscribe(self, event_type: str, handler: Callable, priority: int = 0):
++        """Subscribe a handler to an event type.
++        
++        Args:
++            event_type: The type of event to listen for. Use "*" for wildcard (all events).
++            handler: Callback function with signature (session, event).
++            priority: Lower priority runs first. Examples:
++                combat = -10  (mutates state early)
++                emotion = 0
++                memory = 10   (records final state)
++        """
++        self._subscribers[event_type].append((priority, handler))
++        # Keep sorted by priority for deterministic ordering
++        self._subscribers[event_type].sort(key=lambda x: x[0])
+ 
+-    def subscribe(self, event_type, handler):
+-        self.listeners[event_type].append(handler)
++    def publish(self, event: Dict[str, Any]):
++        """Publish an event (adds to queue, not immediate execution).
++        
++        Args:
++            event: A dictionary with at least a "type" key.
++            
++        Raises:
++            ValueError: If the event is missing required fields for its type.
++        """
++        # Validate event schema
++        etype = event.get("type")
++        if etype in REQUIRED_FIELDS:
++            for field in REQUIRED_FIELDS[etype]:
++                if field not in event:
++                    raise ValueError(f"Missing field '{field}' in event '{etype}'")
++        
++        # Freeze event to prevent mutation by handlers (immutable)
++        self._queue.append(MappingProxyType(dict(event)))
+ 
+-    def emit(self, event):
+-        if hasattr(self, "session"):
+-            self.session.event_log.append(event)
++    def process(self, session):
++        """Process all queued events by dispatching to subscribed handlers.
++        
++        This should be called exactly once at the end of each game tick.
++        Uses tick-bound processing: new events during processing go to next tick.
++        
++        Args:
++            session: The current game session (passed to handlers).
++        """
++        # Tick-bound: only process current batch, new events go to next tick
++        current_batch = list(self._queue)
++        self._queue.clear()
+ 
+-        for handler in self.listeners[event["type"]]:
+-            handler(event)
++        for event in current_batch:
++            # Dispatch to specific event type handlers + wildcard handlers
++            handlers = (
++                self._subscribers.get(event.get("type", ""), []) +
++                self._subscribers.get("*", [])
++            )
+ 
++            # Sort combined handlers by priority to maintain deterministic ordering
++            # (specific + wildcard lists are individually sorted but combined list is not)
++            handlers = sorted(handlers, key=lambda x: x[0])
++            
++            for _, handler in handlers:
++                handler(session, event)
+ 
+-# Global bus (simple version)
+-event_bus = EventBus()
+\ No newline at end of file
++    def clear(self):
++        """Clear all pending events in the queue."""
++        self._queue.clear()
+\ No newline at end of file
+diff --git a/src/app/rpg/game_loop/main.py b/src/app/rpg/game_loop/main.py
+index 8eecf2b..43072d3 100644
+--- a/src/app/rpg/game_loop/main.py
++++ b/src/app/rpg/game_loop/main.py
+@@ -1,72 +1,190 @@
++"""Game Loop - Event-driven simulation core.
++
++The game loop follows this pattern:
++1. NPC decisions (AI planning)
++2. Convert decisions -> events (publish to event bus)
++3. Process ALL events (systems react independently)
++4. Advance time
++"""
++
+ import random
+ 
+-from rpg.ai.npc_planner import choose_target
++from rpg.ai.npc_planner import choose_target, decide
+ from rpg.spatial import distance
++from rpg.emotion import decay_emotions
+ from rpg.brain.unified_brain import unified_brain
+-from rpg.memory import update_memory
+ from rpg.narrative_context import build_context, update_tension
+ from rpg.pipeline_adapter import adapt_pipeline_result
+ from rpg.scene_generator import generate_scene
++from rpg.scene.grounding import build_grounding_block
++from rpg.scene.validator import validate_scene
+ from rpg.simulation import find_npc, process
+-from rpg.systems import combat_system
+ 
++# Import system registration
++from rpg.systems import combat_system, emotion_system, memory_system, scene_system, debug_system
+ 
+-def process_npc_actions(session, npc_actions):
+-    events = []
+ 
+-    for action in npc_actions:
+-        npc = next((n for n in session.npcs if n.id == action["npc_id"]), None)
++def handle_action(session, action):
++    """Convert an NPC action into events published to the event bus.
++    
++    This function translates high-level actions into events.
++    All state changes happen through the event system.
++    """
++    bus = session.event_bus
++    npc_id = action.get("npc_id")
++    
++    if action["action"] == "attack":
++        npc = next((n for n in session.npcs if n.id == npc_id), None)
+         if not npc:
+-            continue
+-
+-        if action["action"] == "attack":
+-            target = choose_target(npc, session)
+-            # Only attack if in range (spatial constraint)
+-            attack_target = find_npc(session, target)
+-            if attack_target and attack_target.is_active and distance(npc.position, attack_target.position) <= 1:
+-                events.append({
+-                    "type": "damage",
+-                    "source": action["npc_id"],
+-                    "target": target,
+-                    "amount": 5
+-                })
+-        elif action["action"] == "move_toward":
+-            from rpg.ai.npc_planner import move_toward
+-            move_toward(npc, session)
+-        elif action["action"] == "wander":
++            return
++        
++        target_id = choose_target(npc, session)
++        target = find_npc(session, target_id)
++        
++        # Only attack if in range (spatial constraint)
++        if target and target.is_active and distance(npc.position, target.position) <= 2:
++            bus.publish({
++                "type": "damage",
++                "source": npc_id,
++                "target": target_id,
++                "amount": 5,
++                "tick": session.world.time
++            })
++    
++    elif action["action"] == "move_toward":
++        npc = next((n for n in session.npcs if n.id == npc_id), None)
++        if npc:
++            _move_toward_npc(npc, session)
++    
++    elif action["action"] == "wander":
++        npc = next((n for n in session.npcs if n.id == npc_id), None)
++        if npc:
+             _npc_wander(npc, session)
+-        elif action["action"] == "observe":
+-            pass  # Observe: no state change, just perception
++    
++    elif action["action"] == "observe":
++        # Observe: no state change, just perception
++        # Record observation in memory via event
++        pass
++
+ 
+-    return events
++def _move_toward_npc(npc, session):
++    """Move NPC toward target using A* pathfinding."""
++    from rpg.spatial import astar
++    
++    target_id = npc.emotional_state.get("top_threat")
++    target = find_npc(session, target_id)
++    
++    if not target:
++        return
++    
++    path = astar(npc.position, target.position, session)
++    
++    if len(path) > 1:
++        npc.position = path[1]
+ 
+ 
+ def _npc_wander(npc, session):
+     """Random wandering behavior for idle NPCs."""
+     x, y = npc.position
+     max_x, max_y = session.world.size
+-
++    
+     options = [
+         (x + dx, y + dy)
+         for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]
+         if 0 <= x + dx < max_x and 0 <= y + dy < max_y
+     ]
+-
++    
+     if options:
+         npc.position = random.choice(options)
+ 
+ 
++def init_systems(session, enable_debug=False):
++    """Register all systems with the event bus.
++    
++    This function sets up the event-driven architecture by
++    subscribing each system to the relevant event types.
++    
++    Args:
++        session: The current game session.
++        enable_debug: If True, enables the debug system for logging all events.
++    """
++    # Guard against duplicate system registration using getattr pattern
++    # This is more robust than hasattr as it handles session reuse/reset
++    if getattr(session, "_systems_initialized", False):
++        return
++
++    bus = session.event_bus
++    
++    # Combat system handles damage and death (priority -10)
++    combat_system.register(bus, session)
++    
++    # Emotion system reacts to damage and death (priority 0)
++    emotion_system.register(bus, session)
++    
++    # Scene system records all events for narrative (priority 5)
++    scene_system.register(bus, session)
++    
++    # Memory system tracks all events (priority 10)
++    memory_system.register(bus, session)
++    
++    # Debug system logs all events (priority 20) - optional
++    if enable_debug:
++        debug_system.register(bus, session)
++    
++    session._systems_initialized = True
++
++
++def game_tick(session):
++    """Execute one game tick using event-driven architecture.
++    
++    1. NPC decisions (AI planning)
++    2. Convert actions -> events
++    3. Process ALL events (systems react independently)
++    4. Advance time
++    """
++    # Mark systems as initialized if needed
++    if not hasattr(session, "_systems_initialized"):
++        init_systems(session)
++    
++    # 1. NPC decisions
++    for npc in session.npcs:
++        if not npc.is_active:
++            continue
++        
++        # Decay emotions before decision
++        decay_emotions(npc, session.world.time)
++        
++        # Decide action
++        action = decide(npc, session)
++        action["npc_id"] = npc.id
++        
++        # 2. Convert actions -> events
++        handle_action(session, action)
++
++    # 3. Process ALL events (tick-bound batch processing)
++    session.event_bus.process(session)
++
++    # 4. Advance time
++    session.world.time += 1
++
++
+ def execute_turn(session, player_input):
++    """Execute a complete turn with player input and NPC simulation.
++    
++    This function wraps the core game_tick with scene generation
++    and narrative context updates.
++    """
++    # Initialize systems if needed
+     if not hasattr(session, "_systems_initialized"):
+         session.event_bus.session = session
+-        combat_system.register(session.event_bus, session)
+-        session._systems_initialized = True
++        init_systems(session)
+ 
++    # Build narrative context
+     context = build_context(session)
+ 
+     # 1. Unified brain
+     brain_output = unified_brain(session, player_input, context)
+-
++    
+     intent = brain_output["intent"]
+     director = brain_output["director"]
+     event = brain_output["event"]
+@@ -76,24 +194,25 @@ def execute_turn(session, player_input):
+     raw_result = process(session, intent)
+     result = adapt_pipeline_result(raw_result)
+ 
+-    # 2.5 Simulation (NPC actions)
+-    npc_events = process_npc_actions(session, npc_actions)
+-
+-    # 3. Apply events
+-    all_events = result["events"] + npc_events
+-    for event in all_events:
+-        session.event_bus.emit(event)
+-
+-    # 4. Memory update
+-    session.recent_events.extend(all_events)
+-    session.recent_events = session.recent_events[-100:]
++    # 2.5 Simulation (NPC actions) - use shared handle_action for consistency
++    for action in npc_actions:
++        npc = next((n for n in session.npcs if n.id == action.get("npc_id")), None)
++        if not npc:
++            continue
++        
++        # Use shared handle_action to prevent logic drift
++        handle_action(session, action)
+ 
+-    update_memory(session, all_events)
++    # 3. Process ALL events (tick-bound batch processing)
++    session.event_bus.process(session)
+ 
+-    # 5. Advance world time
++    # 4. Advance world time
+     session.world.time += 1
+ 
+-    # 7. Scene
++    # 5. Build grounding block for scene validation
++    grounding = build_grounding_block(session, result.get("events", []), npc_actions)
++
++    # 6. Scene generation
+     scene = generate_scene(
+         session=session,
+         director=director,
+@@ -102,6 +221,11 @@ def execute_turn(session, player_input):
+         npc_actions=npc_actions
+     )
+ 
++    # 7. Additional validation at game loop level
++    if scene and scene.narration:
++        if not validate_scene(scene.narration, grounding):
++            scene.narration = "[ERROR: Scene rejected due to hallucination]"
++
+     # 8. Update tension
+     session.narrative_state["tension"] = update_tension(
+         session.narrative_state["tension"],
+@@ -109,3 +233,40 @@ def execute_turn(session, player_input):
+     )
+ 
+     return scene
++
++
++def process_npc_actions(session, npc_actions):
++    """Convert NPC actions to events (legacy compatibility).
++    
++    This function maintains compatibility with existing code that
++    calls process_npc_actions directly.
++    """
++    events = []
++    bus = session.event_bus
++
++    for action in npc_actions:
++        npc = next((n for n in session.npcs if n.id == action.get("npc_id")), None)
++        if not npc:
++            continue
++
++        if action["action"] == "attack":
++            target = choose_target(npc, session)
++            attack_target = find_npc(session, target)
++            if attack_target and attack_target.is_active and distance(npc.position, attack_target.position) <= 1:
++                event = {
++                    "type": "damage",
++                    "source": action.get("npc_id"),
++                    "target": target,
++                    "amount": 5,
++                    "tick": session.world.time
++                }
++                bus.publish(event)
++                events.append(event)
++        elif action["action"] == "move_toward":
++            _move_toward_npc(npc, session)
++        elif action["action"] == "wander":
++            _npc_wander(npc, session)
++        elif action["action"] == "observe":
++            pass
++
++    return events
+\ No newline at end of file
+diff --git a/src/app/rpg/memory.py b/src/app/rpg/memory.py
+index 43df9b9..ac194bc 100644
+--- a/src/app/rpg/memory.py
++++ b/src/app/rpg/memory.py
+@@ -84,17 +84,62 @@ def score_event(npc, event, query):
+     return score
+ 
+ 
+-def _prune_memory(npc):
+-    """Memory pruning: keep important events + recent history (bounded to 100)."""
+-    # Always keep important events (death, boss_event)
+-    important = [e for e in npc.memory if e.get("type") in ("death", "boss_event")]
+-
+-    # Keep last 100 recent events
+-    recent = npc.memory[-100:]
++def prune_memories(npc, max_memories: int = 100):
++    """Prune NPC memories to prevent memory explosion.
++    
++    Keeps the most important and recent memories.
++    Call this periodically to maintain memory performance.
++    
++    Args:
++        npc: The NPC whose memories to prune
++        max_memories: Maximum number of memories to keep (default: 100)
++    """
++    # Support both dict-based memory (memory["events"]) and list-based memory
++    if isinstance(npc.memory, dict):
++        memories = npc.memory.get("events", [])
++        if len(memories) <= max_memories:
++            return
++        
++        # Keep most important + recent memories
++        memories.sort(
++            key=lambda m: (m.get("importance", 1.0), m.get("timestamp", m.get("tick", 0))),
++            reverse=True
++        )
++        npc.memory["events"] = memories[:max_memories]
++    else:
++        # List-based memory (legacy)
++        if len(npc.memory) <= max_memories:
++            return
++        
++        npc.memory.sort(
++            key=lambda m: (m.get("type") in ("death", "boss_event"), m.get("tick", 0)),
++            reverse=True
++        )
++        npc.memory = npc.memory[:max_memories]
++
++
++# Backward compatibility alias
++_prune_memory = prune_memories
+ 
+-    # Merge: important events first, then recent, deduplicated by id
+-    seen = {}
+-    for e in important + recent:
+-        seen[id(e)] = e
+ 
+-    npc.memory = list(seen.values())
+\ No newline at end of file
++def _prune_memory(npc):
++    """Memory pruning: keep important events + recent history (bounded to 100).
++    
++    DEPRECATED: Use prune_memories(npc) instead.
++    """
++    # Always keep important events (death, boss_event)
++    if isinstance(npc.memory, dict):
++        memories = npc.memory.get("events", [])
++        important = [e for e in memories if e.get("type") in ("death", "boss_event")]
++        recent = memories[-100:]
++        seen = {}
++        for e in important + recent:
++            seen[id(e)] = e
++        npc.memory["events"] = list(seen.values())
++    else:
++        important = [e for e in npc.memory if e.get("type") in ("death", "boss_event")]
++        recent = npc.memory[-100:]
++        seen = {}
++        for e in important + recent:
++            seen[id(e)] = e
++        npc.memory = list(seen.values())
+diff --git a/src/app/rpg/memory/__init__.py b/src/app/rpg/memory/__init__.py
+index e69de29..2230f9a 100644
+--- a/src/app/rpg/memory/__init__.py
++++ b/src/app/rpg/memory/__init__.py
+@@ -0,0 +1,30 @@
++"""Memory Module - Manages NPC memory storage, retrieval, and decay.
++
++Submodules:
++- retrieval: Talemate-style memory scoring and retrieval
++- reflection: Converts memories into high-level beliefs
++"""
++
++from rpg.memory.retrieval import (
++    compute_recency_decay,
++    compute_relevance,
++    compute_weighted_importance,
++    score_memory,
++    retrieve_memories,
++)
++from rpg.memory.reflection import (
++    reflect,
++    store_reflection,
++    reflect_all,
++)
++
++__all__ = [
++    "compute_recency_decay",
++    "compute_relevance",
++    "compute_weighted_importance",
++    "score_memory",
++    "retrieve_memories",
++    "reflect",
++    "store_reflection",
++    "reflect_all",
++]
+diff --git a/src/app/rpg/memory/retrieval.py b/src/app/rpg/memory/retrieval.py
+index 6767409..1cef9a5 100644
+--- a/src/app/rpg/memory/retrieval.py
++++ b/src/app/rpg/memory/retrieval.py
+@@ -1,21 +1,144 @@
+-def score_event(event, query):
+-    score = 0
++"""Memory Retrieval System - Talemate-style ranked, filtered, decayed memories.
+ 
+-    if query.get("target") == event.get("target"):
+-        score += 2
++Provides:
++- compute_recency_decay: exponential decay based on time delta
++- compute_relevance: lightweight relevance scoring (no embeddings)
++- score_memory: combined scoring with weights
++- retrieve_memories: top-k memory retrieval for NPCs
++"""
+ 
+-    if query.get("type") == event.get("type"):
+-        score += 1
++import math
++from typing import List, Dict, Any
++
++
++def compute_recency_decay(timestamp: int, current_time: int, half_life: int = 50) -> float:
++    """
++    Exponential decay:
++    newer = closer to 1.0
++    older = approaches 0
++    """
++    delta = current_time - timestamp
++    return math.exp(-delta / half_life)
++
++
++def compute_relevance(memory: Dict[str, Any], context: Dict[str, Any]) -> float:
++    """
++    Weighted relevance scoring with source/target distinction.
++    
++    Prioritizes:
++    - Target matching (who was affected) - highest weight
++    - Source matching (who caused it) - medium weight
++    - Type matching (same event type) - lower weight
++    
++    This ensures "player killed my ally" is more relevant than
++    "player healed me" when context involves the player as threat.
++    """
++    score = 0.0
++
++    # Source matching (who caused the event)
++    if memory.get("source") == context.get("source"):
++        score += 1.0
++
++    # Target matching (who was affected) - highest weight
++    if memory.get("target") == context.get("target"):
++        score += 1.5
++
++    # Type matching (same event category)
++    if memory.get("type") == context.get("type"):
++        score += 0.5
+ 
+     return score
+ 
+ 
+-def retrieve(npc, query, k=5):
+-    scored = []
++def compute_weighted_importance(memory: Dict[str, Any]) -> float:
++    """Compute emotion-weighted importance with negative memory bias.
++    
++    Negative events (damage, death) are boosted to ensure NPCs:
++    - Hold grudges against attackers
++    - Fear entities that have harmed them
++    - Prioritize threats over neutral interactions
++    """
++    importance = memory.get("importance", 1.0)
++    mem_type = memory.get("type", "")
+ 
+-    for e in npc.memory:
+-        scored.append((score_event(e, query), e))
++    # Boost negative memories for realistic behavior
++    if mem_type == "damage":
++        importance *= 1.5
++    
++    if mem_type == "death":
++        importance *= 2.0
++    
++    # Emotional impact multiplier (if available)
++    emotional_impact = memory.get("emotional_impact", 0)
++    importance *= (1 + abs(emotional_impact) * 0.2)
++    
++    return importance
++
++
++def score_memory(memory: Dict[str, Any], context: Dict[str, Any], current_time: int) -> float:
++    """Score a memory entry based on relevance, importance, and recency."""
++    relevance = compute_relevance(memory, context)
++    importance = compute_weighted_importance(memory)
++    recency = compute_recency_decay(memory.get("timestamp", memory.get("tick", 0)), current_time)
++
++    return (
++        relevance * 0.5 +
++        importance * 0.3 +
++        recency * 0.2
++    )
++
++
++def retrieve_memories(
++    npc,
++    context: Dict[str, Any],
++    current_time: int,
++    k: int = 5,
++    mode: str = "general"
++) -> List[Dict[str, Any]]:
++    """Retrieve top-k most relevant memories for an NPC given context.
++    
++    Args:
++        npc: The NPC whose memories to retrieve
++        context: The current event context for relevance scoring
++        current_time: Current world time for recency calculation
++        k: Number of memories to return
++        mode: Retrieval mode affecting weights:
++            - "general": balanced retrieval (default)
++            - "combat": prioritizes recent + hostile memories
++            - "social": prioritizes dialogue + emotional memories
++            - "planning": prioritizes high-importance strategic memories
++    
++    Returns:
++        List of top-k memory dicts, sorted by relevance score
++    """
++    # Weight adjustments based on retrieval mode
++    weights = {
++        "general": {"relevance": 0.5, "importance": 0.3, "recency": 0.2},
++        "combat": {"relevance": 0.3, "importance": 0.4, "recency": 0.3},
++        "social": {"relevance": 0.6, "importance": 0.2, "recency": 0.2},
++        "planning": {"relevance": 0.3, "importance": 0.5, "recency": 0.2},
++    }
++    w = weights.get(mode, weights["general"])
++    
++    # Support both dict-based memory (memory["events"]) and list-based memory (npc.memory)
++    if isinstance(npc.memory, dict):
++        memories = npc.memory.get("events", [])
++    else:
++        memories = npc.memory
++
++    scored = []
++    for mem in memories:
++        relevance = compute_relevance(mem, context)
++        importance = compute_weighted_importance(mem)
++        recency = compute_recency_decay(mem.get("timestamp", mem.get("tick", 0)), current_time)
++        
++        s = (
++            relevance * w["relevance"] +
++            importance * w["importance"] +
++            recency * w["recency"]
++        )
++        scored.append((s, mem))
+ 
+-    scored.sort(reverse=True, key=lambda x: x[0])
++    scored.sort(key=lambda x: x[0], reverse=True)
+ 
+-    return [e for score, e in scored[:k] if score > 0]
+\ No newline at end of file
++    return [m for _, m in scored[:k]]
+diff --git a/src/app/rpg/models.py b/src/app/rpg/models.py
+index 8c45167..3c6b72d 100644
+--- a/src/app/rpg/models.py
++++ b/src/app/rpg/models.py
+@@ -83,3 +83,4 @@ class NPC:
+         }
+         self.position = (0, 0)
+         self.session = None
++        self.perception_radius = 5  # How far the NPC can perceive events
+diff --git a/src/app/rpg/models/npc.py b/src/app/rpg/models/npc.py
+index b199f2d..7fbab52 100644
+--- a/src/app/rpg/models/npc.py
++++ b/src/app/rpg/models/npc.py
+@@ -6,28 +6,40 @@ class NPC:
+         self.faction = faction
+         self.hp = hp
+         self.stats = stats or {"strength": 10, "dexterity": 10, "intelligence": 10}
++        self.is_active = True  # Whether NPC is alive and active
++        self.position = (0, 0)  # Current position on the map
++        self.perception_radius = 5  # How far the NPC can perceive events
+         self.goals = []
+         self.current_goal = None
++        self.plan = []  # Planned actions
+         self.memory = {
+             "events": [],
+             "facts": [],
+             "relationships": {}
+         }
++        self.relationships = {}  # Shortcut for relationship access
+         self.emotional_state = {
+             "neutral": 0.0,
+             "angry": 0.0,
+             "happy": 0.0,
+-            "fearful": 0.0
++            "fearful": 0.0,
++            "anger": 0.0,       # Added for emotion system compatibility
++            "fear": 0.0,        # Added for emotion system compatibility
++            "loyalty": 0.0,     # Added for emotion system compatibility
++            "last_update": 0,   # Added for decay tracking
++            "top_threat": None  # Added for targeting
+         }
+         self.opinions = {}  # opinions of other characters, affected by emotions
+         self.voice_style = "neutral"  # calm, aggressive, formal, casual, etc.
+         self.speaking_patterns = ["direct", "concise"]  # List of speaking patterns
++        self.session = None  # Reference to GameSession
+ 
+     def update_emotions(self, new_emotion):
+         """Update emotional state with decay and new emotion."""
+         # Decay all emotions
+         for emotion in self.emotional_state:
+-            self.emotional_state[emotion] *= 0.9
++            if isinstance(self.emotional_state[emotion], float):
++                self.emotional_state[emotion] *= 0.9
+ 
+         # Apply new emotion
+         if new_emotion in self.emotional_state:
+diff --git a/src/app/rpg/scene/__init__.py b/src/app/rpg/scene/__init__.py
+index e69de29..16085de 100644
+--- a/src/app/rpg/scene/__init__.py
++++ b/src/app/rpg/scene/__init__.py
+@@ -0,0 +1,7 @@
++from rpg.scene.grounding import build_grounding_block
++from rpg.scene.validator import validate_scene
++
++__all__ = [
++    "build_grounding_block",
++    "validate_scene",
++]
+\ No newline at end of file
+diff --git a/src/app/rpg/scene_generator.py b/src/app/rpg/scene_generator.py
+index 9ca5079..e7ad160 100644
+--- a/src/app/rpg/scene_generator.py
++++ b/src/app/rpg/scene_generator.py
+@@ -1,5 +1,7 @@
+ from rpg.models import SceneOutput
+ from rpg.scene_graph import build_scene_graph
++from rpg.scene.grounding import build_grounding_block
++from rpg.scene.validator import validate_scene
+ 
+ 
+ def generate_scene(session, director, result, event, npc_actions):
+@@ -10,6 +12,9 @@ def generate_scene(session, director, result, event, npc_actions):
+ 
+     active_npcs = [n.id for n in session.npcs if n.is_active]
+ 
++    # Build grounding block to prevent hallucination
++    grounding = build_grounding_block(session, result["events"], npc_actions)
++
+     # Hybrid rendering: simulation is truth, LLM is flavor layer
+     base_scene = f"""
+     TIME: {graph['time']}
+@@ -28,7 +33,17 @@ def generate_scene(session, director, result, event, npc_actions):
+     # TODO: integrate with LLM for actual generation
+     # LLM enhances but cannot override the simulation truth
+     _llm_prompt = f"""
+-    Generate a structured cinematic scene.
++    You are a deterministic scene renderer.
++
++    HARD CONSTRAINTS (MUST FOLLOW):
++    - Only use entities listed
++    - Only describe events listed
++    - DO NOT invent new actions or characters
++    - DO NOT change outcomes
++    - Positions must remain consistent
++
++    WORLD STATE:
++    {grounding}
+ 
+     STRICT RULES:
+     - ONLY describe what is in EVENTS
+@@ -49,6 +64,10 @@ def generate_scene(session, director, result, event, npc_actions):
+     # merge_scene keeps simulation events as the ground truth
+     final_narration = _merge_scene(base_scene, event_summary)
+ 
++    # Validate scene against grounding to prevent hallucination
++    if not validate_scene(final_narration, grounding):
++        final_narration = "[ERROR: Scene rejected due to hallucination]"
++
+     return SceneOutput(
+         location="battlefield",
+         scene_type=director["mode"],
+diff --git a/src/app/rpg/systems/__init__.py b/src/app/rpg/systems/__init__.py
+new file mode 100644
+index 0000000..8d8ef1f
+--- /dev/null
++++ b/src/app/rpg/systems/__init__.py
+@@ -0,0 +1,18 @@
++"""RPG Systems - Independent subsystems that react to events.
++
++Available systems:
++- combat_system: Handles damage and death events (priority -10)
++- emotion_system: Handles NPC emotional responses (priority 0)
++- scene_system: Records events for narrative generation (priority 5)
++- memory_system: Records events into NPC memory (priority 10)
++- debug_system: Logs all events for debugging (priority 20, optional)
++
++Priority system:
++    Lower priority runs first. All systems register with appropriate
++    priorities to ensure deterministic execution order:
++        1. Combat (-10): Mutates HP, publishes death
++        2. Emotion (0):   Reacts to combat results
++        3. Scene (5):     Records for narrative
++        4. Memory (10):   Stores in NPC memory
++        5. Debug (20):    Logs final state
++"""
+\ No newline at end of file
+diff --git a/src/app/rpg/systems/combat_system.py b/src/app/rpg/systems/combat_system.py
+index 4ddce0a..fd084bd 100644
+--- a/src/app/rpg/systems/combat_system.py
++++ b/src/app/rpg/systems/combat_system.py
+@@ -1,26 +1,69 @@
+-from rpg.simulation import find_npc
++"""Combat System - Handles damage, death, and combat-related event processing.
+ 
++Subscribes to:
++- "damage": Reduces target HP, publishes "death" event if HP <= 0
++- "death": Marks NPC as inactive
+ 
+-def handle_damage(event, session):
+-    target = find_npc(session, event["target"])
+-    if not target:
+-        return
++Priority: -10 (processes before other systems to mutate state early)
++
++Fixes:
++- Uses centralized entity lookup to prevent logic drift
++- Death handler owns is_active state transition (no redundant assignment in on_damage)
++- Events include metadata for future systems (perception, LLM reasoning, etc.)
++"""
++
++from rpg.utils.entity_lookup import find_entity as find_npc
+ 
+-    target.hp -= event["amount"]
+ 
++def on_damage(session, event):
++    """Handle damage event by reducing target HP.
++    
++    If target HP drops to 0 or below, publishes a "death" event.
++    Note: is_active state transition is handled by the death event handler,
++    not here, to avoid redundant state mutations.
++    """
++    target_id = event.get("target")
++    amount = event.get("amount", 0)
++    source_id = event.get("source")
++    
++    # Find the actual target entity
++    target = find_npc(session, target_id)
++    
++    if not target:
++        return
++    
++    # Only process if target is active
++    if not getattr(target, "is_active", True):
++        return
++    
++    # Apply damage
++    target.hp -= amount
++    
++    # Check for death - publish event but let death handler own state transition
+     if target.hp <= 0:
+-        session.event_bus.emit({
++        session.event_bus.publish({
+             "type": "death",
+-            "target": target.id
++            "target": target_id,
++            "source": source_id,
++            "tick": session.world.time,
++            "meta": {
++                "position": getattr(target, "position", None),
++                "cause": "damage",
++            }
+         })
+ 
+ 
+-def handle_death(event, session):
+-    npc = find_npc(session, event["target"])
+-    if npc:
+-        npc.is_active = False
++def on_death(session, event):
++    """Handle death event by ensuring target is marked inactive."""
++    target = find_npc(session, event.get("target"))
++    if target:
++        target.is_active = False
+ 
+ 
+ def register(bus, session):
+-    bus.subscribe("damage", lambda e: handle_damage(e, session))
+-    bus.subscribe("death", lambda e: handle_death(e, session))
+\ No newline at end of file
++    """Register all combat system handlers with the event bus.
++    
++    Priority -10 ensures combat runs before emotion/memory systems.
++    """
++    bus.subscribe("damage", lambda s, e: on_damage(s, e), priority=-10)
++    bus.subscribe("death", lambda s, e: on_death(s, e), priority=-10)
+diff --git a/src/app/rpg/systems/debug_system.py b/src/app/rpg/systems/debug_system.py
+new file mode 100644
+index 0000000..3ac5663
+--- /dev/null
++++ b/src/app/rpg/systems/debug_system.py
+@@ -0,0 +1,25 @@
++"""Debug System - Logs all events for debugging and development.
++
++Subscribes to:
++- "*": Wildcard - logs all events
++
++Priority: 20 (runs last to observe final state of all events)
++"""
++
++
++def on_any_event(session, event):
++    """Log all events to stdout.
++    
++    Format: [EVENT] {event_type} {event_details}
++    """
++    etype = event.get("type", "unknown")
++    print(f"[EVENT] {etype}: {dict(event)}")
++
++
++def register(bus, session):
++    """Register debug system handlers with the event bus.
++    
++    Priority 20 ensures debug logging runs last to observe final state.
++    Disabled by default - call register_debug(bus, session) to enable.
++    """
++    bus.subscribe("*", on_any_event, priority=20)
+\ No newline at end of file
+diff --git a/src/app/rpg/systems/emotion_system.py b/src/app/rpg/systems/emotion_system.py
+new file mode 100644
+index 0000000..2c7da75
+--- /dev/null
++++ b/src/app/rpg/systems/emotion_system.py
+@@ -0,0 +1,104 @@
++"""Emotion System - Handles NPC emotional responses to events.
++
++Subscribes to:
++- "damage": Increases anger and fear for targeted NPCs with intensity weighting
++- "death": Increases fear for NPCs who perceive the death
++
++Priority: 0 (default, runs after combat but before memory)
++
++Fixes:
++- Uses centralized entity lookup to prevent logic drift
++- Distance computed once and cached (no redundant computations)
++"""
++
++from rpg.spatial import distance
++from rpg.emotion import apply_event_emotion
++from rpg.utils.entity_lookup import find_entity as find_npc
++
++
++def on_damage(session, event):
++    """Apply emotional response to damage events for all NPCs.
++    
++    NPCs that are targeted by damage receive anger and fear increases.
++    Intensity weighting applied:
++    - Target (being attacked): intensity = 2.0
++    - Source (attacker): intensity = 0.5
++    - Others (nearby): intensity = 1.0 if within perception radius
++    """
++    target_id = event.get("target")
++    source_id = event.get("source")
++    target = find_npc(session, target_id) if target_id else None
++
++    for npc in session.npcs:
++        if not npc.is_active:
++            continue
++
++        # Calculate emotional intensity based on relationship to event
++        intensity = 1.0  # Default for bystanders
++
++        if event.get("target") == npc.id:
++            # NPC is the victim - strongest response
++            intensity = 2.0
++        elif event.get("source") == npc.id:
++            # NPC is the attacker - reduced response
++            intensity = 0.5
++        else:
++            # Bystander - check perception radius (spatial filtering)
++            if target and target.is_active:
++                dist = distance(npc.position, target.position)
++                if dist > npc.perception_radius:
++                    # Too far to perceive - skip emotional response
++                    continue
++
++        apply_event_emotion(npc, event, intensity=intensity)
++
++
++def on_death(session, event):
++    """Apply emotional response when an NPC dies.
++    
++    Nearby NPCs or allies of the deceased receive fear increases.
++    Distance is computed once and cached for reuse.
++    """
++    target_id = event.get("target")
++    target = find_npc(session, target_id)
++
++    for npc in session.npcs:
++        if not npc.is_active:
++            continue
++
++        # Skip if target is already removed/position unavailable
++        if not target or not hasattr(target, 'position'):
++            # Still process basic death emotion for all active NPCs
++            death_event = {
++                "type": "ally_killed",
++                "target": target_id,
++                "tick": session.world.time
++            }
++            apply_event_emotion(npc, death_event)
++            continue
++
++        # Check if NPC can perceive the death (spatial filtering)
++        # Distance is computed once and cached for both checks
++        try:
++            dist = distance(npc.position, target.position)
++            if dist <= npc.perception_radius + 2:
++                death_event = {
++                    "type": "ally_killed",
++                    "target": target_id,
++                    "tick": session.world.time
++                }
++                # Higher intensity if NPC is near the death
++                intensity = 2.0 if dist <= 1 else 1.0
++                apply_event_emotion(npc, death_event, intensity=intensity)
++        except AttributeError:
++            pass
++
++
++def register(bus, session):
++    """Register all emotion system handlers with the event bus.
++    
++    Priority 0 (default) ensures emotion runs after combat (-10)
++    but before memory (10).
++    """
++    bus.subscribe("damage", lambda s, e: on_damage(s, e), priority=0)
++    bus.subscribe("death", lambda s, e: on_death(s, e), priority=0)
+\ No newline at end of file
+diff --git a/src/app/rpg/systems/memory_system.py b/src/app/rpg/systems/memory_system.py
+new file mode 100644
+index 0000000..605811a
+--- /dev/null
++++ b/src/app/rpg/systems/memory_system.py
+@@ -0,0 +1,148 @@
++"""Memory System - Handles NPC memory updates from perceived events.
++
++Subscribes to:
++- "*": Wildcard - all events are considered for memory recording
++
++Priority: 10 (runs last after state mutations are complete)
++
++Fixes:
++- Spatial perception filtering (NPCs only remember events they can perceive)
++- Event type validation before recording
++- Uses centralized entity lookup to prevent logic drift
++"""
++
++from rpg.spatial import distance
++from rpg.utils.entity_lookup import find_npc as _find_npc
++
++
++def find_npc(session, npc_id):
++    """Find an NPC by their ID in the session.
++    
++    Backward-compatible wrapper that delegates to centralized entity lookup.
++    """
++    return _find_npc(session, npc_id)
++
++
++def can_perceive(npc, event, session) -> bool:
++    """Check if an NPC can perceive an event based on spatial and visibility rules.
++    
++    Returns True if:
++    - Event has no target (global event like weather)
++    - Target is not found (assume perceivable)
++    - Target is within perception radius
++    
++    Returns False if:
++    - Target exists and is outside perception radius
++    """
++    target_id = event.get("target")
++    if not target_id:
++        # Global events (weather, time, etc.) are always perceivable
++        return True
++
++    target = find_npc(session, target_id)
++    if not target:
++        # Target not found - assume perceivable (don't lose memory due to stale refs)
++        return True
++
++    return distance(npc.position, target.position) <= npc.perception_radius
++
++
++def interpret_event(npc, event) -> str:
++    """Interpret the meaning of an event from an NPC's perspective."""
++    event_type = event.get("type")
++    
++    if event_type == "damage":
++        if event.get("target") == npc.id:
++            return "I was attacked"
++        elif event.get("source") == npc.id:
++            return "I attacked someone"
++        else:
++            return "violence nearby"
++    
++    if event_type == "death":
++        return "someone died"
++    
++    if event_type == "heal":
++        if event.get("target") == npc.id:
++            return "I was healed"
++        return "healing nearby"
++    
++    return "unknown"
++
++
++def compute_importance(event: dict) -> float:
++    """Heuristic importance scoring for events.
++    
++    Higher values = more memorable.
++    - death: 5.0 (highest, stays in memory longest)
++    - damage: scales with amount (1.0-3.0)
++    - dialogue: 1.5
++    - default: 1.0
++    """
++    etype = event.get("type")
++    
++    if etype == "death":
++        return 5.0
++    if etype == "damage":
++        return min(3.0, event.get("amount", 1) / 5)
++    if etype == "dialogue":
++        return 1.5
++    if etype == "heal":
++        return 2.0
++    
++    return 1.0
++
++
++def on_any_event(session, event):
++    """Process any event for NPC memory recording.
++    
++    Only NPCs that can perceive the event (spatial filtering) add it to memory.
++    Memory pruning is applied after processing.
++    
++    Note: npc.memory is a dict with "events", "facts", "relationships" keys.
++    We append to npc.memory["events"].
++    """
++    from rpg.memory import _prune_memory
++
++    for npc in session.npcs:
++        if not npc.is_active:
++            continue
++        
++        # Only record events the NPC can perceive
++        if can_perceive(npc, event, session):
++            # Build visibility list for future stealth/hidden info support
++            visibility = [npc.id]
++            target = find_npc(session, event.get("target"))
++            source = find_npc(session, event.get("source"))
++            if target:
++                visibility.append(target.id)
++            if source:
++                visibility.append(source.id)
++            visibility = list(set(visibility))  # dedupe
++            
++            memory_entry = {
++                "timestamp": session.world.time,
++                "type": event.get("type"),
++                "source": event.get("source"),
++                "target": event.get("target"),
++                "data": dict(event),
++                "importance": compute_importance(event),
++                "actor": event.get("source"),
++                "meaning": interpret_event(npc, event),
++                "tick": session.world.time,
++                "visibility": visibility,
++            }
++            npc.memory["events"].append(memory_entry)
++
++    # Prune memory for all NPCs
++    for npc in session.npcs:
++        if npc.is_active:
++            _prune_memory(npc)
++
++
++def register(bus, session):
++    """Register memory system handlers with the event bus.
++    
++    Priority 10 ensures memory runs after combat (-10) and emotion (0).
++    """
++    bus.subscribe("*", on_any_event, priority=10)
+\ No newline at end of file
+diff --git a/src/app/rpg/systems/scene_system.py b/src/app/rpg/systems/scene_system.py
+new file mode 100644
+index 0000000..922f3ac
+--- /dev/null
++++ b/src/app/rpg/systems/scene_system.py
+@@ -0,0 +1,32 @@
++"""Scene System - Tracks events for scene generation and narrative context.
++
++Subscribes to:
++- "*": Wildcard - all events are recorded for scene generation
++
++Priority: 5 (runs after emotion but before memory for narrative richness)
++"""
++
++
++def on_any_event(session, event):
++    """Record all events for scene generation.
++    
++    Events are appended to the session's _scene_events list
++    for use by the scene generator.
++    
++    Note: The event from the EventBus is a MappingProxyType (immutable).
++    We convert it to a mutable dict for downstream systems that may
++    expect mutable dicts.
++    """
++    if not hasattr(session, "_scene_events"):
++        session._scene_events = []
++    
++    session._scene_events.append(dict(event))
++
++
++def register(bus, session):
++    """Register scene system handlers with the event bus.
++    
++    Priority 5 ensures scene recording runs after combat (-10) and emotion (0)
++    but before memory (10).
++    """
++    bus.subscribe("*", on_any_event, priority=5)
+\ No newline at end of file

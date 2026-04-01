@@ -1,0 +1,229 @@
+🎬 STORY DIRECTOR SYSTEM (FULL PRODUCTION DIFF)
+
+This is plug-and-play into your current architecture.
+
+1. 🧠 Core Design
+What it controls
+pacing (slow / tense / climax)
+arcs (conflict, mystery, alliance)
+tension level
+allowed behaviors
+What it NEVER does
+override logic completely
+force impossible actions
+2. 📁 New File: rpg/story/story_director.py
+class StoryDirector:
+    def __init__(self):
+        self.phase = "intro"   # intro → build → tension → climax → resolution
+        self.tension = 0.0     # 0 → 1
+        self.arc = None
+
+        self.history = []
+        self.cooldowns = {}
+
+    # -------------------------
+    # MAIN ENTRY POINT
+    # -------------------------
+    def adjust_goal(self, npc, proposed_goal, context):
+        self._update_tension(context)
+        self._update_phase()
+
+        goal = proposed_goal
+
+        # Apply arc shaping
+        if self.arc == "conflict":
+            goal = self._bias_conflict(npc, goal)
+
+        elif self.arc == "alliance":
+            goal = self._bias_alliance(npc, goal)
+
+        elif self.arc == "mystery":
+            goal = self._bias_mystery(npc, goal)
+
+        # Apply pacing rules
+        goal = self._apply_pacing(npc, goal)
+
+        return goal
+3. 🎯 Tension System
+def _update_tension(self, context):
+    events = context.get("recent_events", [])
+
+    delta = 0.0
+
+    for e in events:
+        if e["type"] == "damage":
+            delta += 0.05
+        elif e["type"] == "death":
+            delta += 0.2
+        elif e["type"] == "assist":
+            delta -= 0.03
+
+    self.tension = max(0.0, min(1.0, self.tension + delta))
+4. 🎬 Phase Progression
+def _update_phase(self):
+    if self.tension < 0.2:
+        self.phase = "intro"
+    elif self.tension < 0.5:
+        self.phase = "build"
+    elif self.tension < 0.8:
+        self.phase = "tension"
+    elif self.tension >= 0.8:
+        self.phase = "climax"
+5. ⚖️ Goal Shaping (CORE MAGIC)
+Conflict Bias
+def _bias_conflict(self, npc, goal):
+    if "attack" in goal["name"]:
+        goal["priority"] *= 1.3
+
+    if "talk" in goal["name"]:
+        goal["priority"] *= 0.7
+
+    return goal
+Alliance Bias
+def _bias_alliance(self, npc, goal):
+    if "assist" in goal["name"]:
+        goal["priority"] *= 1.5
+
+    if "attack" in goal["name"]:
+        goal["priority"] *= 0.6
+
+    return goal
+Mystery Bias
+def _bias_mystery(self, npc, goal):
+    if "explore" in goal["name"]:
+        goal["priority"] *= 1.4
+
+    if "attack" in goal["name"]:
+        goal["priority"] *= 0.8
+
+    return goal
+6. ⏱️ Pacing Control (VERY IMPORTANT)
+def _apply_pacing(self, npc, goal):
+    if self.phase == "intro":
+        if "attack" in goal["name"]:
+            goal["priority"] *= 0.3
+
+    elif self.phase == "tension":
+        goal["priority"] *= 1.2
+
+    elif self.phase == "climax":
+        if "attack" in goal["name"]:
+            goal["priority"] *= 1.5
+
+    return goal
+7. 🧩 Hook Into GOAP
+File: rpg/goap/planner.py
+BEFORE
+best_goal = select_best_goal(goals)
+AFTER
+best_goal = select_best_goal(goals)
+
+if session.story_director:
+    best_goal = session.story_director.adjust_goal(
+        npc,
+        best_goal,
+        context={
+            "recent_events": session.event_log[-10:]
+        }
+    )
+8. 🌍 Hook Into Session
+File: rpg/core/session.py
+from rpg.story.story_director import StoryDirector
+
+class Session:
+    def __init__(self):
+        ...
+        self.story_director = StoryDirector()
+9. 🧠 Optional: Dynamic Arc Switching (BIG UPGRADE)
+def auto_select_arc(self):
+    if self.tension < 0.2:
+        self.arc = "mystery"
+    elif self.tension < 0.6:
+        self.arc = "alliance"
+    else:
+        self.arc = "conflict"
+
+Call inside _update_phase().
+
+10. 🎭 LLM Grounding Integration (CRITICAL)
+File: scene_grounding.py
+
+Add:
+
+base["story"] = {
+    "phase": session.story_director.phase,
+    "tension": session.story_director.tension,
+    "arc": session.story_director.arc,
+}
+Prompt Injection
+Story State:
+- Phase: {phase}
+- Tension: {tension}
+- Arc: {arc}
+
+Follow tone:
+- intro → calm, exploratory
+- tension → cautious, reactive
+- climax → decisive, emotional
+11. 🚨 Anti-Repetition Guard (VERY IMPORTANT)
+def prevent_repetition(self, npc, goal):
+    key = (npc.id, goal["name"])
+
+    if self.cooldowns.get(key, 0) > 0:
+        goal["priority"] *= 0.2
+
+    self.cooldowns[key] = 3
+    return goal
+
+Tick down each frame.
+
+12. 🧪 Example Outcome
+WITHOUT director:
+NPC attacks randomly
+pacing chaotic
+no narrative arc
+WITH director:
+Phase: intro
+NPCs observe, talk
+Phase: build
+suspicion rises
+Phase: tension
+small fights
+Phase: climax
+full conflict
+Phase: resolution (extendable)
+alliances form / aftermath
+🔥 Why This Is Powerful
+
+You now have:
+
+Simulation (bottom-up realism)
++
+Narrative control (top-down shaping)
+=
+Emergent storytelling engine
+⚠️ Final Warning (Important)
+
+Do NOT let StoryDirector:
+
+inject actions
+override physics
+fabricate events
+
+It should ONLY:
+
+bias decisions, not control outcomes
+
+🚀 Next Level (If You Want)
+
+If you want to go beyond Talemate:
+
+👉 Multi-arc system (parallel storylines)
+👉 Character-specific arcs (hero vs villain paths)
+👉 Director memory (remembers story beats)
+👉 LLM-generated arcs (dynamic storytelling)
+
+🧠 Final Truth
+
+Without this system, your AI is smart but directionless
+With it, your AI becomes a storyteller

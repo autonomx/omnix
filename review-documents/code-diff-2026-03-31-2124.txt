@@ -1,0 +1,69 @@
+========================================================================
+RPG Design Implementation - Code Diff
+Generated: 2026-03-31 21:24 (America/Vancouver, UTC-7:00)
+========================================================================
+
+This diff shows all changes made to implement the RPG design requirements
+from rpg-design.txt.
+
+========================================================================
+NEW FILES CREATED
+========================================================================
+
+1. src/app/rpg/memory/consolidation.py
+   - Memory consolidation system to prevent memory explosion
+   - Merges repeated events into consolidated memories
+   - Converts episodic patterns into semantic beliefs
+   - Prunes low-importance old memories
+
+2. src/app/rpg/memory/relationships.py
+   - Persistent relationship memory system between NPCs
+   - Tracks trust, fear, anger, affection, respect per entity pair
+   - Event-driven relationship updates (damage, death, heal, dialogue)
+   - Goal overrides for grudges, alliances, betrayals
+   - Relationship decay toward neutrality over time
+
+========================================================================
+MODIFIED FILES
+========================================================================
+
+1. src/app/rpg/memory/retrieval.py (+180 lines)
+   - Added MEMORY_TYPES constants (episodic/semantic/relationship)
+   - Added RETRIEVAL_WEIGHTS profiles for different contexts
+   - Added retrieve_with_filters() for structured query retrieval
+   - Added _filter_memories() for target/type/time filtering
+   - New retrieval modes: query_threat, query_emotional, query_conflict, query_matters_now
+
+2. src/app/rpg/memory/__init__.py (+22 exports)
+   - Added imports for retrieval exports (retrieve_with_filters, MEMORY_TYPES, RETRIEVAL_WEIGHTS)
+   - Added imports for consolidation exports (consolidate_memories, merge_repeated_events, convert_to_semantic)
+
+3. src/app/rpg/systems/memory_system.py (+110 lines)
+   - Added on_relationship_event() handler for damage/deal/heal/dialogue events
+   - Added _build_memory_entry() with memory_type classification (episodic)
+   - Added event bus subscriptions for relationship events at priority 5
+   - Memory system now integrates with relationship system
+
+4. src/app/rpg/scene/grounding.py (+90 lines)
+   - Added _build_entity_grounding() with intent, emotional_state, relationships, memories
+   - Entity grounding now includes: hp, position, intent (current_goal), emotional_state, relationship summaries, recent memories
+   - Enhanced relationship extraction from memory-based relationship system
+
+5. src/app/rpg/story/director.py (+130 lines)
+   - Added _detect_memory_driven_arcs() for emergent arc detection from NPC memories
+   - Added _detect_revenge_arc() - scans damage/death patterns
+   - Added _detect_alliance_arc() - scans healing patterns
+   - Added _arc_exists() duplicate prevention
+   - update() now calls memory detection each tick
+
+6. src/app/rpg/ai/goap/actions.py (+70 lines)
+   - Added build_memory_based_state() for memory-informed GOAP state
+   - State includes: has_hostile_memory, hostile_targets, has_ally, allies, has_healer_nearby
+   - Memory-based preconditions for context-aware planning
+
+7. src/app/rpg/ai/goap/__init__.py (+1 export)
+   - Added build_memory_based_state export
+
+========================================================================
+END OF DIFF
+========================================================================
