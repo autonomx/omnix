@@ -1,0 +1,3000 @@
+﻿diff --git a/src/app/rpg/cognitive/__init__.py b/src/app/rpg/cognitive/__init__.py
+index 1307ed5..132cd90 100644
+--- a/src/app/rpg/cognitive/__init__.py
++++ b/src/app/rpg/cognitive/__init__.py
+@@ -1,16 +1,32 @@
+-"""Cognitive Layer ΓÇö Tier 11: Hybrid Cognitive Simulation.
++"""Cognitive Layer ΓÇö Tier 11, 12 & 13: Hybrid Cognitive Simulation + Narrative Convergence + Emotional Layer.
+ 
+-This package implements Tier 11 of the RPG design specification: a hybrid
+-cognitive simulation engine that augments the deterministic core with
+-controlled LLM-assisted cognitive capabilities.
++This package implements Tier 11, 12, and 13 of the RPG design specification:
+ 
+-Architecture:
+-    Layer 1: Intent Enrichment (LLM-assisted, not replaced)
+-    Layer 2: Memory-Informed Planning
+-    Layer 3: LLM-Enhanced Dialogue Engine
+-    Layer 4: Persistent Identity System
+-    Layer 5: Coalition System
+-    Layer 6: Learning Feedback System
++Tier 11: Hybrid Cognitive Simulation Engine (augments deterministic core with
++controlled LLM-assisted cognitive capabilities)
++    - Layer 1: Intent Enrichment (LLM-assisted, not replaced)
++    - Layer 2: Memory-Informed Planning
++    - Layer 3: LLM-Enhanced Dialogue Engine
++    - Layer 4: Persistent Identity System
++    - Layer 5: Coalition System
++    - Layer 6: Learning Feedback System
++
++Tier 12: Narrative Convergence Engine (System-Level Coherence Control)
++    - Decision Arbitration Layer (conflict resolution)
++    - Coalition Commitment Lock (prevent intent oscillation)
++    - Narrative Gravity (convergence, payoff, resolution)
++
++Tier 13: Emotional + Experiential Layer (Research-Grade Architecture)
++    - Resolution Engine (emotionally satisfying resolutions)
++    - Emotion Modifier (emotion -> decision/dialogue mapping)
++    - Narrative Memory Layer (historical awareness)
++    - Narrative Diversity Injection (prevent over-convergence)
++    - Player Narrative Override (player as gravitational center)
++
++Tier 14 Fixes: Player Experience & Perception Layer Patches
++    - Emotional Differentiation Drift (prevent homogenization)
++    - Resolution Entropy Injection (prevent predictability)
++    - Contextual Memory Relevance (prevent overfitting)
+ 
+ Design Principles:
+     - Deterministic core remains unchanged
+@@ -18,26 +34,89 @@ Design Principles:
+     - No LLM planning every tick
+     - No LLM mutating world directly
+     - Guardrails prevent LLM from breaking game logic
++    - Tier 12 adds system-wide coherence control
++    - Tier 13 adds emotional depth and continuity
++    - Tier 14 patches prevent long-term degradation
+ 
+ Usage:
++    # Basic Tier 11
+     cognitive = CognitiveLayer(llm_client=llm)
+-    intention = cognitive.enrich_intent(brain.decide(character, world))
+-    plan = cognitive.memory_informed_plan(intention, character)
+-    dialogue = cognitive.generate_dialogue(speaker, listener, context)
++    
++    # With Tier 12 components
++    resolver = DecisionResolver()
++    lock_manager = CoalitionLockManager()
++    gravity = NarrativeGravity()
++    
++    # With Tier 13 components
++    resolution = ResolutionEngine()
++    emotion_mod = EmotionModifier()
++    narrative_memory = NarrativeMemory()
++    
++    # Full pipeline
++    base_intent = brain.decide(character, world_state)
++    emotion_result = emotion_mod.apply(character, base_intent)
++    enriched = enrichment.enrich(base_intent, character, world_state)
++    final = resolver.resolve(base_intent, enriched, character)
++    final = lock_manager.enforce_lock(char_id, final, tick)
+ """
+ 
+ from __future__ import annotations
+ 
++# Tier 11 exports
+ from .intent_enrichment import IntentEnrichment
+ from .identity import IdentitySystem
+ from .coalition import CoalitionSystem
+ from .learning import LearningSystem
+ from .cognitive_layer import CognitiveLayer
+ 
++# Tier 12 exports
++from .decision_resolver import DecisionResolver
++from .coalition_lock import CoalitionLockManager, CoalitionLock
++from .narrative_gravity import NarrativeGravity, StorylineState, StorylineWeight
++
++# Tier 13 exports
++from .resolution_engine import ResolutionEngine, ResolutionResult
++from .emotion_modifier import (
++    EmotionModifier,
++    EmotionalState,
++    DecisionModification,
++    apply_personality_bias,
++    inject_variance,
++)
++from .narrative_memory import (
++    NarrativeMemory,
++    ArcMemory,
++    EmotionalResidue,
++    relevance_score,
++    filter_memories_by_relevance,
++)
++
+ __all__ = [
++    # Tier 11
+     "IntentEnrichment",
+-    "IdentitySystem", 
++    "IdentitySystem",
+     "CoalitionSystem",
+     "LearningSystem",
+     "CognitiveLayer",
++    # Tier 12
++    "DecisionResolver",
++    "CoalitionLockManager",
++    "CoalitionLock",
++    "NarrativeGravity",
++    "StorylineState",
++    "StorylineWeight",
++    # Tier 13
++    "ResolutionEngine",
++    "ResolutionResult",
++    "EmotionModifier",
++    "EmotionalState",
++    "DecisionModification",
++    "NarrativeMemory",
++    "ArcMemory",
++    "EmotionalResidue",
++    # Tier 14 Fixes
++    "apply_personality_bias",
++    "inject_variance",
++    "relevance_score",
++    "filter_memories_by_relevance",
+ ]
+diff --git a/src/app/rpg/cognitive/emotion_modifier.py b/src/app/rpg/cognitive/emotion_modifier.py
+new file mode 100644
+index 0000000..1864ae1
+--- /dev/null
++++ b/src/app/rpg/cognitive/emotion_modifier.py
+@@ -0,0 +1,584 @@
++"""Emotion Modifier ΓÇö Tier 13: Emotional + Experiential Layer.
++
++This module implements Tier 13's Emotional State Model that maps
++character emotions to decision modifiers, creating believable
++and emotionally consistent NPC behavior.
++
++Problem:
++    NPCs make mechanically optimal decisions regardless of emotional state.
++    An angry NPC shouldn't calmly negotiate.
++    A fearful NPC shouldn't bravely face danger.
++    
++    Result: behavior is logical but not believable.
++
++Solution:
++    EmotionModifier tracks emotional states and applies modifiers
++    to NPC decisions, priorities, and dialogue based on current emotions.
++
++    Emotional State Model:
++    - anger: Increases aggression, decreases diplomacy
++    - fear: Increases avoidance, decreases confrontation
++    - trust: Increases cooperation, decreases betrayal
++    - sadness: Decreases initiative, increases passivity
++    - joy: Increases risk-taking, increases social behavior
++
++Usage:
++    modifier = EmotionModifier()
++    modified_intent = modifier.apply(character, base_intent)
++
++Architecture:
++    Emotion -> Decision Mapping:
++    anger -> aggression (+40%), diplomacy (-30%), revenge (+50%)
++    fear -> avoidance (+40%), caution (+30%), flight (+50%)
++    trust -> cooperation (+30%), loyalty (+20%), sharing (+25%)
++    sadness -> withdrawal (+30%), help-seeking (-20%), passivity (+40%)
++    joy -> risk-taking (+30%), generosity (+20%), socializing (+25%)
++
++    Emotion -> Dialogue Mapping:
++    anger -> terse, aggressive, threatening language
++    fear -> hesitant, uncertain, pleading language
++    trust -> warm, cooperative, honest language
++    sadness -> subdued, melancholic, withdrawn language
++    joy -> enthusiastic, positive, engaging language
++
++Design Rules:
++    - Every emotion has quantifiable decision impact
++    - Emotions decay over time (handled by emotion_system)
++    - Extreme emotions can block certain actions entirely
++    - Multiple emotions can combine for complex effects
++    - Emotional memory persists for important events
++"""
++
++from __future__ import annotations
++
++import logging
++import random
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Optional
++
++logger = logging.getLogger(__name__)
++
++# Tier 14 Fix: Emotional Differentiation Drift
++# Prevents emotional homogenization over long runs
++
++def apply_personality_bias(emotions: Dict[str, float], personality: Dict[str, float]) -> Dict[str, float]:
++    """Apply personality-based emotional bias to prevent homogenization.
++    
++    Each character's personality adds a slight bias to their emotions,
++    ensuring characters stay emotionally distinct even after many events.
++    
++    Args:
++        emotions: Current emotional state.
++        personality: Personality traits that influence emotional responses.
++        
++    Returns:
++        Updated emotional state with personality bias applied.
++    """
++    result = dict(emotions)
++    for e in result:
++        bias = personality.get(e, 0.0)
++        result[e] = max(0.0, min(1.0, result[e] + bias * 0.1))
++    return result
++
++
++def inject_variance(emotions: Dict[str, float], magnitude: float = 0.05) -> Dict[str, float]:
++    """Inject small random variance to prevent emotional flattening.
++    
++    Adds a noise floor to emotions to prevent everyone from converging
++    to the same emotional averages over time.
++    
++    Args:
++        emotions: Current emotional state.
++        magnitude: Maximum variance to inject (default 0.05).
++        
++    Returns:
++        Emotional state with injected variance.
++    """
++    result = dict(emotions)
++    for e in result:
++        result[e] = max(0.0, min(1.0, result[e] + random.uniform(-magnitude, magnitude)))
++    return result
++
++# Default emotion thresholds
++ANGER_THRESHOLD = 0.5
++FEAR_THRESHOLD = 0.5
++TRUST_THRESHOLD = 0.3
++SADNESS_THRESHOLD = 0.4
++JOY_THRESHOLD = 0.4
++
++# Action blocking thresholds (0.0-1.0)
++BLOCKING_THRESHOLDS = {
++    "fear_block_confront": 0.8,
++    "sadness_block_initiative": 0.8,
++    "anger_block_diplomacy": 0.7,
++}
++
++# Emotion to decision modifier mapping
++EMOTION_DECISION_MODIFIERS = {
++    "anger": {
++        "aggression": 0.4,
++        "diplomacy": -0.3,
++        "revenge": 0.5,
++        "risk_tolerance": 0.2,
++        "patience": -0.4,
++    },
++    "fear": {
++        "avoidance": 0.4,
++        "caution": 0.3,
++        "flight": 0.5,
++        "help_seeking": 0.3,
++        "risk_tolerance": -0.4,
++    },
++    "trust": {
++        "cooperation": 0.3,
++        "loyalty": 0.2,
++        "sharing": 0.25,
++        "diplomacy": 0.2,
++        "patience": 0.1,
++    },
++    "sadness": {
++        "withdrawal": 0.3,
++        "help_seeking": -0.2,
++        "passivity": 0.4,
++        "risk_tolerance": -0.3,
++        "socializing": -0.3,
++    },
++    "joy": {
++        "risk_tolerance": 0.3,
++        "generosity": 0.2,
++        "socializing": 0.25,
++        "cooperation": 0.15,
++        "creativity": 0.2,
++    },
++    "grief": {
++        "withdrawal": 0.4,
++        "vengeance": 0.3,
++        "memorializing": 0.5,
++        "risk_tolerance": -0.2,
++    },
++    "guilt": {
++        "reparation": 0.4,
++        "avoidance": 0.2,
++        "honesty": 0.3,
++        "submission": 0.2,
++    },
++    "pride": {
++        "assertiveness": 0.3,
++        "risk_tolerance": 0.2,
++        "competition": 0.4,
++        "diplomacy": -0.1,
++    },
++}
++
++# Emotion to dialogue style mapping
++EMOTION_DIALOGUE_MODIFIERS = {
++    "anger": {
++        "tone": "aggressive",
++        "length": "short",
++        "vocabulary": "harsh",
++        "directness": 0.8,
++        "formality": -0.2,
++    },
++    "fear": {
++        "tone": "hesitant",
++        "length": "variable",
++        "vocabulary": "uncertain",
++        "directness": -0.3,
++        "formality": 0.1,
++    },
++    "trust": {
++        "tone": "warm",
++        "length": "normal",
++        "vocabulary": "honest",
++        "directness": 0.2,
++        "formality": -0.1,
++    },
++    "sadness": {
++        "tone": "melancholic",
++        "length": "short",
++        "vocabulary": "subdued",
++        "directness": -0.1,
++        "formality": 0.0,
++    },
++    "joy": {
++        "tone": "enthusiastic",
++        "length": "long",
++        "vocabulary": "positive",
++        "directness": 0.1,
++        "formality": -0.2,
++    },
++}
++
++# Action type categories for emotion filtering
++AGGRESSIVE_ACTIONS = {"attack", "threaten", "intimidate", "destroy", "steal"}
++DIPLOMATIC_ACTIONS = {"negotiate", "alliance", "trade", "persuade", "appease"}
++AVOIDANCE_ACTIONS = {"flee", "hide", "evade", "retreat", "wait"}
++COOPERATIVE_ACTIONS = {"help", "share", "assist", "cooperate", "support"}
++REVENGE_ACTIONS = {"revenge", "retaliate", "punish", "counter_attack"}
++
++
++@dataclass
++class EmotionalState:
++    """Complete emotional state of a character."""
++    
++    emotions: Dict[str, float] = field(default_factory=lambda: {
++        "anger": 0.0,
++        "fear": 0.0,
++        "trust": 0.5,
++        "sadness": 0.0,
++        "joy": 0.0,
++        "grief": 0.0,
++        "guilt": 0.0,
++        "pride": 0.0,
++    })
++    emotional_volatility: float = 0.5
++    emotional_memory: List[Dict[str, Any]] = field(default_factory=list)
++    last_update_tick: int = 0
++    
++    @property
++    def dominant_emotion(self) -> str:
++        """Get the current dominant emotion."""
++        if not self.emotions:
++            return "neutral"
++        max_emotion = max(self.emotions.items(), key=lambda x: x[1])
++        if max_emotion[1] < 0.1:
++            return "neutral"
++        return max_emotion[0]
++    
++    def get_dominant_intensity(self) -> float:
++        """Get intensity of dominant emotion."""
++        if not self.emotions:
++            return 0.0
++        return max(self.emotions.values())
++    
++    def is_above_threshold(self, emotion: str, threshold: float) -> bool:
++        """Check if specific emotion exceeds threshold."""
++        return self.emotions.get(emotion, 0.0) >= threshold
++    
++    def add_emotional_event(self, event: Dict[str, Any]) -> None:
++        """Record an emotional event for memory tracking."""
++        self.emotional_memory.append({
++            "event": event,
++            "emotions_at_time": dict(self.emotions),
++        })
++        if len(self.emotional_memory) > 20:
++            self.emotional_memory = self.emotional_memory[-20:]
++    
++    def to_dict(self) -> Dict[str, Any]:
++        """Serialize emotional state to dict."""
++        return {
++            "emotions": dict(self.emotions),
++            "dominant_emotion": self.dominant_emotion,
++            "dominant_intensity": self.get_dominant_intensity(),
++            "volatility": self.emotional_volatility,
++            "memory_count": len(self.emotional_memory),
++        }
++
++
++@dataclass
++class DecisionModification:
++    """Result of applying emotional modifiers to a decision."""
++    
++    original_intent: Dict[str, Any]
++    modified_intent: Dict[str, Any]
++    emotion_applied: Dict[str, float]
++    modifiers_used: List[str]
++    was_blocked: bool = False
++    blocking_reason: str = ""
++    confidence: float = 0.8
++    
++    def to_dict(self) -> Dict[str, Any]:
++        """Serialize to dict."""
++        return {
++            "original_intent": dict(self.original_intent),
++            "modified_intent": dict(self.modified_intent),
++            "emotions_applied": dict(self.emotion_applied),
++            "modifiers_used": list(self.modifiers_used),
++            "was_blocked": self.was_blocked,
++            "blocking_reason": self.blocking_reason,
++            "confidence": self.confidence,
++        }
++
++
++class EmotionModifier:
++    """Applies emotional state modifiers to NPC decisions."""
++    
++    def __init__(self, thresholds: Optional[Dict[str, float]] = None):
++        """Initialize the EmotionModifier."""
++        self.thresholds = {
++            "anger": ANGER_THRESHOLD,
++            "fear": FEAR_THRESHOLD,
++            "trust": TRUST_THRESHOLD,
++            "sadness": SADNESS_THRESHOLD,
++            "joy": JOY_THRESHOLD,
++        }
++        if thresholds:
++            self.thresholds.update(thresholds)
++        
++        self._stats = {
++            "modifications_applied": 0,
++            "actions_blocked": 0,
++            "emotions_influencing": 0,
++            "dominant_emotions": {},
++        }
++    
++    def apply(
++        self,
++        character: Any,
++        intent: Dict[str, Any],
++        tick: int = 0,
++    ) -> DecisionModification:
++        """Apply emotional modifiers to a character's intent."""
++        self._stats["modifications_applied"] += 1
++        
++        emotional_state = self._get_emotional_state(character)
++        if emotional_state is None:
++            return DecisionModification(
++                original_intent=intent,
++                modified_intent=dict(intent),
++                emotion_applied={},
++                modifiers_used=[],
++                confidence=0.5,
++            )
++        
++        dominant = emotional_state.dominant_emotion
++        self._stats["dominant_emotions"][dominant] = (
++            self._stats["dominant_emotions"].get(dominant, 0) + 1
++        )
++        
++        # Check for action blocking
++        blocking_result = self._check_action_blocking(intent, emotional_state)
++        if blocking_result["blocked"]:
++            self._stats["actions_blocked"] += 1
++            return DecisionModification(
++                original_intent=intent,
++                modified_intent=self._create_blocked_intent(intent),
++                emotion_applied=emotional_state.emotions,
++                modifiers_used=[],
++                was_blocked=True,
++                blocking_reason=blocking_result["reason"],
++                confidence=0.9,
++            )
++        
++        # Apply emotion-based modifiers
++        modified_intent = dict(intent)
++        active_emotions = {}
++        modifiers_used = []
++        
++        for emotion, intensity in emotional_state.emotions.items():
++            if intensity < self.thresholds.get(emotion, 0.3):
++                continue
++            
++            active_emotions[emotion] = intensity
++            self._stats["emotions_influencing"] += 1
++            
++            emotion_modifiers = EMOTION_DECISION_MODIFIERS.get(emotion, {})
++            for modifier_key, modifier_value in emotion_modifiers.items():
++                modified_intent = self._apply_single_modifier(
++                    modified_intent, modifier_key, modifier_value, intensity
++                )
++                if modifier_key not in modifiers_used:
++                    modifiers_used.append(modifier_key)
++        
++        # Adjust priority based on dominant emotion
++        modified_intent["priority"] = self._adjust_priority(
++            modified_intent.get("priority", 5.0),
++            emotional_state,
++        )
++        
++        # Add emotional reasoning to intent
++        modified_intent["emotional_context"] = {
++            "dominant_emotion": dominant,
++            "dominant_intensity": emotional_state.get_dominant_intensity(),
++            "active_emotions": dict(active_emotions),
++            "emotion_influence": sum(active_emotions.values()) / max(len(active_emotions), 1),
++        }
++        
++        emotional_state.last_update_tick = tick
++        
++        total_emotion = sum(active_emotions.values())
++        confidence = min(0.95, 0.5 + total_emotion * 0.1) if active_emotions else 0.5
++        
++        return DecisionModification(
++            original_intent=intent,
++            modified_intent=modified_intent,
++            emotion_applied=emotional_state.emotions,
++            modifiers_used=modifiers_used,
++            was_blocked=False,
++            confidence=confidence,
++        )
++    
++    def apply_dialogue_modifier(
++        self,
++        character: Any,
++        base_dialogue: str = "",
++    ) -> Dict[str, Any]:
++        """Get dialogue style modifiers based on character's emotions."""
++        emotional_state = self._get_emotional_state(character)
++        if emotional_state is None:
++            return {
++                "style": "neutral",
++                "tone": "neutral",
++                "suggested_modifications": {},
++            }
++        
++        dominant = emotional_state.dominant_emotion
++        dominant_intensity = emotional_state.get_dominant_intensity()
++        dialogue_mod = EMOTION_DIALOGUE_MODIFIERS.get(dominant, {})
++        
++        modifications = {}
++        for key, value in dialogue_mod.items():
++            if isinstance(value, (int, float)):
++                modifications[key] = value * dominant_intensity
++            else:
++                modifications[key] = value
++        
++        return {
++            "style": dominant,
++            "tone": dialogue_mod.get("tone", "neutral"),
++            "vocabulary": dialogue_mod.get("vocabulary", "neutral"),
++            "directness": modifications.get("directness", 0),
++            "formality": modifications.get("formality", 0),
++            "suggested_modifications": modifications,
++        }
++    
++    def get_emotional_memory_impact(
++        self,
++        character: Any,
++        target: str = "",
++        action_type: str = "",
++    ) -> Dict[str, float]:
++        """Get emotional memory impact for a specific target/action."""
++        emotional_state = self._get_emotional_state(character)
++        if emotional_state is None:
++            return {}
++        
++        impact = {}
++        for memory in emotional_state.emotional_memory[-5:]:
++            event = memory.get("event", {})
++            past_emotions = memory.get("emotions_at_time", {})
++            
++            if target and event.get("target") == target:
++                for emotion, intensity in past_emotions.items():
++                    if intensity > self.thresholds.get(emotion, 0.3):
++                        key = f"{emotion}_memory_{target}"
++                        impact[key] = impact.get(key, 0.0) + intensity * 0.3
++            
++            if action_type:
++                event_type = event.get("type", "")
++                if event_type == action_type:
++                    for emotion, intensity in past_emotions.items():
++                        key = f"{emotion}_pattern_{action_type}"
++                        impact[key] = impact.get(key, 0.0) + intensity * 0.2
++        
++        return impact
++    
++    def _get_emotional_state(self, character: Any) -> Optional[EmotionalState]:
++        """Extract emotional state from character."""
++        if character is None:
++            return None
++        
++        emotional_state = getattr(character, "emotional_state", None)
++        if isinstance(emotional_state, EmotionalState):
++            return emotional_state
++        
++        if isinstance(emotional_state, dict):
++            state = EmotionalState()
++            state.emotions.update(emotional_state.get("emotions", {}))
++            state.emotions.update(emotional_state)
++            return state
++        
++        emotions = getattr(character, "emotions", None)
++        if isinstance(emotions, dict):
++            state = EmotionalState()
++            state.emotions.update(emotions)
++            return state
++        
++        return None
++    
++    def _check_action_blocking(
++        self,
++        intent: Dict[str, Any],
++        emotional_state: EmotionalState,
++    ) -> Dict[str, Any]:
++        """Check if intent should be blocked due to extreme emotion."""
++        action_type = intent.get("type", "").lower()
++        
++        # Very fearful NPCs avoid confrontation
++        if action_type in AGGRESSIVE_ACTIONS | REVENGE_ACTIONS:
++            if emotional_state.is_above_threshold("fear", BLOCKING_THRESHOLDS["fear_block_confront"]):
++                return {"blocked": True, "reason": "Fear prevents confrontation"}
++        
++        # Very sad NPCs don't take initiative
++        if action_type in COOPERATIVE_ACTIONS | AGGRESSIVE_ACTIONS:
++            if emotional_state.is_above_threshold("sadness", BLOCKING_THRESHOLDS["sadness_block_initiative"]):
++                return {"blocked": True, "reason": "Sadness prevents action"}
++        
++        # Very angry NPCs can't be diplomatic
++        if action_type in DIPLOMATIC_ACTIONS:
++            if emotional_state.is_above_threshold("anger", BLOCKING_THRESHOLDS["anger_block_diplomacy"]):
++                return {"blocked": True, "reason": "Anger prevents diplomacy"}
++        
++        return {"blocked": False, "reason": ""}
++    
++    def _create_blocked_intent(self, intent: Dict[str, Any]) -> Dict[str, Any]:
++        """Create a blocked intent that waits for emotion to pass."""
++        blocked_intent = dict(intent)
++        blocked_intent["blocked"] = True
++        blocked_intent["block_reason"] = "emotional_override"
++        blocked_intent["priority"] = 0.0
++        return blocked_intent
++    
++    def _apply_single_modifier(
++        self,
++        intent: Dict[str, Any],
++        modifier_key: str,
++        modifier_value: float,
++        intensity: float,
++    ) -> Dict[str, Any]:
++        """Apply a single emotion modifier to the intent."""
++        modified_intent = dict(intent)
++        effective_modifier = modifier_value * intensity
++        
++        if modifier_key in ("aggression", "cooperation", "avoidance"):
++            current_priority = modified_intent.get("priority", 5.0)
++            new_priority = current_priority + effective_modifier * 2
++            modified_intent["priority"] = max(0.0, min(10.0, new_priority))
++        
++        modifiers = modified_intent.get("emotion_modifiers", {})
++        modifiers[modifier_key] = modifiers.get(modifier_key, 0.0) + effective_modifier
++        modified_intent["emotion_modifiers"] = modifiers
++        
++        return modified_intent
++    
++    def _adjust_priority(
++        self,
++        base_priority: float,
++        emotional_state: EmotionalState,
++    ) -> float:
++        """Adjust intent priority based on overall emotional state."""
++        adjustment = 0.0
++        adjustment += emotional_state.emotions.get("anger", 0.0) * 1.5
++        adjustment += emotional_state.emotions.get("fear", 0.0) * 1.0
++        adjustment -= emotional_state.emotions.get("sadness", 0.0) * 1.5
++        adjustment += emotional_state.emotions.get("joy", 0.0) * 0.5
++        return max(0.0, min(10.0, base_priority + adjustment))
++    
++    def get_stats(self) -> Dict[str, Any]:
++        """Get emotion modifier statistics."""
++        return {
++            **self._stats,
++            "action_block_rate": (
++                self._stats["actions_blocked"] / 
++                max(self._stats["modifications_applied"], 1)
++            ),
++        }
++    
++    def reset(self) -> None:
++        """Reset modifier statistics."""
++        self._stats = {
++            "modifications_applied": 0,
++            "actions_blocked": 0,
++            "emotions_influencing": 0,
++            "dominant_emotions": {},
++        }
+\ No newline at end of file
+diff --git a/src/app/rpg/cognitive/narrative_memory.py b/src/app/rpg/cognitive/narrative_memory.py
+new file mode 100644
+index 0000000..14836d0
+--- /dev/null
++++ b/src/app/rpg/cognitive/narrative_memory.py
+@@ -0,0 +1,614 @@
++"""Narrative Memory Layer ΓÇö Tier 13: Emotional + Experiential Layer.
++
++This module implements Tier 13's Narrative Memory Layer that provides
++historical awareness at the narrative level. Past arcs meaningfully
++shape future arcs, creating a world with a "legend" feeling.
++
++Problem:
++    Past arcs don't meaningfully shape future arcs.
++    World lacks continuity across sessions.
++    
++    Result: world feels disconnected, no legendary history.
++
++Solution:
++    NarrativeMemory tracks completed storylines, significant events,
++    and their lasting impact on the world. This memory feeds into:
++    - AgentBrain (informing decisions based on history)
++    - IntentEnrichment (LLM context about past events)
++    - NarrativeGravity (determining storyline importance)
++
++Usage:
++    memory = NarrativeMemory()
++    memory.store_arc("war_of_factions", {"outcome": "A defeated B", "impact": 0.4})
++    relevance = memory.get_relevant_history(current_storyline)
++
++Architecture:
++    Narrative History:
++    [
++        {
++            "arc": "war of factions",
++            "outcome": "A defeated B",
++            "participants": ["A", "B", "C"],
++            "impact": 0.4,  # Long-term world impact
++            "emotions": {"anger": 0.6, "fear": 0.3},
++            "tick_resolved": 150,
++            "resolution_type": "victory",
++        }
++    ]
++    
++    Query Methods:
++    - get_relevant_history(actors, event_type) -> similar past arcs
++    - get_reputation_history(character_id) -> past behavior patterns
++    - get_emotional_resonance(actors) -> leftover emotions
++
++Design Rules:
++    - All concluded arcs are stored
++    - Impact fades but never fully disappears
++    - Similar events trigger memory recall
++    - Emotional residue affects current decisions
++"""
++
++from __future__ import annotations
++
++import logging
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Optional, Tuple
++
++logger = logging.getLogger(__name__)
++
++# Memory decay rate per 100 ticks
++MEMORY_DECAY_RATE = 0.1
++
++# Tier 14 Fix: Contextual Memory Relevance threshold
++MEMORY_RELEVANCE_THRESHOLD = 0.3
++
++
++def relevance_score(
++    memory: ArcMemory,
++    current_context: Dict[str, Any],
++) -> float:
++    """Calculate contextual relevance score for a memory.
++    
++    Tier 14 Fix: Prevents NPCs from being too history-bound by making
++    memory retrieval selective, situational, and adaptive.
++    
++    Relevance is determined by:
++    - Tag similarity between memory and current context
++    - Time decay of the memory
++    - Emotional intensity of the memory
++    
++    Args:
++        memory: ArcMemory to score.
++        current_context: Current situation context with keys:
++            - tags: Set of current context tags/themes
++            - current_tick: Current simulation tick
++            
++    Returns:
++        Relevance score (0.0-1.0).
++    """
++    # Tag similarity
++    memory_tags = set(memory.consequences) | {memory.arc_type}
++    context_tags = set(current_context.get("tags", []))
++    
++    if context_tags:
++        tag_overlap = len(memory_tags & context_tags) / max(len(context_tags), 1)
++    else:
++        tag_overlap = 0.0
++    
++    # Time decay
++    ticks_since = current_context.get("current_tick", 0) - memory.tick_resolved
++    time_decay_factor = max(0.0, 1.0 - (MEMORY_DECAY_RATE * ticks_since / 100.0))
++    
++    # Emotional intensity
++    emotional_intensity = sum(memory.emotions.values()) / max(len(memory.emotions), 1)
++    
++    # Combined relevance
++    score = (
++        tag_overlap * 0.4
++        + time_decay_factor * 0.3
++        + emotional_intensity * 0.3
++    )
++    
++    return min(1.0, score * memory.relevance)
++
++
++def filter_memories_by_relevance(
++    memories: List[ArcMemory],
++    current_context: Dict[str, Any],
++    threshold: float = MEMORY_RELEVANCE_THRESHOLD,
++) -> List[ArcMemory]:
++    """Filter memories to only those contextually relevant.
++    
++    Prevents NPCs from overreacting to old events by filtering
++    out memories that aren't situationally relevant.
++    
++    Args:
++        memories: List of ArcMemory objects to filter.
++        current_context: Current situation context.
++        threshold: Minimum relevance score to include.
++        
++    Returns:
++        Filtered list of relevant ArcMemory objects.
++    """
++    return [
++        m for m in memories
++        if relevance_score(m, current_context) > threshold
++    ]
++
++# Maximum stored arcs
++MAX_STORED_ARCS = 100
++
++# Similarity threshold for relevant history
++SIMILARITY_THRESHOLD = 0.3
++
++
++@dataclass
++class ArcMemory:
++    """Memory of a completed story arc.
++    
++    Attributes:
++        arc_id: Unique identifier for the arc.
++        arc_type: Type of event/conflict.
++        outcome: Description of how the arc resolved.
++        participants: All participants in the arc.
++        impact: Long-term impact on world (0.0-1.0).
++        emotions: Emotional state at resolution.
++        tick_started: When the arc began.
++        tick_resolved: When the arc concluded.
++        resolution_type: How it resolved (victory, tragedy, etc.).
++        consequences: List of lasting consequences.
++        relevance: Current relevance score (decays over time).
++    """
++    
++    arc_id: str = ""
++    arc_type: str = ""
++    outcome: str = ""
++    participants: List[str] = field(default_factory=list)
++    impact: float = 0.5
++    emotions: Dict[str, float] = field(default_factory=dict)
++    tick_started: int = 0
++    tick_resolved: int = 0
++    resolution_type: str = "unknown"
++    consequences: List[str] = field(default_factory=list)
++    relevance: float = 1.0
++    
++    @property
++    def age(self) -> int:
++        """Get age of arc in ticks."""
++        return self.tick_resolved - self.tick_started
++    
++    def decay(self, ticks_since_resolution: int) -> float:
++        """Apply time-based decay to relevance.
++        
++        Args:
++            ticks_since_resolution: Ticks since this arc resolved.
++            
++        Returns:
++            New relevance score after decay.
++        """
++        decay_factor = 1.0 - (MEMORY_DECAY_RATE * ticks_since_resolution / 100.0)
++        self.relevance = max(0.05, self.relevance * max(0.0, decay_factor))
++        return self.relevance
++    
++    def to_dict(self) -> Dict[str, Any]:
++        """Serialize arc memory to dict."""
++        return {
++            "arc_id": self.arc_id,
++            "arc_type": self.arc_type,
++            "outcome": self.outcome,
++            "participants": list(self.participants),
++            "impact": self.impact,
++            "emotions": dict(self.emotions),
++            "tick_started": self.tick_started,
++            "tick_resolved": self.tick_resolved,
++            "resolution_type": self.resolution_type,
++            "consequences": list(self.consequences),
++            "relevance": self.relevance,
++        }
++    
++    @classmethod
++    def from_dict(cls, data: Dict[str, Any]) -> "ArcMemory":
++        """Create ArcMemory from dict."""
++        memory = cls()
++        memory.arc_id = data.get("arc_id", "")
++        memory.arc_type = data.get("arc_type", "")
++        memory.outcome = data.get("outcome", "")
++        memory.participants = list(data.get("participants", []))
++        memory.impact = data.get("impact", 0.5)
++        memory.emotions = dict(data.get("emotions", {}))
++        memory.tick_started = data.get("tick_started", 0)
++        memory.tick_resolved = data.get("tick_resolved", 0)
++        memory.resolution_type = data.get("resolution_type", "unknown")
++        memory.consequences = list(data.get("consequences", []))
++        memory.relevance = data.get("relevance", 1.0)
++        return memory
++
++
++@dataclass
++class EmotionalResidue:
++    """Persistent emotional impact from past events.
++    
++    Attributes:
++        character_id: Character affected.
++        target_id: Target of the emotion (optional).
++        emotion_type: Type of emotion.
++        intensity: Residual intensity (0.0-1.0).
++        source_arc: Arc that created this residue.
++        created_tick: When the residue was created.
++        decay_rate: How quickly the residue fades.
++    """
++    
++    character_id: str = ""
++    target_id: str = ""
++    emotion_type: str = ""
++    intensity: float = 0.0
++    source_arc: str = ""
++    created_tick: int = 0
++    decay_rate: float = 0.05
++    
++    def decay(self, current_tick: int) -> float:
++        """Apply decay to this residue.
++        
++        Args:
++            current_tick: Current simulation tick.
++            
++        Returns:
++            New intensity value.
++        """
++        elapsed = current_tick - self.created_tick
++        self.intensity = max(0.0, self.intensity - self.decay_rate * elapsed / 100.0)
++        return self.intensity
++    
++    def to_dict(self) -> Dict[str, Any]:
++        """Serialize to dict."""
++        return {
++            "character_id": self.character_id,
++            "target_id": self.target_id,
++            "emotion_type": self.emotion_type,
++            "intensity": self.intensity,
++            "source_arc": self.source_arc,
++            "created_tick": self.created_tick,
++            "decay_rate": self.decay_rate,
++        }
++
++
++class NarrativeMemory:
++    """Tracks historical narrative arcs and their lasting impact.
++    
++    This system ensures past arcs meaningfully shape future arcs,
++    creating continuity across sessions and a "legend" feeling.
++    
++    Usage:
++        memory = NarrativeMemory()
++        
++        # Store a completed arc
++        memory.store_arc({
++            "arc_id": "war_of_factions",
++            "arc_type": "faction_conflict",
++            "outcome": "A defeated B",
++            "participants": ["A", "B"],
++            "resolution_type": "victory",
++            "tick_resolved": 150,
++        })
++        
++        # Get relevant history for current storyline
++        relevant = memory.get_relevant_history(
++            current_actors=["A", "C"],
++            event_type="faction_conflict",
++        )
++    """
++    
++    def __init__(self, max_arcs: int = MAX_STORED_ARCS):
++        """Initialize narrative memory.
++        
++        Args:
++            max_arcs: Maximum number of arcs to store.
++        """
++        self.max_arcs = max_arcs
++        
++        # All stored arc memories
++        self._arcs: List[ArcMemory] = []
++        
++        # Emotional residue from past arcs
++        self._emotional_residue: Dict[str, List[EmotionalResidue]] = {}  # char_id -> residues
++        
++        # Character reputation history
++        self._reputation_history: Dict[str, List[Dict[str, Any]]] = {}  # char_id -> behaviors
++        
++        self._stats = {
++            "arcs_stored": 0,
++            "arcs_decayed": 0,
++            "arcs_purged": 0,
++            "queries_made": 0,
++        }
++    
++    def store_arc(self, arc_data: Dict[str, Any]) -> ArcMemory:
++        """Store a completed story arc in memory.
++        
++        Args:
++            arc_data: Arc data dict with required fields:
++                - arc_id: Unique identifier
++                - arc_type: Type of event
++                - outcome: Resolution description
++                - participants: List of participant IDs
++                - tick_resolved: When it concluded
++        
++        Returns:
++            ArcMemory object created from the data.
++        """
++        memory = ArcMemory.from_dict(arc_data)
++        
++        # Ensure required fields
++        if not memory.arc_id or not memory.arc_type:
++            logger.warning("Stored arc missing required fields: %s", arc_data)
++            return memory
++        
++        # Check for duplicate arc_id
++        existing = self._find_arc_by_id(memory.arc_id)
++        if existing:
++            # Update existing arc instead of duplicating
++            existing.outcome = memory.outcome
++            existing.impact = memory.impact
++            existing.resolution_type = memory.resolution_type
++            existing.consequences = memory.consequences
++            existing.relevance = memory.relevance
++            return existing
++        
++        self._arcs.append(memory)
++        self._stats["arcs_stored"] += 1
++        
++        # Create emotional residue for participants
++        for participant in memory.participants:
++            for emotion, intensity in memory.emotions.items():
++                if intensity > 0.2:  # Only significant emotions
++                    residue = EmotionalResidue(
++                        character_id=participant,
++                        emotion_type=emotion,
++                        intensity=intensity * 0.5,  # Residue is half the original
++                        source_arc=memory.arc_id,
++                        created_tick=memory.tick_resolved,
++                    )
++                    if participant not in self._emotional_residue:
++                        self._emotional_residue[participant] = []
++                    self._emotional_residue[participant].append(residue)
++        
++        # Update reputation history
++        resolution_type = memory.resolution_type
++        for participant in memory.participants:
++            if participant not in self._reputation_history:
++                self._reputation_history[participant] = []
++            self._reputation_history[participant].append({
++                "arc_id": memory.arc_id,
++                "arc_type": memory.arc_type,
++                "outcome": resolution_type,
++                "tick": memory.tick_resolved,
++            })
++        
++        # Purge old arcs if over limit
++        if len(self._arcs) > self.max_arcs:
++            self._arcs.sort(key=lambda a: a.relevance, reverse=True)
++            purged = self._arcs[self.max_arcs:]
++            self._arcs = self._arcs[:self.max_arcs]
++            self._stats["arcs_purged"] += len(purged)
++        
++        return memory
++    
++    def get_relevant_history(
++        self,
++        current_actors: Optional[List[str]] = None,
++        event_type: Optional[str] = None,
++        max_results: int = 5,
++        current_tick: int = 0,
++    ) -> List[Dict[str, Any]]:
++        """Get past arcs relevant to the current situation.
++        
++        Finds arcs that share actors or event types with the current
++        situation, helping inform current decisions based on history.
++        
++        Args:
++            current_actors: Current participant IDs.
++            event_type: Current event type.
++            max_results: Maximum number of relevant arcs to return.
++            current_tick: Current simulation tick (for decay).
++            
++        Returns:
++            List of relevant arc memory dicts, sorted by relevance.
++        """
++        self._stats["queries_made"] += 1
++        
++        # Apply decay to all arcs
++        self._decay_all_arcs(current_tick)
++        
++        scored_arcs = []
++        for arc in self._arcs:
++            score = 0.0
++            
++            # Actor overlap
++            if current_actors:
++                actor_overlap = len(set(current_actors) & set(arc.participants))
++                actor_score = actor_overlap / max(len(current_actors), 1)
++                score += actor_score * 0.5
++            
++            # Event type match
++            if event_type and arc.arc_type == event_type:
++                score += 0.3
++            
++            # High impact arcs are more relevant
++            score += arc.impact * 0.2
++            
++            # Adjust by current relevance (decayed)
++            score *= arc.relevance
++            
++            if score >= SIMILARITY_THRESHOLD:
++                scored_arcs.append((score, arc.to_dict()))
++        
++        # Sort by score and return top results
++        scored_arcs.sort(key=lambda x: x[0], reverse=True)
++        return [arc for _, arc in scored_arcs[:max_results]]
++    
++    def get_reputation_history(
++        self,
++        character_id: str,
++        max_results: int = 10,
++    ) -> List[Dict[str, Any]]:
++        """Get the behavioral history of a character.
++        
++        This shows how the character has acted in past arcs,
++        informing predictions about future behavior.
++        
++        Args:
++            character_id: Character to look up.
++            max_results: Maximum number of entries to return.
++            
++        Returns:
++            List of reputation entries, most recent first.
++        """
++        history = self._reputation_history.get(character_id, [])
++        return list(reversed(history[-max_results:]))
++    
++    def get_emotional_resonance(
++        self,
++        character_ids: Optional[List[str]] = None,
++        current_tick: int = 0,
++    ) -> Dict[str, float]:
++        """Get current emotional residue for characters.
++        
++        Returns the combined emotional state lingering from past events.
++        This captures how characters still feel about past arcs.
++        
++        Args:
++            character_ids: Characters to query (all if None).
++            current_tick: Current simulation tick (for decay).
++            
++        Returns:
++            Dict of emotion_type -> combined intensity.
++        """
++        resonance: Dict[str, float] = {}
++        
++        ids_to_query = character_ids or list(self._emotional_residue.keys())
++        
++        for char_id in ids_to_query:
++            residues = self._emotional_residue.get(char_id, [])
++            for residue in residues:
++                current_intensity = residue.decay(current_tick)
++                if current_intensity > 0.05:
++                    emotion = residue.emotion_type
++                    resonance[emotion] = resonance.get(emotion, 0.0) + current_intensity
++        
++        return resonance
++    
++    def get_world_impact(self) -> Dict[str, Any]:
++        """Get aggregated impact of all stored arcs on the world.
++        
++        Returns:
++            Dict with world impact summary.
++        """
++        if not self._arcs:
++            return {
++                "total_arcs": 0,
++                "average_impact": 0.0,
++                "dominant_outcomes": {},
++                "active_conflicts": [],
++            }
++        
++        total_impact = sum(arc.impact * arc.relevance for arc in self._arcs)
++        average_impact = total_impact / len(self._arcs)
++        
++        # Count outcome types
++        outcomes: Dict[str, int] = {}
++        for arc in self._arcs:
++            outcome = arc.resolution_type
++            outcomes[outcome] = outcomes.get(outcome, 0) + 1
++        
++        # Sort by count
++        dominant = dict(sorted(outcomes.items(), key=lambda x: x[1], reverse=True)[:5])
++        
++        # Active conflicts: arcs where resolution_type suggests ongoing tension
++        active = [
++            arc.to_dict()
++            for arc in self._arcs
++            if arc.resolution_type in ("stalemate", "betrayal", "tragedy")
++            and arc.relevance > 0.3
++        ]
++        
++        return {
++            "total_arcs": len(self._arcs),
++            "average_impact": round(average_impact, 3),
++            "dominant_outcomes": dominant,
++            "active_conflicts": active,
++        }
++    
++    def _decay_all_arcs(self, current_tick: int) -> None:
++        """Apply decay to all arc memories.
++        
++        Args:
++            current_tick: Current simulation tick.
++        """
++        decayed = 0
++        for arc in self._arcs:
++            ticks_since = current_tick - arc.tick_resolved
++            if ticks_since > 0:
++                old_relevance = arc.relevance
++                arc.decay(ticks_since)
++                if arc.relevance < old_relevance:
++                    decayed += 1
++        
++        self._stats["arcs_decayed"] = decayed
++    
++    def _find_arc_by_id(self, arc_id: str) -> Optional[ArcMemory]:
++        """Find an arc by its ID.
++        
++        Args:
++            arc_id: Arc identifier.
++            
++        Returns:
++            ArcMemory if found, None otherwise.
++        """
++        for arc in self._arcs:
++            if arc.arc_id == arc_id:
++                return arc
++        return None
++    
++    def get_all_arcs(self) -> List[Dict[str, Any]]:
++        """Get all stored arcs.
++        
++        Returns:
++            List of all arc memory dicts.
++        """
++        return [arc.to_dict() for arc in self._arcs]
++    
++    def get_stats(self) -> Dict[str, Any]:
++        """Get narrative memory statistics.
++        
++        Returns:
++            Stats dict.
++        """
++        return {
++            **self._stats,
++            "stored_arcs": len(self._arcs),
++            "characters_with_residue": len(self._emotional_residue),
++            "characters_with_reputation": len(self._reputation_history),
++        }
++    
++    def clear(
++        self,
++        clear_residue: bool = True,
++        clear_reputation: bool = True,
++    ) -> None:
++        """Clear narrative memory.
++        
++        Args:
++            clear_residue: Also clear emotional residue.
++            clear_reputation: Also clear reputation history.
++        """
++        self._arcs.clear()
++        if clear_residue:
++            self._emotional_residue.clear()
++        if clear_reputation:
++            self._reputation_history.clear()
++        self._stats = {
++            "arcs_stored": 0,
++            "arcs_decayed": 0,
++            "arcs_purged": 0,
++            "queries_made": 0,
++        }
+\ No newline at end of file
+diff --git a/src/app/rpg/cognitive/resolution_engine.py b/src/app/rpg/cognitive/resolution_engine.py
+new file mode 100644
+index 0000000..334764c
+--- /dev/null
++++ b/src/app/rpg/cognitive/resolution_engine.py
+@@ -0,0 +1,745 @@
++"""Resolution Engine ΓÇö Tier 13: Emotional + Experiential Layer.
++
++This module implements Tier 13's Resolution Generator that produces
++emotionally meaningful and narratively satisfying resolutions to storylines.
++
++Problem:
++    Resolution is mechanical: "conflict resolved", "agreement reached"
++    But not: emotionally meaningful, narratively satisfying
++    
++    Result: storylines end without emotional weight
++
++Solution:
++    ResolutionEngine generates satisfying resolutions using:
++    1. Template-based resolution for common patterns
++    2. LLM-assisted resolution for complex storylines (controlled usage)
++    3. Emotional impact assessment for resolution quality
++    
++    The engine tracks resolution history and feeds into narrative memory.
++
++Usage:
++    engine = ResolutionEngine()
++    resolution = engine.generate(storyline, characters, world_state)
++
++Architecture:
++    Resolution Types:
++    - victory: One side achieved their goal
++    - compromise: Both sides found middle ground  
++    - tragedy: Something was lost in the process
++    - redemption: A character overcame their flaws
++    - betrayal: Trust was broken unexpectedly
++    
++    Prompt Template (for LLM):
++    Storyline: {type}
++    Participants: {A, B}
++    History: {events...}
++    Emotions: {anger, fear, trust levels}
++    
++    Generate satisfying resolution:
++    - 1-2 sentences
++    - Reflect consequences
++    - Update relationships
++
++Design Rules:
++    - LLM used sparingly (only for high-importance storylines)
++    - Template fallback always available
++    - Resolutions update character emotions and relationships
++    - Resolution quality affects future narrative gravity
++"""
++
++from __future__ import annotations
++
++import logging
++import random
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Optional
++
++logger = logging.getLogger(__name__)
++
++# Resolution types
++RESOLUTION_TYPES = [
++    "victory",        # One side achieved their goal completely
++    "compromise",     # Both sides found middle ground
++    "tragedy",        # Something/someone was lost
++    "redemption",     # A character overcame their nature/flaws
++    "betrayal",       # Trust was broken unexpectedly
++    "stalemate",      # No clear winner, conflict continues in new form
++    "transcendence",  # Characters moved beyond the original conflict
++    "sacrifice",      # Someone gave up something important for resolution
++]
++
++# Template patterns for resolutions without LLM
++RESOLUTION_TEMPLATES = {
++    "faction_conflict": {
++        "victory": [
++            "{winner} emerged triumphant over {loser}, their dominance reshaping the political landscape.",
++            "After a decisive struggle, {winner} claimed victory, leaving {loser} to lick their wounds and plot revenge.",
++        ],
++        "compromise": [
++            "{faction_a} and {faction_b} brokered a fragile truce, though old wounds simmer beneath the surface.",
++            "Through painful negotiation, {faction_a} and {faction_b} found common ground, neither fully satisfied.",
++        ],
++        "tragedy": [
++            "The conflict consumed everyone involved. {casualty} paid the ultimate price, a reminder of the cost of ambition.",
++            "What began as political maneuvering ended in bloodshed. {casualty}'s death left all parties haunted.",
++        ],
++        "betrayal": [
++            "{traitor} turned against {victim} at the crucial moment, rewriting the entire narrative of the conflict.",
++            "The alliance was built on sand. {traitor}'s betrayal shattered the coalition and left {victim} devastated.",
++        ],
++    },
++    "personal_conflict": {
++        "redemption": [
++            "{character} faced their darkest impulses and chose a different path, earning unexpected respect.",
++            "Against all expectations, {character} overcame their nature. The transformation surprised even their enemies.",
++        ],
++        "victory": [
++            "{winner} proved their point decisively, silencing {loser} in the process.",
++            "Through {method}, {winner} achieved personal vindication against {loser}.",
++        ],
++        "compromise": [
++            "After much tension, {character_a} and {character_b} found a way to coexist without fully reconciling.",
++            "A grudging respect formed between {character_a} and {character_b}, born from hard-won understanding.",
++        ],
++    },
++    "quest": {
++        "victory": [
++            "The quest reached its triumphant conclusion. {reward} was secured, changing the balance of power.",
++            "Against all odds, the quest succeeded. {reward} now belongs to {winner}, with far-reaching consequences.",
++        ],
++        "tragedy": [
++            "The quest succeeded, but at a terrible cost. {loss} can never be recovered.",
++            "Victory tasted like ashes. The quest was completed, but {loss} made it feel like defeat.",
++        ],
++        "sacrifice": [
++            "To complete the quest, {sacrificer} gave up {sacrifice}. The world changed, but so did they.",
++            "{sacrificer}'s sacrifice ensured the quest's success. Their name will be remembered.",
++        ],
++    },
++    "general": {
++        "victory": ["{winner} achieved their goal, reshaping circumstances in their favor."],
++        "compromise": ["A middle path was found, leaving all parties partially satisfied."],
++        "tragedy": ["Events spiraled beyond anyone's control. The cost was higher than anyone anticipated."],
++        "betrayal": ["Trust, once given, was weaponized. The betrayal changed everything."],
++        "stalemate": ["Neither side could claim victory. The conflict transformed rather than ended."],
++        "redemption": ["In a moment of clarity, {character} chose to be better. It changed the outcome."],
++        "sacrifice": ["{sacrificer} gave up something precious. The resolution was bought with loss."],
++        "transcendence": ["The characters rose above their differences. The conflict dissolved into something larger."],
++    },
++}
++
++
++@dataclass
++class ResolutionResult:
++    """Result of a storyline resolution.
++    
++    Attributes:
++        resolution_type: Type of resolution achieved.
++        text: Human-readable resolution description.
++        emotional_impact: Dict of emotion_name -> change_value.
++        relationship_updates: Dict of (char_a, char_b) -> new_relationship_value.
++        consequences: List of narrative consequences.
++        satisfies_player: Whether resolution feels satisfying to player.
++        importance: Resolution importance score (0.0-1.0).
++    """
++    
++    resolution_type: str = "victory"
++    text: str = ""
++    emotional_impact: Dict[str, float] = field(default_factory=dict)
++    relationship_updates: Dict[str, float] = field(default_factory=dict)
++    consequences: List[str] = field(default_factory=list)
++    satisfies_player: bool = False
++    importance: float = 0.5
++    
++    def to_dict(self) -> Dict[str, Any]:
++        """Serialize resolution result to dict."""
++        return {
++            "type": self.resolution_type,
++            "text": self.text,
++            "emotional_impact": dict(self.emotional_impact),
++            "relationship_updates": dict(self.relationship_updates),
++            "consequences": list(self.consequences),
++            "satisfies_player": self.satisfies_player,
++            "importance": self.importance,
++        }
++
++
++class ResolutionEngine:
++    """Generates emotionally satisfying storyline resolutions.
++    
++    The engine uses template-based resolution for common patterns,
++    with optional LLM assistance for high-importance storylines.
++    It tracks resolution history and updates character states.
++    """
++    
++    def __init__(self, llm_client: Optional[Any] = None, use_llm: bool = False):
++        """Initialize the ResolutionEngine.
++        
++        Args:
++            llm_client: Optional LLM client for advanced resolution generation.
++            use_llm: Whether to use LLM for resolution (default: template-only).
++        """
++        self.llm_client = llm_client
++        self.use_llm = use_llm
++        
++        self._stats = {
++            "resolutions_generated": 0,
++            "llm_resolutions": 0,
++            "template_resolutions": 0,
++            "resolution_types_used": {},
++        }
++    
++    def generate(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]] = None,
++        world_state: Optional[Dict[str, Any]] = None,
++    ) -> ResolutionResult:
++        """Generate a satisfying resolution for the given storyline.
++        
++        Args:
++            storyline: Storyline dict with type, participants, events, etc.
++            characters: Optional character data dict.
++            world_state: Optional world state dict.
++            
++        Returns:
++            ResolutionResult with text, emotional impact, and consequences.
++        """
++        self._stats["resolutions_generated"] += 1
++        
++        # Determine resolution type based on storyline context
++        resolution_type = self._determine_resolution_type(
++            storyline, characters, world_state
++        )
++        
++        # Generate resolution text
++        if self.use_llm and self.llm_client and storyline.get("importance", 0) > 0.7:
++            resolution = self._generate_llm_resolution(
++                storyline, characters, world_state, resolution_type
++            )
++            self._stats["llm_resolutions"] += 1
++        else:
++            resolution = self._generate_template_resolution(
++                storyline, characters, world_state, resolution_type
++            )
++            self._stats["template_resolutions"] += 1
++        
++        # Track resolution type usage
++        self._stats["resolution_types_used"][resolution_type] = (
++            self._stats["resolution_types_used"].get(resolution_type, 0) + 1
++        )
++        
++        # Calculate emotional impact on participants
++        emotional_impact = self._calculate_emotional_impact(
++            storyline, characters, resolution_type
++        )
++        
++        # Calculate relationship updates
++        relationship_updates = self._calculate_relationship_updates(
++            storyline, characters, resolution_type
++        )
++        
++        # Determine consequences
++        consequences = self._determine_consequences(
++            storyline, world_state, resolution_type
++        )
++        
++        # Check player satisfaction
++        satisfies_player = self._check_player_satisfaction(
++            storyline, characters, resolution_type
++        )
++        
++        return ResolutionResult(
++            resolution_type=resolution_type,
++            text=resolution,
++            emotional_impact=emotional_impact,
++            relationship_updates=relationship_updates,
++            consequences=consequences,
++            satisfies_player=satisfies_player,
++            importance=storyline.get("importance", 0.5),
++        )
++    
++    def _determine_resolution_type(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]] = None,
++        world_state: Optional[Dict[str, Any]] = None,
++    ) -> str:
++        """Determine the most satisfying resolution type.
++        
++        Resolution type is chosen based on:
++        - Storyline characteristics (progress, importance, events)
++        - Character emotional states
++        - World state context
++        - Tier 14 Fix: Resolution Entropy Injection to prevent predictability
++        
++        Args:
++            storyline: Storyline dict.
++            characters: Optional character data.
++            world_state: Optional world state.
++            
++        Returns:
++            Resolution type string.
++        """
++        progress = storyline.get("progress", 0.5)
++        importance = storyline.get("importance", 0.5)
++        events = storyline.get("events", [])
++        participants = storyline.get("participants", [])
++        
++        # Default to most common resolution type
++        candidate_types = ["victory", "compromise", "stalemate"]
++        weights = [0.4, 0.3, 0.3]
++        
++        # Adjust based on progress
++        if progress > 0.8:
++            # High progress suggests resolution is near - favor victory/completion
++            candidate_types = ["victory", "redemption", "sacrifice"]
++            weights = [0.4, 0.3, 0.3]
++        elif progress < 0.2:
++            # Low progress - favor tragedy/stalemate/betrayal
++            candidate_types = ["tragedy", "betrayal", "stalemate"]
++            weights = [0.4, 0.3, 0.3]
++        
++        # Check for betrayal events in history
++        has_betrayal = any(
++            e.get("type") in ("betrayal", "betray") for e in events
++        )
++        if has_betrayal:
++            candidate_types = ["betrayal", "tragedy", "victory"]
++            weights = [0.5, 0.3, 0.2]
++        
++        # Check for sacrifice events
++        has_sacrifice = any(
++            e.get("type") in ("sacrifice", "selfless") for e in events
++        )
++        if has_sacrifice:
++            candidate_types = ["sacrifice", "redemption", "compromise"]
++            weights = [0.5, 0.3, 0.2]
++        
++        # Check emotional states for redemption potential
++        if characters:
++            for char_id in participants:
++                char_data = characters.get(char_id, {})
++                if isinstance(char_data, dict):
++                    emotions = char_data.get("emotions", {})
++                    if emotions.get("guilt", 0) > 0.5 or emotions.get("remorse", 0) > 0.5:
++                        candidate_types.append("redemption")
++                        weights.append(0.3)
++                        break
++        
++        # Tier 14 Fix: Resolution Entropy Injection
++        # 20% chance of surprise resolution to prevent predictability
++        if random.random() < 0.2:
++            selected = random.choice(RESOLUTION_TYPES)
++            # Still avoid recently used resolutions if history exists
++            recent = storyline.get("resolution_history", [])[-3:] if storyline else []
++            if selected not in recent or len(recent) == 0:
++                return selected
++        
++        # Weighted random selection
++        total_weight = sum(weights)
++        weights = [w / total_weight for w in weights]
++        r = random.random()
++        cumulative = 0.0
++        for i, wt in enumerate(weights):
++            cumulative += wt
++            if r <= cumulative:
++                return candidate_types[i]
++        
++        return candidate_types[-1]  # Default to last option
++    
++    def _generate_template_resolution(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]] = None,
++        world_state: Optional[Dict[str, Any]] = None,
++        resolution_type: str = "victory",
++    ) -> str:
++        """Generate resolution text from templates.
++        
++        Args:
++            storyline: Storyline dict.
++            characters: Optional character data.
++            world_state: Optional world state.
++            resolution_type: Type of resolution.
++            
++        Returns:
++            Resolution text string.
++        """
++        story_type = storyline.get("event_type", "general")
++        participants = storyline.get("participants", ["Unknown"])
++        events = storyline.get("events", [])
++        
++        # Get character names for template substitution
++        char_names = {}
++        if characters:
++            for char_id in participants:
++                char_data = characters.get(char_id, {})
++                if isinstance(char_data, dict):
++                    char_names[char_id] = char_data.get("name", char_id)
++                else:
++                    char_names[char_id] = str(char_id)
++        else:
++            char_names = {cid: cid for cid in participants}
++        
++        # Select appropriate template category
++        template_category = story_type if story_type in RESOLUTION_TEMPLATES else "general"
++        templates = RESOLUTION_TEMPLATES.get(template_category, RESOLUTION_TEMPLATES["general"])
++        
++        # Get templates for this resolution type
++        type_templates = templates.get(resolution_type, RESOLUTION_TEMPLATES["general"].get(resolution_type, []))
++        if not type_templates:
++            type_templates = ["The storyline concluded with lasting consequences for all involved."]
++        
++        # Pick a template
++        template = random.choice(type_templates)
++        
++        # Substitute placeholders
++        text = template
++        replacements = {
++            "{winner}": char_names.get(participants[0], "Unknown") if participants else "Unknown",
++            "{loser}": char_names.get(participants[-1], "Unknown") if participants else "Unknown",
++            "{character}": char_names.get(participants[0], "Unknown") if participants else "Unknown",
++        }
++        
++        if len(participants) >= 2:
++            replacements["{faction_a}"] = char_names.get(participants[0], "Unknown")
++            replacements["{faction_b}"] = char_names.get(participants[1], "Unknown")
++            replacements["{character_a}"] = char_names.get(participants[0], "Unknown")
++            replacements["{character_b}"] = char_names.get(participants[1], "Unknown")
++            replacements["{victim}"] = char_names.get(participants[-1], "Unknown")
++        else:
++            replacements["{faction_a}"] = replacements.get("{winner}", "Unknown")
++            replacements["{faction_b}"] = "opposing forces"
++            replacements["{character_a}"] = replacements.get("{character}", "Unknown")
++            replacements["{character_b}"] = "others"
++            replacements["{victim}"] = "an innocent party"
++        
++        # Add event-specific substitutions based on storyline events
++        for event in events:
++            if event.get("type") in ("betrayal", "betray"):
++                replacements["{traitor}"] = char_names.get(
++                    event.get("betrayer", participants[0]), "a trusted ally"
++                )
++            elif event.get("type") in ("sacrifice",):
++                replacements["{sacrificer}"] = char_names.get(
++                    event.get("sacrificer", participants[0]), "someone"
++                )
++                replacements["{sacrifice}"] = event.get("sacrificed_item", "something precious")
++        
++        # Add fallback substitutions for missing placeholders
++        fallbacks = {
++            "{casualty}": "a key figure",
++            "{reward}": "the prize",
++            "{loss}": "something irreplaceable",
++            "{method}": "skill and determination",
++        }
++        replacements.update(fallbacks)
++        
++        # Apply substitutions
++        for key, value in replacements.items():
++            text = text.replace(key, value)
++        
++        return text
++    
++    def _generate_llm_resolution(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]] = None,
++        world_state: Optional[Dict[str, Any]] = None,
++        resolution_type: str = "victory",
++    ) -> str:
++        """Generate resolution using LLM for high-importance storylines.
++        
++        Args:
++            storyline: Storyline dict.
++            characters: Optional character data.
++            world_state: Optional world state.
++            resolution_type: Target resolution type.
++            
++        Returns:
++            Resolution text string from LLM.
++        """
++        if not self.llm_client:
++            return self._generate_template_resolution(
++                storyline, characters, world_state, resolution_type
++            )
++        
++        prompt = self._build_llm_prompt(
++            storyline, characters, world_state, resolution_type
++        )
++        
++        try:
++            # Call LLM with strict constraints
++            response = self.llm_client.generate(
++                prompt=prompt,
++                max_tokens=100,  # Strict 1-2 sentence limit
++                temperature=0.5,  # Moderate creativity, not wild randomness
++            )
++            
++            resolution = response.strip() if response else ""
++            if resolution:
++                return resolution
++        except Exception as e:
++            logger.warning(f"LLM resolution generation failed, falling back to template: {e}")
++        
++        # Fallback to template
++        return self._generate_template_resolution(
++            storyline, characters, world_state, resolution_type
++        )
++    
++    def _build_llm_prompt(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]] = None,
++        world_state: Optional[Dict[str, Any]] = None,
++        resolution_type: str = "victory",
++    ) -> str:
++        """Build the LLM prompt for resolution generation.
++        
++        Args:
++            storyline: Storyline dict.
++            characters: Optional character data.
++            world_state: Optional world state.
++            resolution_type: Target resolution type.
++            
++        Returns:
++            Prompt string for LLM.
++        """
++        participants = storyline.get("participants", [])
++        events = storyline.get("events", [])
++        story_type = storyline.get("event_type", "unknown")
++        progress = storyline.get("progress", 0.5)
++        
++        # Build character summaries
++        char_summaries = []
++        if characters:
++            for char_id in participants:
++                char_data = characters.get(char_id, {})
++                if isinstance(char_data, dict):
++                    name = char_data.get("name", char_id)
++                    emotions = char_data.get("emotions", {})
++                    char_summaries.append(f"- {name}: emotions={emotions}")
++        
++        # Build event history summary
++        event_history = []
++        for event in events[-5:]:  # Last 5 events max
++            event_desc = f"- {event.get('type', 'unknown')}: {event.get('description', '')}"
++            event_history.append(event_desc)
++        
++        prompt = f"""You are a narrative resolution engine. Generate a satisfying resolution for this storyline.
++
++Storyline Type: {story_type}
++Participants: {', '.join(str(p) for p in participants)}
++Resolution Type: {resolution_type}
++Progress: {progress:.0%}
++
++Event History:
++{chr(10).join(event_history)}
++
++Character States:
++{chr(10).join(char_summaries)}
++
++Generate a resolution that:
++1. Is exactly 1-2 sentences long
++2. Reflects the consequences of the storyline events
++3. Matches the resolution type: {resolution_type}
++4. Feels emotionally meaningful, not mechanical
++5. Updates relationships based on the outcome
++
++Resolution:"""
++        return prompt
++    
++    def _calculate_emotional_impact(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]],
++        resolution_type: str,
++    ) -> Dict[str, float]:
++        """Calculate emotional impact of resolution on participants.
++        
++        Args:
++            storyline: Storyline dict.
++            characters: Character data.
++            resolution_type: Resolution type.
++            
++        Returns:
++            Dict of emotion_name -> change_value.
++        """
++        impact = {}
++        importance = storyline.get("importance", 0.5)
++        
++        # Base emotional changes by resolution type
++        emotion_changes = {
++            "victory": {"joy": 0.3, "pride": 0.2, "anger": -0.1},
++            "compromise": {"relief": 0.2, "frustration": 0.1, "satisfaction": 0.1},
++            "tragedy": {"grief": 0.4, "fear": 0.2, "anger": 0.2},
++            "betrayal": {"anger": 0.4, "distrust": 0.3, "fear": 0.2},
++            "redemption": {"relief": 0.3, "hope": 0.2, "pride": 0.1},
++            "stalemate": {"frustration": 0.2, "weariness": 0.1, "determination": 0.1},
++            "transcendence": {"peace": 0.3, "wisdom": 0.2, "gratitude": 0.1},
++            "sacrifice": {"grief": 0.3, "gratitude": 0.2, "honor": 0.2},
++        }
++        
++        base_emotions = emotion_changes.get(resolution_type, {})
++        for emotion, change in base_emotions.items():
++            impact[emotion] = change * importance
++        
++        return impact
++    
++    def _calculate_relationship_updates(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]],
++        resolution_type: str,
++    ) -> Dict[str, float]:
++        """Calculate relationship value updates from resolution.
++        
++        Args:
++            storyline: Storyline dict.
++            characters: Character data.
++            resolution_type: Resolution type.
++            
++        Returns:
++            Dict of relationship_key -> change_value.
++        """
++        participants = storyline.get("participants", [])
++        importance = storyline.get("importance", 0.5)
++        updates = {}
++        
++        # Different resolution types affect relationships differently
++        relationship_changes = {
++            "victory": 0.2,       # Winners closer, losers more distant
++            "compromise": 0.3,    # Both sides improve relationship
++            "tragedy": -0.2,     # Shared loss can unite or divide
++            "betrayal": -0.5,    # Major relationship damage
++            "redemption": 0.3,   # Redeemed character gains trust
++            "stalemate": 0.0,    # No significant change
++            "transcendence": 0.4, # Relationships strengthen
++            "sacrifice": 0.3,    # Sacrifice earns respect
++        }
++        
++        change = relationship_changes.get(resolution_type, 0.0) * importance
++        
++        # Update relationships between all participant pairs
++        for i, char_a in enumerate(participants):
++            for char_b in participants[i+1:]:
++                key = f"{char_a}:{char_b}"
++                updates[key] = change
++        
++        return updates
++    
++    def _determine_consequences(
++        self,
++        storyline: Dict[str, Any],
++        world_state: Optional[Dict[str, Any]],
++        resolution_type: str,
++    ) -> List[str]:
++        """Determine narrative consequences of resolution.
++        
++        Args:
++            storyline: Storyline dict.
++            world_state: World state dict.
++            resolution_type: Resolution type.
++            
++        Returns:
++            List of consequence description strings.
++        """
++        consequences = []
++        importance = storyline.get("importance", 0.5)
++        story_type = storyline.get("event_type", "general")
++        
++        # Type-specific consequences
++        consequence_pool = {
++            "faction_conflict": [
++                "Political alliances have shifted",
++                "Power balance in the region has changed",
++                "New faction rivalries have emerged",
++            ],
++            "personal_conflict": [
++                "Personal relationships have been altered",
++                "Reputation has shifted based on outcome",
++                "Future interactions will be different",
++            ],
++            "quest": [
++                "The quest's outcome will have lasting effects",
++                "Rewards have been distributed",
++                "Others will hear of this quest's result",
++            ],
++        }
++        
++        # Get relevant consequences
++        pool = consequence_pool.get(story_type, consequence_pool.get("general", []))
++        num_consequences = min(2, len(pool)) if importance > 0.5 else 1
++        
++        consequences = random.sample(pool, num_consequences) if pool else ["Events will unfold"]
++        
++        # High importance adds extra consequence
++        if importance > 0.7:
++            consequences.append("The resolution will be remembered for a long time")
++        
++        return consequences
++    
++    def _check_player_satisfaction(
++        self,
++        storyline: Dict[str, Any],
++        characters: Optional[Dict[str, Any]],
++        resolution_type: str,
++    ) -> bool:
++        """Check if resolution feels satisfying to the player.
++        
++        Player satisfaction is affected by:
++        - Resolution matches their expectations/effort
++        - Resolution feels meaningful, not arbitrary
++        - Resolution has lasting consequences
++        
++        Args:
++            storyline: Storyline dict.
++            characters: Character data.
++            resolution_type: Resolution type.
++            
++        Returns:
++            True if resolution should satisfy player.
++        """
++        player_involved = storyline.get("is_player_involved", False)
++        progress = storyline.get("progress", 0.5)
++        importance = storyline.get("importance", 0.5)
++        participants = storyline.get("participants", [])
++        
++        if not player_involved:
++            # Player less invested, easier to satisfy
++            return True
++        
++        # Satisfying resolution types for player-involved storylines
++        satisfying_types = {"victory", "compromise", "redemption", "transcendence"}
++        
++        # High progress + satisfying type = satisfying resolution
++        if progress > 0.7 and resolution_type in satisfying_types:
++            return True
++        
++        # Low progress but dramatic resolution (tragedy/betrayal) can still satisfy
++        if progress < 0.3 and resolution_type in {"tragedy", "betrayal", "sacrifice"}:
++            return importance > 0.5
++        
++        # Medium progress needs meaningful resolution type
++        if 0.3 <= progress <= 0.7:
++            return resolution_type in satisfying_types and importance > 0.4
++        
++        return False
++    
++    def get_stats(self) -> Dict[str, Any]:
++        """Get resolution engine statistics.
++        
++        Returns:
++            Stats dict.
++        """
++        return dict(self._stats)
++    
++    def reset(self) -> None:
++        """Reset engine statistics."""
++        self._stats = {
++            "resolutions_generated": 0,
++            "llm_resolutions": 0,
++            "template_resolutions": 0,
++            "resolution_types_used": {},
++        }
+\ No newline at end of file
+diff --git a/src/app/rpg/player/__init__.py b/src/app/rpg/player/__init__.py
+index 27d6ed3..7cf4847 100644
+--- a/src/app/rpg/player/__init__.py
++++ b/src/app/rpg/player/__init__.py
+@@ -1,5 +1,30 @@
+ # Player module for RPG system
+ 
+-from rpg.player.agency_system import AgencySystem, PlayerChoice
++from .agency_system import AgencySystem, PlayerChoice
++from .player_experience import (
++    PlayerExperienceEngine,
++    PlayerProfile,
++    SurfacedEvent,
++    MemoryEcho,
++    NarrativeSurfacer,
++    AttentionDirector,
++    EmotionalFeedbackLoop,
++    MemoryEchoSystem,
++    PLAYER_STYLES,
++    PLAYER_VALUES,
++)
+ 
+-__all__ = ["AgencySystem", "PlayerChoice"]
+\ No newline at end of file
++__all__ = [
++    "AgencySystem",
++    "PlayerChoice",
++    "PlayerExperienceEngine",
++    "PlayerProfile",
++    "SurfacedEvent",
++    "MemoryEcho",
++    "NarrativeSurfacer",
++    "AttentionDirector",
++    "EmotionalFeedbackLoop",
++    "MemoryEchoSystem",
++    "PLAYER_STYLES",
++    "PLAYER_VALUES",
++]
+diff --git a/src/app/rpg/player/player_experience.py b/src/app/rpg/player/player_experience.py
+new file mode 100644
+index 0000000..52068f7
+--- /dev/null
++++ b/src/app/rpg/player/player_experience.py
+@@ -0,0 +1,1169 @@
++"""Player Experience Module ΓÇö Tier 14: Player Experience & Perception Layer.
++
++This module implements Tier 14's core systems that transform the underlying
++simulation into a compelling player experience:
++
++1. Narrative Surfacing Engine - Decides what the player sees, compresses
++   complexity into clarity
++2. Attention Director - Highlights important events, hides noise
++3. Emotional Feedback Loop - Shows consequences emotionally, not just logically
++4. Memory Echo System - Callbacks to past arcs, creates "story continuity feeling"
++5. Player Identity Model - World adapts to player's style and values
++
++Design Principles:
++    - Simulation depth should be perceived, not just exist
++    - What the player sees is more important than what exists
++    - Emotional resonance trumps mechanical accuracy
++    - Player identity shapes world response
++
++Usage:
++    engine = PlayerExperienceEngine()
++    surfaced = engine.surface_event(event, context)
++    
++Architecture:
++    PlayerExperienceEngine:
++    - NarrativeSurfacer: Compresses complex events into player-facing narrative
++    - AttentionDirector: Filters and prioritizes what player notices
++    - EmotionalFeedbackLoop: Translates mechanical changes into emotional impact
++    - MemoryEchoSystem: Generates callbacks to past events
++    - PlayerIdentityModel: Tracks and applies player preferences
++"""
++
++from __future__ import annotations
++
++import logging
++import random
++from collections import Counter, defaultdict
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Optional, Tuple
++
++logger = logging.getLogger(__name__)
++
++# Constants for surfacing thresholds
++VISIBILITY_THRESHOLD = 0.3
++HIGHLIGHT_THRESHOLD = 0.7
++EMOTIONAL_SALIENCE_BASE = 0.2
++
++# Player style categories
++PLAYER_STYLES = [
++    "aggressive",
++    "diplomatic",
++    "stealthy",
++    "charismatic",
++    "strategic",
++    "altruistic",
++    "pragmatic",
++    "chaotic",
++]
++
++# Player value categories
++PLAYER_VALUES = [
++    "loyalty",
++    "power",
++    "freedom",
++    "knowledge",
++    "justice",
++    "mercy",
++    "honor",
++    "survival",
++]
++
++# Memory echo triggers
++MEMORY_ECHO_TRIGGERS = {
++    "character_reunion": "meeting character after absence",
++    "location_return": "returning to significant location",
++    "theme_recurrence": "encountering similar situation",
++    "consequence_manifest": "past action having delayed impact",
++    "emotional_parallel": "current emotion mirrors past event",
++}
++
++
++@dataclass
++class SurfacedEvent:
++    """A processed event ready for player presentation.
++    
++    Attributes:
++        headline: Short, attention-grabbing summary.
++        detail: Expanded description with context.
++        emotional_tone: Primary emotional quality.
++        visibility: How visible/prominent this event is (0.0-1.0).
++        should_highlight: Whether to draw special attention.
++        memory_echo: Optional callback to a past event.
++        player_relevance: How relevant this is to the player (0.0-1.0).
++        raw_event: Original event data for reference.
++    """
++    
++    headline: str = ""
++    detail: str = ""
++    emotional_tone: str = "neutral"
++    visibility: float = 0.5
++    should_highlight: bool = False
++    memory_echo: Optional[str] = None
++    player_relevance: float = 0.5
++    raw_event: Optional[Dict[str, Any]] = None
++    
++    def to_dict(self) -> Dict[str, Any]:
++        """Serialize to dict."""
++        return {
++            "headline": self.headline,
++            "detail": self.detail,
++            "emotional_tone": self.emotional_tone,
++            "visibility": self.visibility,
++            "should_highlight": self.should_highlight,
++            "memory_echo": self.memory_echo,
++            "player_relevance": self.player_relevance,
++        }
++
++
++@dataclass
++class PlayerProfile:
++    """Tracks player identity, preferences, and behavioral patterns.
++    
++    Attributes:
++        play_style: Dominant player approach (aggressive, diplomatic, etc.).
++        values: What the player prioritizes (loyalty, power, etc.).
++        emotional_preferences: Preferred emotional tones in narrative.
++        attention_patterns: What types of events player engages with most.
++        relationship_history: Key relationships the player has formed.
++        narrative_preferences: Preferred story types and pacing.
++        interaction_count: Total interactions for behavior analysis.
++        style_confidence: How confident we are in style classification.
++    """
++    
++    play_style: str = "balanced"
++    values: List[str] = field(default_factory=lambda: ["freedom", "loyalty"])
++    emotional_preferences: Dict[str, float] = field(default_factory=dict)
++    attention_patterns: Dict[str, int] = field(default_factory=dict)
++    relationship_history: Dict[str, float] = field(default_factory=dict)
++    narrative_preferences: Dict[str, float] = field(default_factory=lambda: {
++        "action": 0.5,
++        "dialogue": 0.5,
++        "exploration": 0.5,
++        "intrigue": 0.5,
++    })
++    interaction_count: int = 0
++    style_confidence: float = 0.0
++    
++    def update_style(self, action_type: str, weight: float = 1.0) -> None:
++        """Update play style based on player action."""
++        self.interaction_count += 1
++        
++        current = self.attention_patterns.get(action_type, 0)
++        self.attention_patterns[action_type] = current + weight
++        
++        if self.interaction_count >= 5:
++            self._recalculate_style()
++    
++    def update_value_alignment(self, value: str, alignment: float) -> None:
++        """Update alignment with a player value."""
++        current = self.emotional_preferences.get(value, 0.0)
++        self.emotional_preferences[value] = min(1.0, current + alignment * 0.1)
++    
++    def record_relationship(self, character_id: str, quality: float) -> None:
++        """Record quality of relationship with a character."""
++        self.relationship_history[character_id] = quality
++    
++    def _recalculate_style(self) -> None:
++        """Recalculate dominant play style from action patterns."""
++        if not self.attention_patterns:
++            return
++        
++        total = sum(self.attention_patterns.values())
++        if total == 0:
++            return
++        
++        # Normalize
++        normalized = {
++            k: v / total for k, v in self.attention_patterns.items()
++        }
++        
++        # Map to known styles
++        style_mapping = {
++            "attack": "aggressive",
++            "fight": "aggressive",
++            "aggressive": "aggressive",
++            "negotiate": "diplomatic",
++            "persuade": "diplomatic",
++            "diplomatic": "diplomatic",
++            "sneak": "stealthy",
++            "hide": "stealthy",
++            "stealthy": "stealthy",
++            "charm": "charismatic",
++            "inspire": "charismatic",
++            "charismatic": "charismatic",
++            "plan": "strategic",
++            "analyze": "strategic",
++            "strategic": "strategic",
++            "help": "altruistic",
++            "protect": "altruistic",
++            "altruistic": "altruistic",
++            "adapt": "pragmatic",
++            "compromise": "pragmatic",
++            "pragmatic": "pragmatic",
++            "disrupt": "chaotic",
++            "random": "chaotic",
++            "chaotic": "chaotic",
++        }
++        
++        style_scores: Dict[str, float] = defaultdict(float)
++        for action, score in normalized.items():
++            mapped = style_mapping.get(action, action)
++            if mapped in PLAYER_STYLES:
++                style_scores[mapped] += score
++        
++        if style_scores:
++            dominant = max(style_scores.items(), key=lambda x: x[1])
++            old_style = self.play_style
++            self.play_style = dominant[0]
++            self.style_confidence = min(1.0, dominant[1] * 2)
++    
++    def matches_value(self, value: str, threshold: float = 0.5) -> bool:
++        """Check if player identifies with a value."""
++        return value in self.values or self.emotional_preferences.get(value, 0) > threshold
++    
++    def to_dict(self) -> Dict[str, Any]:
++        """Serialize to dict."""
++        return {
++            "play_style": self.play_style,
++            "values": list(self.values),
++            "style_confidence": self.style_confidence,
++            "top_relationships": dict(
++                sorted(self.relationship_history.items(), key=lambda x: -x[1])[:5]
++            ),
++            "interaction_count": self.interaction_count,
++        }
++
++
++@dataclass
++class MemoryEcho:
++    """A callback to a past event that enhances narrative continuity.
++    
++    Attributes:
++        echo_type: Type of memory connection.
++        past_event_description: Brief description of the past event.
++        relevance_score: How relevant this echo is to current situation.
++        emotional_weight: Emotional impact of the memory.
++    """
++    
++    echo_type: str = "general"
++    past_event_description: str = ""
++    relevance_score: float = 0.0
++    emotional_weight: float = 0.0
++    
++    def format(self) -> str:
++        """Format the echo for presentation."""
++        templates = {
++            "character_reunion": "This reminds you of {desc}",
++            "location_return": "Being here again brings back memories of {desc}",
++            "theme_recurrence": "This echoes a familiar pattern: {desc}",
++            "consequence_manifest": "The ripple of past choices surfaces: {desc}",
++            "emotional_parallel": "The feeling is hauntingly familiar: {desc}",
++            "general": "This calls to mind: {desc}",
++        }
++        template = templates.get(self.echo_type, templates["general"])
++        return template.format(desc=self.past_event_description)
++
++
++class NarrativeSurfacer:
++    """Compresses complex simulation events into player-facing narrative.
++    
++    The surfacer decides WHAT the player sees from the underlying simulation,
++    translating mechanical depth into narrative clarity.
++    
++    Key Methods:
++    - surface_simple: Basic event surfacing
++    - surface_contextual: Event with relationship/world context
++    - surface_emotional: Event with emotional framing
++    """
++    
++    def __init__(self):
++        """Initialize the NarrativeSurfacer."""
++        self._events_processed = 0
++        self._headline_templates: Dict[str, List[str]] = {
++            "faction_conflict": [
++                "Tensions rise between {faction_a} and {faction_b}",
++                "{faction_a} and {faction_b} clash over {issue}",
++                "A power struggle erupts: {faction_a} vs {faction_b}",
++            ],
++            "alliance_formed": [
++                "An unlikely alliance forms between {faction_a} and {faction_b}",
++                "{faction_a} and {faction_b} unite against a common concern",
++                "New pact: {faction_a} and {faction_b} join forces",
++            ],
++            "betrayal": [
++                "Trust is shattered: {betrayer} turns against {victim}",
++                "A shocking betrayal rocks {group}",
++                "{betrayer}'s treachery changes everything",
++            ],
++            "quest_complete": [
++                "The quest for {objective} reaches its conclusion",
++                "After much struggle, {objective} is achieved",
++                "A journey ends: {objective} accomplished",
++            ],
++            "character_growth": [
++                "{character} has changed in ways no one expected",
++                "A pivotal moment for {character}",
++                "{character} faces a reckoning",
++            ],
++            "death": [
++                "A life is lost: {character}'s story ends",
++                "Grief spreads as {character} falls",
++                "The world feels dimmer without {character}",
++            ],
++            "discovery": [
++                "A hidden truth comes to light",
++                "Secrets unravel: {discovery} revealed",
++                "What was concealed can no longer stay hidden",
++            ],
++            "general": [
++                "Events unfold in {location}",
++                "Something stirs in {location}",
++                "The situation in {location} develops",
++            ],
++        }
++    
++    def surface(
++        self,
++        event: Dict[str, Any],
++        context: Optional[Dict[str, Any]] = None,
++    ) -> SurfacedEvent:
++        """Surface an event for player presentation.
++        
++        Args:
++            event: The raw event data.
++            context: Optional contextual information (relationships, world state).
++            
++        Returns:
++            SurfacedEvent ready for presentation.
++        """
++        self._events_processed += 1
++        
++        event_type = event.get("type", "general")
++        importance = event.get("importance", 0.5)
++        
++        # Generate headline
++        headline = self._generate_headline(event, event_type)
++        
++        # Generate detail
++        detail = self._generate_detail(event, event_type, context)
++        
++        # Determine emotional tone
++        emotional_tone = self._determine_emotional_tone(event, context)
++        
++        # Calculate visibility
++        visibility = self._calculate_visibility(importance, event_type)
++        
++        # Check for memory echoes
++        memory_echo = self._check_memory_echo(event, context)
++        
++        # Calculate player relevance
++        player_relevance = importance  # Default to importance
++        
++        should_highlight = visibility >= HIGHLIGHT_THRESHOLD
++        
++        return SurfacedEvent(
++            headline=headline,
++            detail=detail,
++            emotional_tone=emotional_tone,
++            visibility=visibility,
++            should_highlight=should_highlight,
++            memory_echo=memory_echo,
++            player_relevance=player_relevance,
++            raw_event=event,
++        )
++    
++    def _generate_headline(
++        self,
++        event: Dict[str, Any],
++        event_type: str,
++    ) -> str:
++        """Generate attention-grabbing headline."""
++        templates = self._headline_templates.get(event_type, self._headline_templates["general"])
++        template = random.choice(templates)
++        
++        # Substitute placeholders
++        replacements = {
++            "{faction_a}": event.get("faction_a", "Faction A"),
++            "{faction_b}": event.get("faction_b", "Faction B"),
++            "{character}": event.get("character", "Someone"),
++            "{location}": event.get("location", "the distance"),
++            "{issue}": event.get("issue", "matters of importance"),
++            "{objective}": event.get("objective", "their goal"),
++            "{betrayer}": event.get("betrayer", "a trusted ally"),
++            "{victim}": event.get("victim", "an unsuspecting party"),
++            "{group}": event.get("group", "the community"),
++            "{discovery}": event.get("discovery", "something hidden"),
++        }
++        
++        for key, value in replacements.items():
++            template = template.replace(key, value)
++        
++        return template
++    
++    def _generate_detail(
++        self,
++        event: Dict[str, Any],
++        event_type: str,
++        context: Optional[Dict[str, Any]] = None,
++    ) -> str:
++        """Generate expanded event description."""
++        descriptions = {
++            "faction_conflict": (
++                "The ongoing tensions between {faction_a} and {faction_b} "
++                "have reached a critical point. Observers note the potential "
++                "for wider repercussions across the region."
++            ),
++            "alliance_formed": (
++                "In an unexpected turn, {faction_a} and {faction_b} have "
++                "forged a partnership. Both sides stand to gain, though "
++                "old alliances may strain under the new arrangement."
++            ),
++            "betrayal": (
++                "What seemed like loyalty proved to be deception. "
++                "{betrayer}'s actions against {victim} have sent shockwaves "
++                "through established power structures."
++            ),
++            "quest_complete": (
++                "The long journey for {objective} has concluded. "
++                "The outcome will resonate for some time, affecting "
++                "all who were invested in its success."
++            ),
++            "character_growth": (
++                "{character} has undergone a significant transformation. "
++                "Those who know them well notice the change, and it "
++                "may reshape future interactions."
++            ),
++            "death": (
++                "{character} has fallen. The loss reverberates through "
++                "their circle of influence, and the void they leave "
++                "will not easily be filled."
++            ),
++            "discovery": (
++                "New information has come to light. {discovery} changes "
++                "the understanding of those who have learned it, and "
++                "may alter courses of action going forward."
++            ),
++        }
++        
++        detail = descriptions.get(event_type, descriptions.get("general", 
++            "Events continue to unfold. Observers watch with interest."
++        ))
++        
++        for key, value in {
++            "{faction_a}": event.get("faction_a", "Faction A"),
++            "{faction_b}": event.get("faction_b", "Faction B"),
++            "{character}": event.get("character", "Someone"),
++            "{objective}": event.get("objective", "their goal"),
++            "{betrayer}": event.get("betrayer", "a trusted ally"),
++            "{victim}": event.get("victim", "an unsuspecting party"),
++            "{discovery}": event.get("discovery", "new information"),
++        }.items():
++            detail = detail.replace(key, value)
++        
++        # Add context if available
++        if context:
++            relationships = context.get("relationships", {})
++            if relationships:
++                detail += " Relationship dynamics may influence the outcome."
++        
++        return detail
++    
++    def _determine_emotional_tone(
++        self,
++        event: Dict[str, Any],
++        context: Optional[Dict[str, Any]] = None,
++    ) -> str:
++        """Determine the emotional tone of the event."""
++        event_type = event.get("type", "general").lower()
++        emotions = event.get("emotions", {})
++        
++        # Event type mapping
++        type_tones = {
++            "death": "grief",
++            "betrayal": "shock",
++            "attack": "tension",
++            "conflict": "tension",
++            "victory": "triumph",
++            "quest_complete": "satisfaction",
++            "alliance_formed": "hope",
++            "discovery": "wonder",
++            "character_growth": "inspiration",
++            "romance": "warmth",
++            "gift": "warmth",
++            "help": "warmth",
++        }
++        
++        # Check for emotion overrides
++        dominant_emotion = "neutral"
++        if emotions:
++            dominant_emotion = max(emotions.items(), key=lambda x: x[1])[0]
++            if emotions[dominant_emotion] > 0.5:
++                return dominant_emotion
++        
++        return type_tones.get(event_type, "neutral")
++    
++    def _calculate_visibility(
++        self,
++        importance: float,
++        event_type: str,
++    ) -> float:
++        """Calculate how visible this event should be."""
++        base = importance
++        
++        # Bonus for dramatic event types
++        visibility_modifiers = {
++            "death": 0.3,
++            "betrayal": 0.25,
++            "quest_complete": 0.2,
++            "faction_conflict": 0.15,
++            "discovery": 0.1,
++        }
++        
++        return min(1.0, base + visibility_modifiers.get(event_type, 0.0))
++    
++    def _check_memory_echo(
++        self,
++        event: Dict[str, Any],
++        context: Optional[Dict[str, Any]] = None,
++    ) -> Optional[str]:
++        """Check if this event should trigger a memory echo."""
++        if context is None:
++            return None
++        
++        memory_bank = context.get("memory_bank", {})
++        if not memory_bank:
++            return None
++        
++        # Check for returning characters
++        character = event.get("character", "")
++        if character and character in memory_bank.get("significant_characters", []):
++            return f"seeing {character} again after everything that's happened"
++        
++        # Check for thematic parallels
++        event_type = event.get("type", "")
++        past_events = memory_bank.get("past_events", [])
++        for past in past_events[-10:]:
++            if past.get("type") == event_type:
++                return f"a situation reminiscent of {past.get('description', 'the past')}"
++        
++        return None
++    
++    def get_stats(self) -> Dict[str, Any]:
++        """Get surfacer statistics."""
++        return {"events_processed": self._events_processed}
++
++
++class AttentionDirector:
++    """Filters and prioritizes what the player notices.
++    
++    Prevents information overload while ensuring important events
++    are properly highlighted.
++    
++    Key Methods:
++    - filter: Reduce event stream to what player should notice
++    - prioritize: Rank events by attention value
++    - schedule: Determine timing of event presentation
++    """
++    
++    def __init__(self, max_events_per_tick: int = 3):
++        """Initialize the AttentionDirector.
++        
++        Args:
++            max_events_per_tick: Maximum events to surface per tick.
++        """
++        self.max_events_per_tick = max_events_per_tick
++        self._attention_budget = 1.0
++        self._recent_events: List[Tuple[int, float]] = []
++        self._fatigue_factor = 0.0
++    
++    def filter_events(
++        self,
++        events: List[Dict[str, Any]],
++        current_tick: int = 0,
++        player_profile: Optional[PlayerProfile] = None,
++    ) -> List[Dict[str, Any]]:
++        """Filter events to what the player should notice.
++        
++        Args:
++            events: List of raw events.
++            current_tick: Current game tick.
++            player_profile: Optional player identity model.
++            
++        Returns:
++            Filtered and sorted list of events worth noticing.
++        """
++        if not events:
++            return []
++        
++        # Score events
++        scored_events = []
++        for event in events:
++            score = self._score_event(event, current_tick, player_profile)
++            scored_events.append((score, event))
++        
++        # Sort by score descending
++        scored_events.sort(key=lambda x: -x[0])
++        
++        # Take top N
++        selected = scored_events[:self.max_events_per_tick]
++        
++        # Track attention budget
++        total_score = sum(s for s, _ in selected)
++        self._recent_events.append((current_tick, total_score))
++        if len(self._recent_events) > 10:
++            self._recent_events = self._recent_events[-10:]
++        
++        return [event for _, event in selected]
++    
++    def prioritize(
++        self,
++        events: List[Dict[str, Any]],
++        player_profile: Optional[PlayerProfile] = None,
++    ) -> List[Tuple[float, Dict[str, Any]]]:
++        """Rank events by priority for presentation.
++        
++        Args:
++            events: List of events to rank.
++            player_profile: Optional player profile.
++            
++        Returns:
++            List of (priority_score, event) tuples, sorted by priority.
++        """
++        scored = []
++        for event in events:
++            score = self._score_event(event, player_profile=player_profile)
++            scored.append((score, event))
++        
++        scored.sort(key=lambda x: -x[0])
++        return scored
++    
++    def get_attention_budget(self) -> float:
++        """Get remaining attention budget (0.0-1.0)."""
++        if not self._recent_events:
++            return 1.0
++        avg_load = sum(s for _, s in self._recent_events) / len(self._recent_events)
++        return max(0.0, 1.0 - avg_load * 0.1)
++    
++    def _score_event(
++        self,
++        event: Dict[str, Any],
++        current_tick: int = 0,
++        player_profile: Optional[PlayerProfile] = None,
++    ) -> float:
++        """Score an event for attention priority."""
++        base_score = event.get("importance", 0.5)
++        
++        # Player involvement bonus
++        if event.get("player_involved", False):
++            base_score *= 1.5
++        
++        # Player relevance bonus
++        if player_profile:
++            event_type = event.get("type", "")
++            style_relevant = event_type in player_profile.attention_patterns
++            if style_relevant:
++                base_score *= 1.2
++            
++            # Relationship relevance
++            for char_id in event.get("characters", []):
++                if char_id in player_profile.relationship_history:
++                    base_score *= 1.3
++        
++        # Fatigue factor (recent high-attention events reduce budget)
++        fatigue = self._fatigue_factor
++        base_score *= (1.0 - fatigue * 0.3)
++        
++        # Update fatigue
++        if base_score > HIGHLIGHT_THRESHOLD:
++            self._fatigue_factor = min(1.0, self._fatigue_factor + 0.1)
++        else:
++            self._fatigue_factor = max(0.0, self._fatigue_factor - 0.02)
++        
++        return min(1.0, base_score)
++
++
++class EmotionalFeedbackLoop:
++    """Translates mechanical game changes into emotional player feedback.
++    
++    Shows consequences emotionally, not just logically.
++    
++    Key Methods:
++    - translate: Convert mechanical changes to emotional narrative
++    - amplify: Boost emotional signal for important events
++    - dampen: Reduce noise for minor events
++    """
++    
++    def __init__(self):
++        """Initialize the EmotionalFeedbackLoop."""
++        self._feedback_history: List[Dict[str, Any]] = []
++        self._emotional_patterns: Dict[str, int] = Counter()
++    
++    def translate(
++        self,
++        mechanical_change: Dict[str, Any],
++        player_profile: Optional[PlayerProfile] = None,
++    ) -> Dict[str, Any]:
++        """Translate a mechanical change into emotional feedback.
++        
++        Args:
++            mechanical_change: Raw game state change.
++            player_profile: Optional player profile.
++            
++        Returns:
++            Emotional feedback dict with narrative framing.
++        """
++        change_type = mechanical_change.get("type", "unknown")
++        magnitude = mechanical_change.get("magnitude", 0.5)
++        
++        # Emotional translation table
++        emotional_mappings = {
++            "reputation_decrease": {
++                "emotion": "isolation",
++                "narrative": "You feel the weight of others' disapproval",
++            },
++            "reputation_increase": {
++                "emotion": "validation",
++                "narrative": "Your deeds are noticed and appreciated",
++            },
++            "relationship_damage": {
++                "emotion": "regret",
++                "narrative": "The bond between you strains under recent events",
++            },
++            "relationship_growth": {
++                "emotion": "connection",
++                "narrative": "Something shifts between you ΓÇö a strengthening of trust",
++            },
++            "power_loss": {
++                "emotion": "vulnerability",
++                "narrative": "You feel your influence slipping away",
++            },
++            "power_gain": {
++                "emotion": "empowerment",
++                "narrative": "New possibilities open before you",
++            },
++            "resource_loss": {
++                "emotion": "anxiety",
++                "narrative": "Resources grow scarce; uncertainty creeps in",
++            },
++            "resource_gain": {
++                "emotion": "security",
++                "narrative": "For now, you can breathe easier",
++            },
++            "betrayal": {
++                "emotion": "shock",
++                "narrative": "The betrayal cuts deep ΓÇö trust is harder now",
++            },
++            "loyalty_test": {
++                "emotion": "conflict",
++                "narrative": "You're torn between competing loyalties",
++            },
++        }
++        
++        mapping = emotional_mappings.get(change_type, {
++            "emotion": "uncertainty",
++            "narrative": "Something shifts, though the full meaning remains unclear",
++        })
++        
++        emotional_feedback = {
++            "emotion": mapping["emotion"],
++            "narrative": mapping["narrative"],
++            "intensity": magnitude,
++            "personal_relevance": 0.5,
++        }
++        
++        # Adjust for player profile
++        if player_profile:
++            values = player_profile.values
++            if change_type in values:
++                emotional_feedback["intensity"] *= 1.5
++                emotional_feedback["personal_relevance"] = 0.8
++        
++        # Track pattern
++        self._emotional_patterns[mapping["emotion"]] += 1
++        self._feedback_history.append({
++            "type": change_type,
++            "emotion": mapping["emotion"],
++            "tick": mechanical_change.get("tick", 0),
++        })
++        
++        return emotional_feedback
++    
++    def get_emotional_state_summary(self) -> str:
++        """Get summary of dominant emotional patterns."""
++        if not self._emotional_patterns:
++            return "Emotionally neutral"
++        
++        dominant = self._emotional_patterns.most_common(1)[0][0]
++        
++        summaries = {
++            "isolation": "You've been feeling increasingly cut off from others",
++            "validation": "There's a growing sense that you're on the right path",
++            "regret": "Unresolved consequences weigh on your mind",
++            "connection": "The bonds you've formed give you strength",
++            "vulnerability": "You sense your position growing precarious",
++            "empowerment": "You feel capable of shaping what comes next",
++            "anxiety": "Uncertainty about the future shadows your thoughts",
++            "security": "For now, the world feels stable and manageable",
++            "shock": "Recent betrayals have left you wary",
++            "conflict": "Competing demands pull at your sense of self",
++            "uncertainty": "The path forward remains unclear",
++        }
++        
++        return summaries.get(dominant, "Emotions run in mixed currents")
++
++
++class MemoryEchoSystem:
++    """Generates callbacks to past events for narrative continuity.
++    
++    Creates the "story continuity feeling" by connecting current events
++    to significant past events.
++    
++    Key Methods:
++    - record_event: Store event for future callbacks
++    - find_echo: Find relevant past event for current situation
++    - generate_echo: Format the callback for presentation
++    """
++    
++    def __init__(self, max_memories: int = 50):
++        """Initialize the MemoryEchoSystem.
++        
++        Args:
++            max_memories: Maximum memories to retain.
++        """
++        self.max_memories = max_memories
++        self._memories: List[Dict[str, Any]] = []
++        self._significant_characters: set = set()
++        self._significant_locations: set = set()
++        self._echoes_generated = 0
++    
++    def record_event(
++        self,
++        event: Dict[str, Any],
++        significance: float = 0.5,
++    ) -> None:
++        """Record an event for potential future callbacks.
++        
++        Args:
++            event: Event to record.
++            significance: Event significance score (0.0-1.0).
++        """
++        if significance < VISIBILITY_THRESHOLD:

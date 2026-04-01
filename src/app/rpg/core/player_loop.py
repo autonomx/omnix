@@ -58,6 +58,9 @@ from rpg.memory.narrative_memory import NarrativeMemory
 from rpg.story.story_arc_engine import StoryArcEngine
 from rpg.story.narrative_renderer import NarrativeRenderer
 
+# TIER 10: Autonomous NPC Agent System
+from rpg.agent.agent_system import AgentSystem
+
 
 class PlayerLoop:
     """Main game loop connecting player input to narrative output.
@@ -106,6 +109,8 @@ class PlayerLoop:
         narrative_memory: Any = None,
         story_arc_engine: Any = None,
         narrative_renderer: Any = None,
+        # TIER 10: Autonomous NPC Agent System
+        agent_system: Any = None,
     ):
         """Initialize the PlayerLoop.
         
@@ -126,6 +131,7 @@ class PlayerLoop:
             agency_system: AgencySystem for player choice tracking.
             faction_system: FactionSystem for faction simulation.
             reputation_engine: ReputationEngine for faction reputation.
+            agent_system: AgentSystem for autonomous NPC actions.
         """
         self.world = world
         self.director = director
@@ -158,6 +164,9 @@ class PlayerLoop:
         self.memory = narrative_memory or NarrativeMemory()
         self.story_arcs = story_arc_engine or StoryArcEngine()
         self.renderer = narrative_renderer or NarrativeRenderer()
+        
+        # TIER 10: Autonomous NPC Agent System
+        self.agents = agent_system or AgentSystem()
         
         self._tick = 0
         
@@ -255,6 +264,14 @@ class PlayerLoop:
         # TIER 9: Check story arcs for completion
         completed_arcs = self.story_arcs.update({"tick": self._tick})
         world_events.extend(completed_arcs)
+        
+        # TIER 10: Autonomous NPC Agent System
+        # NPCs act on their own goals, generating events that enrich the world
+        agent_events = self.agents.update(
+            characters=self.characters.characters,
+            world_state=self._get_world_state_for_agents(),
+        )
+        world_events.extend(agent_events)
         
         # 4. Convert to narrative events
         if self.director:
@@ -515,6 +532,9 @@ class PlayerLoop:
         self.story_arcs.reset()
         self.renderer.reset()
         
+        # TIER 10: Reset Autonomous NPC Agent System
+        self.agents.reset()
+        
     def _quest_to_objectives(self, quest: Dict[str, Any]) -> List[str]:
         """Convert a quest dict to objectives list for PlotEngine.
         
@@ -612,3 +632,18 @@ class PlayerLoop:
                 state["shortages"][loc] = {"severity": 0.8}
         
         return state
+    
+    def _get_world_state_for_agents(self) -> Dict[str, Any]:
+        """Get world state summary for the agent system.
+        
+        Returns:
+            Dict with relevant world state data for NPC decision-making.
+        """
+        return {
+            "factions": {
+                fid: f.to_dict()
+                for fid, f in self.factions.factions.items()
+            },
+            "economy": self.economy.get_summary() if hasattr(self.economy, "get_summary") else {},
+            "tick": self._tick,
+        }

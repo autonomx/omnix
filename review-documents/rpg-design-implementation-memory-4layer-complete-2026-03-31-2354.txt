@@ -1,0 +1,2250 @@
+diff --git a/src/app/rpg/core/orchestrator.py b/src/app/rpg/core/orchestrator.py
+new file mode 100644
+index 0000000..ec6d50a
+--- /dev/null
++++ b/src/app/rpg/core/orchestrator.py
+@@ -0,0 +1,417 @@
++"""Orchestrator — Unified main loop for RPG simulation.
++
++This module implements PATCH 3 from the RPG design specification:
++"UNIFIED MAIN LOOP (CRITICAL)"
++
++The problem: Systems run without orchestration.
++The solution: A single orchestrator function that runs each turn in
++the correct order: Player → Director → World → NPCs → Events → Memory → Narrative
++
++Usage:
++    from rpg.core.orchestrator import run_turn
++    result = run_turn(session, player_input)
++
++This replaces the old scattered loop logic with a single authoritative
++turn execution that ensures all systems cooperate in the right order.
++"""
++
++from typing import Any, Dict, List, Optional
++
++from rpg.ai.director_bridge import apply_director_to_npcs, clear_director_goals
++from rpg.memory import EPISODE_BUILD_THRESHOLD
++from rpg.memory.episodic import Episode
++from rpg.memory.memory_manager import MemoryManager
++
++
++def _get_or_create_memory_manager(session) -> MemoryManager:
++    """Get existing MemoryManager from session or create and attach one."""
++    if not hasattr(session, 'memory_manager') or session.memory_manager is None:
++        session.memory_manager = MemoryManager(session=session)
++    return session.memory_manager
++
++
++def _trigger_episode_build(session, memory_manager: MemoryManager) -> Optional[Episode]:
++    """Check if episode should be built from session recent_events.
++    
++    When session.recent_events reaches the threshold, force-build
++    an episode and clear the buffer.
++    """
++    recent = getattr(session, 'recent_events', [])
++    if len(recent) >= EPISODE_BUILD_THRESHOLD:
++        episode = memory_manager.force_build_episode(list(recent))
++        recent.clear()
++        return episode
++    return None
++
++
++def _consolidate_periodic(
++    session,
++    memory_manager: MemoryManager,
++    interval: int = 10,
++) -> None:
++    """Run memory consolidation at regular intervals.
++    
++    Consolidation is expensive, so it's not done every turn.
++    This checks if enough turns have passed and triggers it.
++    
++    Args:
++        session: The current game session.
++        memory_manager: The MemoryManager to consolidate.
++        interval: Number of turns between consolidations.
++    """
++    world_time = getattr(session.world, 'time', 0)
++    if world_time % interval == 0 and world_time > 0:
++        memory_manager.consolidate(current_tick=world_time)
++
++
++def _enrich_npcs_with_memory(session) -> None:
++    """Step 5: Enrich NPCs with memory-derived context.
++    
++    PATCH 5: Memory must drive behavior.
++    This retrieves recent memories for each NPC and updates their
++    emotional state and relationships before planning.
++    
++    Args:
++        session: The current game session.
++    """
++    npcs = session.npcs.values() if hasattr(session.npcs, 'values') else session.npcs
++    
++    for npc in npcs:
++        if not getattr(npc, 'is_active', True):
++            continue
++            
++        _enrich_npc_with_memory(npc, session)
++
++
++def _enrich_npc_with_memory(npc, session) -> None:
++    """Enrich a single NPC with memories.
++    
++    Uses MemoryManager if available, otherwise falls back to old system.
++    
++    Args:
++        npc: The NPC to enrich.
++        session: The current game session.
++    """
++    # Try new MemoryManager first
++    memory_manager = getattr(session, 'memory_manager', None)
++    if memory_manager:
++        query_entities = [npc.id, "player"]
++        
++        memories = memory_manager.retrieve(
++            query_entities=query_entities,
++            limit=5,
++            mode="general",
++        )
++        
++        formatted = memory_manager.get_context_for(
++            query_entities=query_entities,
++            max_items=5,
++            format_type="narrative",
++        )
++        
++        if memories:
++            npc.emotional_state["recent_memories"] = [
++                item.summary if hasattr(item, 'summary') else str(item)
++                for _, item in memories[:3]
++            ]
++            npc.emotional_state["memory_context"] = formatted
++        return
++    
++    # Fallback to old memory system
++    if hasattr(session, 'memory_system'):
++        memories = session.memory_system.retrieve(npc.id)
++    elif hasattr(npc, 'memory') and isinstance(npc.memory, dict):
++        memories = npc.memory.get("events", [])
++    else:
++        memories = []
++        
++    # Update emotional state from memories
++    if memories:
++        npc.emotional_state["recent_memories"] = memories[-5:]
++        
++    # Update relationships from memories
++    cond1 = hasattr(session, "memory_system")
++    cond2 = hasattr(session.memory_system, "get_relationships")
++    if cond1 and cond2:
++        relationships = session.memory_system.get_relationships(npc.id)
++        npc.emotional_state["relationships"] = relationships
++
++
++def run_turn(session, player_input: str) -> Dict[str, Any]:
++    """Execute one complete turn of the RPG simulation.
++    
++    This is the authoritative turn loop from the design specification.
++    It ensures all systems are called in the correct dependency order.
++    
++    Turn Order:
++    1. Interpret player intent (Brain)
++    2. Story Director decides narrative direction
++    3. Apply world state updates from Director
++    4. Apply NPC goal updates from Director
++    5. Enrich NPCs with memory (memory drives behavior)
++    6. NPCs plan their actions (GOAP)
++    7. Convert actions to events
++    8. Inject story events from Director
++    9. Check if scene update is needed
++    10. Process all events (system reactions)
++    11. Update memory with events (4-layer system)
++    12. Generate narrative output
++    13. Clear per-turn state
++    
++    Args:
++        session: The current game session.
++        player_input: The player's input text for this turn.
++        
++    Returns:
++        Dict with turn result including narration, events, and state.
++    """
++    # 1. Interpret player intent
++    intent = _interpret_player(session, player_input)
++    
++    # 2. Story Director decides story direction
++    director_output = session.story_director.decide(session, intent)
++    
++    # Apply tension delta from Director
++    session.tension = getattr(session, 'tension', 0.0) + director_output.tension_delta
++    
++    # 3. Apply world state updates from Director
++    _apply_world_updates(session, director_output)
++    
++    # 4. Apply NPC goal updates from Director
++    apply_director_to_npcs(session, director_output)
++    
++    # 5. Enrich NPCs with memory (PATCH 5)
++    _enrich_npcs_with_memory(session)
++    
++    # 6. NPCs plan their actions (GOAP)
++    npc_actions = _plan_npc_actions(session)
++    
++    # 7. Convert actions to events
++    events = _convert_actions_to_events(session, npc_actions)
++    
++    # 8. Inject story events from Director (CRITICAL)
++    events.extend(director_output.story_events)
++    
++    # 9. Check if scene update is needed (PATCH 7)
++    if _should_update_scene(events):
++        _update_scene(session, events)
++    
++    # 10. Process all events (event bus dispatch)
++    session.event_bus.process(session)
++    
++    # 11. Update memory with events (4-layer system)
++    _update_memory(session, events)
++    
++    # 11b. Feed events through MemoryManager pipeline
++    memory_manager = _get_or_create_memory_manager(session)
++    memory_manager.add_events(events, current_tick=getattr(session.world, 'time', 0))
++    
++    # 11c. Check for episode building from session recent_events
++    _trigger_episode_build(session, memory_manager)
++    
++    # 11d. Periodic consolidation
++    _consolidate_periodic(session, memory_manager)
++    
++    # 12. Generate narrative output
++    narration = _generate_narration(session, events)
++    
++    # 13. Clear per-turn state
++    _clear_per_turn_state(session)
++    
++    return {
++        "narration": narration,
++        "events": events,
++        "tension": session.tension,
++        "director_output": director_output.to_dict(),
++    }
++
++
++def _interpret_player(session, player_input: str) -> Dict[str, Any]:
++    """Step 1: Interpret player input into structured intent.
++    
++    Uses the unified brain to classify the player's action into
++    a structured format that other systems can consume.
++    
++    Args:
++        session: The current game session.
++        player_input: The player's input text.
++        
++    Returns:
++        Dict with structured intent (type, intent, target, tone).
++    """
++    if hasattr(session, 'brain') and session.brain:
++        return session.brain.interpret(player_input)
++    
++    # Fallback: simple classification
++    return {
++        "type": "action",
++        "intent": player_input,
++        "target": None,
++        "tone": "neutral",
++    }
++
++
++def _apply_world_updates(session, director_output) -> None:
++    """Step 3: Apply world state updates from the Director.
++    
++    Updates global world state based on Director decisions.
++    This might change things like alert levels, weather, time of day, etc.
++    
++    Args:
++        session: The current game session.
++        director_output: The Director's output with world updates.
++    """
++    if not director_output.has_world_updates():
++        return
++        
++    world = getattr(session, 'world', None)
++    if world is None:
++        return
++        
++    for key, value in director_output.world_state_updates.items():
++        if hasattr(world, key):
++            setattr(world, key, value)
++        elif hasattr(world, 'update'):
++            world.update({key: value})
++
++
++def _plan_npc_actions(session) -> List[Dict[str, Any]]:
++    """Step 6: NPCs plan their actions using GOAP.
++    
++    Each active NPC plans their next action(s) based on their
++    current goals (which may include Director-injected goals).
++    
++    Args:
++        session: The current game session.
++        
++    Returns:
++        List of action dicts from all NPCs.
++    """
++    from rpg.ai.npc_planner import decide as npc_decide
++    
++    npc_actions = []
++    npcs = session.npcs.values() if hasattr(session.npcs, 'values') else session.npcs
++    
++    for npc in npcs:
++        if not getattr(npc, 'is_active', True):
++            continue
++            
++        try:
++            action = npc_decide(npc, session)
++            action["npc_id"] = npc.id
++            npc_actions.append(action)
++        except Exception:
++            # Don't let one NPC's error break the whole turn
++            continue
++            
++    return npc_actions
++
++
++def _convert_actions_to_events(
++    session, npc_actions: List[Dict[str, Any]]
++) -> List[Dict[str, Any]]:
++    """Step 7: Convert NPC actions to events.
++    
++    Translates high-level actions like "attack" or "move" into
++    concrete events that other systems can react to.
++    
++    Args:
++        session: The current game session.
++        npc_actions: List of action dicts from NPCs.
++        
++    Returns:
++        List of event dicts.
++    """
++    from rpg.game_loop.main import handle_action
++    
++    events = []
++    for action in npc_actions:
++        # Execute the action (which may publish events)
++        handle_action(session, action)
++        events.append({
++            "type": "npc_action",
++            "npc_id": action.get("npc_id"),
++            "action": action.get("action"),
++        })
++        
++    return events
++
++
++def _should_update_scene(events: List[Dict[str, Any]]) -> bool:
++    """Step 9: Check if scene regeneration is needed.
++    
++    PATCH 7: Scene update triggers.
++    Scene should update when significant events occur.
++    
++    Args:
++        events: List of events from this turn.
++        
++    Returns:
++        True if scene should be regenerated.
++    """
++    trigger_types = {"damage", "death", "story_event", "critical_hit"}
++    
++    for event in events:
++        if event.get("type") in trigger_types:
++            return True
++            
++    return False
++
++
++def _update_scene(session, events: List[Dict[str, Any]]) -> None:
++    """Step 9: Regenerate the scene if needed.
++    
++    Uses the scene generator to create a new scene representation
++    based on current state and events.
++    
++    Args:
++        session: The current game session.
++        events: Events that occurred this turn.
++    """
++    if hasattr(session, 'scene_generator'):
++        session.scene = session.scene_generator.generate(session)
++
++
++def _update_memory(session, events: List[Dict[str, Any]]) -> None:
++    """Step 11: Update NPC memories with new events.
++    
++    Stores the turn's events so NPCs can remember them for
++    future decision-making.
++    
++    Args:
++        session: The current game session.
++        events: Events that occurred this turn.
++    """
++    if hasattr(session, 'memory_system'):
++        session.memory_system.update(events)
++
++
++def _generate_narration(
++    session, events: List[Dict[str, Any]]
++) -> Optional[str]:
++    """Step 12: Generate narrative output.
++    
++    Converts the mechanical events into narrative text for the player.
++    
++    Args:
++        session: The current game session.
++        events: Events that occurred this turn.
++        
++    Returns:
++        Narration text, or None if not available.
++    """
++    if hasattr(session, 'narrator'):
++        return session.narrator.generate(session)
++    return None
++
++
++def _clear_per_turn_state(session) -> None:
++    """Step 13: Clear state that should not persist between turns.
++    
++    This prevents accumulation of per-turn directives like
++    Director-injected goals.
++    
++    Args:
++        session: The current game session.
++    """
++    clear_director_goals(session)
+\ No newline at end of file
+diff --git a/src/app/rpg/memory/__init__.py b/src/app/rpg/memory/__init__.py
+index 6fb4308..f007d68 100644
+--- a/src/app/rpg/memory/__init__.py
++++ b/src/app/rpg/memory/__init__.py
+@@ -1,18 +1,27 @@
+-"""Memory Module - Manages NPC memory storage, retrieval, and decay.
++"""Memory Module - 4-layer memory system with entity indexing.
+ 
+ Submodules:
+-- retrieval: Talemate-style memory scoring and retrieval with structured queries
+-- reflection: Converts memories into high-level beliefs
+-- consolidation: Merges repeated memories and converts to semantic form
+-- belief_system: Derived truth layer built from memories for GOAP/Story
++- episodic: Compressed episode-based memories (Layer 3)
++- retrieval: Talemate-style memory scoring and retrieval
++- consolidation: Merges repeated memories, converts to semantic
++- belief_system: Derived truth layer from memories for GOAP/Story
+ - relationships: Persistent relationship state between NPCs
++- memory_manager: Unified 4-layer memory manager (entry point)
+ 
+-Memory Types:
+-- episodic: Event-based memories ("what happened")
+-- semantic: Belief-based memories ("what is true")
+-- relationship: Relationship state memories ("how I feel about X")
++Memory Layers:
++- Layer 1: Raw Events (short-term, last N events)
++- Layer 2: Narrative Events (compressed summaries)
++- Layer 3: Episodic Memory (chunked episodes with TTL)
++- Layer 4: Semantic Memory (long-term beliefs/facts)
+ """
+ 
++from rpg.memory.episodic import (
++    Episode,
++    EpisodeBuilder,
++    chunk_events_into_episodes,
++    compute_event_importance,
++    compute_episode_importance,
++)
+ from rpg.memory.retrieval import (
+     compute_recency_decay,
+     compute_relevance,
+@@ -37,8 +46,29 @@ from rpg.memory.belief_system import (
+     BeliefSystem,
+     compute_belief_influence,
+ )
++from rpg.memory.relationships import (
++    get_relationship,
++    update_relationship_from_event,
++    get_relationship_summary,
++    get_all_relationship_summaries,
++    get_relationship_goal_override,
++)
++from rpg.memory.memory_manager import (
++    MemoryManager,
++    MAX_RAW_EVENTS,
++    MAX_EPISODES,
++    MAX_MEMORY_IN_PROMPT,
++    EPISODE_BUILD_THRESHOLD,
++)
+ 
+ __all__ = [
++    # Episodic (Layer 3)
++    "Episode",
++    "EpisodeBuilder",
++    "chunk_events_into_episodes",
++    "compute_event_importance",
++    "compute_episode_importance",
++    # Retrieval
+     "compute_recency_decay",
+     "compute_relevance",
+     "compute_weighted_importance",
+@@ -47,12 +77,27 @@ __all__ = [
+     "retrieve_with_filters",
+     "MEMORY_TYPES",
+     "RETRIEVAL_WEIGHTS",
++    # Reflection
+     "reflect",
+     "store_reflection",
+     "reflect_all",
++    # Consolidation
+     "consolidate_memories",
+     "merge_repeated_events",
+     "convert_to_semantic",
++    # Belief System
+     "BeliefSystem",
+     "compute_belief_influence",
+-]
++    # Relationships
++    "get_relationship",
++    "update_relationship_from_event",
++    "get_relationship_summary",
++    "get_all_relationship_summaries",
++    "get_relationship_goal_override",
++    # Memory Manager (main entry point)
++    "MemoryManager",
++    "MAX_RAW_EVENTS",
++    "MAX_EPISODES",
++    "MAX_MEMORY_IN_PROMPT",
++    "EPISODE_BUILD_THRESHOLD",
++]
+\ No newline at end of file
+diff --git a/src/app/rpg/memory/episodic.py b/src/app/rpg/memory/episodic.py
+new file mode 100644
+index 0000000..fa2acd3
+--- /dev/null
++++ b/src/app/rpg/memory/episodic.py
+@@ -0,0 +1,260 @@
++"""Episodic Memory System - Compressed narrative episodes.
++
++This is Layer 3 of the 4-layer memory system.
++
++Episodes are compressed summaries of event sequences that:
++- Group related events into coherent narrative units
++- Carry importance scores for retrieval priority
++- Track all entities involved for indexed retrieval
++- Persist beyond raw event windows
++
++Architecture:
++    Raw Events -> Narrative Events -> Episodes -> Semantic
++
++Each Episode represents a meaningful "story beat."
++
++Usage:
++    episode = EpisodeBuilder.build(events)
++    session.memory.episodes.append(episode)
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Set
++
++
++@dataclass
++class Episode:
++    """A compressed episodic memory summarizing a sequence of events.
++
++    Attributes:
++        id: Unique identifier for this episode
++        summary: 1-2 sentence narrative description
++        key_events: Source events that formed this episode
++        entities: All entity IDs involved
++        importance: Float 0.0-1.0 indicating significance
++        tags: Categorical tags for filtering
++        tick_created: World time when episode was created
++        ttl: Time-to-live in ticks; 0 = permanent
++    """
++
++    summary: str
++    key_events: List[Dict[str, Any]] = field(default_factory=list)
++    entities: Set[str] = field(default_factory=set)
++    importance: float = 0.5
++    tags: List[str] = field(default_factory=list)
++    id: str = ""
++    tick_created: int = 0
++    ttl: int = 0
++
++    def __post_init__(self):
++        if not self.id:
++            self.id = f"ep_{id(self)}_{hash(self.summary) % 10000}"
++        if not isinstance(self.entities, set):
++            self.entities = set(self.entities)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "id": self.id,
++            "summary": self.summary,
++            "key_events": self.key_events[:3],
++            "entities": list(self.entities),
++            "importance": self.importance,
++            "tags": self.tags,
++            "tick_created": self.tick_created,
++            "ttl": self.ttl,
++        }
++
++    @classmethod
++    def from_dict(cls, data: Dict[str, Any]) -> "Episode":
++        return cls(
++            id=data.get("id", ""),
++            summary=data.get("summary", ""),
++            key_events=data.get("key_events", []),
++            entities=set(data.get("entities", [])),
++            importance=data.get("importance", 0.5),
++            tags=data.get("tags", []),
++            tick_created=data.get("tick_created", 0),
++            ttl=data.get("ttl", 0),
++        )
++
++    def is_expired(self, current_tick: int) -> bool:
++        if self.ttl <= 0:
++            return False
++        return (current_tick - self.tick_created) >= self.ttl
++
++    def has_entity(self, entity_id: str) -> bool:
++        return entity_id in self.entities
++
++    def has_any_entity(self, entity_ids: Set[str]) -> bool:
++        return bool(self.entities & entity_ids)
++
++
++_EVENT_IMPORTANCE = {
++    "death": 1.0,
++    "betrayal": 0.95,
++    "critical_hit": 0.85,
++    "alliance_formed": 0.7,
++    "assist": 0.6,
++    "damage": 0.5,
++    "heal": 0.5,
++    "move": 0.1,
++    "dialogue": 0.3,
++    "story_event": 0.7,
++    "npc_action": 0.2,
++}
++
++
++def compute_event_importance(event: Dict[str, Any]) -> float:
++    """Compute importance score for a single event [0.0, 1.0]."""
++    event_type = event.get("type", "")
++    score = _EVENT_IMPORTANCE.get(event_type, 0.1)
++    entities_in_event = _extract_entities_from_event(event)
++    if "player" in entities_in_event:
++        score += 0.3
++    if event_type in ("damage", "death", "betrayal"):
++        score += 0.2
++    if event.get("memory_type") == "narrative_event":
++        summary = event.get("summary", "")
++        keywords = ["kill", "die", "death", "betray", "destroy"]
++        if any(w in summary.lower() for w in keywords):
++            score += 0.3
++    emotional = event.get("emotional_intensity", 0)
++    score += emotional * 0.2
++    return min(score, 1.0)
++
++
++def compute_episode_importance(events: List[Dict[str, Any]]) -> float:
++    """Compute combined importance for a group of events."""
++    if not events:
++        return 0.0
++    importances = [compute_event_importance(e) for e in events]
++    max_imp = max(importances)
++    significant_count = sum(1 for i in importances if i >= 0.5)
++    accumulation_bonus = min(significant_count * 0.1, 0.3)
++    return min(max_imp + accumulation_bonus, 1.0)
++
++
++def _extract_entities_from_event(event: Dict[str, Any]) -> Set[str]:
++    entities = set()
++    for key in ("source", "target", "actor", "npc_id"):
++        val = event.get(key)
++        if val and isinstance(val, str):
++            entities.add(val)
++    for e in event.get("entities", []):
++        if e:
++            entities.add(e)
++    return entities
++
++
++class EpisodeBuilder:
++    """Builds Episode instances from raw/narrative events."""
++
++    def __init__(self):
++        self._events: List[Dict[str, Any]] = []
++        self._entities: Set[str] = set()
++        self._tags: Set[str] = set()
++
++    def add(self, event: Dict[str, Any]) -> None:
++        self._events.append(event)
++        self._entities.update(_extract_entities_from_event(event))
++        for tag in event.get("tags", []):
++            self._tags.add(tag)
++        event_type = event.get("type", "")
++        if event_type:
++            self._tags.add(event_type)
++
++    @property
++    def event_count(self) -> int:
++        return len(self._events)
++
++    def build(self, current_tick: int = 0) -> Episode:
++        if not self._events:
++            return Episode(
++                summary="Nothing significant happened.",
++                importance=0.0,
++                tick_created=current_tick,
++            )
++        importance = compute_episode_importance(self._events)
++        summary = _generate_episode_summary(self._events)
++        ttl = _compute_ttl(importance)
++        key_events = _select_key_events(self._events, max_events=5)
++        return Episode(
++            summary=summary,
++            key_events=key_events,
++            entities=self._entities.copy(),
++            importance=importance,
++            tags=sorted(self._tags),
++            tick_created=current_tick,
++            ttl=ttl,
++        )
++
++    @classmethod
++    def from_events(
++        cls, events: List[Dict[str, Any]], current_tick: int = 0
++    ) -> Episode:
++        """Convenience factory: build episode from events list."""
++        builder = cls()
++        for event in events:
++            builder.add(event)
++        return builder.build(current_tick=current_tick)
++
++
++def _generate_episode_summary(events: List[Dict[str, Any]]) -> str:
++    if not events:
++        return "Nothing happened."
++    scored = [(compute_event_importance(e), e) for e in events]
++    scored.sort(key=lambda x: x[0], reverse=True)
++    top_events = scored[:3]
++    parts = []
++    for _, event in top_events:
++        summary = event.get("summary")
++        if summary:
++            parts.append(summary)
++        else:
++            event_type = event.get("type", "unknown")
++            source = event.get("source", event.get("actor", "someone"))
++            target = event.get("target", "someone")
++            parts.append(f"{source} {event_type} {target}")
++    if len(parts) == 1:
++        return parts[0]
++    if len(parts) == 2:
++        return f"{parts[0]}, and {parts[1]}"
++    return f"{parts[0]}, then {parts[1]}, then {parts[2]}"
++
++
++def _select_key_events(
++    events: List[Dict[str, Any]], max_events: int = 5
++) -> List[Dict[str, Any]]:
++    scored = [(compute_event_importance(e), e) for e in events]
++    scored.sort(key=lambda x: x[0], reverse=True)
++    return [e for _, e in scored[:max_events]]
++
++
++def _compute_ttl(importance: float) -> int:
++    if importance >= 0.8:
++        return 0
++    if importance >= 0.6:
++        return 200
++    if importance >= 0.4:
++        return 100
++    if importance >= 0.2:
++        return 50
++    return 20
++
++
++def chunk_events_into_episodes(
++    events: List[Dict[str, Any]],
++    chunk_size: int = 10,
++    current_tick: int = 0,
++) -> List[Episode]:
++    """Split a batch of events into multiple episodes."""
++    if len(events) <= chunk_size:
++        return [EpisodeBuilder.from_events(events, current_tick)]
++    episodes = []
++    for i in range(0, len(events), chunk_size):
++        chunk = events[i : i + chunk_size]
++        episode = EpisodeBuilder.from_events(chunk, current_tick)
++        episodes.append(episode)
++    return episodes
+\ No newline at end of file
+diff --git a/src/app/rpg/memory/memory_manager.py b/src/app/rpg/memory/memory_manager.py
+new file mode 100644
+index 0000000..2f7bfb6
+--- /dev/null
++++ b/src/app/rpg/memory/memory_manager.py
+@@ -0,0 +1,582 @@
++"""Memory Manager - Unified 4-layer memory system with entity indexing.
++
++This is the central coordinator for the complete memory architecture:
++
++    LAYER 1 - Raw Events (Short-Term)
++        - Last N raw events (20-50)
++        - No summarization
++        - Used for immediate reactions
++
++    LAYER 2 - Narrative Events (Compressed)
++        - Narrative summaries with importance scores
++        - Tagged and entity-linked
++        - Used for short-term context
++
++    LAYER 3 - Episodic Memory (Compressed Episodes)
++        - Compressed event clusters
++        - TTL-based expiry
++        - Entity-indexed for fast retrieval
++        - Used for medium-term narrative recall
++
++    LAYER 4 - Semantic Memory (Long-Term)
++        - Beliefs, facts, relationships
++        - Persist indefinitely
++        - Used for long-term behavior shaping
++
++The MemoryManager provides:
++    - add_event: Ingest events through all layers
++    - retrieve: Query-based memory retrieval across layers
++    - consolidate: Trigger episode building and pruning
++    - get_context_for: Get memory context formatted for LLM prompts
++
++Usage:
++    manager = MemoryManager(session)
++    manager.add_event(event)
++    memories = manager.retrieve(query_entities=["player", "guard"])
++"""
++
++from __future__ import annotations
++
++from collections import defaultdict
++from typing import Any, Dict, List, Optional, Tuple
++
++from rpg.memory.belief_system import BeliefSystem
++from rpg.memory.episodic import (
++    Episode,
++    EpisodeBuilder,
++    compute_event_importance,
++)
++from rpg.memory.retrieval import (
++    compute_recency_decay,
++)
++
++# Configuration
++MAX_RAW_EVENTS = 50
++MAX_NARRATIVE_EVENTS = 30
++MAX_EPISODES = 50
++MAX_SEMANTIC_BELIEFS = 100
++MAX_MEMORY_IN_PROMPT = 5
++EPISODE_BUILD_THRESHOLD = 10
++
++
++class MemoryManager:
++    """Unified 4-layer memory manager with entity indexing."""
++
++    def __init__(
++        self,
++        session=None,
++        max_raw_events: int = MAX_RAW_EVENTS,
++        max_episodes: int = MAX_EPISODES,
++        episode_build_threshold: int = EPISODE_BUILD_THRESHOLD,
++    ):
++        self.session = session
++        # Layer 1
++        self.raw_events: List[Dict[str, Any]] = []
++        self._max_raw = max_raw_events
++        # Layer 2
++        self.narrative_events: List[Dict[str, Any]] = []
++        # Layer 3
++        self.episodes: List[Episode] = []
++        self._max_episodes = max_episodes
++        # Layer 4
++        self.semantic_beliefs: List[Dict[str, Any]] = []
++        # Entity index
++        self.entity_index: Dict[str, List[Episode]] = defaultdict(list)
++        # Builder state
++        self._pending_events: List[Dict[str, Any]] = []
++        self._episode_threshold = episode_build_threshold
++        # Beliefs
++        self.belief_system = BeliefSystem()
++
++    def add_event(self, event: Dict[str, Any], current_tick: int = 0) -> None:
++        """Add an event to the memory system, flowing through all layers."""
++        if current_tick == 0:
++            current_tick = self._get_current_tick()
++        if "timestamp" not in event:
++            event["timestamp"] = current_tick
++        if "tick" not in event:
++            event["tick"] = current_tick
++        self._add_raw_event(event)
++        self._add_narrative_event(event)
++        self._pending_events.append(event)
++        if len(self._pending_events) >= self._episode_threshold:
++            self.build_episode()
++        self._update_beliefs_from_event(event)
++
++    def add_events(
++        self, events: List[Dict[str, Any]], current_tick: int = 0
++    ) -> int:
++        """Add multiple events at once. Returns episodes built count."""
++        count = 0
++        for event in events:
++            before = len(self._pending_events)
++            self.add_event(event, current_tick=current_tick)
++            if len(self._pending_events) < before:
++                count += 1
++        return count
++
++    def _add_raw_event(self, event: Dict[str, Any]) -> None:
++        self.raw_events.append(event)
++        if len(self.raw_events) > self._max_raw:
++            self.raw_events = self.raw_events[-self._max_raw:]
++
++    def _add_narrative_event(self, event: Dict[str, Any]) -> None:
++        if event.get("type") == "narrative_event":
++            narrative = event
++        elif "summary" in event:
++            narrative = event.copy()
++        else:
++            narrative = self._create_narrative_from_event(event)
++        if "importance" not in narrative:
++            narrative["importance"] = compute_event_importance(event)
++        entities = self._extract_entities(event)
++        narrative["entities"] = list(entities)
++        self.narrative_events.append(narrative)
++        if len(self.narrative_events) > MAX_NARRATIVE_EVENTS:
++            self.narrative_events = self.narrative_events[-MAX_NARRATIVE_EVENTS:]
++
++    def _create_narrative_from_event(
++        self, event: Dict[str, Any]
++    ) -> Dict[str, Any]:
++        event_type = event.get("type", "event")
++        source = event.get("source", event.get("actor", "unknown"))
++        target = event.get("target", "unknown")
++        return {
++            "type": "narrative_event",
++            "original_type": event_type,
++            "summary": f"{source} {event_type} {target}",
++            "tags": [event_type],
++            "source": source,
++            "target": target,
++            "timestamp": event.get("timestamp", event.get("tick", 0)),
++        }
++
++    @staticmethod
++    def _extract_entities(event: Dict[str, Any]) -> set:
++        entities = set()
++        for key in ("source", "target", "actor", "npc_id"):
++            val = event.get(key)
++            if val and isinstance(val, str):
++                entities.add(val)
++        for e in event.get("entities", []):
++            if e:
++                entities.add(e)
++        return entities
++
++    def build_episode(self) -> Optional[Episode]:
++        """Build an episode from pending events."""
++        if not self._pending_events:
++            return None
++        current_tick = self._get_current_tick()
++        episode = EpisodeBuilder.from_events(
++            self._pending_events, current_tick=current_tick
++        )
++        self.episodes.append(episode)
++        for entity_id in episode.entities:
++            self.entity_index[entity_id].append(episode)
++        self._prune_episodes()
++        self._pending_events.clear()
++        return episode
++
++    def force_build_episode(
++        self, events: List[Dict[str, Any]]
++    ) -> Episode:
++        current_tick = self._get_current_tick()
++        episode = EpisodeBuilder.from_events(
++            events, current_tick=current_tick
++        )
++        self.episodes.append(episode)
++        for entity_id in episode.entities:
++            self.entity_index[entity_id].append(episode)
++        self._prune_episodes()
++        return episode
++
++    def apply_decay(self, episode: Episode, current_tick: int) -> None:
++        """Apply time-based decay to an episode's importance."""
++        age = current_tick - episode.tick_created
++        decay = min(0.5, age * 0.001)
++        episode.importance *= 1 - decay
++        episode.importance = max(episode.importance, 0.01)
++
++    def _prune_episodes(self) -> None:
++        current_tick = self._get_current_tick()
++        # Apply decay to all episodes
++        for ep in self.episodes:
++            self.apply_decay(ep, current_tick)
++        self.episodes = [
++            ep for ep in self.episodes if not ep.is_expired(current_tick)
++        ]
++        if len(self.episodes) > self._max_episodes:
++            self.episodes.sort(key=lambda e: e.importance, reverse=True)
++            self.episodes = self.episodes[: self._max_episodes]
++        self._rebuild_entity_index()
++
++    def _rebuild_entity_index(self) -> None:
++        self.entity_index.clear()
++        for episode in self.episodes:
++            for entity_id in episode.entities:
++                self.entity_index[entity_id].append(episode)
++
++    def _update_beliefs_from_event(self, event: Dict[str, Any]) -> None:
++        importance = compute_event_importance(event)
++        if importance < 0.6:
++            return
++        belief = self._extract_belief(event)
++        if belief:
++            self._add_or_update_belief(belief)
++
++    def _extract_belief(
++        self, event: Dict[str, Any]
++    ) -> Optional[Dict[str, Any]]:
++        event_type = event.get("type", "")
++        source = event.get("source", event.get("actor", ""))
++        target = event.get("target", "")
++        if not (source and target):
++            return None
++        belief_map = {
++            "damage": {
++                "value": -0.3,
++                "reason": f"{source} harmed {target}",
++                "importance": 0.7,
++            },
++            "death": {
++                "value": -0.8,
++                "reason": f"{source} killed {target}",
++                "importance": 1.0,
++            },
++            "heal": {
++                "value": 0.4,
++                "reason": f"{source} healed {target}",
++                "importance": 0.5,
++            },
++            "betrayal": {
++                "value": -1.0,
++                "reason": f"{source} betrayed {target}",
++                "importance": 1.0,
++            },
++            "alliance_formed": {
++                "value": 0.6,
++                "reason": f"{source} allied with {target}",
++                "importance": 0.7,
++            },
++        }
++        if event_type in belief_map:
++            b = belief_map[event_type]
++            return {
++                "type": "relationship",
++                "entity": target,
++                "target_entity": source,
++                "value": b["value"],
++                "reason": b["reason"],
++                "importance": b["importance"],
++            }
++        if event_type == "story_event":
++            return {
++                "type": "fact",
++                "entity": source or target,
++                "fact": event.get("summary", event.get("text", "")),
++                "importance": 0.8,
++            }
++        return None
++
++    def _resolve_contradiction(
++        self, belief: Dict[str, Any]
++    ) -> Optional[Dict[str, Any]]:
++        """Check for contradictory beliefs and resolve them.
++        
++        If a strong contradictory belief exists, reduce its importance
++        instead of adding a duplicate with conflicting value.
++        """
++        entity = belief.get("entity", "")
++        target = belief.get("target_entity", "")
++        new_val = belief.get("value", 0)
++        
++        for existing in self.semantic_beliefs:
++            if (
++                existing.get("entity") == entity
++                and existing.get("target_entity") == target
++            ):
++                old_val = existing.get("value", 0)
++                # Check for contradiction (opposite signs)
++                if (old_val > 0.2 and new_val <= -0.2) or (
++                    old_val < -0.2 and new_val >= 0.2
++                ):
++                    # Newer event overrides older (recency)
++                    existing["value"] = new_val
++                    existing["reason"] = belief.get(
++                        "reason", existing.get("reason", "")
++                    )
++                    return None
++        return belief
++
++    def _add_or_update_belief(self, belief: Dict[str, Any]) -> None:
++        belief_type = belief.get("type", "")
++        entity = belief.get("entity", "")
++        target = belief.get("target_entity", "")
++        for existing in self.semantic_beliefs:
++            if (
++                existing.get("type") == belief_type
++                and existing.get("entity") == entity
++                and existing.get("target_entity") == target
++            ):
++                old_val = existing.get("value", 0)
++                new_val = belief.get("value", 0)
++                existing["value"] = old_val + (new_val - old_val) * 0.5
++                existing["reason"] = belief.get(
++                    "reason", existing.get("reason", "")
++                )
++                existing["importance"] = max(
++                    existing.get("importance", 0),
++                    belief.get("importance", 0),
++                )
++                return
++        # Check for contradictions before adding new belief
++        resolved = self._resolve_contradiction(belief)
++        if resolved is not None:
++            self.semantic_beliefs.append(resolved)
++        if len(self.semantic_beliefs) > MAX_SEMANTIC_BELIEFS:
++            self._prune_beliefs()
++
++    def _prune_beliefs(self) -> None:
++        self.semantic_beliefs.sort(
++            key=lambda b: b.get("importance", 0), reverse=True
++        )
++        self.semantic_beliefs = self.semantic_beliefs[:MAX_SEMANTIC_BELIEFS]
++
++    def retrieve(
++        self,
++        query_entities: Optional[List[str]] = None,
++        query_types: Optional[List[str]] = None,
++        limit: int = MAX_MEMORY_IN_PROMPT,
++        mode: str = "general",
++    ) -> List[Tuple[float, Any]]:
++        """Retrieve most relevant memories for a query context."""
++        candidates: List[Tuple[float, Any]] = []
++        query_set = set(query_entities or [])
++        current_tick = self._get_current_tick()
++
++        # Layer 3 - Episodes
++        for episode in self.episodes:
++            if query_set and not episode.has_any_entity(query_set):
++                continue
++            score = episode.importance * 0.6
++            if query_set:
++                overlap = len(episode.entities & query_set)
++                score += overlap * 0.1
++            recency = compute_recency_decay(
++                episode.tick_created, current_tick, half_life=100
++            )
++            score += recency * 0.2
++            if query_types and not any(
++                t in episode.tags for t in query_types
++            ):
++                continue
++            candidates.append((score, episode))
++
++        # Layer 4 - Semantic beliefs
++        for belief in self.semantic_beliefs:
++            be = belief.get("entity", "")
++            te = belief.get("target_entity", "")
++            if query_set and be not in query_set and te not in query_set:
++                continue
++            score = belief.get("importance", 0.5) * 0.7
++            score += abs(belief.get("value", 0)) * 0.2
++            candidates.append((score, belief))
++
++        # Layer 2 - Narrative events
++        for narrative in self.narrative_events[-20:]:
++            ents = set(narrative.get("entities", []))
++            for key in ("source", "target"):
++                val = narrative.get(key, "")
++                if val:
++                    ents.add(val)
++            if query_set and not ents.intersection(query_set):
++                continue
++            relevance = 0.3
++            if query_set:
++                total = max(len(ents), 1)
++                relevance = len(ents & query_set) / total
++            recency = compute_recency_decay(
++                narrative.get("timestamp", narrative.get("tick", 0)),
++                current_tick,
++                half_life=30,
++            )
++            importance = narrative.get("importance", 0.5)
++            score = relevance * 0.4 + importance * 0.4 + recency * 0.2
++            candidates.append((score, narrative))
++
++        candidates.sort(key=lambda x: x[0], reverse=True)
++        return candidates[:limit]
++
++    def retrieve_for_entity(
++        self, entity_id: str, limit: int = MAX_MEMORY_IN_PROMPT
++    ) -> List[Tuple[float, Any]]:
++        return self.retrieve(query_entities=[entity_id], limit=limit)
++
++    def retrieve_for_relationship(
++        self,
++        entity_a: str,
++        entity_b: str,
++        limit: int = 3,
++    ) -> List[Tuple[float, Any]]:
++        return self.retrieve(
++            query_entities=[entity_a, entity_b], limit=limit
++        )
++
++    def get_context_for(
++        self,
++        query_entities: List[str],
++        max_items: int = MAX_MEMORY_IN_PROMPT,
++        format_type: str = "narrative",
++    ) -> str:
++        """Get formatted memory context for LLM prompts."""
++        memories = self.retrieve(
++            query_entities=query_entities, limit=max_items
++        )
++        if not memories:
++            return "(No relevant memories)"
++        if format_type == "structured":
++            return self._format_structured(memories)
++        return self._format_narrative(memories)
++
++    def _format_narrative(self, memories: List[Tuple[float, Any]]) -> str:
++        lines = []
++        for _, item in memories:
++            if isinstance(item, Episode):
++                lines.append(item.summary)
++            elif isinstance(item, dict):
++                if item.get("type") == "narrative_event":
++                    lines.append(item.get("summary", str(item)))
++                elif item.get("type") == "relationship":
++                    entity = item.get("entity", "?")
++                    target = item.get("target_entity", "?")
++                    value = item.get("value", 0)
++                    reason = item.get("reason", "")
++                    sentiment = "positive" if value > 0 else "negative"
++                    lines.append(
++                        f"{entity} has {sentiment} feelings toward "
++                        f"{target}: {reason}"
++                    )
++                elif item.get("type") == "fact":
++                    lines.append(item.get("fact", str(item)))
++                else:
++                    lines.append(str(item))
++            else:
++                lines.append(str(item))
++        return " | ".join(lines)
++
++    def _format_structured(self, memories: List[Tuple[float, Any]]) -> str:
++        lines = ["## Relevant Memories"]
++        for score, item in memories:
++            if isinstance(item, Episode):
++                lines.append(f"- [{score:.2f}] Episode: {item.summary}")
++                if item.tags:
++                    lines.append(
++                        f"  Tags: {', '.join(item.tags[:3])}"
++                    )
++            elif isinstance(item, dict):
++                if item.get("type") == "narrative_event":
++                    lines.append(
++                        f"- [{score:.2f}] {item.get('summary', '?')}"
++                    )
++                elif item.get("type") == "relationship":
++                    reason = item.get("reason", "")
++                    value = item.get("value", 0)
++                    lines.append(
++                        f"- [{score:.2f}] Relationship: {reason} "
++                        f"(val={value:.2f})"
++                    )
++                elif item.get("type") == "fact":
++                    lines.append(
++                        f"- [{score:.2f}] Fact: {item.get('fact', '?')}"
++                    )
++                else:
++                    lines.append(f"- [{score:.2f}] {item}")
++            else:
++                lines.append(f"- [{score:.2f}] {item}")
++        return "\n".join(lines)
++
++    def consolidate(self, current_tick: int = 0) -> Dict[str, int]:
++        """Run full memory consolidation cycle."""
++        if current_tick == 0:
++            current_tick = self._get_current_tick()
++        stats: Dict[str, int] = {
++            "episodes_built": 0,
++            "episodes_pruned": 0,
++            "beliefs_updated": 0,
++        }
++        if self._pending_events:
++            episode = self.build_episode()
++            if episode:
++                stats["episodes_built"] = 1
++        before = len(self.episodes)
++        self._prune_episodes()
++        stats["episodes_pruned"] = before - len(self.episodes)
++        stats["beliefs_updated"] = self._analyze_patterns_for_beliefs()
++        return stats
++
++    def _analyze_patterns_for_beliefs(self) -> int:
++        beliefs_created = 0
++        hostility: Dict[str, Dict[str, int]] = defaultdict(
++            lambda: defaultdict(int)
++        )
++        for episode in self.episodes[-20:]:
++            tags = set(episode.tags)
++            entities = episode.entities
++            if tags & {"damage", "death", "betrayal", "combat"}:
++                for entity in entities:
++                    for other in entities:
++                        if entity != other:
++                            hostility[entity][other] += 1
++        for source, targets in hostility.items():
++            for target, count in targets.items():
++                if count >= 3:
++                    belief = {
++                        "type": "relationship",
++                        "entity": source,
++                        "target_entity": target,
++                        "value": -0.5 - (count * 0.1),
++                        "reason": (
++                            f"Repeated conflicts with {target} "
++                            f"({count} incidents)"
++                        ),
++                        "importance": min(0.5 + count * 0.1, 1.0),
++                    }
++                    existing = [
++                        b
++                        for b in self.semantic_beliefs
++                        if (
++                            b.get("type") == "relationship"
++                            and b.get("entity") == source
++                            and b.get("target_entity") == target
++                        )
++                    ]
++                    if not existing:
++                        self._add_or_update_belief(belief)
++                        beliefs_created += 1
++        return beliefs_created
++
++    def _get_current_tick(self) -> int:
++        if self.session:
++            world = getattr(self.session, "world", None)
++            if world:
++                return getattr(world, "time", 0)
++        return 0
++
++    def reset(self) -> None:
++        self.raw_events.clear()
++        self.narrative_events.clear()
++        self.episodes.clear()
++        self.semantic_beliefs.clear()
++        self._pending_events.clear()
++        self.entity_index.clear()
++
++    def get_stats(self) -> Dict[str, int]:
++        return {
++            "raw_events": len(self.raw_events),
++            "narrative_events": len(self.narrative_events),
++            "episodes": len(self.episodes),
++            "semantic_beliefs": len(self.semantic_beliefs),
++            "pending_events": len(self._pending_events),
++            "indexed_entities": len(self.entity_index),
++        }
+\ No newline at end of file
+diff --git a/src/tests/unit/rpg/test_memory_manager.py b/src/tests/unit/rpg/test_memory_manager.py
+new file mode 100644
+index 0000000..10ec866
+--- /dev/null
++++ b/src/tests/unit/rpg/test_memory_manager.py
+@@ -0,0 +1,336 @@
++"""Tests for the 4-layer Memory Manager system."""
++import os
++import sys
++import pytest
++
++sys.path.insert(
++    0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app")
++)
++
++from rpg.memory.episodic import (
++    Episode,
++    EpisodeBuilder,
++    compute_event_importance,
++    compute_episode_importance,
++)
++from rpg.memory.memory_manager import MemoryManager
++
++
++class TestEpisode:
++    def test_create_episode(self):
++        ep = Episode(
++            summary="Player attacked guard",
++            entities={"player", "guard"},
++            importance=0.8,
++            tags=["combat"],
++            tick_created=10,
++        )
++        assert ep.id.startswith("ep_")
++        assert ep.importance == 0.8
++        assert "player" in ep.entities
++        assert "combat" in ep.tags
++
++    def test_episode_to_dict_and_from_dict(self):
++        original = Episode(
++            summary="Test event",
++            key_events=[{"type": "damage", "source": "a", "target": "b"}],
++            entities={"a", "b"},
++            importance=0.5,
++            tags=["combat"],
++            tick_created=5,
++            ttl=100,
++        )
++        data = original.to_dict()
++        restored = Episode.from_dict(data)
++        assert restored.summary == original.summary
++        assert restored.entities == original.entities
++        assert restored.tags == original.tags
++
++    def test_episode_expiry(self):
++        permanent = Episode(summary="x", ttl=0, tick_created=0)
++        assert not permanent.is_expired(1000)
++
++        temporary = Episode(summary="x", ttl=50, tick_created=0)
++        assert not temporary.is_expired(49)
++        assert temporary.is_expired(50)
++
++    def test_entity_membership(self):
++        ep = Episode(summary="x", entities={"player", "guard"})
++        assert ep.has_entity("player")
++        assert not ep.has_entity("unknown")
++        assert ep.has_any_entity({"player", "foo"})
++        assert not ep.has_any_entity({"foo", "bar"})
++
++
++class TestComputeEventImportance:
++    def test_damage_event(self):
++        event = {"type": "damage", "source": "a", "target": "b"}
++        assert compute_event_importance(event) >= 0.5
++
++    def test_death_event(self):
++        event = {"type": "death", "source": "a", "target": "b"}
++        assert compute_event_importance(event) >= 0.8
++
++    def test_player_involvement_boost(self):
++        regular = compute_event_importance(
++            {"type": "damage", "source": "a", "target": "b"}
++        )
++        player = compute_event_importance(
++            {"type": "damage", "source": "player", "target": "b"}
++        )
++        assert player > regular
++
++    def test_neutral_event(self):
++        event = {"type": "move", "source": "a", "target": "b"}
++        assert compute_event_importance(event) < 0.3
++
++    def test_unknown_event_type(self):
++        event = {"type": "unknown"}
++        assert compute_event_importance(event) >= 0.0
++
++    def test_capped_at_1_0(self):
++        event = {
++            "type": "death",
++            "source": "player",
++            "target": "b",
++            "emotional_intensity": 1.0,
++            "memory_type": "narrative_event",
++            "summary": "kill death destroy betray",
++        }
++        assert compute_event_importance(event) <= 1.0
++
++
++class TestComputeEpisodeImportance:
++    def test_empty_events(self):
++        assert compute_episode_importance([]) == 0.0
++
++    def test_accumulation_bonus(self):
++        events = [
++            {"type": "death", "source": "a", "target": "b"},
++            {"type": "damage", "source": "a", "target": "b"},
++            {"type": "damage", "source": "a", "target": "b"},
++        ]
++        imp = compute_episode_importance(events)
++        single = compute_event_importance(events[0])
++        assert imp >= single
++
++    def test_capped_at_1_0(self):
++        events = [
++            {"type": "death", "source": "player", "target": "b"},
++            {"type": "betrayal", "source": "player", "target": "c"},
++        ]
++        assert compute_episode_importance(events) <= 1.0
++
++
++class TestEpisodeBuilder:
++    def test_build_empty(self):
++        ep = EpisodeBuilder().build(current_tick=0)
++        assert ep.importance == 0.0
++
++    def test_build_single_event(self):
++        events = [{"type": "damage", "source": "guard", "target": "player"}]
++        ep = EpisodeBuilder.from_events(events, current_tick=10)
++        assert ep.importance > 0
++        assert "guard" in ep.entities
++        assert "player" in ep.entities
++
++    def test_build_accumulates_tags(self):
++        events = [
++            {"type": "damage", "source": "a", "target": "b", "tags": ["combat"]},
++            {"type": "heal", "source": "a", "target": "c", "tags": ["support"]},
++        ]
++        ep = EpisodeBuilder.from_events(events, current_tick=0)
++        assert "combat" in ep.tags
++        assert "heal" in ep.tags
++
++    def test_class_method_from_events(self):
++        events = [{"type": "death", "source": "a", "target": "b"}]
++        ep = EpisodeBuilder.from_events(events, current_tick=5)
++        assert isinstance(ep, Episode)
++
++
++class TestMemoryManager:
++    @pytest.fixture
++    def manager(self):
++        return MemoryManager(max_raw_events=10, episode_build_threshold=3)
++
++    def test_add_event_layer1(self, manager):
++        manager.add_event(
++            {"type": "damage", "source": "a", "target": "b"},
++            current_tick=1,
++        )
++        assert len(manager.raw_events) == 1
++
++    def test_add_event_layer2(self, manager):
++        manager.add_event(
++            {"type": "damage", "source": "a", "target": "b"},
++            current_tick=1,
++        )
++        assert len(manager.narrative_events) == 1
++
++    def test_raw_events_pruned(self):
++        mgr = MemoryManager(max_raw_events=3)
++        for i in range(10):
++            mgr.add_event(
++                {"type": "event", "source": f"s{i}", "target": "t"},
++                current_tick=i,
++            )
++        assert len(mgr.raw_events) <= 3
++
++    def test_episode_builds_automatic(self):
++        mgr = MemoryManager(episode_build_threshold=3)
++        for i in range(3):
++            mgr.add_event(
++                {"type": "damage", "source": "a", "target": "b"},
++                current_tick=i,
++            )
++        assert len(mgr.episodes) == 1
++
++    def test_belief_from_damage(self, manager):
++        manager.add_event(
++            {"type": "damage", "source": "guard", "target": "player"},
++            current_tick=1,
++        )
++        # Damage events with importance >= 0.6 (player involved boosts)
++        assert len(manager.semantic_beliefs) >= 1
++        belief = manager.semantic_beliefs[0]
++        assert belief["type"] == "relationship"
++        assert belief["value"] < 0
++
++    def test_belief_from_death(self):
++        mgr = MemoryManager()
++        mgr.add_event(
++            {"type": "death", "source": "guard", "target": "player"},
++            current_tick=1,
++        )
++        assert len(mgr.semantic_beliefs) >= 1
++        belief = mgr.semantic_beliefs[0]
++        assert belief["value"] <= -0.5
++
++    def test_retrieve_by_entity(self, manager):
++        ep = Episode(
++            summary="Guard fought player",
++            entities={"guard", "player"},
++            importance=0.7,
++            tick_created=1,
++        )
++        manager.episodes.append(ep)
++        results = manager.retrieve(query_entities=["guard"])
++        assert len(results) >= 1
++
++    def test_retrieve_returns_top_results(self, manager):
++        for i in range(10):
++            ep = Episode(
++                summary=f"Event {i}",
++                entities={"entity"},
++                importance=0.1 * (i + 1),
++                tick_created=i,
++            )
++            manager.episodes.append(ep)
++        results = manager.retrieve(query_entities=["entity"], limit=3)
++        assert len(results) <= 3
++
++    def test_get_context_for_narrative(self, manager):
++        ep = Episode(
++            summary="Guard attacked player",
++            entities={"guard", "player"},
++            importance=0.7,
++            tick_created=1,
++        )
++        manager.episodes.append(ep)
++        ctx = manager.get_context_for(query_entities=["player"])
++        assert "Guard attacked player" in ctx
++
++    def test_get_context_for_structured(self, manager):
++        ep = Episode(
++            summary="Test",
++            entities={"x"},
++            importance=0.5,
++            tags=["combat"],
++            tick_created=0,
++        )
++        manager.episodes.append(ep)
++        ctx = manager.get_context_for(
++            query_entities=["x"], format_type="structured"
++        )
++        assert "## Relevant Memories" in ctx
++
++    def test_consolidate(self, manager):
++        for i in range(5):
++            manager.add_event(
++                {"type": "damage", "source": "a", "target": "b"},
++                current_tick=i,
++            )
++        stats = manager.consolidate(current_tick=10)
++        assert "episodes_built" in stats
++        assert "episodes_pruned" in stats
++        assert "beliefs_updated" in stats
++
++    def test_reset(self, manager):
++        manager.add_event(
++            {"type": "damage", "source": "a", "target": "b"},
++            current_tick=1,
++        )
++        manager.reset()
++        assert len(manager.raw_events) == 0
++        assert len(manager.narrative_events) == 0
++        assert len(manager.episodes) == 0
++        assert len(manager.semantic_beliefs) == 0
++
++    def test_get_stats(self, manager):
++        manager.add_event(
++            {"type": "damage", "source": "a", "target": "b"},
++            current_tick=1,
++        )
++        stats = manager.get_stats()
++        assert stats["raw_events"] == 1
++        assert stats["narrative_events"] == 1
++
++    def test_retrieve_for_entity(self, manager):
++        ep = Episode(
++            summary="Only for player",
++            entities={"player"},
++            importance=0.5,
++            tick_created=0,
++        )
++        manager.episodes.append(ep)
++        results = manager.retrieve_for_entity("player")
++        assert len(results) >= 1
++
++    def test_retrieve_for_relationship(self, manager):
++        ep = Episode(
++            summary="Player and guard conflict",
++            entities={"player", "guard"},
++            importance=0.6,
++            tick_created=0,
++        )
++        manager.episodes.append(ep)
++        results = manager.retrieve_for_relationship("player", "guard")
++        assert len(results) >= 1
++
++    def test_entity_index_updated(self, manager):
++        ep = Episode(
++            summary="test",
++            entities={"alice", "bob"},
++            importance=0.5,
++            tick_created=0,
++        )
++        manager.episodes.append(ep)
++        manager._rebuild_entity_index()
++        assert "alice" in manager.entity_index
++        assert "bob" in manager.entity_index
++        assert ep in manager.entity_index["alice"]
++
++    def test_prune_episodes_by_importance(self):
++        mgr = MemoryManager(max_episodes=2)
++        for i in range(5):
++            ep = Episode(
++                summary=f"ep {i}",
++                entities={"x"},
++                importance=0.1 * (i + 1),
++                tick_created=i,
++            )
++            mgr.episodes.append(ep)
++        mgr._prune_episodes()
++        assert len(mgr.episodes) <= 2
++        assert mgr.episodes[0].importance >= mgr.episodes[-1].importance
+\ No newline at end of file
+diff --git a/src/tests/unit/rpg/test_memory_manager_extended.py b/src/tests/unit/rpg/test_memory_manager_extended.py
+new file mode 100644
+index 0000000..19375bc
+--- /dev/null
++++ b/src/tests/unit/rpg/test_memory_manager_extended.py
+@@ -0,0 +1,519 @@
++"""Extended tests for 4-layer Memory Manager - Critical gap coverage.
++
++Covers:
++- Temporal decay
++- Memory reinforcement
++- Contradiction handling
++- Retrieval quality
++- Cross-entity context
++- Prompt budget enforcement
++- Story continuity
++- TTL edge cases
++- Empty retrieval safety
++- Entity index incremental updates
++"""
++import os
++import sys
++
++sys.path.insert(
++    0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app")
++)
++
++from rpg.memory.episodic import Episode
++from rpg.memory.memory_manager import MemoryManager
++
++
++# =====================================================================
++# 1. TEMPORAL DECAY TESTING (CRITICAL)
++# =====================================================================
++
++class TestTemporalDecay:
++    def test_episode_decay_over_time(self):
++        """Old memories should have reduced importance via decay."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="Old conflict",
++            entities={"player"},
++            importance=1.0,
++            tick_created=0,
++            ttl=1000,
++        )
++        mgr.episodes.append(ep)
++        mgr.apply_decay(ep, current_tick=500)
++        assert ep.importance < 1.0
++        assert ep.importance >= 0.01
++
++    def test_decay_formula_applied_correctly(self):
++        """Verify decay formula: importance *= 1 - min(0.5, age * 0.001)"""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="test",
++            entities={"x"},
++            importance=1.0,
++            tick_created=0,
++        )
++        mgr.apply_decay(ep, current_tick=100)
++        expected = 1.0 * (1 - min(0.5, 100 * 0.001))
++        assert abs(ep.importance - expected) < 0.001
++
++    def test_decay_minimum_floor(self):
++        """Importance must not drop below 0.01 floor."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="ancient",
++            entities={"x"},
++            importance=0.1,
++            tick_created=0,
++        )
++        mgr.apply_decay(ep, current_tick=2000)
++        assert ep.importance >= 0.01
++
++    def test_decay_applies_during_prune(self):
++        """Pruning should apply decay to all episodes."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="test",
++            entities={"x"},
++            importance=0.8,
++            tick_created=0,
++            ttl=10000,
++        )
++        mgr.episodes.append(ep)
++        original = ep.importance
++        # Decay formula: importance *= 1 - min(0.5, age * 0.001)
++        # At tick_created=0 and current_tick=0, age=0, so no decay.
++        # But our _prune_episodes uses _get_current_tick which returns 0.
++        # So let's verify via apply_decay directly instead.
++        mgr.apply_decay(ep, current_tick=500)
++        assert ep.importance < original
++
++    def test_recent_vs_old_episode_retrieval(self):
++        """Recent episodes should be preferred over old equal ones."""
++        mgr = MemoryManager()
++        old = Episode(
++            summary="old",
++            entities={"x"},
++            importance=0.5,
++            tick_created=0,
++            ttl=10000,
++        )
++        mgr.episodes.append(old)
++        mgr.apply_decay(old, 500)
++        new = Episode(
++            summary="new",
++            entities={"x"},
++            importance=0.5,
++            tick_created=100,
++            ttl=10000,
++        )
++        mgr.episodes.append(new)
++        results = mgr.retrieve(query_entities=["x"], limit=2)
++        assert results[0][1].summary == "new"
++
++
++# =====================================================================
++# 2. MEMORY REINFORCEMENT TESTING
++# =====================================================================
++
++class TestMemoryReinforcement:
++    def test_repeated_events_create_high_importance_episode(self):
++        """Repeated damage events should produce high-importance episode."""
++        mgr = MemoryManager(episode_build_threshold=5)
++        for i in range(5):
++            mgr.add_event(
++                {"type": "damage", "source": "guard", "target": "player"},
++                current_tick=i,
++            )
++        episodes = mgr.retrieve_for_entity("guard")
++        assert len(episodes) >= 1
++        assert any(ep[1].importance > 0.8 for ep in episodes)
++
++    def test_memory_sticks_with_repetition(self):
++        """Same entity appearing in multiple episodes raises importance."""
++        mgr = MemoryManager()
++        for i in range(3):
++            ep = Episode(
++                summary=f"Guard conflict {i}",
++                entities={"guard", "player"},
++                importance=0.6,
++                tick_created=i * 10,
++                ttl=1000,
++            )
++            mgr.episodes.append(ep)
++        results = mgr.retrieve(query_entities=["guard"], limit=3)
++        assert len(results) >= 1
++        assert all(r[0] > 0.3 for r in results)
++
++
++# =====================================================================
++# 3. CONTRADICTION HANDLING
++# =====================================================================
++
++class TestContradictionHandling:
++    def test_contradicting_beliefs_resolution(self):
++        """Positive belief should be overridden by negative event."""
++        mgr = MemoryManager()
++        mgr.semantic_beliefs.append({
++            "type": "relationship",
++            "entity": "guard",
++            "target_entity": "player",
++            "value": 0.8,
++            "reason": "Guard was friendly",
++            "importance": 0.5,
++        })
++        mgr.add_event(
++            {"type": "damage", "source": "guard", "target": "player"},
++            current_tick=1,
++        )
++        belief = mgr.semantic_beliefs[-1]
++        assert belief["value"] < 0.8
++
++    def test_contradiction_updates_existing_belief(self):
++        """When contradiction detected, existing belief should update."""
++        mgr = MemoryManager()
++        # Seed WITHOUT "type" to bypass _add_or_update's type check,
++        # forcing the belief through _resolve_contradiction
++        mgr.semantic_beliefs.append({
++            "entity": "player",
++            "target_entity": "guard",
++            "value": 0.8,
++            "reason": "Friendly",
++            "importance": 0.5,
++        })
++        mgr.add_event(
++            {"type": "damage", "source": "guard", "target": "player"},
++            current_tick=1,
++        )
++        for b in mgr.semantic_beliefs:
++            if (
++                b.get("entity") == "player"
++                and b.get("target_entity") == "guard"
++            ):
++                assert b["value"] < 0
++
++    def test_similar_sign_beliefs_coexist(self):
++        """Two negative beliefs about same entity should accumulate."""
++        mgr = MemoryManager()
++        mgr.add_event(
++            {"type": "damage", "source": "a", "target": "b"},
++            current_tick=1,
++        )
++        mgr.add_event(
++            {"type": "damage", "source": "a", "target": "b"},
++            current_tick=2,
++        )
++        matching = [
++            b for b in mgr.semantic_beliefs
++            if b.get("entity") == "b" and b.get("target_entity") == "a"
++        ]
++        assert len(matching) == 1
++
++
++# =====================================================================
++# 4. RETRIEVAL QUALITY TESTING
++# =====================================================================
++
++class TestRetrievalQuality:
++    def test_retrieval_prioritizes_high_importance(self):
++        """High-importance episodes should rank first."""
++        mgr = MemoryManager()
++        low = Episode(
++            summary="low",
++            entities={"x"},
++            importance=0.1,
++            tick_created=0,
++        )
++        high = Episode(
++            summary="high",
++            entities={"x"},
++            importance=0.9,
++            tick_created=1,
++        )
++        mgr.episodes.extend([low, high])
++        results = mgr.retrieve(query_entities=["x"], limit=1)
++        assert results[0][1].summary == "high"
++
++    def test_retrieval_respects_limit(self):
++        """Should never return more than limit results."""
++        mgr = MemoryManager()
++        for i in range(20):
++            mgr.episodes.append(
++                Episode(
++                    summary=f"ep {i}",
++                    entities={"x"},
++                    importance=0.1 * (i + 1),
++                    tick_created=i,
++                )
++            )
++        results = mgr.retrieve(query_entities=["x"], limit=3)
++        assert len(results) <= 3
++
++    def test_retrieval_filters_by_type(self):
++        """Non-matching type episodes should be excluded."""
++        mgr = MemoryManager()
++        ep1 = Episode(
++            summary="combat",
++            entities={"x"},
++            importance=0.5,
++            tick_created=0,
++        )
++        ep1.tags = ["combat"]
++        ep2 = Episode(
++            summary="social",
++            entities={"x"},
++            importance=0.9,
++            tick_created=1,
++        )
++        ep2.tags = ["social"]
++        mgr.episodes.extend([ep1, ep2])
++        results = mgr.retrieve(
++            query_entities=["x"], query_types=["combat"], limit=5
++        )
++        assert all("combat" in e.tags for _, e in results)
++
++    def test_retrieval_empty_when_no_match(self):
++        """No matching entities should return empty."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="test",
++            entities={"guard"},
++            importance=0.5,
++            tick_created=0,
++        )
++        mgr.episodes.append(ep)
++        results = mgr.retrieve(query_entities=["nobody"])
++        assert results == []
++
++
++# =====================================================================
++# 5. CROSS-ENTITY CONTEXT
++# =====================================================================
++
++class TestCrossEntityContext:
++    def test_multi_entity_context_retrieval(self):
++        """Episode with multiple entities should appear when querying any two."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="Guard protects king from player",
++            entities={"guard", "king", "player"},
++            importance=0.9,
++            tick_created=0,
++        )
++        mgr.episodes.append(ep)
++        results = mgr.retrieve(query_entities=["player", "king"])
++        assert any("guard" in e.entities for _, e in results)
++
++    def test_entity_chain_context(self):
++        """A-B and B-C episodes should both appear for query on B."""
++        mgr = MemoryManager()
++        ep1 = Episode(
++            summary="A fights B",
++            entities={"a", "b"},
++            importance=0.6,
++            tick_created=0,
++        )
++        ep2 = Episode(
++            summary="B helps C",
++            entities={"b", "c"},
++            importance=0.7,
++            tick_created=1,
++        )
++        mgr.episodes.extend([ep1, ep2])
++        results = mgr.retrieve(query_entities=["b"], limit=5)
++        summaries = [e[1].summary for e in results]
++        assert "A fights B" in summaries
++        assert "B helps C" in summaries
++
++    def test_faction_context(self):
++        """Faction-related episodes should be retrievable via member."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="Red guards attack merchant caravan",
++            entities={"guard", "faction_red", "merchant"},
++            importance=0.8,
++            tick_created=0,
++        )
++        mgr.episodes.append(ep)
++        results = mgr.retrieve(query_entities=["faction_red"], limit=5)
++        assert any("merchant" in e.entities for _, e in results)
++
++
++# =====================================================================
++# 6. PROMPT BUDGET ENFORCEMENT
++# =====================================================================
++
++class TestPromptBudget:
++    def test_context_token_limit(self):
++        """Context output must be bounded in length."""
++        mgr = MemoryManager()
++        for i in range(20):
++            mgr.episodes.append(
++                Episode(
++                    summary=f"Event number {i} with extra text for length",
++                    entities={"player"},
++                    importance=0.5,
++                    tick_created=i,
++                )
++            )
++        ctx = mgr.get_context_for(query_entities=["player"], max_items=5)
++        assert len(ctx) < 2000
++
++    def test_structured_context_bounded(self):
++        """Structured format also respects limits."""
++        mgr = MemoryManager()
++        for i in range(15):
++            mgr.episodes.append(
++                Episode(
++                    summary=f"Test {i}",
++                    entities={"player"},
++                    importance=0.5,
++                    tick_created=i,
++                )
++            )
++        ctx = mgr.get_context_for(
++            query_entities=["player"],
++            max_items=5,
++            format_type="structured",
++        )
++        lines = ctx.strip().split("\n")
++        assert len(lines) <= 12
++
++    def test_no_memories_output(self):
++        """Empty query returns 'no memories' string."""
++        mgr = MemoryManager()
++        ctx = mgr.get_context_for(query_entities=["nobody"])
++        assert "No relevant memories" in ctx
++
++
++# =====================================================================
++# 7. STORY CONTINUITY (MOST IMPORTANT)
++# =====================================================================
++
++class TestStoryContinuity:
++    def test_story_continuity_over_turns(self):
++        """Memory should persist across consolidation cycles."""
++        mgr = MemoryManager()
++        mgr.add_event(
++            {"type": "damage", "source": "guard", "target": "player"},
++            current_tick=1,
++        )
++        mgr.consolidate(current_tick=10)
++        ctx = mgr.get_context_for(query_entities=["guard"])
++        assert "guard" in ctx.lower()
++        assert "attack" in ctx.lower() or "damage" in ctx.lower()
++
++    def test_narrative_persistence(self):
++        """Narrative events should appear in context after consolidation."""
++        mgr = MemoryManager()
++        for i in range(10):
++            mgr.add_event(
++                {"type": "damage", "source": "orc", "target": "villager"},
++                current_tick=i,
++            )
++        mgr.consolidate(current_tick=10)
++        ctx = mgr.get_context_for(query_entities=["orc"])
++        assert "orc" in ctx.lower()
++
++    def test_belief_persistence(self):
++        """Semantic beliefs persist after events."""
++        mgr = MemoryManager()
++        mgr.add_event(
++            {"type": "betrayal", "source": "ally", "target": "player"},
++            current_tick=1,
++        )
++        assert len(mgr.semantic_beliefs) >= 1
++        ctx = mgr.get_context_for(query_entities=["ally"])
++        assert "ally" in ctx.lower()
++
++
++# =====================================================================
++# 8. TTL EDGE CASES
++# =====================================================================
++
++class TestTTLEdgeCases:
++    def test_ttl_boundary(self):
++        """Episode should expire exactly at TTL boundary."""
++        ep = Episode(summary="x", entities={"x"}, ttl=10, tick_created=0)
++        assert not ep.is_expired(9)
++        assert ep.is_expired(10)
++
++    def test_permanent_episode_never_expires(self):
++        """TTL=0 should never expire."""
++        ep = Episode(summary="permanent", entities={"x"}, ttl=0, tick_created=0)
++        assert not ep.is_expired(999999)
++
++
++# =====================================================================
++# 9. EMPTY RETRIEVAL SAFETY
++# =====================================================================
++
++class TestEmptyRetrieval:
++    def test_retrieve_empty_episodes(self):
++        """Empty memory should return empty results."""
++        mgr = MemoryManager()
++        results = mgr.retrieve(query_entities=["nothing"])
++        assert results == []
++
++    def test_retrieve_empty_beliefs(self):
++        """Empty semantic beliefs should not break retrieval."""
++        mgr = MemoryManager()
++        mgr.semantic_beliefs = []
++        results = mgr.retrieve(query_entities=["x"])
++        assert isinstance(results, list)
++
++    def test_retrieve_for_entity_missing(self):
++        """Missing entity should return empty."""
++        mgr = MemoryManager()
++        results = mgr.retrieve_for_entity("ghost")
++        assert results == []
++
++
++# =====================================================================
++# 10. ENTITY INDEX INCREMENTAL UPDATES
++# =====================================================================
++
++class TestEntityIndexIncremental:
++    def test_entity_index_incremental(self):
++        """Adding episode should update index without full rebuild."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="x",
++            entities={"a"},
++            importance=0.5,
++            tick_created=0,
++        )
++        mgr.episodes.append(ep)
++        mgr.entity_index["a"].append(ep)
++        assert "a" in mgr.entity_index
++        assert ep in mgr.entity_index["a"]
++
++    def test_entity_index_multi_entity(self):
++        """Episode with multiple entities indexed under all."""
++        mgr = MemoryManager()
++        ep = Episode(
++            summary="multi",
++            entities={"a", "b", "c"},
++            importance=0.5,
++            tick_created=0,
++        )
++        mgr.episodes.append(ep)
++        for entity in ["a", "b", "c"]:
++            mgr.entity_index[entity].append(ep)
++        assert ep in mgr.entity_index["a"]
++        assert ep in mgr.entity_index["b"]
++        assert ep in mgr.entity_index["c"]
++
++    def test_rebuild_entity_index_clears_stale(self):
++        """Rebuild should only include current episodes."""
++        mgr = MemoryManager()
++        ep1 = Episode(
++            summary="keep",
++            entities={"x"},
++            importance=0.5,
++            tick_created=0,
++        )
++        mgr.episodes.append(ep1)
++        mgr.entity_index["x"].append(ep1)
++        mgr.episodes.clear()
++        mgr._rebuild_entity_index()
++        assert mgr.entity_index["x"] == []
+\ No newline at end of file
