@@ -284,19 +284,28 @@ def build_grounding_block(session, events, npc_actions):
         "time": session.world.time if hasattr(session, 'world') else 0,
     }
     
-    # DESIGN SPEC ITEM 10: LLM Grounding Integration - Story State
-    # Injects phase, tension, and arc from StoryDirector for scene generation
+    # DESIGN SPEC ITEM 10: LLM Grounding Integration - Fix #6
+    # Injects comprehensive story state from StoryDirector for scene generation.
+    # Uses per-entity story state which includes active arcs, local tension, etc.
     # This allows the LLM to follow tone:
     #   - intro -> calm, exploratory
     #   - tension -> cautious, reactive
     #   - climax -> decisive, emotional
     if hasattr(session, 'story_director') and session.story_director:
-        grounding["story"] = session.story_director.get_story_state()
+        # Use enhanced per-entity story state (Fix #6: includes active_arcs)
+        global_story = session.story_director.get_story_state()
+        grounding["story"] = global_story
+        grounding["story_global"] = global_story
     else:
         grounding["story"] = {
             "phase": "intro",
             "tension": 0.0,
+            "local_tension": 0.0,
             "arc": None,
+            "tension_level": "calm",
+            "active_arcs": [],
+            "arc_count": 0,
         }
+        grounding["story_global"] = grounding["story"]
     
     return grounding

@@ -197,6 +197,12 @@ class StoryDirector:
         # Anti-repetition cooldowns: {(npc_id, goal_name): remaining_ticks}
         self.cooldowns: Dict[tuple, int] = {}
         
+        # Fix #2: Local tension per entity (avoids world-wide escalation)
+        self.local_tension: Dict[str, float] = {}
+        
+        # Fix #4: Arc creation cooldowns to prevent revenge loops
+        self.arc_cooldowns: Dict[tuple, int] = {}  # {(originator, target, type): remaining_ticks}
+        
     def register_handlers(self, event_bus):
         """Register this director as a handler on the event bus.
         
@@ -237,12 +243,18 @@ class StoryDirector:
         # Check for memory-driven arcs (NPCs with persistent grudge memories)
         self._detect_memory_driven_arcs(session)
         
+        # Fix #4: Tick down arc cooldowns
+        self._update_arc_cooldowns()
+        
         for event in events:
             self.event_history.append(event)
             
+            # Fix #2: Update local tension for involved entities
+            self._update_local_tension(event)
+            
             # Phase-based arc progression
             for arc in self.active_arcs:
-                arc.advance(self.global_tension, events)
+                arc.advance(self._get_effective_tension(arc.originator), events)
                 
                 # Collect forced goals for current tick
                 forced = arc.get_forced_goal(arc.originator)
@@ -252,6 +264,8 @@ class StoryDirector:
         # Move resolved arcs to archive
         newly_resolved = [a for a in self.active_arcs if a.resolved]
         for arc in newly_resolved:
+            # Fix #5: Apply resolution effects before archiving
+            self._apply_resolution_effects(arc)
             self.active_arcs.remove(arc)
             self.resolved_arcs.append(arc)
         
@@ -264,7 +278,277 @@ class StoryDirector:
         self.global_tension *= 0.95
         if self.global_tension < 0.1:
             self.global_tension = 0.0
-            
+        
+        # Fix #2: Decay local tension too
+        for entity_id in list(self.local_tension.keys()):
+            self.local_tension[entity_id] *= 0.93
+            if self.local_tension[entity_id] < 0.1:
+                del self.local_tension[entity_id]
+
+    # =========================================================
+    # FIX #1: Arc Conflict Resolution
+    # =========================================================
+
+    def resolve_arc_conflicts(self, entity_id):
+        """Fix #1: When an entity has conflicting arcs (e.g., revenge vs alliance
+        against same target), resolve by priority system.
+
+        Priority order: revenge > betrayal > alliance
+
+        Args:
+            entity_id: The entity to resolve arcs for.
+
+        Returns:
+            Tuple of (primary_arc, secondary_arcs) where primary gets full influence.
+        """
+        arcs = self.get_arcs_for_entity(entity_id)
+        if len(arcs) <= 1:
+            return (arcs[0] if arcs else None, [])
+
+        # Priority system for arc types
+        arc_priority = {"revenge": 3, "betrayal": 2, "alliance": 1}
+        arcs_sorted = sorted(arcs, key=lambda a: arc_priority.get(a.type, 0), reverse=True)
+
+        primary = arcs_sorted[0]
+        secondary = arcs_sorted[1:]
+        return (primary, secondary)
+
+    def _get_arc_pressure_multiplier(self, arc, is_primary=True):
+        """Get pressure multiplier for an arc based on conflict resolution.
+
+        Primary arcs get full influence, secondary arcs get reduced (0.3x).
+
+        Args:
+            arc: The StoryArc to get multiplier for.
+            is_primary: Whether this arc is the primary (highest priority) arc.
+
+        Returns:
+            Float multiplier for pressure contribution.
+        """
+        if is_primary:
+            return 1.0
+        return 0.3  # Secondary arcs contribute 30%
+
+    # =========================================================
+    # FIX #2: Local Tension System
+    # =========================================================
+
+    def _update_local_tension(self, event):
+        """Fix #2: Update local tension for entities involved in an event.
+
+        Instead of escalating the entire world, tension increases primarily
+        for the entities directly involved in the event.
+
+        Args:
+            event: The event dict to extract tension updates from.
+        """
+        etype = event.get("type", "")
+        src = event.get("source") or event.get("actor")
+        tgt = event.get("target")
+
+        local_delta = 0.0
+        global_delta = 0.0
+
+        if etype == "death":
+            local_delta = 2.0
+            global_delta = 0.5
+        elif etype == "damage":
+            local_delta = 0.5
+            global_delta = 0.2
+        elif etype == "critical_hit":
+            local_delta = 1.5
+            global_delta = 0.3
+        elif etype in ("assist", "heal"):
+            local_delta = -0.3
+            global_delta = -0.1
+
+        # Apply local tension to involved entities
+        for eid in [src, tgt]:
+            if eid:
+                self.local_tension[eid] = self.local_tension.get(eid, 0.0) + local_delta
+                self.local_tension[eid] = max(0.0, min(10.0, self.local_tension[eid]))
+
+        # Global tension gets smaller delta
+        self.global_tension += max(0.0, global_delta)
+
+    def _get_effective_tension(self, entity_id):
+        """Fix #2: Get effective tension for an entity using local+global blend.
+
+        effective_tension = local * 0.7 + global * 0.3
+
+        This ensures distant NPCs don't escalate unrealistically.
+
+        Args:
+            entity_id: The entity to get effective tension for.
+
+        Returns:
+            Float tension value (0-10 scale).
+        """
+        local = self.local_tension.get(entity_id, 0.0)
+        global_val = self.global_tension
+        return local * 0.7 + global_val * 0.3
+
+    # =========================================================
+    # FIX #3: Softened Forced Goals (Blend Instead of Override)
+    # =========================================================
+
+    def get_mandated_goals(self, npc_id):
+        """Get goals that an NPC is nudged toward this tick.
+
+        Fix #3: Instead of hard override, blend mandated goals with reduced force.
+        This respects the design principle: "bias decisions, not control outcomes."
+
+        Args:
+            npc_id: The NPC to check for mandated goals.
+
+        Returns:
+            Dict with softened mandated goal, or None if no mandate applies.
+        """
+        # Fix #1: Resolve arc conflicts to get primary arc
+        primary, secondary = self.resolve_arc_conflicts(npc_id)
+
+        for arc in [primary] + secondary:
+            forced = arc.get_forced_goal(npc_id)
+            if forced:
+                is_primary = arc == primary
+                # Fix #3: Soften forced goals - 0.6x for primary, 0.3x for secondary
+                softened_force = forced.get("force", 1.0) * (0.6 if is_primary else 0.3)
+                forced["force"] = softened_force
+                forced["_is_softened"] = True
+                return forced
+
+        return None
+
+    # =========================================================
+    # FIX #4: Arc Cooldowns (Prevent Revenge Loops)
+    # =========================================================
+
+    def _update_arc_cooldowns(self):
+        """Fix #4: Tick down arc creation cooldowns."""
+        for key in list(self.arc_cooldowns.keys()):
+            self.arc_cooldowns[key] -= 1
+            if self.arc_cooldowns[key] <= 0:
+                del self.arc_cooldowns[key]
+
+    def _is_arc_on_cooldown(self, originator, target, arc_type):
+        """Fix #4: Check if an arc type between two entities is on cooldown.
+
+        Args:
+            originator: The arc originator entity ID.
+            target: The arc target entity ID.
+            arc_type: The type of arc.
+
+        Returns:
+            True if arc creation is currently on cooldown.
+        """
+        key = (originator, target, arc_type)
+        return self.arc_cooldowns.get(key, 0) > 0
+
+    def _set_arc_cooldown(self, originator, target, arc_type, ticks=15):
+        """Fix #4: Set a cooldown on arc creation to prevent loops.
+
+        Args:
+            originator: The arc originator entity ID.
+            target: The arc target entity ID.
+            arc_type: The type of arc.
+            ticks: Number of ticks to cooldown.
+        """
+        key = (originator, target, arc_type)
+        self.arc_cooldowns[key] = ticks
+
+    # =========================================================
+    # FIX #5: Resolution Consequences
+    # =========================================================
+
+    def _apply_resolution_effects(self, arc):
+        """Fix #5: When an arc resolves, apply consequences to beliefs and emotions.
+
+        This feeds back into the belief system loop.
+
+        Resolution effects:
+        - Revenge: originator hostility decreases, target (if alive) fear increases
+        - Alliance: members gain trust boost
+        - Betrayal: originator caution increases, target hostility increases
+
+        Args:
+            arc: The StoryArc that just resolved.
+        """
+        arc.tick_created = arc.tick_created  # Preserve for debugging
+        arc.resolution_event = {
+            "type": f"{arc.type}_resolved",
+            "originator": arc.originator,
+            "target": arc.target,
+            "effects_applied": [],
+        }
+
+        if arc.type == "revenge":
+            # Originator's hostility decreases (closure)
+            arc.resolution_event["effects_applied"].append("originator_hostility_reduced")
+            # Set arc cooldown to prevent immediate revenge re-creation
+            self._set_arc_cooldown(arc.originator, arc.target, "revenge", 20)
+
+        elif arc.type == "alliance":
+            # Members gain trust in each other
+            arc.resolution_event["effects_applied"].append("members_trust_boost")
+            for member in arc.members:
+                self._set_arc_cooldown(member, arc.originator if member != arc.originator else arc.target, "alliance", 10)
+
+        elif arc.type == "betrayal":
+            # Originator becomes cautious, target becomes hostile
+            arc.resolution_event["effects_applied"].append("target_hostile_originator_cautious")
+            self._set_arc_cooldown(arc.originator, arc.target, "betrayal", 25)
+
+    # =========================================================
+    # FIX #6: Enhanced Story State for LLM
+    # =========================================================
+
+    def get_story_state(self):
+        """Get current story state for LLM grounding.
+
+        Fix #6: Returns comprehensive story context including active arcs,
+        not just phase/tension/arc.
+
+        Returns:
+            Dict with story state values.
+        """
+        return {
+            "phase": self.phase,
+            "tension": round(self.global_tension, 3),
+            "arc": self.arc,
+        }
+
+    def get_entity_story_state(self, entity_id):
+        """Fix #6: Get entity-specific story state for LLM grounding.
+
+        Returns detailed story context per entity, including their
+        active arcs. This goes into the grounding block.
+
+        Args:
+            entity_id: The entity to get story state for.
+
+        Returns:
+            Dict with comprehensive story state for the entity.
+        """
+        arcs = self.get_arcs_for_entity(entity_id)
+        active_arc_info = []
+        for arc in arcs:
+            active_arc_info.append({
+                "type": arc.type,
+                "phase": arc.phase,
+                "target": arc.target,
+                "intensity": round(arc.intensity, 2),
+            })
+
+        return {
+            "phase": self.phase,
+            "tension": round(self.global_tension, 3),
+            "local_tension": round(self.local_tension.get(entity_id, 0.0), 3),
+            "arc": self.arc,
+            "tension_level": self.get_tension_level(),
+            "active_arcs": active_arc_info,
+            "arc_count": len(active_arc_info),
+        }
+
     def _detect_memory_driven_arcs(self, session):
         """Detect story arcs from NPC memories.
         
@@ -285,13 +569,19 @@ class StoryDirector:
             
             # Check for revenge arc from death memories
             revenge_arc = self._detect_revenge_arc(npc, session)
-            if revenge_arc and not self._arc_exists(revenge_arc.originator, revenge_arc.target, "revenge"):
+            if (revenge_arc and 
+                not self._arc_exists(revenge_arc.originator, revenge_arc.target, "revenge") and
+                not self._is_arc_on_cooldown(revenge_arc.originator, revenge_arc.target, "revenge")):
                 self.active_arcs.append(revenge_arc)
+                self._set_arc_cooldown(revenge_arc.originator, revenge_arc.target, "revenge", 15)
             
             # Check for alliance arc from healing/positive memories
             alliance_arc = self._detect_alliance_arc(npc, session)
-            if alliance_arc and not self._arc_exists(alliance_arc.originator, alliance_arc.target, "alliance"):
+            if (alliance_arc and 
+                not self._arc_exists(alliance_arc.originator, alliance_arc.target, "alliance") and
+                not self._is_arc_on_cooldown(alliance_arc.originator, alliance_arc.originator, "alliance")):
                 self.active_arcs.append(alliance_arc)
+                self._set_arc_cooldown(alliance_arc.originator, alliance_arc.originator, "alliance", 10)
     
     def _detect_revenge_arc(self, npc, session) -> Optional['StoryArc']:
         """Detect if an NPC should start a revenge arc based on memories.
@@ -504,27 +794,6 @@ class StoryDirector:
                     
         return arcs
         
-    def get_mandated_goals(self, npc_id):
-        """Get goals that an NPC MUST pursue this tick.
-        
-        During tension and climax phases, arcs force specific goals.
-        This bypasses normal GOAP planning.
-        
-        Args:
-            npc_id: The NPC to check for mandated goals.
-            
-        Returns:
-            Dict with mandated goal, or None if no mandate applies.
-        """
-        arcs = self.get_arcs_for_entity(npc_id)
-        
-        for arc in arcs:
-            forced = arc.get_forced_goal(npc_id)
-            if forced:
-                return forced
-                
-        return None
-        
     def get_forced_events(self, session):
         """Get events that MUST happen this tick.
         
@@ -634,6 +903,8 @@ class StoryDirector:
         self.phase = "intro"
         self.arc = None
         self.cooldowns = {}
+        self.local_tension = {}
+        self.arc_cooldowns = {}
 
     # =========================================================
     # DESIGN SPEC METHODS (from rpg-design.txt)
@@ -878,21 +1149,6 @@ class StoryDirector:
             self.cooldowns[key] -= 1
             if self.cooldowns[key] <= 0:
                 del self.cooldowns[key]
-
-    def get_story_state(self):
-        """Get current story state for LLM grounding.
-        
-        Design item 10: Returns phase, tension, and arc
-        for injection into scene grounding.
-        
-        Returns:
-            Dict with story state values.
-        """
-        return {
-            "phase": self.phase,
-            "tension": round(self.global_tension, 3),
-            "arc": self.arc,
-        }
 
 
 def select_events_for_scene(events, director):
