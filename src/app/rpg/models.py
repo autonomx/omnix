@@ -83,3 +83,4 @@ class NPC:
         }
         self.position = (0, 0)
         self.session = None
+        self.perception_radius = 5  # How far the NPC can perceive events

@@ -1,11 +1,54 @@
 import heapq
+import math
 
 
 def distance(a, b):
+    """Manhattan distance between two points."""
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
+def euclidean_distance(a, b):
+    """Euclidean distance between two points.
+    
+    Used for precise range checks in combat and spatial reasoning.
+    
+    Args:
+        a: First point as (x, y) tuple.
+        b: Second point as (x, y) tuple.
+        
+    Returns:
+        Float distance between the points.
+    """
+    return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
+
+def in_range(a, b, r):
+    """Check if point a is within range r of point b.
+    
+    Uses Euclidean distance for circular range checks.
+    
+    Args:
+        a: First point as (x, y) tuple.
+        b: Second point as (x, y) tuple.
+        r: Maximum range.
+        
+    Returns:
+        True if a is within range r of b.
+    """
+    return euclidean_distance(a, b) <= r
+
+
 def is_near(a, b, radius=5):
+    """Check if point a is near point b within given radius.
+    
+    Args:
+        a: First point as (x, y) tuple.
+        b: Second point as (x, y) tuple.
+        radius: Maximum distance to consider "near".
+        
+    Returns:
+        True if points are within radius.
+    """
     return distance(a, b) <= radius
 
 

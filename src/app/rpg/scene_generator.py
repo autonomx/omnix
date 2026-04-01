@@ -1,59 +1,54 @@
+"""Scene Generator — deterministic rendering with optional LLM flavor.
+
+Architecture:
+    EVENTS → GROUNDING → DETERMINISTIC RENDER → LLM FLAVOR (optional)
+
+The simulation is truth. The LLM can only add atmosphere, never change facts.
+"""
+
 from rpg.models import SceneOutput
-from rpg.scene_graph import build_scene_graph
+from rpg.scene.grounding import build_grounding_block
+from rpg.scene.renderer import render_scene_deterministic, render_with_llm_flavor
+from rpg.scene.validator import validate_scene
 
 
 def generate_scene(session, director, result, event, npc_actions):
-    event_summary = summarize_events(result["events"])
+    """Generate a scene from simulation events.
 
-    # Build structured scene graph for world state
-    graph = build_scene_graph(session)
+    Uses deterministic rendering to ensure zero hallucination.
+    LLM flavor is optional and constrained to atmospheric detail only.
 
-    active_npcs = [n.id for n in session.npcs if n.is_active]
+    Args:
+        session: The current game session.
+        director: Director state (mode, tension, etc.).
+        result: Simulation result with events.
+        event: The triggering event.
+        npc_actions: List of NPC actions this tick.
 
-    # Hybrid rendering: simulation is truth, LLM is flavor layer
-    base_scene = f"""
-    TIME: {graph['time']}
-    ACTIVE NPCs: {active_npcs}
-
-    ENTITIES:
-    {graph['entities']}
-
-    EVENTS:
-    {event_summary}
-
-    NPC ACTIONS:
-    {npc_actions}
+    Returns:
+        SceneOutput containing the narration.
     """
+    # Build grounding block (source of truth)
+    grounding = build_grounding_block(session, result.get("events", []), npc_actions)
 
-    # TODO: integrate with LLM for actual generation
-    # LLM enhances but cannot override the simulation truth
-    _llm_prompt = f"""
-    Generate a structured cinematic scene.
+    # Deterministic rendering — simulation is truth
+    deterministic_scene = render_scene_deterministic(grounding)
 
-    STRICT RULES:
-    - ONLY describe what is in EVENTS
-    - DO NOT invent outcomes
-    - ALL consequences must match state
-    - deaths MUST be reflected
+    # Optional: LLM flavor layer (constrained)
+    final_narration = deterministic_scene
 
-    STRUCTURE:
-    1. Setup
-    2. Action
-    3. Reaction
-    4. Aftermath
+    if hasattr(session, 'llm_generate') and session.llm_generate is not None:
+        final_narration = render_with_llm_flavor(session, grounding, deterministic_scene)
 
-    SETUP CONTEXT:
-    {base_scene}
-    """
-
-    # merge_scene keeps simulation events as the ground truth
-    final_narration = _merge_scene(base_scene, event_summary)
+    # Validate scene against grounding to prevent hallucination
+    if not validate_scene(final_narration, grounding):
+        final_narration = "[ERROR: Scene rejected due to hallucination]"
 
     return SceneOutput(
         location="battlefield",
-        scene_type=director["mode"],
+        scene_type=director.get("mode", "action"),
         tone="tense",
-        tension=0.7,
+        tension=director.get("tension", 0.7),
         narration=final_narration,
         characters=[],
         choices=[]
@@ -68,6 +63,7 @@ def _merge_scene(base_scene, narrative):
 
 
 def summarize_events(events):
+    """Summarize events for quick display."""
     lines = []
     for e in events:
         if e["type"] == "damage":

@@ -22,19 +22,25 @@ def decay_emotions(npc, world_time):
     npc.emotional_state["last_update"] = world_time
 
 
-def apply_event_emotion(npc, event):
+def apply_event_emotion(npc, event, intensity=1.0):
     """Apply emotional response to a perceived event.
 
     Different event types trigger different emotional responses:
     - damage when targeted: increases anger and fear
     - ally killed: increases fear significantly
+
+    Args:
+        npc: The NPC receiving the emotional response.
+        event: The event that triggered the response.
+        intensity: Multiplier for emotional response strength.
+            1.0 = normal, 2.0 = doubled (direct victim), 0.5 = halved (attacker)
     """
     if event["type"] == "damage" and event.get("target") == npc.id:
-        npc.emotional_state["anger"] += 2.0
-        npc.emotional_state["fear"] += 0.5
+        npc.emotional_state["anger"] += 2.0 * intensity
+        npc.emotional_state["fear"] += 0.5 * intensity
 
     if event["type"] == "ally_killed":
-        npc.emotional_state["fear"] += 1.5
+        npc.emotional_state["fear"] += 1.5 * intensity
 
 
 def apply_event_emotion_with_relationships(npc, event, session):

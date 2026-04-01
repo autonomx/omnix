@@ -84,17 +84,62 @@ def score_event(npc, event, query):
     return score
 
 
+def prune_memories(npc, max_memories: int = 100):
+    """Prune NPC memories to prevent memory explosion.
+    
+    Keeps the most important and recent memories.
+    Call this periodically to maintain memory performance.
+    
+    Args:
+        npc: The NPC whose memories to prune
+        max_memories: Maximum number of memories to keep (default: 100)
+    """
+    # Support both dict-based memory (memory["events"]) and list-based memory
+    if isinstance(npc.memory, dict):
+        memories = npc.memory.get("events", [])
+        if len(memories) <= max_memories:
+            return
+        
+        # Keep most important + recent memories
+        memories.sort(
+            key=lambda m: (m.get("importance", 1.0), m.get("timestamp", m.get("tick", 0))),
+            reverse=True
+        )
+        npc.memory["events"] = memories[:max_memories]
+    else:
+        # List-based memory (legacy)
+        if len(npc.memory) <= max_memories:
+            return
+        
+        npc.memory.sort(
+            key=lambda m: (m.get("type") in ("death", "boss_event"), m.get("tick", 0)),
+            reverse=True
+        )
+        npc.memory = npc.memory[:max_memories]
+
+
+# Backward compatibility alias
+_prune_memory = prune_memories
+
+
 def _prune_memory(npc):
-    """Memory pruning: keep important events + recent history (bounded to 100)."""
+    """Memory pruning: keep important events + recent history (bounded to 100).
+    
+    DEPRECATED: Use prune_memories(npc) instead.
+    """
     # Always keep important events (death, boss_event)
-    important = [e for e in npc.memory if e.get("type") in ("death", "boss_event")]
-
-    # Keep last 100 recent events
-    recent = npc.memory[-100:]
-
-    # Merge: important events first, then recent, deduplicated by id
-    seen = {}
-    for e in important + recent:
-        seen[id(e)] = e
-
-    npc.memory = list(seen.values())
+    if isinstance(npc.memory, dict):
+        memories = npc.memory.get("events", [])
+        important = [e for e in memories if e.get("type") in ("death", "boss_event")]
+        recent = memories[-100:]
+        seen = {}
+        for e in important + recent:
+            seen[id(e)] = e
+        npc.memory["events"] = list(seen.values())
+    else:
+        important = [e for e in npc.memory if e.get("type") in ("death", "boss_event")]
+        recent = npc.memory[-100:]
+        seen = {}
+        for e in important + recent:
+            seen[id(e)] = e
+        npc.memory = list(seen.values())
