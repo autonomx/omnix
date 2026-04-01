@@ -20,7 +20,6 @@ Grounding includes:
 from rpg.spatial import euclidean_distance
 from rpg.memory.relationships import (
     get_all_relationship_summaries,
-    get_relationship,
 )
 
 
@@ -50,6 +49,7 @@ def _build_entity_grounding(entity_id, entity) -> dict:
     - Basic state (hp, position, active)
     - Current goal/intent
     - Emotional state
+    - Belief system (hostile targets, trusted allies, dangerous entities)
     - Relationship summaries
     - Recent relevant memories
     
@@ -83,6 +83,34 @@ def _build_entity_grounding(entity_id, entity) -> dict:
         base["emotional_state"] = dict(entity.emotional_state)
     else:
         base["emotional_state"] = {}
+    
+    # BELIEF SYSTEM INJECTION (CRITICAL for LLM grounding)
+    # Inject belief-derived state into grounding so LLM knows:
+    # - Who the NPC considers hostile
+    # - Who the NPC trusts
+    # - What entities are observed as dangerous
+    # - Overall world threat assessment
+    if hasattr(entity, 'belief_system'):
+        bs = entity.belief_system
+        base["beliefs"] = {
+            "summary": bs.get_summary(),
+            "hostile_targets": bs.get("hostile_targets", [])[:2],  # Top 2
+            "trusted_allies": bs.get("trusted_allies", [])[:2],    # Top 2
+            "dangerous_entities": bs.get("dangerous_entities", [])[:2],  # Observed danger
+            "world_threat_level": bs.get("world_threat_level", "low"),
+            "hostility_intensity": bs.get("hostility_intensity", {}),
+            "trust_intensity": bs.get("trust_intensity", {}),
+        }
+    else:
+        base["beliefs"] = {
+            "summary": "No beliefs formed yet",
+            "hostile_targets": [],
+            "trusted_allies": [],
+            "dangerous_entities": [],
+            "world_threat_level": "low",
+            "hostility_intensity": {},
+            "trust_intensity": {},
+        }
     
     # Relationship summaries (what I think about others)
     if hasattr(entity, 'relationships') or (isinstance(getattr(entity, 'memory', {}), dict) and 'relationships' in getattr(entity, 'memory', {})):

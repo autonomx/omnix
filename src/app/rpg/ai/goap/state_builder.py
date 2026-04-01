@@ -21,6 +21,11 @@ def inject_beliefs_into_state(npc, state):
     Beliefs derived from memory facts and relationships are injected
     into the world state, affecting planning decisions.
 
+    Priority order for belief injection:
+    1. BeliefSystem-derived beliefs (new, most comprehensive)
+    2. Memory fact-based beliefs (existing)
+    3. Relationship-derived beliefs (existing)
+
     Args:
         npc: The NPC whose beliefs are being converted.
         state: The current world state dict (will be mutated).
@@ -28,6 +33,43 @@ def inject_beliefs_into_state(npc, state):
     Returns:
         The updated world state dict with belief-derived entries.
     """
+    # 🔥 BeliefSystem-derived beliefs (new priority layer)
+    if hasattr(npc, 'belief_system') and npc.belief_system:
+        bs = npc.belief_system
+
+        # Hostile targets from belief system
+        hostile = bs.get("hostile_targets", [])
+        for target_id in hostile:
+            state[f"hostile_{target_id}"] = True
+            state[f"threat_{target_id}"] = True
+
+        # Trusted allies from belief system
+        allies = bs.get("trusted_allies", [])
+        for target_id in allies:
+            state[f"ally_{target_id}"] = True
+            state[f"friendly_{target_id}"] = True
+
+        # Subjugated entities (entities NPC has harmed)
+        subjugated = bs.get("subjugated_targets", [])
+        for target_id in subjugated:
+            state[f"subjugated_{target_id}"] = True
+
+        # World threat level influences overall state
+        threat_level = bs.get("world_threat_level", "low")
+        if threat_level in ("high", "very_high"):
+            state["world_dangerous"] = True
+            state["threat_level"] = threat_level
+
+        # Hostility intensity for targeting priority
+        intensity = bs.get("hostility_intensity", {})
+        for target_id, score in intensity.items():
+            state[f"hostility_intensity_{target_id}"] = score
+
+        # Trust intensity for alliance priority
+        trust_intensity = bs.get("trust_intensity", {})
+        for target_id, score in trust_intensity.items():
+            state[f"trust_intensity_{target_id}"] = score
+
     # Handle both dict-based memory and object-based memory
     if isinstance(npc.memory, dict):
         facts = npc.memory.get("facts", [])
@@ -40,7 +82,7 @@ def inject_beliefs_into_state(npc, state):
             if isinstance(event, dict):
                 facts.append(event)
 
-    # Process fact-based beliefs
+    # Process fact-based beliefs (legacy, kept for backward compatibility)
     for belief in facts:
         text = ""
         target = None
@@ -69,7 +111,7 @@ def inject_beliefs_into_state(npc, state):
             if target:
                 state[f"hostile_{target}"] = True
 
-    # Relationship-derived beliefs
+    # Relationship-derived beliefs (legacy, kept for backward compatibility)
     for other_id, rel in relationships.items():
         score = rel.get("score", 0) if isinstance(rel, dict) else 0
 
@@ -177,12 +219,13 @@ def select_goal(npc, session=None):
 
     Goals are prioritized in this order:
     1. SURVIVAL (when HP is low)
-    2. MANDATED GOALS from Story Director (arcs in tension/climax)
-    3. Story arc influence (revenge arcs, narrative pressure)
-    4. Multi-dimensional emotion-driven goals
-    5. Revenge (against hostile entities)
-    6. Protection/Assistance (for allies)
-    7. Exploration (default idle behavior)
+    2. BELIEF-DRIVEN GOALS from BeliefSystem (emergent hostility/alliances)
+    3. MANDATED GOALS from Story Director (arcs in tension/climax)
+    4. Story arc influence (revenge arcs, narrative pressure)
+    5. Multi-dimensional emotion-driven goals
+    6. Revenge (against hostile entities)
+    7. Protection/Assistance (for allies)
+    8. Exploration (default idle behavior)
 
     Args:
         npc: The NPC selecting a goal.
@@ -209,6 +252,43 @@ def select_goal(npc, session=None):
         )
         if hostile_count > 0:
             return {"type": "survive"}
+
+    # 🔥 BELIEF-DRIVEN GOALS — Emergent from memory patterns (new priority layer)
+    if hasattr(npc, 'belief_system') and npc.belief_system:
+        bs = npc.belief_system
+
+        # Hostile targets from belief system — emergent grudges
+        hostile = bs.get("hostile_targets", [])
+        if hostile:
+            # Use best target scoring instead of just first
+            from rpg.memory.belief_system import pick_best_target
+            best_target = pick_best_target(npc, hostile)
+            target = best_target if best_target else hostile[0]
+            return {
+                "type": "attack_target",
+                "target": target,
+                "reason": "belief_hostility",
+                "force": min(1.0, bs.get("hostility_intensity", {}).get(target, 1) * 0.3)
+            }
+
+        # Trusted allies — protect those who helped us
+        allies = bs.get("trusted_allies", [])
+        if allies and npc.hp > 60:
+            return {
+                "type": "assist_target",
+                "target": allies[0],
+                "reason": "belief_alliance"
+            }
+
+        # Dangerous entities observed — be cautious
+        dangerous = bs.get("dangerous_entities", [])
+        if dangerous and npc.hp < 70:
+            return {"type": "survive"}
+
+        # High world threat — be cautious
+        if bs.get("world_threat_level") in ("high", "very_high"):
+            if npc.hp < 70:
+                return {"type": "survive"}
 
     # 🔥 MANDATED GOALS — Story Director forces behavior (tension/climax arcs)
     if session and hasattr(session, 'story_director'):

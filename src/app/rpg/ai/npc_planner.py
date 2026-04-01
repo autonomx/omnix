@@ -140,10 +140,23 @@ def build_decision_context(npc, session):
 
 
 def choose_target(npc, session):
-    """Choose attack target based on anger map with distance weighting.
+    """Choose attack target using belief-weighted scoring.
 
-    Includes stabilization to prevent target flicker between turns.
+    Replaces simplistic hostile[0] selection with multi-factor scoring:
+    - Belief hostility intensity (primary)
+    - Relationship-based anger (secondary)
+    - Distance (closer targets preferred)
+    - Stabilization to prevent target flicker between turns
+
+    Args:
+        npc: The NPC selecting a target
+        session: The game session
+
+    Returns:
+        Best target entity ID string
     """
+    from rpg.memory.belief_system import pick_best_target
+
     anger_map = npc.emotional_state.get("anger_map", {})
 
     # Stabilize: prefer current top_threat if still valid
@@ -151,25 +164,27 @@ def choose_target(npc, session):
     if current_target and current_target in anger_map:
         target = find_npc(session, current_target)
         if target and target.is_active:
-            return current_target
+            # Check if beliefs still support this target
+            if hasattr(npc, 'belief_system'):
+                hostile = npc.belief_system.get_hostile_targets()
+                if current_target in hostile or not hostile:
+                    return current_target
 
-    if not anger_map:
-        return "player"
-
-    candidates = []
-    for target_id, anger in anger_map.items():
-        target = find_npc(session, target_id)
-        if not target or not target.is_active:
-            continue
-
-        dist = distance(npc.position, target.position)
-        score = anger - dist * 0.5
-        candidates.append((score, target_id))
+    # Gather candidates from both anger map and belief system
+    candidates = set()
+    if anger_map:
+        candidates.update(anger_map.keys())
+    
+    if hasattr(npc, 'belief_system'):
+        hostile = npc.belief_system.get_hostile_targets()
+        candidates.update(hostile)
 
     if not candidates:
         return "player"
 
-    return max(candidates)[1]
+    # Use belief-weighted target selection
+    best = pick_best_target(npc, list(candidates))
+    return best if best else "player"
 
 
 def decide(npc, session):
@@ -180,6 +195,9 @@ def decide(npc, session):
     
     Mandated Goals: Story arcs in tension/climax phases can force specific goals.
     
+    Belief System: NPC decisions are influenced by belief-derived goals
+    (hostile targets, trusted allies) in addition to emotion and story.
+    
     Args:
         npc: The NPC deciding on an action.
         session: The current game session.
@@ -188,6 +206,10 @@ def decide(npc, session):
         Dict with decided action and metadata.
     """
     update_npc_emotions(npc)
+
+    # 🔥 Initialize belief system if not present
+    from rpg.systems.memory_system import init_npc_belief_system
+    init_npc_belief_system(npc)
 
     # Build rich context for memory retrieval
     current_context = build_decision_context(npc, session)
@@ -201,6 +223,20 @@ def decide(npc, session):
     # Get relationship summaries for better decision making
     relationships = summarize_relationships(npc, session)
     npc.emotional_state["relationships"] = relationships
+    
+    # 🔥 Update beliefs INCREMENTALLY (no full memory scan)
+    # Beliefs are already updated via event bus (on_belief_update)
+    # Here we just ensure they're current and add to emotional state
+    if not hasattr(npc, 'belief_system') or not npc.belief_system.beliefs:
+        npc.belief_system.update_from_memories(npc)
+    
+    # Apply belief decay periodically (every 10 ticks)
+    current_tick = session.world.time if hasattr(session, 'world') else 0
+    if current_tick % 10 == 0:
+        npc.belief_system.decay(dt=1.0)
+    
+    # Add belief summary to emotional state for LLM consumption
+    npc.emotional_state["beliefs"] = npc.belief_system.get_summary()
 
     # 🔥 PLAN PERSISTENCE — Only replan if conditions changed
     if hasattr(npc, '_current_plan') and npc._current_plan:

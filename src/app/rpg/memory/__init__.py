@@ -4,6 +4,8 @@ Submodules:
 - retrieval: Talemate-style memory scoring and retrieval with structured queries
 - reflection: Converts memories into high-level beliefs
 - consolidation: Merges repeated memories and converts to semantic form
+- belief_system: Derived truth layer built from memories for GOAP/Story
+- relationships: Persistent relationship state between NPCs
 
 Memory Types:
 - episodic: Event-based memories ("what happened")
@@ -31,6 +33,10 @@ from rpg.memory.consolidation import (
     merge_repeated_events,
     convert_to_semantic,
 )
+from rpg.memory.belief_system import (
+    BeliefSystem,
+    compute_belief_influence,
+)
 
 __all__ = [
     "compute_recency_decay",
@@ -47,4 +53,6 @@ __all__ = [
     "consolidate_memories",
     "merge_repeated_events",
     "convert_to_semantic",
+    "BeliefSystem",
+    "compute_belief_influence",
 ]

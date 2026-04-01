@@ -169,6 +169,10 @@ def game_tick(session):
         # Decay emotions before decision
         decay_emotions(npc, session.world.time)
         
+        # 🔥 Periodic belief decay (every 10 ticks)
+        if session.world.time % 10 == 0 and hasattr(npc, 'belief_system'):
+            npc.belief_system.decay(dt=1.0)
+        
         # Decide action
         action = decide(npc, session)
         action["npc_id"] = npc.id

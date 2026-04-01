@@ -15,6 +15,7 @@ Features:
 - Uses centralized entity lookup to prevent logic drift
 - Memory types (episodic/semantic/relationship) for structured storage
 - Relationship system integration (trust, fear, anger tracking)
+- Belief system integration (derived truth layer for GOAP/Story)
 - Event bus → memory hooks for consistency and decoupling
 """
 
@@ -22,8 +23,8 @@ from rpg.spatial import distance
 from rpg.utils.entity_lookup import find_npc as _find_npc
 from rpg.memory.relationships import (
     update_relationship_from_event,
-    get_relationship_goal_override,
 )
+from rpg.memory.belief_system import BeliefSystem
 
 
 def find_npc(session, npc_id):
@@ -185,11 +186,82 @@ def on_relationship_event(session, event):
             update_relationship_from_event(npc, event, session.world.time)
 
 
+def on_belief_update(session, event):
+    """Update belief systems incrementally from specific event types.
+    
+    TARGETED DISPATCH: Only updates NPCs that are:
+    - The source (actor) of the event
+    - The target of the event
+    - Within perception range (observers)
+    
+    Uses INCREMENTAL updates (update_from_event) instead of
+    full memory rescan (update_from_memories).
+    
+    Priority: 7 (runs after relationships, before general memory)
+    """
+    affected_ids = set()
+    
+    # Collect affected entity IDs
+    src = event.get("source") or event.get("actor")
+    tgt = event.get("target")
+    if src:
+        affected_ids.add(src)
+    if tgt:
+        affected_ids.add(tgt)
+    
+    for npc in session.npcs:
+        if not npc.is_active:
+            continue
+        
+        # TARGETED: Only process NPCs directly involved or perceiving
+        npc_involved = npc.id in affected_ids
+        
+        if npc_involved:
+            # Initialize belief system if not present
+            if not hasattr(npc, 'belief_system'):
+                npc.belief_system = BeliefSystem()
+            # INCREMENTAL: Update from single event, not full memory scan
+            npc.belief_system.update_from_event(event)
+        
+        elif can_perceive(npc, event, session):
+            # Observer: still update but with lower weight (handled in belief_system)
+            if not hasattr(npc, 'belief_system'):
+                npc.belief_system = BeliefSystem()
+            npc.belief_system.update_from_event(event)
+
+
+def init_npc_belief_system(npc):
+    """Initialize the belief system for an NPC if not already present.
+    
+    Args:
+        npc: The NPC to initialize the belief system for
+    """
+    if not hasattr(npc, 'belief_system'):
+        npc.belief_system = BeliefSystem()
+
+
+def update_all_beliefs(session):
+    """Update beliefs for all active NPCs based on their current memories.
+    
+    Call this periodically (e.g., every 10 ticks) or after significant events
+    to keep beliefs current.
+    
+    Args:
+        session: The current game session
+    """
+    for npc in session.npcs:
+        if not npc.is_active:
+            continue
+        init_npc_belief_system(npc)
+        npc.belief_system.update_from_memories(npc)
+
+
 def register(bus, session):
     """Register memory system handlers with the event bus.
     
     Priority scheme:
     - Relationship events: priority 5 (updates trust, fear, anger first)
+    - Belief updates: priority 7 (derives beliefs from events)
     - General memory: priority 10 (records events after relationship updates)
     
     This ensures relationships are updated before memories are recorded,
@@ -200,6 +272,12 @@ def register(bus, session):
     bus.subscribe("death", on_relationship_event, priority=5)
     bus.subscribe("heal", on_relationship_event, priority=5)
     bus.subscribe("dialogue", on_relationship_event, priority=5)
+    
+    # Register belief update handlers (priority 7)
+    bus.subscribe("damage", on_belief_update, priority=7)
+    bus.subscribe("death", on_belief_update, priority=7)
+    bus.subscribe("heal", on_belief_update, priority=7)
+    bus.subscribe("assist", on_belief_update, priority=7)
     
     # Register general memory handler (priority 10)
     bus.subscribe("*", on_any_event, priority=10)
