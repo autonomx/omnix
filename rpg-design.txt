@@ -1,266 +1,226 @@
-🧠 TIER 21 — SOCIAL SIMULATION ENGINE
-🔥 WHAT THIS ADDS
-NPC ↔ NPC reputation graph
-alliances & factions
-betrayal propagation
-rumor system (information spread)
-group decision making
-📁 NEW MODULE
-src/app/rpg/ai/social/
-    __init__.py
-    reputation_graph.py
-    alliance_system.py
-    rumor_system.py
-    social_engine.py
-    group_decision.py
-1️⃣ REPUTATION GRAPH (CORE)
-+++ src/app/rpg/ai/social/reputation_graph.py
-+from collections import defaultdict
-+
-+
-+class ReputationGraph:
-+    """
-+    Directed weighted graph:
-+    A -> B = how A feels about B
-+    """
-+
-+    def __init__(self):
-+        self.edges = defaultdict(lambda: defaultdict(float))
-+
-+    def get(self, a, b):
-+        return self.edges[a][b]
-+
-+    def update(self, a, b, delta):
-+        val = self.edges[a][b] + delta
-+        self.edges[a][b] = max(-1.0, min(1.0, val))
-+
-+    def neighbors(self, a):
-+        return self.edges[a]
-+
-+    def top_relations(self, a, n=5):
-+        return sorted(
-+            self.edges[a].items(),
-+            key=lambda x: x[1],
-+            reverse=True
-+        )[:n]
-2️⃣ ALLIANCE SYSTEM
-+++ src/app/rpg/ai/social/alliance_system.py
-+class AllianceSystem:
-+
-+    def __init__(self):
-+        self.factions = {}  # faction_id -> set(npc_ids)
-+
-+    def form_alliance(self, a, b):
-+        for fid, members in self.factions.items():
-+            if a in members or b in members:
-+                members.update([a, b])
-+                return fid
-+
-+        fid = f"faction_{len(self.factions)}"
-+        self.factions[fid] = {a, b}
-+        return fid
-+
-+    def break_alliance(self, a, b):
-+        for fid, members in self.factions.items():
-+            if a in members and b in members:
-+                members.discard(a)
-+                members.discard(b)
-+
-+    def get_faction(self, npc_id):
-+        for fid, members in self.factions.items():
-+            if npc_id in members:
-+                return fid
-+        return None
-3️⃣ RUMOR SYSTEM (INFORMATION SPREAD)
-+++ src/app/rpg/ai/social/rumor_system.py
-+import random
-+
-+
-+class RumorSystem:
-+
-+    def __init__(self):
-+        self.rumors = []  # [{content, source, ttl}]
-+
-+    def add_rumor(self, content, source):
-+        self.rumors.append({
-+            "content": content,
-+            "source": source,
-+            "ttl": 5
-+        })
-+
-+    def tick(self, npcs):
-+        new_rumors = []
-+
-+        for rumor in self.rumors:
-+            rumor["ttl"] -= 1
-+            if rumor["ttl"] <= 0:
-+                continue
-+
-+            for npc in npcs:
-+                if random.random() < 0.3:
-+                    new_rumors.append({
-+                        "content": rumor["content"],
-+                        "source": npc,
-+                        "ttl": rumor["ttl"]
-+                    })
-+
-+        self.rumors.extend(new_rumors)
-4️⃣ BETRAYAL PROPAGATION
-+++ src/app/rpg/ai/social/social_engine.py
-+class SocialEngine:
-+
-+    def __init__(self, reputation_graph, alliance_system, rumor_system):
-+        self.rep = reputation_graph
-+        self.alliances = alliance_system
-+        self.rumors = rumor_system
-+
-+    def process_event(self, event):
-+        t = event.get("type")
-+        a = event.get("actor")
-+        b = event.get("target")
-+
-+        if not a or not b:
-+            return
-+
-+        if t == "help":
-+            self.rep.update(a, b, 0.2)
-+            self.rep.update(b, a, 0.2)
-+
-+        elif t == "attack":
-+            self.rep.update(a, b, -0.5)
-+            self.rep.update(b, a, -0.7)
-+
-+            # propagate to allies
-+            fid = self.alliances.get_faction(b)
-+            if fid:
-+                for ally in self.alliances.factions[fid]:
-+                    self.rep.update(ally, a, -0.3)
-+
-+            self.rumors.add_rumor(f"{a} attacked {b}", a)
-+
-+        elif t == "betrayal":
-+            self.rep.update(a, b, -1.0)
-+            self.alliances.break_alliance(a, b)
-+            self.rumors.add_rumor(f"{a} betrayed {b}", a)
-5️⃣ GROUP DECISION ENGINE
-+++ src/app/rpg/ai/social/group_decision.py
-+from collections import Counter
-+
-+
-+class GroupDecisionEngine:
-+
-+    def decide(self, npc_ids, decisions):
-+        """
-+        decisions: {npc_id: NPCDecision}
-+        """
-+
-+        intents = [d.intent for d in decisions.values()]
-+        common = Counter(intents).most_common(1)
-+
-+        if not common:
-+            return None
-+
-+        dominant_intent = common[0][0]
-+
-+        # choose leader action
-+        for npc_id, d in decisions.items():
-+            if d.intent == dominant_intent:
-+                return d
-+
-+        return None
-6️⃣ INTEGRATE INTO WORLD LOOP
---- world_tick.py
-+++ world_tick.py
-@@
-+from rpg.ai.social.reputation_graph import ReputationGraph
-+from rpg.ai.social.alliance_system import AllianceSystem
-+from rpg.ai.social.rumor_system import RumorSystem
-+from rpg.ai.social.social_engine import SocialEngine
-+
-+rep = ReputationGraph()
-+alliances = AllianceSystem()
-+rumors = RumorSystem()
-+social = SocialEngine(rep, alliances, rumors)
+The goal is simple:
 
- def world_tick(world):
+🔥 Collapse GOAP + LLM mind + intent into ONE authoritative decision pipeline
 
-     for event in world.events:
-+        social.process_event(event)
+🧠 TARGET ARCHITECTURE
 
-+    rumors.tick(world.npcs)
-7️⃣ CONNECT TO NPC MIND
---- npc_mind.py
-+++ npc_mind.py
-@@
- context = {
-     ...
-+    "relationships": world.get("reputation", {}).get(self.id, {}),
-+    "faction": world.get("faction_map", {}).get(self.id),
-+    "rumors": world.get("rumors", [])[:5]
- }
+We introduce a new orchestrator:
 
-Prompt addition:
+ai/decision/decision_engine.py
 
-SOCIAL CONTEXT:
-Relationships: {relationships}
-Faction: {faction}
-Rumors: {rumors}
+This becomes the ONLY entry point for NPC decisions.
 
-You may act based on:
-- loyalty
-- revenge
-- group pressure
-8️⃣ TESTS (CRITICAL)
-Reputation Propagation
-+++ def test_attack_propagates_to_allies():
-+    rep = ReputationGraph()
-+    alliances = AllianceSystem()
-+    rumors = RumorSystem()
-+    social = SocialEngine(rep, alliances, rumors)
+✅ 1. NEW FILE — decision_engine.py
+➕ Create: src/app/rpg/ai/decision/decision_engine.py
+# NEW FILE
+
+from typing import Any, Dict
+
+class DecisionContext:
+    def __init__(self, npc, world_state):
+        self.npc = npc
+        self.world_state = world_state
+        self.plan = None
+        self.llm_adjustment = None
+        self.final_action = None
+        self.debug_trace = {}
+
+
+class DecisionEngine:
+    def __init__(self, goap_planner, llm_mind, resolver):
+        self.goap_planner = goap_planner
+        self.llm_mind = llm_mind
+        self.resolver = resolver
+
+    def decide(self, npc, world_state):
+        ctx = DecisionContext(npc, world_state)
+
+        # 1. Structured plan (deterministic backbone)
+        ctx.plan = self.goap_planner.plan(npc, world_state)
+        ctx.debug_trace["goap_plan"] = ctx.plan
+
+        # 2. LLM cognitive modulation
+        ctx.llm_adjustment = self.llm_mind.evaluate_plan(
+            npc=npc,
+            plan=ctx.plan,
+            world_state=world_state
+        )
+        ctx.debug_trace["llm_adjustment"] = ctx.llm_adjustment
+
+        # 3. Final resolution (single authority)
+        ctx.final_action = self.resolver.resolve(
+            npc=npc,
+            plan=ctx.plan,
+            llm_adjustment=ctx.llm_adjustment,
+            world_state=world_state
+        )
+
+        ctx.debug_trace["final_action"] = ctx.final_action
+
+        return ctx.final_action, ctx.debug_trace
+✅ 2. MODIFY GOAP PLANNER (make it pure)
+❌ BEFORE (typical anti-pattern)
+def plan(self, npc, world_state):
+    # returns action directly OR executes side effects
+✅ AFTER
+
+📍 File: ai/goap/planner.py
+
+ def plan(self, npc, world_state):
+-    action = self._compute_and_execute(npc, world_state)
+-    return action
++    plan = self._compute_plan(npc, world_state)
++    return plan
+🔥 RULE:
+
+GOAP must return structured plan, NOT action
+
+Example:
+
+{
+    "goal": "survive",
+    "steps": ["find_cover", "draw_weapon", "attack"],
+    "priority": 0.8
+}
+✅ 3. MODIFY LLM MIND (change role completely)
+❌ BEFORE
+
+LLM decides action directly
+
+✅ AFTER
+
+LLM evaluates / modifies plan
+
+📍 File: ai/llm_mind/npc_mind.py
+
+- def decide_action(self, npc, world_state):
+-     return llm_generate_action(...)
++ def evaluate_plan(self, npc, plan, world_state):
++     """
++     Takes structured plan and returns adjustment:
++     - modify priority
++     - veto action
++     - inject emotion/behavior
++     """
 +
-+    alliances.form_alliance("npc_b", "npc_c")
++     response = self._call_llm(
++         npc=npc,
++         plan=plan,
++         world_state=world_state
++     )
 +
-+    social.process_event({
-+        "type": "attack",
-+        "actor": "npc_a",
-+        "target": "npc_b"
-+    })
-+
-+    assert rep.get("npc_c", "npc_a") < 0
-Rumor Spread
-+++ def test_rumor_spreads():
-+    rs = RumorSystem()
-+    rs.add_rumor("npc_a betrayed npc_b", "npc_a")
-+
-+    rs.tick(["npc_b", "npc_c"])
-+
-+    assert len(rs.rumors) > 1
-Group Decision
-+++ def test_group_decision_majority():
-+    engine = GroupDecisionEngine()
-+
-+    decisions = {
-+        "a": FakeDecision("attack"),
-+        "b": FakeDecision("attack"),
-+        "c": FakeDecision("flee")
-+    }
-+
-+    result = engine.decide(["a","b","c"], decisions)
-+
-+    assert result.intent == "attack"
-🧠 WHAT YOU JUST BUILT
-Before Tier 21
-NPCs think individually
-After Tier 21
-NPCs:
-form alliances
-share information
-influence each other
-act as groups
-🔥 EMERGENT BEHAVIORS YOU NOW GET
-revenge cascades
-faction wars
-misinformation
-loyalty shifts
-mob behavior
-political dynamics
++     return {
++         "override": response.get("override", False),
++         "new_goal": response.get("new_goal"),
++         "emotional_bias": response.get("emotion"),
++         "risk_tolerance": response.get("risk", 0.5)
++     }
+✅ 4. ADD RESOLVER (NEW CORE LOGIC)
+➕ Create: ai/decision/resolver.py
+# NEW FILE
+
+class ActionResolver:
+
+    def resolve(self, npc, plan, llm_adjustment, world_state):
+
+        # LLM override (rare, but allowed)
+        if llm_adjustment.get("override"):
+            return self._handle_override(llm_adjustment)
+
+        # Adjust plan based on emotion/risk
+        adjusted_plan = self._apply_adjustments(plan, llm_adjustment)
+
+        # Select final action
+        return self._select_action(adjusted_plan)
+
+    def _apply_adjustments(self, plan, adj):
+        # Example: modify priority or steps
+        if adj.get("new_goal"):
+            plan["goal"] = adj["new_goal"]
+
+        return plan
+
+    def _select_action(self, plan):
+        # Simplest version: first step
+        return plan["steps"][0] if plan["steps"] else None
+
+    def _handle_override(self, adj):
+        return adj.get("override_action", "idle")
+✅ 5. REPLACE ALL DECISION ENTRY POINTS
+
+This is CRITICAL.
+
+❌ BEFORE (multiple entry points)
+
+You likely have calls like:
+
+npc_mind.decide_action(...)
+planner.execute(...)
+behavior_driver.run(...)
+intent_engine.process(...)
+✅ AFTER (ONLY THIS)
+action, debug = decision_engine.decide(npc, world_state)
+🔍 Example Diff
+
+📍 Somewhere in your game loop / agent:
+
+- action = self.npc_mind.decide_action(npc, world_state)
++ action, debug = self.decision_engine.decide(npc, world_state)
+✅ 6. REMOVE / DEPRECATE DUPLICATES
+🚫 Deprecate:
+intent_engine.py (merge into pre-processing if needed)
+behavior_driver.py (move logic into resolver)
+any decide_action outside DecisionEngine
+✅ 7. WIRE IT UP
+📍 Initialization
+from ai.decision.decision_engine import DecisionEngine
+from ai.decision.resolver import ActionResolver
+
+decision_engine = DecisionEngine(
+    goap_planner=goap_planner,
+    llm_mind=llm_mind,
+    resolver=ActionResolver()
+)
+✅ 8. ADD DEBUG VISIBILITY (HUGE WIN)
+
+Expose this:
+
+action, debug = decision_engine.decide(npc, world_state)
+
+print(debug)
+
+Example output:
+
+{
+  "goap_plan": {...},
+  "llm_adjustment": {...},
+  "final_action": "attack"
+}
+
+👉 This becomes your killer debugging + UX feature
+
+🧪 OPTIONAL (but powerful)
+
+Add confidence scoring:
+
+ctx.confidence = (
+    plan["priority"] * 
+    (1 - llm_adjustment.get("risk_tolerance", 0.5))
+)
+🏁 FINAL RESULT
+
+After this refactor:
+
+BEFORE
+4 competing decision systems
+unpredictable NPC behavior
+AFTER
+1 pipeline
+deterministic + expressive
+debuggable
+extensible
+⚠️ STRICT RULES (do not violate)
+❌ No system returns final action except resolver
+❌ No direct LLM → action
+❌ No side effects inside planner
+✅ Everything flows through DecisionEngine
