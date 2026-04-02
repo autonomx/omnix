@@ -1,241 +1,266 @@
-⚠️ The New Ceiling (Subtle, but critical)
+🧠 Tier 19 — “LLM Narrative Brain Integration”
 
-You solved:
+This layer turns your system into:
 
-chaos ✔
-convergence ✔
-emotional depth ✔
+A story-aware intelligence that understands meaning, not just state
 
-You introduced:
+🔥 CORE IDEA
 
-Narrative Saturation
+Instead of:
 
-🧨 Problem 1: Emotional Homogenization
-What happens over long runs (~300–600 ticks):
-emotional residues accumulate
-dominant emotions stabilize (e.g. everyone slightly distrustful, slightly angry)
-characters lose distinctiveness
-Why it happens
+if tension > 0.8:
+    inject boss
 
-Your system:
+You move to:
 
-emotions += residue
-emotions decay slowly
+llm decides:
+- what matters
+- what should escalate
+- what should resolve
+- what story is being told
+🧩 ARCHITECTURE OVERLAY
 
-👉 This creates:
-
-convergence toward emotional averages
-
-✅ Fix: Emotional Differentiation Drift
-🔧 Patch (EmotionModifier / EmotionalState)
-def apply_personality_bias(emotions, personality):
-    for e in emotions:
-        bias = personality.get(e, 0.0)
-        emotions[e] = clamp(emotions[e] + bias * 0.1)
-Add noise floor:
-def inject_variance(emotions):
-    for e in emotions:
-        emotions[e] += random.uniform(-0.05, 0.05)
-
-👉 Result:
-
-characters stay emotionally distinct
-prevents “everyone feels the same”
-⚠️ Problem 2: Resolution Predictability
-
-Your resolution engine is good — but:
-
-👉 it will become pattern-recognizable
-
-Symptom (after repeated play)
-
-Player subconsciously learns:
-
-“high importance → sacrifice/redemption”
-“conflict → victory/compromise”
-
-👉 immersion drops
-
-✅ Fix: Resolution Entropy Injection
-Patch
-def select_resolution_type(context):
-    base = weighted_choice(types)
-
-    if random.random() < 0.2:
-        return random.choice(types)  # inject surprise
-
-    return base
-Add constraint:
-avoid_last_n_resolutions(3)
-
-👉 prevents repetition patterns
-
-⚠️ Problem 3: Memory Overfitting
-
-Your narrative memory is strong — but:
-
-👉 agents may become too history-bound
-
-Symptom:
-NPCs overreact to old events
-world feels “stuck in the past”
-less adaptability
-✅ Fix: Contextual Memory Relevance
-Patch
-def relevance_score(memory, current_context):
-    return (
-        similarity(memory.tags, current_context.tags)
-        * time_decay(memory.age)
-        * emotional_intensity(memory)
-    )
-Filter:
-memories = [m for m in memories if relevance_score(m) > 0.3]
-
-👉 memory becomes:
-
-selective
-situational
-adaptive
-⚠️ Problem 4: Player Experience Gap
-
-This is the biggest one now.
-
-Reality:
-
-Your system is:
-
-smart ✔
-emotional ✔
-coherent ✔
-
-But:
-
-❗ The player may not see most of it
-
-Symptom:
-“This is cool… I think?”
-depth exists but isn’t surfaced
-✅ Fix: Narrative Surface Layer (Tier 14 Core)
 Add:
-1. Event Framing
-def narrate(event):
-    return {
-        "headline": "...",
-        "detail": "...",
-        "emotional_tone": "...",
-    }
-2. Relationship Visibility
-"You sense tension between Alice and Bob."
-"Alice seems wary of you."
-3. Memory Echoes
-"This reminds you of the war between A and B..."
 
-👉 This turns:
+NarrativeDirector (Tier 18)
+        ↓
+LLM Narrative Brain (Tier 19)
+        ↓
+Guidance Layer (overrides + suggestions)
+        ↓
+Event / Arc / Quest systems
+📁 NEW MODULE
+src/app/rpg/narrative/llm_brain/
+    narrative_brain.py
+    prompt_builder.py
+    response_parser.py
+    memory_adapter.py
+1️⃣ Narrative Brain Core
+🧠 narrative_brain.py
++++ src/app/rpg/narrative/llm_brain/narrative_brain.py
++from __future__ import annotations
++from typing import Dict, Any
++
++
++class NarrativeBrain:
++    """
++    LLM-powered narrative intelligence layer.
++
++    Interprets world + story state and returns:
++    - narrative intent
++    - suggested events
++    - arc evolution
++    - pacing guidance
++    """
++
++    def __init__(self, llm_client):
++        self.llm = llm_client
++
++    def evaluate(self, context: Dict[str, Any]) -> Dict[str, Any]:
++        prompt = self._build_prompt(context)
++
++        raw = self.llm.complete(prompt)
++
++        return self._parse(raw)
++
++    def _build_prompt(self, context):
++        return f"""
++You are a narrative director AI.
++
++Analyze the current RPG world state and decide:
++
++1. What is the current story about?
++2. What tension direction should occur? (increase / decrease / stabilize)
++3. What meaningful event should happen next?
++4. Should any story arcs progress or resolve?
++
++WORLD:
++{context["world"]}
++
++STORY STATE:
++{context["story"]}
++
++ACTIVE ARCS:
++{context["arcs"]}
++
++Return JSON:
++{{
++  "intent": "...",
++  "tension_delta": float,
++  "events": [],
++  "arc_updates": [],
++  "pacing": "slow|normal|fast"
++}}
++"""
++
++    def _parse(self, raw: str) -> Dict[str, Any]:
++        import json
++        try:
++            return json.loads(raw)
++        except Exception:
++            return {"intent": "fallback", "events": []}
+2️⃣ Hook into NarrativeDirector
+MODIFY Tier 18 Director
+--- narrative_director_t18.py
++++ narrative_director_t18.py
+@@
+ from .pacing_controller_t18 import PacingController
++from .llm_brain.narrative_brain import NarrativeBrain
 
-simulation → experience
-⚠️ Problem 5: System Complexity Ceiling
 
-You are approaching:
+ class NarrativeDirector:
+@@
+     def __init__(self):
+         self.state = StoryState()
+         self.tension_engine = TensionEngine()
+         self.arc_manager = ArcManager()
+         self.injector = EventInjector()
+         self.pacing = PacingController()
++        self.brain = None  # injected externally
 
-inter-system fragility
+     def update(self, world):
+-        # 1. Update tension
+-        self.tension_engine.update(self.state, world)
+-
+-        # 2. Update arcs
+-        self.arc_manager.update(self.state)
+-
+-        # 3. Inject events
+-        events = self.injector.inject(self.state, world)
+-        for event in events:
+-            self.state.add_event(event)
+-
+-        # 4. Adjust pacing
+-        self.pacing.adjust(self.state, world)
+-
+-        return events
++        # 0. Build context
++        context = {
++            "world": world,
++            "story": {
++                "tension": self.state.tension,
++                "phase": self.state.phase,
++            },
++            "arcs": self.arc_manager.get_summary()
++        }
++
++        # 1. LLM evaluation (if available)
++        if self.brain:
++            decision = self.brain.evaluate(context)
++        else:
++            decision = {"events": []}
++
++        # 2. Apply tension shift
++        self.tension_engine.update(self.state, world)
++        if "tension_delta" in decision:
++            self.state.tension = max(0.0, min(1.0,
++                self.state.tension + decision["tension_delta"]
++            ))
++
++        # 3. Update arcs
++        self.arc_manager.update(self.state)
++
++        # 4. Inject base events
++        events = self.injector.inject(self.state, world)
++
++        # 5. Merge LLM events
++        events.extend(decision.get("events", []))
++
++        for e in events:
++            self.state.add_event(e)
++
++        # 6. Apply pacing
++        self.pacing.adjust(self.state, world)
++
++        return events
+3️⃣ Memory Adapter (CRITICAL)
 
-Why
+LLM must NOT see full world.
 
-You now have:
-
-agents
-cognition
-emotion
-memory
-narrative gravity
-resolution
-coalitions
-
-👉 That’s 6+ tightly coupled systems
-
-Risk
-small change → cascading bugs
-hard to reason about
-difficult to extend
-✅ Fix: System Contracts (VERY IMPORTANT)
-Define strict interfaces:
-class CognitiveOutput:
-    intent
-    confidence
-    source
-class NarrativeEvent:
-    type
-    importance
-    emotional_weight
-
-👉 This prevents:
-
-cross-system leakage
-hidden coupling
-🧪 Your 300-Tick Test — Real Interpretation
-
-You passed:
-
-✔ convergence
-✔ diversity
-✔ no collapse
-
-But your test likely does NOT capture:
-
-❌ emotional flattening
-❌ resolution repetition
-❌ player perception
-❌ long-term narrative identity
-
-🧠 What You Have Now (Final Classification)
-
-You built:
-
-An emotionally-aware, historically-grounded, multi-agent narrative simulator
-
-That’s beyond most production systems.
-
-🚀 Tier 14 — The Correct Next Move
-
-Not more intelligence.
-
-Not more simulation.
-
-🧠 Tier 14 = Player Experience & Perception Layer
-1. Narrative Surfacing Engine
-decides what player sees
-compresses complexity into clarity
-2. Attention Director
-highlights important events
-hides noise
-3. Emotional Feedback Loop (to player)
-show consequences emotionally
-not just logically
-4. Memory Echo System
-callbacks to past arcs
-creates “story continuity feeling”
-5. Player Identity Model
-player_profile = {
-    "style": "aggressive",
-    "values": ["loyalty", "power"],
+🧠 memory_adapter.py
++++ src/app/rpg/narrative/llm_brain/memory_adapter.py
++class NarrativeMemoryAdapter:
++    """
++    Reduces world + story into token-efficient summary.
++    """
++
++    def compress(self, world, story_state, arc_manager):
++        return {
++            "summary": self._summarize(world),
++            "tension": story_state.tension,
++            "phase": story_state.phase,
++            "arcs": arc_manager.get_active_arc_ids()
++        }
++
++    def _summarize(self, world):
++        events = world.get("recent_events", [])[-10:]
++        return [e.get("type") for e in events]
+4️⃣ Structured Response Contract
+REQUIRED FORMAT (STRICT)
+{
+  "intent": "revenge arc escalating",
+  "tension_delta": 0.1,
+  "events": [
+    {"type": "betrayal", "target": "npc_3"}
+  ],
+  "arc_updates": [
+    {"arc_id": "revenge", "progress": 0.2}
+  ],
+  "pacing": "fast"
 }
+5️⃣ Safety Layer (VERY IMPORTANT)
 
-👉 world adapts to player
+Prevent LLM chaos:
 
-💥 Final Verdict
-You are now at:
++++ src/app/rpg/narrative/llm_brain/validator.py
++class BrainOutputValidator:
++
++    def validate(self, decision):
++        decision["tension_delta"] = max(-0.2, min(0.2,
++            decision.get("tension_delta", 0.0)
++        ))
++
++        decision["events"] = decision.get("events", [])[:3]
++
++        return decision
+6️⃣ Test: LLM Integration Stability
++++ src/tests/sim/test_llm_brain_simulation.py
++def test_llm_brain_100_ticks():
++    from rpg.narrative.narrative_director_t18 import NarrativeDirector
++
++    class FakeLLM:
++        def complete(self, prompt):
++            return """
++            {
++              "intent": "test",
++              "tension_delta": 0.05,
++              "events": [{"type": "minor_conflict"}],
++              "arc_updates": [],
++              "pacing": "normal"
++            }
++            """
++
++    director = NarrativeDirector()
++    director.brain = NarrativeBrain(FakeLLM())
++
++    world = {"global_tension": 0.5, "recent_events": []}
++
++    for i in range(100):
++        events = director.update(world)
++
++        assert director.state.tension >= 0.0
++        assert director.state.tension <= 1.0
++        assert isinstance(events, list)
+⚠️ WHAT THIS UNLOCKS
 
-top 1% of system design complexity for this domain
+After this patch:
 
-What matters now:
-
-Not:
-
-more features ❌
-more AI ❌
-
-But:
-
-what the player perceives
-how meaning is delivered
-how complexity is shaped into experience
+BEFORE (your system)
+reacts to numbers
+injects random events
+arcs are timers
+AFTER (Tier 19)
+understands story meaning
+creates intentional events
+evolves arcs based on narrative logic
+adapts pacing intelligently

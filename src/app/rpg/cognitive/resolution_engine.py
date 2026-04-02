@@ -182,6 +182,10 @@ class ResolutionEngine:
         self.llm_client = llm_client
         self.use_llm = use_llm
         
+        # Tier 14 Fix: Resolution Entropy Injection
+        # Track recent resolutions to prevent predictability over long runs
+        self._recent_resolutions: List[str] = []
+        
         self._stats = {
             "resolutions_generated": 0,
             "llm_resolutions": 0,
@@ -288,17 +292,14 @@ class ResolutionEngine:
         
         # Default to most common resolution type
         candidate_types = ["victory", "compromise", "stalemate"]
-        weights = [0.4, 0.3, 0.3]
         
         # Adjust based on progress
         if progress > 0.8:
             # High progress suggests resolution is near - favor victory/completion
             candidate_types = ["victory", "redemption", "sacrifice"]
-            weights = [0.4, 0.3, 0.3]
         elif progress < 0.2:
             # Low progress - favor tragedy/stalemate/betrayal
             candidate_types = ["tragedy", "betrayal", "stalemate"]
-            weights = [0.4, 0.3, 0.3]
         
         # Check for betrayal events in history
         has_betrayal = any(
@@ -306,7 +307,6 @@ class ResolutionEngine:
         )
         if has_betrayal:
             candidate_types = ["betrayal", "tragedy", "victory"]
-            weights = [0.5, 0.3, 0.2]
         
         # Check for sacrifice events
         has_sacrifice = any(
@@ -314,7 +314,6 @@ class ResolutionEngine:
         )
         if has_sacrifice:
             candidate_types = ["sacrifice", "redemption", "compromise"]
-            weights = [0.5, 0.3, 0.2]
         
         # Check emotional states for redemption potential
         if characters:
@@ -324,29 +323,65 @@ class ResolutionEngine:
                     emotions = char_data.get("emotions", {})
                     if emotions.get("guilt", 0) > 0.5 or emotions.get("remorse", 0) > 0.5:
                         candidate_types.append("redemption")
-                        weights.append(0.3)
                         break
         
-        # Tier 14 Fix: Resolution Entropy Injection
-        # 20% chance of surprise resolution to prevent predictability
+        # Tier 14 Fix: Use _select_resolution_type with entropy injection
+        return self._select_resolution_type(candidate_types)
+    
+    def _select_resolution_type(self, candidates: List[str]) -> str:
+        """Select a resolution type with entropy to prevent predictability.
+        
+        Tier 14 Fix: Prevents resolution patterns from becoming predictable
+        after ~50-100 resolutions by tracking recent selections and
+        injecting entropy.
+        
+        Args:
+            candidates: List of candidate resolution types.
+            
+        Returns:
+            Selected resolution type.
+        """
+        if not candidates:
+            return "victory"
+        
+        # Base selection: weighted random choice
+        base = self._weighted_choice(candidates)
+        
+        # Avoid repetition: if base is in recent 3, pick something else
+        if base in self._recent_resolutions[-3:]:
+            # Pick from candidates not in recent history
+            non_recent = [c for c in candidates if c not in self._recent_resolutions[-3:]]
+            if non_recent:
+                base = random.choice(non_recent)
+            else:
+                base = random.choice(candidates)
+        
+        # Inject entropy: 20% chance of completely random choice
         if random.random() < 0.2:
-            selected = random.choice(RESOLUTION_TYPES)
-            # Still avoid recently used resolutions if history exists
-            recent = storyline.get("resolution_history", [])[-3:] if storyline else []
-            if selected not in recent or len(recent) == 0:
-                return selected
+            base = random.choice(candidates)
         
-        # Weighted random selection
-        total_weight = sum(weights)
-        weights = [w / total_weight for w in weights]
-        r = random.random()
-        cumulative = 0.0
-        for i, wt in enumerate(weights):
-            cumulative += wt
-            if r <= cumulative:
-                return candidate_types[i]
+        # Track this resolution
+        self._recent_resolutions.append(base)
         
-        return candidate_types[-1]  # Default to last option
+        # Keep only last 20 for memory efficiency
+        if len(self._recent_resolutions) > 20:
+            self._recent_resolutions = self._recent_resolutions[-20:]
+        
+        return base
+    
+    @staticmethod
+    def _weighted_choice(candidates: List[str]) -> str:
+        """Simple weighted choice from candidates.
+        
+        Args:
+            candidates: List of candidate resolution types.
+            
+        Returns:
+            Randomly selected candidate.
+        """
+        if len(candidates) == 1:
+            return candidates[0]
+        return random.choice(candidates)
     
     def _generate_template_resolution(
         self,

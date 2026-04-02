@@ -332,6 +332,18 @@ class EmotionModifier:
         self._stats["modifications_applied"] += 1
         
         emotional_state = self._get_emotional_state(character)
+        
+        # Tier 14 Fix: Force personality bias and variance into the pipeline
+        # This prevents emotional homogenization over long runs
+        if emotional_state is not None:
+            personality = getattr(character, "personality", {})
+            emotional_state.emotions = apply_personality_bias(
+                emotional_state.emotions,
+                personality
+            )
+            emotional_state.emotions = inject_variance(
+                emotional_state.emotions
+            )
         if emotional_state is None:
             return DecisionModification(
                 original_intent=intent,

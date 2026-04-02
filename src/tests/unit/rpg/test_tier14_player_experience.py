@@ -16,6 +16,7 @@ Tests for:
 from __future__ import annotations
 
 import importlib
+import random
 import sys
 import pytest
 from unittest.mock import MagicMock
@@ -75,6 +76,13 @@ inject_variance = cog_mod.inject_variance
 relevance_score = cog_mod.relevance_score
 filter_memories_by_relevance = cog_mod.filter_memories_by_relevance
 ArcMemory = cog_mod.ArcMemory
+
+# Tier 14 Fix: Import NarrativeSurfaceEngine
+try:
+    from src.app.rpg.narrative.surface_engine import NarrativeSurfaceEngine
+except ModuleNotFoundError:
+    sys.path.insert(0, "src")
+    from app.rpg.narrative.surface_engine import NarrativeSurfaceEngine
 
 
 # ============================================================
@@ -783,3 +791,114 @@ class TestMemoryEchoIntegration:
         })
         # Should have some result
         assert result is not None
+
+
+# ============================================================
+# Player Perception Diversity Test
+# ============================================================
+
+class TestPlayerPerceptionDiversity:
+    """Tests for player-facing narrative diversity — the key Tier 14 metric."""
+
+    def test_player_perception_diversity(self):
+        """Test that narrated headlines remain diverse across many events.
+        
+        This is the critical Tier 14 test: it validates that the
+        NarrativeSurfaceEngine produces narratively distinct output,
+        not repetitive or bland narration.
+        
+        Target: unique_ratio > 0.6 (60% of headlines should be unique)
+        """
+        surface_engine = NarrativeSurfaceEngine()
+        
+        event_types = [
+            "faction_conflict", "betrayal", "death",
+            "character_growth", "quest_complete", "discovery",
+            "alliance_formed", "general",
+        ]
+        
+        characters = ["alice", "bob", "charlie", "diana", "eve"]
+        factions = ["hawks", "doves", "wolves", "lions", "eagles"]
+        
+        outputs = []
+        random.seed(42)  # Reproducible
+        
+        for tick in range(100):
+            event_type = random.choice(event_types)
+            
+            event = {
+                "type": event_type,
+                "importance": random.uniform(0.3, 1.0),
+                "tick": tick,
+            }
+            
+            # Add type-specific data
+            if event_type == "faction_conflict":
+                event["faction_a"] = random.choice(factions)
+                event["faction_b"] = random.choice(factions)
+                event["issue"] = random.choice(["territory", "power", "honor", "resources"])
+            elif event_type == "betrayal":
+                event["betrayer"] = random.choice(characters)
+                event["victim"] = random.choice([c for c in characters if c != event["betrayer"]])
+            elif event_type == "death":
+                event["character"] = random.choice(characters)
+            elif event_type == "character_growth":
+                event["character"] = random.choice(characters)
+            elif event_type == "quest_complete":
+                event["objective"] = random.choice(["artifact", "knowledge", "alliance", "revenge"])
+            elif event_type == "discovery":
+                event["discovery"] = random.choice(["secret passage", "ancient text", "hidden truth"])
+            
+            # Add emotions
+            event["emotions"] = {
+                random.choice(["anger", "fear", "trust", "joy", "sadness"]): random.uniform(0.2, 0.9),
+            }
+            
+            narration = surface_engine.narrate(event)
+            outputs.append(narration["headline"])
+        
+        unique_ratio = len(set(outputs)) / len(outputs)
+        
+        # Tier 14 Target: 60% unique headlines over 100 events
+        assert unique_ratio > 0.6, (
+            f"Narrative diversity too low: {unique_ratio:.2%} unique. "
+            f"Expected > 60%. Headlines may be too repetitive."
+        )
+
+    def test_emotional_context_always_present(self):
+        """Test that emotional context is always provided for events with emotions."""
+        surface_engine = NarrativeSurfaceEngine()
+        
+        for _ in range(20):
+            event = {
+                "type": "faction_conflict",
+                "faction_a": "A",
+                "faction_b": "B",
+                "issue": "territory",
+                "emotions": {"anger": 0.6, "fear": 0.3},
+                "importance": 0.7,
+            }
+            narration = surface_engine.narrate(event)
+            assert narration["emotional_context"], "Emotional context should always be present"
+
+    def test_narrative_structure_complete(self):
+        """Test that narration always produces all four layers."""
+        surface_engine = NarrativeSurfaceEngine()
+        
+        event = {
+            "type": "betrayal",
+            "betrayer": "Vargus",
+            "victim": "Elara",
+            "group": "The Council",
+            "emotions": {"shock": 0.8},
+            "importance": 0.9,
+        }
+        
+        narration = surface_engine.narrate(event)
+        
+        assert "headline" in narration
+        assert "description" in narration
+        assert "emotional_context" in narration
+        assert "memory_echo" in narration
+        assert len(narration["headline"]) > 5
+        assert len(narration["description"]) > 20

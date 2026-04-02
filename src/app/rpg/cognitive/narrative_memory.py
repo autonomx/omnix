@@ -409,7 +409,7 @@ class NarrativeMemory:
             current_actors: Current participant IDs.
             event_type: Current event type.
             max_results: Maximum number of relevant arcs to return.
-            current_tick: Current simulation tick (for decay).
+            current_tick: Current simulation tick.
             
         Returns:
             List of relevant arc memory dicts, sorted by relevance.
@@ -418,6 +418,24 @@ class NarrativeMemory:
         
         # Apply decay to all arcs
         self._decay_all_arcs(current_tick)
+        
+        # Tier 14 Fix: Filter memories by contextual relevance
+        # Build context for relevance scoring
+        context_tags = set()
+        if event_type:
+            context_tags.add(event_type)
+        if current_actors:
+            context_tags.update(current_actors)
+        
+        current_context = {
+            "tags": context_tags,
+            "current_tick": current_tick,
+        }
+        
+        memories = filter_memories_by_relevance(
+            self._arcs,
+            current_context
+        )
         
         scored_arcs = []
         for arc in self._arcs:
