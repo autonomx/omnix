@@ -240,8 +240,9 @@ class TestImprovedConfidence(unittest.TestCase):
         llm.evaluate_plan.return_value = {"risk_tolerance": 0.0}
         engine = DecisionEngine(goap, llm, ActionResolver())
         _, debug = engine.decide(MagicMock(), {})
-        # idle is valid (default) → validity=1.0, risk=0 → 1.0 * 1.0 * 1.0 = 1.0
-        self.assertAlmostEqual(debug["confidence"], 1.0, places=4)
+        # idle → validity=0.3 (idle is a low-confidence fallback)
+        # risk=0 → 1.0 * 1.0 * 0.3 = 0.3
+        self.assertAlmostEqual(debug["confidence"], 0.3, places=4)
 
     def test_reasoning_metadata_present(self) -> None:
         goap = MagicMock()

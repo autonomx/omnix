@@ -12,7 +12,6 @@ Rules (never violate):
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 
@@ -179,6 +178,16 @@ class ActionResolver:
         plan["rejected_steps"] = rejected
         return "idle"
 
+    def _get_action_failure_count(self, npc: Any, action: str, threshold: int = 2) -> int:
+        """Return how many times *action* has recently failed in NPC memory."""
+        npc_memory = getattr(npc, "memory", {})
+        if not isinstance(npc_memory, dict):
+            return 0
+        outcomes = npc_memory.get("action_outcomes", {}).get(action, [])
+        # Count recent failures (last 5 outcomes)
+        recent = outcomes[-5:]
+        return sum(1 for o in recent if isinstance(o, dict) and not o.get("success", True))
+
     def _is_valid(
         self,
         action: Any,
@@ -193,6 +202,8 @@ class ActionResolver:
         - ``None`` or empty strings are always invalid.
         - Known actions without a registered checker are considered
           valid (allowing graceful degradation).
+        - Actions that failed recently (>= 2 times) are considered
+          invalid — failure bias.
 
         Args:
             action: Candidate action name or object.
@@ -207,6 +218,10 @@ class ActionResolver:
 
         # Convert action to string key for lookup
         key = action if isinstance(action, str) else getattr(action, "name", str(action))
+
+        # Failure bias: avoid actions that failed recently
+        if self._get_action_failure_count(npc, key) >= 2:
+            return False
 
         # Custom validity checker registered for this action
         checker = self._validity_checks.get(key)

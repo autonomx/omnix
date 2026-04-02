@@ -1,226 +1,242 @@
-The goal is simple:
+🎬 GOAL OF DIRECTOR
 
-🔥 Collapse GOAP + LLM mind + intent into ONE authoritative decision pipeline
+Observe the system → detect patterns → inject events → shape narrative
 
-🧠 TARGET ARCHITECTURE
+Not random events. Not scripted story.
 
-We introduce a new orchestrator:
+👉 Guided emergence
 
-ai/decision/decision_engine.py
+🧠 ARCHITECTURE OVERVIEW
+NPC Loop:
+DECIDE → ACT → OUTCOME → RECORD
 
-This becomes the ONLY entry point for NPC decisions.
-
-✅ 1. NEW FILE — decision_engine.py
-➕ Create: src/app/rpg/ai/decision/decision_engine.py
+Director Loop:
+OBSERVE → ANALYZE → DECIDE → INJECT EVENT
+✅ 1. NEW FILE — director.py
+➕ Create: src/app/rpg/director/director.py
 # NEW FILE
 
-from typing import Any, Dict
-
-class DecisionContext:
-    def __init__(self, npc, world_state):
-        self.npc = npc
-        self.world_state = world_state
-        self.plan = None
-        self.llm_adjustment = None
-        self.final_action = None
-        self.debug_trace = {}
+from typing import List, Dict, Any
 
 
-class DecisionEngine:
-    def __init__(self, goap_planner, llm_mind, resolver):
-        self.goap_planner = goap_planner
-        self.llm_mind = llm_mind
-        self.resolver = resolver
+class Director:
 
-    def decide(self, npc, world_state):
-        ctx = DecisionContext(npc, world_state)
+    def __init__(self, emergence_tracker, event_engine):
+        self.emergence_tracker = emergence_tracker
+        self.event_engine = event_engine
+        self.history = []
 
-        # 1. Structured plan (deterministic backbone)
-        ctx.plan = self.goap_planner.plan(npc, world_state)
-        ctx.debug_trace["goap_plan"] = ctx.plan
+    def tick(self, world_state, npcs, recent_outcomes):
+        """
+        Called once per game tick AFTER all NPCs act
+        """
 
-        # 2. LLM cognitive modulation
-        ctx.llm_adjustment = self.llm_mind.evaluate_plan(
-            npc=npc,
-            plan=ctx.plan,
-            world_state=world_state
-        )
-        ctx.debug_trace["llm_adjustment"] = ctx.llm_adjustment
+        signals = self.emergence_tracker.analyze(world_state, npcs, recent_outcomes)
 
-        # 3. Final resolution (single authority)
-        ctx.final_action = self.resolver.resolve(
-            npc=npc,
-            plan=ctx.plan,
-            llm_adjustment=ctx.llm_adjustment,
-            world_state=world_state
-        )
+        decision = self._decide_intervention(signals)
 
-        ctx.debug_trace["final_action"] = ctx.final_action
+        if decision:
+            event = self.event_engine.create_event(decision, world_state)
+            self.event_engine.apply_event(event, world_state)
+            self.history.append(event)
 
-        return ctx.final_action, ctx.debug_trace
-✅ 2. MODIFY GOAP PLANNER (make it pure)
-❌ BEFORE (typical anti-pattern)
-def plan(self, npc, world_state):
-    # returns action directly OR executes side effects
-✅ AFTER
+        return decision
 
-📍 File: ai/goap/planner.py
+    def _decide_intervention(self, signals: Dict[str, Any]):
 
- def plan(self, npc, world_state):
--    action = self._compute_and_execute(npc, world_state)
--    return action
-+    plan = self._compute_plan(npc, world_state)
-+    return plan
-🔥 RULE:
+        # 1. Stagnation → inject twist
+        if signals.get("stagnation", 0) > 0.7:
+            return {"type": "twist", "intensity": 0.6}
 
-GOAP must return structured plan, NOT action
+        # 2. Conflict spike → escalate
+        if signals.get("conflict", 0) > 0.8:
+            return {"type": "escalation", "intensity": 0.9}
 
-Example:
+        # 3. Repeated failures → assist or punish
+        if signals.get("failure_spike", 0) > 0.6:
+            return {"type": "intervention", "mode": "assist"}
 
-{
-    "goal": "survive",
-    "steps": ["find_cover", "draw_weapon", "attack"],
-    "priority": 0.8
-}
-✅ 3. MODIFY LLM MIND (change role completely)
-❌ BEFORE
+        # 4. High divergence → chaos
+        if signals.get("divergence", 0) > 0.75:
+            return {"type": "chaos", "intensity": 0.8}
 
-LLM decides action directly
-
-✅ AFTER
-
-LLM evaluates / modifies plan
-
-📍 File: ai/llm_mind/npc_mind.py
-
-- def decide_action(self, npc, world_state):
--     return llm_generate_action(...)
-+ def evaluate_plan(self, npc, plan, world_state):
-+     """
-+     Takes structured plan and returns adjustment:
-+     - modify priority
-+     - veto action
-+     - inject emotion/behavior
-+     """
-+
-+     response = self._call_llm(
-+         npc=npc,
-+         plan=plan,
-+         world_state=world_state
-+     )
-+
-+     return {
-+         "override": response.get("override", False),
-+         "new_goal": response.get("new_goal"),
-+         "emotional_bias": response.get("emotion"),
-+         "risk_tolerance": response.get("risk", 0.5)
-+     }
-✅ 4. ADD RESOLVER (NEW CORE LOGIC)
-➕ Create: ai/decision/resolver.py
+        return None
+✅ 2. NEW FILE — event_engine.py
+➕ Create: src/app/rpg/director/event_engine.py
 # NEW FILE
 
-class ActionResolver:
+import random
 
-    def resolve(self, npc, plan, llm_adjustment, world_state):
 
-        # LLM override (rare, but allowed)
-        if llm_adjustment.get("override"):
-            return self._handle_override(llm_adjustment)
+class EventEngine:
 
-        # Adjust plan based on emotion/risk
-        adjusted_plan = self._apply_adjustments(plan, llm_adjustment)
+    def create_event(self, decision, world_state):
 
-        # Select final action
-        return self._select_action(adjusted_plan)
+        event_type = decision["type"]
 
-    def _apply_adjustments(self, plan, adj):
-        # Example: modify priority or steps
-        if adj.get("new_goal"):
-            plan["goal"] = adj["new_goal"]
+        if event_type == "twist":
+            return {
+                "name": "unexpected_betrayal",
+                "description": "An ally turns against the group",
+            }
 
-        return plan
+        if event_type == "escalation":
+            return {
+                "name": "enemy_reinforcements",
+                "description": "More enemies arrive",
+            }
 
-    def _select_action(self, plan):
-        # Simplest version: first step
-        return plan["steps"][0] if plan["steps"] else None
+        if event_type == "intervention":
+            return {
+                "name": "supply_drop",
+                "description": "Helpful resources appear nearby",
+            }
 
-    def _handle_override(self, adj):
-        return adj.get("override_action", "idle")
-✅ 5. REPLACE ALL DECISION ENTRY POINTS
+        if event_type == "chaos":
+            return {
+                "name": "environmental_hazard",
+                "description": "The environment becomes dangerous",
+            }
 
-This is CRITICAL.
+        return None
 
-❌ BEFORE (multiple entry points)
+    def apply_event(self, event, world_state):
 
-You likely have calls like:
+        if not event:
+            return
 
-npc_mind.decide_action(...)
-planner.execute(...)
-behavior_driver.run(...)
-intent_engine.process(...)
-✅ AFTER (ONLY THIS)
-action, debug = decision_engine.decide(npc, world_state)
-🔍 Example Diff
+        name = event["name"]
 
-📍 Somewhere in your game loop / agent:
+        if name == "enemy_reinforcements":
+            world_state["enemy_count"] += 2
 
-- action = self.npc_mind.decide_action(npc, world_state)
-+ action, debug = self.decision_engine.decide(npc, world_state)
-✅ 6. REMOVE / DEPRECATE DUPLICATES
-🚫 Deprecate:
-intent_engine.py (merge into pre-processing if needed)
-behavior_driver.py (move logic into resolver)
-any decide_action outside DecisionEngine
-✅ 7. WIRE IT UP
-📍 Initialization
-from ai.decision.decision_engine import DecisionEngine
-from ai.decision.resolver import ActionResolver
+        elif name == "supply_drop":
+            world_state["resources"] += 3
 
-decision_engine = DecisionEngine(
-    goap_planner=goap_planner,
-    llm_mind=llm_mind,
-    resolver=ActionResolver()
+        elif name == "environmental_hazard":
+            world_state["danger_level"] += 2
+
+        elif name == "unexpected_betrayal":
+            world_state["trust_level"] -= 0.5
+✅ 3. NEW FILE — emergence_tracker.py (bridge your existing one)
+
+You already have emergence tracking—this standardizes output.
+
+➕ Create or adapt:
+# src/app/rpg/director/emergence_adapter.py
+
+class EmergenceAdapter:
+
+    def analyze(self, world_state, npcs, outcomes):
+
+        return {
+            "stagnation": self._stagnation(npcs),
+            "conflict": self._conflict(world_state),
+            "failure_spike": self._failure(outcomes),
+            "divergence": self._divergence(world_state),
+        }
+
+    def _stagnation(self, npcs):
+        idle_count = sum(1 for n in npcs if n.last_action == "idle")
+        return idle_count / max(len(npcs), 1)
+
+    def _conflict(self, world_state):
+        return world_state.get("enemy_count", 0) / 10
+
+    def _failure(self, outcomes):
+        if not outcomes:
+            return 0
+        failures = sum(1 for o in outcomes if not o.success)
+        return failures / len(outcomes)
+
+    def _divergence(self, world_state):
+        return world_state.get("chaos", 0.0)
+✅ 4. INTEGRATE INTO GAME LOOP
+🔧 Modify your main loop
+# AFTER all NPCs act
+
+ outcomes = []
+
+ for npc in npcs:
+     action, debug = decision_engine.decide(npc, world_state)
+
+     outcome = executor.execute(action, npc, world_state)
+     recorder.record(npc, outcome)
+
+     outcomes.append(outcome)
+
++ # 🎬 Director step
++ director.tick(world_state, npcs, outcomes)
+✅ 5. INITIALIZATION
+from rpg.director.director import Director
+from rpg.director.event_engine import EventEngine
+from rpg.director.emergence_adapter import EmergenceAdapter
+
+director = Director(
+    emergence_tracker=EmergenceAdapter(),
+    event_engine=EventEngine()
 )
-✅ 8. ADD DEBUG VISIBILITY (HUGE WIN)
+🧠 WHAT THIS GIVES YOU (immediately)
+1. World reacts to system behavior
+too many failures → help appears
+too much success → enemies escalate
+nothing happening → twist injected
+2. Narrative without scripting
 
-Expose this:
+You get:
 
-action, debug = decision_engine.decide(npc, world_state)
+betrayal
+reinforcements
+chaos events
 
-print(debug)
+WITHOUT writing story scripts
 
-Example output:
+3. System-level intelligence
+
+Before:
+
+NPCs are smart
+
+Now:
+
+The world is smart
+
+🔥 Next-Level Upgrades (do after this works)
+1. Event Memory
+director.history
+
+Use it to avoid repetition.
+
+2. Cooldowns
+if last_event == "twist" → don't repeat immediately
+3. Targeted Events
+
+Instead of global:
+
+target_npc = weakest_npc(npcs)
+4. Narrative Threads (BIG)
+
+Turn events into:
 
 {
-  "goap_plan": {...},
-  "llm_adjustment": {...},
-  "final_action": "attack"
+  "thread": "betrayal_arc",
+  "stage": 1
 }
-
-👉 This becomes your killer debugging + UX feature
-
-🧪 OPTIONAL (but powerful)
-
-Add confidence scoring:
-
-ctx.confidence = (
-    plan["priority"] * 
-    (1 - llm_adjustment.get("risk_tolerance", 0.5))
-)
 🏁 FINAL RESULT
 
-After this refactor:
+After this:
 
-BEFORE
-4 competing decision systems
-unpredictable NPC behavior
-AFTER
-1 pipeline
-deterministic + expressive
-debuggable
-extensible
-⚠️ STRICT RULES (do not violate)
-❌ No system returns final action except resolver
-❌ No direct LLM → action
-❌ No side effects inside planner
-✅ Everything flows through DecisionEngine
+Talemate:
+
+Generates story
+
+You:
+
+Evolve a world that produces story
+
+🧠 Final Insight
+
+This is the moment your system becomes:
+
+🎮 Not a game
+🧠 But a story-generating simulation engine
