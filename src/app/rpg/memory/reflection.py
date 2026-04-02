@@ -9,7 +9,7 @@ NPCs convert experiences into beliefs like:
   "I can trust the healer"
 """
 
-from rpg.memory.retrieval import retrieve_memories
+from app.rpg.memory.retrieval import retrieve_memories
 
 
 def reflect(npc, session, llm_generate) -> str:

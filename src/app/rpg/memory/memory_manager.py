@@ -32,13 +32,13 @@ import math
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-from rpg.memory.belief_system import BeliefSystem
-from rpg.memory.episodic import (
+from app.rpg.memory.belief_system import BeliefSystem
+from app.rpg.memory.episodic import (
     Episode,
     EpisodeBuilder,
     compute_event_importance,
 )
-from rpg.memory.retrieval import (
+from app.rpg.memory.retrieval import (
     compute_recency_decay,
 )
 

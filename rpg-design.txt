@@ -1,266 +1,266 @@
-🧠 Tier 19 — “LLM Narrative Brain Integration”
-
-This layer turns your system into:
-
-A story-aware intelligence that understands meaning, not just state
-
-🔥 CORE IDEA
-
-Instead of:
-
-if tension > 0.8:
-    inject boss
-
-You move to:
-
-llm decides:
-- what matters
-- what should escalate
-- what should resolve
-- what story is being told
-🧩 ARCHITECTURE OVERLAY
-
-Add:
-
-NarrativeDirector (Tier 18)
-        ↓
-LLM Narrative Brain (Tier 19)
-        ↓
-Guidance Layer (overrides + suggestions)
-        ↓
-Event / Arc / Quest systems
+🧠 TIER 21 — SOCIAL SIMULATION ENGINE
+🔥 WHAT THIS ADDS
+NPC ↔ NPC reputation graph
+alliances & factions
+betrayal propagation
+rumor system (information spread)
+group decision making
 📁 NEW MODULE
-src/app/rpg/narrative/llm_brain/
-    narrative_brain.py
-    prompt_builder.py
-    response_parser.py
-    memory_adapter.py
-1️⃣ Narrative Brain Core
-🧠 narrative_brain.py
-+++ src/app/rpg/narrative/llm_brain/narrative_brain.py
-+from __future__ import annotations
-+from typing import Dict, Any
+src/app/rpg/ai/social/
+    __init__.py
+    reputation_graph.py
+    alliance_system.py
+    rumor_system.py
+    social_engine.py
+    group_decision.py
+1️⃣ REPUTATION GRAPH (CORE)
++++ src/app/rpg/ai/social/reputation_graph.py
++from collections import defaultdict
 +
 +
-+class NarrativeBrain:
++class ReputationGraph:
 +    """
-+    LLM-powered narrative intelligence layer.
-+
-+    Interprets world + story state and returns:
-+    - narrative intent
-+    - suggested events
-+    - arc evolution
-+    - pacing guidance
++    Directed weighted graph:
++    A -> B = how A feels about B
 +    """
 +
-+    def __init__(self, llm_client):
-+        self.llm = llm_client
++    def __init__(self):
++        self.edges = defaultdict(lambda: defaultdict(float))
 +
-+    def evaluate(self, context: Dict[str, Any]) -> Dict[str, Any]:
-+        prompt = self._build_prompt(context)
++    def get(self, a, b):
++        return self.edges[a][b]
 +
-+        raw = self.llm.complete(prompt)
++    def update(self, a, b, delta):
++        val = self.edges[a][b] + delta
++        self.edges[a][b] = max(-1.0, min(1.0, val))
 +
-+        return self._parse(raw)
++    def neighbors(self, a):
++        return self.edges[a]
 +
-+    def _build_prompt(self, context):
-+        return f"""
-+You are a narrative director AI.
++    def top_relations(self, a, n=5):
++        return sorted(
++            self.edges[a].items(),
++            key=lambda x: x[1],
++            reverse=True
++        )[:n]
+2️⃣ ALLIANCE SYSTEM
++++ src/app/rpg/ai/social/alliance_system.py
++class AllianceSystem:
 +
-+Analyze the current RPG world state and decide:
++    def __init__(self):
++        self.factions = {}  # faction_id -> set(npc_ids)
 +
-+1. What is the current story about?
-+2. What tension direction should occur? (increase / decrease / stabilize)
-+3. What meaningful event should happen next?
-+4. Should any story arcs progress or resolve?
++    def form_alliance(self, a, b):
++        for fid, members in self.factions.items():
++            if a in members or b in members:
++                members.update([a, b])
++                return fid
 +
-+WORLD:
-+{context["world"]}
++        fid = f"faction_{len(self.factions)}"
++        self.factions[fid] = {a, b}
++        return fid
 +
-+STORY STATE:
-+{context["story"]}
++    def break_alliance(self, a, b):
++        for fid, members in self.factions.items():
++            if a in members and b in members:
++                members.discard(a)
++                members.discard(b)
 +
-+ACTIVE ARCS:
-+{context["arcs"]}
++    def get_faction(self, npc_id):
++        for fid, members in self.factions.items():
++            if npc_id in members:
++                return fid
++        return None
+3️⃣ RUMOR SYSTEM (INFORMATION SPREAD)
++++ src/app/rpg/ai/social/rumor_system.py
++import random
 +
-+Return JSON:
-+{{
-+  "intent": "...",
-+  "tension_delta": float,
-+  "events": [],
-+  "arc_updates": [],
-+  "pacing": "slow|normal|fast"
-+}}
-+"""
 +
-+    def _parse(self, raw: str) -> Dict[str, Any]:
-+        import json
-+        try:
-+            return json.loads(raw)
-+        except Exception:
-+            return {"intent": "fallback", "events": []}
-2️⃣ Hook into NarrativeDirector
-MODIFY Tier 18 Director
---- narrative_director_t18.py
-+++ narrative_director_t18.py
++class RumorSystem:
++
++    def __init__(self):
++        self.rumors = []  # [{content, source, ttl}]
++
++    def add_rumor(self, content, source):
++        self.rumors.append({
++            "content": content,
++            "source": source,
++            "ttl": 5
++        })
++
++    def tick(self, npcs):
++        new_rumors = []
++
++        for rumor in self.rumors:
++            rumor["ttl"] -= 1
++            if rumor["ttl"] <= 0:
++                continue
++
++            for npc in npcs:
++                if random.random() < 0.3:
++                    new_rumors.append({
++                        "content": rumor["content"],
++                        "source": npc,
++                        "ttl": rumor["ttl"]
++                    })
++
++        self.rumors.extend(new_rumors)
+4️⃣ BETRAYAL PROPAGATION
++++ src/app/rpg/ai/social/social_engine.py
++class SocialEngine:
++
++    def __init__(self, reputation_graph, alliance_system, rumor_system):
++        self.rep = reputation_graph
++        self.alliances = alliance_system
++        self.rumors = rumor_system
++
++    def process_event(self, event):
++        t = event.get("type")
++        a = event.get("actor")
++        b = event.get("target")
++
++        if not a or not b:
++            return
++
++        if t == "help":
++            self.rep.update(a, b, 0.2)
++            self.rep.update(b, a, 0.2)
++
++        elif t == "attack":
++            self.rep.update(a, b, -0.5)
++            self.rep.update(b, a, -0.7)
++
++            # propagate to allies
++            fid = self.alliances.get_faction(b)
++            if fid:
++                for ally in self.alliances.factions[fid]:
++                    self.rep.update(ally, a, -0.3)
++
++            self.rumors.add_rumor(f"{a} attacked {b}", a)
++
++        elif t == "betrayal":
++            self.rep.update(a, b, -1.0)
++            self.alliances.break_alliance(a, b)
++            self.rumors.add_rumor(f"{a} betrayed {b}", a)
+5️⃣ GROUP DECISION ENGINE
++++ src/app/rpg/ai/social/group_decision.py
++from collections import Counter
++
++
++class GroupDecisionEngine:
++
++    def decide(self, npc_ids, decisions):
++        """
++        decisions: {npc_id: NPCDecision}
++        """
++
++        intents = [d.intent for d in decisions.values()]
++        common = Counter(intents).most_common(1)
++
++        if not common:
++            return None
++
++        dominant_intent = common[0][0]
++
++        # choose leader action
++        for npc_id, d in decisions.items():
++            if d.intent == dominant_intent:
++                return d
++
++        return None
+6️⃣ INTEGRATE INTO WORLD LOOP
+--- world_tick.py
++++ world_tick.py
 @@
- from .pacing_controller_t18 import PacingController
-+from .llm_brain.narrative_brain import NarrativeBrain
++from rpg.ai.social.reputation_graph import ReputationGraph
++from rpg.ai.social.alliance_system import AllianceSystem
++from rpg.ai.social.rumor_system import RumorSystem
++from rpg.ai.social.social_engine import SocialEngine
++
++rep = ReputationGraph()
++alliances = AllianceSystem()
++rumors = RumorSystem()
++social = SocialEngine(rep, alliances, rumors)
 
+ def world_tick(world):
 
- class NarrativeDirector:
+     for event in world.events:
++        social.process_event(event)
+
++    rumors.tick(world.npcs)
+7️⃣ CONNECT TO NPC MIND
+--- npc_mind.py
++++ npc_mind.py
 @@
-     def __init__(self):
-         self.state = StoryState()
-         self.tension_engine = TensionEngine()
-         self.arc_manager = ArcManager()
-         self.injector = EventInjector()
-         self.pacing = PacingController()
-+        self.brain = None  # injected externally
+ context = {
+     ...
++    "relationships": world.get("reputation", {}).get(self.id, {}),
++    "faction": world.get("faction_map", {}).get(self.id),
++    "rumors": world.get("rumors", [])[:5]
+ }
 
-     def update(self, world):
--        # 1. Update tension
--        self.tension_engine.update(self.state, world)
--
--        # 2. Update arcs
--        self.arc_manager.update(self.state)
--
--        # 3. Inject events
--        events = self.injector.inject(self.state, world)
--        for event in events:
--            self.state.add_event(event)
--
--        # 4. Adjust pacing
--        self.pacing.adjust(self.state, world)
--
--        return events
-+        # 0. Build context
-+        context = {
-+            "world": world,
-+            "story": {
-+                "tension": self.state.tension,
-+                "phase": self.state.phase,
-+            },
-+            "arcs": self.arc_manager.get_summary()
-+        }
-+
-+        # 1. LLM evaluation (if available)
-+        if self.brain:
-+            decision = self.brain.evaluate(context)
-+        else:
-+            decision = {"events": []}
-+
-+        # 2. Apply tension shift
-+        self.tension_engine.update(self.state, world)
-+        if "tension_delta" in decision:
-+            self.state.tension = max(0.0, min(1.0,
-+                self.state.tension + decision["tension_delta"]
-+            ))
-+
-+        # 3. Update arcs
-+        self.arc_manager.update(self.state)
-+
-+        # 4. Inject base events
-+        events = self.injector.inject(self.state, world)
-+
-+        # 5. Merge LLM events
-+        events.extend(decision.get("events", []))
-+
-+        for e in events:
-+            self.state.add_event(e)
-+
-+        # 6. Apply pacing
-+        self.pacing.adjust(self.state, world)
-+
-+        return events
-3️⃣ Memory Adapter (CRITICAL)
+Prompt addition:
 
-LLM must NOT see full world.
+SOCIAL CONTEXT:
+Relationships: {relationships}
+Faction: {faction}
+Rumors: {rumors}
 
-🧠 memory_adapter.py
-+++ src/app/rpg/narrative/llm_brain/memory_adapter.py
-+class NarrativeMemoryAdapter:
-+    """
-+    Reduces world + story into token-efficient summary.
-+    """
+You may act based on:
+- loyalty
+- revenge
+- group pressure
+8️⃣ TESTS (CRITICAL)
+Reputation Propagation
++++ def test_attack_propagates_to_allies():
++    rep = ReputationGraph()
++    alliances = AllianceSystem()
++    rumors = RumorSystem()
++    social = SocialEngine(rep, alliances, rumors)
 +
-+    def compress(self, world, story_state, arc_manager):
-+        return {
-+            "summary": self._summarize(world),
-+            "tension": story_state.tension,
-+            "phase": story_state.phase,
-+            "arcs": arc_manager.get_active_arc_ids()
-+        }
++    alliances.form_alliance("npc_b", "npc_c")
 +
-+    def _summarize(self, world):
-+        events = world.get("recent_events", [])[-10:]
-+        return [e.get("type") for e in events]
-4️⃣ Structured Response Contract
-REQUIRED FORMAT (STRICT)
-{
-  "intent": "revenge arc escalating",
-  "tension_delta": 0.1,
-  "events": [
-    {"type": "betrayal", "target": "npc_3"}
-  ],
-  "arc_updates": [
-    {"arc_id": "revenge", "progress": 0.2}
-  ],
-  "pacing": "fast"
-}
-5️⃣ Safety Layer (VERY IMPORTANT)
-
-Prevent LLM chaos:
-
-+++ src/app/rpg/narrative/llm_brain/validator.py
-+class BrainOutputValidator:
++    social.process_event({
++        "type": "attack",
++        "actor": "npc_a",
++        "target": "npc_b"
++    })
 +
-+    def validate(self, decision):
-+        decision["tension_delta"] = max(-0.2, min(0.2,
-+            decision.get("tension_delta", 0.0)
-+        ))
++    assert rep.get("npc_c", "npc_a") < 0
+Rumor Spread
++++ def test_rumor_spreads():
++    rs = RumorSystem()
++    rs.add_rumor("npc_a betrayed npc_b", "npc_a")
 +
-+        decision["events"] = decision.get("events", [])[:3]
++    rs.tick(["npc_b", "npc_c"])
 +
-+        return decision
-6️⃣ Test: LLM Integration Stability
-+++ src/tests/sim/test_llm_brain_simulation.py
-+def test_llm_brain_100_ticks():
-+    from rpg.narrative.narrative_director_t18 import NarrativeDirector
++    assert len(rs.rumors) > 1
+Group Decision
++++ def test_group_decision_majority():
++    engine = GroupDecisionEngine()
 +
-+    class FakeLLM:
-+        def complete(self, prompt):
-+            return """
-+            {
-+              "intent": "test",
-+              "tension_delta": 0.05,
-+              "events": [{"type": "minor_conflict"}],
-+              "arc_updates": [],
-+              "pacing": "normal"
-+            }
-+            """
++    decisions = {
++        "a": FakeDecision("attack"),
++        "b": FakeDecision("attack"),
++        "c": FakeDecision("flee")
++    }
 +
-+    director = NarrativeDirector()
-+    director.brain = NarrativeBrain(FakeLLM())
++    result = engine.decide(["a","b","c"], decisions)
 +
-+    world = {"global_tension": 0.5, "recent_events": []}
-+
-+    for i in range(100):
-+        events = director.update(world)
-+
-+        assert director.state.tension >= 0.0
-+        assert director.state.tension <= 1.0
-+        assert isinstance(events, list)
-⚠️ WHAT THIS UNLOCKS
-
-After this patch:
-
-BEFORE (your system)
-reacts to numbers
-injects random events
-arcs are timers
-AFTER (Tier 19)
-understands story meaning
-creates intentional events
-evolves arcs based on narrative logic
-adapts pacing intelligently
++    assert result.intent == "attack"
+🧠 WHAT YOU JUST BUILT
+Before Tier 21
+NPCs think individually
+After Tier 21
+NPCs:
+form alliances
+share information
+influence each other
+act as groups
+🔥 EMERGENT BEHAVIORS YOU NOW GET
+revenge cascades
+faction wars
+misinformation
+loyalty shifts
+mob behavior
+political dynamics

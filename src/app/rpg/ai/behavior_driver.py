@@ -29,8 +29,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from rpg.memory.memory_manager import MemoryManager
-from rpg.memory.belief_system import BeliefSystem
+from app.rpg.memory.memory_manager import MemoryManager
+from app.rpg.memory.belief_system import BeliefSystem
 
 
 class BehaviorContext:

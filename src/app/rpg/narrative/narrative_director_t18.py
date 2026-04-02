@@ -17,7 +17,7 @@ from .story_state import StoryState
 from .tension_engine import TensionEngine
 from .arc_manager import ArcManager
 from .event_injector import EventInjector
-from .pacing_controller_t18 import PacingController
+from .pacing_controller import PacingController
 
 
 class NarrativeDirector:
