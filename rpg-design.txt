@@ -1,242 +1,167 @@
-🎬 GOAL OF DIRECTOR
-
-Observe the system → detect patterns → inject events → shape narrative
-
-Not random events. Not scripted story.
-
-👉 Guided emergence
-
-🧠 ARCHITECTURE OVERVIEW
-NPC Loop:
-DECIDE → ACT → OUTCOME → RECORD
-
-Director Loop:
-OBSERVE → ANALYZE → DECIDE → INJECT EVENT
-✅ 1. NEW FILE — director.py
-➕ Create: src/app/rpg/director/director.py
-# NEW FILE
-
-from typing import List, Dict, Any
-
-
-class Director:
-
-    def __init__(self, emergence_tracker, event_engine):
-        self.emergence_tracker = emergence_tracker
-        self.event_engine = event_engine
-        self.history = []
-
-    def tick(self, world_state, npcs, recent_outcomes):
-        """
-        Called once per game tick AFTER all NPCs act
-        """
-
-        signals = self.emergence_tracker.analyze(world_state, npcs, recent_outcomes)
-
-        decision = self._decide_intervention(signals)
-
-        if decision:
-            event = self.event_engine.create_event(decision, world_state)
-            self.event_engine.apply_event(event, world_state)
-            self.history.append(event)
-
-        return decision
-
-    def _decide_intervention(self, signals: Dict[str, Any]):
-
-        # 1. Stagnation → inject twist
-        if signals.get("stagnation", 0) > 0.7:
-            return {"type": "twist", "intensity": 0.6}
-
-        # 2. Conflict spike → escalate
-        if signals.get("conflict", 0) > 0.8:
-            return {"type": "escalation", "intensity": 0.9}
-
-        # 3. Repeated failures → assist or punish
-        if signals.get("failure_spike", 0) > 0.6:
-            return {"type": "intervention", "mode": "assist"}
-
-        # 4. High divergence → chaos
-        if signals.get("divergence", 0) > 0.75:
-            return {"type": "chaos", "intensity": 0.8}
-
-        return None
-✅ 2. NEW FILE — event_engine.py
-➕ Create: src/app/rpg/director/event_engine.py
-# NEW FILE
-
-import random
-
-
-class EventEngine:
-
-    def create_event(self, decision, world_state):
-
-        event_type = decision["type"]
-
-        if event_type == "twist":
-            return {
-                "name": "unexpected_betrayal",
-                "description": "An ally turns against the group",
-            }
-
-        if event_type == "escalation":
-            return {
-                "name": "enemy_reinforcements",
-                "description": "More enemies arrive",
-            }
-
-        if event_type == "intervention":
-            return {
-                "name": "supply_drop",
-                "description": "Helpful resources appear nearby",
-            }
-
-        if event_type == "chaos":
-            return {
-                "name": "environmental_hazard",
-                "description": "The environment becomes dangerous",
-            }
-
-        return None
-
-    def apply_event(self, event, world_state):
-
-        if not event:
-            return
-
-        name = event["name"]
-
-        if name == "enemy_reinforcements":
-            world_state["enemy_count"] += 2
-
-        elif name == "supply_drop":
-            world_state["resources"] += 3
-
-        elif name == "environmental_hazard":
-            world_state["danger_level"] += 2
-
-        elif name == "unexpected_betrayal":
-            world_state["trust_level"] -= 0.5
-✅ 3. NEW FILE — emergence_tracker.py (bridge your existing one)
-
-You already have emergence tracking—this standardizes output.
-
-➕ Create or adapt:
-# src/app/rpg/director/emergence_adapter.py
-
-class EmergenceAdapter:
-
-    def analyze(self, world_state, npcs, outcomes):
-
-        return {
-            "stagnation": self._stagnation(npcs),
-            "conflict": self._conflict(world_state),
-            "failure_spike": self._failure(outcomes),
-            "divergence": self._divergence(world_state),
-        }
-
-    def _stagnation(self, npcs):
-        idle_count = sum(1 for n in npcs if n.last_action == "idle")
-        return idle_count / max(len(npcs), 1)
-
-    def _conflict(self, world_state):
-        return world_state.get("enemy_count", 0) / 10
-
-    def _failure(self, outcomes):
-        if not outcomes:
-            return 0
-        failures = sum(1 for o in outcomes if not o.success)
-        return failures / len(outcomes)
-
-    def _divergence(self, world_state):
-        return world_state.get("chaos", 0.0)
-✅ 4. INTEGRATE INTO GAME LOOP
-🔧 Modify your main loop
-# AFTER all NPCs act
-
- outcomes = []
-
- for npc in npcs:
-     action, debug = decision_engine.decide(npc, world_state)
-
-     outcome = executor.execute(action, npc, world_state)
-     recorder.record(npc, outcome)
-
-     outcomes.append(outcome)
-
-+ # 🎬 Director step
-+ director.tick(world_state, npcs, outcomes)
-✅ 5. INITIALIZATION
-from rpg.director.director import Director
-from rpg.director.event_engine import EventEngine
-from rpg.director.emergence_adapter import EmergenceAdapter
-
-director = Director(
-    emergence_tracker=EmergenceAdapter(),
-    event_engine=EventEngine()
-)
-🧠 WHAT THIS GIVES YOU (immediately)
-1. World reacts to system behavior
-too many failures → help appears
-too much success → enemies escalate
-nothing happening → twist injected
-2. Narrative without scripting
-
-You get:
-
-betrayal
-reinforcements
-chaos events
-
-WITHOUT writing story scripts
-
-3. System-level intelligence
-
-Before:
-
-NPCs are smart
-
-Now:
-
-The world is smart
-
-🔥 Next-Level Upgrades (do after this works)
-1. Event Memory
-director.history
-
-Use it to avoid repetition.
-
-2. Cooldowns
-if last_event == "twist" → don't repeat immediately
-3. Targeted Events
-
-Instead of global:
-
-target_npc = weakest_npc(npcs)
-4. Narrative Threads (BIG)
-
-Turn events into:
-
-{
-  "thread": "betrayal_arc",
-  "stage": 1
-}
-🏁 FINAL RESULT
-
-After this:
-
-Talemate:
-
-Generates story
-
-You:
-
-Evolve a world that produces story
-
-🧠 Final Insight
-
-This is the moment your system becomes:
-
-🎮 Not a game
-🧠 But a story-generating simulation engine
+⚠️ LAST CRITICAL GAPS (Before Phase 2)
+
+These are not bugs — they are scaling risks.
+
+❗ 1. _active_loop Is Not Safe Long-Term
+Problem
+_active_loop = None
+
+This:
+
+breaks with async/multithreading later
+breaks with multiple sessions (you will need this)
+✅ FIX — CONTEXT-LOCAL LOOP (IMPORTANT)
+🔧 FILE: src/app/rpg/core/game_loop.py
++ import contextvars
+🔁 REPLACE
+- _active_loop = None
++ _active_loop_ctx = contextvars.ContextVar("active_game_loop", default=None)
+🔁 MODIFY tick()
+- if GameLoop._active_loop and GameLoop._active_loop is not self:
+-     raise RuntimeError("Multiple GameLoop instances detected")
+-
+- GameLoop._active_loop = self
++ current = GameLoop._active_loop_ctx.get()
++ if current and current is not self:
++     raise RuntimeError("Multiple GameLoop instances detected in same context")
++
++ token = GameLoop._active_loop_ctx.set(self)
+➕ ADD FINALLY CLEANUP
++ try:
++     # existing tick logic
++     ...
++ finally:
++     GameLoop._active_loop_ctx.reset(token)
+
+👉 This makes your system:
+
+future-proof for async
+safe for multiplayer sessions
+❗ 2. EventBus Enforcement Is Still Passive
+
+Right now:
+
+assert_event_usage() = placeholder
+
+✅ FIX — DETECT DIRECT CROSS-SYSTEM CALLS
+🔧 FILE: src/app/rpg/core/event_bus.py
+➕ ADD STRONGER CHECK
++ import sys
++    def assert_event_usage(self):
++        if not self._enforce:
++            return
++
++        stack = inspect.stack()
++
++        for frame in stack[2:]:  # skip emit + assert frames
++            module = inspect.getmodule(frame[0])
++            if not module:
++                continue
++
++            name = module.__name__
++
++            # Allow core systems
++            if name.startswith("app.rpg.core"):
++                continue
++
++            # Detect suspicious direct calls
++            if "npc" in name and "world" in name:
++                raise RuntimeError(
++                    f"Illegal cross-system call detected: {name}. "
++                    "Use EventBus instead."
++                )
+
+👉 This is still basic — but now it’s real enforcement, not a stub.
+
+❗ 3. EventBus Is Write-Only (Missing Replay / Debug Power)
+
+Right now:
+
+events are emitted
+then lost after collect()
+✅ FIX — ADD EVENT HISTORY (DEBUG SUPERPOWER)
+🔧 FILE: src/app/rpg/core/event_bus.py
++        self._history: List[Event] = []
+     def emit(self, event: Event) -> None:
+         self.assert_event_usage()
++        self._history.append(event)
++    def history(self) -> List[Event]:
++        return self._history[:]
+
+👉 This unlocks:
+
+replay
+debugging
+narrative causality tracking (later 🔥)
+❗ 4. StoryDirector Emits Only ONE Event Type
+
+Right now:
+
+"scene_generated"
+
+👉 Too limited.
+
+✅ FIX — ADD STRUCTURED EVENT TYPES
+🔧 FILE: src/app/rpg/narrative/story_director.py
++        event_bus.emit(Event("narrative_beat_selected", {
++            "beat": next_beat,
++            "tick": self._tick_count
++        }))
++        event_bus.emit(Event("scene_generated", {
++            "tick": self._tick_count,
++            "beat": next_beat,
++            "scene": scene
++        }))
+
+👉 This is crucial for:
+
+debugging
+analytics
+future UI
+❗ 5. No System Identity (You Can’t Trace Who Did What)
+
+Right now events don’t include source system
+
+✅ FIX — ADD source FIELD TO EVENT
+🔧 FILE: src/app/rpg/core/event_bus.py
+ @dataclass
+ class Event:
+     type: str
+     payload: Dict[str, Any] = field(default_factory=dict)
++    source: Optional[str] = None
+UPDATE EMITS
+
+Example:
+
+event_bus.emit(Event(
+    "scene_generated",
+    {...},
+    source="story_director"
+))
+
+👉 This becomes critical in Phase 3+
+
+❗ 6. No Tick ID in EventBus (Temporal Debugging Missing)
+✅ FIX
+🔧 FILE: game_loop.py
+ events = self.event_bus.collect()
+BEFORE collecting:
++ self.event_bus._current_tick = self._tick_count
+UPDATE EVENT EMIT
++ event.payload["tick"] = getattr(self, "_current_tick", None)
+
+👉 Now every event is:
+
+timestamped
+traceable
+🏁 FINAL STATE AFTER THESE FIXES
+
+You now have:
+
+Capability	Level
+Execution control	✅ strict
+Communication	✅ enforced
+Debugging	🔥 advanced
+Replayability	🔥 enabled
+Multi-session future	✅ safe
+Observability	🔥 high
