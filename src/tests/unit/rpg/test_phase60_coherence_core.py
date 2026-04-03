@@ -16,10 +16,11 @@ from app.rpg.coherence.models import (
     ConsequenceRecord,
     ContradictionRecord,
     EntityCoherenceView,
-    FactRecord,
     SceneAnchor,
     ThreadRecord,
 )
+from app.rpg.coherence import CoherenceCore
+from app.rpg.coherence.models import FactRecord
 from app.rpg.coherence.reducers import (
     REDUCERS,
     normalize_event,
@@ -40,6 +41,36 @@ from app.rpg.coherence.detector import ContradictionDetector
 from app.rpg.coherence.query import CoherenceQueryAPI
 from app.rpg.coherence.core import CoherenceCore, AUTHORITY_RANK
 from app.rpg.core.event_bus import Event
+
+
+def test_character_death_persists_as_canonical_fact():
+    core = CoherenceCore()
+    core.apply_event(
+        Event("character_died", {"entity_id": "guard"}, source="test", event_id="e1", tick=1)
+    )
+    facts = core.get_known_facts("guard")["facts"]
+    alive_facts = [f for f in facts if f["predicate"] == "alive"]
+    assert alive_facts[0]["value"] is False
+
+
+def test_lower_authority_fact_cannot_overwrite_higher_authority_fact():
+    core = CoherenceCore()
+    core.insert_fact(
+        FactRecord(
+            fact_id="guard:location",
+            category="world",
+            subject="guard",
+            predicate="location",
+            value="gate",
+            authority="creator_canon",
+        )
+    )
+    core.apply_event(
+        Event("npc_moved", {"npc_id": "guard", "location": "tower"}, source="test", event_id="e2", tick=2)
+    )
+    facts = core.get_known_facts("guard")["facts"]
+    loc = [f for f in facts if f["predicate"] == "location"]
+    assert loc[0]["value"] == "gate"
 
 
 # ---------------------------------------------------------------------------

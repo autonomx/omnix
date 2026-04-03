@@ -276,6 +276,7 @@ class TestGameLoop:
         loop.tick("test")
 
         assert results[0]["scene"] == "result"
+        assert "coherence" not in results[0]
 
     def test_event_callback(self):
         """Test event callback is called for each event."""
@@ -421,6 +422,7 @@ class TestGameEngine:
         result = engine.handle_input("look around")
         
         assert result["scene"] == "result"
+        assert "coherence" not in result
 
     def test_event_bus_is_shared(self):
         """Test that engine creates and shares EventBus."""

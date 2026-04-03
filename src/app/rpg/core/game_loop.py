@@ -41,6 +41,7 @@ import contextvars
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Protocol
+import inspect
 
 from .event_bus import Event, EventBus
 from .snapshot_manager import SnapshotManager
@@ -262,7 +263,7 @@ class GameLoop:
                 system.set_tool_runtime_recorder(self.tool_runtime_recorder)
 
         # PHASE 6.0 — CANONICAL COHERENCE CORE
-        from ..coherence import CoherenceCore
+        from ..coherence.core import CoherenceCore
         self.coherence_core = CoherenceCore()
         self._snapshot_systems: List[str] = list(getattr(self, "_snapshot_systems", []))
         if "coherence_core" not in self._snapshot_systems:
@@ -439,27 +440,23 @@ class GameLoop:
             ctx.scene["coherence"] = coherence_result
 
             # 6. Narrative processing
-            try:
+            if self._callable_accepts_kwarg(self.story_director.process, "coherence_context"):
                 narrative = self.story_director.process(
                     events, intent, self.event_bus, coherence_context=coherence_context
                 )
-            except TypeError:
-                # Backwards compatibility for older directors
+            else:
                 narrative = self.story_director.process(events, intent, self.event_bus)
 
             # 7. Render scene
-            try:
+            if self._callable_accepts_kwarg(self.scene_renderer.render, "coherence_context"):
                 scene = self.scene_renderer.render(narrative, coherence_context=coherence_context)
-            except TypeError:
+            else:
                 scene = self.scene_renderer.render(narrative)
             ctx.scene = scene
-            if isinstance(scene, dict):
-                scene.setdefault("coherence", coherence_context)
-                scene.setdefault("coherence_contradictions", coherence_result.get("contradictions", []))
 
             # PHASE 2.5: Save snapshot at interval
             if self.snapshot_manager.should_snapshot(self._tick_count):
-                self.snapshot_manager.save_snapshot(self._tick_count, self)
+                self.snapshot_manager.save_snapshot(self)
 
             # Post-tick callback
             if self._on_post_tick:
@@ -726,6 +723,23 @@ class GameLoop:
             return {"events_applied": 0, "mutations": [], "contradictions": []}
         result = self.coherence_core.apply_events(events)
         return result.to_dict()
+
+    def _callable_accepts_kwarg(self, fn: Any, kwarg_name: str) -> bool:
+        """Return True if callable explicitly accepts kwarg or **kwargs.
+
+        This avoids using TypeError fallbacks, which can hide real runtime bugs
+        thrown inside the target implementation.
+        """
+        try:
+            signature = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return False
+
+        for param in signature.parameters.values():
+            if param.kind == inspect.Parameter.VAR_KEYWORD:
+                return True
+
+        return kwarg_name in signature.parameters
 
     def _build_director_context(self) -> Dict[str, Any]:
         """Build coherence-aware context for director/renderer consumers."""

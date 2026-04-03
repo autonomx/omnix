@@ -86,6 +86,26 @@ class StubNPCWithItems:
 # Functional Tests
 # ---------------------------------------------------------------------------
 
+
+def test_game_loop_populates_coherence_context():
+    loop = GameLoop(
+        intent_parser=StubParser(),
+        world=StubWorldWithScene(),
+        npc_system=StubNPCSystem(),
+        event_bus=EventBus(),
+        story_director=StoryDirector(),
+        scene_renderer=StubRenderer(),
+    )
+
+    scene = loop.tick("look around")
+    coherence = scene["coherence_context"]
+
+    assert coherence["scene_summary"]["location"] == "market"
+    assert any(t["thread_id"] == "q1" for t in coherence["unresolved_threads"])
+    assert "coherence" not in scene
+    assert "coherence_contradictions" not in scene
+
+
 class TestGameLoopCoherenceIntegration:
     """Test that GameLoop correctly populates coherence context."""
 
@@ -142,7 +162,8 @@ class TestGameLoopCoherenceIntegration:
             scene_renderer=StubRenderer(),
         )
         scene = loop.tick("look around")
-        contradictions = scene.get("coherence_contradictions", [])
+        coherence = scene.get("coherence_context") or scene.get("coherence", {})
+        contradictions = coherence.get("contradictions", [])
         assert len(contradictions) > 0
 
     def test_backward_compat_renderer(self):

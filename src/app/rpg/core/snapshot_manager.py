@@ -5,7 +5,7 @@ Provides snapshot-based state serialization for fast replay.
 Core capabilities:
 - Save game state at periodic intervals
 - Load game state from any saved snapshot
-- Find nearest snapshot before a target tick
+- Find nearestsnapshot before a target tick
 - Enable hybrid replay (snapshot + events) for O(1) state recovery
 
 Without snapshots, replay requires O(n) event processing from tick 0.
@@ -16,7 +16,7 @@ Usage:
     
     # In game loop - save periodically
     if tick % 50 == 0:
-        manager.save_snapshot(tick, loop)
+        manager.save_snapshot(loop)
     
     # For replay - find nearest snapshot and replay events after it
     snapshot_tick = manager.nearest_snapshot(target_tick)
@@ -82,7 +82,6 @@ class Snapshot:
     planner_state: Optional[Dict[str, Any]] = None
     llm_state: Optional[Dict[str, Any]] = None
     tool_runtime_state: Optional[Dict[str, Any]] = None
-    host_runtime_state: Optional[Dict[str, Any]] = None
     extra_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
@@ -114,17 +113,20 @@ class SnapshotManager:
         self._snapshots: Dict[int, Snapshot] = {}
         self._snapshot_interval = snapshot_interval
     
-    def save_snapshot(self, tick: int, loop: Any) -> None:
+    def save_snapshot(self, loop: Any, tick: Optional[int] = None) -> None:
         """Save a snapshot of the current game state.
         
         Serializes all available systems into a Snapshot object and stores
         it indexed by tick number.
         
         Args:
-            tick: The current game tick (used as snapshot key).
             loop: The game loop object to serialize. Must have serializable
                  systems like 'world', 'npc_system', etc.
+            tick: The current game tick (used as snapshot key). If None,
+                 derived from loop._tick_count.
         """
+        if tick is None:
+            tick = getattr(loop, "_tick_count", 0)
         snapshot = Snapshot(tick=tick)
         
         # Serialize world state if available
@@ -183,11 +185,6 @@ class SnapshotManager:
         if hasattr(loop, "tool_runtime_recorder") and loop.tool_runtime_recorder is not None:
             if hasattr(loop.tool_runtime_recorder, "serialize_state"):
                 snapshot.tool_runtime_state = loop.tool_runtime_recorder.serialize_state()
-
-        # PHASE 5.8: Serialize host runtime recorder state
-        if hasattr(loop, "host_runtime_recorder") and loop.host_runtime_recorder is not None:
-            if hasattr(loop.host_runtime_recorder, "serialize_state"):
-                snapshot.host_runtime_state = loop.host_runtime_recorder.serialize_state()
         
         # Serialize any additional systems that declare serialize()
         # This allows extensions to opt into snapshot support
@@ -278,11 +275,6 @@ class SnapshotManager:
         if snapshot.tool_runtime_state and hasattr(loop, "tool_runtime_recorder") and loop.tool_runtime_recorder is not None:
             if hasattr(loop.tool_runtime_recorder, "deserialize_state"):
                 loop.tool_runtime_recorder.deserialize_state(snapshot.tool_runtime_state)
-
-        # PHASE 5.8: Restore host runtime recorder state
-        if snapshot.host_runtime_state and hasattr(loop, "host_runtime_recorder") and loop.host_runtime_recorder is not None:
-            if hasattr(loop.host_runtime_recorder, "deserialize_state"):
-                loop.host_runtime_recorder.deserialize_state(snapshot.host_runtime_state)
         
         # Restore any additional system states
         for attr_name, state_data in snapshot.extra_states.items():
