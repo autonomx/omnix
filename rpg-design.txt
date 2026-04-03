@@ -1,433 +1,1590 @@
-Goal
-
-After this fix set:
-
-host/runtime access is treated like LLM and tool/runtime access
-replay/simulation cannot silently perform live host/runtime reads
-missing recorded host/runtime outputs fail hard
-host/runtime recorder is owned by GameLoop
-recorder is propagated to subsystems
-snapshots save and restore host runtime recorder state
-validator can prove host replay safety
-tests exist at unit, functional, and regression level
-1) Add the real source file for the host boundary
-Create:
-
-src/app/rpg/core/host_runtime_boundary.py
-
-Use the same design shape as tool_runtime_boundary.py.
-
-Required contents
-
-Implement these:
-
-HostCallSpec
-HostRuntimeRecord
-HostRuntimeRecorder
-DeterministicHostRuntimeClient
-HostRuntimeGateway
-Supported host/runtime nondeterminism classes
-
-Map these operations to effect types:
-
-get_env -> env_read
-list_dir -> filesystem_read
-read_text -> filesystem_read
-wall_time -> wall_clock
-monotonic_time -> wall_clock
-run_process -> process_spawn
-Recorder requirements
-
-HostRuntimeRecorder must support:
-
-make_key(op_name, payload, context=None, config=None)
-record(...)
-replay(...)
-load_records(...)
-serialize_state()
-deserialize_state(...)
-
-Use stable_json(...) exactly like the other deterministic recorders.
-
-Client requirements
-
-DeterministicHostRuntimeClient.call(...) must:
-
-replay when det.use_recorded_host is true
-fail hard with KeyError if replay entry is missing
-gate live access through effect_manager.check(...)
-execute the live op only when replay is not active
-record outputs when det.record_host is true
-Gateway requirements
-
-HostRuntimeGateway must support:
-
-set_mode(mode)
-set_effect_manager(effect_manager)
-set_host_runtime_recorder(recorder)
-set_determinism(determinism)
-call(op_name, payload, context=None, config=None)
-Important behavior
-
-set_mode("replay") and set_mode("simulation") must set:
-
-determinism.replay_mode = True
-determinism.use_recorded_host = True
-
-set_mode("live") must set:
-
-determinism.replay_mode = False
-determinism.use_recorded_host = False
-
-Do not force record_host; caller controls that.
-
-2) Fully wire host runtime into GameLoop
-Modify:
-
-src/app/rpg/core/game_loop.py
-
-Your current loop wiring only handles LLM and tool/runtime. Add host/runtime ownership and propagation.
-
-In __init__
-
-Add constructor param:
-
-host_runtime_recorder: Optional[HostRuntimeRecorder] = None
-
-Store:
-
-self.host_runtime_recorder = host_runtime_recorder or HostRuntimeRecorder()
-
-Import HostRuntimeRecorder.
-
-Propagate to subsystems during init
-
-For each system in:
-
-world
-npc_system
-story_director
-scene_renderer
-
-if it has set_host_runtime_recorder, call it.
-
-Add method
-def set_host_runtime_recorder(self, recorder: Any) -> None:
-    self.host_runtime_recorder = recorder
-    for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
-        system = getattr(self, system_name, None)
-        if system is not None and hasattr(system, "set_host_runtime_recorder"):
-            system.set_host_runtime_recorder(recorder)
-Extend mode propagation fallback
-
-Inside the determinism fallback block in set_mode(...), also set:
-
-system.determinism.use_recorded_host = True in replay/simulation
-system.determinism.use_recorded_host = False in live
-
-You already do this for LLM and tool runtime. Host must be included too.
-
-Extend explicit effect policies
-
-When constructing EffectPolicy in set_mode(...), explicitly set the new Phase 5.8 host flags.
-
-Live mode
-
-Set all of these to True:
-
-allow_env_read
-allow_filesystem_read
-allow_wall_clock
-allow_process_spawn
-Replay/simulation mode
-
-Set all of these to False.
-
-Do not rely on dataclass defaults.
-
-3) Extend SnapshotManager for host runtime recorder
-Modify:
-
-src/app/rpg/core/snapshot_manager.py
-
-You already added host_runtime_state as a field. Finish the integration.
-
-Snapshot dataclass
-
-Ensure the field exists:
-
-host_runtime_state: Optional[Dict[str, Any]] = None
-save_snapshot(...)
-
-Add:
-
-if hasattr(loop, "host_runtime_recorder") and loop.host_runtime_recorder is not None:
-    if hasattr(loop.host_runtime_recorder, "serialize_state"):
-        snapshot.host_runtime_state = loop.host_runtime_recorder.serialize_state()
-load_snapshot(...)
-
-Add:
-
-if snapshot.host_runtime_state and hasattr(loop, "host_runtime_recorder") and loop.host_runtime_recorder is not None:
-    if hasattr(loop.host_runtime_recorder, "deserialize_state"):
-        loop.host_runtime_recorder.deserialize_state(snapshot.host_runtime_state)
-Doc comments
-
-Update snapshot docs so they explicitly mention:
-
-host_runtime_state: Serialized host runtime recorder state
-4) Add host recorder awareness protocol
-Modify:
-
-src/app/rpg/core/state_contracts.py
-
-Ensure this exists:
-
-class HostRuntimeRecorderAware(Protocol):
-    """Protocol for subsystems that can receive a host/runtime recorder."""
-
-    def set_host_runtime_recorder(self, recorder: Any) -> None:
-        """Inject host/runtime recorder for deterministic replay."""
-        ...
-
-This should sit beside:
-
-LLMRecorderAware
-ToolRuntimeRecorderAware
-5) Extend validator for host/runtime replay safety
-Modify:
-
-src/app/rpg/validation/state_boundary_validator.py
-
-Add:
-
-def validate_host_runtime_replay_safety(self, gateway: Any) -> Dict[str, Any]:
-    """Validate that host/runtime gateway fails on unrecorded replay calls."""
-    try:
-        gateway.set_mode("replay")
-        gateway.call("unrecorded_op", {"x": 1}, context={"test": True})
-        return {"ok": False, "reason": "unrecorded replay host call unexpectedly succeeded"}
-    except (KeyError, RuntimeError):
-        return {"ok": True}
-    except Exception as exc:
-        return {
-            "ok": False,
-            "reason": f"unexpected exception type during host replay validation: {type(exc).__name__}: {exc}",
-        }
-
-This should match the style of the LLM and tool-runtime validators.
-
-6) Ensure exports are complete and real
-Modify:
-
-src/app/rpg/core/__init__.py
-
-Make sure all of these are both imported and exported in __all__:
-
-HostRuntimeRecorderAware
-HostCallSpec
-HostRuntimeRecord
-HostRuntimeRecorder
-DeterministicHostRuntimeClient
-HostRuntimeGateway
-
-Do not leave dead exports pointing at a missing file.
-
-7) Add Phase 5.8 unit tests
-Create:
-
-src/tests/unit/rpg/test_phase58_host_runtime_boundary.py
-
-Use the same structure as the Phase 5.7 tool-runtime tests.
-
-Include a _DummyHostRuntime
-
-It should support:
-
-def call(self, op_name, payload):
-    ...
-Add these tests
-test_live_host_call_blocked_by_effect_policy
-allow_env_read=False or appropriate blocked host effect
-calling gateway should raise RuntimeError
-inner runtime should not be called
-test_live_host_call_allowed_and_recorded
-enable the right host effect in EffectPolicy
-set record_host=True
-ensure result returns
-ensure one live call happened
-ensure one record exists
-test_replay_uses_recorded_output_only
-live gateway records one host call
-replay gateway with use_recorded_host=True returns recorded output
-replay runtime inner client must not be called
-test_replay_missing_record_fails_hard
-replay mode with empty recorder
-must raise KeyError
-test_set_mode_switches_between_replay_and_live
-replay sets use_recorded_host=True
-live sets it back to False
-test_snapshot_roundtrip_host_runtime_state
-recorder records one host interaction
-SnapshotManager.save_snapshot(...)
-restore into fresh loop-like object
-replay succeeds from restored recorder state
-
-Add if __name__ == "__main__": unittest.main().
-
-8) Add Phase 5.8 functional tests
-Create:
-
-src/tests/functional/test_phase58_host_runtime_boundary_functional.py
-
-Mirror the style of the Phase 5.7 functional tests.
-
-Build lightweight test doubles
-
-Have:
-
-_Parser
-_World
-_NPC
-_Renderer
-_Director
-_DummyHostRuntime
-
-The director should call the host gateway during process(...), for example:
-
-result = self.gateway.call("get_env", {"name": "ZONE"}, context={"phase": "director"})
-return {"host_result": result}
-Required tests
-test_replay_blocks_fresh_host_calls_and_uses_recorded
-live mode records one host access
-replay mode returns same result
-inner host runtime call count stays at 1
-test_host_runtime_recorder_serialization_roundtrip
-record two host operations
-serialize and deserialize recorder
-ensure replay works
-test_replay_missing_host_record_fails_hard
-replay mode with empty recorder
-host call raises KeyError
-
-Add if __name__ == "__main__": unittest.main().
-
-9) Add Phase 5.8 regression tests
-Create:
-
-src/tests/regression/test_phase58_host_runtime_boundary_regression.py
-
-Required tests
-test_recorded_outputs_are_snapshot_serializable
-record host call
-serialize/deserialize recorder
-replay must work
-test_gateway_no_client_raises_error
-gateway without runtime client must raise RuntimeError
-test_effect_policy_live_vs_replay_for_host_ops
-confirm:
-live host-relevant effects can be allowed
-replay host-relevant effects are blocked
-test_state_boundary_validator_host_replay_safety
-use validate_host_runtime_replay_safety(...)
-should return {"ok": True}
-test_config_sensitive_keying
-same op and payload, different config values
-replay returns the correct distinct results
-test_gateway_mode_switch_preserves_recorded_state
-record in live
-replay uses recording
-no second live runtime call happens
-
-Add if __name__ == "__main__": unittest.main().
-
-10) Optional but recommended: add a concrete dummy subsystem integration path
-
-If any real subsystem is supposed to use host/runtime access, add:
-
-set_host_runtime_recorder(...)
-a local HostRuntimeGateway
-set_mode(...)
-set_effect_manager(...)
-
-But do not spread raw os, time, or subprocess calls around. Keep all such access behind HostRuntimeGateway.
-
-11) Specific consistency rules
-
-The coding LLM must follow these rules while implementing:
-
-A. Do not duplicate boundary logic
-
-Host boundary should match the style and shape of:
-
-llm_boundary.py
-tool_runtime_boundary.py
-B. Missing replay data must fail hard
-
-Never silently fall back to live host/runtime access in replay or simulation.
-
-C. Snapshots must restore recorder state
-
-The recorder is part of deterministic engine state.
-
-D. Effect policies must be explicit
-
-Do not rely on default values for Phase 5.8 host access.
-
-E. No dead exports
-
-If __init__.py exports a symbol, the file and class must actually exist.
-
-12) Commands the coding LLM should run after applying fixes
-
-Run all of these:
-
-python -m pytest src/tests/unit/rpg/test_phase58_host_runtime_boundary.py -v
-python -m pytest src/tests/functional/test_phase58_host_runtime_boundary_functional.py -v
-python -m pytest src/tests/regression/test_phase58_host_runtime_boundary_regression.py -v
-python -m pytest src/tests/unit/rpg/test_phase57_tool_runtime_boundary.py -v
-python -m pytest src/tests/functional/test_phase57_tool_runtime_boundary_functional.py -v
-python -m pytest src/tests/regression/test_phase57_tool_runtime_boundary_regression.py -v
-python -m pytest src/tests/unit/rpg/test_phase56_llm_boundary.py -v
-python -m pytest src/tests/regression/test_phase56_llm_boundary_regression.py -v
-python -m pytest src/tests/unit/rpg/test_phase55_state_boundaries.py -v
-python -m pytest src/tests/functional/test_phase55_state_boundaries_functional.py -v
-
-If a broader test pass is cheap in your repo, also run:
-
-python -m pytest src/tests/unit/rpg -v
-python -m pytest src/tests/functional -v
-python -m pytest src/tests/regression -v
-13) Expected outcome after the fix
-
-After this patch:
-
-Live mode
-host/runtime access is allowed only if effect policy allows it
-outputs may be recorded
-Replay mode
-no fresh host/runtime access
-only recorded host/runtime results may be used
-missing result causes hard failure
-Simulation mode
-same as replay for host/runtime access
-Snapshots
-preserve host runtime recorder state
-can restore replay-safe host/runtime context
-Validation
-can prove host boundary replay safety
-14) One more cleanup instruction for the coding LLM
-
-After implementing this phase, search for direct usage of nondeterministic host APIs in the codebase, such as:
-
-os.environ
-os.getenv
-os.listdir
-pathlib.Path.read_text
-open(...).read
-time.time
-time.monotonic
-subprocess.run
-subprocess.Popen
-
-Any replay-relevant usage should be routed through HostRuntimeGateway or a subsystem-local wrapper backed by DeterministicHostRuntimeClient.
+diff --git a/src/app/rpg/coherence/__init__.py b/src/app/rpg/coherence/__init__.py
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/app/rpg/coherence/__init__.py
+@@ -0,0 +1,27 @@
++"""Canonical coherence state for RPG narrative/world consistency.
++
++Phase 6.0 — Coherence Core
++"""
++
++from .core import CoherenceCore
++from .detector import ContradictionDetector
++from .models import (
++    CoherenceMutation,
++    CoherenceState,
++    CoherenceUpdateResult,
++    CommitmentRecord,
++    ConsequenceRecord,
++    ContradictionRecord,
++    EntityCoherenceView,
++    FactRecord,
++    SceneAnchor,
++    ThreadRecord,
++)
++
++__all__ = [
++    "CoherenceCore",
++    "CoherenceState",
++    "FactRecord",
++    "ThreadRecord",
++    "CommitmentRecord",
++    "SceneAnchor",
++    "ConsequenceRecord",
++    "ContradictionRecord",
++    "EntityCoherenceView",
++    "CoherenceMutation",
++    "CoherenceUpdateResult",
++    "ContradictionDetector",
++]
+diff --git a/src/app/rpg/coherence/models.py b/src/app/rpg/coherence/models.py
+new file mode 100644
+index 0000000..2222222
+--- /dev/null
++++ b/src/app/rpg/coherence/models.py
+@@ -0,0 +1,341 @@
++from __future__ import annotations
++
++from dataclasses import asdict, dataclass, field
++from typing import Any, Dict, List, Optional
++
++
++@dataclass
++class FactRecord:
++    fact_id: str
++    category: str
++    subject: str
++    predicate: str
++    value: Any
++    confidence: float = 1.0
++    source_event_id: Optional[str] = None
++    tick_first_seen: Optional[int] = None
++    tick_last_updated: Optional[int] = None
++    status: str = "confirmed"
++    authority: str = "runtime"
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "FactRecord":
++        return cls(**data)
++
++
++@dataclass
++class ThreadRecord:
++    thread_id: str
++    title: str
++    status: str = "unresolved"
++    priority: str = "normal"
++    source_event_id: Optional[str] = None
++    opened_tick: Optional[int] = None
++    updated_tick: Optional[int] = None
++    resolved_tick: Optional[int] = None
++    anchor_entity_ids: List[str] = field(default_factory=list)
++    notes: List[str] = field(default_factory=list)
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "ThreadRecord":
++        return cls(**data)
++
++
++@dataclass
++class CommitmentRecord:
++    commitment_id: str
++    actor_id: str
++    target_id: Optional[str]
++    kind: str
++    text: str
++    status: str = "active"
++    source_event_id: Optional[str] = None
++    created_tick: Optional[int] = None
++    updated_tick: Optional[int] = None
++    broken_tick: Optional[int] = None
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "CommitmentRecord":
++        return cls(**data)
++
++
++@dataclass
++class SceneAnchor:
++    anchor_id: str
++    tick: Optional[int]
++    location: Optional[str]
++    present_actors: List[str] = field(default_factory=list)
++    active_tensions: List[str] = field(default_factory=list)
++    unresolved_thread_ids: List[str] = field(default_factory=list)
++    summary: str = ""
++    scene_fact_ids: List[str] = field(default_factory=list)
++    source_event_id: Optional[str] = None
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "SceneAnchor":
++        return cls(**data)
++
++
++@dataclass
++class ConsequenceRecord:
++    consequence_id: str
++    event_id: Optional[str]
++    tick: Optional[int]
++    summary: str
++    entity_ids: List[str] = field(default_factory=list)
++    consequence_type: str = "general"
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "ConsequenceRecord":
++        return cls(**data)
++
++
++@dataclass
++class ContradictionRecord:
++    contradiction_id: str
++    contradiction_type: str
++    severity: str
++    message: str
++    event_id: Optional[str] = None
++    tick: Optional[int] = None
++    entity_ids: List[str] = field(default_factory=list)
++    related_fact_ids: List[str] = field(default_factory=list)
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "ContradictionRecord":
++        return cls(**data)
++
++
++@dataclass
++class EntityCoherenceView:
++    entity_id: str
++    facts: List[Dict[str, Any]] = field(default_factory=list)
++    commitments: List[Dict[str, Any]] = field(default_factory=list)
++    recent_consequences: List[Dict[str, Any]] = field(default_factory=list)
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "EntityCoherenceView":
++        return cls(**data)
++
++
++@dataclass
++class CoherenceMutation:
++    action: str
++    target: str
++    data: Dict[str, Any]
++
++    def to_dict(self) -> dict:
++        return asdict(self)
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "CoherenceMutation":
++        return cls(**data)
++
++
++@dataclass
++class CoherenceUpdateResult:
++    events_applied: int = 0
++    mutations: List[CoherenceMutation] = field(default_factory=list)
++    contradictions: List[ContradictionRecord] = field(default_factory=list)
++
++    def to_dict(self) -> dict:
++        return {
++            "events_applied": self.events_applied,
++            "mutations": [m.to_dict() for m in self.mutations],
++            "contradictions": [c.to_dict() for c in self.contradictions],
++        }
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "CoherenceUpdateResult":
++        return cls(
++            events_applied=data.get("events_applied", 0),
++            mutations=[CoherenceMutation.from_dict(m) for m in data.get("mutations", [])],
++            contradictions=[
++                ContradictionRecord.from_dict(c)
++                for c in data.get("contradictions", [])
++            ],
++        )
++
++
++@dataclass
++class CoherenceState:
++    stable_world_facts: Dict[str, FactRecord] = field(default_factory=dict)
++    scene_facts: Dict[str, FactRecord] = field(default_factory=dict)
++    temporary_assumptions: Dict[str, FactRecord] = field(default_factory=dict)
++    player_commitments: Dict[str, CommitmentRecord] = field(default_factory=dict)
++    npc_commitments: Dict[str, CommitmentRecord] = field(default_factory=dict)
++    recent_changes: List[ConsequenceRecord] = field(default_factory=list)
++    unresolved_threads: Dict[str, ThreadRecord] = field(default_factory=dict)
++    continuity_anchors: List[SceneAnchor] = field(default_factory=list)
++    contradictions: List[ContradictionRecord] = field(default_factory=list)
++
++    def to_dict(self) -> dict:
++        return {
++            "stable_world_facts": {
++                k: v.to_dict() for k, v in self.stable_world_facts.items()
++            },
++            "scene_facts": {k: v.to_dict() for k, v in self.scene_facts.items()},
++            "temporary_assumptions": {
++                k: v.to_dict() for k, v in self.temporary_assumptions.items()
++            },
++            "player_commitments": {
++                k: v.to_dict() for k, v in self.player_commitments.items()
++            },
++            "npc_commitments": {
++                k: v.to_dict() for k, v in self.npc_commitments.items()
++            },
++            "recent_changes": [c.to_dict() for c in self.recent_changes],
++            "unresolved_threads": {
++                k: v.to_dict() for k, v in self.unresolved_threads.items()
++            },
++            "continuity_anchors": [a.to_dict() for a in self.continuity_anchors],
++            "contradictions": [c.to_dict() for c in self.contradictions],
++        }
++
++    @classmethod
++    def from_dict(cls, data: dict) -> "CoherenceState":
++        state = cls()
++        state.stable_world_facts = {
++            k: FactRecord.from_dict(v)
++            for k, v in data.get("stable_world_facts", {}).items()
++        }
++        state.scene_facts = {
++            k: FactRecord.from_dict(v)
++            for k, v in data.get("scene_facts", {}).items()
++        }
++        state.temporary_assumptions = {
++            k: FactRecord.from_dict(v)
++            for k, v in data.get("temporary_assumptions", {}).items()
++        }
++        state.player_commitments = {
++            k: CommitmentRecord.from_dict(v)
++            for k, v in data.get("player_commitments", {}).items()
++        }
++        state.npc_commitments = {
++            k: CommitmentRecord.from_dict(v)
++            for k, v in data.get("npc_commitments", {}).items()
++        }
++        state.recent_changes = [
++            ConsequenceRecord.from_dict(v)
++            for v in data.get("recent_changes", [])
++        ]
++        state.unresolved_threads = {
++            k: ThreadRecord.from_dict(v)
++            for k, v in data.get("unresolved_threads", {}).items()
++        }
++        state.continuity_anchors = [
++            SceneAnchor.from_dict(v)
++            for v in data.get("continuity_anchors", [])
++        ]
++        state.contradictions = [
++            ContradictionRecord.from_dict(v)
++            for v in data.get("contradictions", [])
++        ]
++        return state
++
+diff --git a/src/app/rpg/coherence/reducers.py b/src/app/rpg/coherence/reducers.py
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/src/app/rpg/coherence/reducers.py
+@@ -0,0 +1,351 @@
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from ..core.event_bus import Event
++from .models import CoherenceMutation
++
++
++def normalize_event(event: Any) -> dict:
++    if isinstance(event, Event):
++        return {
++            "type": event.type,
++            "payload": dict(event.payload or {}),
++            "event_id": event.event_id,
++            "tick": event.tick,
++            "source": event.source,
++        }
++    if isinstance(event, dict):
++        return {
++            "type": event.get("type"),
++            "payload": dict(event.get("payload", {}) or {}),
++            "event_id": event.get("event_id"),
++            "tick": event.get("tick") if "tick" in event else event.get("payload", {}).get("tick"),
++            "source": event.get("source"),
++        }
++    raise TypeError(f"Unsupported event type for coherence reducer: {type(event)!r}")
++
++
++def _event_text(event: dict) -> str:
++    payload = event.get("payload", {})
++    return (
++        payload.get("text")
++        or payload.get("summary")
++        or payload.get("description")
++        or event.get("type", "event")
++    )
++
++
++def _fact_mutation(
++    *,
++    target: str,
++    fact_id: str,
++    category: str,
++    subject: str,
++    predicate: str,
++    value: Any,
++    authority: str,
++    event: dict,
++    status: str = "confirmed",
++    confidence: float = 1.0,
++    metadata: Dict[str, Any] | None = None,
++) -> CoherenceMutation:
++    return CoherenceMutation(
++        action="upsert_fact",
++        target=target,
++        data={
++            "fact_id": fact_id,
++            "category": category,
++            "subject": subject,
++            "predicate": predicate,
++            "value": value,
++            "authority": authority,
++            "status": status,
++            "confidence": confidence,
++            "source_event_id": event.get("event_id"),
++            "tick_first_seen": event.get("tick"),
++            "tick_last_updated": event.get("tick"),
++            "metadata": metadata or {},
++        },
++    )
++
++
++def reduce_scene_started(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    mutations: List[CoherenceMutation] = []
++    location = payload.get("location")
++    if location:
++        mutations.append(
++            _fact_mutation(
++                target="scene",
++                fact_id="scene:location",
++                category="scene",
++                subject="scene",
++                predicate="location",
++                value=location,
++                authority="event_confirmed",
++                event=event,
++            )
++        )
++    summary = payload.get("summary") or payload.get("description") or "Scene started"
++    mutations.append(
++        CoherenceMutation(
++            action="push_anchor",
++            target="anchor",
++            data={
++                "anchor_id": f"anchor:{event.get('event_id') or event.get('tick')}",
++                "tick": event.get("tick"),
++                "location": location,
++                "present_actors": payload.get("present_actors", []),
++                "active_tensions": payload.get("active_tensions", []),
++                "unresolved_thread_ids": list(state.unresolved_threads.keys()),
++                "summary": summary,
++                "scene_fact_ids": ["scene:location"] if location else [],
++                "source_event_id": event.get("event_id"),
++                "metadata": {},
++            },
++        )
++    )
++    return mutations
++
++
++def reduce_scene_generated(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    scene = payload.get("scene", payload)
++    location = scene.get("location") or payload.get("location")
++    summary = (
++        scene.get("summary")
++        or scene.get("description")
++        or scene.get("narrative", {}).get("description")
++        if isinstance(scene.get("narrative"), dict)
++        else None
++    ) or payload.get("summary") or "Scene generated"
++
++    present = scene.get("present_actors") or scene.get("participants") or payload.get("participants", [])
++    tensions = scene.get("active_tensions") or payload.get("active_tensions", [])
++
++    mutations: List[CoherenceMutation] = []
++    if location:
++        mutations.append(
++            _fact_mutation(
++                target="scene",
++                fact_id="scene:location",
++                category="scene",
++                subject="scene",
++                predicate="location",
++                value=location,
++                authority="event_confirmed",
++                event=event,
++            )
++        )
++    mutations.append(
++        CoherenceMutation(
++            action="push_anchor",
++            target="anchor",
++            data={
++                "anchor_id": f"anchor:{event.get('event_id') or event.get('tick')}",
++                "tick": event.get("tick"),
++                "location": location,
++                "present_actors": present,
++                "active_tensions": tensions,
++                "unresolved_thread_ids": list(state.unresolved_threads.keys()),
++                "summary": summary,
++                "scene_fact_ids": ["scene:location"] if location else [],
++                "source_event_id": event.get("event_id"),
++                "metadata": {},
++            },
++        )
++    )
++    mutations.append(
++        CoherenceMutation(
++            action="record_consequence",
++            target="consequence",
++            data={
++                "consequence_id": f"cons:{event.get('event_id')}",
++                "event_id": event.get("event_id"),
++                "tick": event.get("tick"),
++                "summary": summary,
++                "entity_ids": list(present),
++                "consequence_type": "scene_generated",
++                "metadata": {},
++            },
++        )
++    )
++    return mutations
++
++
++def reduce_npc_moved(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    npc_id = payload.get("npc_id") or payload.get("actor_id") or payload.get("entity_id")
++    location = payload.get("location") or payload.get("to")
++    if not npc_id or location is None:
++        return []
++    return [
++        _fact_mutation(
++            target="world",
++            fact_id=f"{npc_id}:location",
++            category="world",
++            subject=npc_id,
++            predicate="location",
++            value=location,
++            authority="event_confirmed",
++            event=event,
++        )
++    ]
++
++
++def reduce_relationship_changed(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    npc_id = payload.get("npc_id") or payload.get("source_id")
++    target_id = payload.get("target_id")
++    value = payload.get("relationship") or payload.get("delta")
++    if not npc_id or not target_id:
++        return []
++    return [
++        _fact_mutation(
++            target="world",
++            fact_id=f"rel:{npc_id}:{target_id}",
++            category="world",
++            subject=npc_id,
++            predicate=f"relationship:{target_id}",
++            value=value,
++            authority="event_confirmed",
++            event=event,
++        )
++    ]
++
++
++def reduce_item_acquired(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    actor_id = payload.get("actor_id") or payload.get("npc_id") or payload.get("owner_id")
++    item_id = payload.get("item_id") or payload.get("item")
++    if not actor_id or not item_id:
++        return []
++    return [
++        _fact_mutation(
++            target="world",
++            fact_id=f"item:{item_id}:owner",
++            category="world",
++            subject=item_id,
++            predicate="owner",
++            value=actor_id,
++            authority="event_confirmed",
++            event=event,
++        )
++    ]
++
++
++def reduce_item_lost(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    item_id = payload.get("item_id") or payload.get("item")
++    if not item_id:
++        return []
++    return [
++        _fact_mutation(
++            target="assumption",
++            fact_id=f"item:{item_id}:owner",
++            category="assumption",
++            subject=item_id,
++            predicate="owner",
++            value=None,
++            authority="event_confirmed",
++            event=event,
++            status="uncertain",
++        )
++    ]
++
++
++def reduce_thread_started(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    thread_id = payload.get("thread_id") or payload.get("quest_id") or f"thread:{event.get('event_id')}"
++    return [
++        CoherenceMutation(
++            action="upsert_thread",
++            target="thread",
++            data={
++                "thread_id": thread_id,
++                "title": payload.get("title") or payload.get("name") or _event_text(event),
++                "status": "unresolved",
++                "priority": payload.get("priority", "normal"),
++                "source_event_id": event.get("event_id"),
++                "opened_tick": event.get("tick"),
++                "updated_tick": event.get("tick"),
++                "resolved_tick": None,
++                "anchor_entity_ids": payload.get("entity_ids", []),
++                "notes": [payload.get("summary") or _event_text(event)],
++                "metadata": {},
++            },
++        )
++    ]
++
++
++def reduce_thread_resolved(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    thread_id = payload.get("thread_id") or payload.get("quest_id")
++    if not thread_id:
++        return []
++    return [
++        CoherenceMutation(
++            action="resolve_thread",
++            target="thread",
++            data={
++                "thread_id": thread_id,
++                "resolution_event_id": event.get("event_id"),
++                "tick": event.get("tick"),
++            },
++        )
++    ]
++
++
++def reduce_commitment_created(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    actor_id = payload.get("actor_id") or payload.get("npc_id") or payload.get("source_id") or "unknown"
++    target_id = payload.get("target_id")
++    kind = payload.get("kind") or event["type"]
++    text = payload.get("text") or payload.get("summary") or _event_text(event)
++    commitment_id = payload.get("commitment_id") or f"commitment:{event.get('event_id')}"
++    return [
++        CoherenceMutation(
++            action="upsert_commitment",
++            target="commitment",
++            data={
++                "commitment_id": commitment_id,
++                "actor_id": actor_id,
++                "target_id": target_id,
++                "kind": kind,
++                "text": text,
++                "status": "active",
++                "source_event_id": event.get("event_id"),
++                "created_tick": event.get("tick"),
++                "updated_tick": event.get("tick"),
++                "broken_tick": None,
++                "metadata": {},
++            },
++        )
++    ]
++
++
++def reduce_commitment_broken(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    commitment_id = payload.get("commitment_id")
++    if not commitment_id:
++        return []
++    return [
++        CoherenceMutation(
++            action="break_commitment",
++            target="commitment",
++            data={
++                "commitment_id": commitment_id,
++                "breaking_event_id": event.get("event_id"),
++                "tick": event.get("tick"),
++            },
++        )
++    ]
++
++
++def reduce_character_death(state, event: dict) -> List[CoherenceMutation]:
++    payload = event["payload"]
++    entity_id = payload.get("npc_id") or payload.get("actor_id") or payload.get("entity_id") or payload.get("character_id")
++    if not entity_id:
++        return []
++    return [
++        _fact_mutation(
++            target="world",
++            fact_id=f"{entity_id}:alive",
++            category="world",
++            subject=entity_id,
++            predicate="alive",
++            value=False,
++            authority="event_confirmed",
++            event=event,
++        )
++    ]
++
++
++REDUCERS = {
++    "scene_started": reduce_scene_started,
++    "scene_generated": reduce_scene_generated,
++    "npc_moved": reduce_npc_moved,
++    "relationship_changed": reduce_relationship_changed,
++    "item_acquired": reduce_item_acquired,
++    "item_lost": reduce_item_lost,
++    "quest_started": reduce_thread_started,
++    "thread_started": reduce_thread_started,
++    "quest_completed": reduce_thread_resolved,
++    "thread_resolved": reduce_thread_resolved,
++    "promise_made": reduce_commitment_created,
++    "threat_made": reduce_commitment_created,
++    "promise_broken": reduce_commitment_broken,
++    "character_died": reduce_character_death,
++}
++
++
++def reduce_event(state, event: dict) -> List[CoherenceMutation]:
++    normalized = normalize_event(event)
++    reducer = REDUCERS.get(normalized["type"])
++    if reducer is None:
++        return []
++    return reducer(state, normalized)
+diff --git a/src/app/rpg/coherence/detector.py b/src/app/rpg/coherence/detector.py
+new file mode 100644
+index 0000000..4444444
+--- /dev/null
++++ b/src/app/rpg/coherence/detector.py
+@@ -0,0 +1,162 @@
++from __future__ import annotations
++
++from typing import List
++
++from .models import CoherenceMutation, CoherenceState, ContradictionRecord, FactRecord
++
++
++class ContradictionDetector:
++    """Lightweight deterministic contradiction checks."""
++
++    def detect(
++        self,
++        state: CoherenceState,
++        mutations: List[CoherenceMutation],
++        event: dict | None = None,
++    ) -> List[ContradictionRecord]:
++        contradictions: List[ContradictionRecord] = []
++        contradictions.extend(self._check_dead_actor_conflicts(state, mutations, event))
++        contradictions.extend(self._check_location_conflicts(state, mutations, event))
++        contradictions.extend(self._check_inventory_conflicts(state, mutations, event))
++        contradictions.extend(self._check_thread_conflicts(state, mutations, event))
++        return contradictions
++
++    def _check_dead_actor_conflicts(
++        self,
++        state: CoherenceState,
++        mutations: List[CoherenceMutation],
++        event: dict | None,
++    ) -> List[ContradictionRecord]:
++        out: List[ContradictionRecord] = []
++        for mutation in mutations:
++            if mutation.action != "upsert_fact":
++                continue
++            data = mutation.data
++            subject = data.get("subject")
++            predicate = data.get("predicate")
++            if predicate not in {"location", "relationship", "owner"}:
++                continue
++            alive_fact = state.stable_world_facts.get(f"{subject}:alive")
++            if alive_fact and alive_fact.value is False:
++                out.append(
++                    ContradictionRecord(
++                        contradiction_id=f"contradiction:{event.get('event_id')}:dead_actor"
++                        if event else "contradiction:dead_actor",
++                        contradiction_type="dead_actor_conflict",
++                        severity="high",
++                        message=f"Entity '{subject}' received update '{predicate}' after confirmed death.",
++                        event_id=event.get("event_id") if event else None,
++                        tick=event.get("tick") if event else None,
++                        entity_ids=[subject],
++                        related_fact_ids=[alive_fact.fact_id],
++                    )
++                )
++        return out
++
++    def _check_location_conflicts(
++        self,
++        state: CoherenceState,
++        mutations: List[CoherenceMutation],
++        event: dict | None,
++    ) -> List[ContradictionRecord]:
++        out: List[ContradictionRecord] = []
++        for mutation in mutations:
++            if mutation.action != "upsert_fact":
++                continue
++            data = mutation.data
++            if data.get("predicate") != "location":
++                continue
++            fact_id = data.get("fact_id")
++            existing = state.stable_world_facts.get(fact_id) or state.scene_facts.get(fact_id)
++            if existing and existing.value != data.get("value"):
++                out.append(
++                    ContradictionRecord(
++                        contradiction_id=f"contradiction:{event.get('event_id')}:location"
++                        if event else "contradiction:location",
++                        contradiction_type="location_conflict",
++                        severity="warning",
++                        message=(
++                            f"Entity '{data.get('subject')}' moved from '{existing.value}' "
++                            f"to '{data.get('value')}' without explicit transition event."
++                        ),
++                        event_id=event.get("event_id") if event else None,
++                        tick=event.get("tick") if event else None,
++                        entity_ids=[data.get("subject")],
++                        related_fact_ids=[existing.fact_id],
++                    )
++                )
++        return out
++
++    def _check_inventory_conflicts(
++        self,
++        state: CoherenceState,
++        mutations: List[CoherenceMutation],
++        event: dict | None,
++    ) -> List[ContradictionRecord]:
++        out: List[ContradictionRecord] = []
++        for mutation in mutations:
++            if mutation.action != "upsert_fact":
++                continue
++            data = mutation.data
++            if data.get("predicate") != "owner":
++                continue
++            existing = state.stable_world_facts.get(data.get("fact_id"))
++            if existing and existing.value not in (None, data.get("value")):
++                out.append(
++                    ContradictionRecord(
++                        contradiction_id=f"contradiction:{event.get('event_id')}:inventory"
++                        if event else "contradiction:inventory",
++                        contradiction_type="inventory_conflict",
++                        severity="warning",
++                        message=(
++                            f"Item '{data.get('subject')}' already owned by '{existing.value}' "
++                            f"and now also assigned to '{data.get('value')}'."
++                        ),
++                        event_id=event.get("event_id") if event else None,
++                        tick=event.get("tick") if event else None,
++                        entity_ids=[data.get("subject"), str(existing.value), str(data.get("value"))],
++                        related_fact_ids=[existing.fact_id],
++                    )
++                )
++        return out
++
++    def _check_thread_conflicts(
++        self,
++        state: CoherenceState,
++        mutations: List[CoherenceMutation],
++        event: dict | None,
++    ) -> List[ContradictionRecord]:
++        out: List[ContradictionRecord] = []
++        for mutation in mutations:
++            if mutation.action != "resolve_thread":
++                continue
++            thread_id = mutation.data.get("thread_id")
++            if thread_id and thread_id not in state.unresolved_threads:
++                out.append(
++                    ContradictionRecord(
++                        contradiction_id=f"contradiction:{event.get('event_id')}:thread"
++                        if event else "contradiction:thread",
++                        contradiction_type="thread_resolution_conflict",
++                        severity="info",
++                        message=f"Attempted to resolve unknown or already resolved thread '{thread_id}'.",
++                        event_id=event.get("event_id") if event else None,
++                        tick=event.get("tick") if event else None,
++                        entity_ids=[],
++                        related_fact_ids=[],
++                    )
++                )
++        return out
+diff --git a/src/app/rpg/coherence/query.py b/src/app/rpg/coherence/query.py
+new file mode 100644
+index 0000000..5555555
+--- /dev/null
++++ b/src/app/rpg/coherence/query.py
+@@ -0,0 +1,78 @@
++from __future__ import annotations
++
++from .models import CoherenceState, EntityCoherenceView
++
++
++class CoherenceQueryAPI:
++    def __init__(self, state: CoherenceState) -> None:
++        self.state = state
++
++    def get_scene_summary(self) -> dict:
++        location_fact = self.state.scene_facts.get("scene:location")
++        anchor = self.state.continuity_anchors[-1] if self.state.continuity_anchors else None
++        return {
++            "location": location_fact.value if location_fact else None,
++            "summary": anchor.summary if anchor else "",
++            "present_actors": anchor.present_actors if anchor else [],
++            "active_tensions": anchor.active_tensions if anchor else [],
++        }
++
++    def get_active_tensions(self) -> list[dict]:
++        anchor = self.state.continuity_anchors[-1] if self.state.continuity_anchors else None
++        if not anchor:
++            return []
++        return [{"text": t} for t in anchor.active_tensions]
++
++    def get_unresolved_threads(self) -> list[dict]:
++        return [t.to_dict() for t in self.state.unresolved_threads.values() if t.status != "resolved"]
++
++    def get_actor_commitments(self, actor_id: str) -> list[dict]:
++        records = []
++        for bucket in (self.state.player_commitments, self.state.npc_commitments):
++            for commitment in bucket.values():
++                if commitment.actor_id == actor_id and commitment.status == "active":
++                    records.append(commitment.to_dict())
++        return records
++
++    def get_known_facts(self, entity_id: str) -> dict:
++        facts = []
++        for bucket in (
++            self.state.stable_world_facts,
++            self.state.scene_facts,
++            self.state.temporary_assumptions,
++        ):
++            for fact in bucket.values():
++                if fact.subject == entity_id:
++                    facts.append(fact.to_dict())
++        return {"entity_id": entity_id, "facts": facts}
++
++    def get_recent_consequences(self, limit: int = 10) -> list[dict]:
++        return [c.to_dict() for c in self.state.recent_changes[-limit:]]
++
++    def get_last_good_anchor(self) -> dict | None:
++        if not self.state.continuity_anchors:
++            return None
++        return self.state.continuity_anchors[-1].to_dict()
++
++    def get_entity_view(self, entity_id: str) -> dict:
++        facts = self.get_known_facts(entity_id).get("facts", [])
++        commitments = self.get_actor_commitments(entity_id)
++        consequences = [
++            c.to_dict()
++            for c in self.state.recent_changes
++            if entity_id in c.entity_ids
++        ]
++        return EntityCoherenceView(
++            entity_id=entity_id,
++            facts=facts,
++            commitments=commitments,
++            recent_consequences=consequences,
++        ).to_dict()
+diff --git a/src/app/rpg/coherence/core.py b/src/app/rpg/coherence/core.py
+new file mode 100644
+index 0000000..6666666
+--- /dev/null
++++ b/src/app/rpg/coherence/core.py
+@@ -0,0 +1,283 @@
++from __future__ import annotations
++
++from typing import Any, Dict, List, Optional
++
++from .detector import ContradictionDetector
++from .models import (
++    CoherenceMutation,
++    CoherenceState,
++    CoherenceUpdateResult,
++    CommitmentRecord,
++    ConsequenceRecord,
++    ContradictionRecord,
++    FactRecord,
++    SceneAnchor,
++    ThreadRecord,
++)
++from .query import CoherenceQueryAPI
++from .reducers import normalize_event, reduce_event
++
++
++AUTHORITY_RANK = {
++    "creator_canon": 100,
++    "engine_confirmed": 90,
++    "event_confirmed": 80,
++    "player_commitment": 70,
++    "npc_commitment": 60,
++    "runtime": 50,
++    "inferred": 40,
++    "assumption": 30,
++}
++
++
++class CoherenceCore:
++    """Authoritative coherence state store for narrative/world truth."""
++
++    def __init__(self, contradiction_detector: Optional[ContradictionDetector] = None) -> None:
++        self.state = CoherenceState()
++        self.mode: str = "live"
++        self.contradiction_detector = contradiction_detector or ContradictionDetector()
++
++    def set_mode(self, mode: str) -> None:
++        self.mode = mode
++
++    def get_state(self) -> CoherenceState:
++        return self.state
++
++    def get_query_api(self) -> CoherenceQueryAPI:
++        return CoherenceQueryAPI(self.state)
++
++    def apply_event(self, event: Any) -> CoherenceUpdateResult:
++        normalized = normalize_event(event)
++        mutations = reduce_event(self.state, normalized)
++        contradictions = self.contradiction_detector.detect(self.state, mutations, normalized)
++
++        for mutation in mutations:
++            self._apply_mutation(mutation)
++        if contradictions:
++            self.record_contradictions(contradictions)
++
++        return CoherenceUpdateResult(
++            events_applied=1,
++            mutations=mutations,
++            contradictions=contradictions,
++        )
++
++    def apply_events(self, events: List[Any]) -> CoherenceUpdateResult:
++        aggregate = CoherenceUpdateResult()
++        for event in events:
++            result = self.apply_event(event)
++            aggregate.events_applied += result.events_applied
++            aggregate.mutations.extend(result.mutations)
++            aggregate.contradictions.extend(result.contradictions)
++        return aggregate
++
++    def get_scene_summary(self) -> dict:
++        return self.get_query_api().get_scene_summary()
++
++    def get_active_tensions(self) -> list[dict]:
++        return self.get_query_api().get_active_tensions()
++
++    def get_unresolved_threads(self) -> list[dict]:
++        return self.get_query_api().get_unresolved_threads()
++
++    def get_actor_commitments(self, actor_id: str) -> list[dict]:
++        return self.get_query_api().get_actor_commitments(actor_id)
++
++    def get_known_facts(self, entity_id: str) -> dict:
++        return self.get_query_api().get_known_facts(entity_id)
++
++    def get_recent_consequences(self, limit: int = 10) -> list[dict]:
++        return self.get_query_api().get_recent_consequences(limit=limit)
++
++    def get_last_good_anchor(self) -> dict | None:
++        return self.get_query_api().get_last_good_anchor()
++
++    def insert_fact(self, fact: FactRecord) -> None:
++        self.upsert_fact(fact)
++
++    def upsert_fact(self, fact: FactRecord) -> None:
++        bucket = self._bucket_for_fact(fact)
++        existing = bucket.get(fact.fact_id)
++        if existing is not None:
++            current_rank = AUTHORITY_RANK.get(existing.authority, 0)
++            incoming_rank = AUTHORITY_RANK.get(fact.authority, 0)
++            if incoming_rank < current_rank:
++                return
++            fact.tick_first_seen = existing.tick_first_seen
++        bucket[fact.fact_id] = fact
++
++    def remove_fact(self, fact_id: str) -> None:
++        for bucket in (
++            self.state.stable_world_facts,
++            self.state.scene_facts,
++            self.state.temporary_assumptions,
++        ):
++            bucket.pop(fact_id, None)
++
++    def insert_thread(self, thread: ThreadRecord) -> None:
++        self.state.unresolved_threads[thread.thread_id] = thread
++
++    def resolve_thread(self, thread_id: str, resolution_event_id: str | None = None, tick: int | None = None) -> None:
++        thread = self.state.unresolved_threads.get(thread_id)
++        if thread is None:
++            return
++        thread.status = "resolved"
++        thread.updated_tick = tick
++        thread.resolved_tick = tick
++        if resolution_event_id:
++            thread.metadata["resolution_event_id"] = resolution_event_id
++
++    def insert_commitment(self, commitment: CommitmentRecord) -> None:
++        bucket = (
++            self.state.player_commitments
++            if commitment.actor_id == "player"
++            else self.state.npc_commitments
++        )
++        bucket[commitment.commitment_id] = commitment
++
++    def break_commitment(self, commitment_id: str, breaking_event_id: str | None = None, tick: int | None = None) -> None:
++        for bucket in (self.state.player_commitments, self.state.npc_commitments):
++            commitment = bucket.get(commitment_id)
++            if commitment is not None:
++                commitment.status = "broken"
++                commitment.updated_tick = tick
++                commitment.broken_tick = tick
++                if breaking_event_id:
++                    commitment.metadata["breaking_event_id"] = breaking_event_id
++                return
++
++    def push_anchor(self, anchor: SceneAnchor) -> None:
++        self.state.continuity_anchors.append(anchor)
++        if len(self.state.continuity_anchors) > 50:
++            self.state.continuity_anchors = self.state.continuity_anchors[-50:]
++
++    def record_contradictions(self, contradictions: List[ContradictionRecord]) -> None:
++        self.state.contradictions.extend(contradictions)
++        if len(self.state.contradictions) > 200:
++            self.state.contradictions = self.state.contradictions[-200:]
++
++    def _bucket_for_fact(self, fact: FactRecord):
++        if fact.category in {"world", "stable_world"} or fact.authority in {
++            "creator_canon",
++            "engine_confirmed",
++            "event_confirmed",
++        }:
++            return self.state.stable_world_facts
++        if fact.category in {"scene"}:
++            return self.state.scene_facts
++        return self.state.temporary_assumptions
++
++    def _apply_mutation(self, mutation: CoherenceMutation) -> None:
++        if mutation.action == "upsert_fact":
++            self.upsert_fact(FactRecord.from_dict(mutation.data))
++            return
++        if mutation.action == "remove_fact":
++            self.remove_fact(mutation.data["fact_id"])
++            return
++        if mutation.action == "upsert_thread":
++            self.insert_thread(ThreadRecord.from_dict(mutation.data))
++            return
++        if mutation.action == "resolve_thread":
++            self.resolve_thread(
++                mutation.data["thread_id"],
++                resolution_event_id=mutation.data.get("resolution_event_id"),
++                tick=mutation.data.get("tick"),
++            )
++            return
++        if mutation.action == "upsert_commitment":
++            self.insert_commitment(CommitmentRecord.from_dict(mutation.data))
++            return
++        if mutation.action == "break_commitment":
++            self.break_commitment(
++                mutation.data["commitment_id"],
++                breaking_event_id=mutation.data.get("breaking_event_id"),
++                tick=mutation.data.get("tick"),
++            )
++            return
++        if mutation.action == "push_anchor":
++            self.push_anchor(SceneAnchor.from_dict(mutation.data))
++            return
++        if mutation.action == "record_consequence":
++            self.state.recent_changes.append(ConsequenceRecord.from_dict(mutation.data))
++            if len(self.state.recent_changes) > 100:
++                self.state.recent_changes = self.state.recent_changes[-100:]
++            return
++
++    def serialize_state(self) -> dict:
++        return {
++            "mode": self.mode,
++            "state": self.state.to_dict(),
++        }
++
++    def deserialize_state(self, data: dict) -> None:
++        self.mode = data.get("mode", "live")
++        self.state = CoherenceState.from_dict(data.get("state", {}))
++
++    # SnapshotManager extension hooks
++    def serialize(self) -> dict:
++        return self.serialize_state()
++
++    def deserialize(self, data: dict) -> None:
++        self.deserialize_state(data)
+diff --git a/src/app/rpg/core/game_loop.py b/src/app/rpg/core/game_loop.py
+index 9c6a9ff..aaaaaaa 100644
+--- a/src/app/rpg/core/game_loop.py
++++ b/src/app/rpg/core/game_loop.py
+@@ -33,11 +33,12 @@ import contextvars
+ from dataclasses import dataclass, field
+ from enum import Enum
+ from typing import Any, Callable, Dict, List, Optional, Protocol
+-
+ from .event_bus import Event, EventBus
+ from .snapshot_manager import SnapshotManager
+ from .effects import EffectManager, EffectPolicy
+ from .tool_runtime_boundary import ToolRuntimeRecorder
++from ..coherence import CoherenceCore
+ 
+ 
+ class TickPhase(Enum):
+@@ -76,7 +77,9 @@ class StoryDirector(Protocol):
+     def process(
+-        self, events: List[Event], intent: Dict[str, Any], event_bus: EventBus
++        self,
++        events: List[Event],
++        intent: Dict[str, Any],
++        event_bus: EventBus,
++        coherence_context: Optional[Dict[str, Any]] = None,
+     ) -> Dict[str, Any]:
+         """Process events and intent into narrative output.
+ 
+@@ -108,7 +111,9 @@ class SceneRenderer(Protocol):
+     """Protocol for scene rendering implementations."""
+-    def render(self, narrative: Dict[str, Any]) -> Dict[str, Any]:
++    def render(
++        self, narrative: Dict[str, Any], coherence_context: Optional[Dict[str, Any]] = None
++    ) -> Dict[str, Any]:
+         """Render a scene from narrative data.
+@@ -205,6 +210,12 @@ class GameLoop:
+         self.llm_recorder: Optional[Any] = None
+ 
++        # PHASE 6.0 — CANONICAL COHERENCE CORE
++        self.coherence_core = CoherenceCore()
++        self._snapshot_systems: List[str] = list(getattr(self, "_snapshot_systems", []))
++        if "coherence_core" not in self._snapshot_systems:
++            self._snapshot_systems.append("coherence_core")
++
+         # PHASE 5.5 — Inject effect manager into subsystems that support it
+         for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+             system = getattr(self, system_name, None)
+@@ -218,6 +229,11 @@ class GameLoop:
+             if system is not None and hasattr(system, "set_tool_runtime_recorder"):
+                 system.set_tool_runtime_recorder(self.tool_runtime_recorder)
+ 
++        # PHASE 6.0 — Inject coherence core into systems that can consume it
++        if hasattr(self.story_director, "set_coherence_core"):
++            self.story_director.set_coherence_core(self.coherence_core)
++        elif hasattr(self.story_director, "coherence_core"):
++            self.story_director.coherence_core = self.coherence_core
++
+     def set_llm_recorder(self, recorder: Any) -> None:
+         """
+         Attach an LLM recorder for deterministic model replay.
+@@ -260,6 +276,10 @@ class GameLoop:
+             system = getattr(self, system_name, None)
+             if system is not None and hasattr(system, "set_mode"):
+                 system.set_mode(mode)
++        if hasattr(self, "coherence_core") and self.coherence_core is not None:
++            self.coherence_core.set_mode(mode)
++        if hasattr(self, "story_director") and hasattr(self.story_director, "set_coherence_core"):
++            self.story_director.set_coherence_core(self.coherence_core)
+ 
+         # Primary mode propagation happens via system.set_mode() above.
+         # The direct determinism mutation below is only a fallback for
+@@ -360,12 +380,34 @@ class GameLoop:
+                 for event in events:
+                     self._on_event(event)
+ 
+-            # 5. Narrative processing
+-            narrative = self.story_director.process(events, intent, self.event_bus)
++            # 5. Canonical coherence updates
++            coherence_result = self._apply_coherence_updates(events)
++            coherence_context = self._build_director_context()
++            ctx.scene["coherence"] = coherence_result
++
++            # 6. Narrative processing
++            try:
++                narrative = self.story_director.process(
++                    events, intent, self.event_bus, coherence_context=coherence_context
++                )
++            except TypeError:
++                # Backwards compatibility for older directors
++                narrative = self.story_director.process(events, intent, self.event_bus)
+ 
+-            # 6. Render scene
+-            scene = self.scene_renderer.render(narrative)
++            # 7. Render scene
++            try:
++                scene = self.scene_renderer.render(narrative, coherence_context=coherence_context)
++            except TypeError:
++                scene = self.scene_renderer.render(narrative)
+             ctx.scene = scene
++            if isinstance(scene, dict):
++                scene.setdefault("coherence", coherence_context)
++                scene.setdefault("coherence_contradictions", coherence_result.get("contradictions", []))
+ 
+             # PHASE 2.5: Save snapshot at interval
+             if self.snapshot_manager.should_snapshot(self._tick_count):
+@@ -474,6 +516,29 @@ class GameLoop:
+         self.set_npc_planner(npc_planner, npc_system)
+         # Override npc_meth[...]
+ 
++    # -------------------------
++    # PHASE 6.0 — COHERENCE CORE
++    # -------------------------
++
++    def _apply_coherence_updates(self, events: List[Event]) -> Dict[str, Any]:
++        """Reduce tick events into canonical coherence state."""
++        if self.coherence_core is None:
++            return {"events_applied": 0, "mutations": [], "contradictions": []}
++        result = self.coherence_core.apply_events(events)
++        return result.to_dict()
++
++    def _build_director_context(self) -> Dict[str, Any]:
++        """Build coherence-aware context for director/renderer consumers."""
++        if self.coherence_core is None:
++            return {}
++        return {
++            "scene_summary": self.coherence_core.get_scene_summary(),
++            "active_tensions": self.coherence_core.get_active_tensions(),
++            "unresolved_threads": self.coherence_core.get_unresolved_threads(),
++            "recent_consequences": self.coherence_core.get_recent_consequences(limit=5),
++            "last_good_anchor": self.coherence_core.get_last_good_anchor(),
++            "contradictions": [c.to_dict() for c in self.coherence_core.get_state().contradictions[-10:]],
++        }
++
+diff --git a/src/app/rpg/narrative/story_director.py b/src/app/rpg/narrative/story_director.py
+index 4e7864d..bbbbbbb 100644
+--- a/src/app/rpg/narrative/story_director.py
++++ b/src/app/rpg/narrative/story_director.py
+@@ -15,6 +15,7 @@ ARCHITECTURE RULE:
+ """
+ 
+ from typing import Any, Dict, List, Optional
++import copy
+ 
+ from ..core.event_bus import Event, EventBus
+ 
+@@ -36,6 +37,7 @@ class StoryDirector:
+         self,
+         arc_manager: Optional[Any] = None,
+         plot_engine: Optional[Any] = None,
+         scene_engine: Optional[Any] = None,
++        coherence_core: Optional[Any] = None,
+     ):
+         """Initialize the StoryDirector.
+@@ -49,8 +51,11 @@ class StoryDirector:
+         self.arc_manager = arc_manager or DefaultArcManager()
+         self.plot_engine = plot_engine or DefaultPlotEngine()
+         self.scene_engine = scene_engine or DefaultSceneEngine()
++        self.coherence_core = coherence_core
+ 
+         self._event_log: List[Dict[str, Any]] = []
+         self._tick_count = 0
++        self.mode: str = "live"
++
++    def set_coherence_core(self, coherence_core: Any) -> None:
++        self.coherence_core = coherence_core
+ 
+     def process(
+         self,
+         events: List[Event],
+         player_intent: Dict[str, Any],
+         event_bus: Any,
++        coherence_context: Optional[Dict[str, Any]] = None,
+     ) -> Dict[str, Any]:
+         """Process events and player intent into narrative output.
+@@ -72,18 +77,27 @@ class StoryDirector:
+         self._tick_count += 1
+ 
+         # 1. Analyze world state from events
+-        world_state = self._analyze(events)
++        coherence_context = coherence_context or self._build_coherence_context()
++        world_state = self._analyze(events, coherence_context=coherence_context)
+ 
+         # 2. Update story arcs
+         active_arcs = self.arc_manager.update(world_state)
+ 
+         # 3. Select next narrative beat
+-        next_beat = self.plot_engine.select(active_arcs, player_intent)
++        try:
++            next_beat = self.plot_engine.select(active_arcs, player_intent, coherence_context=coherence_context)
++        except TypeError:
++            next_beat = self.plot_engine.select(active_arcs, player_intent)
++
++        if isinstance(next_beat, dict):
++            next_beat.setdefault("coherence", coherence_context)
+ 
+         # Emit narrative beat selected event (structured event type)
+         event_bus.emit(Event(
+             "narrative_beat_selected",
+             {
+                 "beat": next_beat,
++                "coherence_scene_summary": coherence_context.get("scene_summary", {}),
++                "unresolved_thread_count": len(coherence_context.get("unresolved_threads", [])),
+                 "tick": self._tick_count,
+             },
+             source="story_director"
+@@ -91,18 +105,46 @@ class StoryDirector:
+ 
+         # 4. Generate scene
+-        scene = self.scene_engine.generate(next_beat)
++        try:
++            scene = self.scene_engine.generate(next_beat, coherence_context=coherence_context)
++        except TypeError:
++            scene = self.scene_engine.generate(next_beat)
++
++        if isinstance(scene, dict):
++            scene.setdefault("coherence", coherence_context)
+ 
+         # Emit scene_generated event with enhanced payload
+         event_bus.emit(Event(
+             "scene_generated",
+             {
+                 "tick": self._tick_count,
+                 "beat": next_beat,
+                 "scene": scene,
++                "coherence_scene_summary": coherence_context.get("scene_summary", {}),
+             },
+             source="story_director"
+         ))
+ 
+         return scene
+ 
+-    def _analyze(self, events: List[Event]) -> Dict[str, Any]:
++    def _build_coherence_context(self) -> Dict[str, Any]:
++        if self.coherence_core is None:
++            return {
++                "scene_summary": {},
++                "active_tensions": [],
++                "unresolved_threads": [],
++                "recent_consequences": [],
++                "last_good_anchor": None,
++                "contradictions": [],
++            }
++        return {
++            "scene_summary": self.coherence_core.get_scene_summary(),
++            "active_tensions": self.coherence_core.get_active_tensions(),
++            "unresolved_threads": self.coherence_core.get_unresolved_threads(),
++            "recent_consequences": self.coherence_core.get_recent_consequences(limit=5),
++            "last_good_anchor": self.coherence_core.get_last_good_anchor(),
++            "contradictions": [
++                c.to_dict()
++                for c in self.coherence_core.get_state().contradictions[-10:]
++            ],
++        }
++
++    def _analyze(self, events: List[Event], coherence_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+         """Analyze events to produce a world state summary.
+ 
+         Args:
+@@ -122,11 +164,40 @@ class StoryDirector:
+                 "type": e.type, "payload": e.payload}
+                 for e in events
+             ],
++            "coherence": coherence_context or {},
+             "event_count": len(events),
+             "tick": self._tick_count,
+         }
+ 
++    def serialize_state(self) -> Dict[str, Any]:
++        return {
++            "tick_count": self._tick_count,
++            "event_log": copy.deepcopy(self._event_log),
++            "mode": self.mode,
++        }
++
++    def deserialize_state(self, data: Dict[str, Any]) -> None:
++        self._tick_count = data.get("tick_count", 0)
++        self._event_log = copy.deepcopy(data.get("event_log", []))
++        self.mode = data.get("mode", "live")
++
++    def set_mode(self, mode: str) -> None:
++        self.mode = mode
++
+     @property
+     def tick_count(self) -> int:
+         """Number of ticks processed."""
+         return self._tick_count
+diff --git a/tests/unit/rpg/test_phase60_coherence_core.py b/tests/unit/rpg/test_phase60_coherence_core.py
+new file mode 100644
+index 0000000..ccccccc
+--- /dev/null
++++ b/tests/unit/rpg/test_phase60_coherence_core.py
+@@ -0,0 +1,92 @@
++from app.rpg.coherence import CoherenceCore
++from app.rpg.core.event_bus import Event
++
++
++def test_character_death_persists_as_canonical_fact():
++    core = CoherenceCore()
++    core.apply_event(
++        Event(
++            "character_died",
++            {"entity_id": "npc_guard"},
++            source="tests",
++            event_id="evt_1",
++            tick=1,
++        )
++    )
++    facts = core.get_known_facts("npc_guard")["facts"]
++    alive_facts = [f for f in facts if f["predicate"] == "alive"]
++    assert alive_facts
++    assert alive_facts[0]["value"] is False
++
++
++def test_lower_authority_fact_cannot_overwrite_higher_authority_fact():
++    core = CoherenceCore()
++    core.insert_fact(
++        core.get_state().stable_world_facts.get("guard:location")
++        or __import__("app.rpg.coherence.models", fromlist=["FactRecord"]).FactRecord(
++            fact_id="guard:location",
++            category="world",
++            subject="guard",
++            predicate="location",
++            value="gate",
++            authority="creator_canon",
++        )
++    )
++    core.apply_event(
++        Event(
++            "npc_moved",
++            {"npc_id": "guard", "location": "tower"},
++            source="tests",
++            event_id="evt_2",
++            tick=2,
++        )
++    )
++    facts = core.get_known_facts("guard")["facts"]
++    location = [f for f in facts if f["predicate"] == "location"][0]
++    assert location["value"] == "gate"
++
++
++def test_unresolved_thread_persists_until_resolved():
++    core = CoherenceCore()
++    core.apply_event(
++        Event(
++            "quest_started",
++            {"quest_id": "q1", "title": "Find the relic"},
++            source="tests",
++            event_id="evt_1",
++            tick=1,
++        )
++    )
++    assert len(core.get_unresolved_threads()) == 1
++
++    core.apply_event(
++        Event(
++            "thread_resolved",
++            {"thread_id": "q1"},
++            source="tests",
++            event_id="evt_2",
++            tick=2,
++        )
++    )
++    unresolved = [t for t in core.get_unresolved_threads() if t["thread_id"] == "q1" and t["status"] != "resolved"]
++    assert unresolved == []
+diff --git a/tests/functional/rpg/test_phase60_game_loop_coherence.py b/tests/functional/rpg/test_phase60_game_loop_coherence.py
+new file mode 100644
+index 0000000..ddddddd
+--- /dev/null
++++ b/tests/functional/rpg/test_phase60_game_loop_coherence.py
+@@ -0,0 +1,80 @@
++from app.rpg.core.event_bus import Event, EventBus
++from app.rpg.core.game_loop import GameLoop
++from app.rpg.narrative.story_director import StoryDirector
++
++
++class Parser:
++    def parse(self, player_input: str):
++        return {"text": player_input}
++
++
++class World:
++    def tick(self, event_bus: EventBus):
++        event_bus.emit(Event("scene_started", {"location": "market"}, source="world"))
++
++
++class NPCs:
++    def update(self, intent, event_bus: EventBus):
++        event_bus.emit(Event("npc_moved", {"npc_id": "guard", "location": "market"}, source="npc"))
++        event_bus.emit(Event("quest_started", {"quest_id": "q1", "title": "Watch the gate"}, source="npc"))
++
++
++class Renderer:
++    def render(self, narrative, coherence_context=None):
++        return {
++            "narrative": narrative,
++            "coherence_context": coherence_context,
++        }
++
++
++def test_game_loop_populates_coherence_context():
++    loop = GameLoop(
++        intent_parser=Parser(),
++        world=World(),
++        npc_system=NPCs(),
++        event_bus=EventBus(),
++        story_director=StoryDirector(),
++        scene_renderer=Renderer(),
++    )
++
++    scene = loop.tick("look around")
++    coherence = scene["coherence_context"]
++
++    assert coherence["scene_summary"]["location"] == "market"
++    assert any(t["thread_id"] == "q1" for t in coherence["unresolved_threads"])
++```
+
+A few notes for the coding LLM applying this:
+
+- This patch intentionally keeps Phase 6.0 **deterministic and reducer-driven**.
+- It does **not** introduce LLM-dependent coherence logic.
+- It uses your existing `SnapshotManager` extension path via `loop._snapshot_systems` plus `serialize()` / `deserialize()` aliases on `CoherenceCore`.
+- `GameLoop` integration is designed to be **backward compatible** with older directors/renderers by using `TypeError` fallback when the new `coherence_context` arg is unsupported.
+
+There is one small cleanup I recommend before applying: in `tests/unit/rpg/test_phase60_coherence_core.py`, I wrote the `FactRecord` import inline to keep the diff compact; I would replace that with a normal top-level import before committing.
+
+If you want, I’ll do the next pass as a refined Phase 6 patch that includes:
+1. cleaner direct imports,
+2. broader reducer coverage for your existing event types,
+3. contradiction severity tuning,
+4. snapshot/replay regression tests only.
