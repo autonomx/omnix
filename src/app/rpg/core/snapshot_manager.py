@@ -68,6 +68,8 @@ class Snapshot:
         effect_state: Serialized effect manager state.
         rng_state: Serialized RNG state.
         planner_state: Serialized NPC planner state.
+        llm_state: Serialized LLM recorder state.
+        tool_runtime_state: Serialized tool runtime recorder state.
         extra_states: Additional system states keyed by name.
     """
     tick: int
@@ -79,6 +81,8 @@ class Snapshot:
     rng_state: Optional[Dict[str, Any]] = None
     planner_state: Optional[Dict[str, Any]] = None
     llm_state: Optional[Dict[str, Any]] = None
+    tool_runtime_state: Optional[Dict[str, Any]] = None
+    host_runtime_state: Optional[Dict[str, Any]] = None
     extra_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
@@ -141,15 +145,24 @@ class SnapshotManager:
         if hasattr(loop, "story_director") and hasattr(loop.story_director, "serialize_state"):
             snapshot.director_state = loop.story_director.serialize_state()
         
-        if hasattr(loop, "event_bus") and hasattr(loop.event_bus, "timeline"):
-            timeline = loop.event_bus.timeline
-            if hasattr(timeline, "serialize_state"):
-                snapshot.timeline_state = {
-                    "timeline": timeline.serialize_state(),
-                    "seen_event_ids": list(getattr(loop.event_bus, "_seen_event_ids", [])),
-                    "seq": getattr(loop.event_bus, "_seq", 0),
-                    "current_tick": getattr(loop.event_bus, "_current_tick", None),
-                }
+        if hasattr(loop, "event_bus"):
+            timeline_payload = {}
+            if hasattr(loop.event_bus, "timeline"):
+                timeline = loop.event_bus.timeline
+                if hasattr(timeline, "serialize_state"):
+                    timeline_payload = timeline.serialize_state()
+
+            # This captures deterministic auxiliary event-bus state
+            # needed for replay/bootstrap continuity: timeline payload,
+            # seen IDs, sequence counter, and current tick.
+            # It does not by itself guarantee restoration of full event
+            # history semantics unless history is serialized separately.
+            snapshot.timeline_state = {
+                "timeline": timeline_payload,
+                "seen_event_ids": list(getattr(loop.event_bus, "_seen_event_ids", [])),
+                "seq": getattr(loop.event_bus, "_seq", 0),
+                "current_tick": getattr(loop.event_bus, "_current_tick", None),
+            }
         
         if hasattr(loop, "effect_manager") and hasattr(loop.effect_manager, "serialize_state"):
             snapshot.effect_state = loop.effect_manager.serialize_state()
@@ -165,6 +178,16 @@ class SnapshotManager:
         if hasattr(loop, "llm_recorder") and loop.llm_recorder is not None:
             if hasattr(loop.llm_recorder, "serialize_state"):
                 snapshot.llm_state = loop.llm_recorder.serialize_state()
+
+        # PHASE 5.7: Serialize tool runtime recorder state
+        if hasattr(loop, "tool_runtime_recorder") and loop.tool_runtime_recorder is not None:
+            if hasattr(loop.tool_runtime_recorder, "serialize_state"):
+                snapshot.tool_runtime_state = loop.tool_runtime_recorder.serialize_state()
+
+        # PHASE 5.8: Serialize host runtime recorder state
+        if hasattr(loop, "host_runtime_recorder") and loop.host_runtime_recorder is not None:
+            if hasattr(loop.host_runtime_recorder, "serialize_state"):
+                snapshot.host_runtime_state = loop.host_runtime_recorder.serialize_state()
         
         # Serialize any additional systems that declare serialize()
         # This allows extensions to opt into snapshot support
@@ -213,22 +236,26 @@ class SnapshotManager:
 
         if snapshot.timeline_state and hasattr(loop, "event_bus") and hasattr(loop.event_bus, "timeline"):
             timeline = loop.event_bus.timeline
+            ts = snapshot.timeline_state if isinstance(snapshot.timeline_state, dict) else {}
+            # Restore deterministic auxiliary event-bus state only.
+            # This restores replay counters and dedup context, but it is
+            # not a substitute for restoring full event history unless that
+            # history is snapshotted independently.
             if hasattr(timeline, "deserialize_state"):
-                ts = snapshot.timeline_state
-                if isinstance(ts, dict) and "timeline" in ts:
-                    timeline.deserialize_state(ts.get("timeline", {}))
-                else:
-                    timeline.deserialize_state(ts)
+                timeline.deserialize_state(ts.get("timeline", {}))
+
             if hasattr(loop.event_bus, "_seen_event_ids"):
                 from collections import deque
                 maxlen = getattr(loop.event_bus._seen_event_ids, "maxlen", 100000)
-                restored_seen = snapshot.timeline_state.get("seen_event_ids", [])
+                restored_seen = ts.get("seen_event_ids", [])
                 loop.event_bus._seen_event_ids = deque(restored_seen, maxlen=maxlen)
                 loop.event_bus._seen_event_ids_set = set(restored_seen)
+
             if hasattr(loop.event_bus, "_seq"):
-                loop.event_bus._seq = snapshot.timeline_state.get("seq", 0)
+                loop.event_bus._seq = ts.get("seq", 0)
+
             if hasattr(loop.event_bus, "_current_tick"):
-                loop.event_bus._current_tick = snapshot.timeline_state.get("current_tick", None)
+                loop.event_bus._current_tick = ts.get("current_tick", None)
 
         if snapshot.rng_state and hasattr(loop, "rng") and hasattr(loop.rng, "setstate"):
             loop.rng.setstate(snapshot.rng_state["state"])
@@ -246,6 +273,16 @@ class SnapshotManager:
         if snapshot.llm_state and hasattr(loop, "llm_recorder") and loop.llm_recorder is not None:
             if hasattr(loop.llm_recorder, "deserialize_state"):
                 loop.llm_recorder.deserialize_state(snapshot.llm_state)
+
+        # PHASE 5.7: Restore tool runtime recorder state
+        if snapshot.tool_runtime_state and hasattr(loop, "tool_runtime_recorder") and loop.tool_runtime_recorder is not None:
+            if hasattr(loop.tool_runtime_recorder, "deserialize_state"):
+                loop.tool_runtime_recorder.deserialize_state(snapshot.tool_runtime_state)
+
+        # PHASE 5.8: Restore host runtime recorder state
+        if snapshot.host_runtime_state and hasattr(loop, "host_runtime_recorder") and loop.host_runtime_recorder is not None:
+            if hasattr(loop.host_runtime_recorder, "deserialize_state"):
+                loop.host_runtime_recorder.deserialize_state(snapshot.host_runtime_state)
         
         # Restore any additional system states
         for attr_name, state_data in snapshot.extra_states.items():

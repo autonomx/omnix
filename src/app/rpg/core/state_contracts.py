@@ -45,3 +45,19 @@ class LLMRecorderAware(Protocol):
     def set_llm_recorder(self, recorder: Any) -> None:
         """Inject LLM recorder for deterministic replay."""
         ...
+
+
+class ToolRuntimeRecorderAware(Protocol):
+    """Protocol for subsystems that can receive a tool/runtime recorder."""
+
+    def set_tool_runtime_recorder(self, recorder: Any) -> None:
+        """Inject tool/runtime recorder for deterministic replay."""
+        ...
+
+
+class HostRuntimeRecorderAware(Protocol):
+    """Protocol for subsystems that can receive a host/runtime recorder."""
+
+    def set_host_runtime_recorder(self, recorder: Any) -> None:
+        """Inject host/runtime recorder for deterministic replay."""
+        ...

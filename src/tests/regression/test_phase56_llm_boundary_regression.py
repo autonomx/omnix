@@ -153,6 +153,40 @@ class TestPhase56LLMBoundaryRegression(unittest.TestCase):
         self.assertEqual(out2, "resp:hello")
         self.assertEqual(len(llm.calls), 1)  # Should not call LLM again
 
+    def test_snapshot_timeline_state_restores_bus_even_without_timeline_serializer(self):
+        class _Timeline:
+            pass
+
+        class _Bus:
+            def __init__(self):
+                from collections import deque
+                self.timeline = _Timeline()
+                self._seen_event_ids = deque(["evt_a", "evt_b"], maxlen=100000)
+                self._seen_event_ids_set = {"evt_a", "evt_b"}
+                self._seq = 7
+                self._current_tick = 11
+
+        class _Loop:
+            def __init__(self):
+                self.event_bus = _Bus()
+
+        from app.rpg.core.snapshot_manager import SnapshotManager
+
+        sm = SnapshotManager()
+        loop1 = _Loop()
+        sm.save_snapshot(1, loop1)
+
+        loop2 = _Loop()
+        loop2.event_bus._seen_event_ids.clear()
+        loop2.event_bus._seen_event_ids_set.clear()
+        loop2.event_bus._seq = 0
+        loop2.event_bus._current_tick = None
+        self.assertTrue(sm.load_snapshot(1, loop2))
+        self.assertEqual(list(loop2.event_bus._seen_event_ids), ["evt_a", "evt_b"])
+        self.assertEqual(loop2.event_bus._seen_event_ids_set, {"evt_a", "evt_b"})
+        self.assertEqual(loop2.event_bus._seq, 7)
+        self.assertEqual(loop2.event_bus._current_tick, 11)
+
 
 if __name__ == "__main__":
     unittest.main()

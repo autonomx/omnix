@@ -35,12 +35,20 @@ class DeterminismConfig:
         replay_mode: If True, the system is in replay mode (no fresh side effects).
         record_llm: If True, record LLM prompt/response pairs during live runs.
         use_recorded_llm: If True, use recorded LLM responses instead of calling LLM.
+        record_tools: If True, record tool/runtime call results during live runs.
+        use_recorded_tools: If True, use recorded tool results instead of live calls.
+        record_host: If True, record host/runtime boundary results during live runs.
+        use_recorded_host: If True, use recorded host/runtime results instead of live calls.
     """
     seed: int = 0
     strict_replay: bool = True
     replay_mode: bool = False
     record_llm: bool = False
     use_recorded_llm: bool = False
+    record_tools: bool = False
+    use_recorded_tools: bool = False
+    record_host: bool = False
+    use_recorded_host: bool = False
 
 
 class SeededRNG:

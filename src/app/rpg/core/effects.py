@@ -20,6 +20,11 @@ class EffectPolicy:
     allow_disk_write: bool = False
     allow_live_llm: bool = False
     allow_tool_calls: bool = False
+    # PHASE 5.8 — host/process/runtime leakage controls
+    allow_env_read: bool = False
+    allow_filesystem_read: bool = False
+    allow_wall_clock: bool = False
+    allow_process_spawn: bool = False
 
 
 @dataclass
@@ -58,22 +63,17 @@ class EffectManager:
             "disk_write": self.policy.allow_disk_write,
             "live_llm": self.policy.allow_live_llm,
             "tool_call": self.policy.allow_tool_calls,
+            "env_read": self.policy.allow_env_read,
+            "filesystem_read": self.policy.allow_filesystem_read,
+            "wall_clock": self.policy.allow_wall_clock,
+            "process_spawn": self.policy.allow_process_spawn,
         }.get(effect_type, False)
 
     def check(self, effect_type: str, payload: Optional[Dict[str, Any]] = None) -> None:
         payload = payload or {}
         self.records.append(EffectRecord(effect_type=effect_type, payload=payload))
 
-        allowed = {
-            "log": self.policy.allow_logs,
-            "metric": self.policy.allow_metrics,
-            "network": self.policy.allow_network,
-            "disk_write": self.policy.allow_disk_write,
-            "live_llm": self.policy.allow_live_llm,
-            "tool_call": self.policy.allow_tool_calls,
-        }.get(effect_type, False)
-
-        if not allowed:
+        if not self.is_allowed(effect_type):
             raise RuntimeError(
                 f"Effect '{effect_type}' is blocked by current policy."
             )
@@ -87,6 +87,10 @@ class EffectManager:
                 "allow_disk_write": self.policy.allow_disk_write,
                 "allow_live_llm": self.policy.allow_live_llm,
                 "allow_tool_calls": self.policy.allow_tool_calls,
+                "allow_env_read": self.policy.allow_env_read,
+                "allow_filesystem_read": self.policy.allow_filesystem_read,
+                "allow_wall_clock": self.policy.allow_wall_clock,
+                "allow_process_spawn": self.policy.allow_process_spawn,
             },
             "records": [
                 {"effect_type": r.effect_type, "payload": r.payload}
@@ -103,6 +107,10 @@ class EffectManager:
             allow_disk_write=p.get("allow_disk_write", False),
             allow_live_llm=p.get("allow_live_llm", False),
             allow_tool_calls=p.get("allow_tool_calls", False),
+            allow_env_read=p.get("allow_env_read", False),
+            allow_filesystem_read=p.get("allow_filesystem_read", False),
+            allow_wall_clock=p.get("allow_wall_clock", False),
+            allow_process_spawn=p.get("allow_process_spawn", False),
         )
         self.records = [
             EffectRecord(effect_type=r["effect_type"], payload=r.get("payload", {}))

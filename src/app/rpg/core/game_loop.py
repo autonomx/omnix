@@ -45,6 +45,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 from .event_bus import Event, EventBus
 from .snapshot_manager import SnapshotManager
 from .effects import EffectManager, EffectPolicy
+from .tool_runtime_boundary import ToolRuntimeRecorder
 
 
 class TickPhase(Enum):
@@ -192,6 +193,7 @@ class GameLoop:
         scene_renderer: SceneRenderer,
         snapshot_manager: Optional[SnapshotManager] = None,
         effect_manager: Optional[EffectManager] = None,
+        tool_runtime_recorder: Optional[ToolRuntimeRecorder] = None,
     ):
         """Initialize the GameLoop with all required subsystems.
 
@@ -218,6 +220,8 @@ class GameLoop:
         self.snapshot_manager = snapshot_manager or SnapshotManager()
         # PHASE 5.5: EffectManager for side-effect isolation
         self.effect_manager = effect_manager or EffectManager()
+        # PHASE 5.7: ToolRuntimeRecorder for deterministic tool/runtime replay
+        self.tool_runtime_recorder = tool_runtime_recorder or ToolRuntimeRecorder()
 
         # PHASE 5.2 — REPLAY/LIVE MODE
         self.mode: str = "live"
@@ -243,6 +247,11 @@ class GameLoop:
             system = getattr(self, system_name, None)
             if system is not None and hasattr(system, "set_effect_manager"):
                 system.set_effect_manager(self.effect_manager)
+        # PHASE 5.7 — Inject tool runtime recorder into subsystems that support it
+        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+            system = getattr(self, system_name, None)
+            if system is not None and hasattr(system, "set_tool_runtime_recorder"):
+                system.set_tool_runtime_recorder(self.tool_runtime_recorder)
 
     def set_llm_recorder(self, recorder: Any) -> None:
         """
@@ -256,6 +265,14 @@ class GameLoop:
             system = getattr(self, system_name, None)
             if system is not None and hasattr(system, "set_llm_recorder"):
                 system.set_llm_recorder(recorder)
+
+    def set_tool_runtime_recorder(self, recorder: Any) -> None:
+        """Attach a tool/runtime recorder for deterministic runtime replay."""
+        self.tool_runtime_recorder = recorder
+        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+            system = getattr(self, system_name, None)
+            if system is not None and hasattr(system, "set_tool_runtime_recorder"):
+                system.set_tool_runtime_recorder(recorder)
 
     def set_mode(self, mode: str) -> None:
         """
@@ -276,15 +293,21 @@ class GameLoop:
             if system is not None and hasattr(system, "set_mode"):
                 system.set_mode(mode)
 
+        # Primary mode propagation happens via system.set_mode() above.
+        # The direct determinism mutation below is only a fallback for
+        # systems that expose a determinism object but do not fully
+        # implement their own mode switching.
         # PHASE 5.3 — Propagate replay/live LLM behavior to systems with determinism config
         for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
             system = getattr(self, system_name, None)
             if system is not None and hasattr(system, "determinism"):
-                system.determinism.replay_mode = (mode == "replay")
-                if mode == "replay":
+                system.determinism.replay_mode = (mode in ("replay", "simulation"))
+                if mode in ("replay", "simulation"):
                     system.determinism.use_recorded_llm = True
+                    system.determinism.use_recorded_tools = True
                 else:
                     system.determinism.use_recorded_llm = False
+                    system.determinism.use_recorded_tools = False
 
         # PHASE 5.5 — Apply effect policy by mode
         if mode == "live":

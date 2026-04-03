@@ -21,7 +21,30 @@ from .llm_recording import LLMRecord, LLMRecorder, DeterministicLLMClient
 # PHASE 5.6 — LLM BOUNDARY HARDENING
 from .llm_boundary import LLMCallSpec, LLMGateway
 # PHASE 5.5 — STATE BOUNDARIES + EFFECT ISOLATION
-from .state_contracts import SerializableState, ReplaySafe, EffectAware, LLMRecorderAware
+from .state_contracts import (
+    SerializableState,
+    ReplaySafe,
+    EffectAware,
+    LLMRecorderAware,
+    ToolRuntimeRecorderAware,
+    HostRuntimeRecorderAware,
+)
+# PHASE 5.7 — TOOL/RUNTIME BOUNDARY
+from .tool_runtime_boundary import (
+    ToolCallSpec,
+    ToolRuntimeRecord,
+    ToolRuntimeRecorder,
+    DeterministicToolRuntimeClient,
+    ToolRuntimeGateway,
+)
+# PHASE 5.8 — HOST/PROCESS BOUNDARY
+from .host_runtime_boundary import (
+    HostCallSpec,
+    HostRuntimeRecord,
+    HostRuntimeRecorder,
+    DeterministicHostRuntimeClient,
+    HostRuntimeGateway,
+)
 from .effects import EffectPolicy, EffectRecord, EffectManager
 from .event_bus import Event, EventBus
 from .game_loop import (
@@ -72,6 +95,20 @@ __all__ = [
     "ReplaySafe",
     "EffectAware",
     "LLMRecorderAware",
+    "ToolRuntimeRecorderAware",
+    "HostRuntimeRecorderAware",
+    # PHASE 5.7 — TOOL/RUNTIME BOUNDARY
+    "ToolCallSpec",
+    "ToolRuntimeRecord",
+    "ToolRuntimeRecorder",
+    "DeterministicToolRuntimeClient",
+    "ToolRuntimeGateway",
+    # PHASE 5.8 — HOST/PROCESS BOUNDARY
+    "HostCallSpec",
+    "HostRuntimeRecord",
+    "HostRuntimeRecorder",
+    "DeterministicHostRuntimeClient",
+    "HostRuntimeGateway",
     "EffectPolicy",
     "EffectRecord",
     "EffectManager",

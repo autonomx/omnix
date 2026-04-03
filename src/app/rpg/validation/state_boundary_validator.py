@@ -47,5 +47,38 @@ class StateBoundaryValidator:
             gateway.set_mode("replay")
             gateway.call("complete", "unrecorded prompt", context={"test": True})
             return {"ok": False, "reason": "unrecorded replay call unexpectedly succeeded"}
-        except Exception:
+        except (KeyError, RuntimeError):
             return {"ok": True}
+        except Exception as exc:
+            return {
+                "ok": False,
+                "reason": f"unexpected exception type during replay validation: {type(exc).__name__}: {exc}",
+            }
+
+    def validate_tool_runtime_replay_safety(self, gateway: Any) -> Dict[str, Any]:
+        """Validate that tool/runtime gateway fails on unrecorded replay calls."""
+        try:
+            gateway.set_mode("replay")
+            gateway.call("unrecorded_tool", {"x": 1}, context={"test": True})
+            return {"ok": False, "reason": "unrecorded replay tool call unexpectedly succeeded"}
+        except (KeyError, RuntimeError):
+            return {"ok": True}
+        except Exception as exc:
+            return {
+                "ok": False,
+                "reason": f"unexpected exception type during tool replay validation: {type(exc).__name__}: {exc}",
+            }
+
+    def validate_host_runtime_replay_safety(self, gateway: Any) -> Dict[str, Any]:
+        """Validate that host/runtime gateway fails on unrecorded replay calls."""
+        try:
+            gateway.set_mode("replay")
+            gateway.call("unrecorded_op", {"x": 1}, context={"test": True})
+            return {"ok": False, "reason": "unrecorded replay host call unexpectedly succeeded"}
+        except (KeyError, RuntimeError):
+            return {"ok": True}
+        except Exception as exc:
+            return {
+                "ok": False,
+                "reason": f"unexpected exception type during host replay validation: {type(exc).__name__}: {exc}",
+            }
