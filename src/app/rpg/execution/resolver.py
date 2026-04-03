@@ -115,25 +115,27 @@ class ActionResolver:
         consequences: list[ActionConsequence],
         transition: Optional[SceneTransition],
     ) -> list[dict]:
-        """Transform consequences and transition into a flat event list."""
+        """Transform consequences and transition into a flat event list.
+
+        Transition metadata is merged into the existing scene_transition_requested
+        event from consequences (if present) rather than emitting a duplicate.
+        """
         events: list[dict] = []
 
         for consequence in consequences:
-            events.append({
+            event: dict = {
                 "type": consequence.event_type,
                 "payload": dict(consequence.payload),
-            })
-
-        if transition is not None:
-            events.append({
-                "type": "scene_transition_requested",
-                "payload": {
-                    "from_location": transition.from_location,
-                    "to_location": transition.to_location,
-                    "transition_id": transition.transition_id,
-                    "source": "action_resolver",
-                },
-            })
+            }
+            # Enrich scene_transition_requested with transition details
+            if (
+                transition is not None
+                and consequence.event_type == "scene_transition_requested"
+            ):
+                event["payload"]["from_location"] = transition.from_location
+                event["payload"]["to_location"] = transition.to_location
+                event["payload"]["transition_id"] = transition.transition_id
+            events.append(event)
 
         return events
 

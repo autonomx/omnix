@@ -1264,18 +1264,13 @@ class GameLoop:
             )
 
     def _apply_coherence_updates_from_action_result(self, result: dict) -> dict:
-        """Extract events from an action result and apply them via CoherenceCore."""
-        from .event_bus import Event
-        events = []
-        for event_data in result.get("events", []):
-            events.append(
-                Event(
-                    type=event_data.get("type", "unknown"),
-                    payload=dict(event_data.get("payload", {})),
-                    source="action_resolver",
-                )
-            )
-        if events and self.coherence_core is not None:
-            coherence_result = self.coherence_core.apply_events(events)
+        """Extract events from an action result and apply them via CoherenceCore.
+
+        Re-uses the same event data rather than constructing new Event objects,
+        since coherence reducers accept both Event and dict forms.
+        """
+        raw_events = result.get("events", [])
+        if raw_events and self.coherence_core is not None:
+            coherence_result = self.coherence_core.apply_events(raw_events)
             return coherence_result.to_dict()
         return {"events_applied": 0, "mutations": [], "contradictions": []}

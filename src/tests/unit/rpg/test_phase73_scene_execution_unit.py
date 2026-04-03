@@ -357,8 +357,8 @@ class TestActionResolver:
         result2 = self.resolver.resolve_choice(option, self.cc, self.gm)
         assert result1.resolved_action.action_id == result2.resolved_action.action_id
 
-    def test_action_resolver_travel_emits_two_events(self):
-        """Travel emits consequence event + transition event."""
+    def test_action_resolver_travel_emits_transition_event(self):
+        """Travel emits at least one scene_transition_requested event."""
         option = _make_option_dict(
             option_id="explore:forest",
             intent_type="travel_to_location",
