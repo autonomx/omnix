@@ -92,6 +92,24 @@ class RevealDirective(GMDirective):
     timing: str = "soon"
 
 
+@dataclass
+class OptionFramingDirective(GMDirective):
+    directive_type: str = "option_framing"
+    scope: str = "scene"
+    enabled: bool = True
+    force: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RecapDirective(GMDirective):
+    directive_type: str = "recap"
+    scope: str = "scene"
+    enabled: bool = True
+    force: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 DIRECTIVE_TYPES = {
     "inject_event": InjectEventDirective,
     "pin_thread": PinThreadDirective,
@@ -104,6 +122,8 @@ DIRECTIVE_TYPES = {
     "target_faction": TargetFactionDirective,
     "target_location": TargetLocationDirective,
     "reveal": RevealDirective,
+    "option_framing": OptionFramingDirective,
+    "recap": RecapDirective,
 }
 
 
@@ -252,6 +272,37 @@ class GMDirectiveState:
             "active_directives": len(active),
             "by_type": by_type,
         }
+
+    # ------------------------------------------------------------------
+    # Gameplay-control query helpers (Phase 7.2)
+    # ------------------------------------------------------------------
+
+    def has_forced_option_framing(self) -> bool:
+        """Return True if any active directive forces option framing."""
+        for d in self.get_active_directives():
+            if isinstance(d, OptionFramingDirective) and d.force:
+                return True
+        return False
+
+    def has_forced_recap(self) -> bool:
+        """Return True if any active directive forces a recap."""
+        for d in self.get_active_directives():
+            if isinstance(d, RecapDirective) and d.force:
+                return True
+        return False
+
+    def get_focus_target(self) -> dict | None:
+        """Return the current focus target from directives, if any."""
+        for d in self.get_active_directives():
+            if isinstance(d, TargetNPCDirective) and d.npc_id:
+                return {"target_type": "npc", "target_id": d.npc_id}
+            if isinstance(d, TargetFactionDirective) and d.faction_id:
+                return {"target_type": "faction", "target_id": d.faction_id}
+            if isinstance(d, TargetLocationDirective) and d.location_id:
+                return {"target_type": "location", "target_id": d.location_id}
+            if isinstance(d, PinThreadDirective) and d.thread_id:
+                return {"target_type": "thread", "target_id": d.thread_id}
+        return None
 
     def serialize_state(self) -> dict:
         return {

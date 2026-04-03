@@ -1,4 +1,12 @@
-"""Data models for the Phase 7.2 Gameplay Control Layer."""
+"""Data models for the Phase 7.2 Gameplay Control Layer.
+
+Defines structured representations for:
+- Player choice options
+- Constraints
+- Choice sets
+- Pacing state
+- Framing state
+"""
 
 from __future__ import annotations
 
@@ -6,12 +14,21 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 
+# ------------------------------------------------------------------
+# Constraints
+# ------------------------------------------------------------------
+
 @dataclass
 class OptionConstraint:
-    """Constraint that can hide or disable an option."""
+    """Constraint that can hide or disable an option.
+
+    Flexible schema supports:
+    - simple condition/value checks
+    - richer constraint typing
+    """
 
     constraint_id: str
-    condition: str  # e.g. "fact_exists", "thread_resolved", "danger_level"
+    condition: str  # e.g. "fact_exists", "danger_level"
     required_value: Any = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -23,19 +40,19 @@ class OptionConstraint:
         return cls(**data)
 
 
+# ------------------------------------------------------------------
+# Choice Options
+# ------------------------------------------------------------------
+
 @dataclass
 class ChoiceOption:
-    """A single player-choice option produced by the OptionEngine.
-
-    Each option carries explicit metadata about *why* it exists so that
-    the UI/debugger can explain the control layer's reasoning.
-    """
+    """A single player-choice option produced by the OptionEngine."""
 
     option_id: str
     label: str
     intent_type: str
     summary: str
-    target_id: Optional[str]
+    target_id: Optional[str] = None
     tags: list[str] = field(default_factory=list)
     constraints: list[OptionConstraint] = field(default_factory=list)
     priority: float = 0.5
@@ -72,13 +89,13 @@ class ChoiceOption:
         )
 
 
+# ------------------------------------------------------------------
+# Choice Set
+# ------------------------------------------------------------------
+
 @dataclass
 class ChoiceSet:
-    """A complete set of choice options for the current tick.
-
-    The choice_set_id is deterministic so that replays and UI diffs
-    can reliably identify which control-state produced this set.
-    """
+    """A complete set of choice options for the current tick."""
 
     choice_set_id: str
     title: str
@@ -109,14 +126,27 @@ class ChoiceSet:
         )
 
 
+# ------------------------------------------------------------------
+# Pacing State
+# ------------------------------------------------------------------
+
 @dataclass
 class PacingState:
-    """Current pacing values that bias option priorities."""
+    """Current pacing values that bias option priorities.
 
-    danger_level: str = "medium"  # low, medium, high
-    reveal_pressure: str = "low"  # low, medium, high
-    social_pressure: str = "low"  # low, medium, high
-    action_pressure: str = "low"  # low, medium, high
+    Superset model to support multiple gameplay styles.
+    """
+
+    scene_index: int = 0
+
+    danger_level: str = "medium"
+    reveal_pressure: str = "medium"
+    mystery_pressure: str = "medium"
+
+    social_pressure: str = "low"
+    combat_pressure: str = "low"
+    action_pressure: str = "low"
+
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -127,30 +157,37 @@ class PacingState:
         return cls(**data)
 
 
+# ------------------------------------------------------------------
+# Framing State
+# ------------------------------------------------------------------
+
 @dataclass
 class FramingState:
-    """Current framing values that bias option priorities.
+    """Current framing values that bias option generation.
 
-    The forced_* flags are consumed (cleared) by the controller each
-    tick so that they only affect a single choice set production.
+    forced_* flags are consumed each tick.
     """
 
     focus_target_type: Optional[str] = None
     focus_target_id: Optional[str] = None
+
     forced_option_framing_pending: bool = False
     forced_recap_pending: bool = False
-    last_choice_set: Optional[ChoiceSet] = None
+
+    last_choice_set: Optional[dict[str, Any]] = None
+    last_recap_tick: Optional[int] = None
+
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         result = asdict(self)
-        # Don't serialize the full last_choice_set; store a summary instead.
-        if self.last_choice_set is not None:
-            result["last_choice_set_id"] = self.last_choice_set.choice_set_id
-            del result["last_choice_set"]
+
+        # Provide lightweight reference for debugging / replay
+        if self.last_choice_set:
+            result["last_choice_set_id"] = self.last_choice_set.get("choice_set_id")
         else:
             result["last_choice_set_id"] = None
-            del result["last_choice_set"]
+
         return result
 
     @classmethod
@@ -160,5 +197,7 @@ class FramingState:
             focus_target_id=data.get("focus_target_id"),
             forced_option_framing_pending=data.get("forced_option_framing_pending", False),
             forced_recap_pending=data.get("forced_recap_pending", False),
+            last_choice_set=data.get("last_choice_set"),
+            last_recap_tick=data.get("last_recap_tick"),
             metadata=dict(data.get("metadata", {})),
         )

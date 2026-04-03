@@ -1,3 +1,4 @@
+
 """Phase 7.2 — Gameplay Control Layer.
 
 This module provides the control layer that sits on top of the coherence
@@ -20,7 +21,6 @@ from .models import (
     PacingState,
     FramingState,
 )
-
 __all__ = [
     "ChoiceOption",
     "ChoiceSet",
@@ -28,6 +28,7 @@ __all__ = [
     "PacingState",
     "FramingState",
     "OptionEngine",
+    "PacingController",
     "GameplayControlController",
     "FramingEngine",
 ]

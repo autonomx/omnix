@@ -6,7 +6,9 @@ from typing import Any
 from .gm_state import (
     DangerDirective,
     InjectEventDirective,
+    OptionFramingDirective,
     PinThreadDirective,
+    RecapDirective,
     RevealDirective,
     RetconDirective,
     TargetFactionDirective,
@@ -83,6 +85,24 @@ class GMCommandProcessor:
         if m:
             return {"command": "switch_tone", "tone": m.group(1).strip()}
 
+        # --- Phase 7.2 gameplay-control patterns ---
+
+        if lowered == "frame options":
+            return {"command": "frame_options"}
+
+        if lowered == "force recap":
+            return {"command": "force_recap"}
+
+        m = re.match(r"focus on thread\s+(\S+)", lowered)
+        if m:
+            return {"command": "focus_thread", "thread_id": m.group(1)}
+
+        if lowered == "raise danger":
+            return {"command": "raise_danger"}
+
+        if lowered == "lower danger":
+            return {"command": "lower_danger"}
+
         # --- legacy patterns ---
 
         if lowered == "restate canon":
@@ -145,6 +165,17 @@ class GMCommandProcessor:
             return self.command_target_location(command, gm_state, coherence_core)
         if name == "set_danger":
             return self.command_set_danger(command, gm_state, coherence_core)
+        # Phase 7.2 gameplay-control commands
+        if name == "frame_options":
+            return self.command_frame_options(command, gm_state, coherence_core)
+        if name == "force_recap":
+            return self.command_force_recap(command, gm_state, coherence_core)
+        if name == "focus_thread":
+            return self.command_focus_thread(command, gm_state, coherence_core)
+        if name == "raise_danger":
+            return self.command_raise_danger(command, gm_state, coherence_core)
+        if name == "lower_danger":
+            return self.command_lower_danger(command, gm_state, coherence_core)
         return {"ok": False, "reason": "unknown_command"}
 
     # ------------------------------------------------------------------
@@ -385,6 +416,64 @@ class GMCommandProcessor:
             directive_type="danger",
             scope="scene",
             level=level,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    # ------------------------------------------------------------------
+    # Phase 7.2 gameplay-control command handlers
+    # ------------------------------------------------------------------
+
+    def command_frame_options(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        directive = OptionFramingDirective(
+            directive_id="gm:frame_options",
+            directive_type="option_framing",
+            scope="scene",
+            force=True,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_force_recap(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        directive = RecapDirective(
+            directive_id="gm:force_recap",
+            directive_type="recap",
+            scope="scene",
+            force=True,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_focus_thread(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        thread_id = command.get("thread_id")
+        if not thread_id:
+            return {"ok": False, "reason": "missing_thread_id"}
+        directive = PinThreadDirective(
+            directive_id=f"gm:focus_thread:{thread_id}",
+            directive_type="pin_thread",
+            scope="scene",
+            thread_id=thread_id,
+            priority="high",
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_raise_danger(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        directive = DangerDirective(
+            directive_id="gm:danger_high",
+            directive_type="danger",
+            scope="scene",
+            level="high",
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_lower_danger(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        directive = DangerDirective(
+            directive_id="gm:danger_low",
+            directive_type="danger",
+            scope="scene",
+            level="low",
         )
         gm_state.add_directive(directive)
         return {"ok": True, "directive_id": directive.directive_id}

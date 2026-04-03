@@ -2,14 +2,20 @@
 
 Generates deterministic, priority-ranked choice options from the coherence
 core state. Options are biased by pacing and framing state, then normalized
-to keep priorities bounded and stable.
+for stability.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .models import ChoiceOption, ChoiceSet, OptionConstraint, PacingState, FramingState
+from .models import (
+    ChoiceOption,
+    ChoiceSet,
+    OptionConstraint,
+    PacingState,
+    FramingState,
+)
 
 
 class OptionEngine:
@@ -17,6 +23,10 @@ class OptionEngine:
 
     def __init__(self) -> None:
         pass
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def build_choice_set(
         self,
@@ -29,194 +39,249 @@ class OptionEngine:
         pacing_state = pacing_state or PacingState()
         framing_state = framing_state or FramingState()
 
-        options = []
-        options.extend(self._build_thread_options(coherence_core))
-        options.extend(self._build_npc_options(coherence_core))
-        options.extend(self._build_location_options(coherence_core))
+        options: list[ChoiceOption] = []
+
+        # --- Build base options ---
+        thread_opts = self._build_thread_options(coherence_core)
+        npc_opts = self._build_npc_options(coherence_core)
+        loc_opts = self._build_location_options(coherence_core)
+
+        options.extend(thread_opts)
+        options.extend(npc_opts)
+        options.extend(loc_opts)
         options.append(self._build_recap_option())
 
+        # --- Apply transformations ---
         options = self._apply_gm_constraints(options, gm_state)
         options = self._apply_focus_bias(options, framing_state)
         options = self._apply_pacing_bias(options, pacing_state)
+
         options = self._normalize_priorities(options)
         options = self._sort_and_trim(options, limit=limit)
 
-        choice_set = ChoiceSet(
+        # --- Build choice set ---
+        return ChoiceSet(
             choice_set_id=self._make_choice_set_id(coherence_core, framing_state),
-            title="Available actions",
-            prompt="What do you want to do next?",
+            title="What do you do?",
+            prompt="Choose your next action.",
             options=options,
             source_summary={
-                "scene_summary": coherence_core.get_scene_summary(),
+                "thread_count": len(thread_opts),
+                "npc_count": len(npc_opts),
+                "location_count": len(loc_opts),
             },
             metadata={},
         )
-        return choice_set
+
+    # ------------------------------------------------------------------
+    # ID generation
+    # ------------------------------------------------------------------
 
     def _make_choice_set_id(self, coherence_core: Any, framing_state: FramingState) -> str:
-        """Build a stable, deterministic choice-set id from current control state."""
-        scene = coherence_core.get_scene_summary() or {}
-        location = scene.get("location") or "unknown_location"
+        """Deterministic ID for replay + diff stability."""
+        try:
+            scene = coherence_core.get_scene_summary() or {}
+            location = scene.get("location") or "unknown"
+        except Exception:
+            location = "unknown"
+
         focus_type = framing_state.focus_target_type or "none"
         focus_id = framing_state.focus_target_id or "none"
+
         return f"choices:{location}:{focus_type}:{focus_id}"
+
+    # ------------------------------------------------------------------
+    # Option builders
+    # ------------------------------------------------------------------
 
     def _build_thread_options(self, coherence_core: Any) -> list[ChoiceOption]:
         options: list[ChoiceOption] = []
-        for thread in coherence_core.get_unresolved_threads():
-            thread_id = thread.get("thread_id")
-            title = thread.get("title") or thread_id or "thread"
+
+        threads = []
+        if hasattr(coherence_core, "get_unresolved_threads"):
+            threads = coherence_core.get_unresolved_threads() or []
+
+        for thread in threads:
+            thread_id = getattr(thread, "thread_id", None) or thread.get("thread_id")
+            title = getattr(thread, "title", None) or thread.get("title") or thread_id
+
+            priority_map = {"critical": 3.0, "high": 2.0, "normal": 1.0, "low": 0.5}
+            raw_priority = getattr(thread, "priority", None) or thread.get("priority", "normal")
+            base_priority = priority_map.get(raw_priority, 1.0)
+
             options.append(
                 self._make_option(
                     option_id=f"investigate_thread:{thread_id}",
                     label=f"Investigate: {title}",
                     intent_type="investigate_thread",
-                    summary=f"Follow up on thread '{title}'.",
+                    summary=f"Follow up on '{title}'.",
                     target_id=thread_id,
-                    tags=["thread", "investigation"],
-                    priority=1.0,
-                    metadata={
-                        "source": "thread",
-                        "reason": f"Unresolved thread '{title}' is active.",
-                    },
+                    tags=["thread", raw_priority],
+                    priority=base_priority,
+                    metadata={"source": "thread"},
                 )
             )
         return options
 
     def _build_npc_options(self, coherence_core: Any) -> list[ChoiceOption]:
         options: list[ChoiceOption] = []
-        for fact in coherence_core.get_state().stable_world_facts.values():
-            if str(fact.fact_id).startswith("npc:") and fact.predicate == "name":
-                npc_id = fact.subject
-                npc_name = fact.value
-                options.append(
-                    self._make_option(
-                        option_id=f"talk_to_npc:{npc_id}",
-                        label=f"Talk to {npc_name}",
-                        intent_type="talk_to_npc",
-                        summary=f"Approach {npc_name} and talk.",
-                        target_id=npc_id,
-                        tags=["npc", "social"],
-                        priority=0.8,
-                        metadata={
-                            "source": "npc",
-                            "reason": f"NPC '{npc_name}' is present in known world state.",
-                        },
+
+        # --- Try scene-based actors (copilot style)
+        try:
+            scene = coherence_core.get_scene_summary()
+            if isinstance(scene, dict):
+                for actor_id in scene.get("present_actors", []):
+                    options.append(
+                        self._make_option(
+                            option_id=f"talk_to_npc:{actor_id}",
+                            label=f"Talk to {actor_id}",
+                            intent_type="talk_to_npc",
+                            summary=f"Speak with {actor_id}.",
+                            target_id=actor_id,
+                            tags=["npc", "social"],
+                            priority=1.0,
+                            metadata={"source": "scene"},
+                        )
                     )
-                )
+        except Exception:
+            pass
+
+        # --- Try fact-based (roleplay5 style)
+        try:
+            state = coherence_core.get_state()
+            for fact in getattr(state, "stable_world_facts", {}).values():
+                if str(fact.fact_id).startswith("npc:") and fact.predicate == "name":
+                    npc_id = fact.subject
+                    npc_name = fact.value
+                    options.append(
+                        self._make_option(
+                            option_id=f"talk_to_npc:{npc_id}",
+                            label=f"Talk to {npc_name}",
+                            intent_type="talk_to_npc",
+                            summary=f"Talk to {npc_name}.",
+                            target_id=npc_id,
+                            tags=["npc", "social"],
+                            priority=0.8,
+                            metadata={"source": "facts"},
+                        )
+                    )
+        except Exception:
+            pass
+
         return options
 
     def _build_location_options(self, coherence_core: Any) -> list[ChoiceOption]:
         options: list[ChoiceOption] = []
-        for fact in coherence_core.get_state().stable_world_facts.values():
-            if str(fact.fact_id).startswith("location:") and fact.predicate == "name":
-                location_id = fact.subject
-                location_name = fact.value
+
+        # Scene-based
+        try:
+            scene = coherence_core.get_scene_summary()
+            if isinstance(scene, dict) and scene.get("location"):
+                loc = scene["location"]
                 options.append(
                     self._make_option(
-                        option_id=f"travel_to_location:{location_id}",
-                        label=f"Travel to {location_name}",
+                        option_id=f"explore:{loc}",
+                        label=f"Explore {loc}",
                         intent_type="travel_to_location",
-                        summary=f"Go to {location_name}.",
-                        target_id=location_id,
-                        tags=["location", "travel"],
-                        priority=0.5,
-                        metadata={
-                            "source": "location",
-                            "reason": f"Location '{location_name}' is available in known world state.",
-                        },
+                        summary=f"Explore {loc}.",
+                        target_id=loc,
+                        tags=["location"],
+                        priority=0.8,
+                        metadata={"source": "scene"},
                     )
                 )
+        except Exception:
+            pass
+
         return options
 
     def _build_recap_option(self) -> ChoiceOption:
         return self._make_option(
             option_id="request_recap",
-            label="Ask for a recap",
+            label="Request recap",
             intent_type="request_recap",
             summary="Review the current situation.",
             target_id=None,
-            tags=["recap", "status"],
+            tags=["meta"],
             priority=0.2,
-            metadata={
-                "source": "recap",
-                "reason": "Recap is always available as a fallback control option.",
-            },
+            metadata={"source": "system"},
         )
 
-    def _apply_gm_constraints(self, options: list[ChoiceOption], gm_state: Any) -> list[ChoiceOption]:
-        """Apply GM constraints to filter or modify options.
+    # ------------------------------------------------------------------
+    # Bias + constraints
+    # ------------------------------------------------------------------
 
-        This v1 implementation preserves all options unless gm_state
-        carries explicit filter directives. Extend as needed.
-        """
+    def _apply_gm_constraints(self, options: list[ChoiceOption], gm_state: Any) -> list[ChoiceOption]:
         if gm_state is None:
             return options
 
-        # If gm_state has filter logic, apply it here.
-        # For now, we return all options unchanged.
+        # Example: pin thread boost
+        for directive in getattr(gm_state, "get_active_directives", lambda: [])():
+            if getattr(directive, "directive_type", "") == "pin_thread":
+                thread_id = getattr(directive, "thread_id", None)
+                for opt in options:
+                    if opt.target_id == thread_id:
+                        opt.priority += 2.0
+                        opt.constraints.append(
+                            OptionConstraint(
+                                constraint_id=f"pin:{thread_id}",
+                                condition="gm_pin",
+                                required_value=True,
+                            )
+                        )
         return options
 
     def _apply_focus_bias(self, options: list[ChoiceOption], framing_state: FramingState) -> list[ChoiceOption]:
-        """Apply multiplicative focus bias to option priorities.
-
-        Focused targets get a boost; non-focused targets get a gentle decay.
-        This keeps diversity in the option set instead of letting focus
-        dominate entirely.
-        """
-        focus_type = framing_state.focus_target_type
         focus_id = framing_state.focus_target_id
-        if not focus_type or not focus_id:
+        if not focus_id:
             return options
 
-        for option in options:
-            if option.target_id == focus_id:
-                option.priority *= 1.5
-                option.metadata.setdefault("biases", [])
-                option.metadata["biases"].append("focus_boost")
+        for opt in options:
+            opt.metadata.setdefault("biases", [])
+            if opt.target_id == focus_id:
+                opt.priority *= 1.5
+                opt.metadata["biases"].append("focus_boost")
             else:
-                option.priority *= 0.9
-                option.metadata.setdefault("biases", [])
-                option.metadata["biases"].append("focus_decay")
+                opt.priority *= 0.9
+                opt.metadata["biases"].append("focus_decay")
         return options
 
     def _apply_pacing_bias(self, options: list[ChoiceOption], pacing_state: PacingState) -> list[ChoiceOption]:
-        """Apply pacing-based additive bias to option priorities."""
-        for option in options:
-            if pacing_state.danger_level == "high" and option.intent_type in {"travel_to_location", "investigate_thread"}:
-                option.priority += 0.25
-                option.metadata.setdefault("biases", [])
-                option.metadata["biases"].append("danger_high")
-            if pacing_state.reveal_pressure == "high" and option.intent_type == "investigate_thread":
-                option.priority += 0.5
-                option.metadata.setdefault("biases", [])
-                option.metadata["biases"].append("reveal_pressure_high")
-            if pacing_state.social_pressure == "high" and option.intent_type == "talk_to_npc":
-                option.priority += 0.35
-                option.metadata.setdefault("biases", [])
-                option.metadata["biases"].append("social_pressure_high")
+        for opt in options:
+            opt.metadata.setdefault("biases", [])
+
+            if pacing_state.danger_level == "high" and "thread" in opt.tags:
+                opt.priority += 0.5
+                opt.metadata["biases"].append("danger")
+
+            if pacing_state.reveal_pressure == "high" and opt.intent_type == "investigate_thread":
+                opt.priority += 0.5
+                opt.metadata["biases"].append("reveal")
+
+            if pacing_state.social_pressure == "high" and "social" in opt.tags:
+                opt.priority += 0.5
+                opt.metadata["biases"].append("social")
+
         return options
 
     def _normalize_priorities(self, options: list[ChoiceOption]) -> list[ChoiceOption]:
-        """Normalize priorities to a stable 0..1-ish range before sorting.
-
-        This prevents stacked biasing from causing runaway values and helps keep
-        ordering stable as the control layer grows more complex.
-        """
         if not options:
             return options
-        max_priority = max((o.priority for o in options), default=1.0) or 1.0
-        for option in options:
-            option.priority = option.priority / max_priority
+
+        max_p = max(o.priority for o in options) or 1.0
+        for opt in options:
+            opt.priority /= max_p
         return options
 
     def _sort_and_trim(self, options: list[ChoiceOption], limit: int = 6) -> list[ChoiceOption]:
-        """Sort options by priority (descending), then by intent_type and option_id for stability."""
-        options = sorted(
+        return sorted(
             options,
             key=lambda o: (-o.priority, o.intent_type, o.option_id),
-        )
-        return options[:limit]
+        )[:limit]
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     def _make_option(
         self,

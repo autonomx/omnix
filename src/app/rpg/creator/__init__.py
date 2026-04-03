@@ -23,6 +23,8 @@ from .gm_state import (
     TargetFactionDirective,
     TargetLocationDirective,
     RevealDirective,
+    OptionFramingDirective,
+    RecapDirective,
     GMDirectiveState,
 )
 from .startup_pipeline import StartupGenerationPipeline
@@ -71,6 +73,8 @@ __all__ = [
     "TargetFactionDirective",
     "TargetLocationDirective",
     "RevealDirective",
+    "OptionFramingDirective",
+    "RecapDirective",
     "GMDirectiveState",
     "StartupGenerationPipeline",
     "RecapBuilder",

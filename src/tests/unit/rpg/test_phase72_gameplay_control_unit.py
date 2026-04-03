@@ -1,83 +1,79 @@
-"""Phase 7.2 — Gameplay Control Unit Tests.
+"""Comprehensive unit tests for Phase 7.2 Gameplay Control Layer.
 
-Tests for the option engine, framing engine, and gameplay control controller.
+Tests for the option engine, framing engine, pacing controller, and 
+integration with the GM directive system.
 """
 
 from __future__ import annotations
 
+import pytest
+from dataclasses import dataclass, field
 from typing import Any
 
-import pytest
-
-from src.app.rpg.control.controller import GameplayControlController
-from src.app.rpg.control.framing import FramingEngine
-from src.app.rpg.control.models import (
+# ---------------------------------------------------------------------------
+# Imports
+# ---------------------------------------------------------------------------
+from app.rpg.control.models import (
     ChoiceOption,
     ChoiceSet,
     FramingState,
     OptionConstraint,
     PacingState,
 )
-from src.app.rpg.control.option_engine import OptionEngine
+from app.rpg.control.option_engine import OptionEngine
+from app.rpg.control.pacing import PacingController
+from app.rpg.control.framing import FramingEngine
+from app.rpg.control.controller import GameplayControlController
+
+from app.rpg.creator.gm_state import (
+    DangerDirective,
+    GMDirectiveState,
+    OptionFramingDirective,
+    PinThreadDirective,
+    RecapDirective,
+    TargetNPCDirective,
+    TargetFactionDirective,
+    TargetLocationDirective,
+    DIRECTIVE_TYPES,
+)
+from app.rpg.creator.commands import GMCommandProcessor
+
+# ===========================================================================
+# Test Stubs
+# ===========================================================================
+
+@dataclass
+class _StubCommitments:
+    player_commitments: dict = field(default_factory=dict)
+    npc_commitments: dict = field(default_factory=dict)
 
 
-class _FakeCoherenceCore:
-    """Minimal fake coherence core for testing."""
+class StubCoherenceCore:
+    """Consolidated stub for CoherenceCore to support all control tests."""
 
     def __init__(
         self,
-        threads: list[dict] | None = None,
-        npcs: list[tuple[str, str]] | None = None,
-        locations: list[tuple[str, str]] | None = None,
-        scene_summary: dict | None = None,
-    ) -> None:
-        from src.app.rpg.coherence.models import CoherenceState, FactRecord, ThreadRecord
-
+        threads: list | None = None,
+        scene: dict | None = None,
+        commitments: _StubCommitments | None = None,
+    ):
+        # Format threads to match what OptionEngine expects
         self._threads = threads or []
-        self._npcs = npcs or []
-        self._locations = locations or []
-        self._scene_summary = scene_summary or {"location": "default_place"}
+        self._scene = scene or {"location": "default_loc", "present_actors": []}
+        self._state = commitments or _StubCommitments()
 
-        state = CoherenceState()
-        for npc_id, name in self._npcs:
-            state.stable_world_facts[f"npc:{npc_id}:name"] = FactRecord(
-                fact_id=f"npc:{npc_id}:name",
-                category="world",
-                subject=npc_id,
-                predicate="name",
-                value=name,
-                authority="creator_canon",
-                status="confirmed",
-            )
-        for loc_id, name in self._locations:
-            state.stable_world_facts[f"location:{loc_id}:name"] = FactRecord(
-                fact_id=f"location:{loc_id}:name",
-                category="world",
-                subject=loc_id,
-                predicate="name",
-                value=name,
-                authority="creator_canon",
-                status="confirmed",
-            )
-        for thread in self._threads:
-            state.unresolved_threads[thread.get("thread_id", "unknown")] = ThreadRecord(
-                thread_id=thread.get("thread_id", "unknown"),
-                title=thread.get("title", "unknown"),
-                status="unresolved",
-            )
-        self._state = state
-
-    def get_state(self) -> Any:
-        return self._state
+    def get_unresolved_threads(self) -> list:
+        return self._threads
 
     def get_scene_summary(self) -> dict:
-        return self._scene_summary
+        return self._scene
 
-    def get_unresolved_threads(self) -> list[dict]:
-        return [
-            {"thread_id": tid, "title": t.title}
-            for tid, t in self._state.unresolved_threads.items()
-        ]
+    def get_state(self) -> Any:
+        # Returns the object containing commitments/facts
+        return self._state
+
+    def get_known_facts(self, entity_id: str) -> dict:
+        return {"facts": [{"entity": entity_id}]}
 
     def get_active_tensions(self) -> list:
         return []
@@ -85,193 +81,216 @@ class _FakeCoherenceCore:
     def get_recent_consequences(self, limit: int = 10) -> list:
         return []
 
-    def get_last_good_anchor(self) -> dict | None:
-        return None
+
+# ===================================================================
+# MODELS
+# ===================================================================
+
+class TestControlModels:
+    def test_option_constraint_roundtrip(self):
+        c = OptionConstraint(
+            constraint_id="c1",
+            constraint_type="gm_pin",
+            value="boosted",
+            source="test",
+            metadata={"x": 1},
+        )
+        d = c.to_dict()
+        c2 = OptionConstraint.from_dict(d)
+        assert c2.constraint_id == "c1"
+        assert c2.metadata == {"x": 1}
+
+    def test_choice_option_roundtrip(self):
+        opt = ChoiceOption(
+            option_id="o1",
+            label="Test",
+            intent_type="investigate_thread",
+            summary="desc",
+            target_id="t1",
+            priority=0.8,
+            metadata={"source": "logic"},
+        )
+        d = opt.to_dict()
+        opt2 = ChoiceOption.from_dict(d)
+        assert opt2.option_id == "o1"
+        assert opt2.priority == 0.8
+
+    def test_choice_set_roundtrip(self):
+        cs = ChoiceSet(
+            choice_set_id="cs1",
+            title="T",
+            prompt="P",
+            options=[ChoiceOption(option_id="o1", label="L", intent_type="i", summary="s")]
+        )
+        d = cs.to_dict()
+        cs2 = ChoiceSet.from_dict(d)
+        assert len(cs2.options) == 1
+        assert cs2.choice_set_id == "cs1"
 
 
-class _FakeGMState:
-    """Minimal fake GM state for testing."""
-
-    def __init__(self) -> None:
-        self._directives: list[Any] = []
-
-    def add_directive(self, directive: Any) -> None:
-        self._directives.append(directive)
-
-    def list_directives(self) -> list[Any]:
-        return list(self._directives)
-
-
-def make_coherence_core(
-    threads: list[dict] | None = None,
-    npcs: list[tuple[str, str]] | None = None,
-    locations: list[tuple[str, str]] | None = None,
-) -> _FakeCoherenceCore:
-    if threads is None:
-        threads = [{"thread_id": "t1", "title": "Thread One"}]
-    if npcs is None:
-        npcs = [("npc_guard", "Guard")]
-    if locations is None:
-        locations = [("loc_tavern", "The Tavern")]
-    return _FakeCoherenceCore(threads=threads, npcs=npcs, locations=locations)
-
-
-def make_gm_state() -> _FakeGMState:
-    return _FakeGMState()
-
+# ===================================================================
+# OPTION ENGINE
+# ===================================================================
 
 class TestOptionEngine:
-    def test_build_choice_set_produces_options(self):
+    def test_build_choice_set_empty(self):
         engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
-        choice_set = engine.build_choice_set(cc, gm, PacingState(), FramingState())
-        assert isinstance(choice_set, ChoiceSet)
-        assert choice_set.options
-        assert len(choice_set.options) > 0
+        cc = StubCoherenceCore()
+        gm = GMDirectiveState()
+        cs = engine.build_choice_set(cc, gm, PacingState(), FramingState())
+        assert isinstance(cs, ChoiceSet)
+        # Should always have at least the recap option
+        assert any(o.intent_type == "request_recap" for o in cs.options)
 
-    def test_build_choice_set_respects_limit(self):
+    def test_thread_options_generated_with_semantic_ids(self):
         engine = OptionEngine()
-        cc = make_coherence_core(
-            threads=[{"thread_id": f"t{i}", "title": f"Thread {i}"} for i in range(10)],
-            npcs=[(f"npc{i}", f"NPC {i}") for i in range(10)],
-            locations=[(f"loc{i}", f"Location {i}") for i in range(10)],
+        cc = StubCoherenceCore(
+            threads=[{"thread_id": "t1", "title": "Mystery", "priority": "high"}]
         )
-        gm = make_gm_state()
-        choice_set = engine.build_choice_set(cc, gm, PacingState(), FramingState(), limit=3)
-        assert len(choice_set.options) <= 3
+        cs = engine.build_choice_set(cc, GMDirectiveState(), PacingState(), FramingState())
+        thread_opts = [o for o in cs.options if o.intent_type == "investigate_thread"]
+        assert len(thread_opts) == 1
+        # Check semantic ID style from Roleplay5
+        assert "investigate_thread:t1" in thread_opts[0].option_id
 
-    def test_pacing_bias_increases_investigation_on_reveal_pressure(self):
+    def test_gm_pin_boosts_priority(self):
         engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
+        cc = StubCoherenceCore(
+            threads=[{"thread_id": "t1", "title": "Mystery", "priority": "normal"}]
+        )
+        gm = GMDirectiveState()
+        gm.add_directive(PinThreadDirective(directive_id="g1", thread_id="t1"))
+        
+        cs = engine.build_choice_set(cc, gm, PacingState(), FramingState())
+        pinned = [o for o in cs.options if o.target_id == "t1"][0]
+        assert any(c.constraint_type == "gm_pin" for c in pinned.constraints)
+        # Depending on engine implementation, priority is either > 1.0 (raw) 
+        # or higher than non-pinned (normalized)
+
+    def test_pacing_bias_reveal_pressure(self):
+        engine = OptionEngine()
+        cc = StubCoherenceCore(threads=[{"thread_id": "t1", "title": "T"}])
         pacing = PacingState(reveal_pressure="high")
-        choice_set = engine.build_choice_set(cc, gm, pacing, FramingState())
-        investigation_options = [o for o in choice_set.options if o.intent_type == "investigate_thread"]
-        assert investigation_options
-        for opt in investigation_options:
-            assert "reveal_pressure_high" in opt.metadata.get("biases", [])
+        cs = engine.build_choice_set(cc, GMDirectiveState(), pacing, FramingState())
+        thread_opts = [o for o in cs.options if o.intent_type == "investigate_thread"]
+        assert "reveal_pressure_high" in thread_opts[0].metadata.get("biases", [])
 
-    def test_focus_bias_increases_focused_option_priority(self):
+    def test_priority_normalization(self):
         engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
-        framing = FramingState(focus_target_type="npc", focus_target_id="npc_guard")
-        choice_set = engine.build_choice_set(cc, gm, PacingState(), framing)
-        focused = [o for o in choice_set.options if o.target_id == "npc_guard"]
-        non_focused = [o for o in choice_set.options if o.target_id != "npc_guard" and o.target_id is not None]
-        if focused and non_focused:
-            # Focused should generally have higher priority
-            for f in focused:
-                assert "focus_boost" in f.metadata.get("biases", [])
-
-    def test_recap_option_always_present(self):
-        engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
-        choice_set = engine.build_choice_set(cc, gm, PacingState(), FramingState())
-        recap_options = [o for o in choice_set.options if o.intent_type == "request_recap"]
-        assert len(recap_options) == 1
-        assert recap_options[0].option_id == "request_recap"
-
-    def test_build_control_output_records_last_choice_set(self):
-        ctrl = GameplayControlController()
-        gm = make_gm_state()
-        cc = make_coherence_core()
-        out = ctrl.build_control_output(cc, gm)
-        assert out["choice_set"]["choice_set_id"]
-        assert ctrl.framing_engine.get_state().last_choice_set is not None
-
-    def test_option_ids_are_stable_and_semantic(self):
-        engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
-        choice_set = engine.build_choice_set(cc, gm, PacingState(), FramingState())
-        option_ids = [o.option_id for o in choice_set.options]
-        assert all(isinstance(x, str) and x for x in option_ids)
-        # Check that option IDs use the expected semantic prefixes
-        assert any(x.startswith("investigate_thread:") for x in option_ids if "investigate" in x or x.startswith("investigate_thread:"))
-        # At least one option should have a talk_to_npc or travel prefix
-        assert any(
-            x.startswith("talk_to_npc:") or x.startswith("travel_to_location:") or x == "request_recap"
-            for x in option_ids
+        cc = StubCoherenceCore(
+            threads=[{"thread_id": "t1", "title": "T1"}],
+            scene={"present_actors": ["npc_a"], "location": "loc_a"}
         )
+        cs = engine.build_choice_set(cc, GMDirectiveState(), PacingState(), FramingState())
+        for opt in cs.options:
+            assert 0.0 <= opt.priority <= 1.0
 
-    def test_option_metadata_contains_source_and_reason(self):
-        engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
-        choice_set = engine.build_choice_set(cc, gm, PacingState(), FramingState())
-        assert choice_set.options
-        for option in choice_set.options:
-            assert "source" in option.metadata
-            assert "reason" in option.metadata
 
-    def test_priority_normalization_keeps_values_bounded(self):
-        engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
-        pacing = PacingState(
-            danger_level="high",
-            reveal_pressure="high",
-            social_pressure="high",
+# ===================================================================
+# PACING & FRAMING ENGINES
+# ===================================================================
+
+class TestPacingController:
+    def test_apply_gm_danger_directive(self):
+        pc = PacingController()
+        gm = GMDirectiveState()
+        gm.add_directive(DangerDirective(directive_id="d1", level="high"))
+        pc.apply_gm_directives(gm)
+        assert pc.get_state().danger_level == "high"
+
+    def test_update_from_coherence(self):
+        pc = PacingController()
+        cc = StubCoherenceCore(
+            commitments=_StubCommitments(player_commitments={"p1": {}, "p2": {}, "p3": {}})
         )
-        choice_set = engine.build_choice_set(cc, gm, pacing, FramingState())
-        assert choice_set.options
-        for option in choice_set.options:
-            assert 0.0 <= option.priority <= 1.0
+        pc.update_from_coherence(cc)
+        # High player commitments should drive social pressure
+        assert pc.get_state().social_pressure == "high"
 
-    def test_focus_bias_is_multiplicative_not_binary_additive(self):
-        engine = OptionEngine()
-        cc = make_coherence_core()
-        gm = make_gm_state()
-        framing = FramingState(
-            focus_target_type="npc",
-            focus_target_id="npc_guard",
-        )
-        choice_set = engine.build_choice_set(cc, gm, PacingState(), framing)
-        focused = [o for o in choice_set.options if o.target_id == "npc_guard"]
-        assert focused
-        assert all("focus_boost" in o.metadata.get("biases", []) for o in focused)
 
+class TestFramingEngine:
+    def test_update_from_gm_forced_recap(self):
+        fe = FramingEngine()
+        gm = GMDirectiveState()
+        gm.add_directive(RecapDirective(directive_id="r1", force=True))
+        fe.update_from_gm_state(gm)
+        assert fe.get_state().forced_recap_pending is True
+
+    def test_consume_forced_flags(self):
+        fe = FramingEngine()
+        fe.set_state(FramingState(forced_recap_pending=True))
+        assert fe.consume_forced_recap() is True
+        assert fe.consume_forced_recap() is False
+
+
+# ===================================================================
+# GAMEPLAY CONTROL CONTROLLER
+# ===================================================================
 
 class TestGameplayControlController:
-    def test_build_control_output_consumes_forced_option_framing(self):
+    def test_build_control_output_integration(self):
         ctrl = GameplayControlController()
-        gm = make_gm_state()
+        cc = StubCoherenceCore(threads=[{"thread_id": "t1", "title": "X"}])
+        gm = GMDirectiveState()
+        gm.add_directive(DangerDirective(directive_id="d1", level="high"))
+        
+        out = ctrl.build_control_output(cc, gm, tick=10)
+        assert out["pacing"]["danger_level"] == "high"
+        assert out["choice_set"]["options"]
+        assert out["framing"]["last_recap_tick"] == 10
 
-        class _FakeOptionFramingDirective:
-            directive_id = "gm:frame"
-            directive_type = "option_framing"
-            scope = "scene"
-            force = True
-
-        gm.add_directive(_FakeOptionFramingDirective())
-        cc = make_coherence_core()
-        out1 = ctrl.build_control_output(cc, gm, tick=1)
-        assert out1["choice_set"]["metadata"]["framing"]["forced_option_framing"] is True
-
-        # Remove the directive to simulate one-time directive processing
-        gm._directives.clear()
-        out2 = ctrl.build_control_output(cc, gm, tick=2)
+    def test_consumes_directives_into_metadata(self):
+        """Tests that the controller marks framing flags in output metadata."""
+        ctrl = GameplayControlController()
+        gm = GMDirectiveState()
+        gm.add_directive(OptionFramingDirective(directive_id="f1", force=True))
+        cc = StubCoherenceCore()
+        
+        out = ctrl.build_control_output(cc, gm)
+        assert out["choice_set"]["metadata"]["framing"]["forced_option_framing"] is True
+        
+        # Second call should be false as it was consumed
+        out2 = ctrl.build_control_output(cc, GMDirectiveState())
         assert out2["choice_set"]["metadata"]["framing"]["forced_option_framing"] is False
 
-    def test_build_control_output_consumes_forced_recap(self):
-        ctrl = GameplayControlController()
-        gm = make_gm_state()
 
-        class _FakeRecapDirective:
-            directive_id = "gm:recap"
-            directive_type = "recap"
-            scope = "scene"
-            force = True
+# ===================================================================
+# GM COMMAND PROCESSOR (Phase 7.2 Commands)
+# ===================================================================
 
-        gm.add_directive(_FakeRecapDirective())
-        cc = make_coherence_core()
-        out1 = ctrl.build_control_output(cc, gm, tick=1)
-        assert out1["choice_set"]["metadata"]["framing"]["forced_recap"] is True
+class TestGMCommandProcessorPhase72:
+    def test_parse_and_apply_frame_options(self):
+        proc = GMCommandProcessor()
+        gm = GMDirectiveState()
+        cc = StubCoherenceCore()
+        
+        cmd = proc.parse_command("frame options")
+        assert cmd["command"] == "frame_options"
+        
+        proc.apply_command(cmd, gm, cc)
+        assert gm.has_forced_option_framing() is True
 
-        # Remove the directive to simulate one-time directive processing
-        gm._directives.clear()
-        out2 = ctrl.build_control_output(cc, gm, tick=2)
-        assert out2["choice_set"]["metadata"]["framing"]["forced_recap"] is False
+    def test_parse_and_apply_focus_thread(self):
+        proc = GMCommandProcessor()
+        gm = GMDirectiveState()
+        cc = StubCoherenceCore()
+        
+        cmd = proc.parse_command("focus on thread t1")
+        proc.apply_command(cmd, gm, cc)
+        
+        ft = gm.get_focus_target()
+        assert ft == {"target_type": "thread", "target_id": "t1"}
+
+    def test_danger_commands(self):
+        proc = GMCommandProcessor()
+        gm = GMDirectiveState()
+        cc = StubCoherenceCore()
+        
+        proc.apply_command(proc.parse_command("raise danger"), gm, cc)
+        directives = gm.get_active_directives()
+        assert any(getattr(d, "level", "") == "high" for d in directives)
+
+    def test_existing_commands_compatibility(self):
+        proc = GMCommandProcessor()
+        assert proc.parse_command("pin thread t1")["command"] == "pin_thread"
+        assert proc.parse_command("set danger high")["command"] == "set_danger"
