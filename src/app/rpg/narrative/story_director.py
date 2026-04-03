@@ -17,6 +17,7 @@ Use EventBus for all cross-system communication.
 """
 
 from typing import Any, Dict, List, Optional
+import copy
 
 from ..core.event_bus import Event, EventBus
 
@@ -45,6 +46,7 @@ class StoryDirector:
         arc_manager: Optional[Any] = None,
         plot_engine: Optional[Any] = None,
         scene_engine: Optional[Any] = None,
+        coherence_core: Optional[Any] = None,
     ):
         """Initialize the StoryDirector.
 
@@ -52,19 +54,26 @@ class StoryDirector:
             arc_manager: Story arc manager. If None, uses DefaultArcManager.
             plot_engine: Plot engine for beat selection. If None, uses DefaultPlotEngine.
             scene_engine: Scene engine for scene generation. If None, uses DefaultSceneEngine.
+            coherence_core: Optional CoherenceCore instance.
         """
         self.arc_manager = arc_manager or DefaultArcManager()
         self.plot_engine = plot_engine or DefaultPlotEngine()
         self.scene_engine = scene_engine or DefaultSceneEngine()
+        self.coherence_core = coherence_core
 
         self._event_log: List[Dict[str, Any]] = []
         self._tick_count = 0
+        self.mode: str = "live"
+
+    def set_coherence_core(self, coherence_core: Any) -> None:
+        self.coherence_core = coherence_core
 
     def process(
         self,
         events: List[Event],
         player_intent: Dict[str, Any],
         event_bus: Any,
+        coherence_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Process events and player intent into narrative output.
 
@@ -85,26 +94,41 @@ class StoryDirector:
         self._tick_count += 1
 
         # 1. Analyze world state from events
-        world_state = self._analyze(events)
+        coherence_context = coherence_context or self._build_coherence_context()
+        world_state = self._analyze(events, coherence_context=coherence_context)
 
         # 2. Update story arcs
         active_arcs = self.arc_manager.update(world_state)
 
         # 3. Select next narrative beat
-        next_beat = self.plot_engine.select(active_arcs, player_intent)
+        try:
+            next_beat = self.plot_engine.select(active_arcs, player_intent, coherence_context=coherence_context)
+        except TypeError:
+            next_beat = self.plot_engine.select(active_arcs, player_intent)
+
+        if isinstance(next_beat, dict):
+            next_beat.setdefault("coherence", coherence_context)
 
         # Emit narrative beat selected event (structured event type)
         event_bus.emit(Event(
             "narrative_beat_selected",
             {
                 "beat": next_beat,
+                "coherence_scene_summary": coherence_context.get("scene_summary", {}),
+                "unresolved_thread_count": len(coherence_context.get("unresolved_threads", [])),
                 "tick": self._tick_count,
             },
             source="story_director"
         ))
 
         # 4. Generate scene
-        scene = self.scene_engine.generate(next_beat)
+        try:
+            scene = self.scene_engine.generate(next_beat, coherence_context=coherence_context)
+        except TypeError:
+            scene = self.scene_engine.generate(next_beat)
+
+        if isinstance(scene, dict):
+            scene.setdefault("coherence", coherence_context)
 
         # Emit scene_generated event with enhanced payload
         event_bus.emit(Event(
@@ -113,13 +137,36 @@ class StoryDirector:
                 "tick": self._tick_count,
                 "beat": next_beat,
                 "scene": scene,
+                "coherence_scene_summary": coherence_context.get("scene_summary", {}),
             },
             source="story_director"
         ))
 
         return scene
 
-    def _analyze(self, events: List[Event]) -> Dict[str, Any]:
+    def _build_coherence_context(self) -> Dict[str, Any]:
+        if self.coherence_core is None:
+            return {
+                "scene_summary": {},
+                "active_tensions": [],
+                "unresolved_threads": [],
+                "recent_consequences": [],
+                "last_good_anchor": None,
+                "contradictions": [],
+            }
+        return {
+            "scene_summary": self.coherence_core.get_scene_summary(),
+            "active_tensions": self.coherence_core.get_active_tensions(),
+            "unresolved_threads": self.coherence_core.get_unresolved_threads(),
+            "recent_consequences": self.coherence_core.get_recent_consequences(limit=5),
+            "last_good_anchor": self.coherence_core.get_last_good_anchor(),
+            "contradictions": [
+                c.to_dict()
+                for c in self.coherence_core.get_state().contradictions[-10:]
+            ],
+        }
+
+    def _analyze(self, events: List[Event], coherence_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Analyze events to produce a world state summary.
 
         Args:
@@ -141,9 +188,25 @@ class StoryDirector:
                 {"type": e.type, "payload": e.payload}
                 for e in events
             ],
+            "coherence": coherence_context or {},
             "event_count": len(events),
             "tick": self._tick_count,
         }
+
+    def serialize_state(self) -> Dict[str, Any]:
+        return {
+            "tick_count": self._tick_count,
+            "event_log": copy.deepcopy(self._event_log),
+            "mode": self.mode,
+        }
+
+    def deserialize_state(self, data: Dict[str, Any]) -> None:
+        self._tick_count = data.get("tick_count", 0)
+        self._event_log = copy.deepcopy(data.get("event_log", []))
+        self.mode = data.get("mode", "live")
+
+    def set_mode(self, mode: str) -> None:
+        self.mode = mode
 
     @property
     def tick_count(self) -> int:

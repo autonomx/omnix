@@ -1,0 +1,388 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from ..core.event_bus import Event
+from .models import CoherenceMutation
+
+
+def normalize_event(event: Any) -> dict:
+    if isinstance(event, Event):
+        return {
+            "type": event.type,
+            "payload": dict(event.payload or {}),
+            "event_id": event.event_id,
+            "tick": event.tick,
+            "source": event.source,
+        }
+    if isinstance(event, dict):
+        return {
+            "type": event.get("type"),
+            "payload": dict(event.get("payload", {}) or {}),
+            "event_id": event.get("event_id"),
+            "tick": event.get("tick") if "tick" in event else event.get("payload", {}).get("tick"),
+            "source": event.get("source"),
+        }
+    raise TypeError(f"Unsupported event type for coherence reducer: {type(event)!r}")
+
+
+def _event_text(event: dict) -> str:
+    payload = event.get("payload", {})
+    return (
+        payload.get("text")
+        or payload.get("summary")
+        or payload.get("description")
+        or event.get("type", "event")
+    )
+
+
+def _fact_mutation(
+    *,
+    target: str,
+    fact_id: str,
+    category: str,
+    subject: str,
+    predicate: str,
+    value: Any,
+    authority: str,
+    event: dict,
+    status: str = "confirmed",
+    confidence: float = 1.0,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> CoherenceMutation:
+    return CoherenceMutation(
+        action="upsert_fact",
+        target=target,
+        data={
+            "fact_id": fact_id,
+            "category": category,
+            "subject": subject,
+            "predicate": predicate,
+            "value": value,
+            "authority": authority,
+            "status": status,
+            "confidence": confidence,
+            "source_event_id": event.get("event_id"),
+            "tick_first_seen": event.get("tick"),
+            "tick_last_updated": event.get("tick"),
+            "metadata": metadata or {},
+        },
+    )
+
+
+def reduce_scene_started(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    mutations: List[CoherenceMutation] = []
+    location = payload.get("location")
+    if location:
+        mutations.append(
+            _fact_mutation(
+                target="scene",
+                fact_id="scene:location",
+                category="scene",
+                subject="scene",
+                predicate="location",
+                value=location,
+                authority="event_confirmed",
+                event=event,
+            )
+        )
+    summary = payload.get("summary") or payload.get("description") or "Scene started"
+    mutations.append(
+        CoherenceMutation(
+            action="push_anchor",
+            target="anchor",
+            data={
+                "anchor_id": f"anchor:{event.get('event_id') or event.get('tick')}",
+                "tick": event.get("tick"),
+                "location": location,
+                "present_actors": payload.get("present_actors", []),
+                "active_tensions": payload.get("active_tensions", []),
+                "unresolved_thread_ids": list(state.unresolved_threads.keys()),
+                "summary": summary,
+                "scene_fact_ids": ["scene:location"] if location else [],
+                "source_event_id": event.get("event_id"),
+                "metadata": {},
+            },
+        )
+    )
+    return mutations
+
+
+def reduce_scene_generated(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    scene = payload.get("scene", payload)
+    location = scene.get("location") or payload.get("location")
+    summary = (
+        scene.get("summary")
+        or scene.get("description")
+        or scene.get("narrative", {}).get("description")
+        if isinstance(scene.get("narrative"), dict)
+        else None
+    ) or payload.get("summary") or "Scene generated"
+
+    present = scene.get("present_actors") or scene.get("participants") or payload.get("participants", [])
+    tensions = scene.get("active_tensions") or payload.get("active_tensions", [])
+
+    mutations: List[CoherenceMutation] = []
+    if location:
+        mutations.append(
+            _fact_mutation(
+                target="scene",
+                fact_id="scene:location",
+                category="scene",
+                subject="scene",
+                predicate="location",
+                value=location,
+                authority="event_confirmed",
+                event=event,
+            )
+        )
+    mutations.append(
+        CoherenceMutation(
+            action="push_anchor",
+            target="anchor",
+            data={
+                "anchor_id": f"anchor:{event.get('event_id') or event.get('tick')}",
+                "tick": event.get("tick"),
+                "location": location,
+                "present_actors": present,
+                "active_tensions": tensions,
+                "unresolved_thread_ids": list(state.unresolved_threads.keys()),
+                "summary": summary,
+                "scene_fact_ids": ["scene:location"] if location else [],
+                "source_event_id": event.get("event_id"),
+                "metadata": {},
+            },
+        )
+    )
+    mutations.append(
+        CoherenceMutation(
+            action="record_consequence",
+            target="consequence",
+            data={
+                "consequence_id": f"cons:{event.get('event_id')}",
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+                "summary": summary,
+                "entity_ids": list(present),
+                "consequence_type": "scene_generated",
+                "metadata": {},
+            },
+        )
+    )
+    return mutations
+
+
+def reduce_npc_moved(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    npc_id = payload.get("npc_id") or payload.get("actor_id") or payload.get("entity_id")
+    location = payload.get("location") or payload.get("to")
+    if not npc_id or location is None:
+        return []
+    return [
+        _fact_mutation(
+            target="world",
+            fact_id=f"{npc_id}:location",
+            category="world",
+            subject=npc_id,
+            predicate="location",
+            value=location,
+            authority="event_confirmed",
+            event=event,
+        )
+    ]
+
+
+def reduce_relationship_changed(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    npc_id = payload.get("npc_id") or payload.get("source_id")
+    target_id = payload.get("target_id")
+    value = payload.get("relationship") or payload.get("delta")
+    if not npc_id or not target_id:
+        return []
+    return [
+        _fact_mutation(
+            target="world",
+            fact_id=f"rel:{npc_id}:{target_id}",
+            category="world",
+            subject=npc_id,
+            predicate=f"relationship:{target_id}",
+            value=value,
+            authority="event_confirmed",
+            event=event,
+        )
+    ]
+
+
+def reduce_item_acquired(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    actor_id = payload.get("actor_id") or payload.get("npc_id") or payload.get("owner_id")
+    item_id = payload.get("item_id") or payload.get("item")
+    if not actor_id or not item_id:
+        return []
+    return [
+        _fact_mutation(
+            target="world",
+            fact_id=f"item:{item_id}:owner",
+            category="world",
+            subject=item_id,
+            predicate="owner",
+            value=actor_id,
+            authority="event_confirmed",
+            event=event,
+        )
+    ]
+
+
+def reduce_item_lost(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    item_id = payload.get("item_id") or payload.get("item")
+    if not item_id:
+        return []
+    return [
+        _fact_mutation(
+            target="assumption",
+            fact_id=f"item:{item_id}:owner",
+            category="assumption",
+            subject=item_id,
+            predicate="owner",
+            value=None,
+            authority="event_confirmed",
+            event=event,
+            status="uncertain",
+        )
+    ]
+
+
+def reduce_thread_started(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    thread_id = payload.get("thread_id") or payload.get("quest_id") or f"thread:{event.get('event_id')}"
+    return [
+        CoherenceMutation(
+            action="upsert_thread",
+            target="thread",
+            data={
+                "thread_id": thread_id,
+                "title": payload.get("title") or payload.get("name") or _event_text(event),
+                "status": "unresolved",
+                "priority": payload.get("priority", "normal"),
+                "source_event_id": event.get("event_id"),
+                "opened_tick": event.get("tick"),
+                "updated_tick": event.get("tick"),
+                "resolved_tick": None,
+                "anchor_entity_ids": payload.get("entity_ids", []),
+                "notes": [payload.get("summary") or _event_text(event)],
+                "metadata": {},
+            },
+        )
+    ]
+
+
+def reduce_thread_resolved(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    thread_id = payload.get("thread_id") or payload.get("quest_id")
+    if not thread_id:
+        return []
+    return [
+        CoherenceMutation(
+            action="resolve_thread",
+            target="thread",
+            data={
+                "thread_id": thread_id,
+                "resolution_event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+            },
+        )
+    ]
+
+
+def reduce_commitment_created(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    actor_id = payload.get("actor_id") or payload.get("npc_id") or payload.get("source_id") or "unknown"
+    target_id = payload.get("target_id")
+    kind = payload.get("kind") or event["type"]
+    text = payload.get("text") or payload.get("summary") or _event_text(event)
+    commitment_id = payload.get("commitment_id") or f"commitment:{event.get('event_id')}"
+    return [
+        CoherenceMutation(
+            action="upsert_commitment",
+            target="commitment",
+            data={
+                "commitment_id": commitment_id,
+                "actor_id": actor_id,
+                "target_id": target_id,
+                "kind": kind,
+                "text": text,
+                "status": "active",
+                "source_event_id": event.get("event_id"),
+                "created_tick": event.get("tick"),
+                "updated_tick": event.get("tick"),
+                "broken_tick": None,
+                "metadata": {},
+            },
+        )
+    ]
+
+
+def reduce_commitment_broken(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    commitment_id = payload.get("commitment_id")
+    if not commitment_id:
+        return []
+    return [
+        CoherenceMutation(
+            action="break_commitment",
+            target="commitment",
+            data={
+                "commitment_id": commitment_id,
+                "breaking_event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+            },
+        )
+    ]
+
+
+def reduce_character_death(state: Any, event: dict) -> List[CoherenceMutation]:
+    payload = event["payload"]
+    entity_id = payload.get("npc_id") or payload.get("actor_id") or payload.get("entity_id") or payload.get("character_id")
+    if not entity_id:
+        return []
+    return [
+        _fact_mutation(
+            target="world",
+            fact_id=f"{entity_id}:alive",
+            category="world",
+            subject=entity_id,
+            predicate="alive",
+            value=False,
+            authority="event_confirmed",
+            event=event,
+        )
+    ]
+
+
+REDUCERS = {
+    "scene_started": reduce_scene_started,
+    "scene_generated": reduce_scene_generated,
+    "npc_moved": reduce_npc_moved,
+    "relationship_changed": reduce_relationship_changed,
+    "item_acquired": reduce_item_acquired,
+    "item_lost": reduce_item_lost,
+    "quest_started": reduce_thread_started,
+    "thread_started": reduce_thread_started,
+    "quest_completed": reduce_thread_resolved,
+    "thread_resolved": reduce_thread_resolved,
+    "promise_made": reduce_commitment_created,
+    "threat_made": reduce_commitment_created,
+    "promise_broken": reduce_commitment_broken,
+    "character_died": reduce_character_death,
+}
+
+
+def reduce_event(state: Any, event: dict) -> List[CoherenceMutation]:
+    normalized = normalize_event(event)
+    reducer = REDUCERS.get(normalized["type"])
+    if reducer is None:
+        return []
+    return reducer(state, normalized)

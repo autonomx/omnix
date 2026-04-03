@@ -89,7 +89,11 @@ class NPCSystem(Protocol):
 class StoryDirector(Protocol):
     """Protocol for story director implementations."""
     def process(
-        self, events: List[Event], intent: Dict[str, Any], event_bus: EventBus
+        self,
+        events: List[Event],
+        intent: Dict[str, Any],
+        event_bus: EventBus,
+        coherence_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Process events and intent into narrative output.
 
@@ -97,6 +101,7 @@ class StoryDirector(Protocol):
             events: Events collected from the EventBus.
             intent: The parsed player intent dictionary.
             event_bus: The shared EventBus for emitting narrative events.
+            coherence_context: Optional coherence context from CoherenceCore.
 
         Returns:
             Narrative data for scene rendering.
@@ -106,11 +111,14 @@ class StoryDirector(Protocol):
 
 class SceneRenderer(Protocol):
     """Protocol for scene rendering implementations."""
-    def render(self, narrative: Dict[str, Any]) -> Dict[str, Any]:
+    def render(
+        self, narrative: Dict[str, Any], coherence_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Render a scene from narrative data.
 
         Args:
             narrative: Narrative data from the StoryDirector.
+            coherence_context: Optional coherence context from CoherenceCore.
 
         Returns:
             Final scene data to present to the player.
@@ -253,6 +261,19 @@ class GameLoop:
             if system is not None and hasattr(system, "set_tool_runtime_recorder"):
                 system.set_tool_runtime_recorder(self.tool_runtime_recorder)
 
+        # PHASE 6.0 — CANONICAL COHERENCE CORE
+        from ..coherence import CoherenceCore
+        self.coherence_core = CoherenceCore()
+        self._snapshot_systems: List[str] = list(getattr(self, "_snapshot_systems", []))
+        if "coherence_core" not in self._snapshot_systems:
+            self._snapshot_systems.append("coherence_core")
+
+        # PHASE 6.0 — Inject coherence core into systems that can consume it
+        if hasattr(self.story_director, "set_coherence_core"):
+            self.story_director.set_coherence_core(self.coherence_core)
+        elif hasattr(self.story_director, "coherence_core"):
+            self.story_director.coherence_core = self.coherence_core
+
     def set_llm_recorder(self, recorder: Any) -> None:
         """
         Attach an LLM recorder for deterministic model replay.
@@ -292,6 +313,10 @@ class GameLoop:
             system = getattr(self, system_name, None)
             if system is not None and hasattr(system, "set_mode"):
                 system.set_mode(mode)
+        if hasattr(self, "coherence_core") and self.coherence_core is not None:
+            self.coherence_core.set_mode(mode)
+        if hasattr(self, "story_director") and hasattr(self.story_director, "set_coherence_core"):
+            self.story_director.set_coherence_core(self.coherence_core)
 
         # Primary mode propagation happens via system.set_mode() above.
         # The direct determinism mutation below is only a fallback for
@@ -408,12 +433,29 @@ class GameLoop:
                 for event in events:
                     self._on_event(event)
 
-            # 5. Narrative processing
-            narrative = self.story_director.process(events, intent, self.event_bus)
+            # 5. Canonical coherence updates
+            coherence_result = self._apply_coherence_updates(events)
+            coherence_context = self._build_director_context()
+            ctx.scene["coherence"] = coherence_result
 
-            # 6. Render scene
-            scene = self.scene_renderer.render(narrative)
+            # 6. Narrative processing
+            try:
+                narrative = self.story_director.process(
+                    events, intent, self.event_bus, coherence_context=coherence_context
+                )
+            except TypeError:
+                # Backwards compatibility for older directors
+                narrative = self.story_director.process(events, intent, self.event_bus)
+
+            # 7. Render scene
+            try:
+                scene = self.scene_renderer.render(narrative, coherence_context=coherence_context)
+            except TypeError:
+                scene = self.scene_renderer.render(narrative)
             ctx.scene = scene
+            if isinstance(scene, dict):
+                scene.setdefault("coherence", coherence_context)
+                scene.setdefault("coherence_contradictions", coherence_result.get("contradictions", []))
 
             # PHASE 2.5: Save snapshot at interval
             if self.snapshot_manager.should_snapshot(self._tick_count):
@@ -673,3 +715,27 @@ class GameLoop:
             )
 
         return engine.replay(events, up_to_tick=tick)
+
+    # -------------------------
+    # PHASE 6.0 — COHERENCE CORE
+    # -------------------------
+
+    def _apply_coherence_updates(self, events: List[Event]) -> Dict[str, Any]:
+        """Reduce tick events into canonical coherence state."""
+        if self.coherence_core is None:
+            return {"events_applied": 0, "mutations": [], "contradictions": []}
+        result = self.coherence_core.apply_events(events)
+        return result.to_dict()
+
+    def _build_director_context(self) -> Dict[str, Any]:
+        """Build coherence-aware context for director/renderer consumers."""
+        if self.coherence_core is None:
+            return {}
+        return {
+            "scene_summary": self.coherence_core.get_scene_summary(),
+            "active_tensions": self.coherence_core.get_active_tensions(),
+            "unresolved_threads": self.coherence_core.get_unresolved_threads(),
+            "recent_consequences": self.coherence_core.get_recent_consequences(limit=5),
+            "last_good_anchor": self.coherence_core.get_last_good_anchor(),
+            "contradictions": [c.to_dict() for c in self.coherence_core.get_state().contradictions[-10:]],
+        }
