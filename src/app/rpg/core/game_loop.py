@@ -276,6 +276,9 @@ class GameLoop:
         elif hasattr(self.story_director, "coherence_core"):
             self.story_director.coherence_core = self.coherence_core
 
+        # PHASE 7.0 — CREATOR / GM LAYER
+        self._init_creator_systems()
+
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
 
@@ -325,6 +328,13 @@ class GameLoop:
         # PHASE 6.5 — Propagate mode to recovery manager
         if hasattr(self, "recovery_manager") and self.recovery_manager is not None:
             self.recovery_manager.set_mode(mode)
+
+        # PHASE 7.0 — propagate creator/GM aware state
+        if hasattr(self, "story_director"):
+            if hasattr(self.story_director, "set_creator_canon_state"):
+                self.story_director.set_creator_canon_state(self.creator_canon_state)
+            if hasattr(self.story_director, "set_gm_directive_state"):
+                self.story_director.set_gm_directive_state(self.gm_directive_state)
 
         # Primary mode propagation happens via system.set_mode() above.
         # The direct determinism mutation below is only a fallback for
@@ -1043,3 +1053,72 @@ class GameLoop:
                 anchor = scene_summary
         if anchor:
             self.recovery_manager.record_last_good_anchor(anchor)
+
+    # -------------------------
+    # PHASE 7.0 — CREATOR / GM
+    # -------------------------
+
+    def _init_creator_systems(self) -> None:
+        from ..creator import (
+            CreatorCanonState,
+            GMDirectiveState,
+            RecapBuilder,
+            StartupGenerationPipeline,
+            GMCommandProcessor,
+        )
+
+        self.creator_canon_state = CreatorCanonState()
+        self.gm_directive_state = GMDirectiveState()
+        self.recap_builder = RecapBuilder()
+        self.gm_command_processor = GMCommandProcessor()
+        self.startup_generation_pipeline = StartupGenerationPipeline(
+            llm_gateway=self.llm_gateway if hasattr(self, "llm_gateway") else None,
+            coherence_core=self.coherence_core,
+            creator_canon_state=self.creator_canon_state,
+        )
+
+        for system_name in ("creator_canon_state", "gm_directive_state"):
+            if system_name not in self._snapshot_systems:
+                self._snapshot_systems.append(system_name)
+
+        if hasattr(self.story_director, "set_creator_canon_state"):
+            self.story_director.set_creator_canon_state(self.creator_canon_state)
+        if hasattr(self.story_director, "set_gm_directive_state"):
+            self.story_director.set_gm_directive_state(self.gm_directive_state)
+
+    def start_new_adventure(self, setup_data: dict) -> dict:
+        from ..creator import AdventureSetup
+
+        setup = AdventureSetup.from_dict(setup_data)
+        setup.validate()
+
+        generated = self.startup_generation_pipeline.generate(setup)
+        self.apply_creator_canon()
+        self.apply_gm_directives()
+        return {
+            "ok": True,
+            "setup": setup.to_dict(),
+            "generated": generated,
+            "canon_summary": self.get_canon_summary(),
+        }
+
+    def apply_creator_canon(self) -> None:
+        self.creator_canon_state.apply_to_coherence(self.coherence_core)
+
+    def apply_gm_directives(self) -> None:
+        self.gm_directive_state.apply_to_coherence(self.coherence_core)
+
+    def build_creator_context(self) -> dict:
+        return {
+            "canon": self.creator_canon_state.serialize_state(),
+            "gm": self.gm_directive_state.build_director_context(),
+        }
+
+    def get_recap(self) -> dict:
+        return self.recap_builder.build_session_recap(self.coherence_core, self.gm_directive_state)
+
+    def get_canon_summary(self) -> dict:
+        return self.recap_builder.build_canon_summary(self.coherence_core, self.creator_canon_state)
+
+    def get_unresolved_threads_summary(self) -> dict:
+        return self.recap_builder.build_unresolved_threads_summary(self.coherence_core)

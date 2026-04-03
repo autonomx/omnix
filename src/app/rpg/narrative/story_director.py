@@ -61,12 +61,20 @@ class StoryDirector:
         self.scene_engine = scene_engine or DefaultSceneEngine()
         self.coherence_core = coherence_core
 
+        self.creator_canon_state = None
+        self.gm_directive_state = None
         self._event_log: List[Dict[str, Any]] = []
         self._tick_count = 0
         self.mode: str = "live"
 
     def set_coherence_core(self, coherence_core: Any) -> None:
         self.coherence_core = coherence_core
+
+    def set_creator_canon_state(self, creator_canon_state: Any) -> None:
+        self.creator_canon_state = creator_canon_state
+
+    def set_gm_directive_state(self, gm_directive_state: Any) -> None:
+        self.gm_directive_state = gm_directive_state
 
     def set_recovery_manager(self, recovery_manager: Any) -> None:
         """Accept a recovery manager reference (Phase 6.5).
@@ -104,6 +112,8 @@ class StoryDirector:
         # 1. Analyze world state from events
         coherence_context = coherence_context or self._build_coherence_context()
         world_state = self._analyze(events, coherence_context=coherence_context)
+        world_state["creator"] = self._build_creator_context()
+        world_state["gm"] = self._build_gm_context()
 
         # 2. Update story arcs
         active_arcs = self.arc_manager.update(world_state)
@@ -173,6 +183,16 @@ class StoryDirector:
                 for c in self.coherence_core.get_state().contradictions[-10:]
             ],
         }
+
+    def _build_creator_context(self) -> Dict[str, Any]:
+        if self.creator_canon_state is None:
+            return {}
+        return self.creator_canon_state.serialize_state()
+
+    def _build_gm_context(self) -> Dict[str, Any]:
+        if self.gm_directive_state is None:
+            return {}
+        return self.gm_directive_state.build_director_context()
 
     def _analyze(self, events: List[Event], coherence_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Analyze events to produce a world state summary.

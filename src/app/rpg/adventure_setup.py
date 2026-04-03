@@ -1,3 +1,20 @@
+"""Compatibility wrapper for Phase 7 creator-driven adventure setup."""
+
+from __future__ import annotations
+
+from .creator import AdventureSetup, StartupGenerationPipeline
+
+
+class AdventureSetupService:
+    def build_setup(self, payload: dict) -> AdventureSetup:
+        setup = AdventureSetup.from_dict(payload)
+        setup.validate()
+        return setup
+
+    def start_adventure(self, setup: AdventureSetup, game_loop) -> dict:
+        return game_loop.start_new_adventure(setup.to_dict())
+
+
 class AdventureConfig:
     def __init__(self, theme="fantasy", difficulty="medium", player_background="hero"):
         self.theme = theme
@@ -62,3 +79,12 @@ def generate_world(config: AdventureConfig):
         world["lore"] = config.lore_elements
 
     return world
+
+
+__all__ = [
+    "AdventureConfig",
+    "AdventureSetup",
+    "AdventureSetupService",
+    "StartupGenerationPipeline",
+    "generate_world",
+]
