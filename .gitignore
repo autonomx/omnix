@@ -73,3 +73,16 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+# Model files - too large for git
+*.gguf
+*.gguf.bin
+resources/models/
+debug_*.wav
+*.exe
+*.rar
+src.zip
+voicebox/
+chatterbox/
+faster-qwen3-tts-main/
+tts/*.wav
