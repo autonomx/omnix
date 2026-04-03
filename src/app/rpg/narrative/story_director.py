@@ -68,6 +68,14 @@ class StoryDirector:
     def set_coherence_core(self, coherence_core: Any) -> None:
         self.coherence_core = coherence_core
 
+    def set_recovery_manager(self, recovery_manager: Any) -> None:
+        """Accept a recovery manager reference (Phase 6.5).
+
+        The director does not own recovery state; it merely holds a
+        reference so that the game loop can inject it if needed.
+        """
+        self._recovery_manager = recovery_manager
+
     def process(
         self,
         events: List[Event],

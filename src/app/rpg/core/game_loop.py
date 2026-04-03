@@ -47,6 +47,7 @@ from .event_bus import Event, EventBus
 from .snapshot_manager import SnapshotManager
 from .effects import EffectManager, EffectPolicy
 from .tool_runtime_boundary import ToolRuntimeRecorder
+from ..recovery.manager import RecoveryManager
 
 
 class TickPhase(Enum):
@@ -275,6 +276,9 @@ class GameLoop:
         elif hasattr(self.story_director, "coherence_core"):
             self.story_director.coherence_core = self.coherence_core
 
+        # PHASE 6.5 — RECOVERY MANAGER
+        self._init_recovery_manager()
+
     def set_llm_recorder(self, recorder: Any) -> None:
         """
         Attach an LLM recorder for deterministic model replay.
@@ -318,6 +322,9 @@ class GameLoop:
             self.coherence_core.set_mode(mode)
         if hasattr(self, "story_director") and hasattr(self.story_director, "set_coherence_core"):
             self.story_director.set_coherence_core(self.coherence_core)
+        # PHASE 6.5 — Propagate mode to recovery manager
+        if hasattr(self, "recovery_manager") and self.recovery_manager is not None:
+            self.recovery_manager.set_mode(mode)
 
         # Primary mode propagation happens via system.set_mode() above.
         # The direct determinism mutation below is only a fallback for
@@ -398,8 +405,8 @@ class GameLoop:
 
         self._tick_count += 1
 
-        # 1. Parse player intent
-        intent = self.intent_parser.parse(player_input)
+        # 1. Parse player intent (with recovery)
+        intent, parser_recovery = self._handle_parser_stage(player_input)
 
         # Build tick context
         ctx = TickContext(
@@ -416,6 +423,13 @@ class GameLoop:
         self.event_bus.set_tick(self._tick_count)
 
         try:
+            # If parser failed, return recovery scene directly
+            if parser_recovery is not None:
+                ctx.scene = parser_recovery
+                if self._on_post_tick:
+                    self._on_post_tick(ctx)
+                return parser_recovery
+
             # 2. Advance world simulation
             self.world.tick(self.event_bus)
 
@@ -439,20 +453,32 @@ class GameLoop:
             coherence_context = self._build_director_context()
             ctx.scene["coherence"] = coherence_result
 
-            # 6. Narrative processing
-            if self._callable_accepts_kwarg(self.story_director.process, "coherence_context"):
-                narrative = self.story_director.process(
-                    events, intent, self.event_bus, coherence_context=coherence_context
-                )
-            else:
-                narrative = self.story_director.process(events, intent, self.event_bus)
+            # PHASE 6.5: Check for high-severity contradictions
+            contradiction_scene = self._handle_high_severity_contradictions(
+                coherence_result, coherence_context
+            )
+            if contradiction_scene is not None:
+                ctx.scene = contradiction_scene
+                if self._on_post_tick:
+                    self._on_post_tick(ctx)
+                return contradiction_scene
 
-            # 7. Render scene
-            if self._callable_accepts_kwarg(self.scene_renderer.render, "coherence_context"):
-                scene = self.scene_renderer.render(narrative, coherence_context=coherence_context)
-            else:
-                scene = self.scene_renderer.render(narrative)
+            # 6. Narrative processing (with recovery)
+            narrative = self._handle_director_stage(
+                events, intent, coherence_context
+            )
+            if isinstance(narrative, dict) and narrative.get("metadata", {}).get("recovery"):
+                ctx.scene = narrative
+                if self._on_post_tick:
+                    self._on_post_tick(ctx)
+                return narrative
+
+            # 7. Render scene (with recovery)
+            scene = self._handle_renderer_stage(narrative, coherence_context)
             ctx.scene = scene
+
+            # PHASE 6.5: Update last good anchor on successful render
+            self._maybe_record_last_good_anchor(scene, coherence_context)
 
             # PHASE 2.5: Save snapshot at interval
             if self.snapshot_manager.should_snapshot(self._tick_count):
@@ -753,3 +779,131 @@ class GameLoop:
             "last_good_anchor": self.coherence_core.get_last_good_anchor(),
             "contradictions": [c.to_dict() for c in self.coherence_core.get_state().contradictions[-10:]],
         }
+
+    # -------------------------
+    # PHASE 6.5 — RECOVERY LAYER
+    # -------------------------
+
+    def _init_recovery_manager(self) -> None:
+        """Initialize the recovery manager and register for snapshots."""
+        self.recovery_manager = RecoveryManager()
+        if "recovery_manager" not in self._snapshot_systems:
+            self._snapshot_systems.append("recovery_manager")
+        # Inject into story director if it supports it
+        if hasattr(self.story_director, "set_recovery_manager"):
+            self.story_director.set_recovery_manager(self.recovery_manager)
+
+    def _handle_parser_stage(self, player_input: str) -> tuple:
+        """Parse player input with recovery on failure.
+
+        Returns:
+            (intent_dict, recovery_scene_or_None)
+        """
+        coherence_context = self._build_director_context()
+        try:
+            intent = self.intent_parser.parse(player_input)
+        except Exception as exc:
+            result = self.recovery_manager.handle_parser_failure(
+                player_input=player_input,
+                error=exc,
+                coherence_summary=coherence_context,
+                tick=self._tick_count,
+            )
+            return {}, result.scene
+
+        # Check for ambiguity signal in parser result
+        if isinstance(intent, dict) and intent.get("ambiguous"):
+            result = self.recovery_manager.handle_ambiguity(
+                player_input=player_input,
+                parser_result=intent,
+                coherence_summary=coherence_context,
+                tick=self._tick_count,
+            )
+            return intent, result.scene
+
+        return intent, None
+
+    def _handle_director_stage(
+        self,
+        events: List[Event],
+        intent: Dict[str, Any],
+        coherence_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run the director stage with recovery on failure."""
+        try:
+            if self._callable_accepts_kwarg(self.story_director.process, "coherence_context"):
+                narrative = self.story_director.process(
+                    events, intent, self.event_bus, coherence_context=coherence_context
+                )
+            else:
+                narrative = self.story_director.process(events, intent, self.event_bus)
+        except Exception as exc:
+            result = self.recovery_manager.handle_director_failure(
+                player_input=intent.get("text", ""),
+                error=exc,
+                coherence_summary=coherence_context,
+                tick=self._tick_count,
+            )
+            return result.scene
+
+        # Guard against empty / malformed director output
+        if not narrative or (isinstance(narrative, dict) and not narrative):
+            result = self.recovery_manager.handle_director_failure(
+                player_input=intent.get("text", ""),
+                error="Director returned empty output",
+                coherence_summary=coherence_context,
+                tick=self._tick_count,
+            )
+            return result.scene
+
+        return narrative
+
+    def _handle_renderer_stage(
+        self,
+        narrative: Dict[str, Any],
+        coherence_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run the renderer stage with recovery on failure."""
+        try:
+            if self._callable_accepts_kwarg(self.scene_renderer.render, "coherence_context"):
+                scene = self.scene_renderer.render(narrative, coherence_context=coherence_context)
+            else:
+                scene = self.scene_renderer.render(narrative)
+        except Exception as exc:
+            result = self.recovery_manager.handle_renderer_failure(
+                player_input="",
+                error=exc,
+                coherence_summary=coherence_context,
+                partial_narrative=narrative if isinstance(narrative, dict) else None,
+                tick=self._tick_count,
+            )
+            return result.scene
+        return scene
+
+    def _handle_high_severity_contradictions(
+        self,
+        coherence_result: Dict[str, Any],
+        coherence_context: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """If high-severity contradictions exist, produce a recovery scene."""
+        contradictions = coherence_result.get("contradictions", [])
+        if not contradictions:
+            return None
+        if not self.recovery_manager._has_high_severity_contradiction(contradictions):
+            return None
+        result = self.recovery_manager.handle_contradiction(
+            contradictions=contradictions,
+            coherence_summary=coherence_context,
+            tick=self._tick_count,
+        )
+        return result.scene
+
+    def _maybe_record_last_good_anchor(
+        self,
+        scene: Dict[str, Any],
+        coherence_context: Dict[str, Any],
+    ) -> None:
+        """After a successful render, update the last-good anchor."""
+        anchor = coherence_context.get("last_good_anchor")
+        if anchor and isinstance(anchor, dict):
+            self.recovery_manager.record_last_good_anchor(anchor)
