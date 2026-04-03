@@ -454,6 +454,11 @@ class GameLoop:
             else:
                 self.npc_system.update(intent, self.event_bus)
 
+            # 4.5 PHASE 7.0 — Emit pending GM inject-event directives BEFORE
+            # the tick event list is finalized so coherence sees them in the
+            # same reduction pass.
+            self._emit_pending_gm_events()
+
             # 4. Collect events (now with tick IDs injected)
             events = self.event_bus.collect()
             ctx.events = events
@@ -1086,6 +1091,48 @@ class GameLoop:
         if hasattr(self.story_director, "set_gm_directive_state"):
             self.story_director.set_gm_directive_state(self.gm_directive_state)
 
+    def _emit_pending_gm_events(self) -> None:
+        """Emit active GM inject-event directives into the EventBus deterministically.
+
+        This pass is intentionally simple:
+        - only inject-event directives are emitted
+        - scene-scoped directives are cleared only after successful emission
+        - emission happens through the normal EventBus path so downstream
+          coherence/director consumers see standard events
+        """
+        if not hasattr(self, "gm_directive_state") or self.gm_directive_state is None:
+            return
+
+        pending = self.gm_directive_state.get_pending_injected_events()
+        if not pending:
+            return
+
+        emitted_scene_scoped_ids: list[str] = []
+
+        for item in pending:
+            directive_id = item.get("directive_id")
+            scope = item.get("scope")
+            event_type = item.get("event_type")
+            payload = dict(item.get("payload", {}) or {})
+
+            if not event_type:
+                continue
+
+            self.event_bus.emit(
+                Event(
+                    event_type,
+                    payload,
+                    source="gm_directive",
+                )
+            )
+
+            if scope == "scene" and directive_id:
+                emitted_scene_scoped_ids.append(directive_id)
+
+        # Remove only those scene-scoped directives that were actually emitted.
+        if emitted_scene_scoped_ids:
+            self.gm_directive_state.remove_directives(emitted_scene_scoped_ids)
+
     def start_new_adventure(self, setup_data: dict) -> dict:
         from ..creator import AdventureSetup
 
@@ -1093,6 +1140,7 @@ class GameLoop:
         setup.validate()
 
         generated = self.startup_generation_pipeline.generate(setup)
+        # Canon is applied once here after the pipeline has populated creator state.
         self.apply_creator_canon()
         self.apply_gm_directives()
         return {

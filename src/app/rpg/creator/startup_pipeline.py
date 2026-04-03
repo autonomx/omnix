@@ -117,7 +117,8 @@ class StartupGenerationPipeline:
         for fact in creator_facts:
             self.creator_canon_state.add_fact(fact)
         self.creator_canon_state.setup_id = world_frame["setup_id"]
-        self.creator_canon_state.apply_to_coherence(self.coherence_core)
+        # Canon application is owned by GameLoop.start_new_adventure().
+        # This pipeline populates canonical creator state only.
 
         for faction in generated["seed_factions"]:
             self.coherence_core.insert_fact(

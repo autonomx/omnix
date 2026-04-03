@@ -1,4 +1,9 @@
-"""Compatibility wrapper for Phase 7 creator-driven adventure setup."""
+"""Compatibility wrapper for Phase 7 creator-driven adventure setup.
+
+NOTE:
+This module is compatibility-only.
+The authoritative setup path is app.rpg.creator.schema.AdventureSetup.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +21,7 @@ class AdventureSetupService:
 
 
 class AdventureConfig:
+    """Legacy setup model retained for backwards compatibility only."""
     def __init__(self, theme="fantasy", difficulty="medium", player_background="hero"):
         self.theme = theme
         self.difficulty = difficulty
@@ -31,10 +37,7 @@ class AdventureConfig:
 
 
 def generate_world(config: AdventureConfig):
-    """
-    Generate a world using LLM-driven worldbuilding.
-    Returns a world dict with factions, NPCs, locations, conflicts, and tensions.
-    """
+    """Legacy world generator retained for backwards compatibility only."""
     # Placeholder for LLM call - in real implementation, this would call an LLM
     # with prompts based on config.theme, config.difficulty, etc.
 

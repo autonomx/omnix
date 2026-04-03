@@ -57,6 +57,7 @@ class GMCommandProcessor:
     def command_restate_canon(self, gm_state: Any, coherence_core: Any) -> dict:
         return {
             "ok": True,
+            "note": "Deterministic GM command shim",
             "canon": coherence_core.get_scene_summary(),
             "gm": gm_state.build_director_context(),
         }
@@ -102,8 +103,11 @@ class GMCommandProcessor:
             directive_id="gm:keep_npc_alive",
             directive_type="pin_thread",
             scope="global",
-            thread_id="npc_survival",
-            metadata={"survival_required": True},
+            thread_id=command.get("thread_id", "npc_survival"),
+            metadata={
+                "survival_required": True,
+                "note": "Deterministic placeholder until entity-targeted GM commands are added",
+            },
         )
         gm_state.add_directive(directive)
         return {"ok": True, "directive_id": directive.directive_id}

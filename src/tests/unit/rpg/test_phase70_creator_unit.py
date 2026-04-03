@@ -943,3 +943,199 @@ class TestGMCommandProcessorApply:
             {"command": "unknown"}, self._gm_state(), self._core(),
         )
         assert result["ok"] is False
+
+
+# ===================================================================
+# 7. Canon Override Directive tests (Phase 70 fixpass)
+# ===================================================================
+
+class TestCanonOverrideDirectiveFixpass:
+    """Tests for the canon_override semantic fields fix."""
+
+    def test_canon_override_directive_applies_real_subject_and_predicate(self):
+        """CanonOverrideDirective should use explicit subject/predicate, not predicate='override'."""
+        state = GMDirectiveState()
+        state.add_directive(
+            CanonOverrideDirective(
+                directive_id="gm:override",
+                directive_type="canon_override",
+                fact_id="city:corruption",
+                subject="city",
+                predicate="corruption",
+                value="high",
+            )
+        )
+
+        mock = MockCoherenceCore()
+        state.apply_to_coherence(mock)
+
+        assert "city:corruption" in mock.facts
+        assert mock.facts["city:corruption"].subject == "city"
+        assert mock.facts["city:corruption"].predicate == "corruption"
+        assert mock.facts["city:corruption"].value == "high"
+
+    def test_canon_override_falls_back_to_fact_id_parsing(self):
+        """When subject/predicate not provided, parse from fact_id with ':' separator."""
+        state = GMDirectiveState()
+        state.add_directive(
+            CanonOverrideDirective(
+                directive_id="gm:override",
+                directive_type="canon_override",
+                fact_id="faction:power",
+                value=99,
+            )
+        )
+
+        mock = MockCoherenceCore()
+        state.apply_to_coherence(mock)
+
+        assert "faction:power" in mock.facts
+        assert mock.facts["faction:power"].subject == "faction"
+        assert mock.facts["faction:power"].predicate == "power"
+
+    def test_canon_override_single_fact_id_defaults_to_value(self):
+        """When fact_id has no ':' and no explicit fields, predicate defaults to 'value'."""
+        state = GMDirectiveState()
+        state.add_directive(
+            CanonOverrideDirective(
+                directive_id="gm:override",
+                directive_type="canon_override",
+                fact_id="world_state",
+                value="active",
+            )
+        )
+
+        mock = MockCoherenceCore()
+        state.apply_to_coherence(mock)
+
+        assert "world_state" in mock.facts
+        assert mock.facts["world_state"].subject == "world_state"
+        assert mock.facts["world_state"].predicate == "value"
+
+    def test_canon_override_metadata_includes_directive_type(self):
+        """Canon override facts should include directive_type in metadata."""
+        state = GMDirectiveState()
+        state.add_directive(
+            CanonOverrideDirective(
+                directive_id="gm:override",
+                directive_type="canon_override",
+                fact_id="city:corruption",
+                subject="city",
+                predicate="corruption",
+                value="high",
+            )
+        )
+
+        mock = MockCoherenceCore()
+        state.apply_to_coherence(mock)
+
+        fact = mock.facts["city:corruption"]
+        assert fact.metadata["directive_id"] == "gm:override"
+        assert fact.metadata["directive_type"] == "canon_override"
+
+
+# ===================================================================
+# 8. Inject Event Directive tests (Phase 70 fixpass)
+# ===================================================================
+
+class TestInjectEventDirectiveFixpass:
+    """Tests for inject-event directive being properly emitted."""
+
+    def test_get_pending_injected_events_returns_active_events(self):
+        """Active inject-event directives should be exposed as pending events."""
+        state = GMDirectiveState()
+        state.add_directive(
+            InjectEventDirective(
+                directive_id="gm:spawn",
+                directive_type="inject_event",
+                scope="scene",
+                event_type="npc_spawned",
+                payload={"npc_id": "merchant"},
+            )
+        )
+
+        pending = state.get_pending_injected_events()
+        assert pending == [
+            {
+                "directive_id": "gm:spawn",
+                "scope": "scene",
+                "event_type": "npc_spawned",
+                "payload": {"npc_id": "merchant"},
+            }
+        ]
+
+
+    def test_get_pending_injected_events_includes_directive_identity_and_scope(self):
+        state = GMDirectiveState()
+        state.add_directive(
+            InjectEventDirective(
+                directive_id="gm:event1",
+                directive_type="inject_event",
+                scope="global",
+                event_type="quest_started",
+                payload={"quest_id": "gm_q1", "title": "GM quest"},
+            )
+        )
+        pending = state.get_pending_injected_events()
+        assert len(pending) == 1
+        assert pending[0]["directive_id"] == "gm:event1"
+        assert pending[0]["scope"] == "global"
+        assert pending[0]["event_type"] == "quest_started"
+        assert pending[0]["payload"] == {"quest_id": "gm_q1", "title": "GM quest"}
+
+    def test_get_pending_injected_events_excludes_disabled(self):
+        """Disabled inject-event directives should not appear in pending events."""
+        state = GMDirectiveState()
+        d = InjectEventDirective(
+            directive_id="gm:spawn",
+            directive_type="inject_event",
+            scope="scene",
+            event_type="npc_spawned",
+            payload={"npc_id": "merchant"},
+            enabled=False,
+        )
+        state.add_directive(d)
+
+        pending = state.get_pending_injected_events()
+        assert pending == []
+
+    def test_get_pending_injected_events_deep_copies_payload(self):
+        """Payload should be deep-copied to prevent mutation."""
+        state = GMDirectiveState()
+        state.add_directive(
+            InjectEventDirective(
+                directive_id="gm:spawn",
+                directive_type="inject_event",
+                scope="scene",
+                event_type="npc_spawned",
+                payload={"npc": {"id": "merchant"}},
+            )
+        )
+
+        pending = state.get_pending_injected_events()
+        pending[0]["payload"]["npc"]["id"] = "CHANGED"
+
+        second_call = state.get_pending_injected_events()
+        assert second_call[0]["payload"]["npc"]["id"] == "merchant"
+
+    def test_keep_npc_alive_uses_command_thread_id(self):
+        """keep_npc_alive command should respect thread_id from command dict."""
+        proc = GMCommandProcessor()
+        gm = GMDirectiveState()
+        result = proc.apply_command(
+            {"command": "keep_npc_alive", "thread_id": "custom_thread"}, gm, MockCoherenceCore(),
+        )
+        assert result["ok"] is True
+        directive = gm.list_directives()[0]
+        assert directive.thread_id == "custom_thread"
+
+    def test_keep_npc_alive_includes_placeholder_note(self):
+        """keep_npc_alive should note this is a deterministic placeholder."""
+        proc = GMCommandProcessor()
+        gm = GMDirectiveState()
+        proc.apply_command(
+            {"command": "keep_npc_alive"}, gm, MockCoherenceCore(),
+        )
+        directive = gm.list_directives()[0]
+        assert "note" in directive.metadata
+        assert "deterministic placeholder" in directive.metadata["note"].lower()

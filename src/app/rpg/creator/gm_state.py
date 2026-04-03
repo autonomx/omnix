@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -41,6 +42,8 @@ class RetconDirective(GMDirective):
 @dataclass
 class CanonOverrideDirective(GMDirective):
     fact_id: str = ""
+    subject: str = ""
+    predicate: str = ""
     value: Any = None
 
 
@@ -91,6 +94,31 @@ class GMDirectiveState:
     def get_active_directives(self) -> list[GMDirective]:
         return [d for d in self.directives.values() if d.enabled]
 
+    def get_pending_injected_events(self) -> list[dict]:
+        """Return deterministic event payloads for active inject-event directives.
+
+        The GameLoop is responsible for actually emitting these into the EventBus.
+        Returned items include directive identity and scope so the loop can
+        clear only successfully emitted scene-scoped directives.
+        """
+        events: list[dict] = []
+        for directive in self.get_active_directives():
+            if isinstance(directive, InjectEventDirective):
+                events.append(
+                    {
+                        "directive_id": directive.directive_id,
+                        "scope": directive.scope,
+                        "event_type": directive.event_type,
+                        "payload": copy.deepcopy(directive.payload),
+                    }
+                )
+        return events
+
+    def remove_directives(self, directive_ids: list[str]) -> None:
+        """Remove a specific set of directives by id."""
+        for directive_id in directive_ids:
+            self.directives.pop(directive_id, None)
+
     def apply_to_coherence(self, coherence_core: Any) -> None:
         from ..coherence.models import FactRecord
 
@@ -109,16 +137,26 @@ class GMDirectiveState:
                     )
                 )
             elif isinstance(directive, CanonOverrideDirective):
+                subject = directive.subject or (
+                    directive.fact_id.split(":", 1)[0] if ":" in directive.fact_id else directive.fact_id
+                )
+                predicate = directive.predicate or (
+                    directive.fact_id.split(":", 1)[1] if ":" in directive.fact_id else "value"
+                )
                 coherence_core.upsert_fact(
                     FactRecord(
                         fact_id=directive.fact_id,
                         category="world",
-                        subject=directive.fact_id.split(":", 1)[0] if ":" in directive.fact_id else directive.fact_id,
-                        predicate="override",
+                        subject=subject,
+                        predicate=predicate,
                         value=directive.value,
                         authority="creator_canon",
                         status="confirmed",
-                        metadata={"directive_id": directive.directive_id, **directive.metadata},
+                        metadata={
+                            "directive_id": directive.directive_id,
+                            "directive_type": "canon_override",
+                            **directive.metadata,
+                        },
                     )
                 )
 
