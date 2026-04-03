@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .gm_state import (
     DangerDirective,
     InjectEventDirective,
     PinThreadDirective,
+    RevealDirective,
+    TargetFactionDirective,
+    TargetLocationDirective,
+    TargetNPCDirective,
     ToneDirective,
 )
 
@@ -14,6 +19,55 @@ class GMCommandProcessor:
     def parse_command(self, text: str) -> dict:
         raw = (text or "").strip()
         lowered = raw.lower()
+
+        # --- structured patterns (Phase 7.1) ---
+
+        m = re.match(r"pin thread\s+(\S+)", lowered)
+        if m:
+            return {"command": "pin_thread", "thread_id": m.group(1)}
+
+        m = re.match(r"keep npc\s+(\S+)\s+alive", lowered)
+        if m:
+            return {"command": "keep_npc_alive", "npc_id": m.group(1)}
+
+        m = re.match(r"target npc\s+(\S+)\s+(.*)", lowered)
+        if m:
+            return {"command": "target_npc", "npc_id": m.group(1), "instruction": m.group(2).strip()}
+
+        m = re.match(r"target faction\s+(\S+)\s+(.*)", lowered)
+        if m:
+            return {
+                "command": "target_faction",
+                "faction_id": m.group(1),
+                "instruction": m.group(2).strip(),
+            }
+
+        m = re.match(r"target location\s+(\S+)\s+(.*)", lowered)
+        if m:
+            return {
+                "command": "target_location",
+                "location_id": m.group(1),
+                "instruction": m.group(2).strip(),
+            }
+
+        m = re.match(r"reveal\s+(\S+)\s+(\S+)(?:\s+timing\s+(\S+))?", lowered)
+        if m:
+            return {
+                "command": "reveal",
+                "reveal_type": m.group(1),
+                "target_id": m.group(2),
+                "timing": m.group(3) or "soon",
+            }
+
+        m = re.match(r"set danger\s+(\S+)", lowered)
+        if m:
+            return {"command": "set_danger", "level": m.group(1)}
+
+        m = re.match(r"set tone\s+(.+)", lowered)
+        if m:
+            return {"command": "switch_tone", "tone": m.group(1).strip()}
+
+        # --- legacy patterns ---
 
         if lowered == "restate canon":
             return {"command": "restate_canon"}
@@ -52,7 +106,24 @@ class GMCommandProcessor:
             return self.command_turn_down_combat(command, gm_state, coherence_core)
         if name == "switch_tone":
             return self.command_switch_tone(command, gm_state, coherence_core)
+        # Phase 7.1 targeted commands
+        if name == "pin_thread":
+            return self.command_pin_thread(command, gm_state, coherence_core)
+        if name == "target_npc":
+            return self.command_target_npc(command, gm_state, coherence_core)
+        if name == "target_faction":
+            return self.command_target_faction(command, gm_state, coherence_core)
+        if name == "target_location":
+            return self.command_target_location(command, gm_state, coherence_core)
+        if name == "reveal":
+            return self.command_reveal(command, gm_state, coherence_core)
+        if name == "set_danger":
+            return self.command_set_danger(command, gm_state, coherence_core)
         return {"ok": False, "reason": "unknown_command"}
+
+    # ------------------------------------------------------------------
+    # Legacy command handlers
+    # ------------------------------------------------------------------
 
     def command_restate_canon(self, gm_state: Any, coherence_core: Any) -> dict:
         return {
@@ -99,13 +170,15 @@ class GMCommandProcessor:
         return {"ok": True, "directive_id": directive.directive_id}
 
     def command_keep_npc_alive(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        npc_id = command.get("npc_id", "")
         directive = PinThreadDirective(
-            directive_id="gm:keep_npc_alive",
+            directive_id=f"gm:keep_npc_alive:{npc_id}" if npc_id else "gm:keep_npc_alive",
             directive_type="pin_thread",
             scope="global",
             thread_id=command.get("thread_id", "npc_survival"),
             metadata={
                 "survival_required": True,
+                "npc_id": npc_id,
                 "note": "Deterministic placeholder until entity-targeted GM commands are added",
             },
         )
@@ -128,6 +201,86 @@ class GMCommandProcessor:
             directive_type="tone",
             scope="scene",
             tone=command.get("tone", "darker"),
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    # ------------------------------------------------------------------
+    # Phase 7.1 targeted command handlers
+    # ------------------------------------------------------------------
+
+    def command_pin_thread(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        thread_id = command.get("thread_id", "")
+        directive = PinThreadDirective(
+            directive_id=f"gm:pin_thread:{thread_id}",
+            directive_type="pin_thread",
+            scope="global",
+            thread_id=thread_id,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_target_npc(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        npc_id = command.get("npc_id", "")
+        instruction = command.get("instruction", "")
+        directive = TargetNPCDirective(
+            directive_id=f"gm:target_npc:{npc_id}",
+            directive_type="target_npc",
+            scope="global",
+            npc_id=npc_id,
+            instruction=instruction,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_target_faction(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        faction_id = command.get("faction_id", "")
+        instruction = command.get("instruction", "")
+        directive = TargetFactionDirective(
+            directive_id=f"gm:target_faction:{faction_id}",
+            directive_type="target_faction",
+            scope="global",
+            faction_id=faction_id,
+            instruction=instruction,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_target_location(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        location_id = command.get("location_id", "")
+        instruction = command.get("instruction", "")
+        directive = TargetLocationDirective(
+            directive_id=f"gm:target_location:{location_id}",
+            directive_type="target_location",
+            scope="global",
+            location_id=location_id,
+            instruction=instruction,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_reveal(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        reveal_type = command.get("reveal_type", "")
+        target_id = command.get("target_id", "")
+        timing = command.get("timing", "soon")
+        directive = RevealDirective(
+            directive_id=f"gm:reveal:{target_id}",
+            directive_type="reveal",
+            scope="global",
+            reveal_type=reveal_type,
+            target_id=target_id,
+            timing=timing,
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_set_danger(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        level = command.get("level", "medium")
+        directive = DangerDirective(
+            directive_id=f"gm:danger_{level}",
+            directive_type="danger",
+            scope="scene",
+            level=level,
         )
         gm_state.add_directive(directive)
         return {"ok": True, "directive_id": directive.directive_id}

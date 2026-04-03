@@ -30,6 +30,7 @@ class InjectEventDirective(GMDirective):
 @dataclass
 class PinThreadDirective(GMDirective):
     thread_id: str = ""
+    priority: str = "high"
 
 
 @dataclass
@@ -37,6 +38,7 @@ class RetconDirective(GMDirective):
     subject: str = ""
     predicate: str = ""
     value: Any = None
+    reason: str = ""
 
 
 @dataclass
@@ -45,6 +47,7 @@ class CanonOverrideDirective(GMDirective):
     subject: str = ""
     predicate: str = ""
     value: Any = None
+    reason: str = ""
 
 
 @dataclass
@@ -55,11 +58,38 @@ class PacingDirective(GMDirective):
 @dataclass
 class ToneDirective(GMDirective):
     tone: str = "neutral"
+    target_scope: str = "scene"
 
 
 @dataclass
 class DangerDirective(GMDirective):
     level: str = "medium"
+    target_scope: str = "scene"
+
+
+@dataclass
+class TargetNPCDirective(GMDirective):
+    npc_id: str = ""
+    instruction: str = ""
+
+
+@dataclass
+class TargetFactionDirective(GMDirective):
+    faction_id: str = ""
+    instruction: str = ""
+
+
+@dataclass
+class TargetLocationDirective(GMDirective):
+    location_id: str = ""
+    instruction: str = ""
+
+
+@dataclass
+class RevealDirective(GMDirective):
+    reveal_type: str = ""
+    target_id: str = ""
+    timing: str = "soon"
 
 
 DIRECTIVE_TYPES = {
@@ -70,6 +100,10 @@ DIRECTIVE_TYPES = {
     "pacing": PacingDirective,
     "tone": ToneDirective,
     "danger": DangerDirective,
+    "target_npc": TargetNPCDirective,
+    "target_faction": TargetFactionDirective,
+    "target_location": TargetLocationDirective,
+    "reveal": RevealDirective,
 }
 
 
@@ -168,6 +202,55 @@ class GMDirectiveState:
             "tone": [d.tone for d in active if isinstance(d, ToneDirective)],
             "danger": [d.level for d in active if isinstance(d, DangerDirective)],
             "pinned_threads": [d.thread_id for d in active if isinstance(d, PinThreadDirective)],
+        }
+
+    # ------------------------------------------------------------------
+    # Entity-targeted query helpers (Phase 7.1)
+    # ------------------------------------------------------------------
+
+    def find_directives_for_npc(self, npc_id: str) -> list[GMDirective]:
+        """Return all active directives that target a specific NPC."""
+        results: list[GMDirective] = []
+        for d in self.get_active_directives():
+            if isinstance(d, TargetNPCDirective) and d.npc_id == npc_id:
+                results.append(d)
+            elif isinstance(d, RevealDirective) and d.target_id == npc_id:
+                results.append(d)
+        return results
+
+    def find_directives_for_faction(self, faction_id: str) -> list[GMDirective]:
+        """Return all active directives that target a specific faction."""
+        results: list[GMDirective] = []
+        for d in self.get_active_directives():
+            if isinstance(d, TargetFactionDirective) and d.faction_id == faction_id:
+                results.append(d)
+            elif isinstance(d, RevealDirective) and d.target_id == faction_id:
+                results.append(d)
+        return results
+
+    def find_directives_for_location(self, location_id: str) -> list[GMDirective]:
+        """Return all active directives that target a specific location."""
+        results: list[GMDirective] = []
+        for d in self.get_active_directives():
+            if isinstance(d, TargetLocationDirective) and d.location_id == location_id:
+                results.append(d)
+            elif isinstance(d, RevealDirective) and d.target_id == location_id:
+                results.append(d)
+        return results
+
+    def build_ui_summary(self) -> dict:
+        """Return a UI-friendly summary of the current directive state."""
+        active = self.get_active_directives()
+        by_type: dict[str, list[dict]] = {}
+        for d in active:
+            dtype = d.directive_type
+            if dtype not in by_type:
+                by_type[dtype] = []
+            by_type[dtype].append(self._directive_to_dict(d))
+        return {
+            "total_directives": len(self.directives),
+            "active_directives": len(active),
+            "by_type": by_type,
         }
 
     def serialize_state(self) -> dict:
