@@ -1,212 +1,257 @@
-#!/usr/bin/env python3
-"""
-Test runner for Omnix application
-Runs all test suites including OpenAI API compatibility tests
-"""
+⚠️ CRITICAL GAPS (STILL NOT FULLY SOLVED)
 
-import sys
-import os
-import subprocess
-import argparse
-from pathlib import Path
+These are the ones that matter if you want to surpass Talemate, not just match it.
 
-# Add the project root and src to Python path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(project_root / 'src'))
+🔴 1. EventContext Is Not Enforced (BIGGEST ISSUE LEFT)
 
-def run_tests(test_type="all", verbose=True, coverage=False):
-    """
-    Run the test suite
-    
-    Args:
-        test_type (str): Type of tests to run ('all', 'unit', 'integration', 'openai')
-        verbose (bool): Whether to run tests in verbose mode
-        coverage (bool): Whether to run with coverage reporting
-    """
-    
-    # Test directories and files
-    test_files = {
-        "unit": [
-            "src/tests/unit/test_unit_backend.py",
-            "src/tests/unit/test_huggingface_url.py",
-        ],
-        "openai": [
-            "src/tests/api/sanity/test_openai_api.py",
-            "src/tests/api/regression/test_openai_compatibility.py"
-        ],
-        "integration": [
-<<<<<<< HEAD
-            "tests/test_openai_integration.py"
-        ],
-        "api": [
-            "src/tests/api"
-        ],
-        "healthcheck": [
-            "src/tests/api/healthcheck"
-        ],
-        "e2e": [
-            "src/tests/e2e"
-        ],
-=======
-            "src/tests/integration/test_openai_integration.py"
-        ],
-        "api": [
-            "src/tests/api/sanity/",
-            "src/tests/api/healthcheck/",
-            "src/tests/api/regression/"
-        ],
-        "e2e": [
-            "src/tests/e2e/"
-        ],
-        "healthcheck": [
-            "src/tests/api/healthcheck/"
-        ]
->>>>>>> cb63dc998e1562d350c6448678bc91ab0705136f
-    }
-    
-    # Determine which tests to run
-    if test_type == "all":
-        test_targets = test_files["unit"] + test_files["openai"] + test_files["integration"]
-<<<<<<< HEAD
-    elif test_type in test_files:
-        test_targets = test_files[test_type]
-=======
-    elif test_type == "unit":
-        test_targets = test_files["unit"]
-    elif test_type == "openai":
-        test_targets = test_files["openai"]
-    elif test_type == "integration":
-        test_targets = test_files["integration"]
-    elif test_type == "api":
-        test_targets = test_files["api"]
-    elif test_type == "e2e":
-        test_targets = test_files["e2e"]
-    elif test_type == "healthcheck":
-        test_targets = test_files["healthcheck"]
->>>>>>> cb63dc998e1562d350c6448678bc91ab0705136f
-    else:
-        print(f"Unknown test type: {test_type}")
-        return False
-    
-    # Build pytest command
-    cmd = ["python", "-m", "pytest"]
-    
-    if verbose:
-        cmd.append("-v")
-    
-    if coverage:
-        cmd.extend(["--cov=app", "--cov=openai_api", "--cov-report=html", "--cov-report=term"])
-    
-    # Add test files
-    cmd.extend(test_targets)
-    
-    print(f"Running tests: {test_type}")
-    print(f"Command: {' '.join(cmd)}")
-    print("=" * 60)
-    
-    # Run the tests
-    try:
-        result = subprocess.run(cmd, cwd=project_root, check=False)
-        return result.returncode == 0
-    except KeyboardInterrupt:
-        print("\nTests interrupted by user")
-        return False
-    except Exception as e:
-        print(f"Error running tests: {e}")
-        return False
+Right now:
 
-def check_dependencies():
-    """Check if required test dependencies are installed"""
-    required_packages = [
-        "pytest",
-        "pytest-cov",
-        "requests",
-        "fastapi",
-        "uvicorn"
-    ]
-    
-    missing_packages = []
-    
-    for package in required_packages:
-        try:
-            __import__(package.replace('-', '_'))
-        except ImportError:
-            missing_packages.append(package)
-    
-    if missing_packages:
-        print("Missing required packages:")
-        for package in missing_packages:
-            print(f"  - {package}")
-        print("\nInstall missing packages with:")
-        print(f"  pip install {' '.join(missing_packages)}")
-        return False
-    
-    return True
+emit(..., context=None)  # still allowed
 
-def main():
-    """Main test runner"""
-    parser = argparse.ArgumentParser(description="Run Omnix test suite")
-    parser.add_argument(
-        "--type", 
-<<<<<<< HEAD
-        choices=["all", "unit", "openai", "integration", "api", "healthcheck", "e2e"],
-=======
-        choices=["all", "unit", "openai", "integration", "api", "e2e", "healthcheck"],
->>>>>>> cb63dc998e1562d350c6448678bc91ab0705136f
-        default="all",
-        help="Type of tests to run (default: all)"
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Run tests with verbose output"
-    )
-    parser.add_argument(
-        "--no-verbose",
-        action="store_true",
-        help="Run tests without verbose output"
-    )
-    parser.add_argument(
-        "--coverage",
-        action="store_true",
-        help="Generate coverage report"
-    )
-    parser.add_argument(
-        "--check-deps",
-        action="store_true",
-        help="Check if required dependencies are installed"
-    )
-    
-    args = parser.parse_args()
-    
-    # Check dependencies if requested
-    if args.check_deps:
-        if not check_dependencies():
-            sys.exit(1)
-        print("All required dependencies are installed!")
-        return
-    
-    # Check dependencies
-    if not check_dependencies():
-        print("Please install missing dependencies before running tests.")
-        sys.exit(1)
-    
-    # Run tests
-    success = run_tests(
-        test_type=args.type,
-        verbose=not args.no_verbose,
-        coverage=args.coverage
-    )
-    
-    if success:
-        print("\n" + "=" * 60)
-        print("All tests passed!")
-        sys.exit(0)
-    else:
-        print("\n" + "=" * 60)
-        print("Some tests failed!")
-        sys.exit(1)
+And you say:
 
-if __name__ == "__main__":
-    main()
+“backward compatibility preserved”
+
+That’s actually dangerous.
+
+Why this is a problem
+
+You now have two causality systems:
+
+✅ Explicit (EventContext)
+❌ Implicit fallback (old behavior)
+
+This means:
+
+bugs will silently reintroduce bad parent chains
+different systems may mix both models
+✅ Fix (non-optional if you want correctness)
+
+Add strict mode:
+
+self._require_context: bool = True
+
+Then:
+
+if not replay and self._require_context and context is None:
+    raise ValueError("EventContext required for emit()")
+
+Or softer:
+
+log warning + metrics counter
+🔴 2. Context Is Not Propagated Automatically
+
+You showed:
+
+npc_system.update(ctx)
+world_system.tick(ctx)
+
+But nothing guarantees those systems:
+
+pass the context forward
+don’t mutate it incorrectly
+Problem
+
+You need context chaining, not just passing.
+
+Right now:
+
+ctx.parent_id = player_event
+
+But inside NPC system:
+
+multiple events happen
+which one becomes parent?
+✅ Fix: Context Forking
+
+Add:
+
+def child(self, event_id: str) -> "EventContext":
+    return EventContext(parent_id=event_id, tick=self.tick)
+
+Usage:
+
+npc_event = emit(...)
+npc_ctx = ctx.child(npc_event.event_id)
+
+# subsequent events use npc_ctx
+
+👉 This creates true causal trees, not flat branches.
+
+🔴 3. Branch Evaluation Is Still Naive
+
+You say:
+
+evaluate_branch(events)
+
+But what does it evaluate?
+
+Right now it’s likely:
+
+length
+simple heuristics
+
+That’s not enough.
+
+Missing: State-aware evaluation
+
+Branch scoring must consider:
+
+world_state
+npc_beliefs
+goals
+conflicts
+
+Otherwise:
+
+you’re scoring logs, not outcomes
+
+✅ Fix Direction
+
+Branch evaluation should:
+
+loop = replay_engine.simulate(events)
+score = evaluator.score(loop.state)
+
+NOT:
+
+score = evaluator.score(events)
+🔴 4. Simulation Mode Is Not Truly Isolated
+
+You say:
+
+simulate without rendering
+
+But unless you explicitly isolate:
+
+event_bus
+world state
+npc state
+
+You risk:
+
+👉 simulation mutating real timeline
+
+✅ Fix
+
+Simulation must:
+
+deepcopy(snapshot)
+replay in sandbox loop
+discard after
+
+Or:
+
+loop = factory(isolated=True)
+🔴 5. Snapshot Still Likely Incomplete (Be Honest Here)
+
+You added:
+
+timeline snapshot capture
+
+But based on your description, I don’t see confirmation you included:
+
+_seen_event_ids_set
+_seen_event_ids deque
+timeline graph nodes
+current_head pointer
+If missing → you still have:
+replay inconsistencies
+duplicate event bugs after load
+✅ Required Snapshot State
+{
+  timeline_nodes,
+  seen_event_ids_set,
+  seen_event_ids_queue,
+  current_head,
+}
+🔴 6. Query API Is Missing ONE Critical Primitive
+
+You added:
+
+by tick
+by actor
+causal chain
+
+But missing:
+
+❗ get_descendants(event_id)
+
+Right now you can go:
+
+backward (causal chain)
+
+But not:
+
+forward (impact)
+Why this matters
+
+AI reasoning needs:
+
+“if I do X, what does it affect?”
+
+✅ Add:
+def get_descendants(event_id) -> List[str]
+⚠️ MEDIUM GAPS
+7. Cycle Detection Cost
+
+Your:
+
+while current:
+
+→ O(depth) per insert
+
+Fine now, but:
+
+100k events → noticeable
+
+👉 Future: memoize ancestry or depth index
+
+8. Intent Events Are Not Enforced
+
+You added them, but:
+
+nothing requires systems to use them
+
+👉 You’ll end up with mixed event types again
+
+Fix
+
+Introduce:
+
+Event.type categories:
+- intent
+- action
+- state_change
+9. Branch Enumeration Is Weak
+
+You have:
+
+list_all_branches()
+
+But likely based on leaves.
+
+Missing:
+
+branch grouping by root decision
+pruning insignificant branches
+🧠 OVERALL VERDICT
+Where you are now:
+Area	Status
+Event sourcing	🟢 Strong
+Deterministic replay	🟢 Solid
+Causality model	🟡 Mostly correct
+Timeline DAG	🟢 Good
+Query system	🟢 Useful
+Branching	🟡 Functional
+Branch evaluation	🔴 Still shallow
+Simulation	🟡 Needs isolation
+🔥 THE REAL TRUTH
+
+You are now:
+
+Architecturally ahead of Talemate
+
+But not yet:
+
+Functionally superior in AI behavior

@@ -1,0 +1,233 @@
+"""PHASE 2.5 — SNAPSHOT MANAGER
+
+Provides snapshot-based state serialization for fast replay.
+
+Core capabilities:
+- Save game state at periodic intervals
+- Load game state from any saved snapshot
+- Find nearest snapshot before a target tick
+- Enable hybrid replay (snapshot + events) for O(1) state recovery
+
+Without snapshots, replay requires O(n) event processing from tick 0.
+With snapshots, replay becomes O(1) state load + O(m) events where m << n.
+
+Usage:
+    manager = SnapshotManager()
+    
+    # In game loop - save periodically
+    if tick % 50 == 0:
+        manager.save_snapshot(tick, loop)
+    
+    # For replay - find nearest snapshot and replay events after it
+    snapshot_tick = manager.nearest_snapshot(target_tick)
+    if snapshot_tick is not None:
+        manager.load_snapshot(snapshot_tick, loop)
+"""
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Protocol
+
+
+class SerializableSystem(Protocol):
+    """Protocol for systems that can be serialized/deserialized."""
+    
+    def serialize(self) -> Dict[str, Any]:
+        """Serialize system state to a dictionary.
+        
+        Returns:
+            Dictionary containing all system state data.
+        """
+        ...
+    
+    def deserialize(self, data: Dict[str, Any]) -> None:
+        """Restore system state from a dictionary.
+        
+        Args:
+            data: Dictionary containing serialized state data.
+        """
+        ...
+
+
+class GameLoopLike(Protocol):
+    """Protocol for game loop objects that support snapshot operations."""
+    
+    world: Optional[SerializableSystem]
+    npc_system: Optional[SerializableSystem]
+    
+
+@dataclass
+class Snapshot:
+    """A single game state snapshot at a specific tick.
+    
+    Attributes:
+        tick: The game tick number when this snapshot was taken.
+        world_state: Serialized world state (may be None if no world system).
+        npc_state: Serialized NPC system state (may be None if no NPC system).
+        extra_states: Additional system states keyed by name.
+    """
+    tick: int
+    world_state: Optional[Dict[str, Any]] = None
+    npc_state: Optional[Dict[str, Any]] = None
+    extra_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+
+class SnapshotManager:
+    """Manages game state snapshots for fast replay and save/load.
+    
+    This system enables O(1) state recovery by storing periodic snapshots
+    of the game state. Instead of replaying all events from tick 0, the
+    replay engine can:
+    
+    1. Find the nearest snapshot before the target tick
+    2. Load that snapshot to get the state at that point
+    3. Replay only the events after the snapshot tick
+    
+    This transforms replay from O(n) to O(1) + O(m) where m << n.
+    
+    Attributes:
+        _snapshots: Dictionary mapping tick number to Snapshot objects.
+        _snapshot_interval: How often to save snapshots (default 50 ticks).
+    """
+    
+    def __init__(self, snapshot_interval: int = 50):
+        """Initialize the SnapshotManager.
+        
+        Args:
+            snapshot_interval: Number of ticks between automatic snapshots.
+                              Default is 50 ticks.
+        """
+        self._snapshots: Dict[int, Snapshot] = {}
+        self._snapshot_interval = snapshot_interval
+    
+    def save_snapshot(self, tick: int, loop: Any) -> None:
+        """Save a snapshot of the current game state.
+        
+        Serializes all available systems into a Snapshot object and stores
+        it indexed by tick number.
+        
+        Args:
+            tick: The current game tick (used as snapshot key).
+            loop: The game loop object to serialize. Must have serializable
+                 systems like 'world', 'npc_system', etc.
+        """
+        snapshot = Snapshot(tick=tick)
+        
+        # Serialize world state if available
+        if hasattr(loop, "world") and loop.world is not None:
+            if hasattr(loop.world, "serialize"):
+                snapshot.world_state = loop.world.serialize()
+        
+        # Serialize NPC system state if available
+        if hasattr(loop, "npc_system") and loop.npc_system is not None:
+            if hasattr(loop.npc_system, "serialize"):
+                snapshot.npc_state = loop.npc_system.serialize()
+        
+        # Serialize any additional systems that declare serialize()
+        # This allows extensions to opt into snapshot support
+        for attr_name in getattr(loop, "_snapshot_systems", []):
+            system = getattr(loop, attr_name, None)
+            if system is not None and hasattr(system, "serialize"):
+                snapshot.extra_states[attr_name] = system.serialize()
+        
+        self._snapshots[tick] = snapshot
+    
+    def load_snapshot(self, tick: int, loop: Any) -> bool:
+        """Load a snapshot and restore game state.
+        
+        Restores all serialized system states from the snapshot into
+        the provided game loop object.
+        
+        Args:
+            tick: The tick number of the snapshot to load.
+            loop: The game loop object to restore state into.
+            
+        Returns:
+            True if snapshot was found and loaded, False otherwise.
+        """
+        snapshot = self._snapshots.get(tick)
+        if snapshot is None:
+            return False
+        
+        # Restore world state if available
+        if snapshot.world_state and hasattr(loop, "world") and loop.world is not None:
+            if hasattr(loop.world, "deserialize"):
+                loop.world.deserialize(snapshot.world_state)
+        
+        # Restore NPC system state if available
+        if snapshot.npc_state and hasattr(loop, "npc_system") and loop.npc_system is not None:
+            if hasattr(loop.npc_system, "deserialize"):
+                loop.npc_system.deserialize(snapshot.npc_state)
+        
+        # Restore any additional system states
+        for attr_name, state_data in snapshot.extra_states.items():
+            system = getattr(loop, attr_name, None)
+            if system is not None and hasattr(system, "deserialize"):
+                system.deserialize(state_data)
+        
+        return True
+    
+    def nearest_snapshot(self, tick: int) -> Optional[int]:
+        """Find the tick number of the nearest snapshot at or before the given tick.
+        
+        This is useful for hybrid replay: find the closest checkpoint,
+        load it, then replay events from that point.
+        
+        Args:
+            tick: The target tick to find a snapshot for.
+            
+        Returns:
+            The tick number of the nearest snapshot <= target tick,
+            or None if no such snapshot exists.
+        """
+        candidates = [t for t in self._snapshots if t <= tick]
+        return max(candidates) if candidates else None
+    
+    def has_snapshot(self, tick: int) -> bool:
+        """Check if a snapshot exists for the given tick.
+        
+        Args:
+            tick: The tick number to check.
+            
+        Returns:
+            True if a snapshot exists for the given tick.
+        """
+        return tick in self._snapshots
+    
+    def remove_snapshot(self, tick: int) -> bool:
+        """Remove a snapshot at the given tick.
+        
+        Args:
+            tick: The tick number of the snapshot to remove.
+            
+        Returns:
+            True if snapshot was removed, False if it didn't exist.
+        """
+        if tick in self._snapshots:
+            del self._snapshots[tick]
+            return True
+        return False
+    
+    def clear(self) -> None:
+        """Remove all snapshots and free memory."""
+        self._snapshots.clear()
+    
+    def snapshot_count(self) -> int:
+        """Return the number of snapshots currently stored."""
+        return len(self._snapshots)
+    
+    def snapshot_ticks(self) -> List[int]:
+        """Return a sorted list of all snapshot tick numbers."""
+        return sorted(self._snapshots.keys())
+    
+    def should_snapshot(self, tick: int) -> bool:
+        """Check if the current tick matches the snapshot interval.
+        
+        This is used by the game loop to know when to save a snapshot.
+        
+        Args:
+            tick: The current game tick.
+            
+        Returns:
+            True if a snapshot should be saved at this tick.
+        """
+        return tick > 0 and tick % self._snapshot_interval == 0

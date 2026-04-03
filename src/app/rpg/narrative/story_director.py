@@ -3,6 +3,11 @@
 PHASE 1 — STABILIZE Step 4:
 This is the SINGLE authority for narrative processing as specified in rpg-design.txt.
 
+PHASE 1.5 — ENFORCEMENT PATCH:
+- Added structured event types (narrative_beat_selected + scene_generated)
+- Added source field to events for system identity tracking
+- Enhanced event payloads with more debug info
+
 All other narrative directors (narrative_director.py, narrative_director_t18.py,
 director/director.py) are DEPRECATED and should route through this class.
 
@@ -88,16 +93,28 @@ class StoryDirector:
         # 3. Select next narrative beat
         next_beat = self.plot_engine.select(active_arcs, player_intent)
 
+        # Emit narrative beat selected event (structured event type)
+        event_bus.emit(Event(
+            "narrative_beat_selected",
+            {
+                "beat": next_beat,
+                "tick": self._tick_count,
+            },
+            source="story_director"
+        ))
+
         # 4. Generate scene
         scene = self.scene_engine.generate(next_beat)
 
-        # Emit narrative-level event
+        # Emit scene_generated event with enhanced payload
         event_bus.emit(Event(
             "scene_generated",
             {
                 "tick": self._tick_count,
                 "beat": next_beat,
-            }
+                "scene": scene,
+            },
+            source="story_director"
         ))
 
         return scene

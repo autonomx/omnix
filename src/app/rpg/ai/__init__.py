@@ -3,12 +3,14 @@
 from .behavior_driver import BehaviorDriver, BehaviorContext
 from .npc_actor import NPCActor, NPCGoal
 from .goal_generator import GoalGenerator
-from .planner import Planner
 from .strategy_profiles import STRATEGY_PROFILES, get_strategy_profile, get_strategy_bias, list_strategies
 from .intent_engine import IntentEngine
 from .opposition_engine import OppositionEngine
 from .decision import DecisionContext, DecisionEngine, ActionResolver
 from .goap import GOAPPlanner
+
+# Phase 4.5 exports
+from .branch_ai_evaluator import AIBranchEvaluator, BranchEvaluation
 
 __all__ = [
     "BehaviorDriver",
@@ -16,7 +18,6 @@ __all__ = [
     "NPCActor",
     "NPCGoal",
     "GoalGenerator",
-    "Planner",
     "STRATEGY_PROFILES",
     "get_strategy_profile",
     "get_strategy_bias",
@@ -28,4 +29,7 @@ __all__ = [
     "DecisionEngine",
     "ActionResolver",
     "GOAPPlanner",
+    # Phase 4.5
+    "AIBranchEvaluator",
+    "BranchEvaluation",
 ]

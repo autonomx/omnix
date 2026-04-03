@@ -1,167 +1,189 @@
-⚠️ LAST CRITICAL GAPS (Before Phase 2)
+🚨 THE CORE PROBLEM (WHY 2 TESTS FAIL)
+Your conclusion:
 
-These are not bugs — they are scaling risks.
+“expected behavior when counter is reset”
 
-❗ 1. _active_loop Is Not Safe Long-Term
-Problem
-_active_loop = None
+Reality:
 
-This:
+👉 Your system is not globally deterministic across runs
 
-breaks with async/multithreading later
-breaks with multiple sessions (you will need this)
-✅ FIX — CONTEXT-LOCAL LOOP (IMPORTANT)
-🔧 FILE: src/app/rpg/core/game_loop.py
-+ import contextvars
-🔁 REPLACE
-- _active_loop = None
-+ _active_loop_ctx = contextvars.ContextVar("active_game_loop", default=None)
-🔁 MODIFY tick()
-- if GameLoop._active_loop and GameLoop._active_loop is not self:
--     raise RuntimeError("Multiple GameLoop instances detected")
--
-- GameLoop._active_loop = self
-+ current = GameLoop._active_loop_ctx.get()
-+ if current and current is not self:
-+     raise RuntimeError("Multiple GameLoop instances detected in same context")
-+
-+ token = GameLoop._active_loop_ctx.set(self)
-➕ ADD FINALLY CLEANUP
-+ try:
-+     # existing tick logic
-+     ...
-+ finally:
-+     GameLoop._active_loop_ctx.reset(token)
+Because:
 
-👉 This makes your system:
+EventBus._global_event_counter
 
-future-proof for async
-safe for multiplayer sessions
-❗ 2. EventBus Enforcement Is Still Passive
+is:
+
+process-local
+reset on new run
+not tied to simulation state
+🔥 WHY THIS MATTERS
 
 Right now:
 
-assert_event_usage() = placeholder
+Run 1:
+evt_1, evt_2, evt_3
+Run 2:
+evt_1, evt_2, evt_3   (looks fine)
 
-✅ FIX — DETECT DIRECT CROSS-SYSTEM CALLS
-🔧 FILE: src/app/rpg/core/event_bus.py
-➕ ADD STRONGER CHECK
-+ import sys
-+    def assert_event_usage(self):
-+        if not self._enforce:
-+            return
-+
-+        stack = inspect.stack()
-+
-+        for frame in stack[2:]:  # skip emit + assert frames
-+            module = inspect.getmodule(frame[0])
-+            if not module:
-+                continue
-+
-+            name = module.__name__
-+
-+            # Allow core systems
-+            if name.startswith("app.rpg.core"):
-+                continue
-+
-+            # Detect suspicious direct calls
-+            if "npc" in name and "world" in name:
-+                raise RuntimeError(
-+                    f"Illegal cross-system call detected: {name}. "
-+                    "Use EventBus instead."
-+                )
+But:
 
-👉 This is still basic — but now it’s real enforcement, not a stub.
+Replay + branching / partial runs:
+IDs drift
+hashes diverge
+simulations become incomparable
 
-❗ 3. EventBus Is Write-Only (Missing Replay / Debug Power)
+👉 This breaks:
 
-Right now:
+branching timelines
+caching
+dedup across simulations
+multiplayer sync (future)
+🧨 ROOT ISSUE
 
-events are emitted
-then lost after collect()
-✅ FIX — ADD EVENT HISTORY (DEBUG SUPERPOWER)
-🔧 FILE: src/app/rpg/core/event_bus.py
-+        self._history: List[Event] = []
-     def emit(self, event: Event) -> None:
-         self.assert_event_usage()
-+        self._history.append(event)
-+    def history(self) -> List[Event]:
-+        return self._history[:]
+You made IDs deterministic per run, not:
 
-👉 This unlocks:
+deterministic per causal history
 
-replay
-debugging
-narrative causality tracking (later 🔥)
-❗ 4. StoryDirector Emits Only ONE Event Type
+✅ REAL FIX (NOT TEST FIX)
+👉 Event IDs must be derived, not generated
+🔧 FIX OPTION A — Causal Hash IDs (RECOMMENDED)
 
-Right now:
+Make event_id a function of:
 
-"scene_generated"
+(parent_id, type, payload, tick, seq)
+Patch
+--- src/app/rpg/core/event_bus.py
++++ src/app/rpg/core/event_bus.py
 
-👉 Too limited.
+Replace ID generation:
 
-✅ FIX — ADD STRUCTURED EVENT TYPES
-🔧 FILE: src/app/rpg/narrative/story_director.py
-+        event_bus.emit(Event("narrative_beat_selected", {
-+            "beat": next_beat,
-+            "tick": self._tick_count
-+        }))
-+        event_bus.emit(Event("scene_generated", {
-+            "tick": self._tick_count,
-+            "beat": next_beat,
-+            "scene": scene
-+        }))
+- self.event_id = EventBus.next_event_id()
++ self.event_id = EventBus.compute_event_id(self)
+Add:
+import hashlib
+import json
 
-👉 This is crucial for:
+@staticmethod
+def compute_event_id(event) -> str:
+    data = {
+        "type": event.type,
+        "payload": event.payload,
+        "parent": event.parent_id,
+        "tick": event.tick,
+    }
 
-debugging
-analytics
-future UI
-❗ 5. No System Identity (You Can’t Trace Who Did What)
+    serialized = json.dumps(data, sort_keys=True)
+    return hashlib.sha256(serialized.encode()).hexdigest()[:16]
+🔥 Result
 
-Right now events don’t include source system
+Now:
 
-✅ FIX — ADD source FIELD TO EVENT
-🔧 FILE: src/app/rpg/core/event_bus.py
- @dataclass
- class Event:
-     type: str
-     payload: Dict[str, Any] = field(default_factory=dict)
-+    source: Optional[str] = None
-UPDATE EMITS
+same input → same ID
+replay → identical IDs
+simulation branches → comparable
+no global counter needed
+⚠️ BUT: ONE MORE THING
 
-Example:
+You must include _seq only if needed
 
-event_bus.emit(Event(
-    "scene_generated",
-    {...},
-    source="story_director"
-))
+Otherwise:
 
-👉 This becomes critical in Phase 3+
+parallel events with same payload collide
+Safer version:
+"seq": getattr(event, "_seq", 0)
+🧠 ALTERNATIVE (OPTION B — Hybrid)
 
-❗ 6. No Tick ID in EventBus (Temporal Debugging Missing)
+If you want readability:
+
+evt_<tick>_<seq>_<short_hash>
+🚨 ISSUE 2 — CLOCK STILL LEAKS NON-DETERMINISM
+
+You did:
+
+default timestamp = 0.0
+
+That’s good for tests, but:
+
+👉 In real runtime:
+
+different clocks across loops
+drift between simulation vs live
 ✅ FIX
-🔧 FILE: game_loop.py
- events = self.event_bus.collect()
-BEFORE collecting:
-+ self.event_bus._current_tick = self._tick_count
-UPDATE EVENT EMIT
-+ event.payload["tick"] = getattr(self, "_current_tick", None)
 
-👉 Now every event is:
+Clock must be:
 
-timestamped
-traceable
-🏁 FINAL STATE AFTER THESE FIXES
+injected everywhere
+part of engine factory
+reset per run
+REQUIRED invariant:
+engine_factory(seed=X) → identical clock + identical IDs
+🚨 ISSUE 3 — REPLAY STILL NOT PURE
 
-You now have:
+You fixed ordering, but not side effects
 
-Capability	Level
-Execution control	✅ strict
-Communication	✅ enforced
-Debugging	🔥 advanced
-Replayability	🔥 enabled
-Multi-session future	✅ safe
-Observability	🔥 high
+Replay must guarantee:
+
+NO:
+- LLM calls
+- randomness
+- time progression
+✅ REQUIRED ADDITION
+
+In ReplayEngine:
+
++ loop.set_mode("replay")
+
+Then inside systems:
+
+if loop.mode == "replay":
+    return recorded_output
+🚨 ISSUE 4 — YOUR HASH IS STILL VULNERABLE
+
+Even with all fixes:
+
+If:
+
+dict ordering slips
+float precision varies
+payload mutation happens
+
+👉 hashes diverge
+
+✅ HARDENING PATCH
+
+Inside stable_serialize:
+
++ elif isinstance(obj, float):
++     return round(obj, 6)
+🚨 ISSUE 5 — YOUR TEST IS ACTUALLY CORRECT
+
+You said:
+
+“test design issue”
+
+No.
+
+👉 That test is doing its job:
+
+detecting that your system is not fully deterministic
+
+🧪 CORRECT EXPECTATION
+
+This should pass:
+
+assert compute_state_hash(loop1) == compute_state_hash(loop2)
+
+WITHOUT:
+
+manual IDs
+hacks
+resets
+🧠 BIG INSIGHT
+
+You’ve built:
+
+deterministic execution
+
+But not yet:
+
+deterministic identity
