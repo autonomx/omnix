@@ -23,10 +23,11 @@ After this implementation:
 
 ## Files Modified
 
-- `src/app/rpg/core/llm_recording.py` — Added `serialize_state()`/`deserialize_state()` to LLMRecorder; added `effect_manager` parameter and `_check_live_llm_allowed()` to `DeterministicLLMClient`
+- `src/app/rpg/core/llm_recording.py` — Added `serialize_state()`/`deserialize_state()` to LLMRecorder; added `effect_manager` parameter and `_check_live_llm_allowed()` to `DeterministicLLMClient`; added `_check_live_llm_allowed()` to `chat()` and `generate()` methods
 - `src/app/rpg/core/state_contracts.py` — Added `LLMRecorderAware` protocol
-- `src/app/rpg/core/snapshot_manager.py` — Added `llm_state` field; integrated LLM recorder serialization in save/load
+- `src/app/rpg/core/snapshot_manager.py` — Added `llm_state` field; integrated LLM recorder serialization in save/load; enhanced timeline state to include seen_event_ids, seq, current_tick; added LLM state restoration in load_snapshot
 - `src/app/rpg/core/__init__.py` — Exported `LLMGateway`, `LLMCallSpec`, `LLMRecorderAware`
+- `src/app/rpg/core/determinism.py` — Added `SeededRNG.getstate()`, `setstate()`, `serialize_state()`, `deserialize_state()` for snapshot support
 - `src/app/rpg/validation/state_boundary_validator.py` — Added `validate_llm_replay_safety()` method
 - `src/app/rpg/ai/branch_ai_evaluator.py` — Replaced raw LLM client usage with `LLMGateway`
 
@@ -46,6 +47,14 @@ In replay mode (`use_recorded_llm=True`), the `LLMRecorder.replay()` method rais
 
 ### Serializability
 `LLMRecorder.serialize_state()` and `LLMRecorder.deserialize_state()` enable the recorder state to be captured in snapshots and restored during replay, making deterministic state fully reconstructable.
+
+### SeededRNG Snapshot Support
+Added `getstate()`, `setstate()`, `serialize_state()`, `deserialize_state()` methods to `SeededRNG` class to enable RNG state to be captured in snapshots.
+
+### Snapshot Enhancements
+- Timeline state now includes `seen_event_ids`, `seq`, and `current_tick` for full event bus state restoration
+- Snapshot manager restores LLM recorder state on load
+- Snapshot manager handles dict-form timeline state restoration for enhanced timeline data
 
 ## Test Coverage
 
@@ -70,6 +79,11 @@ In replay mode (`use_recorded_llm=True`), the `LLMRecorder.replay()` method rais
 - `test_deterministic_llm_client_with_effect_manager` — Direct client gating works
 - `test_multiple_records_load_and_replay` — Bulk record operations work
 - `test_gateway_mode_switch_preserves_state` — Mode changes don't corrupt state
+
+## Commits
+
+1. `a7f9143` — Phase 5.6: LLM Boundary Hardening (initial implementation)
+2. `2e20024` — Phase 5.6 Fix#2: LLM boundary hardening fixes (effect manager in chat/generate, SeededRNG snapshot support)
 
 ## Code Diff
 See: `review-documents/rpg-phase56-llm-boundary-implementation-20260402-2052.diff`
