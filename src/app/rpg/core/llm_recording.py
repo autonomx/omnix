@@ -264,6 +264,7 @@ class DeterministicLLMClient:
         if getattr(self.det, "use_recorded_llm", False):
             return self.recorder.replay(messages, context, call_config)
 
+        self._check_live_llm_allowed(messages, context)
         if hasattr(self.inner, "chat"):
             response = self.inner.chat(messages)
         else:
@@ -302,6 +303,7 @@ class DeterministicLLMClient:
         if getattr(self.det, "use_recorded_llm", False):
             return self.recorder.replay(prompt, context, call_config)
 
+        self._check_live_llm_allowed(prompt, context)
         if hasattr(self.inner, "generate"):
             response = self.inner.generate(prompt)
         else:

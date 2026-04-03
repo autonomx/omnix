@@ -68,6 +68,20 @@ class SeededRNG:
     def shuffle(self, x) -> None:
         self._rng.shuffle(x)
 
+    def getstate(self):
+        """Expose underlying RNG state for snapshots."""
+        return self._rng.getstate()
+
+    def setstate(self, state) -> None:
+        """Restore underlying RNG state from snapshots."""
+        self._rng.setstate(state)
+
+    def serialize_state(self) -> Dict[str, Any]:
+        return {"state": self._rng.getstate(), "seed": self._seed}
+
+    def deserialize_state(self, state: Dict[str, Any]) -> None:
+        self._rng.setstate(state["state"])
+
 
 def stable_json(obj: Any) -> str:
     """Deterministic JSON serialization."""

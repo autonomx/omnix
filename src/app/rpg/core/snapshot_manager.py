@@ -144,7 +144,12 @@ class SnapshotManager:
         if hasattr(loop, "event_bus") and hasattr(loop.event_bus, "timeline"):
             timeline = loop.event_bus.timeline
             if hasattr(timeline, "serialize_state"):
-                snapshot.timeline_state = timeline.serialize_state()
+                snapshot.timeline_state = {
+                    "timeline": timeline.serialize_state(),
+                    "seen_event_ids": list(getattr(loop.event_bus, "_seen_event_ids", [])),
+                    "seq": getattr(loop.event_bus, "_seq", 0),
+                    "current_tick": getattr(loop.event_bus, "_current_tick", None),
+                }
         
         if hasattr(loop, "effect_manager") and hasattr(loop.effect_manager, "serialize_state"):
             snapshot.effect_state = loop.effect_manager.serialize_state()
@@ -209,10 +214,26 @@ class SnapshotManager:
         if snapshot.timeline_state and hasattr(loop, "event_bus") and hasattr(loop.event_bus, "timeline"):
             timeline = loop.event_bus.timeline
             if hasattr(timeline, "deserialize_state"):
-                timeline.deserialize_state(snapshot.timeline_state)
+                ts = snapshot.timeline_state
+                if isinstance(ts, dict) and "timeline" in ts:
+                    timeline.deserialize_state(ts.get("timeline", {}))
+                else:
+                    timeline.deserialize_state(ts)
+            if hasattr(loop.event_bus, "_seen_event_ids"):
+                from collections import deque
+                maxlen = getattr(loop.event_bus._seen_event_ids, "maxlen", 100000)
+                restored_seen = snapshot.timeline_state.get("seen_event_ids", [])
+                loop.event_bus._seen_event_ids = deque(restored_seen, maxlen=maxlen)
+                loop.event_bus._seen_event_ids_set = set(restored_seen)
+            if hasattr(loop.event_bus, "_seq"):
+                loop.event_bus._seq = snapshot.timeline_state.get("seq", 0)
+            if hasattr(loop.event_bus, "_current_tick"):
+                loop.event_bus._current_tick = snapshot.timeline_state.get("current_tick", None)
 
         if snapshot.rng_state and hasattr(loop, "rng") and hasattr(loop.rng, "setstate"):
             loop.rng.setstate(snapshot.rng_state["state"])
+        elif snapshot.rng_state and hasattr(loop, "rng") and hasattr(loop.rng, "deserialize_state"):
+            loop.rng.deserialize_state(snapshot.rng_state)
 
         if snapshot.effect_state and hasattr(loop, "effect_manager"):
             if hasattr(loop.effect_manager, "deserialize_state"):
@@ -221,6 +242,10 @@ class SnapshotManager:
         if snapshot.planner_state and hasattr(loop, "npc_planner") and loop.npc_planner is not None:
             if hasattr(loop.npc_planner, "deserialize_state"):
                 loop.npc_planner.deserialize_state(snapshot.planner_state)
+
+        if snapshot.llm_state and hasattr(loop, "llm_recorder") and loop.llm_recorder is not None:
+            if hasattr(loop.llm_recorder, "deserialize_state"):
+                loop.llm_recorder.deserialize_state(snapshot.llm_state)
         
         # Restore any additional system states
         for attr_name, state_data in snapshot.extra_states.items():
