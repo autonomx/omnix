@@ -46,7 +46,6 @@ from .event_bus import Event, EventBus
 from .snapshot_manager import SnapshotManager
 from .effects import EffectManager, EffectPolicy
 from .tool_runtime_boundary import ToolRuntimeRecorder
-from ..coherence import CoherenceCore
 
 
 class TickPhase(Enum):
@@ -263,6 +262,7 @@ class GameLoop:
                 system.set_tool_runtime_recorder(self.tool_runtime_recorder)
 
         # PHASE 6.0 — CANONICAL COHERENCE CORE
+        from ..coherence import CoherenceCore
         self.coherence_core = CoherenceCore()
         self._snapshot_systems: List[str] = list(getattr(self, "_snapshot_systems", []))
         if "coherence_core" not in self._snapshot_systems:
