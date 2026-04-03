@@ -20,7 +20,12 @@ class ConsequenceBuilder:
         mapped_action: dict,
         coherence_core: Any,
         gm_state: Any,
+        evaluation: dict | None = None,
     ) -> list[ActionConsequence]:
+        evaluation = evaluation or {"outcome": "success", "intensity": "medium", "modifiers": []}
+        if evaluation.get("outcome") == "blocked":
+            return self._build_blocked_consequences(mapped_action, coherence_core, evaluation)
+
         resolution_type = mapped_action.get("resolution_type", "")
         builder = {
             "thread_progress": self._build_thread_progress_consequences,
@@ -124,3 +129,31 @@ class ConsequenceBuilder:
             payload=dict(payload),
             metadata=dict(metadata or {}),
         )
+
+    # ------------------------------------------------------------------
+    # Blocked consequence builder
+    # ------------------------------------------------------------------
+
+    def _build_blocked_consequences(
+        self,
+        mapped_action: dict,
+        coherence_core: Any,
+        evaluation: dict,
+    ) -> list[ActionConsequence]:
+        target_id = mapped_action.get("target_id")
+        intent_type = mapped_action.get("intent_type", "unknown")
+        reason = ",".join(evaluation.get("modifiers", []) or []) or "constraints_not_met"
+        return [
+            self._make_consequence(
+                consequence_id=f"blocked:{intent_type}:{target_id or 'none'}",
+                consequence_type="action_blocked",
+                summary=f"Action '{intent_type}' could not proceed.",
+                event_type="action_blocked",
+                payload={
+                    "intent_type": intent_type,
+                    "target_id": target_id,
+                    "reason": reason,
+                },
+                metadata={"evaluation": dict(evaluation)},
+            )
+        ]

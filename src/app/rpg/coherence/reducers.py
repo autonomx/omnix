@@ -480,6 +480,29 @@ def reduce_recap_requested(state: Any, event: dict) -> List[CoherenceMutation]:
     ]
 
 
+def reduce_action_blocked(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Record that an action was blocked without mutating canonical truth directly."""
+    payload = event["payload"]
+    intent_type = payload.get("intent_type", "unknown")
+    target_id = payload.get("target_id")
+    reason = payload.get("reason", "unknown")
+    return [
+        CoherenceMutation(
+            action="record_consequence",
+            target="consequence",
+            data={
+                "consequence_id": f"blocked:{intent_type}:{target_id or 'none'}:{event.get('tick')}",
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+                "summary": f"Action '{intent_type}' was blocked ({reason}).",
+                "entity_ids": [target_id] if target_id else [],
+                "consequence_type": "action_blocked",
+                "metadata": {"reason": reason},
+            },
+        )
+    ]
+
+
 REDUCERS = {
     "scene_started": reduce_scene_started,
     "scene_generated": reduce_scene_generated,
@@ -500,6 +523,7 @@ REDUCERS = {
     "npc_interaction_started": reduce_npc_interaction_started,
     "scene_transition_requested": reduce_scene_transition_requested,
     "recap_requested": reduce_recap_requested,
+    "action_blocked": reduce_action_blocked,
 }
 
 

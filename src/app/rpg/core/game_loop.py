@@ -1268,6 +1268,9 @@ class GameLoop:
 
         Re-uses the same event data rather than constructing new Event objects,
         since coherence reducers accept both Event and dict forms.
+
+        TODO Phase 7.4: unify action event emission and coherence application into
+        a single authoritative event-processing path so emit/apply cannot diverge.
         """
         raw_events = result.get("events", [])
         if raw_events and self.coherence_core is not None:

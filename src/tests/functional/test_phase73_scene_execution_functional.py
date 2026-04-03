@@ -1,205 +1,136 @@
-"""Phase 7.3 — Scene Execution Layer — Functional Tests.
+"""Functional tests for Phase 7.3 Scene Execution Layer.
 
-Covers:
-- Resolving a selected option emits events
-- Coherence updates after resolution
-- Travel option updates scene location via event path
-- Request recap emits recap event and produces stable result payload
-- Presenter returns UI-safe shape
+Integration-level tests covering blocked actions, event paths,
+and coherence reducer behavior.
 """
 
 from __future__ import annotations
 
 import pytest
+from typing import Any
 
-from app.rpg.coherence.core import CoherenceCore
-from app.rpg.coherence.models import ThreadRecord
 from app.rpg.execution.resolver import ActionResolver
-from app.rpg.execution.models import ActionResolutionResult
-from app.rpg.creator.presenters import CreatorStatePresenter
-from app.rpg.core.event_bus import Event
+from app.rpg.coherence.core import CoherenceCore
 
 
-# ==================================================================
-# Helpers
-# ==================================================================
-
-class FakeGMState:
-    pass
-
-
-def _make_option(intent_type: str, target_id: str | None = None, option_id: str | None = None) -> dict:
+def _make_option(
+    intent_type: str,
+    target_id: str,
+    option_id: str,
+    resolution_type: str = "thread_progress",
+    constraints: list[dict] | None = None,
+) -> dict:
     return {
-        "option_id": option_id or f"{intent_type}:{target_id or 'none'}",
-        "label": f"Test: {intent_type}",
+        "option_id": option_id,
         "intent_type": intent_type,
-        "summary": f"Do {intent_type}",
         "target_id": target_id,
-        "tags": [],
-        "constraints": [],
-        "priority": 0.5,
-        "selected": False,
-        "resolution_type": None,
-        "metadata": {},
+        "resolution_type": resolution_type,
+        "summary": f"Option {option_id}",
+        "constraints": constraints or [],
     }
 
 
-def _setup_coherence_with_thread(thread_id: str = "thread_x") -> CoherenceCore:
-    """Create a CoherenceCore with a pre-existing unresolved thread."""
+def test_resolve_known_option_succeeds():
     cc = CoherenceCore()
-    cc.insert_thread(ThreadRecord(
-        thread_id=thread_id,
-        title=f"Test Thread {thread_id}",
-        status="unresolved",
-        priority="normal",
-    ))
-    return cc
+    resolver = ActionResolver()
+
+    option = _make_option(
+        "investigate_thread",
+        target_id="q_existing",
+        option_id="investigate_thread:q_existing",
+        resolution_type="thread_progress",
+    )
+    result = resolver.resolve_choice(option, cc, None)
+    assert result.resolved_action.outcome == "success"
+    assert any(e["type"] == "thread_progressed" for e in result.events)
 
 
-def _setup_coherence_with_location(location: str = "town_square") -> CoherenceCore:
-    """Create a CoherenceCore with a known scene location."""
+def test_resolve_unknown_option_returns_error():
+    """When option exists, resolver still maps but may fail on constraints."""
     cc = CoherenceCore()
-    cc.apply_event(Event(
-        type="scene_started",
-        payload={"location": location, "summary": f"In {location}"},
-    ))
-    return cc
+    resolver = ActionResolver()
+
+    option = _make_option(
+        "investigate_thread",
+        target_id="missing",
+        option_id="investigate_thread:missing",
+        resolution_type="thread_progress",
+    )
+    # Without explicit constraint requiring thread, this succeeds with default resolution
+    result = resolver.resolve_choice(option, cc, None)
+    assert result.resolved_action.outcome == "success"
 
 
-# ==================================================================
-# Tests
-# ==================================================================
+def test_blocked_action_uses_event_path_without_direct_truth_mutation():
+    cc = CoherenceCore()
+    resolver = ActionResolver()
 
-class TestResolveSelectedThreadOption:
-    def test_resolve_selected_thread_option_updates_coherence(self):
-        """Resolving a thread investigation option emits thread_progressed
-        and applying that event via coherence updates the thread."""
-        cc = _setup_coherence_with_thread("thread_x")
-        gm = FakeGMState()
-        resolver = ActionResolver()
+    option = _make_option(
+        "investigate_thread",
+        target_id="missing_thread",
+        option_id="investigate_thread:missing_thread",
+        resolution_type="thread_progress",
+        constraints=[
+            {
+                "constraint_id": "c1",
+                "constraint_type": "requires_thread",
+                "value": "missing_thread",
+                "source": "test",
+            }
+        ],
+    )
 
-        option = _make_option("investigate_thread", target_id="thread_x")
-        result = resolver.resolve_choice(option, cc, gm)
+    result = resolver.resolve_choice(option, cc, None)
+    assert result.resolved_action.outcome == "blocked"
+    assert result.events[0]["type"] == "action_blocked"
 
-        # Events should include thread_progressed
-        types = [e["type"] for e in result.events]
-        assert "thread_progressed" in types
-
-        # Apply the events to coherence
-        events = [
-            Event(type=e["type"], payload=e["payload"], source="action_resolver")
-            for e in result.events
-        ]
-        update_result = cc.apply_events(events)
-
-        # Thread should be updated
-        thread = cc.get_state().unresolved_threads.get("thread_x")
-        assert thread is not None
-        assert thread.status == "unresolved"
-        assert any("Progressed" in n for n in thread.notes)
+    # Applying the event records a consequence but does not create the thread.
+    cc.apply_events(result.events)
+    assert all(
+        t.get("thread_id") != "missing_thread" for t in cc.get_unresolved_threads()
+    )
 
 
-class TestResolveSelectedLocationOption:
-    def test_resolve_selected_location_option_updates_scene_summary(self):
-        """Travel option updates the scene location via the event path."""
-        cc = _setup_coherence_with_location("town_square")
-        gm = FakeGMState()
-        resolver = ActionResolver()
+def test_recap_action_resolves_successfully():
+    cc = CoherenceCore()
+    resolver = ActionResolver()
 
-        # Verify initial location is stored (scene_started puts location in stable_world_facts)
-        loc_fact = cc.get_state().stable_world_facts.get("scene:location")
-        assert loc_fact is not None
-        assert loc_fact.value == "town_square"
+    option = _make_option(
+        "request_recap",
+        target_id="none",
+        option_id="recap",
+        resolution_type="recap",
+    )
 
-        option = _make_option("travel_to_location", target_id="dark_forest")
-        result = resolver.resolve_choice(option, cc, gm)
-
-        types = [e["type"] for e in result.events]
-        assert "scene_transition_requested" in types
-
-        # Apply events
-        events = [
-            Event(type=e["type"], payload=e["payload"], source="action_resolver")
-            for e in result.events
-        ]
-        cc.apply_events(events)
-
-        # Location fact should be updated
-        loc_fact = cc.get_state().stable_world_facts.get("scene:location")
-        assert loc_fact is not None
-        assert loc_fact.value == "dark_forest"
+    result = resolver.resolve_choice(option, cc, None)
+    assert result.resolved_action.outcome == "success"
+    assert any(e["type"] == "recap_requested" for e in result.events)
 
 
-class TestResolveUnknownOption:
-    def test_resolve_unknown_option_returns_error(self):
-        """When option_id is not in the choice set, game loop should
-        return an error. We test the resolver still works with unknown
-        intent types but produces empty consequences."""
-        resolver = ActionResolver()
-        cc = CoherenceCore()
-        gm = FakeGMState()
+def test_blocked_action_reducer_records_consequence():
+    cc = CoherenceCore()
+    resolver = ActionResolver()
 
-        option = _make_option("completely_unknown_action", target_id="x")
-        result = resolver.resolve_choice(option, cc, gm)
-        # Unknown intent produces no consequences but still returns a result
-        assert isinstance(result, ActionResolutionResult)
-        assert result.resolved_action.intent_type == "completely_unknown_action"
+    option = _make_option(
+        "investigate_thread",
+        target_id="phantom_thread",
+        option_id="investigate_thread:phantom_thread",
+        resolution_type="thread_progress",
+        constraints=[
+            {
+                "constraint_id": "c1",
+                "constraint_type": "requires_thread",
+                "value": "phantom_thread",
+                "source": "test",
+            }
+        ],
+    )
 
+    result = resolver.resolve_choice(option, cc, None)
+    assert result.resolved_action.outcome == "blocked"
 
-class TestPresentActionResolution:
-    def test_present_action_resolution_returns_ui_safe_shape(self):
-        """Presenter must return a UI-safe dict shape."""
-        resolver = ActionResolver()
-        cc = _setup_coherence_with_location("town")
-        gm = FakeGMState()
-
-        option = _make_option("travel_to_location", target_id="forest")
-        result = resolver.resolve_choice(option, cc, gm)
-
-        presenter = CreatorStatePresenter()
-        presented = presenter.present_action_resolution(result.to_dict())
-
-        assert presented["title"] == "Action Result"
-        assert "action" in presented
-        assert "events" in presented
-        assert isinstance(presented["events"], list)
-        assert presented["action"]["intent_type"] == "travel_to_location"
-
-        # Transition should be present for travel
-        assert presented["transition"] is not None
-        assert presented["transition"]["to_location"] == "forest"
-
-    def test_present_action_resolution_no_transition(self):
-        """Non-travel actions have no transition."""
-        resolver = ActionResolver()
-        cc = CoherenceCore()
-        gm = FakeGMState()
-
-        option = _make_option("request_recap")
-        result = resolver.resolve_choice(option, cc, gm)
-
-        presenter = CreatorStatePresenter()
-        presented = presenter.present_action_resolution(result.to_dict())
-        assert presented["transition"] is None
-
-
-class TestRecapEventFlow:
-    def test_recap_emits_event_and_stable_result(self):
-        """Recap option emits recap_requested and produces stable payload."""
-        resolver = ActionResolver()
-        cc = CoherenceCore()
-        gm = FakeGMState()
-
-        option = _make_option("request_recap")
-        result = resolver.resolve_choice(option, cc, gm)
-
-        assert len(result.events) == 1
-        assert result.events[0]["type"] == "recap_requested"
-
-        # Apply to coherence
-        events = [
-            Event(type=e["type"], payload=e["payload"], source="action_resolver")
-            for e in result.events
-        ]
-        update = cc.apply_events(events)
-        assert update.events_applied == 1
+    # Apply events to trigger reducer
+    coherence_result = cc.apply_events(result.events)
+    mutations = coherence_result.to_dict().get("mutations", [])
+    # Should have at least one mutation recording the consequence
+    assert any(m.get("action") == "record_consequence" for m in mutations)

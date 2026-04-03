@@ -25,6 +25,7 @@ SUPPORTED_EVENT_TYPES = frozenset({
     "npc_interaction_started",
     "scene_transition_requested",
     "recap_requested",
+    "action_blocked",
 })
 
 
@@ -51,51 +52,70 @@ class ActionResolver:
 
         Steps:
             1. Map option intent
-            2. Build consequences
-            3. Build scene transition if needed
-            4. Transform consequences + transition into event list
-            5. Return structured ActionResolutionResult
+            2. Evaluate constraints
+            3. Evaluate resolution
+            4. Build consequences (with evaluation context)
+            5. Build scene transition if needed (not for blocked actions)
+            6. Transform consequences + transition into event list
+            7. Return structured ActionResolutionResult
         """
         # 1. Map intent
-        mapped = self.intent_mapper.map_option(option)
+        mapped_action = self.intent_mapper.map_option(option)
 
-        # 2. Build consequences
+        # 2. Evaluate constraints
+        constraint_evaluation = self._validate_constraints(option, coherence_core)
+
+        # 3. Evaluate resolution
+        evaluation = self._evaluate_resolution(
+            mapped_action, coherence_core, gm_state, constraint_evaluation
+        )
+
+        # 4. Build consequences
         consequences = self.consequence_builder.build(
-            mapped_action=mapped,
+            mapped_action=mapped_action,
             coherence_core=coherence_core,
             gm_state=gm_state,
+            evaluation=evaluation,
         )
 
-        # 3. Build transition
-        transition = self.transition_builder.build(
-            mapped_action=mapped,
-            coherence_core=coherence_core,
-        )
+        # 5. Build transition (only for non-blocked actions)
+        transition = None
+        if evaluation.get("outcome") != "blocked":
+            transition = self.transition_builder.build(
+                mapped_action=mapped_action,
+                coherence_core=coherence_core,
+            )
 
-        # 4. Build events
+        # 6. Build events
         events = self._build_events(consequences, transition)
 
-        # 5. Assemble result
+        # 7. Assemble result
         option_id = self._get_field(option, "option_id", "unknown")
         action_id = self._resolved_action_id(option)
 
         resolved = ResolvedAction(
             action_id=action_id,
             option_id=option_id,
-            intent_type=mapped.get("intent_type", "unknown"),
-            target_id=mapped.get("target_id"),
-            summary=mapped.get("summary", ""),
+            intent_type=mapped_action.get("intent_type", "unknown"),
+            target_id=mapped_action.get("target_id"),
+            summary=mapped_action.get("summary", ""),
+            outcome=evaluation.get("outcome", "success"),
             consequences=consequences,
             transition=transition,
+            metadata={
+                "mapped_action": dict(mapped_action),
+                "evaluation": dict(evaluation),
+            },
         )
 
         return ActionResolutionResult(
             resolved_action=resolved,
             events=events,
             trace={
-                "mapped_action": mapped,
-                "consequence_count": len(consequences),
-                "has_transition": transition is not None,
+                "mapped_action": dict(mapped_action),
+                "constraint_evaluation": dict(constraint_evaluation),
+                "evaluation": dict(evaluation),
+                "event_types": [e.get("type") for e in events],
             },
         )
 
@@ -127,6 +147,7 @@ class ActionResolver:
                 "type": consequence.event_type,
                 "payload": dict(consequence.payload),
             }
+            self._validate_event(event)
             # Enrich scene_transition_requested with transition details
             if (
                 transition is not None
@@ -138,6 +159,90 @@ class ActionResolver:
             events.append(event)
 
         return events
+
+    def _validate_constraints(self, option: Any, coherence_core: Any) -> dict:
+        """Validate option constraints against the current coherence state.
+
+        Returns a dict with 'allowed' (bool) and 'reasons' (list[str]).
+        """
+        constraints = (
+            option.get("constraints", [])
+            if isinstance(option, dict)
+            else getattr(option, "constraints", [])
+        )
+        if not constraints:
+            return {"allowed": True, "reasons": []}
+
+        reasons: list[str] = []
+        for constraint in constraints:
+            if isinstance(constraint, dict):
+                constraint_type = constraint.get("constraint_type")
+                value = constraint.get("value")
+            else:
+                constraint_type = getattr(constraint, "constraint_type", None)
+                value = getattr(constraint, "value", None)
+
+            if constraint_type == "requires_thread":
+                thread_ids = {
+                    t.get("thread_id") for t in coherence_core.get_unresolved_threads()
+                }
+                if value not in thread_ids:
+                    reasons.append(f"missing_thread:{value}")
+            elif constraint_type == "requires_location":
+                scene = coherence_core.get_scene_summary() or {}
+                if scene.get("location") != value:
+                    reasons.append(f"wrong_location:{value}")
+
+        return {"allowed": not reasons, "reasons": reasons}
+
+    def _evaluate_resolution(
+        self,
+        mapped_action: dict,
+        coherence_core: Any,
+        gm_state: Any,
+        constraint_evaluation: dict,
+    ) -> dict:
+        """Evaluate the resolution outcome based on constraints and action type."""
+        if not constraint_evaluation.get("allowed", True):
+            return {
+                "outcome": "blocked",
+                "intensity": "low",
+                "modifiers": list(constraint_evaluation.get("reasons", [])),
+            }
+
+        resolution_type = mapped_action.get("resolution_type")
+        if resolution_type == "recap":
+            return {"outcome": "success", "intensity": "low", "modifiers": ["recap"]}
+        if resolution_type == "location_travel":
+            return {
+                "outcome": "success",
+                "intensity": "medium",
+                "modifiers": ["transition"],
+            }
+        if resolution_type == "thread_progress":
+            return {
+                "outcome": "success",
+                "intensity": "medium",
+                "modifiers": ["thread_progress"],
+            }
+        if resolution_type == "social_contact":
+            return {
+                "outcome": "success",
+                "intensity": "medium",
+                "modifiers": ["social_contact"],
+            }
+
+        return {"outcome": "success", "intensity": "medium", "modifiers": ["default"]}
+
+    def _validate_event(self, event: dict) -> None:
+        """Validate that an event has a supported type and proper shape."""
+        event_type = event.get("type")
+        if event_type not in SUPPORTED_EVENT_TYPES:
+            raise ValueError(
+                f"Unsupported event type emitted by ActionResolver: {event_type}"
+            )
+        if "payload" not in event or not isinstance(event["payload"], dict):
+            raise ValueError("ActionResolver emitted event without dict payload")
 
     @staticmethod
     def _get_field(option: Any, field: str, default: Any = None) -> Any:

@@ -86,6 +86,7 @@ class ResolvedAction:
     intent_type: str
     target_id: Optional[str] = None
     summary: str = ""
+    outcome: str = "success"
     consequences: list[ActionConsequence] = field(default_factory=list)
     transition: Optional[SceneTransition] = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -97,6 +98,7 @@ class ResolvedAction:
             "intent_type": self.intent_type,
             "target_id": self.target_id,
             "summary": self.summary,
+            "outcome": self.outcome,
             "consequences": [c.to_dict() for c in self.consequences],
             "transition": self.transition.to_dict() if self.transition else None,
             "metadata": dict(self.metadata),
@@ -115,6 +117,7 @@ class ResolvedAction:
             intent_type=data["intent_type"],
             target_id=data.get("target_id"),
             summary=data.get("summary", ""),
+            outcome=data.get("outcome", "success"),
             consequences=consequences,
             transition=transition,
             metadata=dict(data.get("metadata", {})),

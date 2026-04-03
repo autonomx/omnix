@@ -1,1182 +1,609 @@
-Below is a Phase 7.0 foundation patch that adds the creator / GM layer on top of your Phase 6 architecture. It is designed to be a clean first implementation pass:
+Here is the Phase 7.3 — Scene Execution Layer file-by-file implementation spec for the coding LLM.
 
-structured adventure setup schema
-creator canon state
-GM directive state
-startup generation pipeline
-recap builder
-GM command processor
-GameLoop integration
-StoryDirector creator/GM context plumbing
+This phase turns your current control layer into a full gameplay loop:
 
-It keeps:
+ChoiceSet / ChoiceOption exist
+GM and pacing/framing can shape options
+now player choice must resolve into structured events
+those events must flow through EventBus
+CoherenceCore must absorb them
+director/renderer then consume updated truth
 
-CoherenceCore as truth owner
-RecoveryManager as UX safety layer
-GameLoop as orchestration spine
-diff --git a/src/app/rpg/creator/__init__.py b/src/app/rpg/creator/__init__.py
-new file mode 100644
-index 0000000..1111111
---- /dev/null
-+++ b/src/app/rpg/creator/__init__.py
-@@ -0,0 +1,53 @@
-+from .schema import (
-+    AdventureSetup,
-+    LoreConstraint,
-+    FactionSeed,
-+    LocationSeed,
-+    NPCSeed,
-+    ThemeConstraint,
-+    PacingProfile,
-+    SafetyConstraint,
-+    ContentBalance,
-+)
-+from .canon import CreatorCanonFact, CreatorCanonState
-+from .gm_state import (
-+    GMDirective,
-+    InjectEventDirective,
-+    PinThreadDirective,
-+    RetconDirective,
-+    CanonOverrideDirective,
-+    PacingDirective,
-+    ToneDirective,
-+    DangerDirective,
-+    GMDirectiveState,
-+)
-+from .startup_pipeline import StartupGenerationPipeline
-+from .recap import RecapBuilder
-+from .commands import GMCommandProcessor
-+
-+__all__ = [
-+    "AdventureSetup",
-+    "LoreConstraint",
-+    "FactionSeed",
-+    "LocationSeed",
-+    "NPCSeed",
-+    "ThemeConstraint",
-+    "PacingProfile",
-+    "SafetyConstraint",
-+    "ContentBalance",
-+    "CreatorCanonFact",
-+    "CreatorCanonState",
-+    "GMDirective",
-+    "InjectEventDirective",
-+    "PinThreadDirective",
-+    "RetconDirective",
-+    "CanonOverrideDirective",
-+    "PacingDirective",
-+    "ToneDirective",
-+    "DangerDirective",
-+    "GMDirectiveState",
-+    "StartupGenerationPipeline",
-+    "RecapBuilder",
-+    "GMCommandProcessor",
-+]
-diff --git a/src/app/rpg/creator/schema.py b/src/app/rpg/creator/schema.py
-new file mode 100644
-index 0000000..2222222
---- /dev/null
-+++ b/src/app/rpg/creator/schema.py
-@@ -0,0 +1,276 @@
-+from __future__ import annotations
-+
-+from dataclasses import asdict, dataclass, field
-+from typing import Any
-+
-+
-+@dataclass
-+class LoreConstraint:
-+    name: str
-+    description: str
-+    authority: str = "creator_canon"
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "LoreConstraint":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class FactionSeed:
-+    faction_id: str
-+    name: str
-+    description: str
-+    goals: list[str] = field(default_factory=list)
-+    relationships: dict[str, str] = field(default_factory=dict)
-+    metadata: dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "FactionSeed":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class LocationSeed:
-+    location_id: str
-+    name: str
-+    description: str
-+    tags: list[str] = field(default_factory=list)
-+    metadata: dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "LocationSeed":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class NPCSeed:
-+    npc_id: str
-+    name: str
-+    role: str
-+    description: str
-+    goals: list[str] = field(default_factory=list)
-+    faction_id: str | None = None
-+    location_id: str | None = None
-+    must_survive: bool = False
-+    metadata: dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "NPCSeed":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class ThemeConstraint:
-+    name: str
-+    description: str
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "ThemeConstraint":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class PacingProfile:
-+    style: str = "balanced"
-+    danger_level: str = "medium"
-+    mystery_weight: float = 0.25
-+    combat_weight: float = 0.25
-+    politics_weight: float = 0.15
-+    social_weight: float = 0.35
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "PacingProfile":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class SafetyConstraint:
-+    forbidden_themes: list[str] = field(default_factory=list)
-+    soft_avoid_themes: list[str] = field(default_factory=list)
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "SafetyConstraint":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class ContentBalance:
-+    mystery: float = 0.2
-+    combat: float = 0.2
-+    politics: float = 0.2
-+    exploration: float = 0.2
-+    social: float = 0.2
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "ContentBalance":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class AdventureSetup:
-+    setup_id: str
-+    title: str
-+    genre: str
-+    setting: str
-+    premise: str
-+    hard_rules: list[str] = field(default_factory=list)
-+    soft_tone_rules: list[str] = field(default_factory=list)
-+    lore_constraints: list[LoreConstraint] = field(default_factory=list)
-+    factions: list[FactionSeed] = field(default_factory=list)
-+    locations: list[LocationSeed] = field(default_factory=list)
-+    npc_seeds: list[NPCSeed] = field(default_factory=list)
-+    themes: list[ThemeConstraint] = field(default_factory=list)
-+    pacing: PacingProfile | None = None
-+    safety: SafetyConstraint | None = None
-+    content_balance: ContentBalance | None = None
-+    forbidden_content: list[str] = field(default_factory=list)
-+    canon_notes: list[str] = field(default_factory=list)
-+    metadata: dict[str, Any] = field(default_factory=dict)
-+
-+    def validate(self) -> None:
-+        if not self.setup_id:
-+            raise ValueError("AdventureSetup.setup_id is required")
-+        if not self.title:
-+            raise ValueError("AdventureSetup.title is required")
-+        if not self.genre:
-+            raise ValueError("AdventureSetup.genre is required")
-+        if not self.setting:
-+            raise ValueError("AdventureSetup.setting is required")
-+        if not self.premise:
-+            raise ValueError("AdventureSetup.premise is required")
-+
-+        seen_locations = set()
-+        for location in self.locations:
-+            if location.location_id in seen_locations:
-+                raise ValueError(f"Duplicate location_id: {location.location_id}")
-+            seen_locations.add(location.location_id)
-+
-+        seen_factions = set()
-+        for faction in self.factions:
-+            if faction.faction_id in seen_factions:
-+                raise ValueError(f"Duplicate faction_id: {faction.faction_id}")
-+            seen_factions.add(faction.faction_id)
-+
-+        seen_npcs = set()
-+        for npc in self.npc_seeds:
-+            if npc.npc_id in seen_npcs:
-+                raise ValueError(f"Duplicate npc_id: {npc.npc_id}")
-+            seen_npcs.add(npc.npc_id)
-+
-+    def to_dict(self) -> dict:
-+        return {
-+            "setup_id": self.setup_id,
-+            "title": self.title,
-+            "genre": self.genre,
-+            "setting": self.setting,
-+            "premise": self.premise,
-+            "hard_rules": list(self.hard_rules),
-+            "soft_tone_rules": list(self.soft_tone_rules),
-+            "lore_constraints": [x.to_dict() for x in self.lore_constraints],
-+            "factions": [x.to_dict() for x in self.factions],
-+            "locations": [x.to_dict() for x in self.locations],
-+            "npc_seeds": [x.to_dict() for x in self.npc_seeds],
-+            "themes": [x.to_dict() for x in self.themes],
-+            "pacing": self.pacing.to_dict() if self.pacing else None,
-+            "safety": self.safety.to_dict() if self.safety else None,
-+            "content_balance": self.content_balance.to_dict() if self.content_balance else None,
-+            "forbidden_content": list(self.forbidden_content),
-+            "canon_notes": list(self.canon_notes),
-+            "metadata": dict(self.metadata),
-+        }
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "AdventureSetup":
-+        return cls(
-+            setup_id=data["setup_id"],
-+            title=data["title"],
-+            genre=data["genre"],
-+            setting=data["setting"],
-+            premise=data["premise"],
-+            hard_rules=list(data.get("hard_rules", [])),
-+            soft_tone_rules=list(data.get("soft_tone_rules", [])),
-+            lore_constraints=[
-+                LoreConstraint.from_dict(x) for x in data.get("lore_constraints", [])
-+            ],
-+            factions=[FactionSeed.from_dict(x) for x in data.get("factions", [])],
-+            locations=[LocationSeed.from_dict(x) for x in data.get("locations", [])],
-+            npc_seeds=[NPCSeed.from_dict(x) for x in data.get("npc_seeds", [])],
-+            themes=[ThemeConstraint.from_dict(x) for x in data.get("themes", [])],
-+            pacing=PacingProfile.from_dict(data["pacing"]) if data.get("pacing") else None,
-+            safety=SafetyConstraint.from_dict(data["safety"]) if data.get("safety") else None,
-+            content_balance=ContentBalance.from_dict(data["content_balance"])
-+            if data.get("content_balance")
-+            else None,
-+            forbidden_content=list(data.get("forbidden_content", [])),
-+            canon_notes=list(data.get("canon_notes", [])),
-+            metadata=dict(data.get("metadata", {})),
-+        )
-diff --git a/src/app/rpg/creator/canon.py b/src/app/rpg/creator/canon.py
-new file mode 100644
-index 0000000..3333333
---- /dev/null
-+++ b/src/app/rpg/creator/canon.py
-@@ -0,0 +1,104 @@
-+from __future__ import annotations
-+
-+from dataclasses import asdict, dataclass, field
-+from typing import Any
-+
-+
-+@dataclass
-+class CreatorCanonFact:
-+    fact_id: str
-+    subject: str
-+    predicate: str
-+    value: Any
-+    source: str = "creator"
-+    authority: str = "creator_canon"
-+    metadata: dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "CreatorCanonFact":
-+        return cls(**data)
-+
-+
-+class CreatorCanonState:
-+    def __init__(self) -> None:
-+        self.facts: dict[str, CreatorCanonFact] = {}
-+        self.setup_id: str | None = None
-+        self.metadata: dict[str, Any] = {}
-+
-+    def add_fact(self, fact: CreatorCanonFact) -> None:
-+        self.facts[fact.fact_id] = fact
-+
-+    def remove_fact(self, fact_id: str) -> None:
-+        self.facts.pop(fact_id, None)
-+
-+    def get_fact(self, fact_id: str) -> CreatorCanonFact | None:
-+        return self.facts.get(fact_id)
-+
-+    def list_facts(self) -> list[CreatorCanonFact]:
-+        return list(self.facts.values())
-+
-+    def apply_to_coherence(self, coherence_core: Any) -> None:
-+        from ..coherence.models import FactRecord
-+
-+        for fact in self.facts.values():
-+            coherence_core.insert_fact(
-+                FactRecord(
-+                    fact_id=fact.fact_id,
-+                    category="world",
-+                    subject=fact.subject,
-+                    predicate=fact.predicate,
-+                    value=fact.value,
-+                    authority="creator_canon",
-+                    status="confirmed",
-+                    metadata=dict(fact.metadata),
-+                )
-+            )
-+
-+    def serialize_state(self) -> dict:
-+        return {
-+            "facts": {k: v.to_dict() for k, v in self.facts.items()},
-+            "setup_id": self.setup_id,
-+            "metadata": dict(self.metadata),
-+        }
-+
-+    def deserialize_state(self, data: dict) -> None:
-+        self.facts = {
-+            k: CreatorCanonFact.from_dict(v)
-+            for k, v in data.get("facts", {}).items()
-+        }
-+        self.setup_id = data.get("setup_id")
-+        self.metadata = dict(data.get("metadata", {}))
-diff --git a/src/app/rpg/creator/gm_state.py b/src/app/rpg/creator/gm_state.py
-new file mode 100644
-index 0000000..4444444
---- /dev/null
-+++ b/src/app/rpg/creator/gm_state.py
-@@ -0,0 +1,241 @@
-+from __future__ import annotations
-+
-+from dataclasses import asdict, dataclass, field
-+from typing import Any
-+
-+
-+@dataclass
-+class GMDirective:
-+    directive_id: str
-+    directive_type: str
-+    scope: str = "global"
-+    enabled: bool = True
-+    metadata: dict[str, Any] = field(default_factory=dict)
-+
-+    def to_dict(self) -> dict:
-+        return asdict(self)
-+
-+    @classmethod
-+    def from_dict(cls, data: dict) -> "GMDirective":
-+        return cls(**data)
-+
-+
-+@dataclass
-+class InjectEventDirective(GMDirective):
-+    event_type: str = ""
-+    payload: dict[str, Any] = field(default_factory=dict)
-+
-+
-+@dataclass
-+class PinThreadDirective(GMDirective):
-+    thread_id: str = ""
-+
-+
-+@dataclass
-+class RetconDirective(GMDirective):
-+    subject: str = ""
-+    predicate: str = ""
-+    value: Any = None
-+
-+
-+@dataclass
-+class CanonOverrideDirective(GMDirective):
-+    fact_id: str = ""
-+    value: Any = None
-+
-+
-+@dataclass
-+class PacingDirective(GMDirective):
-+    style: str = "balanced"
-+
-+
-+@dataclass
-+class ToneDirective(GMDirective):
-+    tone: str = "neutral"
-+
-+
-+@dataclass
-+class DangerDirective(GMDirective):
-+    level: str = "medium"
-+
-+
-+DIRECTIVE_TYPES = {
-+    "inject_event": InjectEventDirective,
-+    "pin_thread": PinThreadDirective,
-+    "retcon": RetconDirective,
-+    "canon_override": CanonOverrideDirective,
-+    "pacing": PacingDirective,
-+    "tone": ToneDirective,
-+    "danger": DangerDirective,
-+}
-+
-+
-+class GMDirectiveState:
-+    def __init__(self) -> None:
-+        self.directives: dict[str, GMDirective] = {}
-+
-+    def add_directive(self, directive: GMDirective) -> None:
-+        self.directives[directive.directive_id] = directive
-+
-+    def remove_directive(self, directive_id: str) -> None:
-+        self.directives.pop(directive_id, None)
-+
-+    def clear_scene_scoped_directives(self) -> None:
-+        self.directives = {
-+            k: v for k, v in self.directives.items() if v.scope != "scene"
-+        }
-+
-+    def list_directives(self) -> list[GMDirective]:
-+        return list(self.directives.values())
-+
-+    def get_active_directives(self) -> list[GMDirective]:
-+        return [d for d in self.directives.values() if d.enabled]
-+
-+    def apply_to_coherence(self, coherence_core: Any) -> None:
-+        from ..coherence.models import FactRecord
-+
-+        for directive in self.get_active_directives():
-+            if isinstance(directive, RetconDirective):
-+                coherence_core.upsert_fact(
-+                    FactRecord(
-+                        fact_id=f"gm_retcon:{directive.directive_id}",
-+                        category="world",
-+                        subject=directive.subject,
-+                        predicate=directive.predicate,
-+                        value=directive.value,
-+                        authority="creator_canon",
-+                        status="confirmed",
-+                        metadata={"directive_id": directive.directive_id, **directive.metadata},
-+                    )
-+                )
-+            elif isinstance(directive, CanonOverrideDirective):
-+                coherence_core.upsert_fact(
-+                    FactRecord(
-+                        fact_id=directive.fact_id,
-+                        category="world",
-+                        subject=directive.fact_id.split(":", 1)[0] if ":" in directive.fact_id else directive.fact_id,
-+                        predicate="override",
-+                        value=directive.value,
-+                        authority="creator_canon",
-+                        status="confirmed",
-+                        metadata={"directive_id": directive.directive_id, **directive.metadata},
-+                    )
-+                )
-+
-+    def build_director_context(self) -> dict:
-+        active = self.get_active_directives()
-+        return {
-+            "active_directives": [self._directive_to_dict(d) for d in active],
-+            "pacing": [d.style for d in active if isinstance(d, PacingDirective)],
-+            "tone": [d.tone for d in active if isinstance(d, ToneDirective)],
-+            "danger": [d.level for d in active if isinstance(d, DangerDirective)],
-+            "pinned_threads": [d.thread_id for d in active if isinstance(d, PinThreadDirective)],
-+        }
-+
-+    def serialize_state(self) -> dict:
-+        return {
-+            "directives": {
-+                k: self._directive_to_dict(v) for k, v in self.directives.items()
-+            }
-+        }
-+
-+    def deserialize_state(self, data: dict) -> None:
-+        self.directives = {}
-+        for directive_id, payload in data.get("directives", {}).items():
-+            cls = DIRECTIVE_TYPES.get(payload.get("directive_type"), GMDirective)
-+            self.directives[directive_id] = cls(**payload)
-+
-+    def _directive_to_dict(self, directive: GMDirective) -> dict:
-+        return asdict(directive)
-diff --git a/src/app/rpg/creator/startup_pipeline.py b/src/app/rpg/creator/startup_pipeline.py
-new file mode 100644
-index 0000000..5555555
---- /dev/null
-+++ b/src/app/rpg/creator/startup_pipeline.py
-@@ -0,0 +1,224 @@
-+from __future__ import annotations
-+
-+from typing import Any
-+
-+from .canon import CreatorCanonFact, CreatorCanonState
-+from .schema import AdventureSetup
-+
-+
-+class StartupGenerationPipeline:
-+    """Deterministic startup materialization pipeline.
-+
-+    This v1 implementation is schema-driven and deterministic. It does not
-+    require live LLM generation. Future phases can add LLM-assisted expansion
-+    through the existing LLMGateway, but the state contract remains explicit.
-+    """
-+
-+    def __init__(
-+        self,
-+        llm_gateway: Any,
-+        coherence_core: Any,
-+        creator_canon_state: CreatorCanonState | None = None,
-+    ) -> None:
-+        self.llm_gateway = llm_gateway
-+        self.coherence_core = coherence_core
-+        self.creator_canon_state = creator_canon_state or CreatorCanonState()
-+
-+    def generate(self, setup: AdventureSetup) -> dict:
-+        setup.validate()
-+        world_frame = self.generate_world_frame(setup)
-+        opening = self.generate_opening_situation(setup, world_frame)
-+        npcs = self.generate_seed_npcs(setup, world_frame)
-+        factions = self.generate_seed_factions(setup, world_frame)
-+        locations = self.generate_seed_locations(setup, world_frame)
-+        threads = self.generate_initial_threads(setup, opening)
-+        generated = {
-+            "world_frame": world_frame,
-+            "opening_situation": opening,
-+            "seed_npcs": npcs,
-+            "seed_factions": factions,
-+            "seed_locations": locations,
-+            "initial_threads": threads,
-+        }
-+        self.materialize_into_coherence(generated)
-+        generated["initial_scene_anchor"] = self.create_initial_scene_anchor(generated)
-+        return generated
-+
-+    def generate_world_frame(self, setup: AdventureSetup) -> dict:
-+        return {
-+            "setup_id": setup.setup_id,
-+            "title": setup.title,
-+            "genre": setup.genre,
-+            "setting": setup.setting,
-+            "premise": setup.premise,
-+            "hard_rules": list(setup.hard_rules),
-+            "soft_tone_rules": list(setup.soft_tone_rules),
-+            "canon_notes": list(setup.canon_notes),
-+            "forbidden_content": list(setup.forbidden_content),
-+        }
-+
-+    def generate_opening_situation(self, setup: AdventureSetup, world_frame: dict) -> dict:
-+        first_location = setup.locations[0].name if setup.locations else setup.setting
-+        first_npcs = [npc.name for npc in setup.npc_seeds[:3]]
-+        return {
-+            "location": first_location,
-+            "summary": f"{setup.premise} The story opens in {first_location}.",
-+            "present_actors": first_npcs,
-+            "active_tensions": list(setup.hard_rules[:2]) or ["The world has expectations the player must navigate."],
-+        }
-+
-+    def generate_seed_npcs(self, setup: AdventureSetup, world_frame: dict) -> list[dict]:
-+        return [npc.to_dict() for npc in setup.npc_seeds]
-+
-+    def generate_seed_factions(self, setup: AdventureSetup, world_frame: dict) -> list[dict]:
-+        return [faction.to_dict() for faction in setup.factions]
-+
-+    def generate_seed_locations(self, setup: AdventureSetup, world_frame: dict) -> list[dict]:
-+        return [location.to_dict() for location in setup.locations]
-+
-+    def generate_initial_threads(self, setup: AdventureSetup, opening_situation: dict) -> list[dict]:
-+        return [
-+            {
-+                "thread_id": f"setup_thread:{setup.setup_id}:opening",
-+                "title": setup.premise,
-+                "status": "unresolved",
-+                "priority": "high",
-+                "source": "startup_pipeline",
-+                "summary": opening_situation["summary"],
-+            }
-+        ]
-+
-+    def materialize_into_coherence(self, generated: dict) -> None:
-+        from ..coherence.models import FactRecord, SceneAnchor, ThreadRecord
-+
-+        world_frame = generated["world_frame"]
-+        opening = generated["opening_situation"]
-+
-+        creator_facts = [
-+            CreatorCanonFact(
-+                fact_id=f"setup:{world_frame['setup_id']}:genre",
-+                subject="world",
-+                predicate="genre",
-+                value=world_frame["genre"],
-+            ),
-+            CreatorCanonFact(
-+                fact_id=f"setup:{world_frame['setup_id']}:setting",
-+                subject="world",
-+                predicate="setting",
-+                value=world_frame["setting"],
-+            ),
-+            CreatorCanonFact(
-+                fact_id=f"setup:{world_frame['setup_id']}:premise",
-+                subject="world",
-+                predicate="premise",
-+                value=world_frame["premise"],
-+            ),
-+        ]
-+        for fact in creator_facts:
-+            self.creator_canon_state.add_fact(fact)
-+        self.creator_canon_state.setup_id = world_frame["setup_id"]
-+        self.creator_canon_state.apply_to_coherence(self.coherence_core)
-+
-+        for faction in generated["seed_factions"]:
-+            self.coherence_core.insert_fact(
-+                FactRecord(
-+                    fact_id=f"faction:{faction['faction_id']}:exists",
-+                    category="world",
-+                    subject=faction["faction_id"],
-+                    predicate="exists",
-+                    value=True,
-+                    authority="creator_canon",
-+                    status="confirmed",
-+                    metadata={"name": faction["name"]},
-+                )
-+            )
-+
-+        for location in generated["seed_locations"]:
-+            self.coherence_core.insert_fact(
-+                FactRecord(
-+                    fact_id=f"location:{location['location_id']}:name",
-+                    category="world",
-+                    subject=location["location_id"],
-+                    predicate="name",
-+                    value=location["name"],
-+                    authority="creator_canon",
-+                    status="confirmed",
-+                    metadata={"description": location["description"]},
-+                )
-+            )
-+
-+        for npc in generated["seed_npcs"]:
-+            self.coherence_core.insert_fact(
-+                FactRecord(
-+                    fact_id=f"npc:{npc['npc_id']}:name",
-+                    category="world",
-+                    subject=npc["npc_id"],
-+                    predicate="name",
-+                    value=npc["name"],
-+                    authority="creator_canon",
-+                    status="confirmed",
-+                    metadata={"role": npc["role"], "must_survive": npc.get("must_survive", False)},
-+                )
-+            )
-+            if npc.get("location_id"):
-+                self.coherence_core.insert_fact(
-+                    FactRecord(
-+                        fact_id=f"{npc['npc_id']}:location",
-+                        category="world",
-+                        subject=npc["npc_id"],
-+                        predicate="location",
-+                        value=npc["location_id"],
-+                        authority="creator_canon",
-+                        status="confirmed",
-+                    )
-+                )
-+
-+        for thread in generated["initial_threads"]:
-+            self.coherence_core.insert_thread(
-+                ThreadRecord(
-+                    thread_id=thread["thread_id"],
-+                    title=thread["title"],
-+                    status="unresolved",
-+                    priority=thread.get("priority", "normal"),
-+                    notes=[thread.get("summary", "")],
-+                    metadata={"source": "startup_pipeline"},
-+                )
-+            )
-+
-+        self.coherence_core.push_anchor(
-+            SceneAnchor(
-+                anchor_id=f"setup_anchor:{world_frame['setup_id']}",
-+                tick=0,
-+                location=opening.get("location"),
-+                present_actors=list(opening.get("present_actors", [])),
-+                active_tensions=list(opening.get("active_tensions", [])),
-+                unresolved_thread_ids=[t["thread_id"] for t in generated["initial_threads"]],
-+                summary=opening.get("summary", ""),
-+                scene_fact_ids=["scene:location"],
-+                source_event_id="startup_pipeline",
-+                metadata={"setup_id": world_frame["setup_id"]},
-+            )
-+        )
-+
-+    def create_initial_scene_anchor(self, generated: dict) -> dict:
-+        opening = generated["opening_situation"]
-+        threads = generated["initial_threads"]
-+        return {
-+            "anchor_id": f"setup_anchor:{generated['world_frame']['setup_id']}",
-+            "tick": 0,
-+            "location": opening.get("location"),
-+            "present_actors": list(opening.get("present_actors", [])),
-+            "active_tensions": list(opening.get("active_tensions", [])),
-+            "unresolved_thread_ids": [t["thread_id"] for t in threads],
-+            "summary": opening.get("summary", ""),
-+            "metadata": {"source": "startup_pipeline"},
-+        }
-diff --git a/src/app/rpg/creator/recap.py b/src/app/rpg/creator/recap.py
-new file mode 100644
-index 0000000..6666666
---- /dev/null
-+++ b/src/app/rpg/creator/recap.py
-@@ -0,0 +1,89 @@
-+from __future__ import annotations
-+
-+from typing import Any
-+
-+
-+class RecapBuilder:
-+    def build_canon_summary(self, coherence_core: Any, creator_canon_state: Any | None = None) -> dict:
-+        canon_facts = []
-+        if creator_canon_state is not None:
-+            canon_facts = [f.to_dict() for f in creator_canon_state.list_facts()]
-+        return {
-+            "canon_facts": canon_facts,
-+            "scene_summary": coherence_core.get_scene_summary(),
-+        }
-+
-+    def build_session_recap(self, coherence_core: Any, gm_state: Any | None = None) -> dict:
-+        return {
-+            "scene_summary": coherence_core.get_scene_summary(),
-+            "recent_consequences": coherence_core.get_recent_consequences(limit=10),
-+            "active_tensions": coherence_core.get_active_tensions(),
-+            "unresolved_threads": coherence_core.get_unresolved_threads(),
-+            "gm_directives": gm_state.build_director_context() if gm_state else {},
-+        }
-+
-+    def build_active_factions_summary(self, coherence_core: Any) -> dict:
-+        factions = []
-+        for fact in coherence_core.get_state().stable_world_facts.values():
-+            if fact.fact_id.startswith("faction:") and fact.predicate == "exists":
-+                factions.append({"faction_id": fact.subject, "metadata": fact.metadata})
-+        return {"factions": factions}
-+
-+    def build_npc_roster(self, coherence_core: Any) -> dict:
-+        npcs = []
-+        for fact in coherence_core.get_state().stable_world_facts.values():
-+            if fact.fact_id.startswith("npc:") and fact.predicate == "name":
-+                npcs.append(
-+                    {
-+                        "npc_id": fact.subject,
-+                        "name": fact.value,
-+                        "metadata": fact.metadata,
-+                    }
-+                )
-+        return {"npcs": npcs}
-+
-+    def build_unresolved_threads_summary(self, coherence_core: Any) -> dict:
-+        return {"threads": coherence_core.get_unresolved_threads()}
-+
-+    def build_world_tensions_summary(self, coherence_core: Any) -> dict:
-+        return {"active_tensions": coherence_core.get_active_tensions()}
-+
-+    def build_player_impact_summary(self, coherence_core: Any) -> dict:
-+        return {"recent_consequences": coherence_core.get_recent_consequences(limit=10)}
-diff --git a/src/app/rpg/creator/commands.py b/src/app/rpg/creator/commands.py
-new file mode 100644
-index 0000000..7777777
---- /dev/null
-+++ b/src/app/rpg/creator/commands.py
-@@ -0,0 +1,156 @@
-+from __future__ import annotations
-+
-+from typing import Any
-+
-+from .gm_state import (
-+    DangerDirective,
-+    InjectEventDirective,
-+    PinThreadDirective,
-+    ToneDirective,
-+)
-+
-+
-+class GMCommandProcessor:
-+    def parse_command(self, text: str) -> dict:
-+        raw = (text or "").strip()
-+        lowered = raw.lower()
-+
-+        if lowered == "restate canon":
-+            return {"command": "restate_canon"}
-+        if lowered == "what unresolved threads exist?":
-+            return {"command": "list_unresolved_threads"}
-+        if lowered.startswith("spawn a merchant"):
-+            return {"command": "spawn_merchant"}
-+        if lowered.startswith("make this city more corrupt"):
-+            return {"command": "make_city_more_corrupt"}
-+        if lowered.startswith("introduce a hidden faction"):
-+            return {"command": "introduce_hidden_faction"}
-+        if lowered.startswith("keep this npc alive"):
-+            return {"command": "keep_npc_alive"}
-+        if lowered.startswith("turn down combat"):
-+            return {"command": "turn_down_combat"}
-+        if lowered.startswith("switch tone "):
-+            return {"command": "switch_tone", "tone": raw[len("switch tone ") :].strip() or "darker"}
-+
-+        return {"command": "unknown", "raw": raw}
-+
-+    def apply_command(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-+        name = command.get("command")
-+        if name == "restate_canon":
-+            return self.command_restate_canon(gm_state, coherence_core)
-+        if name == "list_unresolved_threads":
-+            return self.command_list_unresolved_threads(gm_state, coherence_core)
-+        if name == "spawn_merchant":
-+            return self.command_spawn_merchant(command, gm_state, coherence_core)
-+        if name == "make_city_more_corrupt":
-+            return self.command_make_city_more_corrupt(command, gm_state, coherence_core)
-+        if name == "introduce_hidden_faction":
-+            return self.command_introduce_hidden_faction(command, gm_state, coherence_core)
-+        if name == "keep_npc_alive":
-+            return self.command_keep_npc_alive(command, gm_state, coherence_core)
-+        if name == "turn_down_combat":
-+            return self.command_turn_down_combat(command, gm_state, coherence_core)
-+        if name == "switch_tone":
-+            return self.command_switch_tone(command, gm_state, coherence_core)
-+        return {"ok": False, "reason": "unknown_command"}
-+
-+    def command_restate_canon(self, gm_state: Any, coherence_core: Any) -> dict:
-+        return {
-+            "ok": True,
-+            "canon": coherence_core.get_scene_summary(),
-+            "gm": gm_state.build_director_context(),
-+        }
-+
-+    def command_list_unresolved_threads(self, gm_state: Any, coherence_core: Any) -> dict:
-+        return {"ok": True, "threads": coherence_core.get_unresolved_threads()}
-+
-+    def command_spawn_merchant(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-+        directive = InjectEventDirective(
-+            directive_id="gm:spawn_merchant",
-+            directive_type="inject_event",
-+            scope="scene",
-+            event_type="npc_spawned",
-+            payload={"npc_id": "merchant", "role": "merchant"},
-+        )
-+        gm_state.add_directive(directive)
-+        return {"ok": True, "directive_id": directive.directive_id}
-+
-+    def command_make_city_more_corrupt(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-+        directive = InjectEventDirective(
-+            directive_id="gm:city_corruption",
-+            directive_type="inject_event",
-+            scope="scene",
-+            event_type="world_fact_established",
-+            payload={"subject": "city", "predicate": "corruption", "value": "high"},
-+        )
-+        gm_state.add_directive(directive)
-+        return {"ok": True, "directive_id": directive.directive_id}
-+
-+    def command_introduce_hidden_faction(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-+        directive = InjectEventDirective(
-+            directive_id="gm:hidden_faction",
-+            directive_type="inject_event",
-+            scope="global",
-+            event_type="faction_revealed",
-+            payload={"faction_id": "hidden_faction"},
-+        )
-+        gm_state.add_directive(directive)
-+        return {"ok": True, "directive_id": directive.directive_id}
-+
-+    def command_keep_npc_alive(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-+        directive = PinThreadDirective(
-+            directive_id="gm:keep_npc_alive",
-+            directive_type="pin_thread",
-+            scope="global",
-+            thread_id="npc_survival",
-+            metadata={"survival_required": True},
-+        )
-+        gm_state.add_directive(directive)
-+        return {"ok": True, "directive_id": directive.directive_id}
-+
-+    def command_turn_down_combat(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-+        directive = DangerDirective(
-+            directive_id="gm:danger_low",
-+            directive_type="danger",
-+            scope="scene",
-+            level="low",
-+        )
-+        gm_state.add_directive(directive)
-+        return {"ok": True, "directive_id": directive.directive_id}
-+
-+    def command_switch_tone(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-+        directive = ToneDirective(
-+            directive_id="gm:tone",
-+            directive_type="tone",
-+            scope="scene",
-+            tone=command.get("tone", "darker"),
-+        )
-+        gm_state.add_directive(directive)
-+        return {"ok": True, "directive_id": directive.directive_id}
-diff --git a/src/app/rpg/core/game_loop.py b/src/app/rpg/core/game_loop.py
-index eeeeeee..9999999 100644
---- a/src/app/rpg/core/game_loop.py
-+++ b/src/app/rpg/core/game_loop.py
-@@ -205,6 +205,27 @@ class GameLoop:
-         if "coherence_core" not in self._snapshot_systems:
-             self._snapshot_systems.append("coherence_core")
- 
-+        # PHASE 7.0 — CREATOR / GM LAYER
-+        self._init_creator_systems()
-+
-         # PHASE 6.5 — RECOVERY MANAGER
-         self._init_recovery_manager()
-@@ -235,6 +256,16 @@ class GameLoop:
-         if hasattr(self, "recovery_manager") and self.recovery_manager is not None:
-             self.recovery_manager.set_mode(mode)
- 
-+        # PHASE 7.0 — propagate creator/GM aware state
-+        if hasattr(self, "story_director"):
-+            if hasattr(self.story_director, "set_creator_canon_state"):
-+                self.story_director.set_creator_canon_state(self.creator_canon_state)
-+            if hasattr(self.story_director, "set_gm_directive_state"):
-+                self.story_director.set_gm_directive_state(self.gm_directive_state)
-+
-         # Primary mode propagation happens via system.set_mode() above.
-@@ -760,6 +791,72 @@ class GameLoop:
-         if anchor:
-             self.recovery_manager.record_last_good_anchor(anchor)
- 
-+    # -------------------------
-+    # PHASE 7.0 — CREATOR / GM
-+    # -------------------------
-+
-+    def _init_creator_systems(self) -> None:
-+        from ..creator import (
-+            CreatorCanonState,
-+            GMDirectiveState,
-+            RecapBuilder,
-+            StartupGenerationPipeline,
-+            GMCommandProcessor,
-+        )
-+
-+        self.creator_canon_state = CreatorCanonState()
-+        self.gm_directive_state = GMDirectiveState()
-+        self.recap_builder = RecapBuilder()
-+        self.gm_command_processor = GMCommandProcessor()
-+        self.startup_generation_pipeline = StartupGenerationPipeline(
-+            llm_gateway=self.llm_gateway if hasattr(self, "llm_gateway") else None,
-+            coherence_core=self.coherence_core,
-+            creator_canon_state=self.creator_canon_state,
-+        )
-+
-+        for system_name in ("creator_canon_state", "gm_directive_state"):
-+            if system_name not in self._snapshot_systems:
-+                self._snapshot_systems.append(system_name)
-+
-+        if hasattr(self.story_director, "set_creator_canon_state"):
-+            self.story_director.set_creator_canon_state(self.creator_canon_state)
-+        if hasattr(self.story_director, "set_gm_directive_state"):
-+            self.story_director.set_gm_directive_state(self.gm_directive_state)
-+
-+    def start_new_adventure(self, setup_data: dict) -> dict:
-+        from ..creator import AdventureSetup
-+
-+        setup = AdventureSetup.from_dict(setup_data)
-+        setup.validate()
-+
-+        generated = self.startup_generation_pipeline.generate(setup)
-+        self.apply_creator_canon()
-+        self.apply_gm_directives()
-+        return {
-+            "ok": True,
-+            "setup": setup.to_dict(),
-+            "generated": generated,
-+            "canon_summary": self.get_canon_summary(),
-+        }
-+
-+    def apply_creator_canon(self) -> None:
-+        self.creator_canon_state.apply_to_coherence(self.coherence_core)
-+
-+    def apply_gm_directives(self) -> None:
-+        self.gm_directive_state.apply_to_coherence(self.coherence_core)
-+
-+    def build_creator_context(self) -> dict:
-+        return {
-+            "canon": self.creator_canon_state.serialize_state(),
-+            "gm": self.gm_directive_state.build_director_context(),
-+        }
-+
-+    def get_recap(self) -> dict:
-+        return self.recap_builder.build_session_recap(self.coherence_core, self.gm_directive_state)
-+
-+    def get_canon_summary(self) -> dict:
-+        return self.recap_builder.build_canon_summary(self.coherence_core, self.creator_canon_state)
-+
-+    def get_unresolved_threads_summary(self) -> dict:
-+        return self.recap_builder.build_unresolved_threads_summary(self.coherence_core)
-+
-diff --git a/src/app/rpg/narrative/story_director.py b/src/app/rpg/narrative/story_director.py
-index bbbbbbb..aaaaaac 100644
---- a/src/app/rpg/narrative/story_director.py
-+++ b/src/app/rpg/narrative/story_director.py
-@@ -51,10 +51,16 @@ class StoryDirector:
-         self.scene_engine = scene_engine or DefaultSceneEngine()
-         self.coherence_core = coherence_core
- 
-+        self.creator_canon_state = None
-+        self.gm_directive_state = None
-         self._event_log: List[Dict[str, Any]] = []
-         self._tick_count = 0
-         self.mode: str = "live"
- 
-     def set_coherence_core(self, coherence_core: Any) -> None:
-         self.coherence_core = coherence_core
-+
-+    def set_creator_canon_state(self, creator_canon_state: Any) -> None:
-+        self.creator_canon_state = creator_canon_state
-+
-+    def set_gm_directive_state(self, gm_directive_state: Any) -> None:
-+        self.gm_directive_state = gm_directive_state
- 
-     def set_recovery_manager(self, recovery_manager: Any) -> None:
-         """Accept a recovery manager reference (Phase 6.5).
-@@ -81,6 +87,8 @@ class StoryDirector:
-         # 1. Analyze world state from events
-         coherence_context = coherence_context or self._build_coherence_context()
-         world_state = self._analyze(events, coherence_context=coherence_context)
-+        world_state["creator"] = self._build_creator_context()
-+        world_state["gm"] = self._build_gm_context()
- 
-         # 2. Update story arcs
-         active_arcs = self.arc_manager.update(world_state)
-@@ -139,6 +147,22 @@ class StoryDirector:
-                 "last_good_anchor": None,
-                 "contradictions": [],
-             }
-+        return {
-+            "scene_summary": self.coherence_core.get_scene_summary(),
-+            "active_tensions": self.coherence_core.get_active_tensions(),
-+            "unresolved_threads": self.coherence_core.get_unresolved_threads(),
-+            "recent_consequences": self.coherence_core.get_recent_consequences(limit=5),
-+            "last_good_anchor": self.coherence_core.get_last_good_anchor(),
-+            "contradictions": [
-+                c.to_dict()
-+                for c in self.coherence_core.get_state().contradictions[-10:]
-+            ],
-+        }
-+
-+    def _build_creator_context(self) -> Dict[str, Any]:
-+        if self.creator_canon_state is None:
-+            return {}
-+        return self.creator_canon_state.serialize_state()
-+
-+    def _build_gm_context(self) -> Dict[str, Any]:
-+        if self.gm_directive_state is None:
-+            return {}
--        return {
--            "scene_summary": self.coherence_core.get_scene_summary(),
--            "active_tensions": self.coherence_core.get_active_tensions(),
--            "unresolved_threads": self.coherence_core.get_unresolved_threads(),
--            "recent_consequences": self.coherence_core.get_recent_consequences(limit=5),
--            "last_good_anchor": self.coherence_core.get_last_good_anchor(),
--            "contradictions": [
--                c.to_dict()
--                for c in self.coherence_core.get_state().contradictions[-10:]
--            ],
--        }
-+        return self.gm_directive_state.build_director_context()
-diff --git a/src/app/rpg/adventure_setup.py b/src/app/rpg/adventure_setup.py
-index 1234567..7654321 100644
---- a/src/app/rpg/adventure_setup.py
-+++ b/src/app/rpg/adventure_setup.py
-@@ -1,3 +1,23 @@
-+"""Compatibility wrapper for Phase 7 creator-driven adventure setup."""
-+
-+from __future__ import annotations
-+
-+from .creator import AdventureSetup, StartupGenerationPipeline
-+
-+
-+class AdventureSetupService:
-+    def build_setup(self, payload: dict) -> AdventureSetup:
-+        setup = AdventureSetup.from_dict(payload)
-+        setup.validate()
-+        return setup
-+
-+    def start_adventure(self, setup: AdventureSetup, game_loop) -> dict:
-+        return game_loop.start_new_adventure(setup.to_dict())
-+
-+
-+__all__ = [
-+    "AdventureSetup",
-+    "StartupGenerationPipeline",
-+    "AdventureSetupService",
-+]
-Notes on this patch
+The key rule for 7.3:
 
-This is the Phase 7 foundation pass, not the fully finished Creator/GM feature set.
+Option selection never mutates state directly.
+It resolves into events, and existing reducers/system boundaries remain the authority path.
 
-What it already gives you:
+This preserves:
 
-explicit setup schema
-creator canon facts with highest authority
-GM directive state
-startup materialization into coherence
-creator/GM context available to director
-recap/query support
-GameLoop.start_new_adventure(...)
+determinism
+replay/snapshot safety
+coherence authority
+inspectability/debugging
+Phase 7.3 goals
+Main outcomes
+Structured action resolution
+selecting an option results in an explicit ResolvedAction
+that action emits deterministic events
+Option types gain gameplay meaning
+investigate_thread
+talk_to_npc
+travel_to_location
+press_for_reveal
+reduce_tension
+request_recap
+Consequences become explicit
+not just prose
+not direct state mutation
+emitted as structured events
+Scene transitions become formalized
+especially location travel and focus changes
+Action traces become inspectable
+“why did this action emit these events?”
+useful for debugging and GM tools later
+New package
 
-What it does not yet do:
+Create:
 
-UI wiring
-LLM-assisted startup generation through LLMGateway
-full GM command language
-tests
-richer directive-to-event emission
-deeper renderer integration
+src/app/rpg/execution/__init__.py
+src/app/rpg/execution/models.py
+src/app/rpg/execution/intent_mapping.py
+src/app/rpg/execution/consequences.py
+src/app/rpg/execution/transitions.py
+src/app/rpg/execution/resolver.py
 
-The best next step after applying this patch is:
+Keep execution separate from:
 
-add Phase 7 unit tests for schema / canon / GM state / startup pipeline / recap
-add functional tests for start_new_adventure(...)
-add regression tests proving creator canon outranks runtime facts over many ticks
+creator setup
+narrative renderer
+coherence core
+File-by-file implementation
+src/app/rpg/execution/__init__.py
+
+Diff path:
+
+NEW FILE
+
+Exports:
+
+ResolvedAction
+ActionResolutionResult
+ActionConsequence
+SceneTransition
+ActionIntentMapper
+ConsequenceBuilder
+SceneTransitionBuilder
+ActionResolver
+src/app/rpg/execution/models.py
+
+Diff path:
+
+NEW FILE
+
+Purpose:
+
+explicit structured models for action resolution
+Dataclasses
+ActionConsequence
+
+Fields:
+
+consequence_id: str
+consequence_type: str
+summary: str
+event_type: str
+payload: dict[str, Any]
+metadata: dict[str, Any] = field(default_factory=dict)
+
+Methods:
+
+to_dict(self) -> dict
+@classmethod from_dict(cls, data: dict) -> "ActionConsequence"
+SceneTransition
+
+Fields:
+
+transition_id: str
+transition_type: str
+from_location: str | None
+to_location: str | None
+summary: str
+metadata: dict[str, Any] = field(default_factory=dict)
+
+Methods:
+
+to_dict(self) -> dict
+@classmethod from_dict(cls, data: dict) -> "SceneTransition"
+ResolvedAction
+
+Fields:
+
+action_id: str
+option_id: str
+intent_type: str
+target_id: str | None
+summary: str
+consequences: list[ActionConsequence] = field(default_factory=list)
+transition: SceneTransition | None = None
+metadata: dict[str, Any] = field(default_factory=dict)
+
+Methods:
+
+to_dict(self) -> dict
+@classmethod from_dict(cls, data: dict) -> "ResolvedAction"
+ActionResolutionResult
+
+Fields:
+
+resolved_action: ResolvedAction
+events: list[dict] = field(default_factory=list)
+trace: dict[str, Any] = field(default_factory=dict)
+
+Methods:
+
+to_dict(self) -> dict
+@classmethod from_dict(cls, data: dict) -> "ActionResolutionResult"
+Important rule
+
+These models are not the state owner. They are resolution artifacts.
+
+src/app/rpg/execution/intent_mapping.py
+
+Diff path:
+
+NEW FILE
+
+Purpose:
+
+map ChoiceOption.intent_type into resolution categories and defaults
+Class
+
+ActionIntentMapper
+
+Methods
+map_option(self, option: Any) -> dict
+_map_investigate_thread(self, option: Any) -> dict
+_map_talk_to_npc(self, option: Any) -> dict
+_map_travel_to_location(self, option: Any) -> dict
+_map_request_recap(self, option: Any) -> dict
+_map_default(self, option: Any) -> dict
+Behavior
+
+Example output:
+
+{
+    "intent_type": "investigate_thread",
+    "resolution_type": "thread_progress",
+    "target_id": "thread_x",
+    "summary": "Investigate unresolved thread thread_x",
+}
+
+This keeps resolution logic cleaner and makes it easier to extend new option types later.
+
+src/app/rpg/execution/consequences.py
+
+Diff path:
+
+NEW FILE
+
+Purpose:
+
+build deterministic consequences from mapped action intents
+Class
+
+ConsequenceBuilder
+
+Methods
+build(self, mapped_action: dict, coherence_core: Any, gm_state: Any) -> list[ActionConsequence]
+_build_thread_progress_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+_build_social_contact_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+_build_location_travel_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+_build_recap_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+_make_consequence(self, consequence_id: str, consequence_type: str, summary: str, event_type: str, payload: dict[str, Any], metadata: dict[str, Any] | None = None) -> ActionConsequence
+Behavior by option type
+investigate_thread
+
+Emit consequences like:
+
+thread_progressed
+possibly scene_fact_established for a lead/clue placeholder if appropriate
+do not invent hidden content yet; keep simple
+talk_to_npc
+
+Emit:
+
+npc_interaction_started
+possibly commitment_created if your current reducers support it later
+for now keep it minimal and structured
+travel_to_location
+
+Emit:
+
+scene_transition_requested
+npc_moved only if your system currently uses player as actor analog; otherwise avoid fake actor facts
+prefer explicit scene transition event
+request_recap
+
+Emit:
+
+recap_requested
+Important rule
+
+Only emit supported, meaningful events. Do not invent many new event types unless you also integrate reducers/consumers for them.
+
+src/app/rpg/execution/transitions.py
+
+Diff path:
+
+NEW FILE
+
+Purpose:
+
+build explicit scene transitions when an action changes the scene
+Class
+
+SceneTransitionBuilder
+
+Methods
+build(self, mapped_action: dict, coherence_core: Any) -> SceneTransition | None
+_build_location_transition(self, mapped_action: dict, coherence_core: Any) -> SceneTransition | None
+Behavior
+
+For travel actions:
+
+inspect current scene summary location
+build a transition record from current → target location
+
+This is mainly for traceability and downstream scene execution clarity.
+
+src/app/rpg/execution/resolver.py
+
+Diff path:
+
+NEW FILE
+
+Purpose:
+
+main entrypoint for resolving a selected ChoiceOption
+Class
+
+ActionResolver
+
+Methods
+__init__(self, intent_mapper: ActionIntentMapper | None = None, consequence_builder: ConsequenceBuilder | None = None, transition_builder: SceneTransitionBuilder | None = None) -> None
+resolve_choice(self, option: Any, coherence_core: Any, gm_state: Any) -> ActionResolutionResult
+_resolved_action_id(self, option: Any) -> str
+_build_events(self, consequences: list[ActionConsequence], transition: SceneTransition | None) -> list[dict]
+Behavior
+map option intent
+build consequences
+build scene transition if needed
+transform consequences + transition into event list
+return structured ActionResolutionResult
+Event output shape
+
+Each emitted event should be dict-like and ready for EventBus.emit(Event(...))
+
+Example:
+
+{
+    "type": "thread_progressed",
+    "payload": {
+        "thread_id": "thread_x",
+        "source": "action_resolver",
+    }
+}
+Important rule
+
+Do not directly call coherence methods here.
+Return events only.
+
+Modify existing control layer
+src/app/rpg/control/models.py
+
+Diff path:
+
+MODIFY EXISTING FILE
+
+Purpose:
+
+make choice options usable for resolution and UI continuity
+Add fields to ChoiceOption
+selected: bool = False
+resolution_type: str | None = None
+
+Update:
+
+to_dict()
+from_dict()
+Why
+
+This helps:
+
+action resolver
+future UI selection state
+stable option-to-action semantics
+src/app/rpg/control/option_engine.py
+
+Diff path:
+
+MODIFY EXISTING FILE
+
+Purpose:
+
+enrich generated options with resolution_type
+Update _make_option(...)
+
+Add param:
+
+resolution_type: str | None = None
+Update option builders
+
+Set:
+
+investigate_thread → resolution_type="thread_progress"
+talk_to_npc → resolution_type="social_contact"
+travel_to_location → resolution_type="location_travel"
+request_recap → resolution_type="recap"
+
+This keeps action mapping simpler and more stable.
+
+src/app/control/controller.py or src/app/rpg/control/controller.py
+
+Diff path:
+
+MODIFY EXISTING FILE
+
+Purpose:
+
+allow current choice set retrieval plus future selection context
+Add methods
+get_last_choice_set(self) -> dict | None
+select_option(self, option_id: str) -> dict | None
+Behavior
+
+For now:
+
+get_last_choice_set() returns FramingState.last_choice_set
+select_option(option_id) searches that stored choice set and returns the chosen option dict
+
+This is a helper for GameLoop integration.
+
+Modify GameLoop
+src/app/rpg/core/game_loop.py
+
+Diff path:
+
+MODIFY EXISTING FILE
+
+Purpose:
+
+integrate action resolution into the live loop
+Add imports
+ActionResolver
+In _init_creator_systems() or appropriate init area
+
+Initialize:
+
+self.action_resolver = ActionResolver()
+
+If you prefer separation, add _init_execution_systems() and register any stateful systems if needed.
+ActionResolver itself is stateless, so snapshot registration is not required.
+
+Add methods
+get_last_choice_set(self) -> dict | None
+resolve_selected_option(self, option_id: str) -> dict
+_emit_action_resolution_events(self, result: dict) -> None
+Behavior of resolve_selected_option(option_id)
+get current/last choice set from GameplayControlController
+find option by option_id
+resolve with ActionResolver
+emit resulting events into EventBus
+apply coherence updates on those action events immediately or on next tick depending on your loop policy
+Recommended approach
+
+For 7.3, keep it simple and explicit:
+
+resolve_selected_option(...) should:
+resolve
+emit events
+apply coherence immediately for those action events
+return the action resolution result
+
+That gives you a usable interaction path outside the normal tick loop.
+
+Example implementation shape
+def resolve_selected_option(self, option_id: str) -> dict:
+    option = self.gameplay_control_controller.select_option(option_id)
+    if option is None:
+        return {"ok": False, "reason": "unknown_option", "option_id": option_id}
+
+    result = self.action_resolver.resolve_choice(
+        option=option,
+        coherence_core=self.coherence_core,
+        gm_state=self.gm_directive_state,
+    )
+
+    self._emit_action_resolution_events(result.to_dict())
+    self._apply_coherence_updates_from_action_result(result.to_dict())
+
+    return {
+        "ok": True,
+        "resolution": result.to_dict(),
+        "scene_summary": self.coherence_core.get_scene_summary(),
+    }
+Add helper
+_apply_coherence_updates_from_action_result(self, result: dict) -> dict
+
+This should extract events and apply them via CoherenceCore.
+
+Important rule
+
+Do not directly mutate coherence from the option itself. Always go through emitted events.
+
+Optional coherence reducer additions
+src/app/rpg/coherence/reducers.py
+
+Diff path:
+
+MODIFY EXISTING FILE ONLY IF NEEDED
+
+If your current reducers do not already support useful action-generated event types, add minimal reducer coverage for:
+
+thread_progressed
+npc_interaction_started
+scene_transition_requested
+recap_requested
+Suggested reducer methods
+reduce_thread_progressed(state, event: dict) -> list[CoherenceMutation]
+reduce_npc_interaction_started(state, event: dict) -> list[CoherenceMutation]
+reduce_scene_transition_requested(state, event: dict) -> list[CoherenceMutation]
+reduce_recap_requested(state, event: dict) -> list[CoherenceMutation]
+
+Keep them conservative:
+
+thread progress updates notes / updated_tick
+interaction can record a consequence
+scene transition can push a new anchor or update scene location
+recap requested can record a consequence only
+
+Only add these if needed by your actual resolver event set.
+
+Presenters
+src/app/rpg/creator/presenters.py
+
+Diff path:
+
+MODIFY EXISTING FILE
+
+Purpose:
+
+present action resolution results in a UI-safe way
+Add methods
+present_action_resolution(self, resolution: dict) -> dict
+present_scene_transition(self, transition: dict | None) -> dict | None
+Behavior
+
+Output shape:
+
+{
+    "title": "Action Result",
+    "action": {...},
+    "events": [...],
+    "transition": {...} | None,
+}
+
+Do not expose raw internal objects. Use mapped dicts only.
+
+Tests
+src/tests/unit/rpg/test_phase73_scene_execution_unit.py
+
+Diff path:
+
+NEW FILE
+
+Cover:
+
+action model roundtrip
+intent mapping for each supported option type
+consequence generation for thread/NPC/location/recap options
+transition generation for location travel
+resolver emits deterministic event list
+stable resolved action ids
+
+Suggested tests:
+
+test_action_consequence_roundtrip()
+test_scene_transition_roundtrip()
+test_resolved_action_roundtrip()
+test_intent_mapper_maps_thread_option()
+test_consequence_builder_creates_thread_progress_event()
+test_transition_builder_creates_location_transition()
+test_action_resolver_builds_deterministic_events()
+src/tests/functional/test_phase73_scene_execution_functional.py
+
+Diff path:
+
+NEW FILE
+
+Cover:
+
+resolving a selected option emits events
+coherence updates after resolution
+travel option updates scene location via event path
+request recap emits recap event and produces stable result payload
+
+Suggested tests:
+
+test_resolve_selected_thread_option_updates_coherence()
+test_resolve_selected_location_option_updates_scene_summary()
+test_resolve_unknown_option_returns_error()
+test_present_action_resolution_returns_ui_safe_shape()
+src/tests/regression/test_phase73_scene_execution_regression.py
+
+Diff path:
+
+NEW FILE
+
+Cover:
+
+resolving same option in same state produces same events
+resolution does not directly mutate coherence without events
+choice selection stays stable across snapshot/restore if choice set is preserved
+resolver does not invent unrelated event types
+
+Suggested tests:
+
+test_action_resolution_is_deterministic_for_same_choice_set()
+test_action_resolution_uses_event_path_not_direct_mutation()
+test_selected_option_resolution_remains_stable_after_restore()
+test_resolver_emits_only_supported_event_types()
+Implementation order for coding LLM
+Commit 1
+
+Create execution package:
+
+src/app/rpg/execution/__init__.py
+src/app/rpg/execution/models.py
+src/app/rpg/execution/intent_mapping.py
+src/app/rpg/execution/consequences.py
+src/app/rpg/execution/transitions.py
+src/app/rpg/execution/resolver.py
+Commit 2
+
+Modify control package:
+
+src/app/rpg/control/models.py
+src/app/rpg/control/option_engine.py
+src/app/rpg/control/controller.py
+Commit 3
+
+Modify game loop and presenters:
+
+src/app/rpg/core/game_loop.py
+src/app/rpg/creator/presenters.py
+Commit 4
+
+If needed, add minimal reducer support:
+
+src/app/rpg/coherence/reducers.py
+Commit 5
+
+Add tests:
+
+src/tests/unit/rpg/test_phase73_scene_execution_unit.py
+src/tests/functional/test_phase73_scene_execution_functional.py
+src/tests/regression/test_phase73_scene_execution_regression.py
+Coding rules
+action resolution must remain deterministic
+no LLMs in resolution logic
+no direct coherence mutation from selected options
+all action effects go through structured emitted events
+keep scene transitions explicit and inspectable
+do not over-invent event types; prefer minimal meaningful set
+keep presenters UI-safe and read-only
+Short prompt for the coding LLM
+
+Implement Phase 7.3 — Scene Execution Layer.
+
+Create app.rpg.execution with action resolution models, intent mapping, consequence building, scene transition building, and an ActionResolver. Update the control layer so options include stable resolution_type, and integrate resolve_selected_option(option_id) into GameLoop. Selected options must resolve into deterministic emitted events that then update coherence through the existing event/reducer path. Add unit, functional, and regression tests proving deterministic action resolution, explicit transitions, and event-path-only state updates.

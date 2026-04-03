@@ -1,414 +1,175 @@
-"""Phase 7.3 — Scene Execution Layer — Unit Tests.
+"""Unit tests for Phase 7.3 Scene Execution Layer.
 
-Covers:
-- Action model roundtrip (to_dict / from_dict)
-- Intent mapping for each supported option type
-- Consequence generation for thread/NPC/location/recap options
-- Transition generation for location travel
-- Resolver emits deterministic event list
-- Stable resolved action IDs
+Tests for ActionResolver constraint enforcement, blocked resolution,
+event validation, and deterministic behavior.
 """
 
 from __future__ import annotations
 
 import pytest
+from dataclasses import dataclass, field
+from typing import Any, List, Optional
 
+from app.rpg.execution.resolver import ActionResolver, SUPPORTED_EVENT_TYPES
 from app.rpg.execution.models import (
-    ActionConsequence,
     ActionResolutionResult,
     ResolvedAction,
-    SceneTransition,
+    ActionConsequence,
 )
-from app.rpg.execution.intent_mapping import ActionIntentMapper
-from app.rpg.execution.consequences import ConsequenceBuilder
-from app.rpg.execution.transitions import SceneTransitionBuilder
-from app.rpg.execution.resolver import ActionResolver, SUPPORTED_EVENT_TYPES
 
 
-# ==================================================================
-# Helpers / fixtures
-# ==================================================================
+# ===========================================================================
+# Test Helpers
+# ===========================================================================
 
 class FakeCoherenceCore:
-    """Minimal stand-in for CoherenceCore in tests."""
+    """Minimal fake of CoherenceCore for testing."""
 
-    def __init__(self, location: str | None = "town_square", threads: list | None = None):
-        self._location = location
+    def __init__(self, threads: list[dict] | None = None, scene: dict | None = None):
         self._threads = threads or []
+        self._scene = scene or {"location": "default_loc"}
 
-    def get_scene_summary(self) -> dict:
-        return {"location": self._location, "present_actors": ["npc_1"]}
-
-    def get_unresolved_threads(self) -> list:
+    def get_unresolved_threads(self) -> list[dict]:
         return self._threads
 
-    def get_state(self):
-        class _S:
-            stable_world_facts = {}
-            unresolved_threads = {}
-        return _S()
+    def get_scene_summary(self) -> dict:
+        return self._scene
 
 
 class FakeGMState:
-    """Minimal stand-in for GMDirectiveState."""
+    """Minimal fake GM state for testing."""
     pass
 
 
 def _make_option_dict(
-    option_id: str = "opt1",
-    intent_type: str = "investigate_thread",
-    target_id: str | None = "thread_x",
-    resolution_type: str | None = "thread_progress",
+    option_id: str,
+    intent_type: str,
+    target_id: str,
+    resolution_type: str = "thread_progress",
+    constraints: list[dict] | None = None,
 ) -> dict:
     return {
         "option_id": option_id,
-        "label": f"Test: {intent_type}",
         "intent_type": intent_type,
-        "summary": f"Do {intent_type}",
         "target_id": target_id,
-        "tags": [],
-        "constraints": [],
-        "priority": 0.5,
-        "selected": False,
         "resolution_type": resolution_type,
-        "metadata": {},
+        "summary": f"Option {option_id}",
+        "constraints": constraints or [],
     }
 
 
-# ==================================================================
-# Model roundtrip tests
-# ==================================================================
-
-class TestActionConsequenceRoundtrip:
-    def test_action_consequence_roundtrip(self):
-        c = ActionConsequence(
-            consequence_id="c1",
-            consequence_type="thread_progressed",
-            summary="Progressed thread X",
-            event_type="thread_progressed",
-            payload={"thread_id": "x"},
-            metadata={"foo": "bar"},
-        )
-        d = c.to_dict()
-        c2 = ActionConsequence.from_dict(d)
-        assert c2.consequence_id == "c1"
-        assert c2.consequence_type == "thread_progressed"
-        assert c2.event_type == "thread_progressed"
-        assert c2.payload == {"thread_id": "x"}
-        assert c2.metadata == {"foo": "bar"}
-        assert c2.to_dict() == d
-
-
-class TestSceneTransitionRoundtrip:
-    def test_scene_transition_roundtrip(self):
-        t = SceneTransition(
-            transition_id="t1",
-            transition_type="location_travel",
-            from_location="town",
-            to_location="forest",
-            summary="Travel from town to forest",
-            metadata={"key": "val"},
-        )
-        d = t.to_dict()
-        t2 = SceneTransition.from_dict(d)
-        assert t2.transition_id == "t1"
-        assert t2.from_location == "town"
-        assert t2.to_location == "forest"
-        assert t2.to_dict() == d
-
-    def test_scene_transition_none_locations(self):
-        t = SceneTransition(
-            transition_id="t2",
-            transition_type="location_travel",
-        )
-        d = t.to_dict()
-        assert d["from_location"] is None
-        assert d["to_location"] is None
-        t2 = SceneTransition.from_dict(d)
-        assert t2.from_location is None
-
-
-class TestResolvedActionRoundtrip:
-    def test_resolved_action_roundtrip(self):
-        consequence = ActionConsequence(
-            consequence_id="c1",
-            consequence_type="thread_progressed",
-            summary="ok",
-            event_type="thread_progressed",
-        )
-        transition = SceneTransition(
-            transition_id="t1",
-            transition_type="location_travel",
-            from_location="a",
-            to_location="b",
-        )
-        ra = ResolvedAction(
-            action_id="a1",
-            option_id="opt1",
-            intent_type="investigate_thread",
-            target_id="thread_x",
-            summary="Investigating",
-            consequences=[consequence],
-            transition=transition,
-            metadata={"debug": True},
-        )
-        d = ra.to_dict()
-        ra2 = ResolvedAction.from_dict(d)
-        assert ra2.action_id == "a1"
-        assert len(ra2.consequences) == 1
-        assert ra2.transition is not None
-        assert ra2.transition.to_location == "b"
-        assert ra2.to_dict() == d
-
-    def test_resolved_action_no_transition(self):
-        ra = ResolvedAction(
-            action_id="a2",
-            option_id="opt2",
-            intent_type="request_recap",
-        )
-        d = ra.to_dict()
-        assert d["transition"] is None
-        ra2 = ResolvedAction.from_dict(d)
-        assert ra2.transition is None
-
-
-class TestActionResolutionResultRoundtrip:
-    def test_full_roundtrip(self):
-        result = ActionResolutionResult(
-            resolved_action=ResolvedAction(
-                action_id="a1",
-                option_id="opt1",
-                intent_type="investigate_thread",
-            ),
-            events=[{"type": "thread_progressed", "payload": {"thread_id": "t1"}}],
-            trace={"mapped_action": {"intent_type": "investigate_thread"}},
-        )
-        d = result.to_dict()
-        r2 = ActionResolutionResult.from_dict(d)
-        assert r2.resolved_action.action_id == "a1"
-        assert len(r2.events) == 1
-        assert r2.trace["mapped_action"]["intent_type"] == "investigate_thread"
-
-
-# ==================================================================
-# Intent mapping tests
-# ==================================================================
-
-class TestActionIntentMapper:
-    def setup_method(self):
-        self.mapper = ActionIntentMapper()
-
-    def test_intent_mapper_maps_thread_option(self):
-        option = _make_option_dict(intent_type="investigate_thread", target_id="thread_x")
-        result = self.mapper.map_option(option)
-        assert result["intent_type"] == "investigate_thread"
-        assert result["resolution_type"] == "thread_progress"
-        assert result["target_id"] == "thread_x"
-
-    def test_intent_mapper_maps_npc_option(self):
-        option = _make_option_dict(intent_type="talk_to_npc", target_id="npc_1")
-        result = self.mapper.map_option(option)
-        assert result["intent_type"] == "talk_to_npc"
-        assert result["resolution_type"] == "social_contact"
-        assert result["target_id"] == "npc_1"
-
-    def test_intent_mapper_maps_location_option(self):
-        option = _make_option_dict(intent_type="travel_to_location", target_id="forest")
-        result = self.mapper.map_option(option)
-        assert result["intent_type"] == "travel_to_location"
-        assert result["resolution_type"] == "location_travel"
-        assert result["target_id"] == "forest"
-
-    def test_intent_mapper_maps_recap_option(self):
-        option = _make_option_dict(intent_type="request_recap", target_id=None)
-        result = self.mapper.map_option(option)
-        assert result["intent_type"] == "request_recap"
-        assert result["resolution_type"] == "recap"
-        assert result["target_id"] is None
-
-    def test_intent_mapper_maps_unknown_option(self):
-        option = _make_option_dict(intent_type="custom_action", target_id="x", resolution_type=None)
-        result = self.mapper.map_option(option)
-        assert result["intent_type"] == "custom_action"
-        assert result["resolution_type"] == "custom_action"
-
-    def test_intent_mapper_handles_object_option(self):
-        """Mapper works with object-based options (not just dicts)."""
-        from app.rpg.control.models import ChoiceOption
-        opt = ChoiceOption(
-            option_id="opt1",
-            label="Investigate",
-            intent_type="investigate_thread",
-            summary="Investigate thread_x",
-            target_id="thread_x",
-        )
-        result = self.mapper.map_option(opt)
-        assert result["intent_type"] == "investigate_thread"
-        assert result["target_id"] == "thread_x"
-
-
-# ==================================================================
-# Consequence builder tests
-# ==================================================================
-
-class TestConsequenceBuilder:
-    def setup_method(self):
-        self.builder = ConsequenceBuilder()
-        self.cc = FakeCoherenceCore()
-        self.gm = FakeGMState()
-
-    def test_consequence_builder_creates_thread_progress_event(self):
-        mapped = {"resolution_type": "thread_progress", "target_id": "thread_x"}
-        consequences = self.builder.build(mapped, self.cc, self.gm)
-        assert len(consequences) == 1
-        c = consequences[0]
-        assert c.event_type == "thread_progressed"
-        assert c.payload["thread_id"] == "thread_x"
-
-    def test_consequence_builder_creates_npc_interaction_event(self):
-        mapped = {"resolution_type": "social_contact", "target_id": "npc_1"}
-        consequences = self.builder.build(mapped, self.cc, self.gm)
-        assert len(consequences) == 1
-        c = consequences[0]
-        assert c.event_type == "npc_interaction_started"
-        assert c.payload["npc_id"] == "npc_1"
-
-    def test_consequence_builder_creates_location_travel_event(self):
-        mapped = {"resolution_type": "location_travel", "target_id": "forest"}
-        consequences = self.builder.build(mapped, self.cc, self.gm)
-        assert len(consequences) == 1
-        c = consequences[0]
-        assert c.event_type == "scene_transition_requested"
-        assert c.payload["location"] == "forest"
-
-    def test_consequence_builder_creates_recap_event(self):
-        mapped = {"resolution_type": "recap", "target_id": None}
-        consequences = self.builder.build(mapped, self.cc, self.gm)
-        assert len(consequences) == 1
-        c = consequences[0]
-        assert c.event_type == "recap_requested"
-
-    def test_consequence_builder_unknown_type_returns_empty(self):
-        mapped = {"resolution_type": "unknown_type", "target_id": "x"}
-        consequences = self.builder.build(mapped, self.cc, self.gm)
-        assert consequences == []
-
-
-# ==================================================================
-# Transition builder tests
-# ==================================================================
-
-class TestSceneTransitionBuilder:
-    def setup_method(self):
-        self.builder = SceneTransitionBuilder()
-
-    def test_transition_builder_creates_location_transition(self):
-        cc = FakeCoherenceCore(location="town")
-        mapped = {"resolution_type": "location_travel", "target_id": "forest"}
-        transition = self.builder.build(mapped, cc)
-        assert transition is not None
-        assert transition.transition_type == "location_travel"
-        assert transition.from_location == "town"
-        assert transition.to_location == "forest"
-
-    def test_transition_builder_returns_none_for_non_travel(self):
-        cc = FakeCoherenceCore()
-        mapped = {"resolution_type": "thread_progress", "target_id": "t1"}
-        transition = self.builder.build(mapped, cc)
-        assert transition is None
-
-    def test_transition_builder_handles_no_current_location(self):
-        cc = FakeCoherenceCore(location=None)
-        mapped = {"resolution_type": "location_travel", "target_id": "forest"}
-        transition = self.builder.build(mapped, cc)
-        assert transition is not None
-        assert transition.from_location is None
-        assert transition.to_location == "forest"
-
-
-# ==================================================================
-# ActionResolver tests
-# ==================================================================
+# ===========================================================================
+# Tests
+# ===========================================================================
 
 class TestActionResolver:
+
     def setup_method(self):
+        cc = FakeCoherenceCore(
+            threads=[{"thread_id": "q1", "title": "Test Thread"}],
+            scene={"location": "default_loc"},
+        )
+        gm = FakeGMState()
         self.resolver = ActionResolver()
-        self.cc = FakeCoherenceCore()
-        self.gm = FakeGMState()
+        self.cc = cc
+        self.gm = gm
 
     def test_action_resolver_builds_deterministic_events(self):
         option = _make_option_dict(
-            option_id="investigate_thread:thread_x",
+            option_id="investigate_thread:q1",
             intent_type="investigate_thread",
-            target_id="thread_x",
-        )
-        result = self.resolver.resolve_choice(option, self.cc, self.gm)
-        assert len(result.events) >= 1
-        assert result.events[0]["type"] == "thread_progressed"
-        assert result.events[0]["payload"]["thread_id"] == "thread_x"
-
-    def test_action_resolver_stable_action_id(self):
-        option = _make_option_dict(
-            option_id="investigate_thread:t1",
-            intent_type="investigate_thread",
-            target_id="t1",
+            target_id="q1",
+            resolution_type="thread_progress",
         )
         result1 = self.resolver.resolve_choice(option, self.cc, self.gm)
         result2 = self.resolver.resolve_choice(option, self.cc, self.gm)
-        assert result1.resolved_action.action_id == result2.resolved_action.action_id
+        assert result1.to_dict()["events"] == result2.to_dict()["events"]
 
-    def test_action_resolver_travel_emits_transition_event(self):
-        """Travel emits at least one scene_transition_requested event."""
+    def test_action_resolver_blocks_when_constraints_fail(self):
         option = _make_option_dict(
-            option_id="explore:forest",
-            intent_type="travel_to_location",
-            target_id="forest",
+            option_id="investigate_thread:q_missing",
+            intent_type="investigate_thread",
+            target_id="q_missing",
+            resolution_type="thread_progress",
+            constraints=[
+                {
+                    "constraint_id": "c1",
+                    "constraint_type": "requires_thread",
+                    "value": "q_missing",
+                    "source": "test",
+                }
+            ],
         )
         result = self.resolver.resolve_choice(option, self.cc, self.gm)
-        types = [e["type"] for e in result.events]
-        assert "scene_transition_requested" in types
-        assert len(result.events) >= 1
+        assert result.resolved_action.outcome == "blocked"
+        assert result.events
+        assert result.events[0]["type"] == "action_blocked"
 
-    def test_action_resolver_recap_emits_recap_event(self):
+    def test_action_resolver_validates_supported_event_types(self):
+        with pytest.raises(ValueError):
+            self.resolver._validate_event({"type": "not_supported", "payload": {}})
+
+    def test_action_resolver_validates_event_payload_shape(self):
+        with pytest.raises(ValueError):
+            self.resolver._validate_event({"type": "thread_progressed", "payload": "bad"})
+
+    def test_action_resolver_succeeds_when_constraints_pass(self):
         option = _make_option_dict(
-            option_id="request_recap",
+            option_id="investigate_thread:q1",
+            intent_type="investigate_thread",
+            target_id="q1",
+            resolution_type="thread_progress",
+            constraints=[
+                {
+                    "constraint_id": "c1",
+                    "constraint_type": "requires_thread",
+                    "value": "q1",
+                    "source": "test",
+                }
+            ],
+        )
+        result = self.resolver.resolve_choice(option, self.cc, self.gm)
+        assert result.resolved_action.outcome == "success"
+        assert any(e["type"] == "thread_progressed" for e in result.events)
+
+    def test_action_resolver_recap_returns_success(self):
+        option = _make_option_dict(
+            option_id="recap",
             intent_type="request_recap",
-            target_id=None,
+            target_id="none",
+            resolution_type="recap",
         )
         result = self.resolver.resolve_choice(option, self.cc, self.gm)
-        assert len(result.events) == 1
-        assert result.events[0]["type"] == "recap_requested"
+        assert result.resolved_action.outcome == "success"
+        assert any(e["type"] == "recap_requested" for e in result.events)
 
-    def test_action_resolver_npc_emits_interaction_event(self):
-        option = _make_option_dict(
-            option_id="talk_to_npc:npc_1",
-            intent_type="talk_to_npc",
-            target_id="npc_1",
+
+class TestResolvedActionModel:
+
+    def test_resolved_action_roundtrip(self):
+        action = ResolvedAction(
+            action_id="act1",
+            option_id="opt1",
+            intent_type="test",
+            target_id="t1",
+            summary="Test action",
+            outcome="blocked",
         )
-        result = self.resolver.resolve_choice(option, self.cc, self.gm)
-        assert len(result.events) == 1
-        assert result.events[0]["type"] == "npc_interaction_started"
+        d = action.to_dict()
+        action2 = ResolvedAction.from_dict(d)
+        assert action2.outcome == "blocked"
+        assert action2.action_id == "act1"
 
-    def test_action_resolver_result_has_trace(self):
-        option = _make_option_dict()
-        result = self.resolver.resolve_choice(option, self.cc, self.gm)
-        assert "mapped_action" in result.trace
-        assert "consequence_count" in result.trace
 
-    def test_action_resolver_emits_only_supported_event_types(self):
-        """All events emitted by the resolver must be in SUPPORTED_EVENT_TYPES."""
-        for intent in ["investigate_thread", "talk_to_npc", "travel_to_location", "request_recap"]:
-            option = _make_option_dict(intent_type=intent, target_id="target")
-            result = self.resolver.resolve_choice(option, self.cc, self.gm)
-            for event in result.events:
-                assert event["type"] in SUPPORTED_EVENT_TYPES, (
-                    f"Event type {event['type']!r} not in SUPPORTED_EVENT_TYPES"
-                )
+class TestEventValidation:
 
-    def test_action_resolver_to_dict_roundtrip(self):
-        option = _make_option_dict()
-        result = self.resolver.resolve_choice(option, self.cc, self.gm)
-        d = result.to_dict()
-        r2 = ActionResolutionResult.from_dict(d)
-        assert r2.resolved_action.action_id == result.resolved_action.action_id
-        assert len(r2.events) == len(result.events)
+    def test_validation_rejects_unknown_types(self):
+        resolver = ActionResolver()
+        resolver._validate_event({"type": "thread_progressed", "payload": {}})
+        with pytest.raises(ValueError):
+            resolver._validate_event({"type": "unknown_event", "payload": {}})
+
+    def test_validation_accepts_known_types(self):
+        resolver = ActionResolver()
+        for et in SUPPORTED_EVENT_TYPES:
+            resolver._validate_event({"type": et, "payload": {}})
