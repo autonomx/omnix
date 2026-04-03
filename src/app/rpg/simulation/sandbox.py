@@ -112,18 +112,29 @@ class SimulationSandbox:
         # Record starting tick
         start_tick = getattr(loop, "_tick_count", 0) or getattr(loop, "tick_count", 0)
 
+        # PHASE 5.5 — Enter simulation mode before running
+        if hasattr(loop, "set_mode"):
+            loop.set_mode("simulation")
+
         # Rebuild current state via replay
         self._replay_events(loop, base_events)
 
-        # Inject hypothetical future events
-        for event in future_events:
-            loop.event_bus.emit(event)
+        # PHASE 5.5 — Use try/finally to ensure mode is always restored
+        try:
+            # Inject hypothetical future events
+            for event in future_events:
+                loop.event_bus.emit(event)
 
-        # Simulate forward ticks
-        ticks_simulated = 0
-        for _ in range(max_ticks):
-            loop.tick()
-            ticks_simulated += 1
+            # Simulate forward ticks
+            ticks_simulated = 0
+            for _ in range(max_ticks):
+                if hasattr(loop, "tick"):
+                    loop.tick("")
+                ticks_simulated += 1
+        finally:
+            # PHASE 5.5 — Always return to live mode, even if simulation fails
+            if hasattr(loop, "set_mode"):
+                loop.set_mode("live")
 
         # Collect results
         history = self._get_event_history(loop)
@@ -174,6 +185,9 @@ class SimulationSandbox:
             loop: The game loop instance.
             events: Events to replay.
         """
+        if not events:
+            return
+
         if hasattr(loop, "replay_to_tick"):
             # Use ReplayEngine for proper state reconstruction
             loop.replay_to_tick(events, tick=max(

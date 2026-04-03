@@ -1,0 +1,439 @@
+diff --git a/src/app/rpg/core/event_bus.py b/src/app/rpg/core/event_bus.py
+index 3d0717b..9f14880 100644
+--- a/src/app/rpg/core/event_bus.py
++++ b/src/app/rpg/core/event_bus.py
+@@ -5,6 +5,20 @@ This module implements the EventBus as specified in rpg-design.txt Step 2.
+ It provides a simple, decoupled event system where all cross-system
+ communication flows through events rather than direct method calls.
+ 
++PHASE 1.5 — ENFORCEMENT PATCH:
++- Added source field to Event for system identity tracking
++- Added event history for replay/debug power
++- Added stronger cross-system call enforcement
++- Added tick ID injection for temporal debugging
++
++PHASE 1.6 — CRITICAL FIXES (rpg-design.txt):
++- Fix #1: Clone events to prevent mutation side effects
++- Fix #2: Enforce source field on all events
++- Fix #3: Layer-based cross-system detection
++- Fix #4: Proper setter for _current_tick (encapsulation)
++- Fix #5: Bounded history to prevent memory leaks
++- Fix #6: ContextVar reset edge case handling
++
+ ARCHITECTURE RULE:
+ This system must NOT directly call other systems.
+ Use EventBus for all cross-system communication.
+@@ -15,24 +29,96 @@ Usage:
+     events = bus.collect()  # Returns and clears all pending events
+ """
+ 
++import uuid
++from collections import deque
+ from dataclasses import dataclass, field
+ from typing import Any, Dict, List, Optional
+ import inspect
++import time
++
++# PHASE 3 — TIMELINE GRAPH
++from .timeline_graph import TimelineGraph
++
++
++# Allowed layers for cross-system enforcement (Fix #3)
++ALLOWED_LAYERS = {
++    "app.rpg.core",
++    "app.rpg.narrative",
++    "app.rpg.world",
++    "app.rpg.npc",
++    "app.rpg.ai",
++    "app.rpg.agent",
++    "app.rpg.character",
++    "app.rpg.quest",
++    "app.rpg.choice",
++    "app.rpg.cognitive",
++    "app.rpg.story",
++    "app.rpg.scene",
++    "app.rpg.player",
++    "app.rpg.memory",
++    "app.rpg.systems",
++    "app.rpg.events",
++    "app.rpg.narration",
++    "app.rpg.tools",
++    "tests",
++}
++
++
++# PHASE 4 — EVENT CONTEXT (rpg-design.txt Issue #1)
++@dataclass
++class EventContext:
++    """Causal context for event emission.
++
++    Addresses rpg-design.txt Issue #1: Parent Chain Is NOT Guaranteed Correct.
++    Instead of using a global _last_event_id, this class provides explicit
++    causal context for each system's event emission.
++
++    Usage in GameLoop:
++        ctx = EventContext(parent_id=player_event.event_id)
++        npc_system.update(ctx)
++        world_system.tick(ctx)
++    """
++    parent_id: Optional[str] = None
++    tick: Optional[int] = None
++    source_system: Optional[str] = None
+ 
+ 
+ @dataclass
+ class Event:
+     """A single game event with a type and payload.
+ 
++    PHASE 2.5 — EVENT ORDERING + CAUSALITY TRACKING:
++    - event_id: Unique identifier for deduplication and causal tracking
++    - timestamp: High-resolution timestamp for ordering
++    - parent_id: Reference to the event that caused this event
++
+     Attributes:
+         type: The event type/name (e.g., "relationship_changed", "combat_started").
+         payload: Dictionary containing event-specific data.
++        source: Optional source system identifier for tracing who did what.
++        event_id: Unique UUID for this event (auto-generated if not provided).
++        timestamp: Float timestamp when event was created (auto-generated if not provided).
++        parent_id: Optional reference to the causally preceding event.
+     """
+     type: str
+     payload: Dict[str, Any] = field(default_factory=dict)
++    source: Optional[str] = None
++    event_id: Optional[str] = None
++    timestamp: Optional[float] = None
++    parent_id: Optional[str] = None
++
++    def __post_init__(self) -> None:
++        """Ensure event_id and timestamp are set if not provided."""
++        if self.event_id is None:
++            self.event_id = str(uuid.uuid4())
++        if self.timestamp is None:
++            self.timestamp = time.time()
+ 
+     def __repr__(self) -> str:
+-        return f"Event(type={self.type!r}, payload={self.payload!r})"
++        return (
++            f"Event(type={self.type!r}, payload={self.payload!r}, "
++            f"source={self.source!r}, event_id={self.event_id!r})"
++        )
+ 
+ 
+ class EventBus:
+@@ -58,29 +144,162 @@ class EventBus:
+         """
+         self._events: List[Event] = []
+         self._log: Optional[List[Event]] = [] if debug else None
++        self._history: List[Event] = []  # Complete event history for replay/debug
+         self._debug = debug
+         self._enforce = enforce
++        self._current_tick: Optional[int] = None  # Current tick ID for temporal tracking
++        self._max_history: int = 10000  # Fix #5: Bounded history to prevent memory leaks
++        # PHASE 2.5 — DEDUPLICATION SAFETY: Track seen event IDs to prevent duplicates
++        # PHASE 4 — MEMORY GROWTH FIX (rpg-design.txt Issue #6): Use deque for sliding window
++        self._seen_event_ids: deque = deque(maxlen=100_000)
++        self._seen_event_ids_set: set = set()  # For O(1) lookup
++
++        # PHASE 3 — TIMELINE GRAPH: DAG of event causality
++        self.timeline = TimelineGraph()
+ 
+-    def emit(self, event: Event) -> None:
++        # PHASE 5.1.5 — FIX #4: Sequence number for stable event ordering
++        # This solves the issue where payload["tick"] may not exist,
++        # timestamps are non-deterministic, and event_id randomness leaks in.
++        self._seq: int = 0
++
++    def set_tick(self, tick: int) -> None:
++        """Set the current tick ID for temporal tracking.
++
++        Fix #4: This is the ONLY way to set the current tick. Direct mutation
++        of _current_tick is prohibited.
++
++        Args:
++            tick: The current tick number.
++        """
++        self._current_tick = tick
++
++    def emit(
++        self,
++        event: Event,
++        *,
++        replay: bool = False,
++        context: Optional[EventContext] = None,
++    ) -> None:
+         """Emit an event (adds to the internal queue).
+ 
+         This is the ONLY way systems should communicate across boundaries.
+         Instead of: world.update_relationship(npc_id, target_id, delta)
+         Use: bus.emit(Event("relationship_changed", {...}))
+ 
++        PHASE 2 — REPLAY ENGINE FIX #1:
++        Events emitted during replay (replay=True) are NOT added to history.
++        This prevents history duplication when replaying event logs:
++            - Normal emit -> history grows
++            - Replay emit  -> history stays clean
++            - Result: replay is deterministic, no double-counting
++
++        PHASE 4 — EVENT CONTEXT (rpg-design.txt Issue #1):
++        Instead of using global _last_event_id for parent linking,
++        use explicit EventContext for true causality:
++            ctx = EventContext(parent_id=player_event.event_id)
++            npc_system.update(ctx)
++            world.update(ctx)
++
++        Fix #1: Clone event to prevent external mutation side-effects.
++        Fix #2: Enforce source field when enforcement is enabled.
++
++        PHASE 5.1.5 — FIX #4: Assign sequence number for deterministic ordering.
++        Every event gets a monotonically increasing sequence number that
++        provides stable ordering independent of timestamps or event_id randomness.
++
+         Args:
+             event: The event to emit.
++            replay: If True, event is from replay and won't be added to
++                   history. This prevents history duplication during replay.
++            context: Optional EventContext for causal parent linking.
++                    If provided, overrides event.parent_id for true causality.
++
++        Raises:
++            RuntimeError: If enforcement is enabled and source is missing.
+         """
+         self.assert_event_usage()
+ 
++        # PHASE 5.1.5 — FIX #4: Assign sequence number for stable ordering
++        event._seq = self._seq
++        self._seq += 1
++
++        # PHASE 4 — EVENT CONTEXT: Apply context parent_id if provided
++        # This addresses rpg-design.txt Issue #1: Parent Chain Is NOT Guaranteed Correct
++        if context is not None and context.parent_id is not None:
++            seq_before = getattr(event, "_seq", 0)
++            event = Event(
++                type=event.type,
++                payload=event.payload,
++                source=event.source,
++                event_id=event.event_id,
++                timestamp=event.timestamp,
++                parent_id=context.parent_id,
++            )
++            # PHASE 5.1.5 FIX #4: Preserve sequence number when cloning
++            event._seq = seq_before
++
++        # Fix #2: Enforce source field when enforcement is enabled
++        if self._enforce and not event.source:
++            raise RuntimeError(
++                f"Event '{event.type}' missing source. "
++                "All events must declare origin system."
++            )
++
++        # PHASE 2.5 — DEDUPLICATION SAFETY:
++        # Check for duplicate events BEFORE cloning to prevent duplicates
++        event_id = event.event_id
++        if event_id in self._seen_event_ids_set:
++            return  # prevent duplicates
++
++        self._seen_event_ids.append(event_id)
++        self._seen_event_ids_set.add(event_id)
++
++        # Fix #1: Clone event to prevent external mutation side-effects
++        # Preserve event_id, timestamp, parent_id, and _seq for causal tracking
++        payload = dict(event.payload)
++
++        if self._current_tick is not None:
++            payload["tick"] = self._current_tick
++
++        # Preserve _seq across cloning
++        original_seq = getattr(event, "_seq", 0)
++
++        event = Event(
++            type=event.type,
++            payload=payload,
++            source=event.source,
++            event_id=event_id,  # preserve original event_id
++            timestamp=event.timestamp,  # preserve original timestamp
++            parent_id=event.parent_id,  # preserve original parent_id
++        )
++        # PHASE 5.1.5 FIX #4: Preserve sequence number when cloning
++        event._seq = original_seq
++
+         if self._debug:
+             print(f"[EVENT] {event.type} -> {event.payload}")
+ 
+         if self._log is not None:
+             self._log.append(event)
+ 
++        # PHASE 2 FIX #1: Separate "history" vs "replay"
++        # Only add to history during normal gameplay, NOT during replay.
++        # This prevents:
++        # - Duplicated causal chain
++        # - Broken temporal reasoning
++        # - NPC memory double-counting events
++        # - Analytics becoming garbage
++        if not replay:
++            self._history.append(event)
++
++            # Fix #5: Bounded history to prevent memory leaks
++            if len(self._history) > self._max_history:
++                self._history.pop(0)
++
+         self._events.append(event)
+ 
++        # PHASE 3 — TIMELINE GRAPH: Track event in DAG for branching timelines
++        self.timeline.add_event(event.event_id, event.parent_id)
++
+     def collect(self) -> List[Event]:
+         """Collect and clear all pending events.
+ 
+@@ -120,28 +339,142 @@ class EventBus:
+         """
+         return self._log
+ 
++    def get_history(self) -> List[Event]:
++        """Return the raw event history (unsorted) for internal use.
++
++        This method provides access to the underlying history list
++        for modules that need to iterate events without sorting
++        overhead. For most use cases, prefer history() which
++        guarantees deterministic ordering.
++
++        PHASE 5.1: Added to support compute_state_hash and
++        validation modules that need direct history access.
++
++        Returns:
++            List of all events ever emitted (not cleared by collect),
++            in insertion order (no sorting).
++        """
++        return list(self._history)
++
++    def history(self) -> List[Event]:
++        """Return a copy of the complete event history for replay/debug.
++
++        PHASE 5.1.5 — DETERMINISTIC ORDERING FIX #4:
++        Events are now sorted by (tick, _seq) instead of (tick, timestamp, event_id).
++        
++        PHASE 5.1 issues with old sort key:
++        - payload["tick"] may not exist on all events
++        - timestamps are non-deterministic outside tests
++        - event_id randomness leaks into ordering
++
++        The new _seq field provides a monotonic, deterministic sequence number
++        assigned at emit time, giving stable ordering regardless of timestamps.
++
++        Returns:
++            List of all events ever emitted (not cleared by collect),
++            sorted deterministically by (tick, _seq).
++        """
++        return sorted(
++            self._history[:],
++            key=lambda e: (
++                getattr(e, "tick", e.payload.get("tick", 0)),
++                getattr(e, "_seq", 0),
++            ),
++        )
++
++    def load_history(self, events: List[Event]) -> None:
++        """Load event history (used for replay/bootstrap).
++
++        PHASE 2 — REPLAY ENGINE:
++        This method allows the ReplayEngine to restore event history
++        into a freshly constructed EventBus so that systems that inspect
++        history can see the full timeline.
++
++        Args:
++            events: List of events to load as history.
++        """
++        self._history = list(events)
++
+     def reset(self) -> None:
+-        """Reset the bus state (clears queue and log)."""
++        """Reset the bus state (clears queue, log, and history).
++
++        Fix #6: Don't touch context vars here - that breaks nested contexts.
++        Context var management is handled by GameLoop.
++
++        PHASE 2.5 FIX: Also clear seen event IDs to allow fresh replay.
++        """
+         self._events.clear()
+         if self._log is not None:
+             self._log.clear()
++        self._history.clear()
++        self._current_tick = None
++        self._seen_event_ids.clear()
++        self._seen_event_ids_set.clear()
++        # PHASE 3: Clear timeline graph on reset
++        self.timeline.clear()
+ 
+     def assert_event_usage(self):
+-        """Development-time enforcement to detect misuse."""
++        """Development-time enforcement to detect illegal cross-system calls.
++
++        Fix #3: Use layer-based detection instead of fragile string matching.
++        """
+         if not self._enforce:
+             return
+ 
+         stack = inspect.stack()
+-        for frame in stack:
++
++        for frame in stack[2:]:  # skip emit + assert frames
+             module = inspect.getmodule(frame[0])
+             if not module:
+                 continue
+ 
+             name = module.__name__
+ 
+-            # Allow core + event_bus
+-            if "core.event_bus" in name:
+-                continue
++            # Fix #3: Detect direct cross-layer calls using allowed layers
++            for layer in ALLOWED_LAYERS:
++                if name.startswith(layer):
++                    return
++
++        raise RuntimeError(
++            "Illegal call path detected. Systems must communicate via EventBus."
++        )
+ 
+-            # Detect suspicious direct calls (future extension point)
+-            # For now, this is a placeholder hook
+\ No newline at end of file
++    def current_head(self) -> Optional[str]:
++        """Get the current head event ID for parent linking.
++
++        Addresses rpg-design.txt Issue #8: GameLoop Pointer Is Weak.
++        Instead of using history[-1].event_id, use this method for
++        the true current head of the event stream.
++
++        Returns:
++            The event_id of the most recently emitted event, or None.
++        """
++        if self._history:
++            return self._history[-1].event_id
++        return None
++
++    # PHASE 3 — EVENT CREATION HELPER (PATCH 6)
++    def create_event(
++        self,
++        type: str,
++        payload: dict,
++        source: str,
++        parent_id: Optional[str] = None,
++    ) -> Event:
++        """Convenience factory for creating events with parent linking.
++
++        Args:
++            type: Event type/name.
++            payload: Event payload data.
++            source: Source system identifier.
++            parent_id: Optional parent event ID for causal linking.
++
++        Returns:
++            A new Event instance with auto-generated event_id and timestamp.
++        """
++        return Event(
++            type=type,
++            payload=payload,
++            source=source,
++            parent_id=parent_id,
++        )

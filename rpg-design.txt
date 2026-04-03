@@ -1,189 +1,1085 @@
-🚨 THE CORE PROBLEM (WHY 2 TESTS FAIL)
-Your conclusion:
-
-“expected behavior when counter is reset”
-
-Reality:
-
-👉 Your system is not globally deterministic across runs
-
-Because:
-
-EventBus._global_event_counter
-
-is:
-
-process-local
-reset on new run
-not tied to simulation state
-🔥 WHY THIS MATTERS
-
-Right now:
-
-Run 1:
-evt_1, evt_2, evt_3
-Run 2:
-evt_1, evt_2, evt_3   (looks fine)
-
-But:
-
-Replay + branching / partial runs:
-IDs drift
-hashes diverge
-simulations become incomparable
-
-👉 This breaks:
-
-branching timelines
-caching
-dedup across simulations
-multiplayer sync (future)
-🧨 ROOT ISSUE
-
-You made IDs deterministic per run, not:
-
-deterministic per causal history
-
-✅ REAL FIX (NOT TEST FIX)
-👉 Event IDs must be derived, not generated
-🔧 FIX OPTION A — Causal Hash IDs (RECOMMENDED)
-
-Make event_id a function of:
-
-(parent_id, type, payload, tick, seq)
-Patch
---- src/app/rpg/core/event_bus.py
-+++ src/app/rpg/core/event_bus.py
-
-Replace ID generation:
-
-- self.event_id = EventBus.next_event_id()
-+ self.event_id = EventBus.compute_event_id(self)
-Add:
-import hashlib
-import json
-
-@staticmethod
-def compute_event_id(event) -> str:
-    data = {
-        "type": event.type,
-        "payload": event.payload,
-        "parent": event.parent_id,
-        "tick": event.tick,
-    }
-
-    serialized = json.dumps(data, sort_keys=True)
-    return hashlib.sha256(serialized.encode()).hexdigest()[:16]
-🔥 Result
-
-Now:
-
-same input → same ID
-replay → identical IDs
-simulation branches → comparable
-no global counter needed
-⚠️ BUT: ONE MORE THING
-
-You must include _seq only if needed
-
-Otherwise:
-
-parallel events with same payload collide
-Safer version:
-"seq": getattr(event, "_seq", 0)
-🧠 ALTERNATIVE (OPTION B — Hybrid)
-
-If you want readability:
-
-evt_<tick>_<seq>_<short_hash>
-🚨 ISSUE 2 — CLOCK STILL LEAKS NON-DETERMINISM
-
-You did:
-
-default timestamp = 0.0
-
-That’s good for tests, but:
-
-👉 In real runtime:
-
-different clocks across loops
-drift between simulation vs live
-✅ FIX
-
-Clock must be:
-
-injected everywhere
-part of engine factory
-reset per run
-REQUIRED invariant:
-engine_factory(seed=X) → identical clock + identical IDs
-🚨 ISSUE 3 — REPLAY STILL NOT PURE
-
-You fixed ordering, but not side effects
-
-Replay must guarantee:
-
-NO:
-- LLM calls
-- randomness
-- time progression
-✅ REQUIRED ADDITION
-
-In ReplayEngine:
-
-+ loop.set_mode("replay")
-
-Then inside systems:
-
-if loop.mode == "replay":
-    return recorded_output
-🚨 ISSUE 4 — YOUR HASH IS STILL VULNERABLE
-
-Even with all fixes:
-
-If:
-
-dict ordering slips
-float precision varies
-payload mutation happens
-
-👉 hashes diverge
-
-✅ HARDENING PATCH
-
-Inside stable_serialize:
-
-+ elif isinstance(obj, float):
-+     return round(obj, 6)
-🚨 ISSUE 5 — YOUR TEST IS ACTUALLY CORRECT
-
-You said:
-
-“test design issue”
-
-No.
-
-👉 That test is doing its job:
-
-detecting that your system is not fully deterministic
-
-🧪 CORRECT EXPECTATION
-
-This should pass:
-
-assert compute_state_hash(loop1) == compute_state_hash(loop2)
-
-WITHOUT:
-
-manual IDs
-hacks
-resets
-🧠 BIG INSIGHT
-
-You’ve built:
-
-deterministic execution
-
-But not yet:
-
-deterministic identity
+PHASE 5.6 — LLM Boundary Hardening Around External Nondeterminism
+Goals
+
+After this patch:
+
+replay/simulation cannot silently call live LLMs
+LLM-backed systems must go through a single deterministic gateway
+missing recorded outputs in replay become hard failures
+prompt/response records become snapshot-able engine state
+effect policy and LLM policy become aligned
+validation can prove whether a subsystem is replay-safe
+Files to add
+src/app/rpg/core/llm_boundary.py
+src/tests/unit/rpg/test_phase56_llm_boundary.py
+src/tests/functional/test_phase56_llm_boundary_functional.py
+src/tests/regression/test_phase56_llm_boundary_regression.py
+Files to modify
+src/app/rpg/core/llm_recording.py
+src/app/rpg/core/game_loop.py
+src/app/rpg/core/replay_engine.py
+src/app/rpg/core/snapshot_manager.py
+src/app/rpg/core/effects.py
+src/app/rpg/core/state_contracts.py
+src/app/rpg/core/__init__.py
+src/app/rpg/ai/branch_ai_evaluator.py
+src/app/rpg/validation/state_boundary_validator.py
+1) NEW FILE — src/app/rpg/core/llm_boundary.py
+"""PHASE 5.6 — LLM Boundary Hardening
+
+Central deterministic boundary for all LLM access.
+
+Rules:
+- No subsystem should call a raw LLM client directly.
+- All LLM access must pass through LLMGateway.
+- In live mode, calls may be recorded.
+- In replay/simulation mode, recorded outputs must be used.
+- If replay requests a missing output, fail hard.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
+from .determinism import DeterminismConfig
+from .effects import EffectManager
+from .llm_recording import LLMRecorder, DeterministicLLMClient
+
+
+@dataclass
+class LLMCallSpec:
+    """Structured description of an LLM call."""
+    method: str
+    prompt: Any
+    context: Optional[Dict[str, Any]] = None
+    model: Optional[str] = None
+
+
+class LLMGateway:
+    """Single deterministic gateway for all LLM-backed work."""
+
+    def __init__(
+        self,
+        llm_client: Optional[Any] = None,
+        recorder: Optional[LLMRecorder] = None,
+        determinism: Optional[DeterminismConfig] = None,
+        effect_manager: Optional[EffectManager] = None,
+    ):
+        self.inner_client = llm_client
+        self.recorder = recorder or LLMRecorder()
+        self.determinism = determinism or DeterminismConfig()
+        self.effect_manager = effect_manager
+
+        self.client = None
+        if llm_client is not None:
+            self.client = DeterministicLLMClient(
+                inner_client=llm_client,
+                recorder=self.recorder,
+                determinism=self.determinism,
+                effect_manager=self.effect_manager,
+            )
+
+    def set_mode(self, mode: str) -> None:
+        """Apply mode-sensitive deterministic behavior."""
+        if mode in ("replay", "simulation"):
+            self.determinism.replay_mode = True
+            self.determinism.use_recorded_llm = True
+        else:
+            self.determinism.replay_mode = False
+            # Do not force record_llm here; caller controls that.
+            self.determinism.use_recorded_llm = False
+
+    def set_effect_manager(self, effect_manager: EffectManager) -> None:
+        self.effect_manager = effect_manager
+        if self.client is not None:
+            self.client.effect_manager = effect_manager
+
+    def set_llm_recorder(self, recorder: LLMRecorder) -> None:
+        self.recorder = recorder
+        if self.client is not None:
+            self.client.recorder = recorder
+
+    def set_determinism(self, determinism: DeterminismConfig) -> None:
+        self.determinism = determinism
+        if self.client is not None:
+            self.client.det = determinism
+
+    def call(
+        self,
+        method: str,
+        prompt: Any,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Execute an LLM call through the deterministic boundary."""
+        if self.client is None:
+            raise RuntimeError("LLMGateway has no LLM client configured.")
+
+        if method == "complete":
+            return self.client.complete(prompt, context=context)
+        if method == "chat":
+            return self.client.chat(prompt, context=context)
+        if method == "generate":
+            return self.client.generate(prompt, context=context)
+
+        raise ValueError(f"Unsupported LLM method: {method}")
+2) MODIFY — src/app/rpg/core/llm_recording.py
+2.1 Add effect-manager awareness and hard blocking of fresh live LLM use
+
+Replace the file with this version if easier.
+
+"""PHASE 5.3 / 5.6 — LLM Record/Replay Layer
+
+Deterministic recording/replay wrapper for LLM calls.
+
+Phase 5.6 additions:
+- effect-manager aware live LLM gating
+- stronger replay guarantees
+- centralized config-sensitive keying
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+
+@dataclass
+class LLMRecord:
+    """One deterministic LLM interaction record."""
+    key: str
+    response: Any
+
+
+@dataclass
+class LLMRecorder:
+    """Stores prompt/response mappings for deterministic replay."""
+    records: List[LLMRecord] = field(default_factory=list)
+    _map: Dict[str, Any] = field(default_factory=dict)
+
+    def make_key(
+        self,
+        prompt: Any,
+        context: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        from .determinism import stable_json
+        return stable_json({
+            "prompt": prompt,
+            "context": context or {},
+            "config": config or {},
+        })
+
+    def record(
+        self,
+        prompt: Any,
+        response: Any,
+        context: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        key = self.make_key(prompt, context, config)
+        record = LLMRecord(key=key, response=response)
+        self.records.append(record)
+        self._map[key] = response
+
+    def replay(
+        self,
+        prompt: Any,
+        context: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        key = self.make_key(prompt, context, config)
+        if key not in self._map:
+            raise KeyError(f"No recorded LLM response for key: {key[:120]}")
+        return self._map[key]
+
+    def load_records(self, records: List[LLMRecord]) -> None:
+        self.records = list(records)
+        self._map = {r.key: r.response for r in self.records}
+
+    def serialize_state(self) -> Dict[str, Any]:
+        return {
+            "records": [
+                {"key": r.key, "response": r.response}
+                for r in self.records
+            ]
+        }
+
+    def deserialize_state(self, state: Dict[str, Any]) -> None:
+        self.records = [
+            LLMRecord(key=r["key"], response=r["response"])
+            for r in state.get("records", [])
+        ]
+        self._map = {r.key: r.response for r in self.records}
+
+
+class DeterministicLLMClient:
+    """Wrapper around a raw LLM client with deterministic replay support."""
+
+    def __init__(
+        self,
+        inner_client: Any,
+        recorder: LLMRecorder,
+        determinism: Any,
+        effect_manager: Optional[Any] = None,
+    ):
+        self.inner = inner_client
+        self.recorder = recorder
+        self.det = determinism
+        self.effect_manager = effect_manager
+
+    def _build_call_config(self, method: str) -> Dict[str, Any]:
+        config = {"method": method}
+        if getattr(self.inner, "model", None) is not None:
+            config["model"] = self.inner.model
+        return config
+
+    def _check_live_llm_allowed(self, prompt: Any, context: Optional[Dict[str, Any]]) -> None:
+        if self.effect_manager is not None:
+            self.effect_manager.check(
+                "live_llm",
+                {
+                    "prompt": prompt,
+                    "context": context or {},
+                },
+            )
+
+    def complete(
+        self,
+        prompt: Any,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        call_config = self._build_call_config("complete")
+
+        if getattr(self.det, "use_recorded_llm", False):
+            return self.recorder.replay(prompt, context, call_config)
+
+        self._check_live_llm_allowed(prompt, context)
+        response = self.inner.complete(prompt)
+
+        if getattr(self.det, "record_llm", False):
+            self.recorder.record(prompt, response, context, call_config)
+
+        return response
+
+    def chat(
+        self,
+        messages: Any,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        call_config = self._build_call_config("chat")
+
+        if getattr(self.det, "use_recorded_llm", False):
+            return self.recorder.replay(messages, context, call_config)
+
+        self._check_live_llm_allowed(messages, context)
+
+        if hasattr(self.inner, "chat"):
+            response = self.inner.chat(messages)
+        else:
+            response = self.inner.complete(messages)
+
+        if getattr(self.det, "record_llm", False):
+            self.recorder.record(messages, response, context, call_config)
+
+        return response
+
+    def generate(
+        self,
+        prompt: Any,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        call_config = self._build_call_config("generate")
+
+        if getattr(self.det, "use_recorded_llm", False):
+            return self.recorder.replay(prompt, context, call_config)
+
+        self._check_live_llm_allowed(prompt, context)
+
+        if hasattr(self.inner, "generate"):
+            response = self.inner.generate(prompt)
+        else:
+            response = self.inner.complete(prompt)
+
+        if getattr(self.det, "record_llm", False):
+            self.recorder.record(prompt, response, context, call_config)
+
+        return response
+3) MODIFY — src/app/rpg/core/effects.py
+
+Add is_allowed().
+
+"""PHASE 5.5 / 5.6 — External Effect Isolation."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+
+@dataclass
+class EffectPolicy:
+    allow_logs: bool = True
+    allow_metrics: bool = True
+    allow_network: bool = False
+    allow_disk_write: bool = False
+    allow_live_llm: bool = False
+    allow_tool_calls: bool = False
+
+
+@dataclass
+class EffectRecord:
+    effect_type: str
+    payload: Dict[str, Any] = field(default_factory=dict)
+
+
+class EffectManager:
+    """Central effect gate for replay/simulation safety."""
+
+    def __init__(self, policy: Optional[EffectPolicy] = None):
+        self.policy = policy or EffectPolicy()
+        self.records: List[EffectRecord] = []
+
+    def set_policy(self, policy: EffectPolicy) -> None:
+        self.policy = policy
+
+    def is_allowed(self, effect_type: str) -> bool:
+        return {
+            "log": self.policy.allow_logs,
+            "metric": self.policy.allow_metrics,
+            "network": self.policy.allow_network,
+            "disk_write": self.policy.allow_disk_write,
+            "live_llm": self.policy.allow_live_llm,
+            "tool_call": self.policy.allow_tool_calls,
+        }.get(effect_type, False)
+
+    def check(self, effect_type: str, payload: Optional[Dict[str, Any]] = None) -> None:
+        payload = payload or {}
+        self.records.append(EffectRecord(effect_type=effect_type, payload=payload))
+
+        if not self.is_allowed(effect_type):
+            raise RuntimeError(f"Effect '{effect_type}' is blocked by current policy.")
+
+    def serialize_state(self) -> Dict[str, Any]:
+        return {
+            "policy": {
+                "allow_logs": self.policy.allow_logs,
+                "allow_metrics": self.policy.allow_metrics,
+                "allow_network": self.policy.allow_network,
+                "allow_disk_write": self.policy.allow_disk_write,
+                "allow_live_llm": self.policy.allow_live_llm,
+                "allow_tool_calls": self.policy.allow_tool_calls,
+            },
+            "records": [
+                {"effect_type": r.effect_type, "payload": r.payload}
+                for r in self.records
+            ],
+        }
+
+    def deserialize_state(self, state: Dict[str, Any]) -> None:
+        p = state.get("policy", {})
+        self.policy = EffectPolicy(
+            allow_logs=p.get("allow_logs", True),
+            allow_metrics=p.get("allow_metrics", True),
+            allow_network=p.get("allow_network", False),
+            allow_disk_write=p.get("allow_disk_write", False),
+            allow_live_llm=p.get("allow_live_llm", False),
+            allow_tool_calls=p.get("allow_tool_calls", False),
+        )
+        self.records = [
+            EffectRecord(effect_type=r["effect_type"], payload=r.get("payload", {}))
+            for r in state.get("records", [])
+        ]
+4) MODIFY — src/app/rpg/core/state_contracts.py
+
+Add LLM-aware protocol.
+
+"""PHASE 5.5 / 5.6 — Deterministic State Boundary Contracts."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Protocol
+
+
+class SerializableState(Protocol):
+    def serialize_state(self) -> Dict[str, Any]:
+        ...
+
+    def deserialize_state(self, state: Dict[str, Any]) -> None:
+        ...
+
+
+class ReplaySafe(Protocol):
+    def set_mode(self, mode: str) -> None:
+        ...
+
+
+class EffectAware(Protocol):
+    def set_effect_manager(self, effect_manager: Any) -> None:
+        ...
+
+
+class LLMRecorderAware(Protocol):
+    def set_llm_recorder(self, recorder: Any) -> None:
+        ...
+5) MODIFY — src/app/rpg/core/game_loop.py
+Add effect manager + LLM recorder propagation + mode hardening
+
+Patch the relevant parts.
+
+--- a/src/app/rpg/core/game_loop.py
++++ b/src/app/rpg/core/game_loop.py
+@@
+-from .event_bus import Event, EventBus
+-from .snapshot_manager import SnapshotManager
++from .event_bus import Event, EventBus
++from .snapshot_manager import SnapshotManager
++from .effects import EffectManager, EffectPolicy
+@@
+     def __init__(
+         self,
+         intent_parser: IntentParser,
+         world: WorldSystem,
+         npc_system: NPCSystem,
+         event_bus: EventBus,
+         story_director: StoryDirector,
+         scene_renderer: SceneRenderer,
+         snapshot_manager: Optional[SnapshotManager] = None,
++        effect_manager: Optional[EffectManager] = None,
+     ):
+@@
+-        self.snapshot_manager = snapshot_manager or SnapshotManager()
++        self.snapshot_manager = snapshot_manager or SnapshotManager()
++        self.effect_manager = effect_manager or EffectManager()
+@@
+         self.llm_recorder: Optional[Any] = None
++
++        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
++            system = getattr(self, system_name, None)
++            if system is not None and hasattr(system, "set_effect_manager"):
++                system.set_effect_manager(self.effect_manager)
+@@
+     def set_llm_recorder(self, recorder: Any) -> None:
+@@
+         self.llm_recorder = recorder
++        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
++            system = getattr(self, system_name, None)
++            if system is not None and hasattr(system, "set_llm_recorder"):
++                system.set_llm_recorder(recorder)
+ 
+     def set_mode(self, mode: str) -> None:
+@@
+         self.mode = mode
+         for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+             system = getattr(self, system_name, None)
+             if system is not None and hasattr(system, "set_mode"):
+                 system.set_mode(mode)
+@@
+         for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+             system = getattr(self, system_name, None)
+             if system is not None and hasattr(system, "determinism"):
+                 system.determinism.replay_mode = (mode == "replay")
+-                if mode == "replay":
++                if mode in ("replay", "simulation"):
+                     system.determinism.use_recorded_llm = True
+                 else:
+                     system.determinism.use_recorded_llm = False
++
++        if mode == "live":
++            self.effect_manager.set_policy(
++                EffectPolicy(
++                    allow_logs=True,
++                    allow_metrics=True,
++                    allow_network=True,
++                    allow_disk_write=True,
++                    allow_live_llm=True,
++                    allow_tool_calls=True,
++                )
++            )
++        elif mode in ("replay", "simulation"):
++            self.effect_manager.set_policy(
++                EffectPolicy(
++                    allow_logs=True,
++                    allow_metrics=True,
++                    allow_network=False,
++                    allow_disk_write=False,
++                    allow_live_llm=False,
++                    allow_tool_calls=False,
++                )
++            )
+6) MODIFY — src/app/rpg/core/replay_engine.py
+
+Ensure replay-safe mode always enters/exits cleanly and LLM replay is forced.
+
+--- a/src/app/rpg/core/replay_engine.py
++++ b/src/app/rpg/core/replay_engine.py
+@@
+     def replay(
+         self,
+         events: List[Event],
+         up_to_tick: Optional[int] = None,
+         mode: str = "deterministic",
+@@
+         loop = self._factory()
+ 
++        if hasattr(loop, "set_mode"):
++            loop.set_mode("replay")
++        if hasattr(loop, "event_bus") and hasattr(loop.event_bus, "set_replay_mode"):
++            loop.event_bus.set_replay_mode(True)
++        self._assert_replay_safe(loop)
++
++        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
++            system = getattr(loop, system_name, None)
++            if system is not None and hasattr(system, "determinism"):
++                system.determinism.use_recorded_llm = True
++                system.determinism.replay_mode = True
++
+         if mode == "deterministic":
+             self._apply_deterministic_mode(loop)
+@@
+-        for event in events:
+-            tick = event.tick if getattr(event, "tick", None) is not None else event.payload.get("tick")
+-            ...
+-            self._apply_event(loop, event)
++        try:
++            for event in events:
++                tick = event.tick if getattr(event, "tick", None) is not None else event.payload.get("tick")
++
++                if snapshot_tick is not None and tick is not None and tick <= snapshot_tick:
++                    continue
++
++                if up_to_tick is not None and tick is not None and tick > up_to_tick:
++                    break
++
++                if self._config.advance_ticks and tick is not None:
++                    loop._tick_count = max(loop._tick_count, tick)
++
++                self._apply_event(loop, event)
++        finally:
++            if hasattr(loop, "event_bus") and hasattr(loop.event_bus, "set_replay_mode"):
++                loop.event_bus.set_replay_mode(False)
++            if hasattr(loop, "set_mode"):
++                loop.set_mode("live")
++            for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
++                system = getattr(loop, system_name, None)
++                if system is not None and hasattr(system, "determinism"):
++                    system.determinism.use_recorded_llm = False
++                    system.determinism.replay_mode = False
+ 
+         return loop
+7) MODIFY — src/app/rpg/core/snapshot_manager.py
+
+Add LLM recorder + effect manager snapshot support.
+
+Use your existing implementation and extend it like this:
+
+--- a/src/app/rpg/core/snapshot_manager.py
++++ b/src/app/rpg/core/snapshot_manager.py
+@@
+ class Snapshot:
+     tick: int
+     world_state: Optional[Dict[str, Any]] = None
+     npc_state: Optional[Dict[str, Any]] = None
+     director_state: Optional[Dict[str, Any]] = None
+     timeline_state: Optional[Dict[str, Any]] = None
+     effect_state: Optional[Dict[str, Any]] = None
+     rng_state: Optional[Dict[str, Any]] = None
+     planner_state: Optional[Dict[str, Any]] = None
++    llm_state: Optional[Dict[str, Any]] = None
+     extra_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+@@
+     def save_snapshot(self, tick: int, loop: Any) -> None:
+         snapshot = Snapshot(tick=tick)
+@@
++        if hasattr(loop, "effect_manager") and hasattr(loop.effect_manager, "serialize_state"):
++            snapshot.effect_state = loop.effect_manager.serialize_state()
++
++        if hasattr(loop, "llm_recorder") and loop.llm_recorder is not None:
++            if hasattr(loop.llm_recorder, "serialize_state"):
++                snapshot.llm_state = loop.llm_recorder.serialize_state()
+@@
+         self._snapshots[tick] = snapshot
+@@
+     def load_snapshot(self, tick: int, loop: Any) -> bool:
+         snapshot = self._snapshots.get(tick)
+         if snapshot is None:
+             return False
+@@
++        if snapshot.effect_state and hasattr(loop, "effect_manager") and hasattr(loop.effect_manager, "deserialize_state"):
++            loop.effect_manager.deserialize_state(snapshot.effect_state)
++
++        if snapshot.llm_state and hasattr(loop, "llm_recorder") and loop.llm_recorder is not None:
++            if hasattr(loop.llm_recorder, "deserialize_state"):
++                loop.llm_recorder.deserialize_state(snapshot.llm_state)
++
+         return True
+8) MODIFY — src/app/rpg/ai/branch_ai_evaluator.py
+
+Replace raw wrapped usage with an explicit gateway.
+
+--- a/src/app/rpg/ai/branch_ai_evaluator.py
++++ b/src/app/rpg/ai/branch_ai_evaluator.py
+@@
+-from ..core.determinism import DeterminismConfig
+-from ..core.llm_recording import LLMRecorder, DeterministicLLMClient
++from ..core.determinism import DeterminismConfig
++from ..core.llm_recording import LLMRecorder
++from ..core.llm_boundary import LLMGateway
+ from ..core.event_bus import Event
+@@
+     def __init__(
+         self,
+         llm_client: Optional[Any] = None,
+         use_heuristic: bool = False,
+         recorder: Optional[LLMRecorder] = None,
+         determinism: Optional[DeterminismConfig] = None,
+     ):
+@@
+         self.use_heuristic = use_heuristic or (llm_client is None)
+         self.recorder = recorder or LLMRecorder()
+         self.determinism = determinism or DeterminismConfig()
++        self.effect_manager = None
+ 
+-        if llm_client is not None:
+-            self.llm = DeterministicLLMClient(
+-                inner_client=llm_client,
+-                recorder=self.recorder,
+-                determinism=self.determinism,
+-            )
+-        else:
+-            self.llm = None
++        self.llm = None
++        self.llm_gateway = None
++        if llm_client is not None:
++            self.llm_gateway = LLMGateway(
++                llm_client=llm_client,
++                recorder=self.recorder,
++                determinism=self.determinism,
++                effect_manager=self.effect_manager,
++            )
+ 
+         self._cache: Dict[str, BranchEvaluation] = {}
++
++    def set_mode(self, mode: str) -> None:
++        if self.llm_gateway is not None:
++            self.llm_gateway.set_mode(mode)
++
++    def set_llm_recorder(self, recorder: LLMRecorder) -> None:
++        self.recorder = recorder
++        if self.llm_gateway is not None:
++            self.llm_gateway.set_llm_recorder(recorder)
++
++    def set_effect_manager(self, effect_manager: Any) -> None:
++        self.effect_manager = effect_manager
++        if self.llm_gateway is not None:
++            self.llm_gateway.set_effect_manager(effect_manager)
+@@
+-        response = self.llm.complete(prompt, context=context)
++        response = self.llm_gateway.call("complete", prompt, context=context)
+         return self._parse_llm_response(response)
+9) MODIFY — src/app/rpg/validation/state_boundary_validator.py
+
+Add LLM boundary validation.
+
+"""PHASE 5.5 / 5.6 — State Boundary Validation."""
+
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+class StateBoundaryValidator:
+    """Validate subsystem state boundaries and replay-safe behavior."""
+
+    def validate_serializable(self, system: Any) -> Dict[str, Any]:
+        result = {
+            "has_serialize_state": hasattr(system, "serialize_state"),
+            "has_deserialize_state": hasattr(system, "deserialize_state"),
+            "ok": False,
+        }
+        result["ok"] = result["has_serialize_state"] and result["has_deserialize_state"]
+        return result
+
+    def validate_roundtrip(self, system: Any) -> Dict[str, Any]:
+        if not hasattr(system, "serialize_state") or not hasattr(system, "deserialize_state"):
+            return {"ok": False, "reason": "missing serialize_state/deserialize_state"}
+
+        state = system.serialize_state()
+        system.deserialize_state(state)
+        state2 = system.serialize_state()
+
+        return {
+            "ok": state == state2,
+            "state_before": state,
+            "state_after": state2,
+        }
+
+    def validate_effect_blocking(self, effect_manager: Any) -> Dict[str, Any]:
+        try:
+            effect_manager.check("network", {"url": "https://example.com"})
+            return {"ok": False, "reason": "network unexpectedly allowed"}
+        except RuntimeError:
+            return {"ok": True}
+
+    def validate_llm_replay_safety(self, gateway: Any) -> Dict[str, Any]:
+        try:
+            gateway.set_mode("replay")
+            gateway.call("complete", "unrecorded prompt", context={"test": True})
+            return {"ok": False, "reason": "unrecorded replay call unexpectedly succeeded"}
+        except Exception:
+            return {"ok": True}
+10) MODIFY — src/app/rpg/core/__init__.py
+--- a/src/app/rpg/core/__init__.py
++++ b/src/app/rpg/core/__init__.py
+@@
+ from .llm_recording import LLMRecord, LLMRecorder, DeterministicLLMClient
++from .llm_boundary import LLMCallSpec, LLMGateway
+ from .state_contracts import SerializableState, ReplaySafe, EffectAware
+ from .effects import EffectPolicy, EffectRecord, EffectManager
+@@
+     "LLMRecord",
+     "LLMRecorder",
+     "DeterministicLLMClient",
++    "LLMCallSpec",
++    "LLMGateway",
+     "SerializableState",
+     "ReplaySafe",
+     "EffectAware",
+11) NEW UNIT TEST — src/tests/unit/rpg/test_phase56_llm_boundary.py
+import unittest
+
+from app.rpg.core.determinism import DeterminismConfig
+from app.rpg.core.effects import EffectManager, EffectPolicy
+from app.rpg.core.llm_boundary import LLMGateway
+from app.rpg.core.llm_recording import LLMRecorder
+
+
+class _DummyLLM:
+    def __init__(self):
+        self.calls = []
+        self.model = "dummy-phase56-model"
+
+    def complete(self, prompt):
+        self.calls.append(("complete", prompt))
+        return f"resp:{prompt}"
+
+    def chat(self, messages):
+        self.calls.append(("chat", messages))
+        return f"chat:{messages}"
+
+    def generate(self, prompt):
+        self.calls.append(("generate", prompt))
+        return f"gen:{prompt}"
+
+
+class TestPhase56LLMBoundary(unittest.TestCase):
+    def test_live_llm_call_blocked_by_effect_policy(self):
+        llm = _DummyLLM()
+        recorder = LLMRecorder()
+        det = DeterminismConfig(record_llm=False, use_recorded_llm=False)
+        effects = EffectManager(EffectPolicy(allow_live_llm=False))
+
+        gateway = LLMGateway(
+            llm_client=llm,
+            recorder=recorder,
+            determinism=det,
+            effect_manager=effects,
+        )
+
+        with self.assertRaises(RuntimeError):
+            gateway.call("complete", "hello", context={"npc": "guard"})
+
+        self.assertEqual(llm.calls, [])
+
+    def test_live_llm_call_allowed_and_recorded(self):
+        llm = _DummyLLM()
+        recorder = LLMRecorder()
+        det = DeterminismConfig(record_llm=True, use_recorded_llm=False)
+        effects = EffectManager(EffectPolicy(allow_live_llm=True))
+
+        gateway = LLMGateway(
+            llm_client=llm,
+            recorder=recorder,
+            determinism=det,
+            effect_manager=effects,
+        )
+
+        out = gateway.call("complete", "hello", context={"npc": "guard"})
+        self.assertEqual(out, "resp:hello")
+        self.assertEqual(len(llm.calls), 1)
+        self.assertEqual(len(recorder.records), 1)
+
+    def test_replay_uses_recorded_output_only(self):
+        llm = _DummyLLM()
+        recorder = LLMRecorder()
+        det_live = DeterminismConfig(record_llm=True, use_recorded_llm=False)
+        effects_live = EffectManager(EffectPolicy(allow_live_llm=True))
+
+        gateway_live = LLMGateway(
+            llm_client=llm,
+            recorder=recorder,
+            determinism=det_live,
+            effect_manager=effects_live,
+        )
+        gateway_live.call("complete", "hello", context={"npc": "guard"})
+
+        replay_llm = _DummyLLM()
+        det_replay = DeterminismConfig(record_llm=False, use_recorded_llm=True, replay_mode=True)
+        effects_replay = EffectManager(EffectPolicy(allow_live_llm=False))
+
+        gateway_replay = LLMGateway(
+            llm_client=replay_llm,
+            recorder=recorder,
+            determinism=det_replay,
+            effect_manager=effects_replay,
+        )
+        out = gateway_replay.call("complete", "hello", context={"npc": "guard"})
+
+        self.assertEqual(out, "resp:hello")
+        self.assertEqual(replay_llm.calls, [])
+
+    def test_replay_missing_record_fails_hard(self):
+        gateway = LLMGateway(
+            llm_client=_DummyLLM(),
+            recorder=LLMRecorder(),
+            determinism=DeterminismConfig(use_recorded_llm=True, replay_mode=True),
+            effect_manager=EffectManager(EffectPolicy(allow_live_llm=False)),
+        )
+
+        with self.assertRaises(KeyError):
+            gateway.call("complete", "missing", context={"x": 1})
+12) NEW FUNCTIONAL TEST — src/tests/functional/test_phase56_llm_boundary_functional.py
+import unittest
+
+from app.rpg.core.determinism import DeterminismConfig
+from app.rpg.core.effects import EffectManager
+from app.rpg.core.game_loop import GameLoop
+from app.rpg.core.event_bus import EventBus
+from app.rpg.core.llm_recording import LLMRecorder
+from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator
+
+
+class _Parser:
+    def parse(self, s):
+        return {"text": s}
+
+
+class _World:
+    def tick(self, event_bus):
+        pass
+    def set_mode(self, mode):
+        self.mode = mode
+    def set_effect_manager(self, em):
+        self.effect_manager = em
+    def set_llm_recorder(self, recorder):
+        self.recorder = recorder
+
+
+class _NPC:
+    def update(self, intent, event_bus):
+        pass
+    def set_mode(self, mode):
+        self.mode = mode
+    def set_effect_manager(self, em):
+        self.effect_manager = em
+    def set_llm_recorder(self, recorder):
+        self.recorder = recorder
+
+
+class _Renderer:
+    def render(self, narrative):
+        return narrative
+    def set_mode(self, mode):
+        self.mode = mode
+    def set_effect_manager(self, em):
+        self.effect_manager = em
+    def set_llm_recorder(self, recorder):
+        self.recorder = recorder
+
+
+class _DummyLLM:
+    def __init__(self):
+        self.calls = []
+        self.model = "phase56-functional"
+
+    def complete(self, prompt):
+        self.calls.append(prompt)
+        return '{"score": 0.8, "reasoning": "ok", "narrative_quality": 0.8, "goal_alignment": 0.8, "interesting_outcomes": 1}'
+
+
+class _Director:
+    def __init__(self, evaluator):
+        self.evaluator = evaluator
+
+    def process(self, events, intent, event_bus):
+        score = self.evaluator.evaluate(events, context={"intent": intent["text"]})
+        return {"score": score}
+
+    def set_mode(self, mode):
+        self.mode = mode
+        if hasattr(self.evaluator, "set_mode"):
+            self.evaluator.set_mode(mode)
+
+    def set_effect_manager(self, em):
+        self.effect_manager = em
+        if hasattr(self.evaluator, "set_effect_manager"):
+            self.evaluator.set_effect_manager(em)
+
+    def set_llm_recorder(self, recorder):
+        self.recorder = recorder
+        if hasattr(self.evaluator, "set_llm_recorder"):
+            self.evaluator.set_llm_recorder(recorder)
+
+
+class TestPhase56LLMBoundaryFunctional(unittest.TestCase):
+    def test_replay_blocks_fresh_llm_and_uses_recorded(self):
+        recorder = LLMRecorder()
+        llm = _DummyLLM()
+
+        evaluator = AIBranchEvaluator(
+            llm_client=llm,
+            recorder=recorder,
+            determinism=DeterminismConfig(record_llm=True, use_recorded_llm=False),
+        )
+
+        loop = GameLoop(
+            intent_parser=_Parser(),
+            world=_World(),
+            npc_system=_NPC(),
+            event_bus=EventBus(),
+            story_director=_Director(evaluator),
+            scene_renderer=_Renderer(),
+            effect_manager=EffectManager(),
+        )
+
+        loop.set_llm_recorder(recorder)
+        loop.set_mode("live")
+
+        # live record
+        out1 = loop.story_director.process([], {"text": "wait"}, loop.event_bus)
+        self.assertEqual(out1["score"], 0.8)
+        self.assertEqual(len(llm.calls), 1)
+
+        # replay should not call inner llm again
+        loop.set_mode("replay")
+        out2 = loop.story_director.process([], {"text": "wait"}, loop.event_bus)
+
+        self.assertEqual(out2["score"], 0.8)
+        self.assertEqual(len(llm.calls), 1)
+13) NEW REGRESSION TEST — src/tests/regression/test_phase56_llm_boundary_regression.py
+import unittest
+
+from app.rpg.core.determinism import DeterminismConfig
+from app.rpg.core.effects import EffectManager, EffectPolicy
+from app.rpg.core.llm_boundary import LLMGateway
+from app.rpg.core.llm_recording import LLMRecorder
+
+
+class _DummyLLM:
+    def __init__(self, model="dummy-model"):
+        self.calls = []
+        self.model = model
+
+    def complete(self, prompt):
+        self.calls.append(prompt)
+        return f"resp:{prompt}"
+
+
+class TestPhase56LLMBoundaryRegression(unittest.TestCase):
+    def test_recorded_outputs_are_snapshot_serializable(self):
+        rec = LLMRecorder()
+        rec.record("prompt", "response", {"npc": "guard"}, {"method": "complete", "model": "m1"})
+        state = rec.serialize_state()
+
+        rec2 = LLMRecorder()
+        rec2.deserialize_state(state)
+
+        self.assertEqual(
+            rec2.replay("prompt", {"npc": "guard"}, {"method": "complete", "model": "m1"}),
+            "response",
+        )
+
+    def test_effect_manager_blocks_live_llm_in_replay_policy(self):
+        mgr = EffectManager(EffectPolicy(allow_live_llm=False))
+        with self.assertRaises(RuntimeError):
+            mgr.check("live_llm", {"prompt": "hello"})
+
+    def test_gateway_replay_missing_record_never_falls_back_to_live(self):
+        llm = _DummyLLM()
+        gateway = LLMGateway(
+            llm_client=llm,
+            recorder=LLMRecorder(),
+            determinism=DeterminismConfig(use_recorded_llm=True, replay_mode=True),
+            effect_manager=EffectManager(EffectPolicy(allow_live_llm=False)),
+        )
+
+        with self.assertRaises(KeyError):
+            gateway.call("complete", "missing", context={"npc": "guard"})
+
+        self.assertEqual(llm.calls, [])
+
+    def test_gateway_config_sensitive_recording_survives_model_change(self):
+        rec = LLMRecorder()
+        det = DeterminismConfig(record_llm=True, use_recorded_llm=False)
+
+        llm1 = _DummyLLM(model="m1")
+        gateway1 = LLMGateway(
+            llm_client=llm1,
+            recorder=rec,
+            determinism=det,
+            effect_manager=EffectManager(EffectPolicy(allow_live_llm=True)),
+        )
+        gateway1.call("complete", "prompt", context={"npc": "guard"})
+
+        llm2 = _DummyLLM(model="m2")
+        gateway2 = LLMGateway(
+            llm_client=llm2,
+            recorder=rec,
+            determinism=DeterminismConfig(use_recorded_llm=True, replay_mode=True),
+            effect_manager=EffectManager(EffectPolicy(allow_live_llm=False)),
+        )
+
+        with self.assertRaises(KeyError):
+            gateway2.call("complete", "prompt", context={"npc": "guard"})
+14) What your coding LLM should check after patch
+
+Run these:
+
+python -m pytest src/tests/unit/rpg/test_phase56_llm_boundary.py -v
+python -m pytest src/tests/functional/test_phase56_llm_boundary_functional.py -v
+python -m pytest src/tests/regression/test_phase56_llm_boundary_regression.py -v
+python -m pytest src/tests/unit/rpg/test_phase53_llm_recording.py -v
+python -m pytest src/tests/regression/test_phase53_llm_recording_regression.py -v
+python -m pytest src/tests/unit/rpg/test_phase55_state_boundaries.py -v
+python -m pytest src/tests/functional/test_phase55_state_boundaries_functional.py -v
+15) Expected outcome
+
+After Phase 5.6:
+
+live mode
+LLM calls allowed only if effect policy allows them
+outputs can be recorded
+replay mode
+no fresh LLM calls
+only recorded outputs allowed
+missing output => hard failure
+simulation mode
+same as replay for LLMs
+no accidental external drift
+snapshots
+can preserve effect state
+can preserve LLM recorder state
+16) Important note
+
+One limitation still remains after this phase:
+
+systems that still hold raw LLM clients internally can bypass this boundary.
+
+So after this patch, your next cleanup pass should be:
+
+search for any direct .complete(, .chat(, .generate( calls on raw model clients
+route them all through either:
+LLMGateway, or
+subsystem-local wrappers backed by DeterministicLLMClient
+
+That is the final hardening step.

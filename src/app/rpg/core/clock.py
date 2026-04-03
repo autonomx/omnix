@@ -74,6 +74,10 @@ class DeterministicClock:
         self._time += amount
         return self._time
     
-    def reset(self) -> None:
-        """Reset the clock to initial state."""
-        self._time = 0.0
+    def reset(self, start_time: float = 0.0) -> None:
+        """Reset the clock to a specific time value.
+
+        Args:
+            start_time: The time value to reset to (default 0.0).
+        """
+        self._time = start_time

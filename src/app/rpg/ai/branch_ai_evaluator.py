@@ -24,6 +24,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from ..core.determinism import DeterminismConfig
+from ..core.llm_recording import LLMRecorder
+from ..core.llm_boundary import LLMGateway
 from ..core.event_bus import Event
 
 logger = logging.getLogger(__name__)
@@ -66,6 +69,8 @@ class AIBranchEvaluator:
         self,
         llm_client: Optional[Any] = None,
         use_heuristic: bool = False,
+        recorder: Optional[LLMRecorder] = None,
+        determinism: Optional[DeterminismConfig] = None,
     ):
         """Initialize the AIBranchEvaluator.
 
@@ -74,10 +79,44 @@ class AIBranchEvaluator:
                        If None, falls back to heuristic evaluation.
             use_heuristic: Force heuristic mode even with LLM available.
                           Useful for performance testing.
+            recorder: LLMRecorder for recording/replaying LLM responses.
+                     If None, a new recorder is created.
+            determinism: DeterminismConfig controlling record/replay behavior.
+                        If None, defaults are used.
         """
-        self.llm = llm_client
         self.use_heuristic = use_heuristic or (llm_client is None)
+        self.recorder = recorder or LLMRecorder()
+        self.determinism = determinism or DeterminismConfig()
+        self.effect_manager = None
+
+        self.llm = None
+        self.llm_gateway = None
+        if llm_client is not None:
+            self.llm_gateway = LLMGateway(
+                llm_client=llm_client,
+                recorder=self.recorder,
+                determinism=self.determinism,
+                effect_manager=self.effect_manager,
+            )
+
         self._cache: Dict[str, BranchEvaluation] = {}
+
+    def set_mode(self, mode: str) -> None:
+        """Set mode for LLM behavior during replay."""
+        if self.llm_gateway is not None:
+            self.llm_gateway.set_mode(mode)
+
+    def set_llm_recorder(self, recorder: LLMRecorder) -> None:
+        """Update the LLM recorder."""
+        self.recorder = recorder
+        if self.llm_gateway is not None:
+            self.llm_gateway.set_llm_recorder(recorder)
+
+    def set_effect_manager(self, effect_manager: Any) -> None:
+        """Inject effect manager into the LLM gateway."""
+        self.effect_manager = effect_manager
+        if self.llm_gateway is not None:
+            self.llm_gateway.set_effect_manager(effect_manager)
 
     def evaluate(self, events: List[Event], context: Optional[Dict[str, Any]] = None) -> float:
         """Evaluate a branch and return score.
@@ -114,7 +153,7 @@ class AIBranchEvaluator:
         """
         context = context or {}
 
-        if self.use_heuristic or self.llm is None:
+        if self.use_heuristic or self.llm_gateway is None:
             return self._heuristic_evaluate(events, context)
 
         try:
@@ -162,7 +201,7 @@ Respond with ONLY a JSON object in this format:
   "reasoning": "Brief explanation of the score"
 }}
 """
-        response = self._call_llm(prompt)
+        response = self.llm_gateway.call("complete", prompt, context=context)
         return self._parse_llm_response(response)
 
     def _heuristic_evaluate(

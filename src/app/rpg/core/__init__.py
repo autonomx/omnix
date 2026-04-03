@@ -13,8 +13,16 @@ Use EventBus for all cross-system communication.
 
 # Phase 1 — STABILIZE: New single-authority components
 # These are the primary exports for the refactored architecture.
-# PHASE 5.2 — DETERMINISTIC CLOCK
+# PHASE 5.2 — DETERMINISTIC CLOCK + DETERMINISM
 from .clock import DeterministicClock
+from .determinism import DeterminismConfig, SeededRNG, compute_deterministic_event_id
+# PHASE 5.3 — LLM RECORD/REPLAY LAYER
+from .llm_recording import LLMRecord, LLMRecorder, DeterministicLLMClient
+# PHASE 5.6 — LLM BOUNDARY HARDENING
+from .llm_boundary import LLMCallSpec, LLMGateway
+# PHASE 5.5 — STATE BOUNDARIES + EFFECT ISOLATION
+from .state_contracts import SerializableState, ReplaySafe, EffectAware, LLMRecorderAware
+from .effects import EffectPolicy, EffectRecord, EffectManager
 from .event_bus import Event, EventBus
 from .game_loop import (
     GameLoop,
@@ -47,8 +55,26 @@ from .timeline_query import (
 
 __all__ = [
     # PHASE 1 — STABILIZE: New single-authority components
-    # PHASE 5.2 — DETERMINISTIC CLOCK
+    # PHASE 5.2 — DETERMINISTIC CLOCK + DETERMINISM
     "DeterministicClock",
+    "DeterminismConfig",
+    "SeededRNG",
+    "compute_deterministic_event_id",
+    # PHASE 5.3 — LLM RECORD/REPLAY LAYER
+    "LLMRecord",
+    "LLMRecorder",
+    "DeterministicLLMClient",
+    # PHASE 5.6 — LLM BOUNDARY HARDENING
+    "LLMCallSpec",
+    "LLMGateway",
+    # PHASE 5.5 — STATE BOUNDARIES + EFFECT ISOLATION
+    "SerializableState",
+    "ReplaySafe",
+    "EffectAware",
+    "LLMRecorderAware",
+    "EffectPolicy",
+    "EffectRecord",
+    "EffectManager",
     "Event",
     "EventBus",
     "GameLoop",

@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 from app.rpg.core.event_bus import Event, EventBus, EventContext
 from app.rpg.core.clock import DeterministicClock
 from app.rpg.core.replay_engine import ReplayEngine, ReplayConfig
+from app.rpg.core.determinism import DeterminismConfig
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +41,12 @@ class TestBackwardCompatibility(unittest.TestCase):
     def test_event_without_clock_works(self):
         """Events should work without a DeterministicClock."""
         e = Event(type="test", payload={"key": "value"}, source="test_system")
+        # event_id and timestamp assigned during emit, not construction
+        self.assertIsNone(e.event_id)  # Assigned by emit
+        self.assertIsNone(e.timestamp)  # Assigned by emit
+        # After emit, they should be populated
+        bus = EventBus()
+        bus.emit(e)
         self.assertIsNotNone(e.event_id)
         self.assertIsNotNone(e.timestamp)
 
@@ -226,28 +233,33 @@ class TestEventIdStability(unittest.TestCase):
     """PHASE 5.2 Regression: Event IDs should be stable and predictable."""
 
     def setUp(self):
-        """Reset global state before each test."""
-        EventBus._global_event_counter = 0
-        EventBus._clock = None
+        """No class-global reset needed; determinism is instance-based now."""
+        pass
 
     def test_event_id_format_stable(self):
-        """Event IDs should follow the expected format."""
-        eid = EventBus.next_event_id()
-        self.assertTrue(eid.startswith("evt_"))
+        """Event IDs should follow the expected format after emit."""
+        bus = EventBus()
+        e = Event(type="test", payload={}, source="test")
+        bus.emit(e)
+        self.assertTrue(e.event_id.startswith("evt_"))
 
     def test_event_id_uniqueness(self):
         """Event IDs should be unique within a session."""
-        EventBus._global_event_counter = 0
+        bus = EventBus()
         ids = set()
         for _ in range(100):
-            eid = EventBus.next_event_id()
-            self.assertNotIn(eid, ids)
-            ids.add(eid)
+            e = Event(type="test", payload={"i": _}, source="test")
+            bus.emit(e)
+            self.assertNotIn(e.event_id, ids)
+            ids.add(e.event_id)
 
     def test_event_with_none_id_gets_auto_id(self):
-        """Events with None event_id should receive auto-generated ID."""
+        """Events with None event_id should receive auto-generated ID after emit."""
         e = Event(type="test", payload={}, source="test", event_id=None)
-        self.assertIsNotNone(e.event_id)
+        self.assertIsNone(e.event_id)  # Not assigned yet
+        bus = EventBus()
+        bus.emit(e)
+        self.assertIsNotNone(e.event_id)  # Assigned by emit
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +360,149 @@ class TestIntegrationRegression(unittest.TestCase):
         
         output = f.getvalue()
         self.assertIn("debug_test", output)
+
+
+# ---------------------------------------------------------------------------
+# Phase 52 — Deterministic Replay Hardening Regression Tests (rpg-design.txt)
+# ---------------------------------------------------------------------------
+
+class TestPhase52DeterministicReplayRegression(unittest.TestCase):
+    """PHASE 5.2: Deterministic replay hardening regression tests."""
+
+    def test_seen_event_ids_set_stays_in_sync_with_bounded_deque(self):
+        """The seen IDs set should stay in sync with the bounded deque."""
+        from collections import deque
+        clock = DeterministicClock(start_time=0.0, increment=0.001)
+        bus = EventBus(clock=clock, determinism=DeterminismConfig(seed=10))
+        bus._seen_event_ids.clear()
+        bus._seen_event_ids_set.clear()
+        bus._seen_event_ids = deque(maxlen=3)
+
+        for i in range(5):
+            bus.set_tick(i + 1)
+            bus.emit(Event(type="x", payload={"i": i}, source="sys"))
+
+        self.assertEqual(set(bus._seen_event_ids), bus._seen_event_ids_set)
+        self.assertLessEqual(len(bus._seen_event_ids), 3)
+
+    def test_load_history_restores_seq_and_tick_state(self):
+        """load_history should restore sequence and tick state correctly."""
+        clock = DeterministicClock(start_time=0.0, increment=0.001)
+        bus = EventBus(clock=clock, determinism=DeterminismConfig(seed=11))
+        bus.set_tick(1)
+        e1 = Event(type="start", payload={}, source="sys")
+        bus.emit(e1)
+        bus.set_tick(2)
+        e2 = Event(type="move", payload={"x": 1}, source="player", parent_id=e1.event_id)
+        bus.emit(e2)
+
+        history = bus.history()
+
+        bus2 = EventBus(clock=DeterministicClock(start_time=0.0, increment=0.001),
+                       determinism=DeterminismConfig(seed=11))
+        bus2.load_history(history)
+
+        self.assertIn(e1.event_id, bus2.timeline.nodes)
+        self.assertIn(e2.event_id, bus2.timeline.nodes)
+        self.assertGreaterEqual(bus2._seq, max(getattr(e, "_seq", 0) for e in history) + 1)
+        self.assertEqual(bus2._current_tick, 2)
+
+    def test_replay_mode_flag_resets_after_exception(self):
+        """Replay mode flag should be reset even if replay throws."""
+        from app.rpg.core.replay_engine import ReplayEngine
+
+        class DummyLoop:
+            def __init__(self):
+                self.mode = "live"
+                self._tick_count = 0
+                self.event_bus = EventBus(
+                    clock=DeterministicClock(start_time=0.0, increment=0.001),
+                    determinism=DeterminismConfig(seed=12),
+                )
+            def set_mode(self, mode):
+                self.mode = mode
+
+        # Create a DummyLoop instance that the factory will return
+        loop_instance = DummyLoop()
+        replay = ReplayEngine(lambda: loop_instance)
+
+        def boom(loop, event):
+            raise RuntimeError("boom")
+
+        replay._apply_event = lambda loop, event: boom(loop, event)
+
+        try:
+            replay.replay([Event(type="x", payload={}, source="sys", event_id="evt_fixed", timestamp=0.1, tick=1)])
+        except RuntimeError:
+            pass
+
+        # The loop instance should have been reset to live mode
+        self.assertEqual(loop_instance.mode, "live")
+        self.assertFalse(loop_instance.event_bus._determinism.replay_mode)
+
+    def test_bus_usable_after_replay_mode_exception(self):
+        """EventBus should remain usable after a replay-mode failure."""
+        bus = EventBus(
+            clock=DeterministicClock(start_time=0.0, increment=0.001),
+            determinism=DeterminismConfig(seed=13),
+        )
+
+        bus.set_replay_mode(True)
+
+        with self.assertRaises(RuntimeError):
+            bus.emit(
+                Event(type="x", payload={}, source="sys", event_id=None, timestamp=1.0),
+                replay=True,
+            )
+
+        bus.set_replay_mode(False)
+        bus.emit(Event(type="y", payload={}, source="sys"))
+
+        self.assertEqual(len(bus.history()), 1)
+        self.assertEqual(bus.history()[0].type, "y")
+        self.assertFalse(bus.is_replay_mode())
+
+    def test_identity_not_derived_from_payload_tick_duplication(self):
+        """Identity should use top-level tick, not depend on payload['tick'] duplication semantics."""
+        seed = 88
+
+        bus1 = EventBus(
+            clock=DeterministicClock(start_time=0.0, increment=0.001),
+            determinism=DeterminismConfig(seed=seed),
+        )
+        bus1.set_tick(5)
+        e1 = Event(type="move", payload={"x": 1}, source="player")
+        bus1.emit(e1)
+
+        bus2 = EventBus(
+            clock=DeterministicClock(start_time=0.0, increment=0.001),
+            determinism=DeterminismConfig(seed=seed),
+        )
+        e2 = Event(type="move", payload={"x": 1}, source="player", tick=5)
+        bus2.emit(e2)
+
+        self.assertEqual(e1.event_id, e2.event_id)
+
+    def test_loaded_history_preserves_identity_stability(self):
+        """Loading history should not alter existing deterministic IDs."""
+        seed = 99
+        bus1 = EventBus(
+            clock=DeterministicClock(start_time=0.0, increment=0.001),
+            determinism=DeterminismConfig(seed=seed),
+        )
+        bus1.set_tick(1)
+        e1 = Event(type="start", payload={"zone": "town"}, source="sys")
+        bus1.emit(e1)
+        original_id = e1.event_id
+        history = bus1.history()
+
+        bus2 = EventBus(
+            clock=DeterministicClock(start_time=0.0, increment=0.001),
+            determinism=DeterminismConfig(seed=seed),
+        )
+        bus2.load_history(history)
+
+        self.assertEqual(bus2.history()[0].event_id, original_id)
 
 
 if __name__ == "__main__":

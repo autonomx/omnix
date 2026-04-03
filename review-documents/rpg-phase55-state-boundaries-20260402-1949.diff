@@ -1,0 +1,504 @@
+diff --git a/src/app/rpg/core/state_contracts.py b/src/app/rpg/core/state_contracts.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/core/state_contracts.py
+@@ -0,0 +1,42 @@
++"""PHASE 5.5 — Deterministic State Boundary Contracts.
++
++This module defines explicit protocols for stateful subsystems so that:
++- replay can reconstruct subsystem state deterministically
++- snapshots can capture full engine state boundaries
++- simulation sandboxes can isolate mutations cleanly
++"""
++
++from __future__ import annotations
++
++from typing import Any, Dict, Protocol
++
++
++class SerializableState(Protocol):
++    """Protocol for subsystems with explicit serializable state."""
++
++    def serialize_state(self) -> Dict[str, Any]:
++        """Return deterministic subsystem state."""
++        ...
++
++    def deserialize_state(self, state: Dict[str, Any]) -> None:
++        """Restore subsystem state from serialized representation."""
++        ...
++
++
++class ReplaySafe(Protocol):
++    """Protocol for subsystems that support replay/live mode switching."""
++
++    def set_mode(self, mode: str) -> None:
++        """Set subsystem mode to 'live', 'replay', or 'simulation'."""
++        ...
++
++
++class EffectAware(Protocol):
++    """Protocol for subsystems that can receive an effect manager."""
++
++    def set_effect_manager(self, effect_manager: Any) -> None:
++        """Inject effect policy manager into subsystem."""
++        ...
+diff --git a/src/app/rpg/core/effects.py b/src/app/rpg/core/effects.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/core/effects.py
+@@ -0,0 +1,87 @@
++"""PHASE 5.5 — External Effect Isolation.
++
++This module provides policy-based gating for side effects so replay/simulation
++can refuse external actions deterministically.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Optional
++
++
++@dataclass
++class EffectPolicy:
++    """Policy controlling which side effects are allowed."""
++
++    allow_logs: bool = True
++    allow_metrics: bool = True
++    allow_network: bool = False
++    allow_disk_write: bool = False
++    allow_live_llm: bool = False
++    allow_tool_calls: bool = False
++
++
++@dataclass
++class EffectRecord:
++    """Recorded effect attempt."""
++
++    effect_type: str
++    payload: Dict[str, Any] = field(default_factory=dict)
++
++
++class EffectManager:
++    """Central effect gate for replay/simulation safety."""
++
++    def __init__(self, policy: Optional[EffectPolicy] = None):
++        self.policy = policy or EffectPolicy()
++        self.records: List[EffectRecord] = []
++
++    def set_policy(self, policy: EffectPolicy) -> None:
++        self.policy = policy
++
++    def check(self, effect_type: str, payload: Optional[Dict[str, Any]] = None) -> None:
++        payload = payload or {}
++        self.records.append(EffectRecord(effect_type=effect_type, payload=payload))
++
++        allowed = {
++            "log": self.policy.allow_logs,
++            "metric": self.policy.allow_metrics,
++            "network": self.policy.allow_network,
++            "disk_write": self.policy.allow_disk_write,
++            "live_llm": self.policy.allow_live_llm,
++            "tool_call": self.policy.allow_tool_calls,
++        }.get(effect_type, False)
++
++        if not allowed:
++            raise RuntimeError(
++                f"Effect '{effect_type}' is blocked by current policy."
++            )
++
++    def serialize_state(self) -> Dict[str, Any]:
++        return {
++            "policy": {
++                "allow_logs": self.policy.allow_logs,
++                "allow_metrics": self.policy.allow_metrics,
++                "allow_network": self.policy.allow_network,
++                "allow_disk_write": self.policy.allow_disk_write,
++                "allow_live_llm": self.policy.allow_live_llm,
++                "allow_tool_calls": self.policy.allow_tool_calls,
++            },
++            "records": [
++                {"effect_type": r.effect_type, "payload": r.payload}
++                for r in self.records
++            ],
++        }
++
++    def deserialize_state(self, state: Dict[str, Any]) -> None:
++        p = state.get("policy", {})
++        self.policy = EffectPolicy(
++            allow_logs=p.get("allow_logs", True),
++            allow_metrics=p.get("allow_metrics", True),
++            allow_network=p.get("allow_network", False),
++            allow_disk_write=p.get("allow_disk_write", False),
++            allow_live_llm=p.get("allow_live_llm", False),
++            allow_tool_calls=p.get("allow_tool_calls", False),
++        )
++        self.records = [
++            EffectRecord(effect_type=r["effect_type"], payload=r.get("payload", {}))
++            for r in state.get("records", [])
++        ]
+diff --git a/src/app/rpg/validation/state_boundary_validator.py b/src/app/rpg/validation/state_boundary_validator.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/validation/state_boundary_validator.py
+@@ -0,0 +1,43 @@
++"""PHASE 5.5 — State Boundary Validation.
++
++Validation helpers for deterministic state serialization and side-effect isolation.
++"""
++
++from __future__ import annotations
++
++from typing import Any, Dict
++
++
++class StateBoundaryValidator:
++    """Validate subsystem state boundaries and replay-safe behavior."""
++
++    def validate_serializable(self, system: Any) -> Dict[str, Any]:
++        result = {
++            "has_serialize_state": hasattr(system, "serialize_state"),
++            "has_deserialize_state": hasattr(system, "deserialize_state"),
++            "ok": False,
++        }
++        result["ok"] = result["has_serialize_state"] and result["has_deserialize_state"]
++        return result
++
++    def validate_roundtrip(self, system: Any) -> Dict[str, Any]:
++        if not hasattr(system, "serialize_state") or not hasattr(system, "deserialize_state"):
++            return {"ok": False, "reason": "missing serialize_state/deserialize_state"}
++
++        state = system.serialize_state()
++        system.deserialize_state(state)
++        state2 = system.serialize_state()
++
++        return {
++            "ok": state == state2,
++            "state_before": state,
++            "state_after": state2,
++        }
++
++    def validate_effect_blocking(self, effect_manager: Any) -> Dict[str, Any]:
++        try:
++            effect_manager.check("network", {"url": "https://example.com"})
++            return {"ok": False, "reason": "network unexpectedly allowed"}
++        except RuntimeError:
++            return {"ok": True}
+diff --git a/src/app/rpg/core/__init__.py b/src/app/rpg/core/__init__.py
+index b58eae7..1fdd638 100644
+--- a/src/app/rpg/core/__init__.py
++++ b/src/app/rpg/core/__init__.py
+@@ -18,6 +18,9 @@ from .clock import DeterministicClock
+ from .determinism import DeterminismConfig, SeededRNG, compute_deterministic_event_id
+ # PHASE 5.3 — LLM RECORD/REPLAY LAYER
+ from .llm_recording import LLMRecord, LLMRecorder, DeterministicLLMClient
++# PHASE 5.5 — STATE BOUNDARIES + EFFECT ISOLATION
++from .state_contracts import SerializableState, ReplaySafe, EffectAware
++from .effects import EffectPolicy, EffectRecord, EffectManager
+ from .event_bus import Event, EventBus
+ from .game_loop import (
+     GameLoop,
+@@ -59,6 +62,13 @@ __all__ = [
+     "LLMRecord",
+     "LLMRecorder",
+     "DeterministicLLMClient",
++    # PHASE 5.5 — STATE BOUNDARIES + EFFECT ISOLATION
++    "SerializableState",
++    "ReplaySafe",
++    "EffectAware",
++    "EffectPolicy",
++    "EffectRecord",
++    "EffectManager",
+     "Event",
+     "EventBus",
+     "GameLoop",
+diff --git a/src/app/rpg/core/game_loop.py b/src/app/rpg/core/game_loop.py
+index e5cc496..5638e59 100644
+--- a/src/app/rpg/core/game_loop.py
++++ b/src/app/rpg/core/game_loop.py
+@@ -44,6 +44,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
+ from .event_bus import Event, EventBus
+ from .snapshot_manager import SnapshotManager
++from .effects import EffectManager, EffectPolicy
+
+ class GameLoop:
+     def __init__(
+         self,
+         intent_parser: IntentParser,
+         world: WorldSystem,
+         npc_system: NPCSystem,
+         event_bus: EventBus,
+         story_director: StoryDirector,
+         scene_renderer: SceneRenderer,
+         snapshot_manager: Optional[SnapshotManager] = None,
++        effect_manager: Optional[EffectManager] = None,
+     ):
+         """Initialize the GameLoop with all required subsystems."""
+         ...
+         self.snapshot_manager = snapshot_manager or SnapshotManager()
++        # PHASE 5.5: EffectManager for side-effect isolation
++        self.effect_manager = effect_manager or EffectManager()
+
++        # PHASE 5.5 — Inject effect manager into subsystems that support it
++        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
++            system = getattr(self, system_name, None)
++            if system is not None and hasattr(system, "set_effect_manager"):
++                system.set_effect_manager(self.effect_manager)
+
+     def set_mode(self, mode: str) -> None:
+         ...
++        # PHASE 5.5 — Apply effect policy by mode
++        if mode == "live":
++            self.effect_manager.set_policy(
++                EffectPolicy(
++                    allow_logs=True,
++                    allow_metrics=True,
++                    allow_network=True,
++                    allow_disk_write=True,
++                    allow_live_llm=True,
++                    allow_tool_calls=True,
++                )
++            )
++        elif mode in ("replay", "simulation"):
++            self.effect_manager.set_policy(
++                EffectPolicy(
++                    allow_logs=True,
++                    allow_metrics=True,
++                    allow_network=False,
++                    allow_disk_write=False,
++                    allow_live_llm=False,
++                    allow_tool_calls=False,
++                )
++            )
+diff --git a/src/app/rpg/core/snapshot_manager.py b/src/app/rpg/core/snapshot_manager.py
+index 998dcd4..505d5b2 100644
+--- a/src/app/rpg/core/snapshot_manager.py
++++ b/src/app/rpg/core/snapshot_manager.py
+@@ -63,11 +63,21 @@ class Snapshot:
+     world_state: Optional[Dict[str, Any]] = None
+     npc_state: Optional[Dict[str, Any]] = None
++    director_state: Optional[Dict[str, Any]] = None
++    timeline_state: Optional[Dict[str, Any]] = None
++    effect_state: Optional[Dict[str, Any]] = None
++    rng_state: Optional[Dict[str, Any]] = None
++    planner_state: Optional[Dict[str, Any]] = None
+     extra_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+     def save_snapshot(self, tick: int, loop: Any) -> None:
+         snapshot = Snapshot(tick=tick)
+         # Serialize with serialize_state() first, fallback to serialize()
++        # PHASE 5.5: Serialize additional state (director, timeline, effect, rng, planner)
+         ...
+
+     def load_snapshot(self, tick: int, loop: Any) -> bool:
+         snapshot = self._snapshots.get(tick)
+         if snapshot is None:
+             return False
++        # PHASE 5.5: Restore additional state
+         ...
+         return True
+diff --git a/src/app/rpg/simulation/sandbox.py b/src/app/rpg/simulation/sandbox.py
+index bec02b9..a970448 100644
+--- a/src/app/rpg/simulation/sandbox.py
++++ b/src/app/rpg/simulation/sandbox.py
+@@ -112,6 +112,10 @@ class SimulationSandbox:
+         # Record starting tick
+         start_tick = getattr(loop, "_tick_count", 0) or getattr(loop, "tick_count", 0)
+
++        # PHASE 5.5 — Enter simulation mode before running
++        if hasattr(loop, "set_mode"):
++            loop.set_mode("simulation")
++
+         # Rebuild current state via replay
+         self._replay_events(loop, base_events)
+@@ -122,9 +126,14 @@ class SimulationSandbox:
+         # Simulate forward ticks
+         ticks_simulated = 0
+         for _ in range(max_ticks):
+-            loop.tick()
++            if hasattr(loop, "tick"):
++                loop.tick("")
+             ticks_simulated += 1
+
++        # PHASE 5.5 — Return to live mode after running
++        if hasattr(loop, "set_mode"):
++            loop.set_mode("live")
++
+         # Collect results
+         history = self._get_event_history(loop)
+@@ -180,6 +189,7 @@ class SimulationSandbox:
+                     (e.payload.get("tick", 0) for e in events if e.payload.get("tick") is not None),
+                     default=0,
+                 ))
++            return
+         else:
+             # Direct event emission fallback
+             for event in events:
+diff --git a/src/tests/unit/rpg/test_phase55_state_boundaries.py b/src/tests/unit/rpg/test_phase55_state_boundaries.py
+new file mode 100644
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase55_state_boundaries.py
+@@ -0,0 +1,52 @@
++import unittest
++
++from app.rpg.core.effects import EffectManager, EffectPolicy
++from app.rpg.validation.state_boundary_validator import StateBoundaryValidator
++
++class _DummyStateful:
++    def __init__(self):
++        self.value = {"x": 1}
++
++    def serialize_state(self):
++        return {"value": {"x": self.value["x"]}}
++
++    def deserialize_state(self, state):
++        self.value = {"x": state["value"]["x"]}
++
++
++class TestPhase55StateBoundaries(unittest.TestCase):
++    def test_effect_manager_blocks_network_by_default(self):
++        mgr = EffectManager()
++        with self.assertRaises(RuntimeError):
++            mgr.check("network", {"url": "x"})
++
++    def test_effect_manager_allows_live_llm_when_policy_allows(self):
++        mgr = EffectManager(EffectPolicy(allow_live_llm=True))
++        mgr.check("live_llm", {"prompt": "hi"})
++        self.assertEqual(mgr.records[-1].effect_type, "live_llm")
++
++    def test_state_boundary_roundtrip(self):
++        validator = StateBoundaryValidator()
++        sys = _DummyStateful()
++        result = validator.validate_roundtrip(sys)
++        self.assertTrue(result["ok"])
++
++    def test_state_boundary_serializable_contract(self):
++        validator = StateBoundaryValidator()
++        sys = _DummyStateful()
++        result = validator.validate_serializable(sys)
++        self.assertTrue(result["ok"])
+diff --git a/src/tests/functional/test_phase55_state_boundaries_functional.py b/src/tests/functional/test_phase55_state_boundaries_functional.py
+new file mode 100644
+--- /dev/null
++++ b/src/tests/functional/test_phase55_state_boundaries_functional.py
+@@ -0,0 +1,112 @@
++import unittest
++
++from app.rpg.core.effects import EffectManager
++from app.rpg.core.game_loop import GameLoop
++from app.rpg.core.event_bus import EventBus
++
++class _Parser:
++    def parse(self, s):
++        return {"text": s}
++
++class _World:
++    def tick(self, event_bus): pass
++    def set_mode(self, mode): self.mode = mode
++    def set_effect_manager(self, em): self.effect_manager = em
++
++class _NPC:
++    def update(self, intent, event_bus): pass
++    def set_mode(self, mode): self.mode = mode
++    def set_effect_manager(self, em): self.effect_manager = em
++
++class _Director:
++    def process(self, events, intent, event_bus):
++        return {"events": [e.type for e in events]}
++    def set_mode(self, mode): self.mode = mode
++    def set_effect_manager(self, em): self.effect_manager = em
++
++class _Renderer:
++    def render(self, narrative): return narrative
++    def set_mode(self, mode): self.mode = mode
++    def set_effect_manager(self, em): self.effect_manager = em
++
++
++class TestPhase55StateBoundariesFunctional(unittest.TestCase):
++    def test_game_loop_replay_mode_blocks_live_llm_effects(self):
++        loop = GameLoop(
++            intent_parser=_Parser(),
++            world=_World(),
++            npc_system=_NPC(),
++            event_bus=EventBus(),
++            story_director=_Director(),
++            scene_renderer=_Renderer(),
++            effect_manager=EffectManager(),
++        )
++        loop.set_mode("replay")
++        with self.assertRaises(RuntimeError):
++            loop.effect_manager.check("live_llm", {"prompt": "hello"})
++
++    def test_game_loop_live_mode_allows_live_llm_effects(self):
++        loop = GameLoop(
++            intent_parser=_Parser(),
++            world=_World(),
++            npc_system=_NPC(),
++            event_bus=EventBus(),
++            story_director=_Director(),
++            scene_renderer=_Renderer(),
++            effect_manager=EffectManager(),
++        )
++        loop.set_mode("live")
++        loop.effect_manager.check("live_llm", {"prompt": "hello"})
++        self.assertEqual(loop.effect_manager.records[-1].effect_type, "live_llm")
++
++    def test_game_loop_simulation_mode_blocks_live_llm_effects(self):
++        loop = GameLoop(
++            intent_parser=_Parser(),
++            world=_World(),
++            npc_system=_NPC(),
++            event_bus=EventBus(),
++            story_director=_Director(),
++            scene_renderer=_Renderer(),
++            effect_manager=EffectManager(),
++        )
++        loop.set_mode("simulation")
++        with self.assertRaises(RuntimeError):
++            loop.effect_manager.check("live_llm", {"prompt": "hello"})
+diff --git a/src/tests/regression/test_phase55_state_boundaries_regression.py b/src/tests/regression/test_phase55_state_boundaries_regression.py
+new file mode 100644
+--- /dev/null
++++ b/src/tests/regression/test_phase55_state_boundaries_regression.py
+@@ -0,0 +1,35 @@
++"""PHASE 5.5 Regression Tests"""
++
++import unittest
++
++from app.rpg.core.effects import EffectManager, EffectPolicy
++
++
++class TestPhase55StateBoundariesRegression(unittest.TestCase):
++
++    def test_effect_policy_defaults_are_replay_safe(self):
++        policy = EffectPolicy()
++        self.assertFalse(policy.allow_network)
++        self.assertFalse(policy.allow_disk_write)
++        self.assertFalse(policy.allow_live_llm)
++        self.assertFalse(policy.allow_tool_calls)
++
++    def test_effect_manager_serialization_roundtrip(self):
++        mgr = EffectManager()
++        state = mgr.serialize_state()
++        mgr2 = EffectManager()
++        mgr2.deserialize_state(state)
++        self.assertEqual(mgr.serialize_state(), mgr2.serialize_state())
++
++    def test_blocked_effect_is_recorded_before_failure(self):
++        mgr = EffectManager()
++        with self.assertRaises(RuntimeError):
++            mgr.check("network", {"url": "x"})
++        # Even blocked effects get recorded
++        self.assertTrue(any(r.effect_type == "network" for r in mgr.records))
++
++    def test_effect_policy_custom_allows_network(self):
++        mgr = EffectManager(EffectPolicy(allow_network=True))
++        mgr.check("network", {"url": "https://api.example.com"})
++        self.assertTrue(any(r.effect_type == "network" for r in mgr.records))
++
++    def test_effect_manager_state_isolation(self):
++        mgr1 = EffectManager(EffectPolicy(allow_live_llm=True))
++        mgr2 = EffectManager(EffectPolicy(allow_live_llm=False))
++        mgr1.check("live_llm", {"prompt": "test"})
++        with self.assertRaises(RuntimeError):
++            mgr2.check("live_llm", {"prompt": "test2"})

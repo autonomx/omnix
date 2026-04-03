@@ -122,6 +122,19 @@ class ReplayEngine:
         self._factory = game_loop_factory
         self._config = config or ReplayConfig()
 
+    def _assert_replay_safe(self, loop: Any) -> None:
+        """
+        Hook for future strict replay compliance checks.
+
+        Subsystems should avoid fresh side effects in replay mode.
+        This method is intentionally lightweight for now and can be extended
+        later to enforce replay-safe subsystem capabilities.
+
+        Args:
+            loop: Freshly created game loop instance.
+        """
+        return None
+
     def replay(
         self,
         events: List[Event],
@@ -191,6 +204,20 @@ class ReplayEngine:
 
         loop = self._factory()
 
+        # Enter replay mode: subsystems should avoid fresh side effects
+        if hasattr(loop, "set_mode"):
+            loop.set_mode("replay")
+        if hasattr(loop, "event_bus") and hasattr(loop.event_bus, "set_replay_mode"):
+            loop.event_bus.set_replay_mode(True)
+        self._assert_replay_safe(loop)
+
+        # PHASE 5.3 — Enable recorded LLM usage during replay if supported
+        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+            system = getattr(loop, system_name, None)
+            if system is not None and hasattr(system, "determinism"):
+                system.determinism.use_recorded_llm = True
+                system.determinism.replay_mode = True
+
         # PHASE 5.1.5 — FIX #3: Enforce deterministic replay mode
         if mode == "deterministic":
             self._apply_deterministic_mode(loop)
@@ -224,25 +251,38 @@ class ReplayEngine:
             ),
         )
 
-        for event in events:
-            tick = event.payload.get("tick")
+        try:
+            for event in events:
+                tick = event.tick if getattr(event, "tick", None) is not None else event.payload.get("tick")
 
-            # PHASE 2.5 — HYBRID REPLAY: Skip events already captured in snapshot
-            if snapshot_tick is not None and tick is not None and tick <= snapshot_tick:
-                continue
+                # PHASE 2.5 — HYBRID REPLAY: Skip events already captured in snapshot
+                if snapshot_tick is not None and tick is not None and tick <= snapshot_tick:
+                    continue
 
-            if up_to_tick is not None and tick is not None:
-                if tick > up_to_tick:
-                    break
+                if up_to_tick is not None and tick is not None:
+                    if tick > up_to_tick:
+                        break
 
-            # PHASE 2 FIX #3: Advance tick count during replay
-            # Without this, loop._tick_count stays at 0 and future
-            # ticks collide with replayed tick values
-            if self._config.advance_ticks and tick is not None:
-                loop._tick_count = max(loop._tick_count, tick)
+                # PHASE 2 FIX #3: Advance tick count during replay
+                # Without this, loop._tick_count stays at 0 and future
+                # ticks collide with replayed tick values
+                if self._config.advance_ticks and tick is not None:
+                    loop._tick_count = max(loop._tick_count, tick)
 
-            # Feed event back into systems
-            self._apply_event(loop, event)
+                # Feed event back into systems
+                self._apply_event(loop, event)
+        finally:
+            # Exit replay mode — always, even on exception
+            if hasattr(loop, "event_bus") and hasattr(loop.event_bus, "set_replay_mode"):
+                loop.event_bus.set_replay_mode(False)
+            if hasattr(loop, "set_mode"):
+                loop.set_mode("live")
+            # PHASE 5.3 — Disable recorded LLM usage when exiting replay
+            for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+                system = getattr(loop, system_name, None)
+                if system is not None and hasattr(system, "determinism"):
+                    system.determinism.use_recorded_llm = False
+                    system.determinism.replay_mode = False
 
         return loop
 

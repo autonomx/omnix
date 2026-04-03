@@ -44,6 +44,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from .event_bus import Event, EventBus
 from .snapshot_manager import SnapshotManager
+from .effects import EffectManager, EffectPolicy
 
 
 class TickPhase(Enum):
@@ -190,6 +191,7 @@ class GameLoop:
         story_director: StoryDirector,
         scene_renderer: SceneRenderer,
         snapshot_manager: Optional[SnapshotManager] = None,
+        effect_manager: Optional[EffectManager] = None,
     ):
         """Initialize the GameLoop with all required subsystems.
 
@@ -203,6 +205,8 @@ class GameLoop:
             snapshot_manager: Optional SnapshotManager for periodic state
                             serialization. If None, a default manager is created
                             with snapshot interval of 50 ticks.
+            effect_manager: Optional EffectManager for controlling side effects.
+                            If None, a default manager is created.
         """
         self.intent_parser = intent_parser
         self.world = world
@@ -212,6 +216,11 @@ class GameLoop:
         self.scene_renderer = scene_renderer
         # PHASE 2.5: SnapshotManager for periodic state serialization
         self.snapshot_manager = snapshot_manager or SnapshotManager()
+        # PHASE 5.5: EffectManager for side-effect isolation
+        self.effect_manager = effect_manager or EffectManager()
+
+        # PHASE 5.2 — REPLAY/LIVE MODE
+        self.mode: str = "live"
 
         self._tick_count = 0
         self._on_pre_tick: Optional[Callable[[TickContext], None]] = None
@@ -224,6 +233,82 @@ class GameLoop:
         # PHASE 4.5 — NPC PLANNER: Simulation-based NPC decision making
         self.npc_planner: Optional[Any] = None
         self.npc_system_protocol: Optional[Any] = None  # get_npcs() method
+        self.npc_method = None  # PHASE 5.2: Override for planner path
+
+        # PHASE 5.3 — LLM RECORD/REPLAY: Deterministic LLM response caching
+        self.llm_recorder: Optional[Any] = None
+
+        # PHASE 5.5 — Inject effect manager into subsystems that support it
+        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+            system = getattr(self, system_name, None)
+            if system is not None and hasattr(system, "set_effect_manager"):
+                system.set_effect_manager(self.effect_manager)
+
+    def set_llm_recorder(self, recorder: Any) -> None:
+        """
+        Attach an LLM recorder for deterministic model replay.
+
+        Args:
+            recorder: LLMRecorder instance for recording/replaying LLM responses.
+        """
+        self.llm_recorder = recorder
+        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+            system = getattr(self, system_name, None)
+            if system is not None and hasattr(system, "set_llm_recorder"):
+                system.set_llm_recorder(recorder)
+
+    def set_mode(self, mode: str) -> None:
+        """
+        Propagate replay/live mode to subsystems that support it.
+
+        Args:
+            mode: Either "replay" or "live".
+
+        Replay mode contract:
+        - no fresh LLM calls unless using recorded outputs
+        - no fresh randomness outside seeded RNG
+        - no external side effects
+        - no time-based generation outside deterministic clock
+        """
+        self.mode = mode
+        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+            system = getattr(self, system_name, None)
+            if system is not None and hasattr(system, "set_mode"):
+                system.set_mode(mode)
+
+        # PHASE 5.3 — Propagate replay/live LLM behavior to systems with determinism config
+        for system_name in ("world", "npc_system", "story_director", "scene_renderer"):
+            system = getattr(self, system_name, None)
+            if system is not None and hasattr(system, "determinism"):
+                system.determinism.replay_mode = (mode == "replay")
+                if mode == "replay":
+                    system.determinism.use_recorded_llm = True
+                else:
+                    system.determinism.use_recorded_llm = False
+
+        # PHASE 5.5 — Apply effect policy by mode
+        if mode == "live":
+            self.effect_manager.set_policy(
+                EffectPolicy(
+                    allow_logs=True,
+                    allow_metrics=True,
+                    allow_network=True,
+                    allow_disk_write=True,
+                    allow_live_llm=True,
+                    allow_tool_calls=True,
+                )
+            )
+        elif mode in ("replay", "simulation"):
+            self.effect_manager.set_policy(
+                EffectPolicy(
+                    allow_logs=True,
+                    allow_metrics=True,
+                    allow_network=False,
+                    allow_disk_write=False,
+                    allow_live_llm=False,
+                    allow_tool_calls=False,
+                )
+            )
 
     def tick(self, player_input: str) -> Dict[str, Any]:
         """Execute one game tick.
@@ -286,7 +371,10 @@ class GameLoop:
             self.world.tick(self.event_bus)
 
             # 3. Update NPCs
-            self.npc_system.update(intent, self.event_bus)
+            if getattr(self, "npc_method", None) is not None:
+                self.npc_method(intent)
+            else:
+                self.npc_system.update(intent, self.event_bus)
 
             # 4. Collect events (now with tick IDs injected)
             events = self.event_bus.collect()
@@ -556,18 +644,9 @@ class GameLoop:
         if loop_factory is not None:
             engine = ReplayEngine(loop_factory)
         else:
-            # Backward compat: reuse current systems (NOT recommended)
-            # PHASE 2 FIX #2: This path causes state leaks. Use factory instead.
-            def fallback_factory() -> "GameLoop":
-                return self.__class__(
-                    intent_parser=self.intent_parser,
-                    world=self.world,
-                    npc_system=self.npc_system,
-                    story_director=self.story_director,
-                    scene_renderer=self.scene_renderer,
-                    event_bus=EventBus(),
-                )
-
-            engine = ReplayEngine(fallback_factory)
+            raise RuntimeError(
+                "replay_to_tick() requires loop_factory for deterministic replay. "
+                "Refusing to reuse live systems."
+            )
 
         return engine.replay(events, up_to_tick=tick)

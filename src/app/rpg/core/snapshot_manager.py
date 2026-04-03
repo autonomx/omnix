@@ -63,11 +63,22 @@ class Snapshot:
         tick: The game tick number when this snapshot was taken.
         world_state: Serialized world state (may be None if no world system).
         npc_state: Serialized NPC system state (may be None if no NPC system).
+        director_state: Serialized story director state.
+        timeline_state: Serialized timeline/event bus state.
+        effect_state: Serialized effect manager state.
+        rng_state: Serialized RNG state.
+        planner_state: Serialized NPC planner state.
         extra_states: Additional system states keyed by name.
     """
     tick: int
     world_state: Optional[Dict[str, Any]] = None
     npc_state: Optional[Dict[str, Any]] = None
+    director_state: Optional[Dict[str, Any]] = None
+    timeline_state: Optional[Dict[str, Any]] = None
+    effect_state: Optional[Dict[str, Any]] = None
+    rng_state: Optional[Dict[str, Any]] = None
+    planner_state: Optional[Dict[str, Any]] = None
+    llm_state: Optional[Dict[str, Any]] = None
     extra_states: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
@@ -113,14 +124,42 @@ class SnapshotManager:
         snapshot = Snapshot(tick=tick)
         
         # Serialize world state if available
-        if hasattr(loop, "world") and loop.world is not None:
-            if hasattr(loop.world, "serialize"):
+        if hasattr(loop, "world"):
+            if hasattr(loop.world, "serialize_state"):
+                snapshot.world_state = loop.world.serialize_state()
+            elif hasattr(loop.world, "serialize"):
                 snapshot.world_state = loop.world.serialize()
         
         # Serialize NPC system state if available
-        if hasattr(loop, "npc_system") and loop.npc_system is not None:
-            if hasattr(loop.npc_system, "serialize"):
+        if hasattr(loop, "npc_system"):
+            if hasattr(loop.npc_system, "serialize_state"):
+                snapshot.npc_state = loop.npc_system.serialize_state()
+            elif hasattr(loop.npc_system, "serialize"):
                 snapshot.npc_state = loop.npc_system.serialize()
+        
+        # PHASE 5.5: Serialize additional state
+        if hasattr(loop, "story_director") and hasattr(loop.story_director, "serialize_state"):
+            snapshot.director_state = loop.story_director.serialize_state()
+        
+        if hasattr(loop, "event_bus") and hasattr(loop.event_bus, "timeline"):
+            timeline = loop.event_bus.timeline
+            if hasattr(timeline, "serialize_state"):
+                snapshot.timeline_state = timeline.serialize_state()
+        
+        if hasattr(loop, "effect_manager") and hasattr(loop.effect_manager, "serialize_state"):
+            snapshot.effect_state = loop.effect_manager.serialize_state()
+        
+        if hasattr(loop, "rng") and hasattr(loop.rng, "getstate"):
+            snapshot.rng_state = {"state": loop.rng.getstate()}
+        
+        if hasattr(loop, "npc_planner") and loop.npc_planner is not None:
+            if hasattr(loop.npc_planner, "serialize_state"):
+                snapshot.planner_state = loop.npc_planner.serialize_state()
+        
+        # PHASE 5.6: Serialize LLM recorder state
+        if hasattr(loop, "llm_recorder") and loop.llm_recorder is not None:
+            if hasattr(loop.llm_recorder, "serialize_state"):
+                snapshot.llm_state = loop.llm_recorder.serialize_state()
         
         # Serialize any additional systems that declare serialize()
         # This allows extensions to opt into snapshot support
@@ -149,14 +188,39 @@ class SnapshotManager:
             return False
         
         # Restore world state if available
-        if snapshot.world_state and hasattr(loop, "world") and loop.world is not None:
-            if hasattr(loop.world, "deserialize"):
+        if snapshot.world_state and hasattr(loop, "world"):
+            if hasattr(loop.world, "deserialize_state"):
+                loop.world.deserialize_state(snapshot.world_state)
+            elif hasattr(loop.world, "deserialize"):
                 loop.world.deserialize(snapshot.world_state)
         
         # Restore NPC system state if available
-        if snapshot.npc_state and hasattr(loop, "npc_system") and loop.npc_system is not None:
-            if hasattr(loop.npc_system, "deserialize"):
+        if snapshot.npc_state and hasattr(loop, "npc_system"):
+            if hasattr(loop.npc_system, "deserialize_state"):
+                loop.npc_system.deserialize_state(snapshot.npc_state)
+            elif hasattr(loop.npc_system, "deserialize"):
                 loop.npc_system.deserialize(snapshot.npc_state)
+        
+        # PHASE 5.5: Restore additional state
+        if snapshot.director_state and hasattr(loop, "story_director"):
+            if hasattr(loop.story_director, "deserialize_state"):
+                loop.story_director.deserialize_state(snapshot.director_state)
+
+        if snapshot.timeline_state and hasattr(loop, "event_bus") and hasattr(loop.event_bus, "timeline"):
+            timeline = loop.event_bus.timeline
+            if hasattr(timeline, "deserialize_state"):
+                timeline.deserialize_state(snapshot.timeline_state)
+
+        if snapshot.rng_state and hasattr(loop, "rng") and hasattr(loop.rng, "setstate"):
+            loop.rng.setstate(snapshot.rng_state["state"])
+
+        if snapshot.effect_state and hasattr(loop, "effect_manager"):
+            if hasattr(loop.effect_manager, "deserialize_state"):
+                loop.effect_manager.deserialize_state(snapshot.effect_state)
+        
+        if snapshot.planner_state and hasattr(loop, "npc_planner") and loop.npc_planner is not None:
+            if hasattr(loop.npc_planner, "deserialize_state"):
+                loop.npc_planner.deserialize_state(snapshot.planner_state)
         
         # Restore any additional system states
         for attr_name, state_data in snapshot.extra_states.items():

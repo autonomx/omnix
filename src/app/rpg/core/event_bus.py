@@ -30,6 +30,7 @@ Usage:
 """
 
 from collections import deque
+import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 import inspect
@@ -39,11 +40,7 @@ from .timeline_graph import TimelineGraph
 
 # PHASE 5.2 — DETERMINISTIC CLOCK (rpg-design.txt Issue #2)
 from .clock import DeterministicClock
-
-# PHASE 5.1.5 — CAUSAL HASH IDS (rpg-design.txt Issue #1)
-# Event IDs are now derived from causal history, not generated via counter
-import hashlib
-import json
+from .determinism import DeterminismConfig, compute_deterministic_event_id
 
 
 # Allowed layers for cross-system enforcement (Fix #3)
@@ -129,22 +126,11 @@ class Event:
     tick: Optional[int] = None
 
     def __post_init__(self) -> None:
-        """Ensure event_id and timestamp are set if not provided.
-        
-        PHASE 5.2 — DETERMINISTIC EVENT ID (rpg-design.txt Issue #1):
-        Uses EventBus.next_event_id() for sequential, deterministic IDs.
-        
-        PHASE 5.2 — DETERMINISTIC TIMESTAMP (rpg-design.txt Issue #2):
-        Uses DeterministicClock if available, otherwise defaults to 0.0.
         """
-        if self.event_id is None:
-            self.event_id = EventBus.next_event_id()
-        if self.timestamp is None:
-            clock = getattr(EventBus, "_clock", None)
-            if clock is not None:
-                self.timestamp = clock.now()
-            else:
-                self.timestamp = 0.0
+        Event is intentionally passive.
+        Deterministic event_id, timestamp, tick, and _seq are assigned by EventBus.emit().
+        """
+        pass
 
     def __repr__(self) -> str:
         return (
@@ -179,36 +165,13 @@ class EventBus:
         _enforce: If True, development-time enforcement checks are active.
     """
 
-    # PHASE 5.2 — DETERMINISTIC EVENT ID (rpg-design.txt Issue #1)
-    _global_event_counter: int = 0
-
-    # PHASE 5.2 — DETERMINISTIC CLOCK (rpg-design.txt Issue #2)
-    _clock: Optional["DeterministicClock"] = None
-
-    @classmethod
-    def next_event_id(cls) -> str:
-        """Deterministic event ID generator.
-
-        PHASE 5.2 — DETERMINISTIC EVENT ID (rpg-design.txt Issue #1):
-        Instead of uuid4(), this uses a global counter to generate
-        sequential IDs like "evt_1", "evt_2", etc.
-
-        This ensures:
-        - Replay produces identical IDs
-        - Simulation timelines are comparable
-        - Hashing is stable across runs
-
-        Returns:
-            Deterministic event ID string (e.g., "evt_1").
-        """
-        cls._global_event_counter += 1
-        return f"evt_{cls._global_event_counter}"
 
     def __init__(
         self,
         debug: bool = False,
         enforce: bool = False,
         clock: Optional["DeterministicClock"] = None,
+        determinism: Optional["DeterminismConfig"] = None,
     ):
         """Initialize the EventBus.
 
@@ -216,10 +179,12 @@ class EventBus:
             debug: If True, log all events for debugging purposes.
             enforce: If True, enable development-time enforcement to detect misuse.
             clock: Optional DeterministicClock for deterministic timestamps.
-                  When None, timestamps default to 0.0.
+                  When None, a default DeterministicClock is created.
+            determinism: Optional DeterminismConfig for seeded deterministic IDs.
+                        When None, defaults to DeterminismConfig(seed=0).
         """
-        # PHASE 5.2 — DETERMINISTIC CLOCK (rpg-design.txt Issue #2)
-        EventBus._clock = clock
+        self._clock = clock or DeterministicClock(start_time=0.0, increment=0.001)
+        self._determinism = determinism or DeterminismConfig()
 
         self._events: List[Event] = []
         self._log: Optional[List[Event]] = [] if debug else None
@@ -302,9 +267,9 @@ class EventBus:
         event._seq = self._seq
         self._seq += 1
 
-        # PHASE 4 — EVENT CONTEXT: Apply context parent_id if provided
+        # PHASE 4 — EVENT CONTEXT: Apply context parent_id and tick if provided
         # This addresses rpg-design.txt Issue #1: Parent Chain Is NOT Guaranteed Correct
-        if context is not None and context.parent_id is not None:
+        if context is not None and (context.parent_id is not None or context.tick is not None):
             seq_before = getattr(event, "_seq", 0)
             event = Event(
                 type=event.type,
@@ -312,7 +277,8 @@ class EventBus:
                 source=event.source,
                 event_id=event.event_id,
                 timestamp=event.timestamp,
-                parent_id=context.parent_id,
+                parent_id=context.parent_id if context.parent_id is not None else event.parent_id,
+                tick=context.tick if context.tick is not None else event.tick,
             )
             # PHASE 5.1.5 FIX #4: Preserve sequence number when cloning
             event._seq = seq_before
@@ -324,51 +290,83 @@ class EventBus:
                 "All events must declare origin system."
             )
 
-        # PHASE 2.5 — DEDUPLICATION SAFETY:
-        # Check for duplicate events BEFORE cloning to prevent duplicates
+        # Determine canonical tick:
+        # 1) explicit event.tick if already present
+        # 2) current bus tick otherwise
+        event_tick = event.tick if event.tick is not None else self._current_tick
+
+        # Deep-clone payload so caller-side nested mutation cannot affect:
+        # - event bus stored state
+        # - deterministic identity inputs
+        payload = copy.deepcopy(event.payload)
+
+        # Identity payload must NOT duplicate top-level tick.
+        # tick participates in identity as its own first-class field.
+        identity_payload = copy.deepcopy(payload)
+
+        # Legacy compatibility payload for downstream systems:
+        # keep tick mirrored into payload["tick"] for older consumers.
+        if event_tick is not None:
+            payload["tick"] = event_tick
+
+        # Assign deterministic timestamp if missing
+        if self._determinism.replay_mode and event.timestamp is None:
+            raise RuntimeError(
+                "Replay mode requires recorded event.timestamp; refusing fresh timestamp generation."
+            )
+        event_timestamp = event.timestamp if event.timestamp is not None else self._clock.now()
+
+        # Assign deterministic event_id if missing
+        original_seq = getattr(event, "_seq", 0)
         event_id = event.event_id
+        if event_id is None:
+            if self._determinism.replay_mode:
+                raise RuntimeError(
+                    "Replay mode requires recorded event.event_id; refusing fresh ID generation."
+                )
+            # Deterministic identity is execution-path based:
+            # seed + canonical event content + causal parent + tick + seq.
+            # It is versioned in determinism.py via IDENTITY_VERSION.
+            event_id = compute_deterministic_event_id(
+                seed=self._determinism.seed,
+                event_type=event.type,
+                payload=identity_payload,
+                source=event.source,
+                parent_id=event.parent_id,
+                tick=event_tick,
+                seq=original_seq,
+            )
+
+        # Check for duplicate events BEFORE cloning
         if event_id in self._seen_event_ids_set:
             return  # prevent duplicates
 
+        # Correct deque/set synchronization:
+        # remove the element that will be evicted before append
+        if len(self._seen_event_ids) == self._seen_event_ids.maxlen:
+            evicted = self._seen_event_ids[0]
+            self._seen_event_ids_set.discard(evicted)
         self._seen_event_ids.append(event_id)
         self._seen_event_ids_set.add(event_id)
 
-        # PHASE 5.2 — MEMORY LEAK FIX (rpg-design.txt Issue #3):
-        # Keep _seen_event_ids_set in sync with the bounded deque.
-        # When the deque wraps around, remove oldest entry from the set.
-        # Check >= because append happens before this check on the next iteration.
-        if len(self._seen_event_ids) >= self._seen_event_ids.maxlen:
-            oldest = self._seen_event_ids[0]
-            self._seen_event_ids_set.discard(oldest)
-
-        # Fix #1: Clone event to prevent external mutation side-effects
-        # Preserve event_id, timestamp, parent_id, and _seq for causal tracking
-        payload = dict(event.payload)
-
-        if self._current_tick is not None:
-            payload["tick"] = self._current_tick
-
-        # PHASE 5.2 — FIRST-CLASS TICK (rpg-design.txt Issue #4):
-        # Inject event.tick as first-class field instead of hiding in payload
-        event_tick = self._current_tick
-
-        # Preserve _seq across cloning
-        original_seq = getattr(event, "_seq", 0)
-
+        # Store the payload with legacy tick injection for compatibility,
+        # but compute identity from identity_payload above to avoid
+        # double-representing tick in the identity function.
         cloned = Event(
             type=event.type,
             payload=payload,
             source=event.source,
-            event_id=event_id,  # preserve original event_id
-            timestamp=event.timestamp,  # preserve original timestamp
-            parent_id=event.parent_id,  # preserve original parent_id
-            tick=event_tick,  # PHASE 5.2: first-class tick field
+            event_id=event_id,
+            timestamp=event_timestamp,
+            parent_id=event.parent_id,
+            tick=event_tick,
         )
         # PHASE 5.1.5 FIX #4: Preserve sequence number when cloning
         cloned._seq = original_seq
 
-        # PHASE 5.2 — Propagate tick and _seq back to original event object
-        # so callers can inspect them after emit() returns.
+        # Propagate canonical fields back to original event so callers can inspect them
+        event.event_id = event_id
+        event.timestamp = event_timestamp
         event.tick = event_tick
         event._seq = original_seq
 
@@ -489,23 +487,46 @@ class EventBus:
     def load_history(self, events: List[Event]) -> None:
         """Load event history (used for replay/bootstrap).
 
-        PHASE 2 — REPLAY ENGINE:
-        This method allows the ReplayEngine to restore event history
-        into a freshly constructed EventBus so that systems that inspect
-        history can see the full timeline.
+        Restores the EventBus into a deterministic state derived from
+        previously recorded events.
 
-        PHASE 5.2 — TIMELINE REBUILD (rpg-design.txt Issue #5):
-        After loading history, the timeline graph is rebuilt from the
-        loaded events to ensure causality tracking is correct during
-        replay. Without this, the timeline may desync from history.
+        This method restores:
+        - full history
+        - pending queue reset
+        - timeline graph
+        - seen-event dedup state
+        - sequence counter
+        - current tick
+
+        This is required so replay/bootstrap state matches a live run
+        as closely as possible.
         """
         self._history = list(events)
+        self._events.clear()
+        if self._log is not None:
+            self._log.clear()
+            self._log.extend(self._history)
 
-        # PHASE 5.2 — TIMELINE REBUILD (rpg-design.txt Issue #5):
-        # Rebuild timeline graph from loaded events so replay matches original.
+        # Rebuild deterministic bus state from loaded history
         self.timeline.clear()
+        self._seen_event_ids.clear()
+        self._seen_event_ids_set.clear()
+        self._seq = 0
+        self._current_tick = None
+
         for e in self._history:
             self.timeline.add_event(e.event_id, e.parent_id)
+
+            if e.event_id is not None:
+                if len(self._seen_event_ids) == self._seen_event_ids.maxlen:
+                    evicted = self._seen_event_ids[0]
+                    self._seen_event_ids_set.discard(evicted)
+                self._seen_event_ids.append(e.event_id)
+                self._seen_event_ids_set.add(e.event_id)
+
+            self._seq = max(self._seq, getattr(e, "_seq", 0) + 1)
+            if getattr(e, "tick", None) is not None:
+                self._current_tick = max(self._current_tick or 0, e.tick)
 
     def reset(self) -> None:
         """Reset the bus state (clears queue, log, and history).
@@ -567,6 +588,20 @@ class EventBus:
         if self._history:
             return self._history[-1].event_id
         return None
+
+    def set_replay_mode(self, enabled: bool = True) -> None:
+        """Set replay mode to influence deterministic behavior.
+
+        When replay mode is enabled, subsystems should avoid fresh side effects.
+
+        Args:
+            enabled: Whether replay mode is active.
+        """
+        self._determinism.replay_mode = enabled
+
+    def is_replay_mode(self) -> bool:
+        """Return whether replay mode is currently enabled."""
+        return self._determinism.replay_mode
 
     # PHASE 3 — EVENT CREATION HELPER (PATCH 6)
     def create_event(
