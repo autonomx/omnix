@@ -131,3 +131,23 @@ class GameplayControlController:
         self._mode = data.get("mode", "live")
         self.pacing_controller.deserialize_state(data.get("pacing", {}))
         self.framing_engine.deserialize_state(data.get("framing", {}))
+
+    # ------------------------------------------------------------------
+    # Phase 7.3 — Choice retrieval and selection helpers
+    # ------------------------------------------------------------------
+
+    def get_last_choice_set(self) -> dict | None:
+        """Return the last presented choice set as a dict, or None."""
+        state = self.framing_engine.get_state()
+        return state.last_choice_set
+
+    def select_option(self, option_id: str) -> dict | None:
+        """Find and return the option dict matching *option_id* from the
+        last presented choice set, or ``None`` if not found."""
+        choice_set = self.get_last_choice_set()
+        if not choice_set:
+            return None
+        for option in choice_set.get("options", []):
+            if option.get("option_id") == option_id:
+                return dict(option)
+        return None

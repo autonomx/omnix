@@ -56,6 +56,8 @@ class ChoiceOption:
     tags: list[str] = field(default_factory=list)
     constraints: list[OptionConstraint] = field(default_factory=list)
     priority: float = 0.5
+    selected: bool = False
+    resolution_type: Optional[str] = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -68,6 +70,8 @@ class ChoiceOption:
             "tags": list(self.tags),
             "constraints": [c.to_dict() for c in self.constraints],
             "priority": self.priority,
+            "selected": self.selected,
+            "resolution_type": self.resolution_type,
             "metadata": dict(self.metadata),
         }
 
@@ -85,6 +89,8 @@ class ChoiceOption:
                 for c in data.get("constraints", [])
             ],
             priority=data.get("priority", 0.5),
+            selected=data.get("selected", False),
+            resolution_type=data.get("resolution_type"),
             metadata=dict(data.get("metadata", {})),
         )
 

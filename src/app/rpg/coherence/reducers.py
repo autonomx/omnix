@@ -362,6 +362,124 @@ def reduce_character_death(state: Any, event: dict) -> List[CoherenceMutation]:
     ]
 
 
+# ------------------------------------------------------------------
+# Phase 7.3 — Action-generated event reducers
+# ------------------------------------------------------------------
+
+def reduce_thread_progressed(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle thread_progressed events from action resolution."""
+    payload = event["payload"]
+    thread_id = payload.get("thread_id")
+    if not thread_id:
+        return []
+    thread = getattr(state, "unresolved_threads", {}).get(thread_id)
+    if thread is None:
+        return []
+    notes = list(getattr(thread, "notes", []) or [])
+    notes.append(f"Progressed via action at tick {event.get('tick')}")
+    return [
+        CoherenceMutation(
+            action="upsert_thread",
+            target="thread",
+            data={
+                "thread_id": thread_id,
+                "title": getattr(thread, "title", thread_id),
+                "status": "unresolved",
+                "priority": getattr(thread, "priority", "normal"),
+                "source_event_id": event.get("event_id"),
+                "opened_tick": getattr(thread, "opened_tick", None),
+                "updated_tick": event.get("tick"),
+                "resolved_tick": None,
+                "anchor_entity_ids": getattr(thread, "anchor_entity_ids", []),
+                "notes": notes,
+                "metadata": dict(getattr(thread, "metadata", {}) or {}),
+            },
+        )
+    ]
+
+
+def reduce_npc_interaction_started(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_interaction_started events from action resolution."""
+    payload = event["payload"]
+    npc_id = payload.get("npc_id")
+    if not npc_id:
+        return []
+    return [
+        CoherenceMutation(
+            action="record_consequence",
+            target="consequence",
+            data={
+                "consequence_id": f"cons:{event.get('event_id') or 'interaction'}:{npc_id}",
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+                "summary": f"Started interaction with {npc_id}",
+                "entity_ids": [npc_id],
+                "consequence_type": "npc_interaction_started",
+                "metadata": {},
+            },
+        )
+    ]
+
+
+def reduce_scene_transition_requested(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle scene_transition_requested events from action resolution."""
+    payload = event["payload"]
+    location = payload.get("location") or payload.get("to_location")
+    if not location:
+        return []
+    mutations: List[CoherenceMutation] = [
+        _fact_mutation(
+            target="scene",
+            fact_id="scene:location",
+            category="scene",
+            subject="scene",
+            predicate="location",
+            value=location,
+            authority="event_confirmed",
+            event=event,
+        ),
+    ]
+    summary = f"Scene transition to {location}"
+    mutations.append(
+        CoherenceMutation(
+            action="push_anchor",
+            target="anchor",
+            data={
+                "anchor_id": f"anchor:transition:{event.get('event_id') or event.get('tick')}",
+                "tick": event.get("tick"),
+                "location": location,
+                "present_actors": [],
+                "active_tensions": [],
+                "unresolved_thread_ids": list(state.unresolved_threads.keys()),
+                "summary": summary,
+                "scene_fact_ids": ["scene:location"],
+                "source_event_id": event.get("event_id"),
+                "metadata": {},
+            },
+        )
+    )
+    return mutations
+
+
+def reduce_recap_requested(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle recap_requested events from action resolution."""
+    return [
+        CoherenceMutation(
+            action="record_consequence",
+            target="consequence",
+            data={
+                "consequence_id": f"cons:recap:{event.get('event_id') or 'recap'}",
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+                "summary": "Player requested a recap",
+                "entity_ids": [],
+                "consequence_type": "recap_requested",
+                "metadata": {},
+            },
+        )
+    ]
+
+
 REDUCERS = {
     "scene_started": reduce_scene_started,
     "scene_generated": reduce_scene_generated,
@@ -377,6 +495,11 @@ REDUCERS = {
     "threat_made": reduce_commitment_created,
     "promise_broken": reduce_commitment_broken,
     "character_died": reduce_character_death,
+    # Phase 7.3 — Action-generated event types
+    "thread_progressed": reduce_thread_progressed,
+    "npc_interaction_started": reduce_npc_interaction_started,
+    "scene_transition_requested": reduce_scene_transition_requested,
+    "recap_requested": reduce_recap_requested,
 }
 
 

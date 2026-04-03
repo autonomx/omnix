@@ -48,6 +48,7 @@ from .snapshot_manager import SnapshotManager
 from .effects import EffectManager, EffectPolicy
 from .tool_runtime_boundary import ToolRuntimeRecorder
 from ..recovery.manager import RecoveryManager
+from ..execution.resolver import ActionResolver
 
 
 class TickPhase(Enum):
@@ -278,6 +279,9 @@ class GameLoop:
 
         # PHASE 7.0 — CREATOR / GM LAYER
         self._init_creator_systems()
+
+        # PHASE 7.3 — SCENE EXECUTION LAYER
+        self._init_execution_systems()
 
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
@@ -1201,3 +1205,72 @@ class GameLoop:
             "validation": validation.to_dict(),
             "preview": self.creator_presenter.present_setup_summary(setup),
         }
+
+    # ------------------------------------------------------------------
+    # Phase 7.3 — Scene Execution Layer
+    # ------------------------------------------------------------------
+
+    def _init_execution_systems(self) -> None:
+        """Initialize the action resolver for scene execution."""
+        from ..control.controller import GameplayControlController
+        self.action_resolver = ActionResolver()
+        # GameplayControlController is already initialized by _init_creator_systems
+        # via build_control_output. We create one for direct option lookup.
+        if not hasattr(self, "gameplay_control_controller"):
+            self.gameplay_control_controller = GameplayControlController()
+
+    def get_last_choice_set(self) -> dict | None:
+        """Return the last presented choice set, if any."""
+        if hasattr(self, "gameplay_control_controller"):
+            return self.gameplay_control_controller.get_last_choice_set()
+        return None
+
+    def resolve_selected_option(self, option_id: str) -> dict:
+        """Resolve a selected option into events and update coherence.
+
+        This is the main entry point for the scene execution layer.
+        It resolves the option, emits events, and applies coherence
+        updates through the standard event/reducer path.
+        """
+        option = self.gameplay_control_controller.select_option(option_id)
+        if option is None:
+            return {"ok": False, "reason": "unknown_option", "option_id": option_id}
+
+        result = self.action_resolver.resolve_choice(
+            option=option,
+            coherence_core=self.coherence_core,
+            gm_state=self.gm_directive_state,
+        )
+
+        self._emit_action_resolution_events(result.to_dict())
+        self._apply_coherence_updates_from_action_result(result.to_dict())
+
+        return {
+            "ok": True,
+            "resolution": result.to_dict(),
+            "scene_summary": self.coherence_core.get_scene_summary(),
+        }
+
+    def _emit_action_resolution_events(self, result: dict) -> None:
+        """Emit resolved action events into the EventBus."""
+        from .event_bus import Event
+        for event_data in result.get("events", []):
+            self.event_bus.emit(
+                Event(
+                    type=event_data.get("type", "unknown"),
+                    payload=dict(event_data.get("payload", {})),
+                    source="action_resolver",
+                )
+            )
+
+    def _apply_coherence_updates_from_action_result(self, result: dict) -> dict:
+        """Extract events from an action result and apply them via CoherenceCore.
+
+        Re-uses the same event data rather than constructing new Event objects,
+        since coherence reducers accept both Event and dict forms.
+        """
+        raw_events = result.get("events", [])
+        if raw_events and self.coherence_core is not None:
+            coherence_result = self.coherence_core.apply_events(raw_events)
+            return coherence_result.to_dict()
+        return {"events_applied": 0, "mutations": [], "contradictions": []}

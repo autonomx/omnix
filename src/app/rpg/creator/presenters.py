@@ -170,3 +170,41 @@ class CreatorStatePresenter:
             "recent_consequences": list(recap.get("recent_consequences", [])),
             "unresolved_threads": [self._present_thread(t) for t in recap.get("unresolved_threads", [])],
         }
+
+    # ------------------------------------------------------------------
+    # Phase 7.3 — Action resolution presenters
+    # ------------------------------------------------------------------
+
+    def present_action_resolution(self, resolution: dict) -> dict:
+        """Present an action resolution result in a UI-safe format."""
+        resolved_action = resolution.get("resolved_action", {})
+        events = resolution.get("events", [])
+        transition = resolved_action.get("transition")
+        return {
+            "title": "Action Result",
+            "action": {
+                "action_id": resolved_action.get("action_id"),
+                "option_id": resolved_action.get("option_id"),
+                "intent_type": resolved_action.get("intent_type"),
+                "target_id": resolved_action.get("target_id"),
+                "summary": resolved_action.get("summary"),
+                "consequence_count": len(resolved_action.get("consequences", [])),
+            },
+            "events": [
+                {"type": e.get("type"), "payload": dict(e.get("payload", {}))}
+                for e in events
+            ],
+            "transition": self.present_scene_transition(transition),
+        }
+
+    def present_scene_transition(self, transition: dict | None) -> dict | None:
+        """Present a scene transition in a UI-safe format."""
+        if transition is None:
+            return None
+        return {
+            "transition_id": transition.get("transition_id"),
+            "transition_type": transition.get("transition_type"),
+            "from_location": transition.get("from_location"),
+            "to_location": transition.get("to_location"),
+            "summary": transition.get("summary"),
+        }

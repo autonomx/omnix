@@ -476,6 +476,9 @@ class TestReducerDispatch:
             "item_acquired", "item_lost", "quest_started", "thread_started",
             "quest_completed", "thread_resolved", "promise_made", "threat_made",
             "promise_broken", "character_died",
+            # Phase 7.3 — Action-generated event types
+            "thread_progressed", "npc_interaction_started",
+            "scene_transition_requested", "recap_requested",
         }
         assert set(REDUCERS.keys()) == expected
 

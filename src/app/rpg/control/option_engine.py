@@ -118,6 +118,7 @@ class OptionEngine:
                     target_id=thread_id,
                     tags=["thread", raw_priority],
                     priority=base_priority,
+                    resolution_type="thread_progress",
                     metadata={"source": "thread"},
                 )
             )
@@ -140,6 +141,7 @@ class OptionEngine:
                             target_id=actor_id,
                             tags=["npc", "social"],
                             priority=1.0,
+                            resolution_type="social_contact",
                             metadata={"source": "scene"},
                         )
                     )
@@ -162,6 +164,7 @@ class OptionEngine:
                             target_id=npc_id,
                             tags=["npc", "social"],
                             priority=0.8,
+                            resolution_type="social_contact",
                             metadata={"source": "facts"},
                         )
                     )
@@ -187,6 +190,7 @@ class OptionEngine:
                         target_id=loc,
                         tags=["location"],
                         priority=0.8,
+                        resolution_type="location_travel",
                         metadata={"source": "scene"},
                     )
                 )
@@ -204,6 +208,7 @@ class OptionEngine:
             target_id=None,
             tags=["meta"],
             priority=0.2,
+            resolution_type="recap",
             metadata={"source": "system"},
         )
 
@@ -292,6 +297,7 @@ class OptionEngine:
         target_id: str | None,
         tags: list[str] | None = None,
         priority: float = 0.5,
+        resolution_type: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ChoiceOption:
         return ChoiceOption(
@@ -303,5 +309,6 @@ class OptionEngine:
             tags=list(tags or []),
             constraints=[],
             priority=priority,
+            resolution_type=resolution_type,
             metadata=dict(metadata or {}),
         )
