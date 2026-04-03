@@ -423,12 +423,17 @@ class GameLoop:
         self.event_bus.set_tick(self._tick_count)
 
         try:
-            # If parser failed, return recovery scene directly
+            # PHASE 6.5 FIX: If parser failed, route recovery through renderer + normalizer
             if parser_recovery is not None:
-                ctx.scene = parser_recovery
+                coherence_context = self._build_director_context()
+                rendered = self._handle_renderer_stage(parser_recovery, coherence_context)
+                scene = self._finalize_scene_output(rendered, coherence_context)
+                ctx.scene = scene
+                # Do NOT update last-good anchor from recovery scenes (handled in _is_strong_scene)
+                self._maybe_record_last_good_anchor(scene, coherence_context)
                 if self._on_post_tick:
                     self._on_post_tick(ctx)
-                return parser_recovery
+                return scene
 
             # 2. Advance world simulation
             self.world.tick(self.event_bus)
@@ -453,7 +458,7 @@ class GameLoop:
             coherence_context = self._build_director_context()
             ctx.scene["coherence"] = coherence_result
 
-            # PHASE 6.5: Check for high-severity contradictions
+            # PHASE 6.5: Check for high-severity contradictions only
             contradiction_scene = self._handle_high_severity_contradictions(
                 coherence_result, coherence_context
             )
@@ -467,17 +472,21 @@ class GameLoop:
             narrative = self._handle_director_stage(
                 events, intent, coherence_context
             )
-            if isinstance(narrative, dict) and narrative.get("metadata", {}).get("recovery"):
-                ctx.scene = narrative
+            if isinstance(narrative, dict) and narrative.get("meta", {}).get("recovered"):
+                # PHASE 6.5: Route recovery through renderer + normalization
+                rendered = self._handle_renderer_stage(narrative, coherence_context)
+                scene = self._finalize_scene_output(rendered, coherence_context)
+                ctx.scene = scene
                 if self._on_post_tick:
                     self._on_post_tick(ctx)
-                return narrative
+                return scene
 
             # 7. Render scene (with recovery)
             scene = self._handle_renderer_stage(narrative, coherence_context)
+            scene = self._finalize_scene_output(scene, coherence_context)
             ctx.scene = scene
 
-            # PHASE 6.5: Update last good anchor on successful render
+            # PHASE 6.5: Update last good anchor only for strong (non-recovered) scenes
             self._maybe_record_last_good_anchor(scene, coherence_context)
 
             # PHASE 2.5: Save snapshot at interval
@@ -793,6 +802,112 @@ class GameLoop:
         if hasattr(self.story_director, "set_recovery_manager"):
             self.story_director.set_recovery_manager(self.recovery_manager)
 
+    def _normalize_scene(self, scene: dict | None) -> dict:
+        """Normalize a scene dict to a consistent shape.
+
+        Ensures all scenes have canonical keys regardless of source.
+
+        Precedence rules are intentional:
+        - root-level keys from the renderer/output scene are authoritative
+        - nested narrative keys only backfill missing values
+        - `meta` is canonical; `metadata` is kept as a compatibility mirror
+        """
+        scene = scene or {}
+        if not isinstance(scene, dict):
+            return {
+                "scene": str(scene),
+                "options": [],
+                "meta": {},
+            }
+
+        # If the scene is wrapped in a 'narrative' key (e.g., by renderer),
+        # extract the nested payload for backfill only. Root scene keys remain
+        # authoritative wherever present.
+        narrative_wrapper = scene.get("narrative")
+        payload = narrative_wrapper if isinstance(narrative_wrapper, dict) else scene
+
+        # Root scene keys are authoritative; nested narrative only backfills.
+        body = (
+            scene.get("body")
+            or scene.get("scene")
+            or scene.get("text")
+            or scene.get("description")
+            or payload.get("body")
+            or payload.get("scene")
+            or payload.get("text")
+            or payload.get("description")
+            or ""
+        )
+
+        # Root meta is canonical; nested payload only fills missing keys.
+        payload_meta = payload.get("meta", {}) or {}
+        payload_metadata = payload.get("metadata", {}) or {}
+        scene_meta = scene.get("meta", {}) or {}
+        scene_metadata = scene.get("metadata", {}) or {}
+
+        meta = {**payload_meta, **scene_meta}
+        metadata = {**payload_metadata, **scene_metadata}
+
+        # Keep metadata synchronized for compatibility, but `meta` remains
+        # the canonical place to read recovery flags.
+        if "recovered" in meta and "recovered" not in metadata:
+            metadata["recovered"] = meta["recovered"]
+        if "recovery_reason" in meta and "recovery_reason" not in metadata:
+            metadata["recovery_reason"] = meta["recovery_reason"]
+        if "recovery_policy" in meta and "recovery_policy" not in metadata:
+            metadata["recovery_policy"] = meta["recovery_policy"]
+
+        # Extract options
+        options = scene.get("options", []) or payload.get("options", []) or []
+
+        normalized = {
+            "scene": body,
+            "body": body,
+            "options": options,
+            "meta": meta,
+            "metadata": metadata,
+        }
+
+        # Preserve other keys from both payload and scene
+        for key in ("title", "summary", "status", "prompt", "scene_data"):
+            if key in payload and key not in normalized:
+                normalized[key] = payload[key]
+            elif key in scene and key not in normalized:
+                normalized[key] = scene[key]
+
+        # Keep narrative key if present
+        if "narrative" in scene:
+            normalized["narrative"] = scene["narrative"]
+
+        return normalized
+
+    def _finalize_scene_output(self, scene: dict, coherence_context: dict | None = None) -> dict:
+        """Normalize and finalize a scene for output.
+
+        Single final step applied to all scene outputs regardless of source.
+        """
+        scene = self._normalize_scene(scene)
+        if coherence_context:
+            scene.setdefault("meta", {})
+            scene["meta"].setdefault("coherence_available", True)
+        return scene
+
+    def _is_strong_scene(self, scene: dict) -> bool:
+        """Determine if a scene is strong enough to become a last-good anchor.
+
+        Recovered or degraded scenes are NOT considered strong.
+        """
+        if not isinstance(scene, dict):
+            return False
+        meta = scene.get("meta", {})
+        # Check both meta and metadata keys for backwards compatibility
+        if meta.get("recovered") or meta.get("degraded"):
+            return False
+        metadata = scene.get("metadata", {})
+        if metadata.get("recovered") or metadata.get("degraded"):
+            return False
+        return bool(scene.get("scene") or scene.get("body"))
+
     def _handle_parser_stage(self, player_input: str) -> tuple:
         """Parse player input with recovery on failure.
 
@@ -885,7 +1000,12 @@ class GameLoop:
         coherence_result: Dict[str, Any],
         coherence_context: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        """If high-severity contradictions exist, produce a recovery scene."""
+        """If high-severity contradictions exist, produce a recovery scene.
+
+        Only triggers recovery for high/critical severity contradictions.
+        Info and warning contradictions remain visible in state but are
+        not player-facing by default.
+        """
         contradictions = coherence_result.get("contradictions", [])
         if not contradictions:
             return None
@@ -896,14 +1016,30 @@ class GameLoop:
             coherence_summary=coherence_context,
             tick=self._tick_count,
         )
-        return result.scene
+        return self._finalize_scene_output(result.scene, coherence_context)
 
     def _maybe_record_last_good_anchor(
         self,
         scene: Dict[str, Any],
         coherence_context: Dict[str, Any],
     ) -> None:
-        """After a successful render, update the last-good anchor."""
+        """After a successful render, update the last-good anchor.
+
+        Only strong (non-recovered, non-degraded) scenes qualify as anchors.
+        """
+        if not self._is_strong_scene(scene):
+            return
         anchor = coherence_context.get("last_good_anchor")
-        if anchor and isinstance(anchor, dict):
+        if not anchor:
+            scene_summary = coherence_context.get("scene_summary")
+            if (
+                isinstance(scene_summary, dict)
+                and (
+                    scene_summary.get("location")
+                    or scene_summary.get("summary")
+                    or scene_summary.get("present_actors")
+                )
+            ):
+                anchor = scene_summary
+        if anchor:
             self.recovery_manager.record_last_good_anchor(anchor)

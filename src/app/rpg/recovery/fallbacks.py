@@ -164,10 +164,16 @@ class FallbackSceneBuilder:
         metadata: dict[str, Any] | None = None,
     ) -> dict:
         """Return a canonical scene dict compatible with normal scene output."""
+        meta = metadata or {}
+        # Ensure all recovery scenes carry recovery metadata
+        meta.setdefault("recovered", True)
         return {
+            "scene": body,
             "title": title,
+            "options": [],
+            "meta": meta,
             "body": body,
             "narrative": {"title": title, "description": body},
             "scene_data": {},
-            "metadata": metadata or {},
+            "metadata": meta,
         }

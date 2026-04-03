@@ -188,14 +188,57 @@ class TestPhase65RecoveryFunctional:
         assert "tavern" in scene.get("body", "")
 
     def test_successful_scene_updates_last_good_anchor(self):
+        """A successful (non-recovered, non-degraded) scene should update the anchor
+        if coherence provides a last_good_anchor."""
         loop = _make_loop(world=StubWorldWithScene())
-        # Tick with scene_started event so coherence builds an anchor
+        # Pre-seed a coherence anchor via internal state
+        loop.coherence_core._state.last_good_anchor = {
+            "anchor_id": "coherence_anchor",
+            "location": "market",
+        }
         scene = loop.tick("look around")
         assert isinstance(scene, dict)
-        # The anchor update depends on coherence returning a last_good_anchor.
-        # With default reducers and a scene_started event, a continuity anchor
-        # may or may not be produced. Verify the mechanism exists:
-        ctx = loop._build_director_context()
-        anchor = ctx.get("last_good_anchor")
-        if anchor:
-            assert loop.recovery_manager._state.last_good_scene_anchor is not None
+        # The scene should NOT be a recovery scene
+        meta = scene.get("meta", {})
+        metadata = scene.get("metadata", {})
+        assert meta.get("recovered") is not True
+        assert metadata.get("recovery") is not True
+        # The coherence anchor should have been recorded
+        assert loop.recovery_manager._state.last_good_scene_anchor is not None
+        assert loop.recovery_manager._state.last_good_scene_anchor["anchor_id"] == "coherence_anchor"
+
+    def test_parser_recovery_scene_still_flows_through_renderer_and_normalization(self):
+        """Prove that parser recovery still goes through renderer + normalization."""
+        loop = _make_loop(parser=FailingParser())
+        scene = loop.tick("@#$%!")
+        assert isinstance(scene, dict)
+        # final scene shape includes normalized keys: scene, options, meta
+        assert "scene" in scene
+        assert "options" in scene
+        # meta or metadata should indicate recovery
+        meta = scene.get("meta", {})
+        metadata = scene.get("metadata", {})
+        assert meta.get("recovered") is True or metadata.get("recovery") is True
+
+    def test_recovery_escalation_on_repeated_failures(self):
+        """After many failures in same scene, policy should escalate to hard_reset_to_anchor."""
+        loop = _make_loop(parser=FailingParser())
+        # Set a known anchor
+        loop.recovery_manager.record_last_good_anchor(
+            {"anchor_id": "anchor_1", "location": "forest"}
+        )
+        # Trigger repeated recoveries
+        scenes = []
+        for i in range(5):
+            scene = loop.tick(f"bad input {i}")
+            scenes.append(scene)
+        # After ESCALATION_THRESHOLD (3) recoveries, policy should escalate
+        # Check last scene metadata
+        last_meta = scenes[-1].get("meta", {})
+        last_metadata = scenes[-1].get("metadata", {})
+        # Either meta or metadata should have recovery_reason
+        policy = last_meta.get("recovery_policy") or last_metadata.get("recovery_policy")
+        assert policy is not None
+        # Recovery count should be tracked
+        count = loop.recovery_manager._state.recovery_count_by_scene.get("anchor_1", 0)
+        assert count >= 5

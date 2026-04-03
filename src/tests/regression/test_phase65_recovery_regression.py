@@ -165,6 +165,96 @@ class TestPhase65RecoveryRegression:
             {"anchor_id": "original", "location": "tavern"}
         )
         scene = loop.tick("look")
-        assert scene.get("metadata", {}).get("recovery") is True
+        # Check both meta and metadata for recovered flag
+        meta = scene.get("meta", {})
+        metadata = scene.get("metadata", {})
+        assert meta.get("recovered") is True or metadata.get("recovery") is True
         # Anchor should still be the original, not updated by the failed tick
         assert loop.recovery_manager._state.last_good_scene_anchor["anchor_id"] == "original"
+
+    def test_last_good_anchor_not_updated_by_recovered_scene(self):
+        """Prove recovered scenes do not become last-good anchors."""
+        loop = _make_loop(parser=FailingParser())
+        # Set an initial strong anchor
+        loop.recovery_manager.record_last_good_anchor(
+            {"anchor_id": "strong_anchor", "location": "castle"}
+        )
+        # Generate a recovered scene with meta["recovered"] = True
+        scene = loop.tick("@#$%!")
+        assert isinstance(scene, dict)
+        # Verify the scene has recovery metadata
+        meta = scene.get("meta", {})
+        metadata = scene.get("metadata", {})
+        assert meta.get("recovered") is True or metadata.get("recovery") is True
+        # call _maybe_record_last_good_anchor(...) directly to confirm behavior
+        coherence_context = loop._build_director_context()
+        loop._maybe_record_last_good_anchor(scene, coherence_context)
+        # confirm stored anchor did not change
+        assert loop.recovery_manager._state.last_good_scene_anchor["anchor_id"] == "strong_anchor"
+
+    def test_recovery_state_survives_snapshot_restore_complete(self):
+        """Snapshot save/load should preserve all recovery state fields."""
+        loop = _make_loop()
+        # set a last-good anchor
+        loop.recovery_manager.record_last_good_anchor(
+            {"anchor_id": "snap_anchor", "location": "dungeon"}
+        )
+        # record at least one recovery
+        loop.recovery_manager.handle_parser_failure(
+            player_input="test",
+            error="fail",
+            coherence_summary={},
+            tick=1,
+        )
+        # generate another to test recovery_count_by_scene
+        loop.recovery_manager.handle_director_failure(
+            player_input="look",
+            error="timeout",
+            coherence_summary={},
+            tick=2,
+        )
+
+        sm = SnapshotManager()
+        sm.save_snapshot(loop, tick=5)
+
+        # Create a fresh loop and restore
+        loop2 = _make_loop()
+        assert loop2.recovery_manager._state.last_good_scene_anchor is None
+        assert len(loop2.recovery_manager._state.recent_recoveries) == 0
+
+        sm.load_snapshot(5, loop2)
+
+        # last_good_scene_anchor restored
+        assert loop2.recovery_manager._state.last_good_scene_anchor is not None
+        assert loop2.recovery_manager._state.last_good_scene_anchor["anchor_id"] == "snap_anchor"
+
+        # recent_recoveries restored (at least the initial save_snapshot tick)
+        assert len(loop2.recovery_manager._state.recent_recoveries) >= 1
+
+        # last_recovery_reason restored
+        assert loop2.recovery_manager._state.last_recovery_reason == "director_failure"
+        assert loop2.recovery_manager._state.last_recovery_tick == 2
+
+        # recovery_count_by_scene restored
+        assert isinstance(loop2.recovery_manager._state.recovery_count_by_scene, dict)
+
+
+def test_last_good_anchor_uses_scene_summary_only_when_anchor_quality_is_sufficient():
+    loop = GameLoop(
+        intent_parser=StubParser(),
+        world=StubWorldEmpty(),
+        npc_system=StubNPCEmpty(),
+        event_bus=EventBus(),
+        story_director=StoryDirector(),
+        scene_renderer=StubRenderer(),
+    )
+
+    scene = {"scene": "A stable scene", "meta": {}}
+
+    weak_context = {"scene_summary": {}}
+    loop._maybe_record_last_good_anchor(scene, weak_context)
+    assert loop.recovery_manager._state.last_good_scene_anchor is None
+
+    strong_context = {"scene_summary": {"location": "market", "summary": "Crowded square"}}
+    loop._maybe_record_last_good_anchor(scene, strong_context)
+    assert loop.recovery_manager._state.last_good_scene_anchor == strong_context["scene_summary"]

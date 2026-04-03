@@ -6,6 +6,7 @@ maintaining serializable, deterministic state.
 """
 from __future__ import annotations
 
+import copy
 import uuid
 from typing import Any
 
@@ -23,6 +24,9 @@ _MAX_RECENT_RECOVERIES = 50
 
 class RecoveryManager:
     """Orchestrate recovery for all pipeline failure modes."""
+
+    MAX_RECOVERIES = 50
+    ESCALATION_THRESHOLD = 3
 
     def __init__(
         self,
@@ -57,28 +61,38 @@ class RecoveryManager:
         tick: int | None = None,
     ) -> RecoveryResult:
         reason = "parser_failure"
+        scene_anchor_id = self._last_anchor_id()
+        policy = self._select_policy("fallback_scene", scene_anchor_id)
+        # Escalate: use anchor-based recovery on repeated failures
         anchor = self._state.last_good_scene_anchor
-        if anchor:
-            scene = self.fallback_builder.build_from_last_good_anchor(
-                anchor, coherence_summary
-            )
-            used_anchor = True
+        if anchor or policy == "hard_reset_to_anchor":
+            if anchor:
+                scene = self.fallback_builder.build_from_last_good_anchor(
+                    anchor, coherence_summary
+                )
+                used_anchor = True
+            else:
+                scene = self.fallback_builder.build_from_coherence_summary(
+                    coherence_summary
+                )
+                used_anchor = False
         else:
             scene = self.fallback_builder.build_from_coherence_summary(
                 coherence_summary
             )
             used_anchor = False
+        scene = self._tag_recovery_scene(scene, reason, policy)
         record = self._make_record(
             reason=reason,
             summary=f"Parser failed on input: {player_input!r}",
-            policy="fallback_scene",
+            policy=policy,
             tick=tick,
-            scene_anchor_id=self._last_anchor_id(),
+            scene_anchor_id=scene_anchor_id,
             metadata={"error": str(error)},
         )
         result = RecoveryResult(
             reason=reason,
-            policy="fallback_scene",
+            policy=policy,
             scene=scene,
             record=record,
             used_anchor=used_anchor,
@@ -96,28 +110,37 @@ class RecoveryManager:
     ) -> RecoveryResult:
         reason = "director_failure"
         safe_reason = "The narrative could not advance."
+        scene_anchor_id = self._last_anchor_id()
+        policy = self._select_policy("fallback_scene", scene_anchor_id)
         anchor = self._state.last_good_scene_anchor
-        if anchor:
-            scene = self.fallback_builder.build_from_last_good_anchor(
-                anchor, coherence_summary
-            )
-            used_anchor = True
+        if anchor or policy == "hard_reset_to_anchor":
+            if anchor:
+                scene = self.fallback_builder.build_from_last_good_anchor(
+                    anchor, coherence_summary
+                )
+                used_anchor = True
+            else:
+                scene = self.fallback_builder.build_director_failure_scene(
+                    coherence_summary, reason=safe_reason
+                )
+                used_anchor = False
         else:
             scene = self.fallback_builder.build_director_failure_scene(
                 coherence_summary, reason=safe_reason
             )
             used_anchor = False
+        scene = self._tag_recovery_scene(scene, reason, policy)
         record = self._make_record(
             reason=reason,
             summary=f"Director failed: {safe_reason}",
-            policy="fallback_scene",
+            policy=policy,
             tick=tick,
-            scene_anchor_id=self._last_anchor_id(),
+            scene_anchor_id=scene_anchor_id,
             metadata={"error": str(error)},
         )
         result = RecoveryResult(
             reason=reason,
-            policy="fallback_scene",
+            policy=policy,
             scene=scene,
             record=record,
             used_anchor=used_anchor,
@@ -135,28 +158,37 @@ class RecoveryManager:
         tick: int | None = None,
     ) -> RecoveryResult:
         reason = "renderer_failure"
+        scene_anchor_id = self._last_anchor_id()
+        policy = self._select_policy("fallback_scene", scene_anchor_id)
         anchor = self._state.last_good_scene_anchor
-        if anchor:
-            scene = self.fallback_builder.build_from_last_good_anchor(
-                anchor, coherence_summary
-            )
-            used_anchor = True
+        if anchor or policy == "hard_reset_to_anchor":
+            if anchor:
+                scene = self.fallback_builder.build_from_last_good_anchor(
+                    anchor, coherence_summary
+                )
+                used_anchor = True
+            else:
+                scene = self.fallback_builder.build_renderer_failure_scene(
+                    coherence_summary, partial_narrative=partial_narrative
+                )
+                used_anchor = False
         else:
             scene = self.fallback_builder.build_renderer_failure_scene(
                 coherence_summary, partial_narrative=partial_narrative
             )
             used_anchor = False
+        scene = self._tag_recovery_scene(scene, reason, policy)
         record = self._make_record(
             reason=reason,
             summary="Renderer failed to produce scene.",
-            policy="fallback_scene",
+            policy=policy,
             tick=tick,
-            scene_anchor_id=self._last_anchor_id(),
+            scene_anchor_id=scene_anchor_id,
             metadata={"error": str(error)},
         )
         result = RecoveryResult(
             reason=reason,
-            policy="fallback_scene",
+            policy=policy,
             scene=scene,
             record=record,
             used_anchor=used_anchor,
@@ -172,20 +204,23 @@ class RecoveryManager:
         tick: int | None = None,
     ) -> RecoveryResult:
         reason = "contradiction"
+        scene_anchor_id = self._last_anchor_id()
+        policy = self._select_policy("contradiction_recovery", scene_anchor_id)
         scene = self.fallback_builder.build_contradiction_recovery_scene(
             contradictions, coherence_summary
         )
+        scene = self._tag_recovery_scene(scene, reason, policy)
         record = self._make_record(
             reason=reason,
             summary=f"Contradiction recovery ({len(contradictions)} items).",
-            policy="contradiction_recovery",
+            policy=policy,
             tick=tick,
-            scene_anchor_id=self._last_anchor_id(),
+            scene_anchor_id=scene_anchor_id,
             metadata={"contradiction_count": len(contradictions)},
         )
         result = RecoveryResult(
             reason=reason,
-            policy="contradiction_recovery",
+            policy=policy,
             scene=scene,
             record=record,
             used_anchor=False,
@@ -222,6 +257,7 @@ class RecoveryManager:
             )
             policy = "narrate_uncertainty"
 
+        scene = self._tag_recovery_scene(scene, "ambiguity", policy)
         record = self._make_record(
             reason="ambiguity",
             summary=f"Ambiguity resolved via {policy}.",
@@ -259,9 +295,9 @@ class RecoveryManager:
         if result.record is not None:
             self._state.recent_recoveries.append(result.record)
             # Cap recent recoveries
-            if len(self._state.recent_recoveries) > _MAX_RECENT_RECOVERIES:
+            if len(self._state.recent_recoveries) > self.MAX_RECOVERIES:
                 self._state.recent_recoveries = self._state.recent_recoveries[
-                    -_MAX_RECENT_RECOVERIES:
+                    -self.MAX_RECOVERIES:
                 ]
             self._state.last_recovery_reason = result.reason
             self._state.last_recovery_tick = result.record.tick
@@ -330,3 +366,36 @@ class RecoveryManager:
         return any(
             c.get("severity") in ("high", "critical") for c in contradictions
         )
+
+    def _select_policy(self, base_policy: str, scene_anchor_id: str | None) -> str:
+        """Select recovery policy with escalation for repeated failures.
+
+        Escalation begins once the same scene anchor has already accumulated
+        ESCALATION_THRESHOLD prior recoveries. With ESCALATION_THRESHOLD = 3,
+        the 4th recovery against the same anchor escalates.
+        """
+        if not scene_anchor_id:
+            return base_policy
+        count = self._state.recovery_count_by_scene.get(scene_anchor_id, 0)
+        if count >= self.ESCALATION_THRESHOLD:
+            return "hard_reset_to_anchor"
+        return base_policy
+
+    def _tag_recovery_scene(self, scene: dict, reason: str, policy: str) -> dict:
+        """Tag a scene with recovery metadata.
+
+        Uses a deep copy so recovery metadata cannot mutate caller-owned
+        nested dicts such as scene["meta"], scene["metadata"], or
+        scene["narrative"].
+        """
+        tagged = copy.deepcopy(scene)
+        tagged.setdefault("meta", {})
+        tagged["meta"]["recovered"] = True
+        tagged["meta"]["recovery_reason"] = reason
+        tagged["meta"]["recovery_policy"] = policy
+        # Backwards-compatibility mirror only. `meta` is authoritative.
+        tagged.setdefault("metadata", {})
+        tagged["metadata"]["recovered"] = True
+        tagged["metadata"]["recovery_reason"] = reason
+        tagged["metadata"]["recovery_policy"] = policy
+        return tagged
