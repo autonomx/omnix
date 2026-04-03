@@ -8,6 +8,7 @@ from .gm_state import (
     InjectEventDirective,
     PinThreadDirective,
     RevealDirective,
+    RetconDirective,
     TargetFactionDirective,
     TargetLocationDirective,
     TargetNPCDirective,
@@ -16,6 +17,21 @@ from .gm_state import (
 
 
 class GMCommandProcessor:
+    # ------------------------------------------------------------------
+    # Entity validation helpers
+    # ------------------------------------------------------------------
+    def _npc_exists(self, coherence_core: Any, npc_id: str) -> bool:
+        facts = coherence_core.get_known_facts(npc_id)
+        return bool(facts and facts.get("facts"))
+
+    def _faction_exists(self, coherence_core: Any, faction_id: str) -> bool:
+        facts = coherence_core.get_known_facts(faction_id)
+        return bool(facts and facts.get("facts"))
+
+    def _location_exists(self, coherence_core: Any, location_id: str) -> bool:
+        facts = coherence_core.get_known_facts(location_id)
+        return bool(facts and facts.get("facts"))
+
     def parse_command(self, text: str) -> dict:
         raw = (text or "").strip()
         lowered = raw.lower()
@@ -109,14 +125,24 @@ class GMCommandProcessor:
         # Phase 7.1 targeted commands
         if name == "pin_thread":
             return self.command_pin_thread(command, gm_state, coherence_core)
+        if name == "focus_npc":
+            return self.command_focus_npc(command, gm_state, coherence_core)
+        if name == "focus_faction":
+            return self.command_focus_faction(command, gm_state, coherence_core)
+        if name == "focus_location":
+            return self.command_focus_location(command, gm_state, coherence_core)
+        if name == "pin_thread":
+            return self.command_pin_thread(command, gm_state, coherence_core)
+        if name == "reveal":
+            return self.command_reveal(command, gm_state, coherence_core)
+        if name == "retcon":
+            return self.command_retcon(command, gm_state, coherence_core)
         if name == "target_npc":
             return self.command_target_npc(command, gm_state, coherence_core)
         if name == "target_faction":
             return self.command_target_faction(command, gm_state, coherence_core)
         if name == "target_location":
             return self.command_target_location(command, gm_state, coherence_core)
-        if name == "reveal":
-            return self.command_reveal(command, gm_state, coherence_core)
         if name == "set_danger":
             return self.command_set_danger(command, gm_state, coherence_core)
         return {"ok": False, "reason": "unknown_command"}
@@ -210,12 +236,105 @@ class GMCommandProcessor:
     # ------------------------------------------------------------------
 
     def command_pin_thread(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-        thread_id = command.get("thread_id", "")
+        thread_id = command.get("thread_id")
+        if not thread_id:
+            return {"ok": False, "reason": "missing_thread_id"}
         directive = PinThreadDirective(
             directive_id=f"gm:pin_thread:{thread_id}",
             directive_type="pin_thread",
             scope="global",
             thread_id=thread_id,
+            priority=command.get("priority", "high"),
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_focus_npc(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        from .gm_state import TargetNPCDirective
+
+        npc_id = command.get("npc_id")
+        if not npc_id:
+            return {"ok": False, "reason": "missing_npc_id"}
+        if not self._npc_exists(coherence_core, npc_id):
+            return {"ok": False, "reason": "unknown_npc", "npc_id": npc_id}
+        directive = TargetNPCDirective(
+            directive_id=f"gm:focus_npc:{npc_id}",
+            directive_type="target_npc",
+            scope="scene",
+            npc_id=npc_id,
+            instruction=command.get("instruction", "focus"),
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_focus_faction(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        from .gm_state import TargetFactionDirective
+
+        faction_id = command.get("faction_id")
+        if not faction_id:
+            return {"ok": False, "reason": "missing_faction_id"}
+        if not self._faction_exists(coherence_core, faction_id):
+            return {"ok": False, "reason": "unknown_faction", "faction_id": faction_id}
+        directive = TargetFactionDirective(
+            directive_id=f"gm:focus_faction:{faction_id}",
+            directive_type="target_faction",
+            scope="scene",
+            faction_id=faction_id,
+            instruction=command.get("instruction", "focus"),
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_focus_location(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        from .gm_state import TargetLocationDirective
+
+        location_id = command.get("location_id")
+        if not location_id:
+            return {"ok": False, "reason": "missing_location_id"}
+        if not self._location_exists(coherence_core, location_id):
+            return {"ok": False, "reason": "unknown_location", "location_id": location_id}
+        directive = TargetLocationDirective(
+            directive_id=f"gm:focus_location:{location_id}",
+            directive_type="target_location",
+            scope="scene",
+            location_id=location_id,
+            instruction=command.get("instruction", "focus"),
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_reveal(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        from .gm_state import RevealDirective
+
+        reveal_type = command.get("reveal_type")
+        target_id = command.get("target_id")
+        if not reveal_type or not target_id:
+            return {"ok": False, "reason": "missing_reveal_fields"}
+        directive = RevealDirective(
+            directive_id=f"gm:reveal:{reveal_type}:{target_id}",
+            directive_type="reveal",
+            scope="scene",
+            reveal_type=reveal_type,
+            target_id=target_id,
+            timing=command.get("timing", "soon"),
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_retcon(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        subject = command.get("subject")
+        predicate = command.get("predicate")
+        value = command.get("value")
+        if not subject or not predicate:
+            return {"ok": False, "reason": "missing_retcon_fields"}
+        directive = RetconDirective(
+            directive_id=f"gm:retcon:{subject}:{predicate}",
+            directive_type="retcon",
+            scope="global",
+            subject=subject,
+            predicate=predicate,
+            value=value,
+            reason=command.get("reason", ""),
         )
         gm_state.add_directive(directive)
         return {"ok": True, "directive_id": directive.directive_id}
@@ -255,21 +374,6 @@ class GMCommandProcessor:
             scope="global",
             location_id=location_id,
             instruction=instruction,
-        )
-        gm_state.add_directive(directive)
-        return {"ok": True, "directive_id": directive.directive_id}
-
-    def command_reveal(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
-        reveal_type = command.get("reveal_type", "")
-        target_id = command.get("target_id", "")
-        timing = command.get("timing", "soon")
-        directive = RevealDirective(
-            directive_id=f"gm:reveal:{target_id}",
-            directive_type="reveal",
-            scope="global",
-            reveal_type=reveal_type,
-            target_id=target_id,
-            timing=timing,
         )
         gm_state.add_directive(directive)
         return {"ok": True, "directive_id": directive.directive_id}

@@ -1071,11 +1071,13 @@ class GameLoop:
             StartupGenerationPipeline,
             GMCommandProcessor,
         )
+        from ..creator.presenters import CreatorStatePresenter
 
         self.creator_canon_state = CreatorCanonState()
         self.gm_directive_state = GMDirectiveState()
         self.recap_builder = RecapBuilder()
         self.gm_command_processor = GMCommandProcessor()
+        self.creator_presenter = CreatorStatePresenter()
         self.startup_generation_pipeline = StartupGenerationPipeline(
             llm_gateway=self.llm_gateway if hasattr(self, "llm_gateway") else None,
             coherence_core=self.coherence_core,
@@ -1170,3 +1172,32 @@ class GameLoop:
 
     def get_unresolved_threads_summary(self) -> dict:
         return self.recap_builder.build_unresolved_threads_summary(self.coherence_core)
+
+    # ------------------------------------------------------------------
+    # Phase 7.1 — validation / preview helpers
+    # ------------------------------------------------------------------
+
+    def validate_new_adventure(self, setup_data: dict) -> dict:
+        from ..creator.validation import validate_adventure_setup_payload
+        result = validate_adventure_setup_payload(setup_data)
+        return result.to_dict()
+
+    def prepare_new_adventure(self, setup_data: dict) -> dict:
+        from ..creator import AdventureSetup
+        from ..creator.defaults import apply_adventure_defaults
+        from ..creator.validation import validate_adventure_setup_payload
+
+        data = apply_adventure_defaults(dict(setup_data))
+        validation = validate_adventure_setup_payload(data)
+        if validation.is_blocking():
+            return {
+                "ok": False,
+                "validation": validation.to_dict(),
+            }
+
+        setup = AdventureSetup.from_dict(data).normalize().with_defaults()
+        return {
+            "ok": True,
+            "validation": validation.to_dict(),
+            "preview": self.creator_presenter.present_setup_summary(setup),
+        }

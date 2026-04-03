@@ -24,6 +24,20 @@ class StartupGenerationPipeline:
         self.coherence_core = coherence_core
         self.creator_canon_state = creator_canon_state or CreatorCanonState()
 
+    def resolve_starting_context(self, setup: AdventureSetup) -> dict:
+        location_id = setup.starting_location_id
+        if not location_id and setup.locations:
+            location_id = setup.locations[0].location_id
+
+        npc_ids = list(setup.starting_npc_ids)
+        if not npc_ids and setup.npc_seeds:
+            npc_ids = [npc.npc_id for npc in setup.npc_seeds[:3]]
+
+        return {
+            "location_id": location_id,
+            "npc_ids": npc_ids,
+        }
+
     def generate(self, setup: AdventureSetup) -> dict:
         setup.validate()
         world_frame = self.generate_world_frame(setup)
@@ -58,8 +72,24 @@ class StartupGenerationPipeline:
         }
 
     def generate_opening_situation(self, setup: AdventureSetup, world_frame: dict) -> dict:
-        first_location = setup.locations[0].name if setup.locations else setup.setting
-        first_npcs = [npc.name for npc in setup.npc_seeds[:3]]
+        context = self.resolve_starting_context(setup)
+
+        first_location = setup.setting
+        if context["location_id"]:
+            for location in setup.locations:
+                if location.location_id == context["location_id"]:
+                    first_location = location.name
+                    break
+            else:
+                first_location = context["location_id"]
+
+        first_npcs = []
+        npc_lookup = {npc.npc_id: npc for npc in setup.npc_seeds}
+        for npc_id in context["npc_ids"]:
+            npc = npc_lookup.get(npc_id)
+            if npc:
+                first_npcs.append(npc.name)
+
         return {
             "location": first_location,
             "summary": f"{setup.premise} The story opens in {first_location}.",

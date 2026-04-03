@@ -12,10 +12,43 @@ class CreatorStatePresenter:
     suitable for direct JSON serialisation to a frontend panel.
     """
 
-    def present_setup_summary(self, setup: AdventureSetup) -> dict:
-        """Summarise an AdventureSetup for a UI overview panel."""
+    def _present_thread(self, thread: dict) -> dict:
         return {
-            "setup_id": setup.setup_id,
+            "id": thread.get("thread_id"),
+            "title": thread.get("title"),
+            "status": thread.get("status"),
+            "priority": thread.get("priority"),
+            "notes": list(thread.get("notes", [])),
+        }
+
+    def _present_fact(self, fact: dict) -> dict:
+        return {
+            "id": fact.get("fact_id"),
+            "subject": fact.get("subject"),
+            "predicate": fact.get("predicate"),
+            "value": fact.get("value"),
+            "authority": fact.get("authority"),
+            "label": fact.get("label") or fact.get("metadata", {}).get("label"),
+        }
+
+    def _present_directive(self, directive: dict) -> dict:
+        return {
+            "id": directive.get("directive_id"),
+            "type": directive.get("directive_type"),
+            "scope": directive.get("scope"),
+            "enabled": directive.get("enabled", True),
+            "summary": directive.get("instruction")
+                or directive.get("tone")
+                or directive.get("level")
+                or directive.get("thread_id")
+                or directive.get("target_id")
+                or directive.get("npc_id")
+                or directive.get("faction_id")
+                or directive.get("location_id"),
+        }
+
+    def present_setup_summary(self, setup: AdventureSetup) -> dict:
+        return {
             "title": setup.title,
             "genre": setup.genre,
             "setting": setup.setting,
@@ -24,102 +57,116 @@ class CreatorStatePresenter:
             "mood": setup.mood,
             "starting_location_id": setup.starting_location_id,
             "starting_npc_ids": list(setup.starting_npc_ids),
-            "faction_count": len(setup.factions),
-            "npc_count": len(setup.npc_seeds),
-            "location_count": len(setup.locations),
-            "has_pacing": setup.pacing is not None,
-            "has_safety": setup.safety is not None,
-            "has_content_balance": setup.content_balance is not None,
+            "counts": {
+                "factions": len(setup.factions),
+                "locations": len(setup.locations),
+                "npcs": len(setup.npc_seeds),
+            },
         }
 
     def present_canon_summary(
         self, creator_canon_state: Any, coherence_core: Any
     ) -> dict:
-        """Produce a canon-state summary combining creator facts and coherence."""
-        canon_facts = []
+        facts = []
         if creator_canon_state is not None:
-            canon_facts = [
-                {
-                    "fact_id": f.fact_id,
-                    "subject": f.subject,
-                    "predicate": f.predicate,
-                    "value": f.value,
-                }
-                for f in creator_canon_state.list_facts()
-            ]
+            facts = [self._present_fact(f.to_dict()) for f in creator_canon_state.list_facts()]
+        scene_summary = coherence_core.get_scene_summary()
+        if isinstance(scene_summary, dict):
+            scene_summary = scene_summary
+        else:
+            scene_summary = {"summary": str(scene_summary)}
         return {
-            "canon_facts": canon_facts,
-            "scene_summary": coherence_core.get_scene_summary(),
+            "title": "Canon",
+            "facts": facts,
+            "scene_summary": scene_summary,
+            "count": len(facts),
         }
 
     def present_gm_dashboard(self, gm_state: Any, coherence_core: Any) -> dict:
-        """Present a combined GM dashboard with directives and world status."""
-        ctx = gm_state.build_director_context()
+        summary = gm_state.build_ui_summary()
+        directives = summary.get("directives", [])
+        scene_summary = coherence_core.get_scene_summary()
+        if isinstance(scene_summary, dict):
+            scene_summary = scene_summary
+        else:
+            scene_summary = {"summary": str(scene_summary)}
         return {
-            "active_directive_count": len(ctx.get("active_directives", [])),
-            "pacing": ctx.get("pacing", []),
-            "tone": ctx.get("tone", []),
-            "danger": ctx.get("danger", []),
-            "pinned_threads": ctx.get("pinned_threads", []),
-            "scene_summary": coherence_core.get_scene_summary(),
-            "unresolved_thread_count": len(coherence_core.get_unresolved_threads()),
+            "title": "GM Dashboard",
+            "directives": [self._present_directive(d) for d in directives],
+            "counts": summary.get("counts", {}),
+            "scene_summary": scene_summary,
         }
 
     def present_thread_panel(self, coherence_core: Any) -> dict:
-        """Return threads grouped by status for a thread-panel UI."""
-        all_threads = coherence_core.get_unresolved_threads()
+        threads = coherence_core.get_unresolved_threads()
         return {
-            "unresolved_threads": all_threads,
-            "total": len(all_threads),
+            "title": "Threads",
+            "items": [self._present_thread(t) for t in threads],
+            "count": len(threads),
         }
 
     def present_npc_panel(self, coherence_core: Any) -> dict:
-        """List NPCs known to coherence for an NPC roster panel."""
         npcs = []
         for fact in coherence_core.get_state().stable_world_facts.values():
-            if fact.fact_id.startswith("npc:") and fact.predicate == "name":
+            if str(fact.fact_id).startswith("npc:") and fact.predicate == "name":
                 npcs.append(
                     {
-                        "npc_id": fact.subject,
+                        "id": fact.subject,
                         "name": fact.value,
-                        "metadata": dict(fact.metadata),
+                        "role": fact.metadata.get("role"),
+                        "must_survive": fact.metadata.get("must_survive", False),
                     }
                 )
-        return {"npcs": npcs, "total": len(npcs)}
+        return {
+            "title": "NPCs",
+            "items": npcs,
+            "count": len(npcs),
+        }
 
     def present_faction_panel(self, coherence_core: Any) -> dict:
-        """List factions known to coherence for a faction panel."""
         factions = []
         for fact in coherence_core.get_state().stable_world_facts.values():
-            if fact.fact_id.startswith("faction:") and fact.predicate == "exists":
+            if str(fact.fact_id).startswith("faction:") and fact.predicate == "exists":
                 factions.append(
                     {
-                        "faction_id": fact.subject,
-                        "metadata": dict(fact.metadata),
+                        "id": fact.subject,
+                        "name": fact.metadata.get("name"),
+                        "exists": fact.value,
                     }
                 )
-        return {"factions": factions, "total": len(factions)}
+        return {
+            "title": "Factions",
+            "items": factions,
+            "count": len(factions),
+        }
 
     def present_location_panel(self, coherence_core: Any) -> dict:
-        """List locations known to coherence for a location panel."""
         locations = []
         for fact in coherence_core.get_state().stable_world_facts.values():
-            if fact.fact_id.startswith("location:") and fact.predicate == "name":
+            if str(fact.fact_id).startswith("location:") and fact.predicate == "name":
                 locations.append(
                     {
-                        "location_id": fact.subject,
+                        "id": fact.subject,
                         "name": fact.value,
-                        "metadata": dict(fact.metadata),
+                        "description": fact.metadata.get("description"),
                     }
                 )
-        return {"locations": locations, "total": len(locations)}
+        return {
+            "title": "Locations",
+            "items": locations,
+            "count": len(locations),
+        }
 
     def present_recap_panel(self, recap: dict) -> dict:
-        """Normalise a recap dict into a stable UI payload shape."""
+        scene_summary = recap.get("scene_summary", {})
+        if isinstance(scene_summary, dict):
+            scene_summary = scene_summary
+        else:
+            scene_summary = {"summary": str(scene_summary)}
         return {
-            "scene_summary": recap.get("scene_summary", ""),
-            "recent_consequences": recap.get("recent_consequences", []),
-            "active_tensions": recap.get("active_tensions", []),
-            "unresolved_threads": recap.get("unresolved_threads", []),
-            "gm_directives": recap.get("gm_directives", {}),
+            "title": recap.get("title", "Recap"),
+            "scene_summary": scene_summary,
+            "active_tensions": list(recap.get("active_tensions", [])),
+            "recent_consequences": list(recap.get("recent_consequences", [])),
+            "unresolved_threads": [self._present_thread(t) for t in recap.get("unresolved_threads", [])],
         }

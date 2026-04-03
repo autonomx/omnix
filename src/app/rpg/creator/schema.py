@@ -190,47 +190,71 @@ class AdventureSetup:
     # ------------------------------------------------------------------
 
     def with_defaults(self) -> "AdventureSetup":
-        """Return a copy with missing optional fields populated from defaults."""
-        from .defaults import (
-            default_content_balance,
-            default_pacing_profile,
-            default_safety_constraint,
-        )
+        """Return a copy with defaults applied through the canonical dict path.
 
-        import copy
+        This keeps defaults application aligned with serialize/deserialize
+        behavior and avoids partial deep-copy mutation drift.
+        """
+        from .defaults import apply_adventure_defaults
 
-        result = copy.deepcopy(self)
-        if result.pacing is None:
-            result.pacing = default_pacing_profile()
-        if result.safety is None:
-            result.safety = default_safety_constraint()
-        if result.content_balance is None:
-            result.content_balance = default_content_balance()
-        return result
+        data = self.to_dict()
+        data = apply_adventure_defaults(data)
+        return AdventureSetup.from_dict(data)
 
     def normalize(self) -> "AdventureSetup":
-        """Return a normalised copy (trimmed strings, standardised values)."""
+        """Return a normalized copy of this setup.
+
+        Normalization rules:
+        - trim strings
+        - collapse empty strings to None where appropriate
+        - lowercase enum-like fields
+        - deduplicate ordered lists of ids
+        - keep normalization deterministic
+        """
         import copy
 
+        def _norm_str(value: str | None, *, lower: bool = False, none_if_empty: bool = False) -> str | None:
+            if value is None:
+                return None
+            value = " ".join(value.strip().split())
+            if lower:
+                value = value.lower()
+            if none_if_empty and not value:
+                return None
+            return value
+
+        def _dedupe_keep_order(values: list[str]) -> list[str]:
+            out: list[str] = []
+            seen = set()
+            for value in values:
+                if value not in seen:
+                    out.append(value)
+                    seen.add(value)
+            return out
+
         result = copy.deepcopy(self)
-        result.setup_id = (result.setup_id or "").strip()
-        result.title = (result.title or "").strip()
-        result.genre = (result.genre or "").strip().lower()
-        result.setting = (result.setting or "").strip()
-        result.premise = (result.premise or "").strip()
-        if result.difficulty_style:
-            result.difficulty_style = result.difficulty_style.strip().lower()
-        if result.mood:
-            result.mood = result.mood.strip().lower()
-        if result.starting_location_id:
-            result.starting_location_id = result.starting_location_id.strip()
-        result.starting_npc_ids = [s.strip() for s in result.starting_npc_ids if s and s.strip()]
-        result.hard_rules = [r for r in result.hard_rules if r]
-        result.soft_tone_rules = [r for r in result.soft_tone_rules if r]
-        result.forbidden_content = [r for r in result.forbidden_content if r]
-        result.canon_notes = [r for r in result.canon_notes if r]
-        if result.metadata is None:
-            result.metadata = {}
+
+        result.title = _norm_str(result.title) or ""
+        result.genre = _norm_str(result.genre, lower=True) or ""
+        result.setting = _norm_str(result.setting) or ""
+        result.premise = _norm_str(result.premise) or ""
+
+        result.mood = _norm_str(result.mood, lower=True, none_if_empty=True)
+        result.difficulty_style = _norm_str(result.difficulty_style, lower=True, none_if_empty=True)
+        result.starting_location_id = _norm_str(result.starting_location_id, none_if_empty=True)
+
+        result.hard_rules = [_norm_str(x) for x in result.hard_rules if _norm_str(x)]
+        result.soft_tone_rules = [_norm_str(x) for x in result.soft_tone_rules if _norm_str(x)]
+        result.forbidden_content = [_norm_str(x) for x in result.forbidden_content if _norm_str(x)]
+        result.canon_notes = [_norm_str(x) for x in result.canon_notes if _norm_str(x)]
+
+        normalized_starting_npcs = []
+        for npc_id in result.starting_npc_ids:
+            norm = _norm_str(npc_id, none_if_empty=True)
+            if norm:
+                normalized_starting_npcs.append(norm)
+        result.starting_npc_ids = _dedupe_keep_order(normalized_starting_npcs)
+
         return result
 
     def validate_for_ui(self) -> dict:

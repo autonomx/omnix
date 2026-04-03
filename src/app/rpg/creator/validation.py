@@ -29,13 +29,15 @@ class ValidationIssue:
 class ValidationResult:
     """Aggregated validation result with structured issues."""
 
-    valid: bool
     issues: list[ValidationIssue] = field(default_factory=list)
+
+    def is_blocking(self) -> bool:
+        return any(issue.severity == "error" for issue in self.issues)
 
     def to_dict(self) -> dict:
         return {
-            "valid": self.valid,
             "issues": [i.to_dict() for i in self.issues],
+            "blocking": self.is_blocking(),
         }
 
     @classmethod
@@ -250,5 +252,4 @@ def validate_adventure_setup_payload(payload: dict) -> ValidationResult:
     all_issues.extend(validate_setup_ids(payload))
     all_issues.extend(validate_setup_balances(payload))
     all_issues.extend(validate_setup_cross_references(payload))
-    has_errors = any(i.severity == "error" for i in all_issues)
-    return ValidationResult(valid=not has_errors, issues=all_issues)
+    return ValidationResult(issues=all_issues)
