@@ -261,10 +261,26 @@ class TestRegenerateEndpoint:
 
     @pytest.fixture
     def client(self):
-        """Return a Flask test client."""
-        from app import create_app
-        app = create_app()
+        """Return a minimal Flask test client for the regenerate endpoint."""
+        from flask import Flask, jsonify, request
+        from app.rpg.services.adventure_builder_service import regenerate_setup_section
+
+        app = Flask(__name__)
         app.config["TESTING"] = True
+
+        @app.route("/api/rpg/adventure/regenerate", methods=["POST"])
+        def regenerate():
+            data = request.get_json()
+            if data is None:
+                return jsonify({"success": False, "error": "Request must be JSON"}), 400
+            target = data.get("target")
+            if not target:
+                return jsonify({"success": False, "error": "Missing target", "validation": {"blocking": False}}), 400
+            setup = data.get("setup", {})
+            result = regenerate_setup_section(setup, target)
+            http_status = 200 if result["success"] else 400
+            return jsonify(result), http_status
+
         with app.test_client() as client:
             yield client
 

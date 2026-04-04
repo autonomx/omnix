@@ -1,4 +1,4 @@
-from rpg.models.npc import NPC
+from app.rpg.models.npc import NPC
 
 
 class Scene:
