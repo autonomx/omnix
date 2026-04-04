@@ -651,85 +651,12 @@
         }
     }
 
-    // ─── Adventure setup ───────────────────────────────────────────────────────
+    // ─── Adventure setup (delegates to Adventure Builder v1) ─────────────────
 
     function showAdventureSetup() {
-        closeAllPanels();
-        var panel = el('rpgAdventureSetupPanel');
-        if (!panel) {
-            panel = document.createElement('div');
-            panel.id = 'rpgAdventureSetupPanel';
-            panel.className = 'modal';
-            panel.innerHTML = '<div class="modal-content" id="rpgAdventureSetupContent"></div>';
-            document.body.appendChild(panel);
-            panel.addEventListener('click', function(e) {
-                if (e.target === panel) panel.classList.remove('active');
-            });
+        if (typeof AdventureBuilder !== 'undefined') {
+            AdventureBuilder.open();
         }
-        var content = el('rpgAdventureSetupContent');
-        content.innerHTML = '<div class="modal-header"><h3>Adventure Setup</h3><button class="modal-close" onclick="document.getElementById(\'rpgAdventureSetupPanel\').classList.remove(\'active\');">&times;</button></div><div class="modal-body" id="rpgAdventureSetupBody"></div>';
-        var body = el('rpgAdventureSetupBody');
-        body.innerHTML = `
-
-            <div class="setup-field">
-
-                <label>Character Class:</label>
-
-                <select id="setupCharacterClass">
-                    <option value="" ${!adventureSetup.character_class ? 'selected' : ''}>None (Default)</option>
-                    <option value="warrior" ${adventureSetup.character_class === 'warrior' ? 'selected' : ''}>⚔️ Warrior (+3 STR, +2 CON)</option>
-                    <option value="mage" ${adventureSetup.character_class === 'mage' ? 'selected' : ''}>🔮 Mage (+3 INT, +2 WIS)</option>
-                    <option value="rogue" ${adventureSetup.character_class === 'rogue' ? 'selected' : ''}>🗡️ Rogue (+3 DEX, +2 CHA)</option>
-                </select>
-
-            </div>
-
-            <div class="setup-field">
-
-                <label>Custom Lore:</label>
-
-                <textarea id="setupCustomLore" placeholder="Enter background lore for the world">${adventureSetup.custom_lore}</textarea>
-
-            </div>
-
-            <div class="setup-field">
-
-                <label>Custom Rules:</label>
-
-                <textarea id="setupCustomRules" placeholder="Enter special gameplay rules">${adventureSetup.custom_rules}</textarea>
-
-            </div>
-
-            <div class="setup-field">
-
-                <label>Story Hook:</label>
-
-                <textarea id="setupCustomStory" placeholder="Enter initial story or scenario">${adventureSetup.custom_story}</textarea>
-
-            </div>
-
-            <div class="setup-field">
-
-                <label>World Prompt:</label>
-
-                <textarea id="setupWorldPrompt" placeholder="Additional instructions for world generation">${adventureSetup.world_prompt}</textarea>
-
-            </div>
-
-            <button class="btn btn-primary" id="setupSaveBtn">Save Settings</button>
-
-        `;
-        var saveBtn = el('setupSaveBtn');
-        if (saveBtn) saveBtn.addEventListener('click', function() {
-            adventureSetup.custom_lore = el('setupCustomLore').value;
-            adventureSetup.custom_rules = el('setupCustomRules').value;
-            adventureSetup.custom_story = el('setupCustomStory').value;
-            adventureSetup.world_prompt = el('setupWorldPrompt').value;
-            adventureSetup.character_class = el('setupCharacterClass').value;
-            localStorage.setItem(ADVENTURE_SETUP_KEY, JSON.stringify(adventureSetup));
-            panel.classList.remove('active');
-        });
-        panel.classList.add('active');
     }
 
     // ─── API ───────────────────────────────────────────────────────────────────
@@ -1626,94 +1553,26 @@
                 '</div>';
     }
 
-    // ─── Adventure Setup Modal ─────────────────────────────────────────────────
+    // ─── Adventure Setup Modal (v1 — delegates to Adventure Builder) ──────────
     //
-    // Shows a Game-Master-style form that lets the player shape the world
-    // before it is generated.  Fields: genre, player name, lore, rules,
-    // story hook, and freeform world prompt.  All fields are optional.
+    // The legacy buildSetupModal / showSetupModal are replaced by the
+    // Adventure Builder wizard.  These thin wrappers remain so that any
+    // existing callers still work.
 
     function buildSetupModal() {
-        var overlay = document.createElement('div');
-        overlay.className = 'rpg-setup-overlay';
-        overlay.id = 'rpgSetupOverlay';
-
-        overlay.innerHTML =
-            '<div class="rpg-setup-modal">' +
-                '<h3 class="rpg-setup-title">\uD83C\uDFAD Adventure Setup</h3>' +
-                '<p class="rpg-setup-subtitle">Shape your world — all fields are optional</p>' +
-                '<div class="rpg-setup-fields">' +
-                    '<label class="rpg-setup-label">' +
-                        'Theme / Genre' +
-                        '<input type="text" id="rpgSetupGenre" class="rpg-setup-input" placeholder="medieval fantasy, sci-fi, noir\u2026">' +
-                    '</label>' +
-                    '<label class="rpg-setup-label">' +
-                        'Player Name' +
-                        '<input type="text" id="rpgSetupPlayerName" class="rpg-setup-input" placeholder="Player">' +
-                    '</label>' +
-                    '<label class="rpg-setup-label">' +
-                        'World Lore <span class="rpg-setup-hint">(optional)</span>' +
-                        '<textarea id="rpgSetupLore" class="rpg-setup-textarea" rows="3" placeholder="Background history, mythology, ancient events\u2026"></textarea>' +
-                    '</label>' +
-                    '<label class="rpg-setup-label">' +
-                        'Rules / Constraints <span class="rpg-setup-hint">(optional)</span>' +
-                        '<textarea id="rpgSetupRules" class="rpg-setup-textarea" rows="2" placeholder="No magic, permadeath, limited inventory\u2026"></textarea>' +
-                    '</label>' +
-                    '<label class="rpg-setup-label">' +
-                        'Story Hook <span class="rpg-setup-hint">(optional)</span>' +
-                        '<textarea id="rpgSetupStory" class="rpg-setup-textarea" rows="3" placeholder="You awaken in a ruined library with no memory\u2026"></textarea>' +
-                    '</label>' +
-                    '<label class="rpg-setup-label">' +
-                        'Additional Instructions <span class="rpg-setup-hint">(optional)</span>' +
-                        '<textarea id="rpgSetupPrompt" class="rpg-setup-textarea" rows="2" placeholder="Dark tone, lots of humor, political intrigue\u2026"></textarea>' +
-                    '</label>' +
-                '</div>' +
-                '<div class="rpg-setup-actions">' +
-                    '<button class="rpg-setup-cancel" id="rpgSetupCancel">Cancel</button>' +
-                    '<button class="rpg-setup-start" id="rpgSetupStart">\u2694\uFE0F Begin Adventure</button>' +
-                '</div>' +
-            '</div>';
-
-        document.body.appendChild(overlay);
-
-        // Close on cancel or overlay backdrop click
-        var cancelBtn = overlay.querySelector('#rpgSetupCancel');
-        cancelBtn.addEventListener('click', function () { closeSetupModal(); });
-        overlay.addEventListener('click', function (e) {
-            if (e.target === overlay) closeSetupModal();
-        });
-
-        // Start game with custom payload
-        var startBtn = overlay.querySelector('#rpgSetupStart');
-        startBtn.addEventListener('click', function () {
-            var genre = (document.getElementById('rpgSetupGenre').value || '').trim();
-            var playerName = (document.getElementById('rpgSetupPlayerName').value || '').trim();
-            var lore = (document.getElementById('rpgSetupLore').value || '').trim();
-            var rules = (document.getElementById('rpgSetupRules').value || '').trim();
-            var story = (document.getElementById('rpgSetupStory').value || '').trim();
-            var prompt = (document.getElementById('rpgSetupPrompt').value || '').trim();
-
-            var payload = {};
-            if (genre) payload.genre = genre;
-            if (playerName) payload.player_name = playerName;
-            if (lore) payload.lore = lore;
-            if (rules) payload.rules = rules;
-            if (story) payload.story = story;
-            if (prompt) payload.world_prompt = prompt;
-
-            closeSetupModal();
-            startGameWithPayload(payload);
-        });
+        // No-op: the Adventure Builder overlay is created lazily by AdventureBuilder.open()
     }
 
     function showSetupModal() {
-        var existing = document.getElementById('rpgSetupOverlay');
-        if (existing) existing.remove();
-        buildSetupModal();
+        if (typeof AdventureBuilder !== 'undefined') {
+            AdventureBuilder.open();
+        }
     }
 
     function closeSetupModal() {
-        var overlay = document.getElementById('rpgSetupOverlay');
-        if (overlay) overlay.remove();
+        if (typeof AdventureBuilder !== 'undefined') {
+            AdventureBuilder.close();
+        }
     }
 
     /** Start a new game with custom parameters from the setup modal. */
@@ -1839,6 +1698,12 @@
         if (playerPanel) playerPanel.innerHTML = '';
 
         closePlayerPanel();
+
+        // Open the Adventure Builder after reset so the user gets the
+        // structured wizard instead of falling through to a raw text input.
+        if (typeof AdventureBuilder !== 'undefined') {
+            AdventureBuilder.open();
+        }
     }
 
     // ─── Init ──────────────────────────────────────────────────────────────────
@@ -1847,6 +1712,28 @@
         console.log('[RPG] Initializing RPG mode\u2026');
 
         window._currentMode = 'chat';
+
+        // ── Adventure Builder launch callback ──────────────────────────────
+        // When the builder successfully launches an adventure, pipe the
+        // result into the RPG feed just like legacy game creation.
+        window._onAdventureBuilderLaunch = function (res) {
+            updateState({ sessionId: res.session_id });
+            localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
+            if (res.opening && res.opening.trim()) {
+                applyUpdate(transformResponse({ narration: res.opening }));
+            }
+            if (res.npcs && res.npcs.length) {
+                updateState({ npcs: res.npcs });
+                renderNPCs();
+            }
+            if (res.memory && res.memory.length) {
+                updateState({ memory: res.memory });
+            }
+            if (res.worldEvents && res.worldEvents.length) {
+                updateState({ worldEvents: res.worldEvents });
+            }
+            persistSnapshot();
+        };
 
         // Restore persisted session id (will retry fresh session on first failure)
         var storedId = localStorage.getItem(STORAGE_KEY);
