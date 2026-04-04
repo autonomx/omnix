@@ -15,7 +15,19 @@ from ..creator.defaults import (
     build_setup_template,
     list_setup_templates,
 )
-from ..creator.regeneration import REGENERATION_TARGETS
+from ..creator.regeneration import (
+    APPLY_STRATEGIES,
+    ENTITY_TARGETS,
+    REGENERATION_MODES,
+    REGENERATION_TARGETS,
+    TARGET_ID_FIELD,
+    TARGET_STRATEGIES,
+    compute_item_diff,
+    compute_section_diff,
+    generate_apply_token,
+    merge_entity_lists,
+    merge_thread_lists,
+)
 from ..creator.schema import AdventureSetup
 from ..creator.validation import validate_adventure_setup_payload
 from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_start_result
@@ -317,20 +329,19 @@ def _bootstrap_loop_dependencies() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _apply_regenerated_section(
+def _replace_regenerated_section(
     setup_payload: dict[str, Any],
     target: str,
     regenerated: Any,
 ) -> dict[str, Any]:
-    """Merge a regenerated section back into the setup payload.
+    """Replace a section entirely (Phase 1.3 behaviour).
 
     Parameters
     ----------
     setup_payload :
         The current (normalized) setup dict.
     target :
-        One of ``REGENERATION_TARGETS`` (``"factions"``, ``"locations"``,
-        ``"npc_seeds"``, ``"opening"``, ``"threads"``).
+        One of ``REGENERATION_TARGETS``.
     regenerated :
         The data returned by the startup pipeline's regenerate_* method.
 
@@ -348,7 +359,6 @@ def _apply_regenerated_section(
     elif target == "npc_seeds":
         next_payload["npc_seeds"] = list(regenerated or [])
     elif target == "threads":
-        # Stored in metadata for preview-time use until formal setup field exists.
         metadata = dict(next_payload.get("metadata") or {})
         metadata["regenerated_threads"] = list(regenerated or [])
         next_payload["metadata"] = metadata
@@ -367,40 +377,125 @@ def _apply_regenerated_section(
     return next_payload
 
 
-def regenerate_setup_section(payload: dict[str, Any], target: str) -> dict[str, Any]:
-    """Regenerate a single section of an adventure setup.
+def _merge_regenerated_section(
+    setup_payload: dict[str, Any],
+    target: str,
+    regenerated: Any,
+) -> dict[str, Any]:
+    """Merge regenerated data into the existing section by stable id.
 
     Parameters
     ----------
-    payload :
-        Raw setup dict (may be incomplete — defaults are applied).
+    setup_payload :
+        The current (normalized) setup dict.
     target :
-        One of ``REGENERATION_TARGETS``.
+        One of ``REGENERATION_TARGETS`` that supports merge.
+    regenerated :
+        The regenerated data.
 
     Returns
     -------
     dict
-        Response dict with ``success``, ``target``, ``updated_setup``,
-        ``regenerated``, ``validation``, ``preview``, and ``resolved_context``.
+        A new setup payload with the section merged.
     """
-    if target not in REGENERATION_TARGETS:
-        return {
-            "success": False,
-            "error": f"Unsupported regeneration target: {target}",
-        }
+    next_payload = dict(setup_payload)
+    id_field = TARGET_ID_FIELD.get(target, "id")
 
-    normalized_payload = apply_adventure_defaults(dict(payload or {}))
-    validation = validate_adventure_setup_payload(normalized_payload)
+    if target in ENTITY_TARGETS:
+        current = list(next_payload.get(target) or [])
+        regen_list = list(regenerated or [])
+        next_payload[target] = merge_entity_lists(current, regen_list, id_field)
+    elif target == "threads":
+        metadata = dict(next_payload.get("metadata") or {})
+        current_threads = list(metadata.get("regenerated_threads") or [])
+        regen_threads = list(regenerated or [])
+        metadata["regenerated_threads"] = merge_thread_lists(
+            current_threads, regen_threads, strategy="append"
+        )
+        next_payload["metadata"] = metadata
+    else:
+        # Fallback to replace for targets that don't support merge
+        return _replace_regenerated_section(setup_payload, target, regenerated)
 
-    # Allow regeneration even with warnings, but block on hard-invalid payloads.
-    if validation.is_blocking():
-        return {
-            "success": False,
-            "error": "Setup has blocking validation issues",
-            "validation": validation.to_dict(),
-        }
+    return next_payload
 
-    # Build the startup pipeline directly — we don't need a full GameLoop for regeneration.
+
+def _apply_regenerated_section(
+    setup_payload: dict[str, Any],
+    target: str,
+    regenerated: Any,
+    strategy: str = "replace",
+) -> dict[str, Any]:
+    """Apply a regenerated section to the setup payload, dispatching by strategy.
+
+    Parameters
+    ----------
+    setup_payload :
+        The current (normalized) setup dict.
+    target :
+        One of ``REGENERATION_TARGETS``.
+    regenerated :
+        The data returned by the startup pipeline's regenerate_* method.
+    strategy :
+        One of ``"replace"``, ``"merge"``, ``"append"``.
+
+    Returns
+    -------
+    dict
+        A new setup payload with the requested section updated.
+    """
+    if strategy == "merge":
+        return _merge_regenerated_section(setup_payload, target, regenerated)
+    if strategy == "append" and target == "threads":
+        return _merge_regenerated_section(setup_payload, target, regenerated)
+    return _replace_regenerated_section(setup_payload, target, regenerated)
+
+
+# ---------------------------------------------------------------------------
+# In-memory preview store (keyed by apply_token)
+# ---------------------------------------------------------------------------
+
+_preview_store: dict[str, dict[str, Any]] = {}
+
+_MAX_PREVIEW_STORE_SIZE = 50
+
+
+def _store_preview(token: str, data: dict[str, Any]) -> None:
+    """Store a preview result keyed by token. Evicts oldest if limit reached."""
+    if len(_preview_store) >= _MAX_PREVIEW_STORE_SIZE:
+        oldest_key = next(iter(_preview_store))
+        _preview_store.pop(oldest_key, None)
+    _preview_store[token] = data
+
+
+def _pop_preview(token: str) -> dict[str, Any] | None:
+    """Retrieve and remove a stored preview by token."""
+    return _preview_store.pop(token, None)
+
+
+# ---------------------------------------------------------------------------
+# Section-level regeneration (Phase 1.4A)
+# ---------------------------------------------------------------------------
+
+
+def _get_current_section(payload: dict[str, Any], target: str) -> Any:
+    """Extract the current section data from a setup payload for diff."""
+    if target in ENTITY_TARGETS:
+        return list(payload.get(target) or [])
+    if target == "threads":
+        metadata = payload.get("metadata") or {}
+        return list(metadata.get("regenerated_threads") or [])
+    if target == "opening":
+        metadata = payload.get("metadata") or {}
+        return dict(metadata.get("regenerated_opening") or {})
+    return None
+
+
+def _run_regeneration(normalized_payload: dict[str, Any], target: str) -> Any:
+    """Run the startup pipeline regeneration for a given target.
+
+    Returns the regenerated data.
+    """
     from ..core.event_bus import EventBus
     from ..creator.canon import CreatorCanonState
     from ..creator.startup_pipeline import StartupGenerationPipeline
@@ -415,26 +510,233 @@ def regenerate_setup_section(payload: dict[str, Any], target: str) -> dict[str, 
     setup = AdventureSetup.from_dict(normalized_payload).normalize().with_defaults()
 
     if target == "factions":
-        regenerated = pipeline.regenerate_factions(setup)
+        return pipeline.regenerate_factions(setup)
     elif target == "locations":
-        regenerated = pipeline.regenerate_locations(setup)
+        return pipeline.regenerate_locations(setup)
     elif target == "npc_seeds":
-        regenerated = pipeline.regenerate_npc_seeds(setup)
+        return pipeline.regenerate_npc_seeds(setup)
     elif target == "threads":
-        regenerated = pipeline.regenerate_threads(setup)
+        return pipeline.regenerate_threads(setup)
     elif target == "opening":
-        regenerated = pipeline.regenerate_opening(setup)
+        return pipeline.regenerate_opening(setup)
     else:
         raise ValueError(f"Unsupported regeneration target: {target}")
 
-    next_payload = _apply_regenerated_section(normalized_payload, target, regenerated)
+
+def regenerate_setup_section(
+    payload: dict[str, Any],
+    target: str,
+    mode: str = "apply",
+    apply_token: str | None = None,
+    apply_strategy: str = "replace",
+) -> dict[str, Any]:
+    """Regenerate a single section of an adventure setup.
+
+    Parameters
+    ----------
+    payload :
+        Raw setup dict (may be incomplete — defaults are applied).
+    target :
+        One of ``REGENERATION_TARGETS``.
+    mode :
+        ``"preview"`` to get a diff without applying, or ``"apply"`` to apply.
+    apply_token :
+        Optional token from a previous preview to apply cached results.
+    apply_strategy :
+        One of ``"replace"``, ``"merge"``, ``"append"``.
+
+    Returns
+    -------
+    dict
+        Response dict whose shape varies by mode.
+    """
+    if target not in REGENERATION_TARGETS:
+        return {
+            "success": False,
+            "error": f"Unsupported regeneration target: {target}",
+        }
+
+    if mode and mode not in REGENERATION_MODES:
+        return {
+            "success": False,
+            "error": f"Unsupported regeneration mode: {mode}",
+        }
+
+    # Validate strategy against target
+    allowed = TARGET_STRATEGIES.get(target, {"replace"})
+    effective_strategy = apply_strategy if apply_strategy in allowed else "replace"
+
+    normalized_payload = apply_adventure_defaults(dict(payload or {}))
+    validation = validate_adventure_setup_payload(normalized_payload)
+
+    if validation.is_blocking():
+        return {
+            "success": False,
+            "error": "Setup has blocking validation issues",
+            "validation": validation.to_dict(),
+        }
+
+    # ── Preview mode ────────────────────────────────────────────────────
+    if mode == "preview":
+        before = _get_current_section(normalized_payload, target)
+        regenerated = _run_regeneration(normalized_payload, target)
+        after = regenerated
+
+        diff = compute_section_diff(target, before, after)
+        token = generate_apply_token(target, normalized_payload)
+
+        # Store preview for later apply
+        _store_preview(token, {
+            "target": target,
+            "regenerated": regenerated,
+            "normalized_payload": normalized_payload,
+        })
+
+        return {
+            "success": True,
+            "target": target,
+            "mode": "preview",
+            "before": before,
+            "after": after,
+            "diff": diff,
+            "apply_token": token,
+        }
+
+    # ── Apply mode ──────────────────────────────────────────────────────
+    # If an apply_token is provided, try to use cached regenerated data
+    regenerated = None
+    if apply_token:
+        cached = _pop_preview(apply_token)
+        if cached and cached.get("target") == target:
+            regenerated = cached["regenerated"]
+
+    # If no cached data, regenerate fresh
+    if regenerated is None:
+        regenerated = _run_regeneration(normalized_payload, target)
+
+    next_payload = _apply_regenerated_section(
+        normalized_payload, target, regenerated, strategy=effective_strategy,
+    )
     prepared = _build_preview_contract_from_payload(next_payload)
 
     return {
         "success": True,
         "target": target,
+        "mode": "apply",
+        "apply_strategy": effective_strategy,
         "updated_setup": next_payload,
         "regenerated": regenerated,
+        "validation": prepared.get("validation"),
+        "preview": prepared.get("preview"),
+        "resolved_context": prepared.get("resolved_context"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Single-item regeneration (Phase 1.4C)
+# ---------------------------------------------------------------------------
+
+
+def regenerate_single_item(
+    payload: dict[str, Any],
+    target: str,
+    item_id: str,
+) -> dict[str, Any]:
+    """Regenerate a single entity within a section.
+
+    Parameters
+    ----------
+    payload :
+        Raw setup dict.
+    target :
+        One of the entity targets (``"factions"``, ``"locations"``, ``"npc_seeds"``).
+    item_id :
+        The id of the entity to regenerate.
+
+    Returns
+    -------
+    dict
+        Response with ``before``, ``after``, ``diff``, and ``updated_setup``.
+    """
+    if target not in ENTITY_TARGETS:
+        return {
+            "success": False,
+            "error": f"Single-item regeneration is only supported for: {', '.join(sorted(ENTITY_TARGETS))}",
+        }
+
+    id_field = TARGET_ID_FIELD.get(target, "id")
+
+    normalized_payload = apply_adventure_defaults(dict(payload or {}))
+    validation = validate_adventure_setup_payload(normalized_payload)
+
+    if validation.is_blocking():
+        return {
+            "success": False,
+            "error": "Setup has blocking validation issues",
+            "validation": validation.to_dict(),
+        }
+
+    # Find the current entity
+    current_list = list(normalized_payload.get(target) or [])
+    before_item = None
+    before_idx = None
+    for idx, item in enumerate(current_list):
+        if isinstance(item, dict) and item.get(id_field) == item_id:
+            before_item = dict(item)
+            before_idx = idx
+            break
+
+    if before_item is None:
+        return {
+            "success": False,
+            "error": f"Item '{item_id}' not found in {target}",
+        }
+
+    # Regenerate the whole section, then extract the matching item
+    regenerated_section = _run_regeneration(normalized_payload, target)
+    regen_list = list(regenerated_section or [])
+
+    # Try to find the item with the same id in the regenerated output
+    after_item = None
+    for item in regen_list:
+        if isinstance(item, dict) and item.get(id_field) == item_id:
+            after_item = dict(item)
+            break
+
+    if after_item is None:
+        # Regenerated section doesn't have this id — generate a replacement
+        # by taking any item from the regenerated set with the same index
+        if before_idx is not None and before_idx < len(regen_list):
+            after_item = dict(regen_list[before_idx])
+        elif regen_list:
+            after_item = dict(regen_list[0])
+        else:
+            after_item = dict(before_item)
+
+        # Preserve the original id and name
+        after_item[id_field] = item_id
+        if "name" in before_item:
+            after_item["name"] = before_item["name"]
+
+    diff = compute_item_diff(before_item, after_item)
+
+    # Build updated_setup with the single item replaced
+    updated_list = list(current_list)
+    if before_idx is not None:
+        updated_list[before_idx] = after_item
+    next_payload = dict(normalized_payload)
+    next_payload[target] = updated_list
+
+    prepared = _build_preview_contract_from_payload(next_payload)
+
+    return {
+        "success": True,
+        "target": target,
+        "item_id": item_id,
+        "before": before_item,
+        "after": after_item,
+        "diff": diff,
+        "updated_setup": next_payload,
         "validation": prepared.get("validation"),
         "preview": prepared.get("preview"),
         "resolved_context": prepared.get("resolved_context"),

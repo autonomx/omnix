@@ -1,7 +1,17 @@
-"""Targeted regeneration helpers for Creator UX partial refresh flows."""
+"""Targeted regeneration helpers for Creator UX partial refresh flows.
+
+Phase 1.4 additions:
+- Preview / apply regeneration modes
+- Diff computation between before / after sections
+- Replace vs merge strategies
+- Single-item regeneration support
+- Apply-token generation for safer workflows
+"""
 
 from __future__ import annotations
 
+import hashlib
+import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -21,6 +31,34 @@ REGENERATION_TARGETS: set[str] = {
     "threads",
 }
 
+RegenerationMode = Literal["preview", "apply"]
+
+REGENERATION_MODES: set[str] = {"preview", "apply"}
+
+ApplyStrategy = Literal["replace", "merge", "append"]
+
+APPLY_STRATEGIES: set[str] = {"replace", "merge", "append"}
+
+# Per-target strategy support matrix
+TARGET_STRATEGIES: dict[str, set[str]] = {
+    "factions": {"replace", "merge"},
+    "locations": {"replace", "merge"},
+    "npc_seeds": {"replace", "merge"},
+    "opening": {"replace"},
+    "threads": {"replace", "append"},
+}
+
+# Entity-type targets that support id-based merge and single-item regen
+ENTITY_TARGETS: set[str] = {"factions", "locations", "npc_seeds"}
+
+# Mapping from target to the id field used for merge
+TARGET_ID_FIELD: dict[str, str] = {
+    "factions": "faction_id",
+    "locations": "location_id",
+    "npc_seeds": "npc_id",
+    "threads": "thread_id",
+}
+
 
 @dataclass
 class RegenerationOptions:
@@ -28,3 +66,268 @@ class RegenerationOptions:
     replace: bool = True
     preserve_ids: bool = True
     extra_context: dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Apply-token generation
+# ---------------------------------------------------------------------------
+
+
+def generate_apply_token(target: str, payload_snapshot: Any = None) -> str:
+    """Generate a lightweight apply token for a preview → apply handshake.
+
+    The token encodes the target and a timestamp. It does **not** provide
+    cryptographic guarantees — it is a UX-level contract for cleaner flows.
+    """
+    raw = f"regen_preview_{target}_{time.time()}"
+    if payload_snapshot is not None:
+        raw += f"_{id(payload_snapshot)}"
+    return "regen_preview_" + hashlib.sha256(raw.encode()).hexdigest()[:12]
+
+
+# ---------------------------------------------------------------------------
+# Diff computation
+# ---------------------------------------------------------------------------
+
+
+def _safe_list(value: Any) -> list[Any]:
+    """Return *value* if it is a list, otherwise ``[]``."""
+    return value if isinstance(value, list) else []
+
+
+def _entity_id(item: Any, id_field: str) -> str | None:
+    """Extract entity id from a dict or return None."""
+    if isinstance(item, dict):
+        return item.get(id_field)
+    return None
+
+
+def compute_section_diff(
+    target: str,
+    before: Any,
+    after: Any,
+) -> dict[str, Any]:
+    """Compute a human-readable diff summary between two section snapshots.
+
+    For entity targets (factions, locations, npc_seeds), performs id-based
+    comparison. For opening/threads, does a simpler structural diff.
+
+    Returns a dict with ``added``, ``removed``, ``changed``, and ``summary``.
+    """
+    if target in ENTITY_TARGETS:
+        return _compute_entity_diff(target, before, after)
+    if target == "threads":
+        return _compute_thread_diff(before, after)
+    if target == "opening":
+        return _compute_opening_diff(before, after)
+    return {"added": 0, "removed": 0, "changed": 0, "summary": []}
+
+
+def _compute_entity_diff(
+    target: str,
+    before: Any,
+    after: Any,
+) -> dict[str, Any]:
+    """Diff two entity lists by id field."""
+    id_field = TARGET_ID_FIELD.get(target, "id")
+    before_list = _safe_list(before)
+    after_list = _safe_list(after)
+
+    before_ids = {_entity_id(e, id_field) for e in before_list if _entity_id(e, id_field)}
+    after_ids = {_entity_id(e, id_field) for e in after_list if _entity_id(e, id_field)}
+
+    added_ids = after_ids - before_ids
+    removed_ids = before_ids - after_ids
+    common_ids = before_ids & after_ids
+
+    # Detect changed entities (same id, different content)
+    before_map = {_entity_id(e, id_field): e for e in before_list if isinstance(e, dict)}
+    after_map = {_entity_id(e, id_field): e for e in after_list if isinstance(e, dict)}
+
+    changed = 0
+    for eid in common_ids:
+        if before_map.get(eid) != after_map.get(eid):
+            changed += 1
+
+    # Human-readable target labels
+    label_map = {
+        "factions": "faction",
+        "locations": "location",
+        "npc_seeds": "NPC",
+    }
+    label = label_map.get(target, "item")
+    plural = label + "s"
+
+    summary: list[str] = []
+    if removed_ids:
+        summary.append(f"{len(removed_ids)} {plural if len(removed_ids) != 1 else label} would be removed")
+    if added_ids:
+        summary.append(f"{len(added_ids)} new {plural if len(added_ids) != 1 else label} would be added")
+    if changed:
+        summary.append(f"{changed} {plural if changed != 1 else label} would change")
+
+    return {
+        "added": len(added_ids),
+        "removed": len(removed_ids),
+        "changed": changed,
+        "summary": summary,
+    }
+
+
+def _compute_thread_diff(
+    before: Any,
+    after: Any,
+) -> dict[str, Any]:
+    """Diff two thread lists."""
+    before_list = _safe_list(before)
+    after_list = _safe_list(after)
+
+    before_ids = {_entity_id(t, "thread_id") for t in before_list if _entity_id(t, "thread_id")}
+    after_ids = {_entity_id(t, "thread_id") for t in after_list if _entity_id(t, "thread_id")}
+
+    added = len(after_ids - before_ids)
+    removed = len(before_ids - after_ids)
+
+    summary: list[str] = []
+    if removed:
+        summary.append(f"{removed} thread{'s' if removed != 1 else ''} would be removed")
+    if added:
+        summary.append(f"{added} new thread{'s' if added != 1 else ''} would be added")
+
+    return {"added": added, "removed": removed, "changed": 0, "summary": summary}
+
+
+def _compute_opening_diff(
+    before: Any,
+    after: Any,
+) -> dict[str, Any]:
+    """Diff two opening snapshots."""
+    before_dict = before if isinstance(before, dict) else {}
+    after_dict = after if isinstance(after, dict) else {}
+
+    changed_fields: list[str] = []
+    all_keys = set(list(before_dict.keys()) + list(after_dict.keys()))
+    for key in sorted(all_keys):
+        if before_dict.get(key) != after_dict.get(key):
+            changed_fields.append(key)
+
+    summary: list[str] = []
+    if changed_fields:
+        summary.append(f"Opening would change: {', '.join(changed_fields)}")
+
+    return {
+        "added": 0,
+        "removed": 0,
+        "changed": len(changed_fields),
+        "summary": summary,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Single-item diff
+# ---------------------------------------------------------------------------
+
+
+def compute_item_diff(
+    before: dict[str, Any],
+    after: dict[str, Any],
+) -> dict[str, Any]:
+    """Compute a field-level diff between two entity dicts.
+
+    Returns a dict with ``changed_fields`` listing which keys differ.
+    """
+    before = before if isinstance(before, dict) else {}
+    after = after if isinstance(after, dict) else {}
+
+    all_keys = set(list(before.keys()) + list(after.keys()))
+    changed: list[str] = []
+    for key in sorted(all_keys):
+        if before.get(key) != after.get(key):
+            changed.append(key)
+
+    return {"changed_fields": changed}
+
+
+# ---------------------------------------------------------------------------
+# Merge helpers
+# ---------------------------------------------------------------------------
+
+
+def merge_entity_lists(
+    current: list[dict[str, Any]],
+    regenerated: list[dict[str, Any]],
+    id_field: str,
+) -> list[dict[str, Any]]:
+    """Merge regenerated entities into current list by id field.
+
+    Rules:
+    - If a regenerated entity's id already exists, overwrite that entity.
+    - If a regenerated entity's id is new, append it.
+    - Keep current entities not mentioned by regeneration.
+    """
+    current_list = _safe_list(current)
+    regen_list = _safe_list(regenerated)
+
+    # Build lookup for regenerated items
+    regen_map: dict[str, dict[str, Any]] = {}
+    regen_order: list[str] = []
+    for item in regen_list:
+        if isinstance(item, dict):
+            eid = item.get(id_field)
+            if eid:
+                regen_map[eid] = item
+                regen_order.append(eid)
+
+    # Start with current, overwriting where regenerated matches
+    result: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for item in current_list:
+        if not isinstance(item, dict):
+            continue
+        eid = item.get(id_field)
+        if eid and eid in regen_map:
+            result.append(regen_map[eid])
+        else:
+            result.append(item)
+        if eid:
+            seen_ids.add(eid)
+
+    # Append new regenerated items not already in current
+    for eid in regen_order:
+        if eid not in seen_ids:
+            result.append(regen_map[eid])
+            seen_ids.add(eid)
+
+    return result
+
+
+def merge_thread_lists(
+    current: list[dict[str, Any]],
+    regenerated: list[dict[str, Any]],
+    strategy: str = "append",
+) -> list[dict[str, Any]]:
+    """Merge regenerated threads into current list.
+
+    ``strategy='merge'``: id-based merge (same as entities).
+    ``strategy='append'``: append all regenerated threads.
+    """
+    current_list = _safe_list(current)
+    regen_list = _safe_list(regenerated)
+
+    if strategy == "merge":
+        return merge_entity_lists(current_list, regen_list, "thread_id")
+
+    # Append: add all regenerated threads, dedup by thread_id
+    existing_ids = {
+        t.get("thread_id")
+        for t in current_list
+        if isinstance(t, dict) and t.get("thread_id")
+    }
+    result = list(current_list)
+    for item in regen_list:
+        if isinstance(item, dict):
+            tid = item.get("thread_id")
+            if tid and tid not in existing_ids:
+                result.append(item)
+                existing_ids.add(tid)
+    return result

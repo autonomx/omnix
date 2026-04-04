@@ -3,6 +3,10 @@
  *
  * Thin wrappers around the creator endpoints.
  * Consumed by adventureBuilder.js.
+ *
+ * Phase 1.4 additions:
+ * - regenerateSection supports mode, apply_token, apply_strategy
+ * - regenerateItem for single-entity regeneration
  */
 
 /* global */
@@ -45,12 +49,47 @@ var AdventureBuilderApi = (function () {
         }).then(_json);
     }
 
-    function regenerateSection(target, setup) {
+    /**
+     * Regenerate a full section of the adventure setup.
+     *
+     * @param {string} target         - Section target (e.g. 'npc_seeds')
+     * @param {Object} setup          - Current setup payload
+     * @param {Object} [opts]         - Optional overrides
+     * @param {string} [opts.mode]    - 'preview' or 'apply' (default: 'apply')
+     * @param {string} [opts.apply_token]    - Token from a previous preview
+     * @param {string} [opts.apply_strategy] - 'replace', 'merge', or 'append'
+     */
+    function regenerateSection(target, setup, opts) {
+        var body = {
+            target: target,
+            setup: setup
+        };
+        if (opts) {
+            if (opts.mode) body.mode = opts.mode;
+            if (opts.apply_token) body.apply_token = opts.apply_token;
+            if (opts.apply_strategy) body.apply_strategy = opts.apply_strategy;
+        }
         return fetch(BASE + '/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        }).then(_json);
+    }
+
+    /**
+     * Regenerate a single entity within a section.
+     *
+     * @param {string} target  - Section target (e.g. 'npc_seeds')
+     * @param {string} itemId  - Entity id to regenerate
+     * @param {Object} setup   - Current setup payload
+     */
+    function regenerateItem(target, itemId, setup) {
+        return fetch(BASE + '/regenerate-item', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 target: target,
+                item_id: itemId,
                 setup: setup
             }),
         }).then(_json);
@@ -70,6 +109,7 @@ var AdventureBuilderApi = (function () {
         validateSetup: validateSetup,
         previewSetup: previewSetup,
         regenerateSection: regenerateSection,
+        regenerateItem: regenerateItem,
         startAdventure: startAdventure,
     };
 })();

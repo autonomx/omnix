@@ -53,7 +53,9 @@ var AdventureBuilderState = (function () {
             setup: _defaultSetup(),
             validation: null,
             preview: null,
-            lastError: null
+            lastError: null,
+            /** Phase 1.4D — Undo stack for regeneration rollbacks */
+            history: []
         };
     }
 
@@ -131,6 +133,26 @@ var AdventureBuilderState = (function () {
         saveDraft(state.setup);
     }
 
+    /** Phase 1.4D — Push a snapshot onto the undo stack before applying a regeneration. */
+    var MAX_HISTORY = 20;
+
+    function pushHistory(state, entry) {
+        if (!state.history) state.history = [];
+        state.history.push(_clone(entry));
+        if (state.history.length > MAX_HISTORY) {
+            state.history = state.history.slice(-MAX_HISTORY);
+        }
+    }
+
+    function popHistory(state) {
+        if (!state.history || !state.history.length) return null;
+        return state.history.pop();
+    }
+
+    function hasHistory(state) {
+        return !!(state.history && state.history.length);
+    }
+
     return {
         STORAGE_KEY: STORAGE_KEY,
         defaultSetup: _defaultSetup,
@@ -141,6 +163,9 @@ var AdventureBuilderState = (function () {
         clearDraft: clearDraft,
         resetState: resetState,
         hydrateFromTemplate: hydrateFromTemplate,
-        markDirty: markDirty
+        markDirty: markDirty,
+        pushHistory: pushHistory,
+        popHistory: popHistory,
+        hasHistory: hasHistory
     };
 })();
