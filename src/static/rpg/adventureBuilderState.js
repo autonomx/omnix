@@ -68,7 +68,16 @@ var AdventureBuilderState = (function () {
                 activeTarget: null
             },
             constraints: {},
-            tone: "neutral"
+            tone: "neutral",
+            /** Phase 2 — World inspection (graph, simulation, inspector) */
+            worldInspection: {
+                loading: false,
+                graph: null,
+                simulation: null,
+                inspector: null,
+                selectedNodeId: null,
+                activeTab: 'summary'
+            }
         };
     }
 
