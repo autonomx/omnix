@@ -283,3 +283,46 @@ class CreatorStatePresenter:
                 for s in rumor_seeds
             ],
         }
+
+    # ------------------------------------------------------------------
+    # Phase 7.6 — Social state presenters
+    # ------------------------------------------------------------------
+
+    def present_social_dashboard(self, social_state_core: Any) -> dict:
+        """Present the social state dashboard in a UI-safe format."""
+        if social_state_core is None:
+            return {
+                "title": "Social State",
+                "relationships": [],
+                "rumors": [],
+                "alliances": [],
+            }
+        state = social_state_core.get_state()
+        return {
+            "title": "Social State",
+            "relationships": [r.to_dict() for r in state.relationships.values()],
+            "rumors": [self.present_rumor(r.to_dict()) for r in state.rumors.values()],
+            "alliances": [a.to_dict() for a in state.alliances.values()],
+        }
+
+    def present_npc_social_view(self, social_view: dict) -> dict:
+        """Present an NPC social view in a UI-safe format."""
+        return {
+            "npc_id": social_view.get("npc_id") or "unknown",
+            "target_id": social_view.get("target_id"),
+            "relationship": social_view.get("relationship"),
+            "reputation": social_view.get("reputation"),
+            "active_rumors": [
+                self.present_rumor(r) for r in (social_view.get("active_rumors") or [])
+            ],
+        }
+
+    def present_rumor(self, rumor: dict) -> dict:
+        """Present a rumor in a UI-safe format."""
+        return {
+            "rumor_id": rumor.get("rumor_id") or "unknown",
+            "rumor_type": rumor.get("rumor_type") or "unknown",
+            "summary": rumor.get("summary") or "",
+            "spread_level": rumor.get("spread_level", 0),
+            "active": rumor.get("active", True),
+        }

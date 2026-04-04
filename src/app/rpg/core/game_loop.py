@@ -49,6 +49,7 @@ from .effects import EffectManager, EffectPolicy
 from .tool_runtime_boundary import ToolRuntimeRecorder
 from ..recovery.manager import RecoveryManager
 from ..execution.resolver import ActionResolver
+from ..social_state.core import SocialStateCore
 
 
 class TickPhase(Enum):
@@ -283,6 +284,11 @@ class GameLoop:
         # PHASE 7.3 — SCENE EXECUTION LAYER
         self._init_execution_systems()
 
+        # PHASE 7.6 — PERSISTENT SOCIAL STATE
+        self.social_state_core = SocialStateCore()
+        if "social_state_core" not in self._snapshot_systems:
+            self._snapshot_systems.append("social_state_core")
+
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
 
@@ -332,6 +338,10 @@ class GameLoop:
         # PHASE 6.5 — Propagate mode to recovery manager
         if hasattr(self, "recovery_manager") and self.recovery_manager is not None:
             self.recovery_manager.set_mode(mode)
+
+        # PHASE 7.6 — Propagate mode to social state core
+        if hasattr(self, "social_state_core") and self.social_state_core is not None:
+            self.social_state_core.set_mode(mode)
 
         # PHASE 7.0 — propagate creator/GM aware state
         if hasattr(self, "story_director"):
@@ -1234,11 +1244,11 @@ class GameLoop:
         return None
 
     def resolve_selected_option(self, option_id: str) -> dict:
-        """Resolve a selected option into events and update coherence.
+        """Resolve a selected option into events and update coherence + social state.
 
         This is the main entry point for the scene execution layer.
-        It resolves the option, emits events, and applies coherence
-        updates through the standard event/reducer path.
+        It resolves the option, emits events, and applies both coherence
+        and social state updates through their respective event/reducer paths.
         """
         option = self.gameplay_control_controller.select_option(option_id)
         if option is None:
@@ -1248,14 +1258,19 @@ class GameLoop:
             option=option,
             coherence_core=self.coherence_core,
             gm_state=self.gm_directive_state,
+            social_state_core=self.social_state_core,
         )
 
-        self._emit_action_resolution_events(result.to_dict())
-        self._apply_coherence_updates_from_action_result(result.to_dict())
+        result_dict = result.to_dict()
+        self._emit_action_resolution_events(result_dict)
+        self._apply_coherence_updates_from_action_result(result_dict)
+
+        # Phase 7.6 — Apply social state updates
+        self._apply_social_state_updates_from_action_result(result_dict)
 
         return {
             "ok": True,
-            "resolution": result.to_dict(),
+            "resolution": result_dict,
             "scene_summary": self.coherence_core.get_scene_summary(),
         }
 
@@ -1285,3 +1300,39 @@ class GameLoop:
             coherence_result = self.coherence_core.apply_events(raw_events)
             return coherence_result.to_dict()
         return {"events_applied": 0, "mutations": [], "contradictions": []}
+
+    def _apply_social_state_updates_from_action_result(self, result: dict) -> None:
+        """Phase 7.6 — Apply events from an action result to social state."""
+        raw_events = result.get("events", [])
+        if raw_events and self.social_state_core is not None:
+            self.social_state_core.apply_events(raw_events)
+
+    # ------------------------------------------------------------------
+    # Phase 7.6 — Social State Dashboard / Query
+    # ------------------------------------------------------------------
+
+    def get_social_dashboard(self) -> dict:
+        """Return a presenter-shaped social state dashboard."""
+        if self.social_state_core is None:
+            return {"title": "Social State", "relationships": [], "rumors": [], "alliances": []}
+        state = self.social_state_core.get_state()
+        return {
+            "title": "Social State",
+            "relationships": [r.to_dict() for r in state.relationships.values()],
+            "rumors": [r.to_dict() for r in state.rumors.values()],
+            "alliances": [a.to_dict() for a in state.alliances.values()],
+        }
+
+    def get_npc_social_view(self, npc_id: str, target_id: str | None = None) -> dict:
+        """Return a social view for a specific NPC."""
+        if self.social_state_core is None:
+            return {
+                "npc_id": npc_id,
+                "target_id": target_id,
+                "relationship": None,
+                "reputation": None,
+                "active_rumors": [],
+            }
+        query = self.social_state_core.get_query()
+        state = self.social_state_core.get_state()
+        return query.build_npc_social_view(state, npc_id, target_id)
