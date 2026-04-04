@@ -36,7 +36,10 @@ def build_template_payload(template_name: str) -> dict[str, Any]:
     Applies canonical defaults after template hydration so the caller
     receives a complete payload ready for UI editing.
     """
-    raw = build_setup_template(template_name)
+    try:
+        raw = build_setup_template(template_name)
+    except ValueError:
+        return {"success": False, "error": f"Unknown template: {template_name}"}
     if raw is None:
         return {"success": False, "error": f"Unknown template: {template_name}"}
     payload = apply_adventure_defaults(dict(raw))
