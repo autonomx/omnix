@@ -45,6 +45,14 @@ class DialogueCore:
             - ``trace``: structured reasoning (GM-safe)
             - ``log_entry``: memory candidate (or None)
         """
+        # Defensive input validation at core boundary
+        if not speaker_id:
+            return {
+                "response": {"text": "", "options": []},
+                "trace": {"error": "missing_speaker_id", "plan": {}},
+                "log_entry": None,
+            }
+
         # 1. Build context
         context = self.context_builder.build_for_interaction(
             speaker_id=speaker_id,

@@ -1351,11 +1351,20 @@ class GameLoop:
         if option is None:
             return {"ok": False, "reason": "unknown_option", "option_id": option_id}
 
+        # Capture scene_summary at resolution time to avoid drift during logging
+        scene_summary = (
+            self.coherence_core.get_scene_summary() if self.coherence_core else {}
+        )
+
         result = self.action_resolver.resolve_choice(
             option=option,
             coherence_core=self.coherence_core,
             gm_state=self.gm_directive_state,
             social_state_core=self.social_state_core,
+            arc_control_controller=getattr(self, "arc_control_controller", None),
+            campaign_memory_core=getattr(self, "campaign_memory_core", None),
+            scene_summary=scene_summary,
+            tick=self._tick_count,
         )
 
         result_dict = result.to_dict()
@@ -1400,23 +1409,23 @@ class GameLoop:
             self.last_dialogue_response = None
 
         # Phase 8.1 — Record dialogue log entry into journal if meaningful
+        # Use the same scene_summary captured at resolution time to avoid drift
         dialogue_log = resolved_meta.get("dialogue_log_entry")
         if (
             dialogue_log
             and hasattr(self, "campaign_memory_core")
             and self.campaign_memory_core is not None
         ):
-            scene = self.coherence_core.get_scene_summary() if self.coherence_core else {}
             self.campaign_memory_core.record_dialogue_log_entry(
                 dialogue_log=dialogue_log,
                 tick=self._tick_count,
-                location=scene.get("location"),
+                location=scene_summary.get("location"),
             )
 
         return {
             "ok": True,
             "resolution": result_dict,
-            "scene_summary": self.coherence_core.get_scene_summary(),
+            "scene_summary": scene_summary,
         }
 
     def _emit_action_resolution_events(self, result: dict) -> None:

@@ -75,6 +75,10 @@ class ActionResolver:
         coherence_core: Any,
         gm_state: Any,
         social_state_core: Any | None = None,
+        arc_control_controller: Any | None = None,
+        campaign_memory_core: Any | None = None,
+        scene_summary: dict | None = None,
+        tick: int | None = None,
     ) -> ActionResolutionResult:
         """Resolve a player-selected option into an ActionResolutionResult.
 
@@ -109,6 +113,10 @@ class ActionResolver:
                 option, mapped_action, coherence_core, gm_state,
                 constraint_evaluation, evaluation,
                 social_state_core=social_state_core,
+                arc_control_controller=arc_control_controller,
+                campaign_memory_core=campaign_memory_core,
+                scene_summary=scene_summary,
+                tick=tick,
             )
 
         # 5. Build consequences
@@ -346,6 +354,10 @@ class ActionResolver:
         constraint_evaluation: dict,
         evaluation: dict,
         social_state_core: Any | None = None,
+        arc_control_controller: Any | None = None,
+        campaign_memory_core: Any | None = None,
+        scene_summary: dict | None = None,
+        tick: int | None = None,
     ) -> ActionResolutionResult:
         """Delegate social_contact resolution to NPC agency engine.
 
@@ -492,6 +504,10 @@ class ActionResolver:
         self._attach_dialogue_payload(
             resolved, coherence_core, gm_state, npc_decision,
             social_state_core=social_state_core,
+            arc_control_controller=arc_control_controller,
+            campaign_memory_core=campaign_memory_core,
+            scene_summary=scene_summary,
+            tick=tick,
         )
 
         return ActionResolutionResult(
@@ -511,6 +527,10 @@ class ActionResolver:
         gm_state: Any,
         npc_decision: dict | None,
         social_state_core: Any | None = None,
+        arc_control_controller: Any | None = None,
+        campaign_memory_core: Any | None = None,
+        scene_summary: dict | None = None,
+        tick: int | None = None,
     ) -> None:
         """Attach structured dialogue output to resolved action metadata.
 
@@ -532,6 +552,10 @@ class ActionResolver:
                 listener_id=None,
                 coherence_core=coherence_core,
                 social_state_core=social_state_core,
+                arc_control_controller=arc_control_controller,
+                campaign_memory_core=campaign_memory_core,
+                scene_summary=scene_summary,
+                tick=tick,
                 resolved_action=resolved,
                 npc_decision=npc_decision,
             )
