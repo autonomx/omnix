@@ -881,6 +881,10 @@ def regenerate_multiple_items_service(
 ) -> dict[str, Any]:
     """Regenerate multiple entities within a section (Phase 1.5).
 
+    Regenerations are applied sequentially — each item is regenerated against
+    the setup produced by the previous item's regeneration, so results are
+    cumulative rather than independent.
+
     Parameters
     ----------
     payload :

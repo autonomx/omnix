@@ -410,14 +410,19 @@ def regenerate_multiple_items(
     item_ids: list[str],
     regenerate_fn: Any,
 ) -> list[dict[str, Any]]:
-    """Regenerate multiple entities safely."""
+    """Regenerate multiple entities safely.
+
+    Note: exceptions during individual item regeneration are silently
+    skipped to allow partial success — the caller decides how to handle
+    incomplete results.
+    """
     results: list[dict[str, Any]] = []
     for item_id in item_ids:
         try:
             result = regenerate_fn(setup, target, item_id)
             if result:
                 results.append(result)
-        except Exception:
+        except Exception:  # noqa: BLE001 — intentional: partial success over total failure
             continue
     return results
 

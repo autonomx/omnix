@@ -1331,7 +1331,7 @@ var AdventureBuilder = (function () {
 
     function _handleBulkRegenerate(target) {
         var ids = state.selection.items;
-        if (!ids.length) { alert('No items selected'); return; }
+        if (!ids.length) { alert('No ' + target.replace('_', ' ') + ' selected'); return; }
 
         _readCurrentStepIntoSetup();
         _markDirty();
@@ -1339,12 +1339,15 @@ var AdventureBuilder = (function () {
         AdventureBuilderApi.regenerateMultiple(target, ids, state.setup)
             .then(function (res) {
                 if (!res || !res.success) { alert((res && res.error) || 'Bulk regeneration failed.'); return; }
-                alert('Regenerated ' + res.count + ' items');
+                alert('Regenerated ' + res.count + ' ' + target.replace('_', ' '));
                 state.selection.items = [];
                 state.selection.activeTarget = null;
                 _renderStep();
             })
-            .catch(function () { alert('Bulk regeneration failed.'); });
+            .catch(function (err) {
+                console.error('[AdventureBuilder] Bulk regeneration error:', err);
+                alert('Bulk regeneration failed.');
+            });
     }
 
     // ── Phase 1.5 — Tone selector ────────────────────────────────────
