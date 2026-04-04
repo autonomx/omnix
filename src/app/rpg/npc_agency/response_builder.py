@@ -38,7 +38,14 @@ class NPCResponseBuilder:
             "redirect": self._build_redirect_events,
         }.get(outcome, self._build_agree_events)
 
-        return builder(decision, mapped_action)
+        events = builder(decision, mapped_action)
+
+        # Enforce event whitelist (Phase 7.4 safety)
+        for e in events:
+            if e.get("type") not in SUPPORTED_NPC_EVENT_TYPES:
+                raise ValueError(f"Unsupported NPC response event: {e.get('type')}")
+
+        return events
 
     def _build_agree_events(
         self, decision: NPCDecisionResult, mapped_action: dict

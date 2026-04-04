@@ -513,7 +513,7 @@ def _reduce_npc_response(
     """Shared reducer logic for NPC response events. Records a consequence."""
     payload = event["payload"]
     npc_id = payload.get("npc_id", "unknown_npc")
-    summary = payload.get("summary", f"NPC {consequence_type}")
+    summary = payload.get("summary") or payload.get("decision_summary") or f"NPC {consequence_type}"
     return [
         CoherenceMutation(
             action="record_consequence",

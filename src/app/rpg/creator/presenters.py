@@ -225,9 +225,9 @@ class CreatorStatePresenter:
     def present_npc_decision(self, decision: dict) -> dict:
         """Present an NPC decision result in a UI-safe format."""
         return {
-            "npc_id": decision.get("npc_id"),
-            "outcome": decision.get("outcome"),
-            "response_type": decision.get("response_type"),
-            "summary": decision.get("summary"),
-            "modifiers": list(decision.get("modifiers", [])),
+            "npc_id": decision.get("npc_id") or "unknown",
+            "outcome": decision.get("outcome") or "unknown",
+            "response_type": decision.get("response_type") or "unknown",
+            "summary": decision.get("summary") or "",
+            "modifiers": list(decision.get("modifiers") or []),
         }

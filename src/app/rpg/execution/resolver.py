@@ -273,6 +273,48 @@ class ActionResolver:
             return option.get(field, default)
         return getattr(option, field, default)
 
+    @staticmethod
+    def _get_option_field(option: Any, field: str, default: Any = None) -> Any:
+        """Get a field from an option dict or object."""
+        if isinstance(option, dict):
+            return option.get(field, default)
+        return getattr(option, field, default)
+
+    # ------------------------------------------------------------------
+    # Phase 7.4 — Invalid social interaction helper
+    # ------------------------------------------------------------------
+
+    def _build_invalid_social_result(
+        self, option: Any, mapped_action: dict, reason: str
+    ) -> ActionResolutionResult:
+        """Build an ActionResolutionResult for an invalid social interaction."""    
+        consequence = ActionConsequence(
+            consequence_id=f"invalid_social:{reason}",
+            consequence_type="action_blocked",
+            summary="Social interaction failed.",
+            event_type="action_blocked",
+            payload={"reason": reason},
+        )
+
+        resolved = ResolvedAction(
+            action_id=self._resolved_action_id(option),
+            option_id=self._get_option_field(option, "option_id"),
+            intent_type=mapped_action.get("intent_type"),
+            target_id=mapped_action.get("target_id"),
+            summary="Invalid social interaction",
+            outcome="blocked",
+            consequences=[consequence],
+            metadata={"reason": reason},
+        )
+
+        events = self._build_events([consequence], None)
+
+        return ActionResolutionResult(
+            resolved_action=resolved,
+            events=events,
+            trace={"error": reason},
+        )
+
     # ------------------------------------------------------------------
     # Phase 7.4 — NPC Agency social contact resolution
     # ------------------------------------------------------------------
@@ -291,6 +333,51 @@ class ActionResolver:
         Returns an ActionResolutionResult with NPC-driven events and
         NPC decision metadata in the trace.
         """
+        npc_id = mapped_action.get("target_id")
+
+        # Guard for unknown NPCs (Phase 7.4 safety)
+        if not npc_id:
+            return self._build_invalid_social_result(option, mapped_action, "missing_npc_id")
+
+        # Check coherence for known NPC
+        entity_facts = coherence_core.get_entity_facts(npc_id) if hasattr(coherence_core, "get_entity_facts") else None
+
+        if entity_facts is None:
+            return self._build_invalid_social_result(option, mapped_action, f"unknown_npc:{npc_id}")
+
+        # EXPLICIT fallback path when NPC agency engine is missing (Phase 7.4 safety)
+        if self.npc_agency_engine is None:
+            consequences = self.consequence_builder.build(
+                mapped_action, coherence_core, gm_state, evaluation=evaluation
+            )
+            transition = None
+
+            resolved_action = ResolvedAction(
+                action_id=self._resolved_action_id(option),
+                option_id=self._get_option_field(option, "option_id"),
+                intent_type=mapped_action.get("intent_type"),
+                target_id=mapped_action.get("target_id"),
+                summary="Fallback social interaction (no NPC agency engine)",
+                outcome="success",
+                consequences=consequences,
+                transition=transition,
+                metadata={
+                    "mapped_action": dict(mapped_action),
+                    "fallback": True,
+                },
+            )
+
+            events = self._build_events(consequences, transition)
+
+            return ActionResolutionResult(
+                resolved_action=resolved_action,
+                events=events,
+                trace={
+                    "fallback": True,
+                    "reason": "npc_agency_engine_missing",
+                },
+            )
+
         agency_result = self.npc_agency_engine.resolve_social_interaction(
             mapped_action=mapped_action,
             coherence_core=coherence_core,
@@ -299,6 +386,21 @@ class ActionResolver:
 
         npc_decision = agency_result.get("decision", {})
         npc_events = agency_result.get("events", [])
+
+        # Override evaluation outcome with NPC decision (Phase 7.4)
+        outcome_map = {
+            "agree": "success",
+            "assist": "success",
+            "refuse": "blocked",
+            "threaten": "blocked",
+            "delay": "partial",
+            "suspicious": "partial",
+            "redirect": "partial",
+        }
+
+        evaluation["outcome"] = outcome_map.get(
+            npc_decision.get("outcome"), evaluation.get("outcome")
+        )
 
         # Build ActionConsequence list from NPC events
         consequences: list[ActionConsequence] = []
