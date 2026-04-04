@@ -22,6 +22,8 @@ class PackMetadata:
     tags: list[str] = field(default_factory=list)
     requires_engine_version: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    pack_format_version: int = 0
+    engine_compatibility: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -33,6 +35,8 @@ class PackMetadata:
             "tags": list(self.tags),
             "requires_engine_version": self.requires_engine_version,
             "metadata": dict(self.metadata),
+            "pack_format_version": self.pack_format_version,
+            "engine_compatibility": dict(self.engine_compatibility),
         }
 
     @classmethod
@@ -46,6 +50,8 @@ class PackMetadata:
             tags=list(data.get("tags", [])),
             requires_engine_version=data.get("requires_engine_version", ""),
             metadata=dict(data.get("metadata", {})),
+            pack_format_version=int(data.get("pack_format_version", 0)),
+            engine_compatibility=dict(data.get("engine_compatibility", {})),
         )
 
 
