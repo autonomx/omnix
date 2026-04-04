@@ -39,6 +39,7 @@ class UXPayloadBuilder:
         panels = self._build_panel_descriptors(loop)
         highlights = self._build_highlights(loop)
         interaction = self._build_interaction_payload(loop)
+        encounter = self._build_encounter_payload(loop)
 
         payload = SceneUXPayload(
             payload_id=payload_id,
@@ -47,6 +48,7 @@ class UXPayloadBuilder:
             panels=panels,
             highlights=highlights,
             interaction=interaction,
+            encounter=encounter,
         )
         payload.trace = {"tick": tick}
         return payload
@@ -59,6 +61,7 @@ class UXPayloadBuilder:
         control_output = self._gather_control_output(loop)
         choices = self._build_choice_cards(control_output)
         interaction = self._build_interaction_payload(loop)
+        encounter = self._build_encounter_payload(loop)
 
         return ActionResultPayload(
             result_id=str(uuid.uuid4()),
@@ -67,6 +70,7 @@ class UXPayloadBuilder:
             updated_choices=choices,
             updated_panels=panels,
             interaction=interaction,
+            encounter=encounter,
             metadata={
                 "choice_id": action_result.get("choice_id"),
             },
@@ -202,3 +206,19 @@ class UXPayloadBuilder:
         if response and isinstance(response, dict):
             return dict(response)
         return {}
+
+    # ------------------------------------------------------------------
+    # Phase 8.2 — Encounter payload
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_encounter_payload(loop: Any) -> dict:
+        """Read current encounter state from the loop and present it."""
+        enc_ctrl = getattr(loop, "encounter_controller", None)
+        enc_presenter = getattr(loop, "encounter_presenter", None)
+        if enc_ctrl is None or enc_presenter is None:
+            return {}
+        state = enc_ctrl.get_active_encounter()
+        if state is None:
+            return {}
+        return enc_presenter.present_encounter(state)
