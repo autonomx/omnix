@@ -62,6 +62,20 @@ from app.rpg.memory.memory_manager import (
 )
 from app.rpg.memory.summarizer import MemorySummarizer
 
+# Phase 7.7 — Memory / Read-Model Layer
+from app.rpg.memory.models import (
+    JournalEntry,
+    RecapSnapshot,
+    CodexEntry,
+    CampaignMemorySnapshot,
+)
+from app.rpg.memory.journal_builder import JournalBuilder
+from app.rpg.memory.recap_builder import RecapBuilder as Phase77RecapBuilder
+from app.rpg.memory.codex_builder import CodexBuilder
+from app.rpg.memory.campaign_memory_builder import CampaignMemoryBuilder
+from app.rpg.memory.presenters import MemoryPresenter
+from app.rpg.memory.core import CampaignMemoryCore
+
 __all__ = [
     # Episodic (Layer 3)
     "Episode",
@@ -102,4 +116,15 @@ __all__ = [
     "MAX_EPISODES",
     "MAX_MEMORY_IN_PROMPT",
     "EPISODE_BUILD_THRESHOLD",
+    # Phase 7.7 — Memory / Read-Model Layer
+    "JournalEntry",
+    "RecapSnapshot",
+    "CodexEntry",
+    "CampaignMemorySnapshot",
+    "JournalBuilder",
+    "Phase77RecapBuilder",
+    "CodexBuilder",
+    "CampaignMemoryBuilder",
+    "MemoryPresenter",
+    "CampaignMemoryCore",
 ]
