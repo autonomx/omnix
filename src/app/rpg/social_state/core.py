@@ -57,3 +57,66 @@ class SocialStateCore:
     def deserialize_state(self, data: dict) -> None:
         """Restore social state from a serialized snapshot."""
         self.state = SocialState.from_dict(data)
+
+    # ------------------------------------------------------------------
+    # Phase 7.9 — Pack seed integration
+    # ------------------------------------------------------------------
+
+    def load_social_seed(self, payload: dict) -> None:
+        """Seed reputation, relationships, rumors, and alliances from a pack.
+
+        Uses the tracker/log APIs rather than raw dict mutation to
+        maintain the same invariants as event-driven updates.
+        """
+        from .models import (
+            AllianceRecord,
+            RelationshipStateRecord,
+            ReputationEdge,
+            RumorRecord,
+        )
+
+        for seed in payload.get("social_seeds", []):
+            if not isinstance(seed, dict):
+                continue
+            seed_type = seed.get("type", "")
+            if seed_type == "reputation":
+                edge = ReputationEdge(
+                    source_id=seed.get("source", ""),
+                    target_id=seed.get("target", ""),
+                    score=seed.get("value", 0.0),
+                    edge_type="reputation",
+                    metadata={"source": "pack_seed"},
+                )
+                self.reputation_graph.upsert_edge(self.state, edge)
+            elif seed_type == "relationship":
+                record = RelationshipStateRecord(
+                    relationship_id=f"{seed.get('entity_a', '')}_{seed.get('entity_b', '')}",
+                    source_id=seed.get("entity_a", ""),
+                    target_id=seed.get("entity_b", ""),
+                    trust=seed.get("trust", 0.0),
+                    fear=seed.get("fear", 0.0),
+                    hostility=seed.get("hostility", 0.0),
+                    respect=seed.get("respect", 0.0),
+                    metadata={"source": "pack_seed"},
+                )
+                self.relationship_tracker.upsert(self.state, record)
+            elif seed_type == "rumor":
+                self.rumor_log.seed_rumor(
+                    state=self.state,
+                    rumor_id=seed.get("rumor_id", ""),
+                    source_npc_id=seed.get("source_npc_id"),
+                    subject_id=seed.get("subject_id"),
+                    rumor_type=seed.get("rumor_type", "general"),
+                    summary=seed.get("content", ""),
+                    location=seed.get("location"),
+                )
+            elif seed_type == "alliance":
+                record = AllianceRecord(
+                    alliance_id=seed.get("alliance_id", ""),
+                    entity_a=seed.get("entity_a", ""),
+                    entity_b=seed.get("entity_b", ""),
+                    strength=seed.get("strength", 0.5),
+                    status=seed.get("status", "allied"),
+                    metadata={"source": "pack_seed"},
+                )
+                self.alliance_tracker.upsert(self.state, record)
