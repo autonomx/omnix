@@ -76,9 +76,13 @@ class NPCAgencyEngine:
                 primary_decision=decision.to_dict(),
                 coherence_core=coherence_core,
             )
-            result["group"] = group_result
-            # Merge group events into the primary event list
-            result["events"] = events + group_result.get("events", [])
+            # FIX #8: Do not emit empty group payloads
+            if not group_result.get("events"):
+                group_result = None
+            if group_result is not None:
+                result["group"] = group_result
+                # Merge group events into the primary event list
+                result["events"] = events + group_result.get("events", [])
 
         return result
 

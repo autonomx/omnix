@@ -62,6 +62,9 @@ class GroupDynamicsEngine:
         # 1. Find participants
         participants = self.participant_finder.find(primary_npc_id, coherence_core)
 
+        # FIX #5: Ensure deterministic ordering
+        participants = sorted(participants, key=lambda p: p.npc_id)
+
         # 2. Build crowd state
         crowd_state = self.crowd_builder.build(coherence_core)
 
@@ -69,6 +72,9 @@ class GroupDynamicsEngine:
         reactions = self.reaction_policy.decide(
             participants, primary_decision, crowd_state, coherence_core
         )
+
+        # FIX #5: Ensure deterministic ordering of reactions
+        reactions = sorted(reactions, key=lambda r: r.npc_id)
 
         # 4. Build rumor seeds
         rumor_seeds = self.rumor_builder.build(

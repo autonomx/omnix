@@ -253,8 +253,12 @@ class CreatorStatePresenter:
     def present_group_dynamics(self, group: dict) -> dict:
         """Present group dynamics in a UI-safe format."""
         participants = group.get("participants") or []
+        # FIX #7: Ensure deterministic ordering for UI stability
+        participants = sorted(participants, key=lambda p: p.get("npc_id", ""))
         crowd_state = group.get("crowd_state") or {}
         secondary_reactions = group.get("secondary_reactions") or []
+        # FIX #7: Ensure deterministic ordering for UI stability
+        secondary_reactions = sorted(secondary_reactions, key=lambda r: r.get("npc_id", ""))
         rumor_seeds = group.get("rumor_seeds") or []
 
         return {

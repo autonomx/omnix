@@ -46,7 +46,8 @@ class RumorSeedBuilder:
         primary_npc_id = primary_decision.get("npc_id")
         outcome = primary_decision.get("outcome", "unknown")
 
-        rumor_id = f"rumor:{reaction.npc_id}:{primary_npc_id or 'unknown'}"
+        location = location or "unknown"
+        rumor_id = f"rumor:{reaction.npc_id}:{primary_npc_id or 'unknown'}:{location}"
         summary = (
             f"{reaction.npc_id} spreads word about "
             f"{primary_npc_id or 'an NPC'}'s {outcome} response."

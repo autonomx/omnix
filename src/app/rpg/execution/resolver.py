@@ -398,6 +398,13 @@ class ActionResolver:
         # Phase 7.5 — Group dynamics result
         group_result = agency_result.get("group")
 
+        # FIX #2: Merge group events into the final emitted event list
+        group_events: list[dict] = []
+        if group_result:
+            group_events = group_result.get("events", []) or []
+
+        events = npc_events + group_events
+
         # Override evaluation outcome with NPC decision (Phase 7.4)
         outcome_map = {
             "agree": "success",
@@ -458,15 +465,19 @@ class ActionResolver:
             "constraint_evaluation": dict(constraint_evaluation),
             "evaluation": dict(evaluation),
             "npc_decision": dict(npc_decision),
-            "event_types": [e.get("type") for e in npc_events],
+            "event_types": [e.get("type") for e in events],
         }
         if group_result:
             trace["group_event_types"] = [
                 e.get("type") for e in group_result.get("events", [])
             ]
 
+        # FIX #3: Validate all events (Phase 7.5 safety)
+        for e in events:
+            self._validate_event(e)
+
         return ActionResolutionResult(
             resolved_action=resolved,
-            events=npc_events,
+            events=events,
             trace=trace,
         )
