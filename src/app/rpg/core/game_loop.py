@@ -66,6 +66,8 @@ from ..dialogue.core import DialogueCore
 from ..encounter.controller import EncounterController
 from ..encounter.resolver import EncounterResolver
 from ..encounter.presenter import EncounterPresenter
+from ..world_sim.controller import WorldSimController
+from ..world_sim.presenter import WorldSimPresenter
 
 
 class TickPhase(Enum):
@@ -338,6 +340,13 @@ class GameLoop:
         self.last_encounter_resolution: dict | None = None
         if "encounter_controller" not in self._snapshot_systems:
             self._snapshot_systems.append("encounter_controller")
+
+        # PHASE 8.3 — WORLD SIMULATION (deterministic background pressure engine)
+        self.world_sim_controller = WorldSimController()
+        self.world_sim_presenter = WorldSimPresenter()
+        self.last_world_sim_result: dict | None = None
+        if "world_sim_controller" not in self._snapshot_systems:
+            self._snapshot_systems.append("world_sim_controller")
 
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
@@ -1494,6 +1503,32 @@ class GameLoop:
                 tick=self._tick_count,
                 location=scene_summary.get("location"),
             )
+
+        # Phase 8.3 — Advance world simulation after all authoritative updates
+        self.last_world_sim_result = None
+        if hasattr(self, "world_sim_controller") and self.world_sim_controller is not None:
+            world_result = self.world_sim_controller.advance(
+                coherence_core=self.coherence_core,
+                social_state_core=self.social_state_core,
+                arc_control_controller=getattr(self, "arc_control_controller", None),
+                campaign_memory_core=getattr(self, "campaign_memory_core", None),
+                encounter_controller=getattr(self, "encounter_controller", None),
+                tick=self._tick_count,
+            )
+            self.last_world_sim_result = world_result.to_dict()
+
+            # Journal meaningful world simulation effects
+            if (
+                world_result.journal_payloads
+                and hasattr(self, "campaign_memory_core")
+                and self.campaign_memory_core is not None
+            ):
+                for journal_effect in world_result.journal_payloads:
+                    self.campaign_memory_core.record_world_sim_log_entry(
+                        world_effect=journal_effect,
+                        tick=self._tick_count,
+                        location=scene_summary.get("location"),
+                    )
 
         return {
             "ok": True,

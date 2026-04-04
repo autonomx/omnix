@@ -361,6 +361,30 @@ class EncounterController:
         return ctrl
 
     # ------------------------------------------------------------------
+    # Phase 8.3 — World simulation seed (read-only)
+    # ------------------------------------------------------------------
+
+    def build_world_sim_seed(self) -> dict:
+        """Return read-only encounter aftermath data for world sim seeding.
+
+        Exposes recent encounter mode/status and summary without mutating
+        encounter state.
+        """
+        state = self.active_encounter
+        if state is None:
+            return {}
+
+        return {
+            "mode": state.mode,
+            "status": state.status,
+            "location": state.metadata.get("location", ""),
+            "pressure": state.pressure,
+            "stakes": state.stakes,
+            "participant_count": len(state.participants),
+            "resolved": state.status in ("resolved", "finished"),
+        }
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 

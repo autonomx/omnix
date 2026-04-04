@@ -246,3 +246,52 @@ class ArcControlController:
             )
 
         return guidance
+
+    # ------------------------------------------------------------------
+    # Phase 8.3 — World simulation guidance (read-only)
+    # ------------------------------------------------------------------
+
+    def build_world_sim_guidance(self) -> dict:
+        """Return deterministic world-sim-level guidance from arc state.
+
+        Read-only — does not mutate arc state.  This guidance biases
+        world sim deterministically (e.g. pacing slow → pressure rises).
+        """
+        plan = self._pacing_plan_controller.get_active_plan(self.pacing_plans)
+        bias = self._scene_bias_controller.get_active_bias(self.scene_biases)
+
+        active_arcs = [
+            a.to_dict()
+            for a in self._arc_registry.list_arcs(self.arcs)
+            if a.status == "active"
+        ]
+
+        guidance: dict = {
+            "top_active_arcs": [a.get("arc_id", "") for a in active_arcs[:3]],
+            "reveal_pressure": "normal",
+            "pacing_pressure": "normal",
+            "escalation_bias": "neutral",
+            "preferred_thread_pressure_targets": [],
+        }
+
+        if plan is not None:
+            pacing_meta = plan.metadata or {}
+            guidance["pacing_pressure"] = pacing_meta.get(
+                "pacing_pressure", "normal"
+            )
+            guidance["escalation_bias"] = (
+                "escalate" if pacing_meta.get("should_escalate") else "neutral"
+            )
+
+        due_reveals = list(
+            self._reveal_scheduler.due_reveals(self.reveals)
+        )
+        if due_reveals:
+            guidance["reveal_pressure"] = "high"
+
+        if bias is not None:
+            targets = bias.metadata.get("preferred_thread_pressure_targets", [])
+            if isinstance(targets, list):
+                guidance["preferred_thread_pressure_targets"] = targets
+
+        return guidance

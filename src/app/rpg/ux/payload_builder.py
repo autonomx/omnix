@@ -40,6 +40,7 @@ class UXPayloadBuilder:
         highlights = self._build_highlights(loop)
         interaction = self._build_interaction_payload(loop)
         encounter = self._build_encounter_payload(loop)
+        world = self._build_world_payload(loop)
 
         payload = SceneUXPayload(
             payload_id=payload_id,
@@ -49,6 +50,7 @@ class UXPayloadBuilder:
             highlights=highlights,
             interaction=interaction,
             encounter=encounter,
+            world=world,
         )
         payload.trace = {"tick": tick}
         return payload
@@ -62,6 +64,7 @@ class UXPayloadBuilder:
         choices = self._build_choice_cards(control_output)
         interaction = self._build_interaction_payload(loop)
         encounter = self._build_encounter_payload(loop)
+        world = self._build_world_payload(loop)
 
         return ActionResultPayload(
             result_id=str(uuid.uuid4()),
@@ -71,6 +74,7 @@ class UXPayloadBuilder:
             updated_panels=panels,
             interaction=interaction,
             encounter=encounter,
+            world=world,
             metadata={
                 "choice_id": action_result.get("choice_id"),
             },
@@ -222,3 +226,24 @@ class UXPayloadBuilder:
         if state is None:
             return {}
         return enc_presenter.present_encounter(state)
+
+    # ------------------------------------------------------------------
+    # Phase 8.3 — World simulation payload
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_world_payload(loop: Any) -> dict:
+        """Read current world sim state from the loop and present it."""
+        ws_ctrl = getattr(loop, "world_sim_controller", None)
+        ws_presenter = getattr(loop, "world_sim_presenter", None)
+        if ws_ctrl is None or ws_presenter is None:
+            return {}
+        state = ws_ctrl.get_state()
+        presented = ws_presenter.present_state(state)
+        # Include last tick result summary if available
+        last_result = getattr(loop, "last_world_sim_result", None)
+        if last_result and isinstance(last_result, dict):
+            presented["last_tick_effect_count"] = len(
+                last_result.get("generated_effects", [])
+            )
+        return presented
