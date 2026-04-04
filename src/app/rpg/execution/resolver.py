@@ -1,4 +1,4 @@
-"""Phase 7.3 / 7.4 / 7.5 — Action Resolver.
+"""Phase 7.3 / 7.4 / 7.5 / 7.6 — Action Resolver.
 
 Main entry point for resolving a selected ChoiceOption into deterministic
 events. Does NOT directly call coherence methods — returns events only.
@@ -8,6 +8,9 @@ for decision-driven NPC interaction outcomes.
 
 Phase 7.5 addition: group dynamics metadata preserved in resolved action
 metadata and trace.
+
+Phase 7.6 addition: optional social_state_core parameter for passing
+persistent social state into NPC agency resolution.
 """
 
 from __future__ import annotations
@@ -66,6 +69,7 @@ class ActionResolver:
         option: Any,
         coherence_core: Any,
         gm_state: Any,
+        social_state_core: Any | None = None,
     ) -> ActionResolutionResult:
         """Resolve a player-selected option into an ActionResolutionResult.
 
@@ -99,6 +103,7 @@ class ActionResolver:
             return self._resolve_social_contact(
                 option, mapped_action, coherence_core, gm_state,
                 constraint_evaluation, evaluation,
+                social_state_core=social_state_core,
             )
 
         # 5. Build consequences
@@ -335,6 +340,7 @@ class ActionResolver:
         gm_state: Any,
         constraint_evaluation: dict,
         evaluation: dict,
+        social_state_core: Any | None = None,
     ) -> ActionResolutionResult:
         """Delegate social_contact resolution to NPC agency engine.
 
@@ -390,6 +396,7 @@ class ActionResolver:
             mapped_action=mapped_action,
             coherence_core=coherence_core,
             gm_state=gm_state,
+            social_state_core=social_state_core,
         )
 
         npc_decision = agency_result.get("decision", {})
