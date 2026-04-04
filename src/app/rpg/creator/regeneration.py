@@ -14,10 +14,13 @@ Phase 1.5 additions:
 
 from __future__ import annotations
 
+import logging
 import hashlib
 import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+logger = logging.getLogger(__name__)
 
 RegenerationTarget = Literal[
     "factions",
@@ -412,8 +415,8 @@ def regenerate_multiple_items(
 ) -> list[dict[str, Any]]:
     """Regenerate multiple entities safely.
 
-    Note: exceptions during individual item regeneration are silently
-    skipped to allow partial success — the caller decides how to handle
+    Note: exceptions during individual item regeneration are logged
+    and skipped to allow partial success — the caller decides how to handle
     incomplete results.
     """
     results: list[dict[str, Any]] = []
@@ -422,7 +425,11 @@ def regenerate_multiple_items(
             result = regenerate_fn(setup, target, item_id)
             if result:
                 results.append(result)
-        except Exception:  # noqa: BLE001 — intentional: partial success over total failure
+        except Exception as exc:  # noqa: BLE001 — intentional: partial success over total failure
+            logger.warning(
+                "Partial bulk regeneration failure",
+                extra={"target": target, "item_id": item_id, "error": str(exc)},
+            )
             continue
     return results
 

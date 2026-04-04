@@ -903,17 +903,20 @@ def regenerate_multiple_items_service(
         return {"success": False, "error": "Missing item_ids"}
 
     results: list[dict[str, Any]] = []
+    next_payload = dict(payload or {})
+
     for item_id in item_ids:
-        res = regenerate_single_item(payload, target, item_id)
+        res = regenerate_single_item(next_payload, target, item_id)
         if res.get("success"):
             results.append(res["after"])
-            # Update payload with each iteration so subsequent items use updated setup
             if res.get("updated_setup"):
-                payload = res["updated_setup"]
+                next_payload = res["updated_setup"]
 
     return {
         "success": True,
         "target": target,
         "count": len(results),
         "items": results,
+        "updated_setup": next_payload,
+        "health": compute_creator_health(next_payload),
     }

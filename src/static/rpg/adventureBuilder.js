@@ -338,12 +338,17 @@ var AdventureBuilder = (function () {
     // ── Step 3: World Seeds ──
 
     function _renderStep3(body) {
+        var factionSelCount = _selectionCount('factions');
+        var locationSelCount = _selectionCount('locations');
+        var npcSelCount = _selectionCount('npc_seeds');
+        var clearDisabled = state.selection.items.length ? '' : ' disabled';
         var undoDisabled = AdventureBuilderState.hasHistory(state) ? '' : ' disabled';
         var html = '<div class="ab-section">' +
             '<h4>Factions</h4>' +
             '<div class="ab-inline-actions">' +
                 '<button id="abRegenFactions" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Factions</button>' +
                 '<button id="abBulkRegenFactions" class="ab-btn ab-btn-secondary ab-btn-sm">\uD83D\uDD04 Bulk Regenerate Selected</button>' +
+                '<span class="ab-selection-count">' + factionSelCount + ' selected</span>' +
             '</div>' +
             '<div id="abFactionList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddFaction">+ Add Faction</button>' +
@@ -353,6 +358,7 @@ var AdventureBuilder = (function () {
             '<div class="ab-inline-actions">' +
                 '<button id="abRegenLocations" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Locations</button>' +
                 '<button id="abBulkRegenLocations" class="ab-btn ab-btn-secondary ab-btn-sm">\uD83D\uDD04 Bulk Regenerate Selected</button>' +
+                '<span class="ab-selection-count">' + locationSelCount + ' selected</span>' +
             '</div>' +
             '<div id="abLocationList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddLocation">+ Add Location</button>' +
@@ -362,11 +368,13 @@ var AdventureBuilder = (function () {
             '<div class="ab-inline-actions">' +
                 '<button id="abRegenNpcs" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate NPCs</button>' +
                 '<button id="abBulkRegenNpcs" class="ab-btn ab-btn-secondary ab-btn-sm">\uD83D\uDD04 Bulk Regenerate Selected</button>' +
+                '<span class="ab-selection-count">' + npcSelCount + ' selected</span>' +
             '</div>' +
             '<div id="abNpcList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddNpc">+ Add NPC</button>' +
             '</div>' +
             '<div class="ab-section ab-undo-section">' +
+            '<button id="abClearSelection" class="ab-btn ab-btn-secondary ab-btn-sm"' + clearDisabled + '>\u2715 Clear Selection</button>' +
             '<button id="abUndoRegen" class="ab-btn ab-btn-secondary ab-btn-sm"' + undoDisabled + '>\u21A9 Undo Last Regeneration</button>' +
             '</div>';
 
@@ -416,6 +424,13 @@ var AdventureBuilder = (function () {
         if (bulkLBtn) bulkLBtn.addEventListener('click', function () { _handleBulkRegenerate('locations'); });
         var bulkNBtn = body.querySelector('#abBulkRegenNpcs');
         if (bulkNBtn) bulkNBtn.addEventListener('click', function () { _handleBulkRegenerate('npc_seeds'); });
+
+        // Clear selection button binding
+        var clearSelBtn = body.querySelector('#abClearSelection');
+        if (clearSelBtn) clearSelBtn.addEventListener('click', function () {
+            _clearSelection();
+            _renderStep();
+        });
     }
 
     // -- Faction cards
@@ -569,6 +584,7 @@ var AdventureBuilder = (function () {
                 var id = cb.getAttribute('data-id');
                 if (target && id) {
                     _toggleSelection(target, id);
+                    _renderStep();
                 }
             });
         });
@@ -1329,25 +1345,39 @@ var AdventureBuilder = (function () {
         else sel.items.push(id);
     }
 
+    function _clearSelection() {
+        state.selection.items = [];
+        state.selection.activeTarget = null;
+    }
+
+    function _selectionCount(target) {
+        if (state.selection.activeTarget !== target) return 0;
+        return (state.selection.items || []).length;
+    }
+
     function _handleBulkRegenerate(target) {
         var ids = state.selection.items;
         if (!ids.length) { alert('No ' + target.replace('_', ' ') + ' selected'); return; }
-
         _readCurrentStepIntoSetup();
         _markDirty();
-
         AdventureBuilderApi.regenerateMultiple(target, ids, state.setup)
             .then(function (res) {
                 if (!res || !res.success) { alert((res && res.error) || 'Bulk regeneration failed.'); return; }
+                if (res.updated_setup) {
+                    state.setup = res.updated_setup;
+                    setup = state.setup;
+                }
+                if (res.health) {
+                    state.preview = state.preview || {};
+                    state.preview.health = res.health;
+                }
                 alert('Regenerated ' + res.count + ' ' + target.replace('_', ' '));
-                state.selection.items = [];
-                state.selection.activeTarget = null;
+                _clearSelection();
                 _renderStep();
+                _runValidation();
+                _runPreview();
             })
-            .catch(function (err) {
-                console.error('[AdventureBuilder] Bulk regeneration error:', err);
-                alert('Bulk regeneration failed.');
-            });
+            .catch(function () { alert('Bulk regeneration failed.'); });
     }
 
     // ── Phase 1.5 — Tone selector ────────────────────────────────────
