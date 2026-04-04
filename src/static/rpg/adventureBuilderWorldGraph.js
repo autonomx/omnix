@@ -275,7 +275,7 @@ var AdventureBuilderWorldGraph = (function () {
             html += '<button class="ab-wg-filter-btn' + active + '" data-filter="' + t + '">' + label + '</button>';
         });
         html += '</div>';
-        html += '<input type="text" class="ab-wg-search" placeholder="Search nodes\u2026" value="' + _esc(searchQuery) + '" />';
+        html += '<input type="text" class="ab-wg-search" placeholder="Search nodes\u2026" aria-label="Search graph nodes" value="' + _esc(searchQuery) + '" />';
         html += '</div>';
         container.innerHTML = html;
 
@@ -357,16 +357,20 @@ var AdventureBuilderWorldGraph = (function () {
             _esc(label) + ':</span> <span class="ab-wg-field-value">' + _esc(value) + '</span></div>';
     }
 
+    function _itemId(item) {
+        return item.npc_id || item.thread_id || item.faction_id || item.location_id || '';
+    }
+
     function _inspectorList(label, items) {
         if (!items || !items.length) return '';
         var html = '<div class="ab-wg-inspector-list"><span class="ab-wg-field-label">' + _esc(label) + ':</span><ul>';
         items.forEach(function (item) {
             if (typeof item === 'string') {
                 html += '<li>' + _esc(item) + '</li>';
-            } else if (item.name) {
-                html += '<li>' + _esc(item.name) + ' <span class="ab-wg-id">(' + _esc(item.npc_id || item.thread_id || '') + ')</span></li>';
-            } else if (item.title) {
-                html += '<li>' + _esc(item.title) + ' <span class="ab-wg-id">(' + _esc(item.thread_id || '') + ')</span></li>';
+            } else {
+                var display = item.name || item.title || _itemId(item);
+                var id = _itemId(item);
+                html += '<li>' + _esc(display) + (id ? ' <span class="ab-wg-id">(' + _esc(id) + ')</span>' : '') + '</li>';
             }
         });
         html += '</ul></div>';

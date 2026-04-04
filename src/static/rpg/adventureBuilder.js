@@ -851,6 +851,8 @@ var AdventureBuilder = (function () {
         }
     }
 
+    var _DEFAULT_NODE_CONFIG = { icon: '●', color: '#666' };
+
     function _renderInspectorEntityList(container, inspectorData) {
         if (!inspectorData || !inspectorData.entities) {
             container.innerHTML = '<div class="ab-wg-inspector-empty">No entity data available</div>';
@@ -866,7 +868,7 @@ var AdventureBuilder = (function () {
         html += '<h5>All Entities (' + ids.length + ')</h5>';
         ids.forEach(function (eid) {
             var e = entities[eid];
-            var nc = (typeof AdventureBuilderWorldGraph !== 'undefined' && AdventureBuilderWorldGraph.NODE_CONFIG[e.type]) || { icon: '●', color: '#666' };
+            var nc = (typeof AdventureBuilderWorldGraph !== 'undefined' && AdventureBuilderWorldGraph.NODE_CONFIG[e.type]) || _DEFAULT_NODE_CONFIG;
             html += '<div class="ab-wg-entity-list-item" data-id="' + _esc(eid) + '">' +
                 '<span class="ab-wg-entity-icon" style="color:' + nc.color + '">' + nc.icon + '</span>' +
                 '<span class="ab-wg-entity-name">' + _esc(e.name || e.title || eid) + '</span>' +
@@ -891,8 +893,9 @@ var AdventureBuilder = (function () {
     var _wgSearchQuery = '';
 
     function _fetchWorldInspection(callback) {
-        if (!state.worldInspection) {
-            state.worldInspection = { loading: false, graph: null, simulation: null, inspector: null, selectedNodeId: null, activeTab: 'worldgraph' };
+        var wi = state.worldInspection;
+        if (!wi || !wi.activeTab) {
+            state.worldInspection = { loading: false, graph: null, simulation: null, inspector: null, selectedNodeId: null, activeTab: 'summary' };
         }
         if (state.worldInspection.loading) return;
         state.worldInspection.loading = true;
