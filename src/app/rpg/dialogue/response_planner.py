@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 from .acts import (
-    SUPPORTED_DIALOGUE_ACTS,
     map_arc_pressure_to_reveal_level,
     map_npc_outcome_to_primary_act,
     map_relationship_to_stance,
@@ -241,7 +240,7 @@ class DialogueResponsePlanner:
 
         # Customize redirect line if we have a target
         if decision.primary_act == "redirect" and context.listener_id:
-            line = f"Talk to someone else about that."
+            line = "Talk to someone else about that."
 
         return {
             "line": line,
