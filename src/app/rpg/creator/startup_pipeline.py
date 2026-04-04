@@ -244,3 +244,38 @@ class StartupGenerationPipeline:
             "summary": opening.get("summary", ""),
             "metadata": {"source": "startup_pipeline"},
         }
+
+    # ── Targeted regeneration helpers ──────────────────────────────────
+    # Each method regenerates a single section while leaving the others
+    # untouched.  They all delegate to the core generate_* methods so
+    # the logic stays in one place.
+
+    def regenerate_factions(self, setup: "AdventureSetup") -> list[dict]:
+        """Generate faction seeds from the current setup context."""
+        world_frame = self.generate_world_frame(setup)
+        return self.generate_seed_factions(setup, world_frame)
+
+    def regenerate_locations(self, setup: "AdventureSetup") -> list[dict]:
+        """Generate location seeds from the current setup context."""
+        world_frame = self.generate_world_frame(setup)
+        return self.generate_seed_locations(setup, world_frame)
+
+    def regenerate_npc_seeds(self, setup: "AdventureSetup") -> list[dict]:
+        """Generate NPC seeds from the current setup context."""
+        world_frame = self.generate_world_frame(setup)
+        return self.generate_seed_npcs(setup, world_frame)
+
+    def regenerate_threads(self, setup: "AdventureSetup") -> list[dict]:
+        """Generate initial unresolved threads from the current setup context."""
+        opening = self.generate_opening_situation(setup, self.generate_world_frame(setup))
+        return self.generate_initial_threads(setup, opening)
+
+    def regenerate_opening(self, setup: "AdventureSetup") -> dict:
+        """Generate opening/start-state material only."""
+        world_frame = self.generate_world_frame(setup)
+        opening = self.generate_opening_situation(setup, world_frame)
+        resolved = self.resolve_starting_context(setup)
+        return {
+            "opening_situation": opening,
+            "resolved_context": resolved,
+        }

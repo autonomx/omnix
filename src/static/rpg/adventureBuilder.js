@@ -340,16 +340,25 @@ var AdventureBuilder = (function () {
     function _renderStep3(body) {
         var html = '<div class="ab-section">' +
             '<h4>Factions</h4>' +
+            '<div class="ab-inline-actions">' +
+                '<button id="abRegenFactions" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Factions</button>' +
+            '</div>' +
             '<div id="abFactionList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddFaction">+ Add Faction</button>' +
             '</div>' +
             '<div class="ab-section">' +
             '<h4>Locations</h4>' +
+            '<div class="ab-inline-actions">' +
+                '<button id="abRegenLocations" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Locations</button>' +
+            '</div>' +
             '<div id="abLocationList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddLocation">+ Add Location</button>' +
             '</div>' +
             '<div class="ab-section">' +
             '<h4>NPCs</h4>' +
+            '<div class="ab-inline-actions">' +
+                '<button id="abRegenNpcs" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate NPCs</button>' +
+            '</div>' +
             '<div id="abNpcList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddNpc">+ Add NPC</button>' +
             '</div>';
@@ -374,6 +383,16 @@ var AdventureBuilder = (function () {
             _markDirty();
             _renderNpcCards();
         });
+
+        // Regeneration button bindings for Step 3
+        var regenFactionsBtn = body.querySelector('#abRegenFactions');
+        if (regenFactionsBtn) regenFactionsBtn.addEventListener('click', function () { _handleRegenerate('factions'); });
+
+        var regenLocationsBtn = body.querySelector('#abRegenLocations');
+        if (regenLocationsBtn) regenLocationsBtn.addEventListener('click', function () { _handleRegenerate('locations'); });
+
+        var regenNpcsBtn = body.querySelector('#abRegenNpcs');
+        if (regenNpcsBtn) regenNpcsBtn.addEventListener('click', function () { _handleRegenerate('npc_seeds'); });
     }
 
     // -- Faction cards
@@ -577,6 +596,14 @@ var AdventureBuilder = (function () {
             '<div id="abReviewSummary" class="ab-review-block"></div>' +
             '</div>' +
             '<div class="ab-section">' +
+            '<h4>Targeted Regeneration</h4>' +
+            '<p class="ab-hint">Replace individual sections without losing your other work.</p>' +
+            '<div class="ab-inline-actions">' +
+                '<button id="abRegenOpening" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Opening</button>' +
+                '<button id="abRegenThreads" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Tensions</button>' +
+            '</div>' +
+            '</div>' +
+            '<div class="ab-section">' +
             '<h4>Validation</h4>' +
             '<div id="abReviewValidation" class="ab-review-block"></div>' +
             '</div>' +
@@ -592,6 +619,13 @@ var AdventureBuilder = (function () {
         _renderReviewValidation();
 
         _runPreview();
+
+        // Regeneration button bindings for Step 5
+        var regenOpeningBtn = body.querySelector('#abRegenOpening');
+        if (regenOpeningBtn) regenOpeningBtn.addEventListener('click', function () { _handleRegenerate('opening'); });
+
+        var regenThreadsBtn = body.querySelector('#abRegenThreads');
+        if (regenThreadsBtn) regenThreadsBtn.addEventListener('click', function () { _handleRegenerate('threads'); });
     }
 
     function _buildReviewSummary() {
@@ -813,6 +847,76 @@ var AdventureBuilder = (function () {
             if (pacingStyle) setup.pacing.style = pacingStyle;
             if (pacingDanger) setup.pacing.danger_level = pacingDanger;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Regeneration controller
+    // ─────────────────────────────────────────────────────────────────────────
+
+    var REGEN_TARGETS = [
+        ['abRegenFactions', 'factions'],
+        ['abRegenLocations', 'locations'],
+        ['abRegenNpcs', 'npc_seeds'],
+        ['abRegenOpening', 'opening'],
+        ['abRegenThreads', 'threads']
+    ];
+
+    var REGEN_LABELS = {
+        factions: '\u267B Regenerate Factions',
+        locations: '\u267B Regenerate Locations',
+        npc_seeds: '\u267B Regenerate NPCs',
+        opening: '\u267B Regenerate Opening',
+        threads: '\u267B Regenerate Tensions'
+    };
+
+    function _handleRegenerate(target) {
+        _readCurrentStepIntoSetup();
+        _markDirty();
+
+        state.regenerating = target;
+        _setRegenerationButtonsDisabled(true, target);
+
+        AdventureBuilderApi.regenerateSection(target, state.setup).then(function (res) {
+            if (!res || !res.success) {
+                alert((res && res.error) || 'Regeneration failed.');
+                return;
+            }
+
+            if (res.updated_setup) {
+                state.setup = res.updated_setup;
+                setup = state.setup;
+            }
+            state.validation = res.validation || null;
+            state.preview = {
+                ok: true,
+                preview: res.preview || null,
+                validation: res.validation || null,
+                resolved_context: res.resolved_context || null
+            };
+
+            _saveDraft();
+            _renderStep();
+            _runValidation();
+        }).catch(function () {
+            alert('Regeneration failed.');
+        }).finally(function () {
+            state.regenerating = null;
+            _setRegenerationButtonsDisabled(false, null);
+        });
+    }
+
+    function _setRegenerationButtonsDisabled(disabled, activeTarget) {
+        if (!overlayEl) return;
+        REGEN_TARGETS.forEach(function (pair) {
+            var btn = overlayEl.querySelector('#' + pair[0]);
+            if (!btn) return;
+            btn.disabled = !!disabled;
+            if (disabled && pair[1] === activeTarget) {
+                btn.textContent = '\u23F3 Regenerating\u2026';
+            } else {
+                btn.textContent = REGEN_LABELS[pair[1]];
+            }
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -390,3 +390,26 @@
     padding: 6px 14px;
 }
 .ab-btn-add:hover { background: rgba(100, 200, 100, 0.2); }
+
+/* ── Regeneration controls ───────────────────────────────────────── */
+
+.ab-inline-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 8px 0 12px;
+}
+
+.ab-btn-sm {
+    font-size: 0.78rem;
+    padding: 4px 12px;
+}
+
+.ab-info-banner {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.95rem;
+}

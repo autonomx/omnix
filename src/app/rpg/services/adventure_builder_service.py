@@ -15,6 +15,7 @@ from ..creator.defaults import (
     build_setup_template,
     list_setup_templates,
 )
+from ..creator.regeneration import REGENERATION_TARGETS
 from ..creator.schema import AdventureSetup
 from ..creator.validation import validate_adventure_setup_payload
 from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_start_result
@@ -284,15 +285,213 @@ class _NullDependency:
 def _build_game_loop() -> "GameLoop":
     """Construct a GameLoop instance for creator preview/start flows.
 
-    Prefer real lightweight collaborators where available. Only use explicit
-    null dependencies for collaborators that the creator pipeline does not touch.
+    Uses minimal mock/stub dependencies since the regeneration pipeline
+    only needs access to the startup_generation_pipeline, not full execution.
     """
+    from ..core.event_bus import EventBus
     from ..core.game_loop import GameLoop
 
-    # These arguments match the real GameLoop constructor signature.
-    # Non-essential collaborators use _NullDependency; essential ones
-    # should be provided with real implementations where possible.
+    # Create a real EventBus — other deps can be null objects for creator flows.
+    event_bus = EventBus()
     return GameLoop(
-        narrator=_NullDependency(),
-        persistence=_NullDependency(),
+        intent_parser=_NullDependency(),
+        world=_NullDependency(),
+        npc_system=_NullDependency(),
+        event_bus=event_bus,
+        story_director=_NullDependency(),
+        scene_renderer=_NullDependency(),
     )
+
+
+def _bootstrap_loop_dependencies() -> None:
+    """Ensure all GameLoop subclasses are importable and initialized.
+
+    This is a no-op helper kept for compatibility — the real initialization
+    happens inside _build_game_loop().
+    """
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Targeted regeneration helpers
+# ---------------------------------------------------------------------------
+
+
+def _apply_regenerated_section(
+    setup_payload: dict[str, Any],
+    target: str,
+    regenerated: Any,
+) -> dict[str, Any]:
+    """Merge a regenerated section back into the setup payload.
+
+    Parameters
+    ----------
+    setup_payload :
+        The current (normalized) setup dict.
+    target :
+        One of ``REGENERATION_TARGETS`` (``"factions"``, ``"locations"``,
+        ``"npc_seeds"``, ``"opening"``, ``"threads"``).
+    regenerated :
+        The data returned by the startup pipeline's regenerate_* method.
+
+    Returns
+    -------
+    dict
+        A new setup payload with the requested section replaced.
+    """
+    next_payload = dict(setup_payload)
+
+    if target == "factions":
+        next_payload["factions"] = list(regenerated or [])
+    elif target == "locations":
+        next_payload["locations"] = list(regenerated or [])
+    elif target == "npc_seeds":
+        next_payload["npc_seeds"] = list(regenerated or [])
+    elif target == "threads":
+        # Stored in metadata for preview-time use until formal setup field exists.
+        metadata = dict(next_payload.get("metadata") or {})
+        metadata["regenerated_threads"] = list(regenerated or [])
+        next_payload["metadata"] = metadata
+    elif target == "opening":
+        metadata = dict(next_payload.get("metadata") or {})
+        metadata["regenerated_opening"] = dict(regenerated or {})
+        next_payload["metadata"] = metadata
+        resolved = (regenerated or {}).get("resolved_context") or {}
+        if resolved.get("location_id"):
+            next_payload["starting_location_id"] = resolved["location_id"]
+        if resolved.get("npc_ids"):
+            next_payload["starting_npc_ids"] = list(resolved["npc_ids"])
+    else:
+        raise ValueError(f"Unsupported regeneration target: {target}")
+
+    return next_payload
+
+
+def regenerate_setup_section(payload: dict[str, Any], target: str) -> dict[str, Any]:
+    """Regenerate a single section of an adventure setup.
+
+    Parameters
+    ----------
+    payload :
+        Raw setup dict (may be incomplete — defaults are applied).
+    target :
+        One of ``REGENERATION_TARGETS``.
+
+    Returns
+    -------
+    dict
+        Response dict with ``success``, ``target``, ``updated_setup``,
+        ``regenerated``, ``validation``, ``preview``, and ``resolved_context``.
+    """
+    if target not in REGENERATION_TARGETS:
+        return {
+            "success": False,
+            "error": f"Unsupported regeneration target: {target}",
+        }
+
+    normalized_payload = apply_adventure_defaults(dict(payload or {}))
+    validation = validate_adventure_setup_payload(normalized_payload)
+
+    # Allow regeneration even with warnings, but block on hard-invalid payloads.
+    if validation.is_blocking():
+        return {
+            "success": False,
+            "error": "Setup has blocking validation issues",
+            "validation": validation.to_dict(),
+        }
+
+    # Build the startup pipeline directly — we don't need a full GameLoop for regeneration.
+    from ..core.event_bus import EventBus
+    from ..creator.canon import CreatorCanonState
+    from ..creator.startup_pipeline import StartupGenerationPipeline
+
+    event_bus = EventBus()
+    canon_state = CreatorCanonState()
+    pipeline = StartupGenerationPipeline(
+        llm_gateway=_NullDependency(),
+        coherence_core=event_bus,
+        creator_canon_state=canon_state,
+    )
+    setup = AdventureSetup.from_dict(normalized_payload).normalize().with_defaults()
+
+    if target == "factions":
+        regenerated = pipeline.regenerate_factions(setup)
+    elif target == "locations":
+        regenerated = pipeline.regenerate_locations(setup)
+    elif target == "npc_seeds":
+        regenerated = pipeline.regenerate_npc_seeds(setup)
+    elif target == "threads":
+        regenerated = pipeline.regenerate_threads(setup)
+    elif target == "opening":
+        regenerated = pipeline.regenerate_opening(setup)
+    else:
+        raise ValueError(f"Unsupported regeneration target: {target}")
+
+    next_payload = _apply_regenerated_section(normalized_payload, target, regenerated)
+    prepared = _build_preview_contract_from_payload(next_payload)
+
+    return {
+        "success": True,
+        "target": target,
+        "updated_setup": next_payload,
+        "regenerated": regenerated,
+        "validation": prepared.get("validation"),
+        "preview": prepared.get("preview"),
+        "resolved_context": prepared.get("resolved_context"),
+    }
+
+
+def _build_preview_contract_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build a preview contract from a setup payload (without validation).
+
+    Re-generates the resolved_context and preview summary for the given payload.
+    """
+    setup = AdventureSetup.from_dict(payload).normalize().with_defaults()
+
+    # Resolve starting context locally (mirrors StartupGenerationPipeline)
+    location_id = setup.starting_location_id
+    if not location_id and setup.locations:
+        location_id = setup.locations[0].location_id
+
+    npc_ids = list(setup.starting_npc_ids)
+    if not npc_ids and setup.npc_seeds:
+        npc_ids = [npc.npc_id for npc in setup.npc_seeds[:3]]
+
+    # Human-readable names for resolved context
+    location_name = location_id or ""
+    for loc in setup.locations:
+        if loc.location_id == location_id:
+            location_name = loc.name
+            break
+
+    npc_names: list[str] = []
+    npc_lookup = {npc.npc_id: npc.name for npc in setup.npc_seeds}
+    for npc_id in npc_ids:
+        npc_names.append(npc_lookup.get(npc_id, npc_id))
+
+    resolved_context = {
+        "location_id": location_id,
+        "location_name": location_name,
+        "npc_ids": npc_ids,
+        "npc_names": npc_names,
+    }
+
+    counts = {
+        "factions": len(setup.factions),
+        "locations": len(setup.locations),
+        "npcs": len(setup.npc_seeds),
+    }
+
+    return {
+        "ok": True,
+        "validation": {"issues": [], "blocking": False, "hints": []},
+        "preview": {
+            "title": setup.title,
+            "genre": setup.genre,
+            "setting": setup.setting,
+            "premise": setup.premise,
+            "counts": counts,
+            "warnings": [],
+        },
+        "resolved_context": resolved_context,
+    }

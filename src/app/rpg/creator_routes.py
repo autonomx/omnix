@@ -117,3 +117,29 @@ def start_adventure():
     except Exception:
         logger.exception("Failed to start adventure")
         return jsonify({"success": False, "error": "Failed to start adventure"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 6. POST /api/rpg/adventure/regenerate
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/regenerate", methods=["POST"])
+def regenerate_adventure_section():
+    """Regenerate a single section of the adventure setup."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    target = data.get("target")
+    payload = data.get("setup") or {}
+
+    if not target:
+        return jsonify({"success": False, "error": "Missing regeneration target"}), 400
+
+    try:
+        result = builder.regenerate_setup_section(payload, target)
+        status = 200 if result.get("success") else 400
+        return jsonify(result), status
+    except Exception:
+        logger.exception("Failed to regenerate setup section")
+        return jsonify({"success": False, "error": "Failed to regenerate setup section"}), 500

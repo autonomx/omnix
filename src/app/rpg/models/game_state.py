@@ -1,4 +1,4 @@
-from rpg.scene.scene import Scene
+from app.rpg.scene.scene import Scene
 
 
 class SceneOutput:

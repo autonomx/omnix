@@ -47,6 +47,7 @@ var AdventureBuilderState = (function () {
             loading: false,
             validating: false,
             previewing: false,
+            regenerating: null,
             dirty: false,
             templates: [],
             setup: _defaultSetup(),

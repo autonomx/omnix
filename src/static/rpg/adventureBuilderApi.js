@@ -45,6 +45,17 @@ var AdventureBuilderApi = (function () {
         }).then(_json);
     }
 
+    function regenerateSection(target, setup) {
+        return fetch(BASE + '/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target: target,
+                setup: setup
+            }),
+        }).then(_json);
+    }
+
     function startAdventure(payload) {
         return fetch(BASE + '/start', {
             method: 'POST',
@@ -58,6 +69,7 @@ var AdventureBuilderApi = (function () {
         buildTemplate: buildTemplate,
         validateSetup: validateSetup,
         previewSetup: previewSetup,
+        regenerateSection: regenerateSection,
         startAdventure: startAdventure,
     };
 })();
