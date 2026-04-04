@@ -556,3 +556,20 @@
     border: 1px solid rgba(255,255,255,0.08);
     line-height: 1.4;
 }
+
+/* Phase 1.5 — Health warnings */
+.ab-warning {
+    color: #ffb86c;
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+}
+
+.ab-health {
+    margin-top: 12px;
+}
+
+/* Phase 1.5 — Entity multi-select checkbox */
+.ab-entity-select {
+    margin-right: 8px;
+    cursor: pointer;
+}

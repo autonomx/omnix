@@ -61,7 +61,14 @@ var AdventureBuilderState = (function () {
                 preview: null,
                 modalOpen: false,
                 loading: false
-            }
+            },
+            /** Phase 1.5 — Multi-select, constraints, tone */
+            selection: {
+                items: [],
+                activeTarget: null
+            },
+            constraints: {},
+            tone: "neutral"
         };
     }
 

@@ -68,11 +68,32 @@ var AdventureBuilderApi = (function () {
             if (opts.mode) body.mode = opts.mode;
             if (opts.apply_token) body.apply_token = opts.apply_token;
             if (opts.apply_strategy) body.apply_strategy = opts.apply_strategy;
+            if (opts.tone) body.tone = opts.tone;
+            if (opts.constraints) body.constraints = opts.constraints;
         }
         return fetch(BASE + '/regenerate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
+        }).then(_json);
+    }
+
+    /**
+     * Regenerate multiple entities within a section (Phase 1.5).
+     *
+     * @param {string} target   - Section target (e.g. 'npc_seeds')
+     * @param {string[]} itemIds - Array of entity ids to regenerate
+     * @param {Object} setup    - Current setup payload
+     */
+    function regenerateMultiple(target, itemIds, setup) {
+        return fetch(BASE + '/regenerate-multiple', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target: target,
+                item_ids: itemIds,
+                setup: setup
+            }),
         }).then(_json);
     }
 
@@ -110,6 +131,7 @@ var AdventureBuilderApi = (function () {
         previewSetup: previewSetup,
         regenerateSection: regenerateSection,
         regenerateItem: regenerateItem,
+        regenerateMultiple: regenerateMultiple,
         startAdventure: startAdventure,
     };
 })();

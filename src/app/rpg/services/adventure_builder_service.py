@@ -23,6 +23,8 @@ from ..creator.regeneration import (
     REGENERATION_TARGETS,
     TARGET_ID_FIELD,
     TARGET_STRATEGIES,
+    apply_constraints_to_setup,
+    apply_tone_to_setup,
     build_regeneration_rationale,
     compute_item_diff,
     compute_section_diff,
@@ -552,6 +554,8 @@ def regenerate_setup_section(
     mode: str = "apply",
     apply_token: str | None = None,
     apply_strategy: str = "replace",
+    tone: str | None = None,
+    constraints: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Regenerate a single section of an adventure setup.
 
@@ -567,6 +571,10 @@ def regenerate_setup_section(
         Optional token from a previous preview to apply cached results.
     apply_strategy :
         One of ``"replace"``, ``"merge"``, ``"append"``.
+    tone :
+        Optional tone preset (Phase 1.5).
+    constraints :
+        Optional constraint dict (Phase 1.5).
 
     Returns
     -------
@@ -590,6 +598,11 @@ def regenerate_setup_section(
     effective_strategy = apply_strategy if apply_strategy in allowed else "replace"
 
     normalized_payload = apply_adventure_defaults(dict(payload or {}))
+
+    # Phase 1.5 — inject constraints and tone before generation
+    normalized_payload = apply_constraints_to_setup(normalized_payload, constraints)
+    normalized_payload = apply_tone_to_setup(normalized_payload, tone)
+
     validation = validate_adventure_setup_payload(normalized_payload)
 
     if validation.is_blocking():
@@ -656,6 +669,7 @@ def regenerate_setup_section(
         "preview": prepared.get("preview"),
         "resolved_context": prepared.get("resolved_context"),
         "rationale": build_regeneration_rationale(target, normalized_payload, regenerated),
+        "health": compute_creator_health(next_payload),
     }
 
 
@@ -768,6 +782,7 @@ def regenerate_single_item(
         "preview": prepared.get("preview"),
         "resolved_context": prepared.get("resolved_context"),
         "rationale": build_regeneration_rationale(target, normalized_payload, [after_item]),
+        "health": compute_creator_health(next_payload),
     }
 
 
@@ -824,4 +839,81 @@ def _build_preview_contract_from_payload(payload: dict[str, Any]) -> dict[str, A
             "warnings": [],
         },
         "resolved_context": resolved_context,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.5 — Creator health warnings
+# ---------------------------------------------------------------------------
+
+
+def compute_creator_health(setup_payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute health warnings for the current setup (Phase 1.5).
+
+    Returns a dict with ``warnings`` and a ``score`` (0-100).
+    """
+    warnings: list[str] = []
+
+    if len(_safe_list(setup_payload.get("npc_seeds"))) < 2:
+        warnings.append("Very few NPCs — consider adding more for richer interactions.")
+
+    if len(_safe_list(setup_payload.get("factions"))) == 0:
+        warnings.append("No factions defined — world may feel flat.")
+
+    if not setup_payload.get("starting_location_id"):
+        warnings.append("No starting location set.")
+
+    return {
+        "warnings": warnings,
+        "score": max(0, 100 - (len(warnings) * 20)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.5 — Bulk regeneration service
+# ---------------------------------------------------------------------------
+
+
+def regenerate_multiple_items_service(
+    payload: dict[str, Any],
+    target: str,
+    item_ids: list[str],
+) -> dict[str, Any]:
+    """Regenerate multiple entities within a section (Phase 1.5).
+
+    Regenerations are applied sequentially — each item is regenerated against
+    the setup produced by the previous item's regeneration, so results are
+    cumulative rather than independent.
+
+    Parameters
+    ----------
+    payload :
+        Raw setup dict.
+    target :
+        One of the entity targets.
+    item_ids :
+        List of entity ids to regenerate.
+
+    Returns
+    -------
+    dict
+        Response with ``success``, ``target``, ``count``, and ``items``.
+    """
+    if not item_ids:
+        return {"success": False, "error": "Missing item_ids"}
+
+    results: list[dict[str, Any]] = []
+    for item_id in item_ids:
+        res = regenerate_single_item(payload, target, item_id)
+        if res.get("success"):
+            results.append(res["after"])
+            # Update payload with each iteration so subsequent items use updated setup
+            if res.get("updated_setup"):
+                payload = res["updated_setup"]
+
+    return {
+        "success": True,
+        "target": target,
+        "count": len(results),
+        "items": results,
     }
