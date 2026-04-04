@@ -180,7 +180,9 @@ class CreatorStatePresenter:
         resolved_action = resolution.get("resolved_action", {})
         events = resolution.get("events", [])
         transition = resolved_action.get("transition")
-        return {
+        metadata = resolved_action.get("metadata", {})
+
+        result = {
             "title": "Action Result",
             "action": {
                 "action_id": resolved_action.get("action_id"),
@@ -197,6 +199,13 @@ class CreatorStatePresenter:
             "transition": self.present_scene_transition(transition),
         }
 
+        # Phase 7.4 — Include NPC decision summary if present
+        npc_decision = metadata.get("npc_decision")
+        if npc_decision:
+            result["npc_decision"] = self.present_npc_decision(npc_decision)
+
+        return result
+
     def present_scene_transition(self, transition: dict | None) -> dict | None:
         """Present a scene transition in a UI-safe format."""
         if transition is None:
@@ -207,4 +216,18 @@ class CreatorStatePresenter:
             "from_location": transition.get("from_location"),
             "to_location": transition.get("to_location"),
             "summary": transition.get("summary"),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 7.4 — NPC decision presenters
+    # ------------------------------------------------------------------
+
+    def present_npc_decision(self, decision: dict) -> dict:
+        """Present an NPC decision result in a UI-safe format."""
+        return {
+            "npc_id": decision.get("npc_id"),
+            "outcome": decision.get("outcome"),
+            "response_type": decision.get("response_type"),
+            "summary": decision.get("summary"),
+            "modifiers": list(decision.get("modifiers", [])),
         }
