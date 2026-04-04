@@ -23,7 +23,10 @@ class ArcControlPresenter:
                 "count": <int>,
             }
         """
-        items = [a.to_dict() for a in controller.arcs.values()]
+        items = sorted(
+            [a.to_dict() for a in controller.arcs.values()],
+            key=lambda x: x.get("arc_id", ""),
+        )
         return {
             "title": "Arcs",
             "items": items,
@@ -41,7 +44,10 @@ class ArcControlPresenter:
                 "count": <int>,
             }
         """
-        items = [r.to_dict() for r in controller.reveals.values()]
+        items = sorted(
+            [r.to_dict() for r in controller.reveals.values()],
+            key=lambda x: x.get("reveal_id", ""),
+        )
         return {
             "title": "Reveals",
             "items": items,
@@ -59,7 +65,10 @@ class ArcControlPresenter:
                 "count": <int>,
             }
         """
-        items = [p.to_dict() for p in controller.pacing_plans.values()]
+        items = sorted(
+            [p.to_dict() for p in controller.pacing_plans.values()],
+            key=lambda x: x.get("plan_id", ""),
+        )
         return {
             "title": "Pacing Plan",
             "items": items,
@@ -77,7 +86,10 @@ class ArcControlPresenter:
                 "count": <int>,
             }
         """
-        items = [b.to_dict() for b in controller.scene_biases.values()]
+        items = sorted(
+            [b.to_dict() for b in controller.scene_biases.values()],
+            key=lambda x: x.get("bias_id", ""),
+        )
         return {
             "title": "Scene Bias",
             "items": items,

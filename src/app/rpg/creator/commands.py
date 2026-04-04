@@ -540,6 +540,13 @@ class GMCommandProcessor:
         arc_id = command.get("arc_id", "")
         if not arc_id:
             return {"ok": False, "reason": "missing_arc_id"}
+
+        # Phase 7.8 tightening — validate arc exists
+        threads = coherence_core.query.get_active_threads() if hasattr(coherence_core, "query") else []
+        valid_ids = {t.get("thread_id") for t in threads}
+        if arc_id not in valid_ids:
+            return {"ok": False, "reason": "unknown_arc"}
+
         directive = PinThreadDirective(
             directive_id=f"gm:focus_arc:{arc_id}",
             directive_type="pin_thread",

@@ -51,9 +51,15 @@ class RevealScheduler:
     def due_reveals(
         self, state: dict[str, RevealDirectiveState]
     ) -> list[RevealDirectiveState]:
-        """Return reveals whose timing is ``"immediate"`` or ``"soon"``."""
-        return [
-            r
-            for r in state.values()
-            if r.timing in ("immediate", "soon") and r.status == "scheduled"
-        ]
+        """Return reveals whose timing is ``"immediate"`` or ``"soon"``.
+
+        Results are sorted by reveal_id to ensure deterministic ordering.
+        """
+        return sorted(
+            [
+                r
+                for r in state.values()
+                if r.timing in ("immediate", "soon") and r.status == "scheduled"
+            ],
+            key=lambda r: r.reveal_id,
+        )

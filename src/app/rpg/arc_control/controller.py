@@ -65,10 +65,11 @@ class ArcControlController:
         Call this once per tick, after coherence/social updates and
         before director processing.
         """
-        # 1. Merge thread-derived arcs (non-destructive)
+        # Phase 7.8 tightening — deterministic refresh pipeline
+        # 1. Rebuild structural arcs from coherence
         self._arc_registry.refresh_from_coherence(self.arcs, coherence_core)
 
-        # 2. Ingest GM directives into arc/reveal/pacing/bias state
+        # 2. Apply GM directives (steering overrides)
         self._directive_adapter.ingest_gm_state(
             gm_state,
             arc_state=self.arcs,
@@ -129,14 +130,15 @@ class ArcControlController:
 
     def serialize_state(self) -> dict:
         """Return a JSON-safe snapshot of all arc-control state."""
+        # Phase 7.8 tightening — defensive copy of arc state
         return {
-            "arcs": {k: v.to_dict() for k, v in self.arcs.items()},
-            "reveals": {k: v.to_dict() for k, v in self.reveals.items()},
+            "arcs": {k: dict(v.to_dict()) for k, v in self.arcs.items()},
+            "reveals": {k: dict(v.to_dict()) for k, v in self.reveals.items()},
             "pacing_plans": {
-                k: v.to_dict() for k, v in self.pacing_plans.items()
+                k: dict(v.to_dict()) for k, v in self.pacing_plans.items()
             },
             "scene_biases": {
-                k: v.to_dict() for k, v in self.scene_biases.items()
+                k: dict(v.to_dict()) for k, v in self.scene_biases.items()
             },
             "mode": self._mode,
         }

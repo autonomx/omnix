@@ -520,6 +520,8 @@ class GameLoop:
                 arc_ctx = self.arc_control_controller.build_director_context(
                     self.coherence_core
                 )
+                # Phase 7.8 tightening — defensive copy to avoid shared mutation
+                coherence_context = dict(coherence_context)
                 coherence_context["arc_control"] = arc_ctx
                 # Also push context to story director for guidance
                 if hasattr(self.story_director, "set_arc_control_context"):

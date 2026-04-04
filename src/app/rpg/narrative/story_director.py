@@ -19,7 +19,7 @@ Use EventBus for all cross-system communication.
 from typing import Any, Dict, List, Optional
 import copy
 
-from ..core.event_bus import Event, EventBus
+from ..core.event_bus import Event
 
 
 class StoryDirector:
@@ -94,7 +94,8 @@ class StoryDirector:
         a truth owner.  Arc control context includes active arcs,
         due reveals, active pacing plan, and active scene bias.
         """
-        self.arc_control_context = context
+        # Phase 7.8 tightening — freeze via copy to prevent external mutation
+        self.arc_control_context = dict(context) if context else None
 
     def process(
         self,

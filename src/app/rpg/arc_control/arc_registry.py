@@ -93,12 +93,27 @@ class ArcRegistry:
         state: dict[str, NarrativeArc],
         coherence_core: Any,
     ) -> None:
-        """Refresh the arc registry by merging thread-derived arcs.
+        """Refresh the arc registry by reconciling against coherence.
 
-        New arcs are inserted; existing arcs are *not* overwritten so
-        that explicit GM/creator steering is preserved.
+        New arcs are inserted; existing arcs have structural fields
+        refreshed while preserving steering fields (priority/status).
+        Arcs that no longer exist in coherence are removed.
         """
-        derived = self.build_from_threads(coherence_core)
-        for arc in derived:
-            if arc.arc_id not in state:
+        new_arcs = self.build_from_threads(coherence_core)
+        new_ids = {a.arc_id for a in new_arcs}
+
+        # Upsert current arcs
+        for arc in new_arcs:
+            if arc.arc_id in state:
+                # preserve steering fields (priority/status) but refresh structural fields
+                existing = state[arc.arc_id]
+                existing.title = arc.title
+                existing.related_thread_ids = arc.related_thread_ids
+                existing.focus_entity_ids = arc.focus_entity_ids
+            else:
                 state[arc.arc_id] = arc
+
+        # Remove arcs that no longer exist in coherence
+        to_remove = [arc_id for arc_id in state if arc_id not in new_ids]
+        for arc_id in to_remove:
+            del state[arc_id]

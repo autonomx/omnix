@@ -41,10 +41,17 @@ class SceneBiasController:
         """Annotate a choice-set payload with scene-bias hints.
 
         Adds a ``"scene_bias"`` section with focus hints.  Does **not**
-        remove or replace existing keys.
+        remove or replace existing keys.  A defensive copy is made to
+        prevent upstream mutation of the original choice_set.
         """
         if bias is None:
-            return choice_set
+            return dict(choice_set)
+
+        # Phase 7.8 tightening — copy before applying bias
+        choice_set = dict(choice_set)
+        options = list(choice_set.get("options", []))
+        options = [dict(o) for o in options]
+
         hints: dict[str, Any] = {
             "scene_type_bias": bias.scene_type_bias,
             "force_option_framing": bias.force_option_framing,
@@ -56,9 +63,9 @@ class SceneBiasController:
             hints["focus_thread_id"] = bias.focus_thread_id
         if bias.focus_npc_id:
             hints["focus_npc_id"] = bias.focus_npc_id
-        output = dict(choice_set)
-        output["scene_bias"] = hints
-        return output
+        choice_set["options"] = options
+        choice_set["scene_bias"] = hints
+        return choice_set
 
     def apply_to_director_context(
         self, bias: SceneBiasState | None, director_context: dict
