@@ -52,6 +52,8 @@ from ..execution.resolver import ActionResolver
 from ..social_state.core import SocialStateCore
 from ..memory.core import CampaignMemoryCore
 from ..memory.presenters import MemoryPresenter
+from ..arc_control.controller import ArcControlController
+from ..arc_control.presenters import ArcControlPresenter
 
 
 class TickPhase(Enum):
@@ -297,6 +299,12 @@ class GameLoop:
         if "campaign_memory_core" not in self._snapshot_systems:
             self._snapshot_systems.append("campaign_memory_core")
 
+        # PHASE 7.8 — ARC CONTROL (steering layer)
+        self.arc_control_controller = ArcControlController()
+        self.arc_control_presenter = ArcControlPresenter()
+        if "arc_control_controller" not in self._snapshot_systems:
+            self._snapshot_systems.append("arc_control_controller")
+
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
 
@@ -354,6 +362,10 @@ class GameLoop:
         # PHASE 7.7 — Propagate mode to campaign memory core
         if hasattr(self, "campaign_memory_core") and self.campaign_memory_core is not None:
             self.campaign_memory_core.set_mode(mode)
+
+        # PHASE 7.8 — Propagate mode to arc control controller
+        if hasattr(self, "arc_control_controller") and self.arc_control_controller is not None:
+            self.arc_control_controller.set_mode(mode)
 
         # PHASE 7.0 — propagate creator/GM aware state
         if hasattr(self, "story_director"):
@@ -498,6 +510,20 @@ class GameLoop:
             coherence_result = self._apply_coherence_updates(events)
             coherence_context = self._build_director_context()
             ctx.scene["coherence"] = coherence_result
+
+            # PHASE 7.8: Refresh arc control from coherence + GM state, then
+            # merge arc steering context into the director context.
+            if hasattr(self, "arc_control_controller") and self.arc_control_controller is not None:
+                self.arc_control_controller.refresh_from_state(
+                    self.coherence_core, self.gm_directive_state
+                )
+                arc_ctx = self.arc_control_controller.build_director_context(
+                    self.coherence_core
+                )
+                coherence_context["arc_control"] = arc_ctx
+                # Also push context to story director for guidance
+                if hasattr(self.story_director, "set_arc_control_context"):
+                    self.story_director.set_arc_control_context(arc_ctx)
 
             # PHASE 6.5: Check for high-severity contradictions only
             contradiction_scene = self._handle_high_severity_contradictions(
@@ -1391,3 +1417,31 @@ class GameLoop:
         if snapshot is None:
             return {"title": "Campaign Memory", "current_scene": {}, "active_threads": [], "resolved_threads": [], "major_consequences": [], "social_summary": {}, "canon_summary": {}}
         return self.memory_presenter.present_campaign_memory(snapshot.to_dict())
+
+    # ------------------------------------------------------------------
+    # Phase 7.8 — Arc Control Panels
+    # ------------------------------------------------------------------
+
+    def get_arc_panel(self) -> dict:
+        """Return a presenter-shaped arc panel."""
+        if not hasattr(self, "arc_control_controller") or self.arc_control_controller is None:
+            return {"title": "Arcs", "items": [], "count": 0}
+        return self.arc_control_presenter.present_arc_panel(self.arc_control_controller)
+
+    def get_reveal_panel(self) -> dict:
+        """Return a presenter-shaped reveal panel."""
+        if not hasattr(self, "arc_control_controller") or self.arc_control_controller is None:
+            return {"title": "Reveals", "items": [], "count": 0}
+        return self.arc_control_presenter.present_reveal_panel(self.arc_control_controller)
+
+    def get_pacing_plan_panel(self) -> dict:
+        """Return a presenter-shaped pacing-plan panel."""
+        if not hasattr(self, "arc_control_controller") or self.arc_control_controller is None:
+            return {"title": "Pacing Plan", "items": [], "count": 0}
+        return self.arc_control_presenter.present_pacing_plan_panel(self.arc_control_controller)
+
+    def get_scene_bias_panel(self) -> dict:
+        """Return a presenter-shaped scene-bias panel."""
+        if not hasattr(self, "arc_control_controller") or self.arc_control_controller is None:
+            return {"title": "Scene Bias", "items": [], "count": 0}
+        return self.arc_control_presenter.present_scene_bias_panel(self.arc_control_controller)

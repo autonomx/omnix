@@ -67,6 +67,9 @@ class StoryDirector:
         self._tick_count = 0
         self.mode: str = "live"
 
+        # Phase 7.8 — Arc steering context (bias/guidance, not authority)
+        self.arc_control_context: Dict[str, Any] | None = None
+
     def set_coherence_core(self, coherence_core: Any) -> None:
         self.coherence_core = coherence_core
 
@@ -83,6 +86,15 @@ class StoryDirector:
         reference so that the game loop can inject it if needed.
         """
         self._recovery_manager = recovery_manager
+
+    def set_arc_control_context(self, context: Dict[str, Any] | None) -> None:
+        """Accept arc steering context (Phase 7.8).
+
+        The director consumes this as guidance — it does NOT become
+        a truth owner.  Arc control context includes active arcs,
+        due reveals, active pacing plan, and active scene bias.
+        """
+        self.arc_control_context = context
 
     def process(
         self,
@@ -114,6 +126,7 @@ class StoryDirector:
         world_state = self._analyze(events, coherence_context=coherence_context)
         world_state["creator"] = self._build_creator_context()
         world_state["gm"] = self._build_gm_context()
+        world_state["arc_control"] = self._build_arc_guidance()
 
         # 2. Update story arcs
         active_arcs = self.arc_manager.update(world_state)
@@ -193,6 +206,16 @@ class StoryDirector:
         if self.gm_directive_state is None:
             return {}
         return self.gm_directive_state.build_director_context()
+
+    def _build_arc_guidance(self) -> Dict[str, Any]:
+        """Build arc steering guidance from the current arc control context.
+
+        Phase 7.8: The director consumes active arcs, due reveals, active
+        pacing plan, and active scene bias as guidance — not authority.
+        """
+        if self.arc_control_context is None:
+            return {}
+        return dict(self.arc_control_context)
 
     def _analyze(self, events: List[Event], coherence_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Analyze events to produce a world state summary.
