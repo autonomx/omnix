@@ -147,8 +147,8 @@ class NPCAgencyEngine:
                     social_state, npc_id, target_id
                 )
                 context_metadata["social_view"] = social_view
-            except (AttributeError, TypeError):
-                pass
+            except (AttributeError, TypeError) as e:
+                context_metadata["social_view_error"] = str(e)
 
         return NPCDecisionContext(
             npc_id=npc_id,

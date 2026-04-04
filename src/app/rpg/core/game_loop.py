@@ -1263,10 +1263,14 @@ class GameLoop:
 
         result_dict = result.to_dict()
         self._emit_action_resolution_events(result_dict)
-        self._apply_coherence_updates_from_action_result(result_dict)
 
-        # Phase 7.6 — Apply social state updates
-        self._apply_social_state_updates_from_action_result(result_dict)
+        # Phase 7.6 tightening — ensure identical event ordering for coherence and social state
+        raw_events = result_dict.get("events", [])
+        if raw_events:
+            if self.coherence_core is not None:
+                self.coherence_core.apply_events(raw_events)
+            if self.social_state_core is not None:
+                self.social_state_core.apply_events(raw_events)
 
         return {
             "ok": True,
@@ -1286,26 +1290,6 @@ class GameLoop:
                 )
             )
 
-    def _apply_coherence_updates_from_action_result(self, result: dict) -> dict:
-        """Extract events from an action result and apply them via CoherenceCore.
-
-        Re-uses the same event data rather than constructing new Event objects,
-        since coherence reducers accept both Event and dict forms.
-
-        TODO Phase 7.4: unify action event emission and coherence application into
-        a single authoritative event-processing path so emit/apply cannot diverge.
-        """
-        raw_events = result.get("events", [])
-        if raw_events and self.coherence_core is not None:
-            coherence_result = self.coherence_core.apply_events(raw_events)
-            return coherence_result.to_dict()
-        return {"events_applied": 0, "mutations": [], "contradictions": []}
-
-    def _apply_social_state_updates_from_action_result(self, result: dict) -> None:
-        """Phase 7.6 — Apply events from an action result to social state."""
-        raw_events = result.get("events", [])
-        if raw_events and self.social_state_core is not None:
-            self.social_state_core.apply_events(raw_events)
 
     # ------------------------------------------------------------------
     # Phase 7.6 — Social State Dashboard / Query

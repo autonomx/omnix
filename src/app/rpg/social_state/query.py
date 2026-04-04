@@ -20,7 +20,7 @@ class SocialStateQuery:
 
         tracker = RelationshipTracker()
         record = tracker.get(state, source_id, target_id)
-        return record.to_dict() if record is not None else None
+        return dict(record.to_dict()) if record is not None else None
 
     def get_reputation(
         self, state: SocialState, source_id: str, target_id: str
@@ -30,7 +30,7 @@ class SocialStateQuery:
 
         graph = ReputationGraph()
         edge = graph.get_edge(state, source_id, target_id)
-        return edge.to_dict() if edge is not None else None
+        return dict(edge.to_dict()) if edge is not None else None
 
     def get_active_rumors_for_subject(
         self, state: SocialState, subject_id: str
@@ -39,7 +39,7 @@ class SocialStateQuery:
         results = []
         for rumor in state.rumors.values():
             if rumor.active and rumor.subject_id == subject_id:
-                results.append(rumor.to_dict())
+                results.append(dict(rumor.to_dict()))
         return results
 
     def get_alliance(
@@ -50,7 +50,7 @@ class SocialStateQuery:
 
         tracker = AllianceTracker()
         record = tracker.get(state, entity_a, entity_b)
-        return record.to_dict() if record is not None else None
+        return dict(record.to_dict()) if record is not None else None
 
     def build_npc_social_view(
         self, state: SocialState, npc_id: str, target_id: str | None = None

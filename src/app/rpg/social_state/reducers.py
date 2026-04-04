@@ -9,6 +9,17 @@ from __future__ import annotations
 from typing import Any
 
 
+def _validate_event_schema(event: Any) -> bool:
+    """Ensure minimal event structure for safe reducer execution."""
+    if not isinstance(event, dict):
+        return False
+    if "type" not in event or not isinstance(event["type"], str):
+        return False
+    if "payload" in event and not isinstance(event["payload"], dict):
+        return False
+    return True
+
+
 def _get_event_type(event: Any) -> str:
     """Extract event type from an event dict or object."""
     if isinstance(event, dict):
@@ -179,6 +190,9 @@ _REDUCER_MAP: dict[str, Any] = {
 
 def reduce_event(core: Any, event: Any) -> None:
     """Route an event to the appropriate social state reducer."""
+    if not _validate_event_schema(event):
+        return  # fail-safe: ignore malformed events deterministically
+
     event_type = _get_event_type(event)
     reducer = _REDUCER_MAP.get(event_type)
     if reducer is not None:

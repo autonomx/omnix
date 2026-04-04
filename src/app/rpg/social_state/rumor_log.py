@@ -33,6 +33,9 @@ class RumorLog:
         metadata: dict | None = None,
     ) -> RumorRecord:
         """Create a new rumor from a seed event."""
+        if rumor_id in state.rumors:
+            return state.rumors[rumor_id]  # deterministic dedup
+
         rumor = RumorRecord(
             rumor_id=rumor_id,
             source_npc_id=source_npc_id,

@@ -56,6 +56,30 @@ class RelationshipTracker:
         if metadata:
             record.metadata.update(metadata)
         state.relationships[rel_id] = record
+
+        # Phase 7.6 tightening — symmetric drift (optional)
+        if metadata and metadata.get("symmetric", False):
+            reverse = self._get_or_create(state, target_id, source_id)
+            reverse.trust = self._clamp(reverse.trust + trust * 0.5)
+            reverse.hostility = self._clamp(reverse.hostility + hostility * 0.5)
+
+        return record
+
+    def _clamp(self, value: float) -> float:
+        """Clamp a value to [-1.0, 1.0]."""
+        return max(-1.0, min(1.0, value))
+
+    def _get_or_create(self, state: SocialState, source_id: str, target_id: str) -> RelationshipStateRecord:
+        """Get or create a relationship record for symmetric updates."""
+        rel_id = self._relationship_id(source_id, target_id)
+        record = state.relationships.get(rel_id)
+        if record is None:
+            record = RelationshipStateRecord(
+                relationship_id=rel_id,
+                source_id=source_id,
+                target_id=target_id,
+            )
+            state.relationships[rel_id] = record
         return record
 
     def _relationship_id(self, source_id: str, target_id: str) -> str:
