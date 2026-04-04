@@ -1,7 +1,10 @@
-"""Phase 7.3 — Action Resolver.
+"""Phase 7.3 / 7.4 — Action Resolver.
 
 Main entry point for resolving a selected ChoiceOption into deterministic
 events. Does NOT directly call coherence methods — returns events only.
+
+Phase 7.4 addition: social_contact resolution delegates to NPCAgencyEngine
+for decision-driven NPC interaction outcomes.
 """
 
 from __future__ import annotations
@@ -26,6 +29,12 @@ SUPPORTED_EVENT_TYPES = frozenset({
     "scene_transition_requested",
     "recap_requested",
     "action_blocked",
+    # Phase 7.4 — NPC agency response event types
+    "npc_response_agreed",
+    "npc_response_refused",
+    "npc_response_delayed",
+    "npc_response_threatened",
+    "npc_response_redirected",
 })
 
 
@@ -37,10 +46,12 @@ class ActionResolver:
         intent_mapper: Optional[ActionIntentMapper] = None,
         consequence_builder: Optional[ConsequenceBuilder] = None,
         transition_builder: Optional[SceneTransitionBuilder] = None,
+        npc_agency_engine: Optional[Any] = None,
     ) -> None:
         self.intent_mapper = intent_mapper or ActionIntentMapper()
         self.consequence_builder = consequence_builder or ConsequenceBuilder()
         self.transition_builder = transition_builder or SceneTransitionBuilder()
+        self.npc_agency_engine = npc_agency_engine
 
     def resolve_choice(
         self,
@@ -54,10 +65,11 @@ class ActionResolver:
             1. Map option intent
             2. Evaluate constraints
             3. Evaluate resolution
-            4. Build consequences (with evaluation context)
-            5. Build scene transition if needed (not for blocked actions)
-            6. Transform consequences + transition into event list
-            7. Return structured ActionResolutionResult
+            4. For social_contact: delegate to NPC agency engine (Phase 7.4)
+            5. Build consequences (with evaluation context)
+            6. Build scene transition if needed (not for blocked actions)
+            7. Transform consequences + transition into event list
+            8. Return structured ActionResolutionResult
         """
         # 1. Map intent
         mapped_action = self.intent_mapper.map_option(option)
@@ -70,7 +82,18 @@ class ActionResolver:
             mapped_action, coherence_core, gm_state, constraint_evaluation
         )
 
-        # 4. Build consequences
+        # 4. Phase 7.4 — Delegate social_contact to NPC agency
+        if (
+            evaluation.get("outcome") != "blocked"
+            and mapped_action.get("resolution_type") == "social_contact"
+            and self.npc_agency_engine is not None
+        ):
+            return self._resolve_social_contact(
+                option, mapped_action, coherence_core, gm_state,
+                constraint_evaluation, evaluation,
+            )
+
+        # 5. Build consequences
         consequences = self.consequence_builder.build(
             mapped_action=mapped_action,
             coherence_core=coherence_core,
@@ -78,7 +101,7 @@ class ActionResolver:
             evaluation=evaluation,
         )
 
-        # 5. Build transition (only for non-blocked actions)
+        # 6. Build transition (only for non-blocked actions)
         transition = None
         if evaluation.get("outcome") != "blocked":
             transition = self.transition_builder.build(
@@ -86,10 +109,10 @@ class ActionResolver:
                 coherence_core=coherence_core,
             )
 
-        # 6. Build events
+        # 7. Build events
         events = self._build_events(consequences, transition)
 
-        # 7. Assemble result
+        # 8. Assemble result
         option_id = self._get_field(option, "option_id", "unknown")
         action_id = self._resolved_action_id(option)
 
@@ -249,3 +272,81 @@ class ActionResolver:
         if isinstance(option, dict):
             return option.get(field, default)
         return getattr(option, field, default)
+
+    # ------------------------------------------------------------------
+    # Phase 7.4 — NPC Agency social contact resolution
+    # ------------------------------------------------------------------
+
+    def _resolve_social_contact(
+        self,
+        option: Any,
+        mapped_action: dict,
+        coherence_core: Any,
+        gm_state: Any,
+        constraint_evaluation: dict,
+        evaluation: dict,
+    ) -> ActionResolutionResult:
+        """Delegate social_contact resolution to NPC agency engine.
+
+        Returns an ActionResolutionResult with NPC-driven events and
+        NPC decision metadata in the trace.
+        """
+        agency_result = self.npc_agency_engine.resolve_social_interaction(
+            mapped_action=mapped_action,
+            coherence_core=coherence_core,
+            gm_state=gm_state,
+        )
+
+        npc_decision = agency_result.get("decision", {})
+        npc_events = agency_result.get("events", [])
+
+        # Build ActionConsequence list from NPC events
+        consequences: list[ActionConsequence] = []
+        for event in npc_events:
+            event_type = event.get("type", "unknown")
+            payload = event.get("payload", {})
+            npc_id = payload.get("npc_id", "unknown_npc")
+            consequences.append(
+                ActionConsequence(
+                    consequence_id=f"cons:npc:{event_type}:{npc_id}",
+                    consequence_type=event_type,
+                    summary=payload.get("summary", f"NPC {event_type}"),
+                    event_type=event_type,
+                    payload=dict(payload),
+                    metadata={"npc_decision": dict(npc_decision)},
+                )
+            )
+
+        # Use NPC decision outcome for the resolved action
+        npc_outcome = npc_decision.get("outcome", "success")
+
+        option_id = self._get_field(option, "option_id", "unknown")
+        action_id = self._resolved_action_id(option)
+
+        resolved = ResolvedAction(
+            action_id=action_id,
+            option_id=option_id,
+            intent_type=mapped_action.get("intent_type", "unknown"),
+            target_id=mapped_action.get("target_id"),
+            summary=mapped_action.get("summary", ""),
+            outcome=npc_outcome,
+            consequences=consequences,
+            transition=None,
+            metadata={
+                "mapped_action": dict(mapped_action),
+                "evaluation": dict(evaluation),
+                "npc_decision": dict(npc_decision),
+            },
+        )
+
+        return ActionResolutionResult(
+            resolved_action=resolved,
+            events=npc_events,
+            trace={
+                "mapped_action": dict(mapped_action),
+                "constraint_evaluation": dict(constraint_evaluation),
+                "evaluation": dict(evaluation),
+                "npc_decision": dict(npc_decision),
+                "event_types": [e.get("type") for e in npc_events],
+            },
+        )

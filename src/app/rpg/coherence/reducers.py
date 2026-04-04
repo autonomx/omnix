@@ -503,6 +503,62 @@ def reduce_action_blocked(state: Any, event: dict) -> List[CoherenceMutation]:
     ]
 
 
+# ------------------------------------------------------------------
+# Phase 7.4 — NPC agency response reducers
+# ------------------------------------------------------------------
+
+def _reduce_npc_response(
+    state: Any, event: dict, consequence_type: str
+) -> List[CoherenceMutation]:
+    """Shared reducer logic for NPC response events. Records a consequence."""
+    payload = event["payload"]
+    npc_id = payload.get("npc_id", "unknown_npc")
+    summary = payload.get("summary", f"NPC {consequence_type}")
+    return [
+        CoherenceMutation(
+            action="record_consequence",
+            target="consequence",
+            data={
+                "consequence_id": f"cons:{event.get('event_id') or consequence_type}:{npc_id}",
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+                "summary": summary,
+                "entity_ids": [npc_id],
+                "consequence_type": consequence_type,
+                "metadata": {
+                    "outcome": payload.get("outcome"),
+                    "modifiers": payload.get("modifiers", []),
+                },
+            },
+        )
+    ]
+
+
+def reduce_npc_response_agreed(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_response_agreed events from NPC agency."""
+    return _reduce_npc_response(state, event, "npc_response_agreed")
+
+
+def reduce_npc_response_refused(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_response_refused events from NPC agency."""
+    return _reduce_npc_response(state, event, "npc_response_refused")
+
+
+def reduce_npc_response_delayed(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_response_delayed events from NPC agency."""
+    return _reduce_npc_response(state, event, "npc_response_delayed")
+
+
+def reduce_npc_response_threatened(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_response_threatened events from NPC agency."""
+    return _reduce_npc_response(state, event, "npc_response_threatened")
+
+
+def reduce_npc_response_redirected(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_response_redirected events from NPC agency."""
+    return _reduce_npc_response(state, event, "npc_response_redirected")
+
+
 REDUCERS = {
     "scene_started": reduce_scene_started,
     "scene_generated": reduce_scene_generated,
@@ -524,6 +580,12 @@ REDUCERS = {
     "scene_transition_requested": reduce_scene_transition_requested,
     "recap_requested": reduce_recap_requested,
     "action_blocked": reduce_action_blocked,
+    # Phase 7.4 — NPC agency response event types
+    "npc_response_agreed": reduce_npc_response_agreed,
+    "npc_response_refused": reduce_npc_response_refused,
+    "npc_response_delayed": reduce_npc_response_delayed,
+    "npc_response_threatened": reduce_npc_response_threatened,
+    "npc_response_redirected": reduce_npc_response_redirected,
 }
 
 
