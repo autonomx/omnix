@@ -343,6 +343,7 @@ var AdventureBuilder = (function () {
             '<h4>Factions</h4>' +
             '<div class="ab-inline-actions">' +
                 '<button id="abRegenFactions" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Factions</button>' +
+                '<button id="abBulkRegenFactions" class="ab-btn ab-btn-secondary ab-btn-sm">\uD83D\uDD04 Bulk Regenerate Selected</button>' +
             '</div>' +
             '<div id="abFactionList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddFaction">+ Add Faction</button>' +
@@ -351,6 +352,7 @@ var AdventureBuilder = (function () {
             '<h4>Locations</h4>' +
             '<div class="ab-inline-actions">' +
                 '<button id="abRegenLocations" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Locations</button>' +
+                '<button id="abBulkRegenLocations" class="ab-btn ab-btn-secondary ab-btn-sm">\uD83D\uDD04 Bulk Regenerate Selected</button>' +
             '</div>' +
             '<div id="abLocationList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddLocation">+ Add Location</button>' +
@@ -359,6 +361,7 @@ var AdventureBuilder = (function () {
             '<h4>NPCs</h4>' +
             '<div class="ab-inline-actions">' +
                 '<button id="abRegenNpcs" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate NPCs</button>' +
+                '<button id="abBulkRegenNpcs" class="ab-btn ab-btn-secondary ab-btn-sm">\uD83D\uDD04 Bulk Regenerate Selected</button>' +
             '</div>' +
             '<div id="abNpcList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddNpc">+ Add NPC</button>' +
@@ -366,7 +369,11 @@ var AdventureBuilder = (function () {
             '<div class="ab-section ab-undo-section">' +
             '<button id="abUndoRegen" class="ab-btn ab-btn-secondary ab-btn-sm"' + undoDisabled + '>\u21A9 Undo Last Regeneration</button>' +
             '</div>';
+
+        // Phase 1.5 — Tone & constraints panels
         body.innerHTML = html;
+        _renderToneSelector(body);
+        _renderConstraints(body);
 
         _renderFactionCards();
         _renderLocationCards();
@@ -401,6 +408,14 @@ var AdventureBuilder = (function () {
         // Undo button binding for Step 3
         var undoBtn = body.querySelector('#abUndoRegen');
         if (undoBtn) undoBtn.addEventListener('click', function () { _handleUndo(); });
+
+        // Phase 1.5 — Bulk regeneration button bindings
+        var bulkFBtn = body.querySelector('#abBulkRegenFactions');
+        if (bulkFBtn) bulkFBtn.addEventListener('click', function () { _handleBulkRegenerate('factions'); });
+        var bulkLBtn = body.querySelector('#abBulkRegenLocations');
+        if (bulkLBtn) bulkLBtn.addEventListener('click', function () { _handleBulkRegenerate('locations'); });
+        var bulkNBtn = body.querySelector('#abBulkRegenNpcs');
+        if (bulkNBtn) bulkNBtn.addEventListener('click', function () { _handleBulkRegenerate('npc_seeds'); });
     }
 
     // -- Faction cards
@@ -411,8 +426,10 @@ var AdventureBuilder = (function () {
         if (!setup.factions.length) { list.innerHTML = '<p class="ab-muted">No factions yet.</p>'; return; }
         var html = '';
         setup.factions.forEach(function (f, i) {
+            var selChecked = (state.selection.activeTarget === 'factions' && state.selection.items.indexOf(f.faction_id || '') >= 0) ? ' checked' : '';
             html += '<div class="ab-entity-card" data-idx="' + i + '">' +
                 '<div class="ab-entity-header">' +
+                    '<input type="checkbox" class="ab-entity-select" data-type="factions" data-id="' + _esc(f.faction_id || '') + '"' + selChecked + '>' +
                     '<span class="ab-entity-summary">' + _esc(f.name || 'Unnamed Faction') + '</span>' +
                     '<button class="ab-entity-regen" data-type="factions" data-id="' + _esc(f.faction_id || '') + '" title="Regenerate this faction">\u267B</button>' +
                     '<button class="ab-entity-del" data-type="faction" data-idx="' + i + '">\uD83D\uDDD1\uFE0F</button>' +
@@ -430,6 +447,7 @@ var AdventureBuilder = (function () {
         _attachEntityToggle(list);
         _attachEntityDelete(list, 'faction');
         _attachEntityRegen(list);
+        _attachEntitySelect(list);
         _attachAutoSlug(list, 'Faction');
         _attachChipEditors(list);
     }
@@ -442,8 +460,10 @@ var AdventureBuilder = (function () {
         if (!setup.locations.length) { list.innerHTML = '<p class="ab-muted">No locations yet.</p>'; return; }
         var html = '';
         setup.locations.forEach(function (loc, i) {
+            var selChecked = (state.selection.activeTarget === 'locations' && state.selection.items.indexOf(loc.location_id || '') >= 0) ? ' checked' : '';
             html += '<div class="ab-entity-card" data-idx="' + i + '">' +
                 '<div class="ab-entity-header">' +
+                    '<input type="checkbox" class="ab-entity-select" data-type="locations" data-id="' + _esc(loc.location_id || '') + '"' + selChecked + '>' +
                     '<span class="ab-entity-summary">' + _esc(loc.name || 'Unnamed Location') + '</span>' +
                     '<button class="ab-entity-regen" data-type="locations" data-id="' + _esc(loc.location_id || '') + '" title="Regenerate this location">\u267B</button>' +
                     '<button class="ab-entity-del" data-type="location" data-idx="' + i + '">\uD83D\uDDD1\uFE0F</button>' +
@@ -461,6 +481,7 @@ var AdventureBuilder = (function () {
         _attachEntityToggle(list);
         _attachEntityDelete(list, 'location');
         _attachEntityRegen(list);
+        _attachEntitySelect(list);
         _attachAutoSlug(list, 'Location');
         _attachChipEditors(list);
     }
@@ -473,8 +494,10 @@ var AdventureBuilder = (function () {
         if (!setup.npc_seeds.length) { list.innerHTML = '<p class="ab-muted">No NPCs yet.</p>'; return; }
         var html = '';
         setup.npc_seeds.forEach(function (npc, i) {
+            var selChecked = (state.selection.activeTarget === 'npc_seeds' && state.selection.items.indexOf(npc.npc_id || '') >= 0) ? ' checked' : '';
             html += '<div class="ab-entity-card" data-idx="' + i + '">' +
                 '<div class="ab-entity-header">' +
+                    '<input type="checkbox" class="ab-entity-select" data-type="npc_seeds" data-id="' + _esc(npc.npc_id || '') + '"' + selChecked + '>' +
                     '<span class="ab-entity-summary">' + _esc(npc.name || 'Unnamed NPC') + '</span>' +
                     '<button class="ab-entity-regen" data-type="npc_seeds" data-id="' + _esc(npc.npc_id || '') + '" title="Regenerate this NPC">\u267B</button>' +
                     '<button class="ab-entity-del" data-type="npc" data-idx="' + i + '">\uD83D\uDDD1\uFE0F</button>' +
@@ -496,6 +519,7 @@ var AdventureBuilder = (function () {
         _attachEntityToggle(list);
         _attachEntityDelete(list, 'npc');
         _attachEntityRegen(list);
+        _attachEntitySelect(list);
         _attachAutoSlug(list, 'Npc');
         _attachChipEditors(list);
     }
@@ -533,6 +557,18 @@ var AdventureBuilder = (function () {
                 if (target && itemId) {
                     _readCurrentStepIntoSetup();
                     _handleRegenerateItem(target, itemId);
+                }
+            });
+        });
+    }
+
+    function _attachEntitySelect(container) {
+        container.querySelectorAll('.ab-entity-select').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var target = cb.getAttribute('data-type');
+                var id = cb.getAttribute('data-id');
+                if (target && id) {
+                    _toggleSelection(target, id);
                 }
             });
         });
@@ -637,6 +673,10 @@ var AdventureBuilder = (function () {
             '<div id="abReviewValidation" class="ab-review-block"></div>' +
             '</div>' +
             '<div class="ab-section">' +
+            '<h4>Health Check</h4>' +
+            '<div id="abHealthWarnings" class="ab-review-block"><p class="ab-muted">Analyzing setup\u2026</p></div>' +
+            '</div>' +
+            '<div class="ab-section">' +
             '<h4>Preview</h4>' +
             '<div id="abReviewPreview" class="ab-review-block"><p class="ab-muted">Loading preview\u2026</p></div>' +
             '</div>';
@@ -646,6 +686,13 @@ var AdventureBuilder = (function () {
         sumEl.innerHTML = _buildReviewSummary();
 
         _renderReviewValidation();
+
+        // Phase 1.5 — render inline health warnings from current setup
+        var healthEl = body.querySelector('#abHealthWarnings');
+        if (healthEl) {
+            var healthHtml = _renderHealthWarnings({ health: _computeClientHealth() });
+            healthEl.innerHTML = healthHtml || '<p class="ab-success">\u2705 Setup looks good!</p>';
+        }
 
         _runPreview();
 
@@ -758,6 +805,10 @@ var AdventureBuilder = (function () {
                 }
             });
             html += '</div>';
+        }
+        // Phase 1.5 — show health warnings if available
+        if (pr.health) {
+            html += _renderHealthWarnings(pr);
         }
         el.innerHTML = html;
     }
@@ -917,7 +968,11 @@ var AdventureBuilder = (function () {
         _setRegenerationButtonsDisabled(true, target);
 
         // Phase 1.4A: Always start with preview mode
-        AdventureBuilderApi.regenerateSection(target, state.setup, { mode: 'preview' }).then(function (res) {
+        AdventureBuilderApi.regenerateSection(target, state.setup, {
+            mode: 'preview',
+            tone: state.tone || null,
+            constraints: state.constraints || null
+        }).then(function (res) {
             if (!res || !res.success) {
                 alert((res && res.error) || 'Regeneration failed.');
                 state.regenerating = null;
@@ -1066,7 +1121,9 @@ var AdventureBuilder = (function () {
         AdventureBuilderApi.regenerateSection(target, state.setup, {
             mode: 'apply',
             apply_token: applyToken,
-            apply_strategy: strategy
+            apply_strategy: strategy,
+            tone: state.tone || null,
+            constraints: state.constraints || null
         }).then(function (res) {
             if (!res || !res.success) {
                 // Roll back the undo entry we just pushed
@@ -1084,7 +1141,8 @@ var AdventureBuilder = (function () {
                 ok: true,
                 preview: res.preview || null,
                 validation: res.validation || null,
-                resolved_context: res.resolved_context || null
+                resolved_context: res.resolved_context || null,
+                health: res.health || null
             };
 
             // Clear regen state
@@ -1184,7 +1242,8 @@ var AdventureBuilder = (function () {
                 ok: true,
                 preview: res.preview || null,
                 validation: res.validation || null,
-                resolved_context: res.resolved_context || null
+                resolved_context: res.resolved_context || null,
+                health: res.health || null
             };
 
             _saveDraft();
@@ -1255,6 +1314,130 @@ var AdventureBuilder = (function () {
         _saveDraft();
         _renderStep();
         _runValidation();
+    }
+
+    // ── Phase 1.5 — Multi-select & bulk regeneration ──────────────────
+
+    function _toggleSelection(target, id) {
+        var sel = state.selection;
+        if (sel.activeTarget !== target) {
+            sel.items = [];
+            sel.activeTarget = target;
+        }
+        var idx = sel.items.indexOf(id);
+        if (idx >= 0) sel.items.splice(idx, 1);
+        else sel.items.push(id);
+    }
+
+    function _handleBulkRegenerate(target) {
+        var ids = state.selection.items;
+        if (!ids.length) { alert('No items selected'); return; }
+
+        _readCurrentStepIntoSetup();
+        _markDirty();
+
+        AdventureBuilderApi.regenerateMultiple(target, ids, state.setup)
+            .then(function (res) {
+                if (!res || !res.success) { alert((res && res.error) || 'Bulk regeneration failed.'); return; }
+                alert('Regenerated ' + res.count + ' items');
+                state.selection.items = [];
+                state.selection.activeTarget = null;
+                _renderStep();
+            })
+            .catch(function () { alert('Bulk regeneration failed.'); });
+    }
+
+    // ── Phase 1.5 — Tone selector ────────────────────────────────────
+
+    function _renderToneSelector(container) {
+        var tones = ['neutral', 'grim', 'heroic', 'chaotic'];
+        var opts = '';
+        tones.forEach(function (t) {
+            var sel = (t === state.tone) ? ' selected' : '';
+            opts += '<option value="' + t + '"' + sel + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>';
+        });
+        var html = '<div class="ab-section">' +
+            '<h4>Tone</h4>' +
+            '<p class="ab-hint">Set an overall narrative tone for regenerated content.</p>' +
+            '<select id="abTone" class="ab-select">' + opts + '</select>' +
+            '</div>';
+        container.insertAdjacentHTML('beforeend', html);
+
+        var sel = container.querySelector('#abTone');
+        if (sel) {
+            sel.addEventListener('change', function (e) {
+                state.tone = e.target.value;
+            });
+        }
+    }
+
+    // ── Phase 1.5 — Constraint editor ─────────────────────────────────
+
+    function _renderConstraints(container) {
+        var c = state.constraints || {};
+        var factionChecked = c.require_factions ? ' checked' : '';
+        var conflictChecked = (c.require_conflict !== false) ? ' checked' : '';
+        var density = c.npc_density || 'medium';
+
+        var densityOpts = '';
+        ['low', 'medium', 'high'].forEach(function (d) {
+            var sel = (d === density) ? ' selected' : '';
+            densityOpts += '<option value="' + d + '"' + sel + '>' + d.charAt(0).toUpperCase() + d.slice(1) + '</option>';
+        });
+
+        var html = '<div class="ab-section">' +
+            '<h4>Constraints</h4>' +
+            '<p class="ab-hint">Adjust generation constraints for the next regeneration.</p>' +
+            '<label class="ab-checkbox-label"><input type="checkbox" id="abConstraintFaction"' + factionChecked + '> Require factions</label>' +
+            '<label class="ab-checkbox-label"><input type="checkbox" id="abConstraintConflict"' + conflictChecked + '> Require conflict</label>' +
+            '<label class="ab-label">NPC Density <select id="abConstraintDensity" class="ab-select">' + densityOpts + '</select></label>' +
+            '</div>';
+        container.insertAdjacentHTML('beforeend', html);
+
+        var fEl = container.querySelector('#abConstraintFaction');
+        if (fEl) fEl.addEventListener('change', function (e) { state.constraints.require_factions = e.target.checked; });
+
+        var cEl = container.querySelector('#abConstraintConflict');
+        if (cEl) cEl.addEventListener('change', function (e) { state.constraints.require_conflict = e.target.checked; });
+
+        var dEl = container.querySelector('#abConstraintDensity');
+        if (dEl) dEl.addEventListener('change', function (e) { state.constraints.npc_density = e.target.value; });
+    }
+
+    // ── Phase 1.5 — Health warnings display ──────────────────────────
+
+    function _renderHealthWarnings(res) {
+        if (!res || !res.health) return '';
+        var health = res.health;
+        var html = '<div class="ab-health">';
+        if (health.warnings && health.warnings.length) {
+            health.warnings.forEach(function (w) {
+                html += '<div class="ab-warning">\u26A0\uFE0F ' + _esc(w) + '</div>';
+            });
+        }
+        html += '<div class="ab-hint">Health score: ' + (health.score != null ? health.score : '—') + '/100</div>';
+        html += '</div>';
+        return html;
+    }
+
+    // ── Phase 1.5 — Client-side health check (mirrors backend) ───────
+
+    function _computeClientHealth() {
+        var s = state.setup || {};
+        var warnings = [];
+        if ((s.npc_seeds || []).length < 2) {
+            warnings.push('Very few NPCs — consider adding more for richer interactions.');
+        }
+        if ((s.factions || []).length === 0) {
+            warnings.push('No factions defined — world may feel flat.');
+        }
+        if (!s.starting_location_id) {
+            warnings.push('No starting location set.');
+        }
+        return {
+            warnings: warnings,
+            score: Math.max(0, 100 - (warnings.length * 20))
+        };
     }
 
     function _setRegenerationButtonsDisabled(disabled, activeTarget) {

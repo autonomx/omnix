@@ -6,6 +6,10 @@ Phase 1.4 additions:
 - Replace vs merge strategies
 - Single-item regeneration support
 - Apply-token generation for safer workflows
+
+Phase 1.5 additions:
+- Tone presets and constraint injection
+- Bulk regeneration helper
 """
 
 from __future__ import annotations
@@ -29,6 +33,15 @@ REGENERATION_TARGETS: set[str] = {
     "npc_seeds",
     "opening",
     "threads",
+}
+
+# Phase 1.5 — Tone presets and default constraints
+TONE_PRESETS: set[str] = {"neutral", "grim", "heroic", "chaotic"}
+
+DEFAULT_CONSTRAINTS: dict[str, Any] = {
+    "require_factions": False,
+    "require_conflict": True,
+    "npc_density": "medium",  # low / medium / high
 }
 
 RegenerationMode = Literal["preview", "apply"]
@@ -357,6 +370,56 @@ def merge_thread_lists(
                 result.append(item)
                 existing_ids.add(tid)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.5 — Constraint & tone injection helpers
+# ---------------------------------------------------------------------------
+
+
+def apply_constraints_to_setup(setup: dict[str, Any], constraints: dict[str, Any] | None) -> dict[str, Any]:
+    """Lightweight constraint injector (Phase 1.5)."""
+    setup = dict(setup or {})
+    meta = dict(setup.get("metadata") or {})
+    meta["constraints"] = constraints or {}
+    setup["metadata"] = meta
+    return setup
+
+
+def apply_tone_to_setup(setup: dict[str, Any], tone: str | None) -> dict[str, Any]:
+    """Inject tone preset into setup metadata (Phase 1.5)."""
+    if not tone:
+        return setup
+    if tone not in TONE_PRESETS:
+        return setup
+    setup = dict(setup or {})
+    meta = dict(setup.get("metadata") or {})
+    meta["tone"] = tone
+    setup["metadata"] = meta
+    return setup
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.5 — Bulk regeneration helper
+# ---------------------------------------------------------------------------
+
+
+def regenerate_multiple_items(
+    setup: dict[str, Any],
+    target: str,
+    item_ids: list[str],
+    regenerate_fn: Any,
+) -> list[dict[str, Any]]:
+    """Regenerate multiple entities safely."""
+    results: list[dict[str, Any]] = []
+    for item_id in item_ids:
+        try:
+            result = regenerate_fn(setup, target, item_id)
+            if result:
+                results.append(result)
+        except Exception:
+            continue
+    return results
 
 
 def build_regeneration_rationale(target: str, setup: dict[str, Any], regenerated: Any) -> str:

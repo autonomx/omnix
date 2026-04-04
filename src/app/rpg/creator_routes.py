@@ -139,6 +139,8 @@ def regenerate_adventure_section():
     mode = data.get("mode", "apply")
     apply_token = data.get("apply_token")
     apply_strategy = data.get("apply_strategy", "replace")
+    tone = data.get("tone")
+    constraints = data.get("constraints")
 
     if not target:
         return jsonify({"success": False, "error": "Missing regeneration target"}), 400
@@ -150,6 +152,8 @@ def regenerate_adventure_section():
             mode=mode,
             apply_token=apply_token,
             apply_strategy=apply_strategy,
+            tone=tone,
+            constraints=constraints,
         )
         status = 200 if result.get("success") else 400
         return jsonify(result), status
@@ -185,3 +189,30 @@ def regenerate_adventure_item():
     except Exception:
         logger.exception("Failed to regenerate single item")
         return jsonify({"success": False, "error": "Failed to regenerate single item"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 8. POST /api/rpg/adventure/regenerate-multiple  (Phase 1.5)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/regenerate-multiple", methods=["POST"])
+def regenerate_multiple_items():
+    """Regenerate multiple entities within a section of the adventure setup."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    target = data.get("target")
+    item_ids = data.get("item_ids") or []
+    payload = data.get("setup") or {}
+
+    if not target:
+        return jsonify({"success": False, "error": "Missing regeneration target"}), 400
+
+    try:
+        result = builder.regenerate_multiple_items_service(payload, target, item_ids)
+        status = 200 if result.get("success") else 400
+        return jsonify(result), status
+    except Exception:
+        logger.exception("Failed to regenerate multiple items")
+        return jsonify({"success": False, "error": "Failed to regenerate multiple items"}), 500
