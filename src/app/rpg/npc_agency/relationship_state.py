@@ -1,6 +1,8 @@
-"""Phase 7.4 — Relationship State Builder.
+"""Phase 7.4 / 7.6 — Relationship State Builder.
 
 Derives an NPCRelationshipView from coherence facts and recent consequences.
+Phase 7.6: when persistent social state is available, uses it as primary
+source instead of shallow coherence-derived inference.
 Keeps logic simple and deterministic — no randomness, no LLM calls.
 """
 
@@ -19,8 +21,23 @@ class RelationshipStateBuilder:
         npc_id: str,
         target_id: str | None,
         coherence_core: Any,
+        social_state_core: Any | None = None,
     ) -> NPCRelationshipView:
-        """Derive relationship view from coherence facts and consequences."""
+        """Derive relationship view from persistent social state or coherence.
+
+        Phase 7.6: if social_state_core is provided and contains a
+        persistent relationship for this NPC pair, use it as primary.
+        Otherwise fall back to coherence-derived inference.
+        """
+        # Phase 7.6 — try persistent social state first
+        if social_state_core is not None and target_id is not None:
+            persistent = self._from_persistent_social_state(
+                npc_id, target_id, social_state_core
+            )
+            if persistent is not None:
+                return persistent
+
+        # Fallback: derive from coherence
         relationship_fact = self._extract_relationship_fact(
             npc_id, target_id, coherence_core
         )
@@ -34,6 +51,28 @@ class RelationshipStateBuilder:
             hostility=self._derive_hostility(relationship_fact, recent_consequences),
             respect=self._derive_respect(relationship_fact, recent_consequences),
         )
+
+    def _from_persistent_social_state(
+        self, npc_id: str, target_id: str, social_state_core: Any
+    ) -> NPCRelationshipView | None:
+        """Try to build a view from persistent social state."""
+        try:
+            query = social_state_core.get_query()
+            state = social_state_core.get_state()
+            rel = query.get_relationship(state, npc_id, target_id)
+            if rel is not None:
+                return NPCRelationshipView(
+                    npc_id=npc_id,
+                    target_id=target_id,
+                    trust=float(rel.get("trust", 0.0)),
+                    fear=float(rel.get("fear", 0.0)),
+                    hostility=float(rel.get("hostility", 0.0)),
+                    respect=float(rel.get("respect", 0.0)),
+                    metadata={"source": "persistent_social_state"},
+                )
+        except (AttributeError, TypeError):
+            pass
+        return None
 
     def _extract_relationship_fact(
         self, npc_id: str, target_id: str | None, coherence_core: Any
