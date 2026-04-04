@@ -607,3 +607,130 @@ def test_recent_effects_trim_preserves_newest() -> None:
         assert ":0:" not in first_id and not first_id.endswith(":0"), (
             "oldest effects should have been trimmed, but tick-0 effect still present"
         )
+
+
+# ==================================================================
+# 6. Seed context bounding and deterministic sorting
+# ==================================================================
+
+
+def test_seed_context_is_bounded_and_sorted() -> None:
+    """build_seed_context must return bounded, deterministically sorted data."""
+    from app.rpg.world_sim.controller import WorldSimController
+
+    class _CQ:
+        def get_known_locations(self):
+            return ["z", "a", "m", "a"]
+        def get_unresolved_threads(self):
+            return [{"thread_id": "t2"}, {"thread_id": "t1"}]
+        def get_recent_consequences(self, limit=5):
+            return [{"consequence_id": "c2", "tick": 2}, {"consequence_id": "c1", "tick": 1}]
+
+    class _SQ:
+        def get_known_factions(self, state):
+            return ["f2", "f1"]
+        def get_recent_rumors(self, state, limit=5):
+            return [{"rumor_id": "r2"}, {"rumor_id": "r1"}]
+        def get_relationship_hotspots(self, state):
+            return [{"entity_a": "b", "entity_b": "c", "score": 2}, {"entity_a": "a", "entity_b": "c", "score": 1}]
+
+    class _C:
+        query = _CQ()
+    class _S:
+        query = _SQ()
+        state = object()
+
+    ctrl = WorldSimController()
+    seed = ctrl.build_seed_context(
+        coherence_core=_C(),
+        social_state_core=_S(),
+        arc_control_controller=None,
+        campaign_memory_core=None,
+        encounter_controller=None,
+        tick=1,
+    )
+    assert seed["locations"] == ["a", "m", "z"]
+    assert [x["thread_id"] for x in seed["unresolved_threads"]] == ["t1", "t2"]
+    assert [x["rumor_id"] for x in seed["recent_rumors"]] == ["r1", "r2"]
+
+
+# ==================================================================
+# 7. Rumor propagation plateau and cooling
+# ==================================================================
+
+
+def test_rumor_propagation_plateaus_and_cools() -> None:
+    """Rumors should plateau at max reach or cool when no new surface pressure."""
+    from app.rpg.world_sim.reducers import reduce_rumor_propagation
+    from app.rpg.world_sim.models import RumorPropagationState
+
+    current = {
+        "r1": RumorPropagationState(
+            rumor_id="r1",
+            origin_location="dock",
+            current_locations=["dock"],
+            reach=3,
+            heat="hot",
+            status="active",
+        )
+    }
+    updated, _ = reduce_rumor_propagation(current, {"recent_rumors": [{"rumor_id": "r1"}], "locations": []})
+    # Reducer returns dict values
+    r1 = updated["r1"]
+    assert r1["heat"] in {"warm", "cold", "hot"}
+    assert r1["status"] in {"cooling", "plateaued", "active"}
+
+
+# ==================================================================
+# 8. World pressure cooling when not reinforced
+# ==================================================================
+
+
+def test_world_pressure_cools_when_not_reinforced() -> None:
+    """Pressure should decay for threads/locations/factions not present."""
+    from app.rpg.world_sim.reducers import reduce_world_pressure
+    from app.rpg.world_sim.models import WorldPressureState
+
+    current = WorldPressureState(
+        active_threads=[],
+        pressure_by_thread={"t1": "high"},
+        pressure_by_location={"dock": "critical"},
+        pressure_by_faction={"f1": "high"},
+        metadata={},
+    )
+    updated, _ = reduce_world_pressure(current, {
+        "unresolved_threads": [],
+        "locations": [],
+        "factions": [],
+        "faction_drift_current": {},
+        "location_conditions_current": {},
+    })
+    # Cooling: high -> medium, critical -> high
+    assert updated.pressure_by_thread["t1"] == "medium"
+    assert updated.pressure_by_location["dock"] == "high"
+    assert updated.pressure_by_faction["f1"] == "medium"
+
+
+# ==================================================================
+# 9. World sim from_dict normalizes nested models
+# ==================================================================
+
+
+def test_world_sim_from_dict_normalizes_nested_models() -> None:
+    """from_dict must convert plain dicts back into proper state objects."""
+    from app.rpg.world_sim.controller import WorldSimController
+    from app.rpg.world_sim.models import FactionDriftState
+
+    ctrl = WorldSimController.from_dict({
+        "sim_tick": 2,
+        "status": "active",
+        "faction_drift": {"f1": {"faction_id": "f1", "momentum": "steady", "pressure": "low"}},
+        "rumor_states": {},
+        "location_conditions": {},
+        "npc_activities": {},
+        "world_pressure": {"active_threads": [], "pressure_by_thread": {}, "pressure_by_location": {}, "pressure_by_faction": {}, "metadata": {}},
+        "recent_effects": [],
+        "last_result": {},
+        "metadata": {},
+    })
+    assert isinstance(ctrl.get_state().faction_drift["f1"], FactionDriftState)

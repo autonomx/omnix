@@ -27,6 +27,24 @@ from .models import (
 
 _PRESSURE_ORDER = ("low", "medium", "high", "critical")
 _PRESSURE_INDEX = {p: i for i, p in enumerate(_PRESSURE_ORDER)}
+_HEAT_ORDER = ("cold", "warm", "hot")
+_ACTIVITY_ORDER = ("quiet", "active", "busy")
+
+
+def _step_up(value: str, order: tuple[str, ...]) -> str:
+    """Step a value up one level in an ordered sequence."""
+    if value not in order:
+        return order[0]
+    idx = order.index(value)
+    return order[min(idx + 1, len(order) - 1)]
+
+
+def _step_down(value: str, order: tuple[str, ...]) -> str:
+    """Step a value down one level in an ordered sequence."""
+    if value not in order:
+        return order[0]
+    idx = order.index(value)
+    return order[max(idx - 1, 0)]
 
 
 def _escalate_pressure(current: str) -> str:
@@ -182,66 +200,75 @@ def reduce_rumor_propagation(
             }
 
     for rumor_id in sorted(current.keys()):
-        state = dict(current[rumor_id])
+        item = current[rumor_id]
+        state = item.to_dict() if hasattr(item, "to_dict") else dict(item)
         heat = state.get("heat", "cold")
         status = state.get("status", "dormant")
         current_locs: list[str] = list(state.get("current_locations", []))
         reach: int = int(state.get("reach", 0))
 
+        # Plateau and cooling rules:
+        # - a rumor may only increase reach up to 3 per propagation lifecycle
+        # - if no new relevant seed pressure appears, it cools instead of rising
+        relevant_locations = seed_context.get("locations", [])
+        has_new_surface = bool(relevant_locations) and (
+            state.get("origin_location") in relevant_locations
+            or any(loc not in current_locs for loc in relevant_locations)
+        )
+
         if status == "dormant" or heat == "cold":
-            # Cooled rumors stop spreading
-            state["status"] = "dormant"
-            state["heat"] = "cold"
-            updated[rumor_id] = state
-            continue
-
-        # Active/warm rumors spread to next known location not yet reached
-        spread_to: str | None = None
-        for loc in known_locations:
-            if loc not in current_locs:
-                spread_to = loc
-                break
-
-        if spread_to:
-            current_locs.append(spread_to)
-            reach += 1
-            state["current_locations"] = current_locs
-            state["reach"] = reach
-
-            effect: dict[str, Any] = {
-                "effect_id": f"rumor_spread:{rumor_id}:{tick}",
-                "effect_type": "rumor_spread",
-                "scope": "rumor",
-                "target_id": rumor_id,
-                "payload": {
-                    "spread_to": spread_to,
-                    "reach": reach,
-                },
-                "journalable": True,
-                "metadata": {},
-            }
-            effects.append(effect)
-
-        # High-reach rumors cool down deterministically
-        if reach >= len(known_locations) or reach >= 5:
-            if heat == "hot":
-                state["heat"] = "warm"
-            elif heat == "warm":
-                state["heat"] = "cold"
+            # Cooled/dormant rumors try to revive if there's new surface pressure
+            if has_new_surface:
+                heat = "warm"
+                status = "active"
+            else:
                 state["status"] = "dormant"
-                effects.append({
-                    "effect_id": f"rumor_cools:{rumor_id}:{tick}",
-                    "effect_type": "rumor_cools",
-                    "scope": "rumor",
-                    "target_id": rumor_id,
-                    "payload": {"reason": "fully_spread"},
-                    "journalable": False,
-                    "metadata": {},
-                })
-        elif heat == "warm" and not spread_to:
-            # No new location to spread to → cool
-            state["heat"] = "cold"
-            state["status"] = "dormant"
+                state["heat"] = "cold"
+                updated[rumor_id] = state
+                continue
+
+        if has_new_surface:
+            heat = _step_up(heat, _HEAT_ORDER)
+            if reach < 3:
+                reach = reach + 1
+                # Find a new location to spread to
+                spread_to: str | None = None
+                for loc in known_locations:
+                    if loc not in current_locs:
+                        spread_to = loc
+                        break
+                if spread_to:
+                    current_locs.append(spread_to)
+                    effect: dict[str, Any] = {
+                        "effect_id": f"rumor_spread:{rumor_id}:{tick}",
+                        "effect_type": "rumor_spread",
+                        "scope": "rumor",
+                        "target_id": rumor_id,
+                        "payload": {
+                            "spread_to": spread_to,
+                            "reach": reach,
+                        },
+                        "journalable": True,
+                        "metadata": {},
+                    }
+                    effects.append(effect)
+        else:
+            heat = _step_down(heat, _HEAT_ORDER)
+            if heat == "cold" and reach > 0:
+                reach = reach - 1
+
+        # Determine status
+        if reach <= 0 and heat == "cold":
+            status = "cooling"
+        elif reach >= 3 and heat == "hot":
+            status = "plateaued"
+        else:
+            status = "active"
+
+        state["current_locations"] = current_locs
+        state["reach"] = reach
+        state["heat"] = heat
+        state["status"] = status
 
         updated[rumor_id] = state
 
@@ -454,15 +481,25 @@ def reduce_world_pressure(
     encounter_aftermath: dict = seed_context.get("encounter_aftermath", {})
     tick: int | None = seed_context.get("tick")
 
-    # Thread pressure: unresolved → rises, resolved → falls
-    thread_ids: list[str] = sorted(
-        t.get("thread_id", "") for t in unresolved_threads if t.get("thread_id")
-    )
+    # Thread pressure: unresolved → rises, not present → cools
+    active_thread_ids: set[str] = set()
+    for thread in unresolved_threads:
+        tid = thread.get("thread_id", "")
+        if tid:
+            active_thread_ids.add(tid)
+
     old_thread_pressure = dict(current.pressure_by_thread)
     new_thread_pressure: dict[str, str] = {}
-    for tid in thread_ids:
+
+    # Escalate active threads
+    for tid in sorted(active_thread_ids):
         old_p = old_thread_pressure.get(tid, "low")
         new_thread_pressure[tid] = _escalate_pressure(old_p)
+
+    # Cool unreinforced threads
+    for tid in sorted(old_thread_pressure.keys()):
+        if tid not in active_thread_ids:
+            new_thread_pressure[tid] = _deescalate_pressure(old_thread_pressure[tid])
 
     # Encounter aftermath can spike local pressure
     if encounter_aftermath.get("mode"):
@@ -471,15 +508,27 @@ def reduce_world_pressure(
             loc_p = new_thread_pressure.get(enc_location, "low")
             new_thread_pressure[enc_location] = _escalate_pressure(loc_p)
 
-    # Faction pressure
+    # Faction pressure: active → keep, unreinforced → cool
+    active_faction_ids: set[str] = set(faction_drift.keys())
+    old_faction_pressure = dict(current.pressure_by_faction)
     new_faction_pressure: dict[str, str] = {}
-    for fid, fstate in sorted(faction_drift.items()):
+    for fid in sorted(active_faction_ids):
+        fstate = faction_drift.get(fid, {})
         new_faction_pressure[fid] = fstate.get("pressure", "low")
+    for fid in sorted(old_faction_pressure.keys()):
+        if fid not in active_faction_ids:
+            new_faction_pressure[fid] = _deescalate_pressure(old_faction_pressure[fid])
 
-    # Location pressure
+    # Location pressure: active → keep, unreinforced → cool
+    active_location_ids: set[str] = set(location_conditions.keys())
+    old_location_pressure = dict(current.pressure_by_location)
     new_location_pressure: dict[str, str] = {}
-    for lid, lstate in sorted(location_conditions.items()):
+    for lid in sorted(active_location_ids):
+        lstate = location_conditions.get(lid, {})
         new_location_pressure[lid] = lstate.get("pressure", "low")
+    for lid in sorted(old_location_pressure.keys()):
+        if lid not in active_location_ids:
+            new_location_pressure[lid] = _deescalate_pressure(old_location_pressure[lid])
 
     # Detect overall change
     if (
@@ -493,7 +542,7 @@ def reduce_world_pressure(
             "scope": "world",
             "target_id": None,
             "payload": {
-                "thread_count": len(thread_ids),
+                "thread_count": len(active_thread_ids),
                 "consequence_count": len(recent_consequences),
             },
             "journalable": False,
@@ -501,7 +550,7 @@ def reduce_world_pressure(
         })
 
     updated = WorldPressureState(
-        active_threads=thread_ids,
+        active_threads=list(active_thread_ids),
         pressure_by_thread=new_thread_pressure,
         pressure_by_location=new_location_pressure,
         pressure_by_faction=new_faction_pressure,

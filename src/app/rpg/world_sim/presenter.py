@@ -81,9 +81,9 @@ class WorldSimPresenter:
             "status": state.status,
             "pressure_summary": pressure_summary,
             "recent_developments": len(state.recent_effects),
-            "notable_locations": notable_locations,
-            "notable_factions": notable_factions,
-            "rumor_heat": rumor_heat,
+            "location_overlays": notable_locations,
+            "faction_overlays": notable_factions,
+            "rumor_overlays": rumor_heat,
             "metadata": {},
         }
 

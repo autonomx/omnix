@@ -45,6 +45,13 @@ class WorldSimController:
     - emits structured effects/summaries for downstream consumers
     """
 
+    _MAX_THREADS = 8
+    _MAX_CONSEQUENCES = 8
+    _MAX_RUMORS = 8
+    _MAX_LOCATIONS = 12
+    _MAX_HOTSPOTS = 8
+    _MAX_EFFECTS = 50
+
     def __init__(self) -> None:
         self.state = WorldSimState()
 
@@ -73,9 +80,31 @@ class WorldSimController:
         return self.serialize_state()
 
     @classmethod
-    def from_dict(cls, data: dict) -> WorldSimController:
+    def from_dict(cls, data: dict) -> "WorldSimController":
         ctrl = cls()
-        ctrl.deserialize_state(data)
+        raw = data or {}
+        ctrl.state = WorldSimState.from_dict(raw)
+
+        # Defensive normalization for nested models in case older saves or
+        # partial payloads contain plain dicts.
+        ctrl.state.faction_drift = {
+            str(k): (v if isinstance(v, FactionDriftState) else FactionDriftState.from_dict(v))
+            for k, v in (ctrl.state.faction_drift or {}).items()
+        }
+        ctrl.state.rumor_states = {
+            str(k): (v if isinstance(v, RumorPropagationState) else RumorPropagationState.from_dict(v))
+            for k, v in (ctrl.state.rumor_states or {}).items()
+        }
+        ctrl.state.location_conditions = {
+            str(k): (v if isinstance(v, LocationConditionState) else LocationConditionState.from_dict(v))
+            for k, v in (ctrl.state.location_conditions or {}).items()
+        }
+        ctrl.state.npc_activities = {
+            str(k): (v if isinstance(v, NPCActivityState) else NPCActivityState.from_dict(v))
+            for k, v in (ctrl.state.npc_activities or {}).items()
+        }
+        if not isinstance(ctrl.state.world_pressure, WorldPressureState):
+            ctrl.state.world_pressure = WorldPressureState.from_dict(ctrl.state.world_pressure or {})
         return ctrl
 
     # ------------------------------------------------------------------
@@ -96,68 +125,101 @@ class WorldSimController:
         This is the **one place** world sim reads other systems.
         Returns a plain dict consumed by reducers.
         """
-        ctx: dict[str, Any] = {"tick": tick}
-
         # --- Coherence data ---
         if coherence_core is not None:
-            query = getattr(coherence_core, "query", None)
-            if query is not None:
-                ctx["unresolved_threads"] = query.get_unresolved_threads()
-                ctx["recent_consequences"] = query.get_recent_consequences(limit=5)
-                ctx["scene_entities"] = query.get_scene_entities()
-                scene_summary = query.get_scene_summary()
-                ctx["active_scene_location"] = scene_summary.get("location")
-                # known locations
-                ctx["known_locations"] = self._extract_known_locations(query)
-            else:
-                ctx["unresolved_threads"] = []
-                ctx["recent_consequences"] = []
-                ctx["scene_entities"] = []
-                ctx["active_scene_location"] = None
-                ctx["known_locations"] = []
+            coherence_query = getattr(coherence_core, "query", None)
+            locations = (
+                coherence_query.get_known_locations()
+                if coherence_query is not None and hasattr(coherence_query, "get_known_locations")
+                else []
+            )
+            unresolved_threads = (
+                coherence_query.get_unresolved_threads()
+                if coherence_query is not None and hasattr(coherence_query, "get_unresolved_threads")
+                else []
+            )
+            recent_consequences = (
+                coherence_query.get_recent_consequences(limit=self._MAX_CONSEQUENCES)
+                if coherence_query is not None and hasattr(coherence_query, "get_recent_consequences")
+                else []
+            )
         else:
-            ctx["unresolved_threads"] = []
-            ctx["recent_consequences"] = []
-            ctx["scene_entities"] = []
-            ctx["active_scene_location"] = None
-            ctx["known_locations"] = []
+            locations = []
+            unresolved_threads = []
+            recent_consequences = []
 
         # --- Social state data ---
         if social_state_core is not None:
-            query = getattr(social_state_core, "get_query", lambda: None)()
-            state = social_state_core.get_state() if hasattr(social_state_core, "get_state") else None
-            if query is not None and state is not None:
-                ctx["known_factions"] = self._extract_known_factions(state)
-                ctx["recent_rumors"] = self._extract_recent_rumors(state)
-                ctx["faction_pressure_map"] = self._extract_faction_pressure_map(state)
+            social_query = getattr(social_state_core, "query", None)
+            social_state = getattr(social_state_core, "state", None) or getattr(social_state_core, "get_state", lambda: None)()
+            if social_query is not None and hasattr(social_query, "get_known_factions"):
+                factions = social_query.get_known_factions(social_state)
             else:
-                ctx["known_factions"] = []
-                ctx["recent_rumors"] = []
-                ctx["faction_pressure_map"] = {}
+                factions = []
+            if social_query is not None and hasattr(social_query, "get_recent_rumors"):
+                recent_rumors = social_query.get_recent_rumors(social_state, limit=self._MAX_RUMORS)
+            else:
+                recent_rumors = []
+            if social_query is not None and hasattr(social_query, "get_relationship_hotspots"):
+                hotspots = social_query.get_relationship_hotspots(social_state)
+            else:
+                hotspots = []
         else:
-            ctx["known_factions"] = []
-            ctx["recent_rumors"] = []
-            ctx["faction_pressure_map"] = {}
+            factions = []
+            recent_rumors = []
+            hotspots = []
+
+        # Apply fixed caps and deterministic sorting (deduplicate locations)
+        locations = sorted(set(str(x) for x in locations if x))[: self._MAX_LOCATIONS]
+        factions = sorted(str(x) for x in factions if x)[: self._MAX_LOCATIONS]
+        unresolved_threads = self._sorted_dicts(
+            unresolved_threads,
+            primary_keys=("thread_id", "id", "name"),
+            limit=self._MAX_THREADS,
+        )
+        recent_consequences = self._sorted_dicts(
+            recent_consequences,
+            primary_keys=("consequence_id", "id", "tick"),
+            limit=self._MAX_CONSEQUENCES,
+        )
+        recent_rumors = self._sorted_dicts(
+            recent_rumors,
+            primary_keys=("rumor_id", "id", "text"),
+            limit=self._MAX_RUMORS,
+        )
+        hotspots = self._sorted_dicts(
+            hotspots,
+            primary_keys=("entity_a", "entity_b", "score"),
+            limit=self._MAX_HOTSPOTS,
+        )
 
         # --- Arc control guidance ---
-        if arc_control_controller is not None:
-            if hasattr(arc_control_controller, "build_world_sim_guidance"):
-                ctx["arc_guidance"] = arc_control_controller.build_world_sim_guidance()
-            else:
-                ctx["arc_guidance"] = {}
-        else:
-            ctx["arc_guidance"] = {}
+        arc_guidance = (
+            arc_control_controller.build_world_sim_guidance()
+            if arc_control_controller is not None
+            and hasattr(arc_control_controller, "build_world_sim_guidance")
+            else {}
+        )
 
         # --- Encounter aftermath ---
-        if encounter_controller is not None:
-            if hasattr(encounter_controller, "build_world_sim_seed"):
-                ctx["encounter_aftermath"] = encounter_controller.build_world_sim_seed()
-            else:
-                ctx["encounter_aftermath"] = {}
-        else:
-            ctx["encounter_aftermath"] = {}
+        encounter_seed = (
+            encounter_controller.build_world_sim_seed()
+            if encounter_controller is not None
+            and hasattr(encounter_controller, "build_world_sim_seed")
+            else {}
+        )
 
-        return ctx
+        return {
+            "tick": tick,
+            "locations": locations,
+            "unresolved_threads": unresolved_threads,
+            "recent_consequences": recent_consequences,
+            "factions": factions,
+            "recent_rumors": recent_rumors,
+            "hotspots": hotspots,
+            "arc_guidance": arc_guidance,
+            "encounter_seed": encounter_seed,
+        }
 
     # ------------------------------------------------------------------
     # Advance
@@ -303,9 +365,26 @@ class WorldSimController:
 
     def _trim_recent_effects(self) -> None:
         """Deterministically trim recent effects to bounded size."""
-        if len(self.state.recent_effects) > _MAX_RECENT_EFFECTS:
-            overflow = len(self.state.recent_effects) - _MAX_RECENT_EFFECTS
+        if len(self.state.recent_effects) > self._MAX_EFFECTS:
+            overflow = len(self.state.recent_effects) - self._MAX_EFFECTS
             self.state.recent_effects = self.state.recent_effects[overflow:]
+
+    @staticmethod
+    def _sorted_dicts(
+        items: list[dict] | None,
+        primary_keys: tuple[str, ...],
+        limit: int,
+    ) -> list[dict]:
+        """Sort and cap a list of dicts deterministically."""
+        rows = [dict(x) for x in (items or []) if isinstance(x, dict)]
+        def _key(row: dict) -> tuple:
+            vals = []
+            for key in primary_keys:
+                vals.append(str(row.get(key, "")))
+            vals.append(str(sorted(row.items())))
+            return tuple(vals)
+        rows.sort(key=_key)
+        return rows[:limit]
 
     @staticmethod
     def _extract_known_locations(query: Any) -> list[str]:

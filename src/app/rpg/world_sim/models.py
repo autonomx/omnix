@@ -71,7 +71,12 @@ SUPPORTED_WORLD_SIM_STATUSES: frozenset[str] = frozenset({
 
 @dataclass
 class WorldEffect:
-    """A single structured background world effect."""
+    """A single structured background world effect.
+
+    NOTE:
+    World effects are proposals/summaries. They do not directly mutate
+    external truth owners unless another explicit reducer/controller applies them.
+    """
 
     effect_id: str
     effect_type: str
@@ -185,7 +190,11 @@ class RumorPropagationState:
 
 @dataclass
 class LocationConditionState:
-    """Background location condition overlay."""
+    """Background location condition overlay.
+
+    NOTE:
+    These are simulation overlays/biases, not automatic coherence facts.
+    """
 
     location_id: str
     conditions: list[str] = field(default_factory=list)
@@ -218,7 +227,12 @@ class LocationConditionState:
 
 @dataclass
 class NPCActivityState:
-    """Background NPC activity overlay (not full NPC truth)."""
+    """Background NPC activity overlay (not full NPC truth).
+
+    NOTE:
+    This is a world-sim overlay, not canonical entity location truth.
+    Downstream systems must reduce explicitly if they want to adopt it.
+    """
 
     entity_id: str
     current_location: str | None = None

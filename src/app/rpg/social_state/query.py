@@ -149,13 +149,18 @@ class SocialStateQuery:
     def get_recent_rumors(
         self, state: SocialState, limit: int = 5
     ) -> list[dict]:
-        """Return active rumors, newest first, up to limit."""
-        active = [
+        """Return active rumors, sorted deterministically, up to limit."""
+        rows = [
             dict(rumor.to_dict())
             for rumor in state.rumors.values()
             if rumor.active
         ]
-        return active[:limit]
+        rows.sort(key=lambda x: (
+            str(x.get("rumor_id", "")),
+            str(x.get("origin_location", "")),
+            str(x.get("subject_entity_id", "")),
+        ))
+        return rows[-limit:]
 
     def get_faction_pressure_map(self, state: SocialState) -> dict[str, str]:
         """Derive faction pressure from relationship hostility."""
@@ -168,14 +173,22 @@ class SocialStateQuery:
         return pressure
 
     def get_relationship_hotspots(self, state: SocialState) -> list[dict]:
-        """Return a list of high-tension relationship pairs."""
+        """Return a list of high-tension relationship pairs, sorted."""
         hotspots: list[dict] = []
         for rel in state.relationships.values():
-            status = getattr(rel, "status", "")
-            if status in ("hostile", "enemy", "rival"):
+            trust = float(getattr(rel, "trust", 0.0))
+            hostility = float(getattr(rel, "hostility", 0.0))
+            score = abs(trust) + abs(hostility)
+            if score >= 1.0 or getattr(rel, "status", "") in ("hostile", "enemy", "rival"):
                 hotspots.append({
-                    "source_id": getattr(rel, "source_id", ""),
-                    "target_id": getattr(rel, "target_id", ""),
-                    "status": status,
+                    "entity_a": getattr(rel, "entity_a", "") or getattr(rel, "source_id", ""),
+                    "entity_b": getattr(rel, "entity_b", "") or getattr(rel, "target_id", ""),
+                    "score": score,
+                    "status": getattr(rel, "status", ""),
                 })
+        hotspots.sort(key=lambda x: (
+            str(x.get("entity_a", "")),
+            str(x.get("entity_b", "")),
+            str(x.get("score", "")),
+        ))
         return hotspots

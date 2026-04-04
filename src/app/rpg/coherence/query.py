@@ -26,7 +26,12 @@ class CoherenceQueryAPI:
         return [{"text": t} for t in anchor.active_tensions]
 
     def get_unresolved_threads(self) -> list:
-        return [t.to_dict() for t in self.state.unresolved_threads.values() if t.status != "resolved"]
+        rows = [t.to_dict() for t in self.state.unresolved_threads.values() if t.status != "resolved"]
+        rows.sort(key=lambda x: (
+            str(x.get("thread_id", "")),
+            str(x.get("title", "")),
+        ))
+        return rows
 
     def get_actor_commitments(self, actor_id: str) -> list:
         records: List[dict] = []
@@ -49,7 +54,12 @@ class CoherenceQueryAPI:
         return {"entity_id": entity_id, "facts": facts}
 
     def get_recent_consequences(self, limit: int = 10) -> list:
-        return [c.to_dict() for c in self.state.recent_changes[-limit:]]
+        items = [c.to_dict() for c in self.state.recent_changes]
+        items.sort(key=lambda x: (
+            str(x.get("tick", "")),
+            str(x.get("consequence_id", "")),
+        ))
+        return items[-limit:]
 
     def get_last_good_anchor(self) -> dict | None:
         if not self.state.continuity_anchors:

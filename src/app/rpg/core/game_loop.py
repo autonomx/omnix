@@ -1504,7 +1504,9 @@ class GameLoop:
                 location=scene_summary.get("location"),
             )
 
-        # Phase 8.3 — Advance world simulation after all authoritative updates
+        # Phase 8.3 — Advance world simulation after all authoritative updates.
+        # NOTE: world sim produces overlay summaries/effects only; it is not
+        # a direct mutator of canonical coherence/social/memory truth.
         self.last_world_sim_result = None
         if hasattr(self, "world_sim_controller") and self.world_sim_controller is not None:
             world_result = self.world_sim_controller.advance(
