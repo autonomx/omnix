@@ -94,6 +94,7 @@ class SceneUXPayload:
     world: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     trace: dict[str, Any] = field(default_factory=dict)
+    debug: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -107,6 +108,7 @@ class SceneUXPayload:
             "world": dict(self.world),
             "metadata": dict(self.metadata),
             "trace": dict(self.trace),
+            "debug": dict(self.debug),
         }
 
     @classmethod
@@ -127,6 +129,8 @@ class SceneUXPayload:
             encounter=dict(data.get("encounter", {})),
             world=dict(data.get("world", {})),
             metadata=dict(data.get("metadata", {})),
+            trace=dict(data.get("trace", {})),
+            debug=dict(data.get("debug", {})),
         )
 
 
@@ -143,6 +147,7 @@ class ActionResultPayload:
     encounter: dict[str, Any] = field(default_factory=dict)
     world: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    debug: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -155,6 +160,7 @@ class ActionResultPayload:
             "encounter": dict(self.encounter),
             "world": dict(self.world),
             "metadata": dict(self.metadata),
+            "debug": dict(self.debug),
         }
 
     @classmethod
@@ -175,4 +181,5 @@ class ActionResultPayload:
             encounter=dict(data.get("encounter", {})),
             world=dict(data.get("world", {})),
             metadata=dict(data.get("metadata", {})),
+            debug=dict(data.get("debug", {})),
         )

@@ -295,3 +295,48 @@ class ArcControlController:
                 guidance["preferred_thread_pressure_targets"] = targets
 
         return guidance
+
+    # ------------------------------------------------------------------
+    # Phase 8.4 — Debug summary (read-only)
+    # ------------------------------------------------------------------
+
+    def build_debug_summary(self) -> dict:
+        """Return a read-only debug summary for GM/debug inspection.
+
+        Does not mutate arc state.
+        """
+        active_arcs = [
+            {"arc_id": a.arc_id, "title": a.title, "status": a.status}
+            for a in sorted(self.arcs.values(), key=lambda a: a.arc_id)
+            if a.status == "active"
+        ]
+
+        due_reveals = list(
+            self._reveal_scheduler.due_reveals(self.reveals)
+        )
+        reveal_pressure = "high" if due_reveals else "normal"
+
+        plan = self._pacing_plan_controller.get_active_plan(self.pacing_plans)
+        pacing_pressure = "normal"
+        if plan is not None:
+            pacing_meta = plan.metadata or {}
+            pacing_pressure = pacing_meta.get("pacing_pressure", "normal")
+
+        bias = self._scene_bias_controller.get_active_bias(self.scene_biases)
+        scene_bias_summary: dict = {}
+        if bias is not None:
+            scene_bias_summary = {
+                "bias_id": bias.bias_id,
+                "metadata": dict(bias.metadata) if bias.metadata else {},
+            }
+
+        return {
+            "active_arcs": active_arcs,
+            "active_arc_count": len(active_arcs),
+            "reveal_pressure": reveal_pressure,
+            "due_reveal_count": len(due_reveals),
+            "pacing_pressure": pacing_pressure,
+            "pacing_plan_id": plan.plan_id if plan else None,
+            "scene_bias_summary": scene_bias_summary,
+            "mode": self._mode,
+        }

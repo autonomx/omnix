@@ -53,3 +53,25 @@ class PackRegistry:
             pack_id: AdventurePack.from_dict(pack_data)
             for pack_id, pack_data in data.get("packs", {}).items()
         }
+
+    # ------------------------------------------------------------------
+    # Phase 8.4 — Debug summary (read-only)
+    # ------------------------------------------------------------------
+
+    def build_debug_summary(self) -> dict:
+        """Return a read-only debug summary for GM/debug inspection.
+
+        Does not mutate registry state.
+        """
+        pack_summaries: list[dict] = []
+        for pack in self.list_packs():
+            meta = pack.metadata
+            pack_summaries.append({
+                "pack_id": meta.pack_id,
+                "title": meta.title,
+                "version": meta.version,
+            })
+        return {
+            "active_packs": pack_summaries,
+            "active_pack_count": len(pack_summaries),
+        }

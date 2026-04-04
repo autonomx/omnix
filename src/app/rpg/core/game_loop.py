@@ -68,6 +68,7 @@ from ..encounter.resolver import EncounterResolver
 from ..encounter.presenter import EncounterPresenter
 from ..world_sim.controller import WorldSimController
 from ..world_sim.presenter import WorldSimPresenter
+from ..debug.core import DebugCore
 
 
 class TickPhase(Enum):
@@ -347,6 +348,13 @@ class GameLoop:
         self.last_world_sim_result: dict | None = None
         if "world_sim_controller" not in self._snapshot_systems:
             self._snapshot_systems.append("world_sim_controller")
+
+        # PHASE 8.4 — DEBUG / ANALYTICS / GM INSPECTION (read-only, non-authoritative)
+        self.debug_core = DebugCore()
+        self.last_debug_bundle: dict | None = None
+        self.last_dialogue_trace: dict | None = None
+        self.last_control_output: dict | None = None
+        self.last_action_result: dict | None = None
 
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
@@ -1532,6 +1540,16 @@ class GameLoop:
                         location=scene_summary.get("location"),
                     )
 
+        # Phase 8.4 — Store last subsystem traces for debug inspection
+        self.last_action_result = result_dict
+        self.last_dialogue_trace = resolved_meta.get("dialogue_trace")
+
+        # Phase 8.4 — Build GM debug inspection bundle (read-only, late in flow)
+        self.last_debug_bundle = self._build_debug_bundle(
+            scene_summary=scene_summary,
+            action_result=result_dict,
+        )
+
         return {
             "ok": True,
             "resolution": result_dict,
@@ -1565,6 +1583,78 @@ class GameLoop:
                     source="action_resolver",
                 )
             )
+
+    # ------------------------------------------------------------------
+    # Phase 8.4 — Debug bundle builder (read-only, no mutation)
+    # ------------------------------------------------------------------
+
+    def _build_debug_bundle(
+        self,
+        scene_summary: dict | None = None,
+        action_result: dict | None = None,
+    ) -> dict:
+        """Build a GM debug inspection bundle from current loop state.
+
+        Strictly read-only — called late in resolve_selected_option()
+        after all authoritative updates are complete.
+        """
+        # Gather control output
+        ctrl = getattr(self, "gameplay_control_controller", None)
+        control_output = None
+        if ctrl is not None:
+            cs = ctrl.get_last_choice_set()
+            if cs is not None:
+                control_output = {"choice_set": cs}
+        self.last_control_output = control_output
+
+        # Encounter state (read-only)
+        enc_state_dict: dict | None = None
+        enc_ctrl = getattr(self, "encounter_controller", None)
+        if enc_ctrl is not None and enc_ctrl.has_active_encounter():
+            enc_obj = enc_ctrl.get_active_encounter()
+            if enc_obj is not None:
+                enc_state_dict = self.encounter_presenter.present_encounter(enc_obj)
+
+        # World sim state (read-only)
+        ws_state_dict: dict | None = None
+        ws_ctrl = getattr(self, "world_sim_controller", None)
+        ws_pres = getattr(self, "world_sim_presenter", None)
+        if ws_ctrl is not None and ws_pres is not None:
+            ws_state_dict = ws_pres.present_state(ws_ctrl.get_state())
+
+        # Arc debug summary (read-only)
+        arc_summary: dict | None = None
+        arc_ctrl = getattr(self, "arc_control_controller", None)
+        if arc_ctrl is not None and hasattr(arc_ctrl, "build_debug_summary"):
+            arc_summary = arc_ctrl.build_debug_summary()
+
+        # Recovery debug summary (read-only)
+        recovery_summary: dict | None = None
+        rec_mgr = getattr(self, "recovery_manager", None)
+        if rec_mgr is not None and hasattr(rec_mgr, "build_debug_summary"):
+            recovery_summary = rec_mgr.build_debug_summary()
+
+        # Pack debug summary (read-only)
+        pack_summary: dict | None = None
+        pack_reg = getattr(self, "pack_registry", None)
+        if pack_reg is not None and hasattr(pack_reg, "build_debug_summary"):
+            pack_summary = pack_reg.build_debug_summary()
+
+        return self.debug_core.build_gm_inspection_bundle(
+            tick=getattr(self, "_tick_count", None),
+            scene_payload=scene_summary,
+            action_result=action_result,
+            control_output=control_output,
+            last_dialogue_response=getattr(self, "last_dialogue_response", None),
+            last_dialogue_trace=getattr(self, "last_dialogue_trace", None),
+            last_encounter_resolution=getattr(self, "last_encounter_resolution", None),
+            last_encounter_state=enc_state_dict,
+            last_world_sim_result=getattr(self, "last_world_sim_result", None),
+            last_world_sim_state=ws_state_dict,
+            arc_debug_summary=arc_summary,
+            recovery_debug_summary=recovery_summary,
+            pack_debug_summary=pack_summary,
+        )
 
 
     # ------------------------------------------------------------------
