@@ -236,3 +236,76 @@ def inspect_world():
     except Exception:
         logger.exception("Failed to inspect world")
         return jsonify({"success": False, "error": "Failed to inspect world"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 10. POST /api/rpg/adventure/inspect-world-snapshot  (Phase 2.5)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/inspect-world-snapshot", methods=["POST"])
+def inspect_world_snapshot():
+    """Build a full snapshot wrapper around the world inspection result."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    payload = data.get("setup") or data
+    label = data.get("label")
+    try:
+        result = builder.inspect_world_snapshot(payload, label=label)
+        return jsonify(result)
+    except Exception:
+        logger.exception("Failed to build world snapshot")
+        return jsonify({"success": False, "error": "Failed to build world snapshot"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 11. POST /api/rpg/adventure/compare-world  (Phase 2.5)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/compare-world", methods=["POST"])
+def compare_world():
+    """Compare two setup payloads and return a graph diff."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    before_setup = data.get("before_setup")
+    after_setup = data.get("after_setup")
+    if not before_setup or not after_setup:
+        return jsonify({"success": False, "error": "Both before_setup and after_setup are required"}), 400
+
+    try:
+        result = builder.compare_world(before_setup, after_setup)
+        return jsonify(result)
+    except Exception:
+        logger.exception("Failed to compare world snapshots")
+        return jsonify({"success": False, "error": "Failed to compare world snapshots"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 12. POST /api/rpg/adventure/compare-entity  (Phase 2.5)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/compare-entity", methods=["POST"])
+def compare_entity():
+    """Compare a specific entity between two setup payloads."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    before_setup = data.get("before_setup")
+    after_setup = data.get("after_setup")
+    entity_id = data.get("entity_id")
+
+    if not before_setup or not after_setup:
+        return jsonify({"success": False, "error": "Both before_setup and after_setup are required"}), 400
+    if not entity_id:
+        return jsonify({"success": False, "error": "entity_id is required"}), 400
+
+    try:
+        result = builder.compare_world_entity(before_setup, after_setup, entity_id)
+        return jsonify(result)
+    except Exception:
+        logger.exception("Failed to compare entity")
+        return jsonify({"success": False, "error": "Failed to compare entity"}), 500

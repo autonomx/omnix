@@ -947,3 +947,83 @@ def inspect_world(payload: dict[str, Any]) -> dict[str, Any]:
     data = dict(payload or {})
     data = apply_adventure_defaults(data)
     return _inspect(data)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2.5 — World Snapshot + Graph Diff
+# ---------------------------------------------------------------------------
+
+
+def inspect_world_snapshot(
+    payload: dict[str, Any],
+    label: str | None = None,
+) -> dict[str, Any]:
+    """Build a full snapshot wrapper around the world inspection result.
+
+    Read-only and deterministic — does not modify the setup.
+    """
+    from ..creator.world_snapshot import build_world_snapshot
+
+    data = dict(payload or {})
+    data = apply_adventure_defaults(data)
+    snapshot = build_world_snapshot(data, label=label)
+    return {"success": True, "snapshot": snapshot}
+
+
+def compare_world(
+    payload_before: dict[str, Any],
+    payload_after: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare two setup payloads and return a graph diff.
+
+    Read-only and deterministic.
+    """
+    from ..creator.world_snapshot import build_world_snapshot, compute_graph_diff
+
+    before = dict(payload_before or {})
+    before = apply_adventure_defaults(before)
+    after = dict(payload_after or {})
+    after = apply_adventure_defaults(after)
+
+    before_snap = build_world_snapshot(before, label="Before")
+    after_snap = build_world_snapshot(after, label="After")
+
+    diff = compute_graph_diff(before_snap["graph"], after_snap["graph"])
+
+    return {
+        "success": True,
+        "before_snapshot_id": before_snap["snapshot_id"],
+        "after_snapshot_id": after_snap["snapshot_id"],
+        "diff": diff,
+    }
+
+
+def compare_world_entity(
+    payload_before: dict[str, Any],
+    payload_after: dict[str, Any],
+    entity_id: str,
+) -> dict[str, Any]:
+    """Compare a specific entity between two setup payloads.
+
+    Read-only and deterministic.
+    """
+    from ..creator.world_snapshot import (
+        build_world_snapshot,
+        compute_entity_history_diff,
+    )
+
+    before = dict(payload_before or {})
+    before = apply_adventure_defaults(before)
+    after = dict(payload_after or {})
+    after = apply_adventure_defaults(after)
+
+    before_snap = build_world_snapshot(before, label="Before")
+    after_snap = build_world_snapshot(after, label="After")
+
+    result = compute_entity_history_diff(
+        before_snap["inspector"],
+        after_snap["inspector"],
+        entity_id,
+    )
+
+    return {"success": True, **result}
