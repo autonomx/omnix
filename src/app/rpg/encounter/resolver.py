@@ -160,7 +160,7 @@ class EncounterResolver:
         elif action_type in ("reposition", "use_cover"):
             state_updates["mode_state"] = {"momentum": "repositioning"}
 
-        journal_payload = self._build_journal_payload(state, action_type, outcome_type, tick)
+        journal_payload = self._build_journal_payload(state, action_type, outcome_type, "combat")
         trace = self._build_trace(state, action_type, outcome_type, "combat")
 
         return EncounterResolution(
@@ -212,7 +212,7 @@ class EncounterResolver:
         elif action_type == "retreat":
             outcome_type = "resolve"
 
-        journal_payload = self._build_journal_payload(state, action_type, outcome_type, tick)
+        journal_payload = self._build_journal_payload(state, action_type, outcome_type, "stealth")
         trace = self._build_trace(state, action_type, outcome_type, "stealth")
 
         return EncounterResolution(
@@ -259,7 +259,7 @@ class EncounterResolver:
         elif action_type == "test_theory":
             state_updates["mode_state"] = {"clue_progress": {"theory_tested": True}}
 
-        journal_payload = self._build_journal_payload(state, action_type, outcome_type, tick)
+        journal_payload = self._build_journal_payload(state, action_type, outcome_type, "investigation")
         trace = self._build_trace(state, action_type, outcome_type, "investigation")
 
         return EncounterResolution(
@@ -309,7 +309,7 @@ class EncounterResolver:
         elif action_type == "concede_point":
             state_updates["mode_state"] = {"concession_count": 1}
 
-        journal_payload = self._build_journal_payload(state, action_type, outcome_type, tick)
+        journal_payload = self._build_journal_payload(state, action_type, outcome_type, "diplomacy")
         trace = self._build_trace(state, action_type, outcome_type, "diplomacy")
 
         return EncounterResolution(
@@ -362,7 +362,7 @@ class EncounterResolver:
             outcome_type = "escalate"
             state_updates["mode_state"] = {"distance_band": "close"}
 
-        journal_payload = self._build_journal_payload(state, action_type, outcome_type, tick)
+        journal_payload = self._build_journal_payload(state, action_type, outcome_type, "chase")
         trace = self._build_trace(state, action_type, outcome_type, "chase")
 
         return EncounterResolution(
