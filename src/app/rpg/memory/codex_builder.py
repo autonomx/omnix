@@ -75,8 +75,11 @@ class CodexBuilder:
                             )
                         )
 
-        entries.sort(key=lambda e: e.entry_id)
-        return entries
+        # Fix 3: enforce deterministic dedup by entry_id
+        unique = {}
+        for e in entries:
+            unique[e.entry_id] = e
+        return list(sorted(unique.values(), key=lambda x: x.entry_id))
 
     def build_faction_entries(
         self,
@@ -122,8 +125,11 @@ class CodexBuilder:
                             )
                         )
 
-        entries.sort(key=lambda e: e.entry_id)
-        return entries
+        # Fix 3: enforce deterministic dedup by entry_id
+        unique = {}
+        for e in entries:
+            unique[e.entry_id] = e
+        return list(sorted(unique.values(), key=lambda x: x.entry_id))
 
     def build_location_entries(
         self,
@@ -167,8 +173,11 @@ class CodexBuilder:
                     )
                 )
 
-        entries.sort(key=lambda e: e.entry_id)
-        return entries
+        # Fix 3: enforce deterministic dedup by entry_id
+        unique = {}
+        for e in entries:
+            unique[e.entry_id] = e
+        return list(sorted(unique.values(), key=lambda x: x.entry_id))
 
     def build_lore_entries(
         self,
@@ -193,8 +202,11 @@ class CodexBuilder:
                 )
             )
 
-        entries.sort(key=lambda e: e.entry_id)
-        return entries
+        # Fix 3: enforce deterministic dedup by entry_id
+        unique = {}
+        for e in entries:
+            unique[e.entry_id] = e
+        return list(sorted(unique.values(), key=lambda x: x.entry_id))
 
     def build_rumor_entries(
         self,
@@ -221,8 +233,11 @@ class CodexBuilder:
                     )
                 )
 
-        entries.sort(key=lambda e: e.entry_id)
-        return entries
+        # Fix 3: enforce deterministic dedup by entry_id
+        unique = {}
+        for e in entries:
+            unique[e.entry_id] = e
+        return list(sorted(unique.values(), key=lambda x: x.entry_id))
 
     def build_thread_entries(
         self,
@@ -246,5 +261,8 @@ class CodexBuilder:
                 )
             )
 
-        entries.sort(key=lambda e: e.entry_id)
-        return entries
+        # Fix 3: enforce deterministic dedup by entry_id
+        unique = {}
+        for e in entries:
+            unique[e.entry_id] = e
+        return list(sorted(unique.values(), key=lambda x: x.entry_id))

@@ -1285,6 +1285,7 @@ class GameLoop:
                 self.social_state_core.apply_events(raw_events)
 
         # Phase 7.7 — record journal entries and refresh memory panels
+        # Fix 6: only refresh recap/snapshot when there are meaningful events
         if hasattr(self, "campaign_memory_core") and self.campaign_memory_core is not None:
             self.campaign_memory_core.record_action_resolution(
                 resolution=result_dict,
@@ -1292,18 +1293,19 @@ class GameLoop:
                 social_state_core=self.social_state_core,
                 tick=self._tick_count,
             )
-            self.campaign_memory_core.refresh_recap(
-                coherence_core=self.coherence_core,
-                social_state_core=self.social_state_core,
-                creator_canon_state=getattr(self, "creator_canon_state", None),
-                tick=self._tick_count,
-            )
-            self.campaign_memory_core.refresh_campaign_snapshot(
-                coherence_core=self.coherence_core,
-                social_state_core=self.social_state_core,
-                creator_canon_state=getattr(self, "creator_canon_state", None),
-                tick=self._tick_count,
-            )
+            if result_dict.get("events"):
+                self.campaign_memory_core.refresh_recap(
+                    coherence_core=self.coherence_core,
+                    social_state_core=self.social_state_core,
+                    creator_canon_state=getattr(self, "creator_canon_state", None),
+                    tick=self._tick_count,
+                )
+                self.campaign_memory_core.refresh_campaign_snapshot(
+                    coherence_core=self.coherence_core,
+                    social_state_core=self.social_state_core,
+                    creator_canon_state=getattr(self, "creator_canon_state", None),
+                    tick=self._tick_count,
+                )
 
         return {
             "ok": True,

@@ -37,6 +37,11 @@ class CampaignMemoryCore:
         self.last_campaign_snapshot: CampaignMemorySnapshot | None = None
         self.codex_entries: dict[str, CodexEntry] = {}
         self._mode: str = "live"
+        # Fix 1: bounded journal with deterministic trimming
+        self._max_entries: int = 500
+        # Fix 5: bounded snapshot history
+        self._snapshot_history: list[CampaignMemorySnapshot] = []
+        self._max_snapshots: int = 50
 
         self._journal_builder = JournalBuilder()
         self._recap_builder = RecapBuilder()
@@ -69,6 +74,15 @@ class CampaignMemoryCore:
             tick=tick,
         )
         self.journal_entries.extend(thread_entries)
+
+        # Fix 1: deterministic trimming after entries are added
+        self._trim_journal_if_needed()
+
+    def _trim_journal_if_needed(self) -> None:
+        """Fix 1: deterministic bounded journal trimming."""
+        if len(self.journal_entries) > self._max_entries:
+            overflow = len(self.journal_entries) - self._max_entries
+            self.journal_entries = self.journal_entries[overflow:]
 
     def refresh_recap(
         self,
@@ -112,23 +126,34 @@ class CampaignMemoryCore:
         tick: int | None = None,
     ) -> dict:
         """Refresh the campaign memory snapshot and return a presenter-shaped payload."""
-        self.last_campaign_snapshot = self._campaign_memory_builder.build(
+        snapshot = self._campaign_memory_builder.build(
             coherence_core=coherence_core,
             social_state_core=social_state_core,
             creator_canon_state=creator_canon_state,
             tick=tick,
         )
-        return self._presenter.present_campaign_memory(self.last_campaign_snapshot.to_dict())
+        self.last_campaign_snapshot = snapshot
+
+        # Fix 5: keep bounded snapshot history
+        self._snapshot_history.append(snapshot)
+        if len(self._snapshot_history) > self._max_snapshots:
+            self._snapshot_history = self._snapshot_history[-self._max_snapshots:]
+
+        return self._presenter.present_campaign_memory(snapshot.to_dict())
 
     def serialize_state(self) -> dict:
-        """Serialize derived memory state for snapshot persistence."""
+        """Serialize derived memory state for snapshot persistence.
+
+        Fix 8: defensive copy — return fresh dicts so callers cannot
+        mutate internal state.
+        """
         return {
-            "journal_entries": [e.to_dict() for e in self.journal_entries],
-            "last_recap": self.last_recap.to_dict() if self.last_recap else None,
+            "journal_entries": [dict(e.to_dict()) for e in self.journal_entries],
+            "last_recap": dict(self.last_recap.to_dict()) if self.last_recap else None,
             "last_campaign_snapshot": (
-                self.last_campaign_snapshot.to_dict() if self.last_campaign_snapshot else None
+                dict(self.last_campaign_snapshot.to_dict()) if self.last_campaign_snapshot else None
             ),
-            "codex_entries": {k: v.to_dict() for k, v in self.codex_entries.items()},
+            "codex_entries": {k: dict(v.to_dict()) for k, v in self.codex_entries.items()},
             "mode": self._mode,
         }
 

@@ -330,10 +330,10 @@ class TestJournalBuilder:
 
     def test_entry_id_deterministic(self):
         builder = JournalBuilder()
-        id1 = builder._entry_id("action", 5, "act-1")
-        id2 = builder._entry_id("action", 5, "act-1")
+        id1 = builder._entry_id("action", 5, "act-1", 0)
+        id2 = builder._entry_id("action", 5, "act-1", 0)
         assert id1 == id2
-        assert id1 == "journal:action:5:act-1"
+        assert id1 == "journal:action:5:act-1:0"
 
 
 # ---------------------------------------------------------------------------
@@ -585,7 +585,7 @@ class TestMemoryPresenter:
         assert result["count"] == 1
         assert len(result["items"]) == 1
         item = result["items"][0]
-        assert "entry_id" in item
+        assert "id" in item
         assert "title" in item
 
     def test_present_recap_ui_safe(self):
@@ -630,8 +630,9 @@ class TestMemoryPresenter:
         presenter = MemoryPresenter()
         entry = {"entry_id": "je-1", "entry_type": "action", "title": "Hit", "summary": "Player hit", "tick": 3, "location": "forest"}
         result = presenter.present_journal_entry(entry)
-        assert result["entry_id"] == "je-1"
+        assert result["id"] == "je-1"
         assert result["title"] == "Hit"
+        assert result["type"] == "action"
 
     def test_present_codex_entry(self):
         presenter = MemoryPresenter()

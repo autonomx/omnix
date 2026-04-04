@@ -46,18 +46,26 @@ class RecapBuilder:
         coherence_core: Any,
         social_state_core: Any | None,
     ) -> str:
-        """Build a concise text summary from state."""
+        """Build a concise text summary from state.
+
+        Fix 4: enforce deterministic ordering before summarizing.
+        """
         parts: list[str] = []
         scene = coherence_core.get_scene_summary()
         location = scene.get("location")
         if location:
             parts.append(f"Current location: {location}.")
 
-        threads = coherence_core.get_unresolved_threads()
+        # Fix 4: sort threads for deterministic output
+        threads = sorted(
+            coherence_core.get_unresolved_threads(),
+            key=lambda t: t.get("thread_id", t.get("title", ""))
+        )
         if threads:
             thread_titles = [t.get("title", "unknown") for t in threads[:3]]
             parts.append(f"Active threads: {', '.join(thread_titles)}.")
 
+        # Fix 4: consequences are already ordered by coherence_core
         consequences = coherence_core.get_recent_consequences(limit=3)
         if consequences:
             c_summaries = [c.get("summary", "") for c in consequences if c.get("summary")]
@@ -66,22 +74,29 @@ class RecapBuilder:
 
         if social_state_core is not None:
             state = social_state_core.get_state()
-            active_rumors = [r for r in state.rumors.values() if r.active]
+            # Fix 4: sort rumors by ID for deterministic output
+            active_rumors = sorted(
+                [r for r in state.rumors.values() if r.active],
+                key=lambda r: getattr(r, "rumor_id", "") if hasattr(r, "rumor_id") else ""
+            )
             if active_rumors:
                 parts.append(f"{len(active_rumors)} active rumor(s) circulating.")
 
         return " ".join(parts) if parts else "No notable events yet."
 
     def _social_highlights(self, social_state_core: Any | None) -> list[dict]:
-        """Extract social highlights from social state."""
+        """Extract social highlights from social state.
+
+        Fix 4: enforce deterministic ordering.
+        """
         if social_state_core is None:
             return []
 
         highlights: list[dict] = []
         state = social_state_core.get_state()
 
-        # Active rumors
-        for rumor in state.rumors.values():
+        # Active rumors — sorted by rumor_id for determinism
+        for rumor in sorted(state.rumors.values(), key=lambda r: r.rumor_id):
             if rumor.active:
                 highlights.append({
                     "type": "rumor",
@@ -89,8 +104,9 @@ class RecapBuilder:
                     "subject_id": rumor.subject_id,
                 })
 
-        # Notable relationships (high hostility or trust)
-        for rel in state.relationships.values():
+        # Notable relationships (high hostility or trust) — sorted by key
+        for rel_key in sorted(state.relationships.keys()):
+            rel = state.relationships[rel_key]
             if abs(rel.trust) >= 0.5 or abs(rel.hostility) >= 0.5:
                 highlights.append({
                     "type": "relationship",

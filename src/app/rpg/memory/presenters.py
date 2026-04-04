@@ -63,12 +63,16 @@ class MemoryPresenter:
         }
 
     def present_journal_entry(self, entry: dict) -> dict:
-        """Present a single journal entry as a UI-safe dict."""
+        """Present a single journal entry as a UI-safe dict.
+
+        Fix 7: whitelist fields only — no raw metadata passed through.
+        """
         return {
-            "entry_id": entry.get("entry_id", ""),
-            "entry_type": entry.get("entry_type", ""),
-            "title": entry.get("title", ""),
-            "summary": entry.get("summary", ""),
-            "tick": entry.get("tick"),
+            "id": entry.get("entry_id"),
+            "title": entry.get("title"),
+            "summary": entry.get("summary"),
+            "type": entry.get("entry_type"),
+            "entities": entry.get("entity_ids", []),
+            "threads": entry.get("thread_ids", []),
             "location": entry.get("location"),
         }

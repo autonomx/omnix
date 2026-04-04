@@ -32,7 +32,7 @@ class JournalBuilder:
 
         entries.append(
             JournalEntry(
-                entry_id=self._entry_id("action", tick, resolved.get("action_id", "unknown")),
+                entry_id=self._entry_id("action", tick, resolved.get("action_id", "unknown"), 0),
                 tick=tick,
                 entry_type="action",
                 title=action_title,
@@ -44,13 +44,13 @@ class JournalBuilder:
         )
 
         # Extract consequence entries
-        for consequence in resolution.get("consequences", []):
+        for idx, consequence in enumerate(resolution.get("consequences", [])):
             c_summary = consequence.get("summary", "")
             c_entity_ids = list(consequence.get("entity_ids", []))
             if c_summary:
                 entries.append(
                     JournalEntry(
-                        entry_id=self._entry_id("consequence", tick, consequence.get("consequence_id", "c")),
+                        entry_id=self._entry_id("consequence", tick, consequence.get("consequence_id", "c"), idx),
                         tick=tick,
                         entry_type="action",
                         title="Consequence",
@@ -97,11 +97,11 @@ class JournalBuilder:
         entries: list[JournalEntry] = []
         state = coherence_core.get_state()
 
-        for thread_id, thread in state.unresolved_threads.items():
+        for idx, (thread_id, thread) in enumerate(sorted(state.unresolved_threads.items())):
             if thread.status == "resolved" and thread.resolved_tick == tick:
                 entries.append(
                     JournalEntry(
-                        entry_id=self._entry_id("thread_resolution", tick, thread_id),
+                        entry_id=self._entry_id("thread_resolution", tick, thread_id, idx),
                         tick=tick,
                         entry_type="thread_resolution",
                         title=f"Thread Resolved: {thread.title}",
@@ -114,7 +114,7 @@ class JournalBuilder:
             elif thread.updated_tick == tick and thread.status != "resolved":
                 entries.append(
                     JournalEntry(
-                        entry_id=self._entry_id("thread_progress", tick, thread_id),
+                        entry_id=self._entry_id("thread_progress", tick, thread_id, idx),
                         tick=tick,
                         entry_type="thread_progress",
                         title=f"Thread Updated: {thread.title}",
@@ -140,11 +140,11 @@ class JournalBuilder:
         state = social_state_core.get_state()
 
         # Rumor entries
-        for rumor_id, rumor in state.rumors.items():
+        for idx, (rumor_id, rumor) in enumerate(sorted(state.rumors.items())):
             if rumor.active:
                 entries.append(
                     JournalEntry(
-                        entry_id=self._entry_id("rumor", tick, rumor_id),
+                        entry_id=self._entry_id("rumor", tick, rumor_id, idx),
                         tick=tick,
                         entry_type="rumor",
                         title=f"Rumor: {rumor.summary[:50]}",
@@ -157,7 +157,7 @@ class JournalBuilder:
 
         return entries
 
-    def _entry_id(self, prefix: str, tick: int | None, key: str) -> str:
+    def _entry_id(self, prefix: str, tick: int | None, key: str, index: int = 0) -> str:
         """Generate a deterministic entry ID."""
         tick_part = str(tick) if tick is not None else "none"
-        return f"journal:{prefix}:{tick_part}:{key}"
+        return f"journal:{prefix}:{tick_part}:{key}:{index}"
