@@ -18,12 +18,21 @@ class PackLoader:
 
     def load(self, pack: AdventurePack) -> dict:
         """Load a single pack into a seed payload."""
-        return {
+        payload = {
             "creator_seed": self._to_creator_seed(pack),
             "arc_seed": self._to_arc_seed(pack),
             "social_seed": self._to_social_seed(pack),
             "memory_seed": self._to_memory_seed(pack),
         }
+
+        # Phase 7.9 tightening — deterministic ordering
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    if isinstance(v, list):
+                        v.sort(key=lambda x: str(x))
+
+        return payload
 
     def load_many(self, packs: list[AdventurePack]) -> dict:
         """Load and merge multiple packs into a single seed payload."""

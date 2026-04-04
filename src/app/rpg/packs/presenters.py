@@ -11,6 +11,7 @@ class PackPresenter:
 
     def present_pack_list(self, packs: list[dict]) -> dict:
         """Present a list of packs for the UI."""
+        packs = sorted(packs, key=lambda p: p.get("metadata", {}).get("pack_id", ""))
         items = []
         for pack in packs:
             meta = pack.get("metadata", {})

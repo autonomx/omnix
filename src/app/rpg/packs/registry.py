@@ -17,7 +17,14 @@ class PackRegistry:
 
     def register(self, pack: AdventurePack) -> None:
         """Register a pack by its pack_id."""
-        self.packs[pack.metadata.pack_id] = pack
+        pack_id = pack.metadata.pack_id
+
+        if pack_id in self.packs:
+            existing = self.packs[pack_id]
+            if existing.metadata.version != pack.metadata.version:
+                raise ValueError(f"pack_version_conflict:{pack_id}")
+
+        self.packs[pack_id] = pack
 
     def remove(self, pack_id: str) -> None:
         """Remove a pack from the registry."""

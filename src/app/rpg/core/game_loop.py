@@ -319,6 +319,7 @@ class GameLoop:
         self.pack_merger = PackMerger()
         self.pack_exporter = PackExporter()
         self.pack_presenter = PackPresenter()
+        self._applied_pack_ids: set[str] = set()
         if "pack_registry" not in self._snapshot_systems:
             self._snapshot_systems.append("pack_registry")
 
@@ -1574,6 +1575,10 @@ class GameLoop:
         - social state (social_seed)
         - memory/codex (memory_seed)
         """
+        pack_id = payload.get("pack_id")
+        if pack_id and pack_id in self._applied_pack_ids:
+            return {"ok": True, "skipped": True}
+
         applied: list[str] = []
 
         # Creator seed — apply facts and content to creator canon
@@ -1607,6 +1612,9 @@ class GameLoop:
             if hasattr(core, "load_memory_seed"):
                 core.load_memory_seed(memory_seed)
                 applied.append("memory_seed")
+
+        if pack_id:
+            self._applied_pack_ids.add(pack_id)
 
         return {
             "ok": True,

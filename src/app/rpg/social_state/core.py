@@ -70,9 +70,7 @@ class SocialStateCore:
         """
         from .models import (
             AllianceRecord,
-            RelationshipStateRecord,
             ReputationEdge,
-            RumorRecord,
         )
 
         for seed in payload.get("social_seeds", []):
@@ -89,17 +87,15 @@ class SocialStateCore:
                 )
                 self.reputation_graph.upsert_edge(self.state, edge)
             elif seed_type == "relationship":
-                record = RelationshipStateRecord(
-                    relationship_id=f"{seed.get('entity_a', '')}_{seed.get('entity_b', '')}",
+                self.relationship_tracker.adjust(
+                    state=self.state,
                     source_id=seed.get("entity_a", ""),
                     target_id=seed.get("entity_b", ""),
                     trust=seed.get("trust", 0.0),
-                    fear=seed.get("fear", 0.0),
                     hostility=seed.get("hostility", 0.0),
                     respect=seed.get("respect", 0.0),
-                    metadata={"source": "pack_seed"},
+                    metadata={"symmetric": True, "source": "pack_seed"},
                 )
-                self.relationship_tracker.upsert(self.state, record)
             elif seed_type == "rumor":
                 self.rumor_log.seed_rumor(
                     state=self.state,

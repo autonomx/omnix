@@ -161,6 +161,12 @@ class PackExporter:
         version: str,
         pack_id: str,
     ) -> AdventurePack:
-        """Export a minimal empty adventure pack."""
+        """Export a minimal empty adventure pack.
+
+        Phase 7.9 tightening — normalize through serialization for
+        deterministic field ordering.
+        """
         from .schema import build_empty_pack
-        return build_empty_pack(pack_id, title, version)
+        pack = build_empty_pack(pack_id, title, version)
+        data = pack.to_dict()
+        return AdventurePack.from_dict(data)

@@ -24,15 +24,18 @@ class PackMerger:
     def merge(self, packs: list[AdventurePack]) -> AdventurePack:
         """Merge a list of packs into a single combined pack.
 
-        Merge order is deterministic (list order).  First-wins for metadata.
-        Content lists are concatenated. Duplicate IDs across packs cause an
-        error unless they resolve to distinct namespaced values.
+        Merge order is deterministic — packs are sorted by pack_id first.
+        First-wins for metadata. Content lists are concatenated. Duplicate IDs
+        across packs cause an error unless they resolve to distinct namespaced
+        values.
         """
         if not packs:
             from .schema import build_empty_pack
             return build_empty_pack("merged", "Merged Pack", "0.0.0")
         if len(packs) == 1:
             return AdventurePack.from_dict(packs[0].to_dict())
+
+        packs = sorted(packs, key=lambda p: p.metadata.pack_id)
 
         self._check_conflicts(packs)
 
@@ -159,7 +162,7 @@ class PackMerger:
             if isinstance(item_id, str) and item_id:
                 if item_id in seen:
                     raise PackMergeConflictError(
-                        f"Duplicate {id_key} '{item_id}' across packs"
+                        f"duplicate_id:{item_id}"
                     )
                 seen[item_id] = item
             result.append(item)

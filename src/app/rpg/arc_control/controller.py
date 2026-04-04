@@ -174,14 +174,22 @@ class ArcControlController:
         coherence — it populates arc control state for subsequent
         director context building.
         """
-        from .models import NarrativeArc, RevealDirectiveState, PacingPlanState, SceneBiasState
+        from .models import NarrativeArc, RevealDirectiveState, PacingPlanState
 
         for arc_data in payload.get("arcs", []):
             if not isinstance(arc_data, dict):
                 continue
             arc_id = arc_data.get("arc_id", "")
             if arc_id:
-                self.arcs[arc_id] = NarrativeArc.from_dict(arc_data)
+                arc = NarrativeArc.from_dict(arc_data)
+                if arc_id in self.arcs:
+                    existing = self.arcs[arc_id]
+                    existing.title = arc.title or existing.title
+                    existing.related_thread_ids = (
+                        arc.related_thread_ids or existing.related_thread_ids
+                    )
+                else:
+                    self.arcs[arc_id] = arc
 
         for reveal_data in payload.get("reveal_seeds", []):
             if not isinstance(reveal_data, dict):
