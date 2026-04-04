@@ -50,6 +50,8 @@ from .tool_runtime_boundary import ToolRuntimeRecorder
 from ..recovery.manager import RecoveryManager
 from ..execution.resolver import ActionResolver
 from ..social_state.core import SocialStateCore
+from ..memory.core import CampaignMemoryCore
+from ..memory.presenters import MemoryPresenter
 
 
 class TickPhase(Enum):
@@ -289,6 +291,12 @@ class GameLoop:
         if "social_state_core" not in self._snapshot_systems:
             self._snapshot_systems.append("social_state_core")
 
+        # PHASE 7.7 — CAMPAIGN MEMORY (derived read-model layer)
+        self.campaign_memory_core = CampaignMemoryCore()
+        self.memory_presenter = MemoryPresenter()
+        if "campaign_memory_core" not in self._snapshot_systems:
+            self._snapshot_systems.append("campaign_memory_core")
+
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
 
@@ -342,6 +350,10 @@ class GameLoop:
         # PHASE 7.6 — Propagate mode to social state core
         if hasattr(self, "social_state_core") and self.social_state_core is not None:
             self.social_state_core.set_mode(mode)
+
+        # PHASE 7.7 — Propagate mode to campaign memory core
+        if hasattr(self, "campaign_memory_core") and self.campaign_memory_core is not None:
+            self.campaign_memory_core.set_mode(mode)
 
         # PHASE 7.0 — propagate creator/GM aware state
         if hasattr(self, "story_director"):
@@ -1272,6 +1284,27 @@ class GameLoop:
             if self.social_state_core is not None:
                 self.social_state_core.apply_events(raw_events)
 
+        # Phase 7.7 — record journal entries and refresh memory panels
+        if hasattr(self, "campaign_memory_core") and self.campaign_memory_core is not None:
+            self.campaign_memory_core.record_action_resolution(
+                resolution=result_dict,
+                coherence_core=self.coherence_core,
+                social_state_core=self.social_state_core,
+                tick=self._tick_count,
+            )
+            self.campaign_memory_core.refresh_recap(
+                coherence_core=self.coherence_core,
+                social_state_core=self.social_state_core,
+                creator_canon_state=getattr(self, "creator_canon_state", None),
+                tick=self._tick_count,
+            )
+            self.campaign_memory_core.refresh_campaign_snapshot(
+                coherence_core=self.coherence_core,
+                social_state_core=self.social_state_core,
+                creator_canon_state=getattr(self, "creator_canon_state", None),
+                tick=self._tick_count,
+            )
+
         return {
             "ok": True,
             "resolution": result_dict,
@@ -1320,3 +1353,39 @@ class GameLoop:
         query = self.social_state_core.get_query()
         state = self.social_state_core.get_state()
         return query.build_npc_social_view(state, npc_id, target_id)
+
+    # ------------------------------------------------------------------
+    # Phase 7.7 — Memory / Read-Model Panels
+    # ------------------------------------------------------------------
+
+    def get_journal_panel(self) -> dict:
+        """Return a presenter-shaped journal panel."""
+        if not hasattr(self, "campaign_memory_core") or self.campaign_memory_core is None:
+            return {"title": "Journal", "items": [], "count": 0}
+        entries = [e.to_dict() for e in self.campaign_memory_core.journal_entries]
+        return self.memory_presenter.present_journal_entries(entries)
+
+    def get_recap_panel(self) -> dict:
+        """Return a presenter-shaped recap panel."""
+        if not hasattr(self, "campaign_memory_core") or self.campaign_memory_core is None:
+            return {"title": "Recap", "summary": "", "scene_summary": {}, "active_threads": [], "recent_consequences": [], "social_highlights": []}
+        recap = self.campaign_memory_core.last_recap
+        if recap is None:
+            return {"title": "Recap", "summary": "", "scene_summary": {}, "active_threads": [], "recent_consequences": [], "social_highlights": []}
+        return self.memory_presenter.present_recap(recap.to_dict())
+
+    def get_codex_panel(self) -> dict:
+        """Return a presenter-shaped codex panel."""
+        if not hasattr(self, "campaign_memory_core") or self.campaign_memory_core is None:
+            return {"title": "Codex", "items": [], "count": 0}
+        entries = [e.to_dict() for e in self.campaign_memory_core.codex_entries.values()]
+        return self.memory_presenter.present_codex(entries)
+
+    def get_campaign_memory_panel(self) -> dict:
+        """Return a presenter-shaped campaign memory panel."""
+        if not hasattr(self, "campaign_memory_core") or self.campaign_memory_core is None:
+            return {"title": "Campaign Memory", "current_scene": {}, "active_threads": [], "resolved_threads": [], "major_consequences": [], "social_summary": {}, "canon_summary": {}}
+        snapshot = self.campaign_memory_core.last_campaign_snapshot
+        if snapshot is None:
+            return {"title": "Campaign Memory", "current_scene": {}, "active_threads": [], "resolved_threads": [], "major_consequences": [], "social_summary": {}, "canon_summary": {}}
+        return self.memory_presenter.present_campaign_memory(snapshot.to_dict())
