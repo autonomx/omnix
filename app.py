@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from app.rpg.routes import rpg_bp
+from app.rpg.creator_routes import creator_bp
 from flask import Flask
 
 from app.audio import audio_bp
@@ -51,6 +52,7 @@ def create_app():
     app.register_blueprint(llamacpp_bp)
     app.register_blueprint(voice_studio_bp)
     app.register_blueprint(rpg_bp)
+    app.register_blueprint(creator_bp)
     
     return app
 

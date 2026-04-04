@@ -234,9 +234,49 @@ def build_setup_template(template_name: str) -> dict:
     return dict(_TEMPLATES[template_name])
 
 
+_TEMPLATE_META: dict[str, dict] = {
+    "fantasy_adventure": {
+        "label": "Fantasy Adventure",
+        "description": "Classic high-fantasy with heroic quests, magical creatures, and ancient prophecies.",
+        "recommended_for": "First-time players, heroic storytelling",
+    },
+    "political_intrigue": {
+        "label": "Political Intrigue",
+        "description": "Courtly machinations, hidden alliances, and power plays in a renaissance setting.",
+        "recommended_for": "Players who enjoy dialogue, scheming, and consequences",
+    },
+    "mystery_noir": {
+        "label": "Mystery Noir",
+        "description": "A rain-soaked detective story where nothing is what it seems.",
+        "recommended_for": "Players who enjoy investigation and moral ambiguity",
+    },
+    "grimdark_survival": {
+        "label": "Grimdark Survival",
+        "description": "A harsh, unforgiving world where every resource counts and death is permanent.",
+        "recommended_for": "Experienced players seeking challenge and tension",
+    },
+    "cyberpunk_heist": {
+        "label": "Cyberpunk Heist",
+        "description": "Neon-lit megacities, corporate espionage, and one last job to pull off.",
+        "recommended_for": "Players who enjoy fast-paced action and stylish storytelling",
+    },
+}
+
+
 def list_setup_templates() -> list[dict]:
     """Return a list of available template descriptors for UI display."""
-    return [
-        {"name": name, "genre": tpl.get("genre", ""), "mood": tpl.get("mood", "")}
-        for name, tpl in _TEMPLATES.items()
-    ]
+    result = []
+    for name, tpl in _TEMPLATES.items():
+        meta = _TEMPLATE_META.get(name, {})
+        result.append({
+            "name": name,
+            "genre": tpl.get("genre", ""),
+            "mood": tpl.get("mood", ""),
+            "difficulty_style": tpl.get("difficulty_style", ""),
+            "label": meta.get("label", name.replace("_", " ").title()),
+            "description": meta.get("description", ""),
+            "recommended_for": meta.get("recommended_for", ""),
+            "setting": tpl.get("setting", ""),
+            "premise": tpl.get("premise", ""),
+        })
+    return result

@@ -1339,10 +1339,31 @@ class GameLoop:
             }
 
         setup = AdventureSetup.from_dict(data).normalize().with_defaults()
+
+        # Resolve starting context so the frontend can show a preview of
+        # the opening location and actors without duplicating the logic.
+        resolved_context = self.startup_generation_pipeline.resolve_starting_context(setup)
+
+        # Enrich with human-readable names
+        location_name = resolved_context.get("location_id") or ""
+        for loc in setup.locations:
+            if loc.location_id == resolved_context.get("location_id"):
+                location_name = loc.name
+                break
+
+        npc_names: list[str] = []
+        npc_lookup = {npc.npc_id: npc.name for npc in setup.npc_seeds}
+        for npc_id in resolved_context.get("npc_ids", []):
+            npc_names.append(npc_lookup.get(npc_id, npc_id))
+
+        resolved_context["location_name"] = location_name
+        resolved_context["npc_names"] = npc_names
+
         return {
             "ok": True,
             "validation": validation.to_dict(),
             "preview": self.creator_presenter.present_setup_summary(setup),
+            "resolved_context": resolved_context,
         }
 
     # ------------------------------------------------------------------
