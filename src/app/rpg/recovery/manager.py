@@ -399,3 +399,32 @@ class RecoveryManager:
         tagged["metadata"]["recovery_reason"] = reason
         tagged["metadata"]["recovery_policy"] = policy
         return tagged
+
+    # ------------------------------------------------------------------
+    # Phase 8.4 — Debug summary (read-only)
+    # ------------------------------------------------------------------
+
+    def build_debug_summary(self) -> dict:
+        """Return a read-only debug summary for GM/debug inspection.
+
+        Does not mutate recovery state.
+        """
+        recent = self._state.recent_recoveries[-10:]
+        warnings: list[str] = []
+        recovery_dicts: list[dict] = []
+        for rec in recent:
+            rd = rec.to_dict() if hasattr(rec, "to_dict") else dict(rec)
+            recovery_dicts.append(rd)
+            if rd.get("reason") == "contradiction":
+                warnings.append(
+                    f"Contradiction recovery at tick {rd.get('tick', '?')}"
+                )
+
+        return {
+            "recent_recoveries": recovery_dicts,
+            "total_recovery_count": len(self._state.recent_recoveries),
+            "last_recovery_reason": self._state.last_recovery_reason,
+            "last_recovery_tick": self._state.last_recovery_tick,
+            "warnings": warnings,
+            "mode": self.mode,
+        }

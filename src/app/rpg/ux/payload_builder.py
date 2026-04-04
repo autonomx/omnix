@@ -41,6 +41,7 @@ class UXPayloadBuilder:
         interaction = self._build_interaction_payload(loop)
         encounter = self._build_encounter_payload(loop)
         world = self._build_world_payload(loop)
+        debug = self._build_debug_payload(loop)
 
         payload = SceneUXPayload(
             payload_id=payload_id,
@@ -51,6 +52,7 @@ class UXPayloadBuilder:
             interaction=interaction,
             encounter=encounter,
             world=world,
+            debug=debug,
         )
         payload.trace = {"tick": tick}
         return payload
@@ -65,6 +67,7 @@ class UXPayloadBuilder:
         interaction = self._build_interaction_payload(loop)
         encounter = self._build_encounter_payload(loop)
         world = self._build_world_payload(loop)
+        debug = self._build_debug_payload(loop, action_result=action_result)
 
         return ActionResultPayload(
             result_id=str(uuid.uuid4()),
@@ -78,6 +81,7 @@ class UXPayloadBuilder:
             metadata={
                 "choice_id": action_result.get("choice_id"),
             },
+            debug=debug,
         )
 
     # ------------------------------------------------------------------
@@ -247,3 +251,41 @@ class UXPayloadBuilder:
                 last_result.get("generated_effects", [])
             )
         return presented
+
+    # ------------------------------------------------------------------
+    # Phase 8.4 — Debug payload
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_debug_payload(
+        loop: Any, action_result: dict | None = None
+    ) -> dict:
+        """Build a compact debug payload for UX payloads.
+
+        For scene payloads: includes a compact choice-debug summary.
+        For action result payloads: includes compact GM/debug bundle.
+        Keeps payloads bounded — does not dump raw trace blobs.
+        """
+        debug_bundle = getattr(loop, "last_debug_bundle", None)
+        if debug_bundle and isinstance(debug_bundle, dict):
+            # Return a compact summary from the stored bundle
+            summary: dict = {
+                "tick": debug_bundle.get("tick"),
+                "choice_count": len(debug_bundle.get("choices", [])),
+                "has_encounter": bool(debug_bundle.get("encounter_summary")),
+                "warning_count": len(debug_bundle.get("warnings", [])),
+            }
+            # Include dialogue summary flag
+            dlg = debug_bundle.get("dialogue_summary", {})
+            if dlg:
+                summary["has_dialogue"] = True
+            # Include world effect count
+            ws = debug_bundle.get("world_summary", {})
+            if ws:
+                summary["world_effect_count"] = ws.get("effect_count", 0)
+            # Include warnings
+            warnings = debug_bundle.get("warnings", [])
+            if warnings:
+                summary["warnings"] = list(warnings)[:5]
+            return summary
+        return {}

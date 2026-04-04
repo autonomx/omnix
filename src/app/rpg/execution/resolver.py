@@ -147,6 +147,7 @@ class ActionResolver:
         result_metadata: dict[str, Any] = {
             "mapped_action": dict(mapped_action),
             "evaluation": dict(evaluation),
+            "constraint_evaluation": dict(constraint_evaluation),
         }
 
         # Phase 8.2 — Attach encounter context to resolved action metadata

@@ -147,6 +147,30 @@ class GameplayControlController:
         )
         choice_set.metadata["framing"]["forced_recap"] = forced_recap
 
+        # --- Phase 8.4: Inject compact debug metadata into each option ---
+        enc_mode_active = None
+        if enc_ctrl is not None:
+            active_enc = (
+                enc_ctrl.get_active_encounter()
+                if hasattr(enc_ctrl, "get_active_encounter")
+                else None
+            )
+            if active_enc is not None and getattr(active_enc, "status", None) == "active":
+                enc_mode_active = getattr(active_enc, "mode", None)
+        for opt in choice_set.options:
+            opt_meta = opt.metadata if hasattr(opt, "metadata") else {}
+            if not opt_meta.get("debug_source"):
+                source = "standard"
+                if opt_meta.get("encounter_start"):
+                    source = "encounter_start"
+                elif enc_mode_active and opt_meta.get("encounter_action_type"):
+                    source = f"encounter:{enc_mode_active}"
+                opt_meta["debug_source"] = source
+            if not opt_meta.get("debug_priority"):
+                opt_meta["debug_priority"] = str(getattr(opt, "priority", 0.0))
+            if hasattr(opt, "metadata"):
+                opt.metadata = opt_meta
+
         # --- Record presentation ---
         self.framing_engine.mark_choice_set_presented(choice_set, tick=tick)
 
