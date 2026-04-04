@@ -52,6 +52,42 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _thread_related_ids(thread: dict[str, Any]) -> dict[str, list[str]]:
+    """Extract directly referenced ids from a thread payload."""
+    thread = _safe_dict(thread)
+    return {
+        "npc_ids": [x for x in _safe_list(thread.get("npc_ids")) if x],
+        "faction_ids": [x for x in _safe_list(thread.get("faction_ids")) if x],
+        "location_ids": [x for x in _safe_list(thread.get("location_ids")) if x],
+    }
+
+
+def _infer_thread_links(
+    thread: dict[str, Any],
+    npc_by_id: dict[str, dict[str, Any]],
+) -> dict[str, list[str]]:
+    """Infer missing thread links through linked NPC faction/location."""
+    direct = _thread_related_ids(thread)
+    factions = set(direct["faction_ids"])
+    locations = set(direct["location_ids"])
+    npcs = set(direct["npc_ids"])
+
+    for npc_id in list(npcs):
+        npc = _safe_dict(npc_by_id.get(npc_id))
+        faction_id = npc.get("faction_id")
+        location_id = npc.get("location_id")
+        if faction_id:
+            factions.add(faction_id)
+        if location_id:
+            locations.add(location_id)
+
+    return {
+        "npc_ids": sorted(npcs),
+        "faction_ids": sorted(factions),
+        "location_ids": sorted(locations),
+    }
+
+
 def _make_node(node_id: str, node_type: str, label: str, meta: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "id": node_id,
@@ -134,6 +170,7 @@ def build_world_graph(setup_payload: dict[str, Any]) -> dict[str, Any]:
     # --- Threads ---
     metadata = _safe_dict(setup_payload.get("metadata"))
     threads = _safe_list(metadata.get("regenerated_threads"))
+    npc_by_id = {npc.get("npc_id"): npc for npc in _safe_list(setup_payload.get("npc_seeds")) if npc.get("npc_id")}
     for idx, thread in enumerate(threads):
         thread = _safe_dict(thread)
         tid = _safe_str(thread.get("thread_id")) or f"thread_{idx}"
@@ -144,23 +181,24 @@ def build_world_graph(setup_payload: dict[str, Any]) -> dict[str, Any]:
         }))
         node_ids.add(tid)
 
-        # Thread → referenced entities
-        for ref_id in _safe_list(thread.get("involved_entities")):
-            ref_id = _safe_str(ref_id)
+        inferred = _infer_thread_links(thread, npc_by_id)
+
+        # Thread → referenced entities (NPCs)
+        for ref_id in inferred["npc_ids"]:
             if ref_id and ref_id in node_ids:
                 edges.append(_make_edge(tid, ref_id, "involves"))
 
         # Thread → referenced factions
-        for ref_id in _safe_list(thread.get("faction_ids")):
+        for ref_id in inferred["faction_ids"]:
             ref_id = _safe_str(ref_id)
             if ref_id and ref_id in node_ids:
                 edges.append(_make_edge(tid, ref_id, "pressures"))
 
         # Thread → referenced locations
-        for ref_id in _safe_list(thread.get("location_ids")):
+        for ref_id in inferred["location_ids"]:
             ref_id = _safe_str(ref_id)
             if ref_id and ref_id in node_ids:
-                edges.append(_make_edge(tid, ref_id, "involves"))
+                edges.append(_make_edge(tid, ref_id, "connected_to"))
 
     # --- Opening ---
     starting_location = _safe_str(setup_payload.get("starting_location_id"))
@@ -240,23 +278,25 @@ def build_simulation_summary(setup_payload: dict[str, Any]) -> dict[str, Any]:
     threads_at_location: dict[str, int] = {}
     threads_at_faction: dict[str, int] = {}
     factions_linked_by_threads: dict[str, set[str]] = {}
+    npc_by_id = {npc.get("npc_id"): npc for npc in npcs if npc.get("npc_id")}
 
     for thread in threads:
         thread = _safe_dict(thread)
         tid = _safe_str(thread.get("thread_id")) or ""
+        inferred = _infer_thread_links(thread, npc_by_id)
 
-        for ref_id in _safe_list(thread.get("location_ids")):
+        for ref_id in inferred["location_ids"]:
             ref_id = _safe_str(ref_id)
             if ref_id in location_ids:
                 threads_at_location[ref_id] = threads_at_location.get(ref_id, 0) + 1
 
-        for ref_id in _safe_list(thread.get("faction_ids")):
+        for ref_id in inferred["faction_ids"]:
             ref_id = _safe_str(ref_id)
             if ref_id in faction_ids:
                 threads_at_faction[ref_id] = threads_at_faction.get(ref_id, 0) + 1
 
         # Track which factions share threads
-        thread_factions = [_safe_str(r) for r in _safe_list(thread.get("faction_ids")) if _safe_str(r) in faction_ids]
+        thread_factions = [_safe_str(r) for r in inferred["faction_ids"] if _safe_str(r) in faction_ids]
         for fid in thread_factions:
             factions_linked_by_threads.setdefault(fid, set()).update(thread_factions)
 
@@ -359,6 +399,8 @@ def build_entity_inspector(setup_payload: dict[str, Any]) -> dict[str, Any]:
     entities: dict[str, dict[str, Any]] = {}
     metadata = _safe_dict(setup_payload.get("metadata"))
     threads = _safe_list(metadata.get("regenerated_threads"))
+    npcs = _safe_list(setup_payload.get("npc_seeds"))
+    npc_by_id = {npc.get("npc_id"): npc for npc in npcs if npc.get("npc_id")}
 
     # Build reverse indexes: entity_id → threads it appears in
     entity_threads: dict[str, list[dict[str, str]]] = {}
@@ -367,16 +409,17 @@ def build_entity_inspector(setup_payload: dict[str, Any]) -> dict[str, Any]:
         tid = _safe_str(thread.get("thread_id")) or ""
         title = _safe_str(thread.get("title")) or _safe_str(thread.get("label")) or ""
         thread_ref = {"thread_id": tid, "title": title}
+        inferred = _infer_thread_links(thread, npc_by_id)
 
-        for ref_id in _safe_list(thread.get("involved_entities")):
+        for ref_id in inferred["npc_ids"]:
             ref_id = _safe_str(ref_id)
             if ref_id:
                 entity_threads.setdefault(ref_id, []).append(thread_ref)
-        for ref_id in _safe_list(thread.get("faction_ids")):
+        for ref_id in inferred["faction_ids"]:
             ref_id = _safe_str(ref_id)
             if ref_id:
                 entity_threads.setdefault(ref_id, []).append(thread_ref)
-        for ref_id in _safe_list(thread.get("location_ids")):
+        for ref_id in inferred["location_ids"]:
             ref_id = _safe_str(ref_id)
             if ref_id:
                 entity_threads.setdefault(ref_id, []).append(thread_ref)
@@ -467,13 +510,14 @@ def build_entity_inspector(setup_payload: dict[str, Any]) -> dict[str, Any]:
     for idx, thread in enumerate(threads):
         thread = _safe_dict(thread)
         tid = _safe_str(thread.get("thread_id")) or f"thread_{idx}"
+        inferred = _infer_thread_links(thread, npc_by_id)
         entities[tid] = {
             "type": "thread",
             "title": _safe_str(thread.get("title")) or _safe_str(thread.get("label")) or f"Thread {idx + 1}",
             "description": _safe_str(thread.get("description")),
-            "involved_entities": _safe_list(thread.get("involved_entities")),
-            "faction_ids": _safe_list(thread.get("faction_ids")),
-            "location_ids": _safe_list(thread.get("location_ids")),
+            "involved_entities": inferred["npc_ids"],
+            "faction_ids": inferred["faction_ids"],
+            "location_ids": inferred["location_ids"],
             "status": _safe_str(thread.get("status")),
         }
 

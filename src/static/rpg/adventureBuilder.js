@@ -54,9 +54,13 @@ var AdventureBuilder = (function () {
         AdventureBuilderState.markDirty(state);
         // Phase 2 — invalidate world inspection cache on setup changes
         if (state.worldInspection) {
+            if (state.worldInspection.graph) {
+                state.worldInspection.previousGraph = state.worldInspection.graph;
+            }
             state.worldInspection.graph = null;
             state.worldInspection.simulation = null;
             state.worldInspection.inspector = null;
+            state.worldInspection.graphDiff = null;
         }
     }
 
@@ -809,13 +813,21 @@ var AdventureBuilder = (function () {
     }
 
     function _renderStep5WorldGraph(contentEl) {
+        var wi = state.worldInspection || {};
         var html = '<div class="ab-section ab-wg-section">' +
+            '<div id="abWorldGraphDiff"></div>' +
             '<div id="abWgControls" class="ab-wg-controls-container"></div>' +
             '<div id="abWgLegend"></div>' +
             '<div id="abWgCanvas" class="ab-wg-canvas"></div>' +
             '<div id="abWgNodeInspector" class="ab-wg-node-inspector"></div>' +
             '</div>';
         contentEl.innerHTML = html;
+
+        // Render diff summary if available
+        var diffEl = contentEl.querySelector('#abWorldGraphDiff');
+        if (diffEl) {
+            AdventureBuilderWorldGraph.renderGraphDiffSummary(diffEl, wi.graphDiff);
+        }
         _fetchAndRenderWorldGraph(contentEl);
     }
 
@@ -895,7 +907,7 @@ var AdventureBuilder = (function () {
     function _fetchWorldInspection(callback) {
         var wi = state.worldInspection;
         if (!wi || !wi.activeTab) {
-            state.worldInspection = { loading: false, graph: null, simulation: null, inspector: null, selectedNodeId: null, activeTab: 'summary' };
+            state.worldInspection = { loading: false, graph: null, simulation: null, inspector: null, selectedNodeId: null, hoveredNodeId: null, activeTab: 'summary', previousGraph: null, graphDiff: { added: [], removed: [] }, layoutMode: 'auto' };
         }
         if (state.worldInspection.loading) return;
         state.worldInspection.loading = true;
@@ -903,9 +915,15 @@ var AdventureBuilder = (function () {
         AdventureBuilderApi.inspectWorld(state.setup).then(function (res) {
             state.worldInspection.loading = false;
             if (res.success) {
+                var prevGraph = state.worldInspection.previousGraph || state.worldInspection.graph;
+                state.worldInspection.graphDiff = AdventureBuilderWorldGraph.computeAndStoreGraphDiff(prevGraph, res.graph);
                 state.worldInspection.graph = res.graph;
                 state.worldInspection.simulation = res.simulation;
                 state.worldInspection.inspector = res.inspector;
+                // Auto-select first node if none selected
+                if (!state.worldInspection.selectedNodeId && res.graph && res.graph.nodes && res.graph.nodes.length) {
+                    state.worldInspection.selectedNodeId = res.graph.nodes[0].id;
+                }
             }
             if (callback) callback(res);
         }).catch(function () {
@@ -932,11 +950,19 @@ var AdventureBuilder = (function () {
             AdventureBuilderWorldGraph.renderLegend(legend);
             AdventureBuilderWorldGraph.renderGraph(canvas, wi.graph, {
                 selectedNodeId: wi.selectedNodeId,
+                hoveredNodeId: wi.hoveredNodeId,
+                graphDiff: wi.graphDiff,
                 filterType: _wgFilterType,
                 searchQuery: _wgSearchQuery,
-                onNodeClick: function (nodeId) {
+                layoutMode: wi.layoutMode || 'auto',
+                onHoverNode: function (nodeId) {
+                    wi.hoveredNodeId = nodeId;
+                    _rerender();
+                },
+                onSelectNode: function (nodeId) {
                     wi.selectedNodeId = nodeId;
                     _rerender();
+                    AdventureBuilderWorldGraph.renderInspector(inspector, nodeId, wi.inspector);
                 }
             });
             AdventureBuilderWorldGraph.renderInspector(inspector, wi.selectedNodeId, wi.inspector);

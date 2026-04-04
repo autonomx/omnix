@@ -973,3 +973,60 @@
     border-radius: 6px;
     margin-top: 4px;
 }
+
+/* ─── Phase 2 — Column layout for larger graphs ────────────────────────── */
+
+.ab-wg-columns {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.ab-wg-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 220px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.ab-wg-column-title {
+    font-weight: 600;
+    text-transform: capitalize;
+    opacity: 0.9;
+}
+
+.ab-wg-column-node {
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+}
+
+.ab-wg-column-node.selected {
+    outline: 2px solid rgba(255, 255, 255, 0.35);
+}
+
+.ab-wg-column-node.dimmed {
+    opacity: 0.45;
+}
+
+/* ─── Graph diff summary ───────────────────────────────────────────────── */
+
+.ab-wg-diff-summary {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.ab-wg-diff-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 0.9rem;
+}

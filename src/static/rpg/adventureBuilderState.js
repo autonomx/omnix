@@ -76,7 +76,11 @@ var AdventureBuilderState = (function () {
                 simulation: null,
                 inspector: null,
                 selectedNodeId: null,
-                activeTab: 'summary'
+                hoveredNodeId: null,
+                activeTab: 'summary',
+                previousGraph: null,
+                graphDiff: null,
+                layoutMode: 'auto'
             }
         };
     }

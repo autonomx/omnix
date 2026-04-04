@@ -14,6 +14,7 @@ var AdventureBuilderWorldGraph = (function () {
     'use strict';
 
     var _esc = AdventureBuilderRenderer.esc;
+    var MAX_FORCE_GRAPH_NODES = 50;
 
     // ─────────────────────────────────────────────────────────────────────
     // Node type config — colors and icons
@@ -39,6 +40,33 @@ var AdventureBuilderWorldGraph = (function () {
     // ─────────────────────────────────────────────────────────────────────
     // Simple force-directed layout (no external deps)
     // ─────────────────────────────────────────────────────────────────────
+
+    function _relatedNodeIds(graph, nodeId) {
+        var related = {};
+        (graph.edges || []).forEach(function (e) {
+            if (e.source === nodeId) related[e.target] = true;
+            if (e.target === nodeId) related[e.source] = true;
+        });
+        related[nodeId] = true;
+        return related;
+    }
+
+    function _computeGraphDiff(previousGraph, nextGraph) {
+        var prevNodes = {};
+        var nextNodes = {};
+        (previousGraph && previousGraph.nodes || []).forEach(function (n) { prevNodes[n.id] = n; });
+        (nextGraph && nextGraph.nodes || []).forEach(function (n) { nextNodes[n.id] = n; });
+
+        var added = [];
+        var removed = [];
+        Object.keys(nextNodes).forEach(function (id) {
+            if (!prevNodes[id]) added.push(id);
+        });
+        Object.keys(prevNodes).forEach(function (id) {
+            if (!nextNodes[id]) removed.push(id);
+        });
+        return { added: added, removed: removed };
+    }
 
     function _layoutGraph(nodes, edges, width, height) {
         if (!nodes.length) return [];
@@ -138,12 +166,57 @@ var AdventureBuilderWorldGraph = (function () {
     // SVG Graph rendering
     // ─────────────────────────────────────────────────────────────────────
 
+    function _renderColumnGraph(container, graph, opts) {
+        var hoveredNodeId = opts.hoveredNodeId || null;
+        var selectedNodeId = opts.selectedNodeId || null;
+        var activeNodeId = hoveredNodeId || selectedNodeId;
+        var related = activeNodeId ? _relatedNodeIds(graph, activeNodeId) : null;
+        var grouped = { faction: [], location: [], npc: [], thread: [], opening: [] };
+        (graph.nodes || []).forEach(function (n) {
+            var type = n.type || 'thread';
+            if (!grouped[type]) grouped[type] = [];
+            grouped[type].push(n);
+        });
+
+        var html = '<div class="ab-wg-columns">';
+        ['faction', 'location', 'npc', 'thread', 'opening'].forEach(function (type) {
+            var nc = NODE_CONFIG[type] || { label: type };
+            html += '<div class="ab-wg-column"><div class="ab-wg-column-title">' + nc.icon + ' ' + _esc(nc.label) + '</div>';
+            (grouped[type] || []).forEach(function (n) {
+                var cls = 'ab-wg-column-node';
+                if (selectedNodeId === n.id) cls += ' selected';
+                if (related && !related[n.id]) cls += ' dimmed';
+                html += '<button class="' + cls + '" data-node-id="' + _esc(n.id) + '">' + _esc(n.label) + '</button>';
+            });
+            html += '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+
+        container.querySelectorAll('[data-node-id]').forEach(function (btn) {
+            btn.addEventListener('mouseenter', function () {
+                if (opts.onHoverNode) opts.onHoverNode(btn.getAttribute('data-node-id'));
+            });
+            btn.addEventListener('mouseleave', function () {
+                if (opts.onHoverNode) opts.onHoverNode(null);
+            });
+            btn.addEventListener('click', function () {
+                if (opts.onSelectNode) opts.onSelectNode(btn.getAttribute('data-node-id'));
+            });
+        });
+    }
+
     function renderGraph(container, graphData, options) {
         options = options || {};
         var onNodeClick = options.onNodeClick || function () {};
+        var onHoverNode = options.onHoverNode || function () {};
+        var onSelectNode = options.onSelectNode || options.onNodeClick || function () {};
         var selectedNodeId = options.selectedNodeId || null;
+        var hoveredNodeId = options.hoveredNodeId || null;
+        var graphDiff = options.graphDiff || { added: [], removed: [] };
         var filterType = options.filterType || 'all';
         var searchQuery = (options.searchQuery || '').toLowerCase();
+        var layoutMode = options.layoutMode || 'auto';
 
         var nodes = (graphData && graphData.nodes) || [];
         var edges = (graphData && graphData.edges) || [];
@@ -167,6 +240,21 @@ var AdventureBuilderWorldGraph = (function () {
             return;
         }
 
+        // Auto-switch to column layout for larger graphs
+        if (layoutMode === 'auto') {
+            layoutMode = (graphData.nodes || []).length > MAX_FORCE_GRAPH_NODES ? 'columns' : 'force';
+        }
+        if (layoutMode === 'columns') {
+            var columnOpts = {
+                selectedNodeId: selectedNodeId,
+                hoveredNodeId: hoveredNodeId,
+                onHoverNode: onHoverNode,
+                onSelectNode: onSelectNode
+            };
+            _renderColumnGraph(container, graphData, columnOpts);
+            return;
+        }
+
         var width = container.clientWidth || 600;
         var height = Math.max(400, container.clientHeight || 400);
 
@@ -174,13 +262,14 @@ var AdventureBuilderWorldGraph = (function () {
         var posMap = {};
         laid.forEach(function (n) { posMap[n.id] = n; });
 
-        // Highlight: when a node is selected, find connected nodes
+        // Highlight: when a node is selected or hovered, find connected nodes
+        var activeNodeId = hoveredNodeId || selectedNodeId;
         var highlightIds = {};
-        if (selectedNodeId && posMap[selectedNodeId]) {
-            highlightIds[selectedNodeId] = true;
+        if (activeNodeId && posMap[activeNodeId]) {
+            highlightIds[activeNodeId] = true;
             filteredEdges.forEach(function (e) {
-                if (e.source === selectedNodeId) highlightIds[e.target] = true;
-                if (e.target === selectedNodeId) highlightIds[e.source] = true;
+                if (e.source === activeNodeId) highlightIds[e.target] = true;
+                if (e.target === activeNodeId) highlightIds[e.source] = true;
             });
         }
 
@@ -219,11 +308,13 @@ var AdventureBuilderWorldGraph = (function () {
         laid.forEach(function (n) {
             var nc = NODE_CONFIG[n.type] || { color: '#666', icon: '●' };
             var isSelected = n.id === selectedNodeId;
-            var dimmed = selectedNodeId && !highlightIds[n.id];
+            var isHovered = n.id === hoveredNodeId;
+            var dimmed = activeNodeId && !highlightIds[n.id];
+            var isAdded = graphDiff.added && graphDiff.added.indexOf(n.id) >= 0;
             var opacity = dimmed ? 0.3 : 1;
-            var r = isSelected ? 22 : 18;
-            var strokeWidth = isSelected ? 3 : 1.5;
-            var stroke = isSelected ? '#fff' : 'rgba(255,255,255,0.3)';
+            var r = isSelected ? 22 : (isHovered ? 20 : 18);
+            var strokeWidth = isSelected ? 3 : (isAdded ? 2.5 : 1.5);
+            var stroke = isSelected ? '#fff' : (isAdded ? '#6fcf97' : 'rgba(255,255,255,0.3)');
 
             svgParts.push(
                 '<g class="ab-wg-node" data-id="' + _esc(n.id) + '" style="cursor:pointer;opacity:' + opacity + '">' +
@@ -237,11 +328,18 @@ var AdventureBuilderWorldGraph = (function () {
         svgParts.push('</svg>');
         container.innerHTML = svgParts.join('');
 
-        // Attach click listeners
+        // Attach hover and click listeners
         container.querySelectorAll('.ab-wg-node').forEach(function (g) {
+            var nodeId = g.getAttribute('data-id');
+            g.addEventListener('mouseenter', function (ev) {
+                onHoverNode(nodeId);
+            });
+            g.addEventListener('mouseleave', function (ev) {
+                onHoverNode(null);
+            });
             g.addEventListener('click', function (ev) {
                 ev.stopPropagation();
-                onNodeClick(g.getAttribute('data-id'));
+                onSelectNode(nodeId);
             });
         });
 
@@ -249,7 +347,7 @@ var AdventureBuilderWorldGraph = (function () {
         var svg = container.querySelector('.ab-wg-svg');
         if (svg) {
             svg.addEventListener('click', function () {
-                onNodeClick(null);
+                onSelectNode(null);
             });
         }
     }
