@@ -42,7 +42,11 @@ def list_rpg_games():
 
 @rpg_bp.route("/api/rpg/games", methods=["POST"])
 def create_rpg_game():
-    """Create a new RPG game session."""
+    """Create a new RPG game session.
+
+    Deprecated: new adventures should use ``/api/rpg/adventure/start`` backed by
+    the structured ``AdventureSetup`` creator flow.
+    """
     data = request.get_json() or {}
     seed = data.get("seed")
     genre = data.get("genre", "medieval fantasy")
@@ -84,7 +88,7 @@ def create_rpg_game():
         opening_parts.append(session.world.lore)
     opening = "\n\n".join(opening_parts) if opening_parts else "Your adventure begins\u2026"
 
-    return jsonify({
+    response = jsonify({
         "success": True,
         "session_id": session.session_id,
         "world": {
@@ -94,7 +98,10 @@ def create_rpg_game():
         },
         "player": session.player.to_dict(),
         "opening": opening,
-    }), 201
+    })
+    response.headers["X-Omnix-RPG-Legacy-Create"] = "true"
+    response.headers["X-Omnix-RPG-Recommended-Create"] = "/api/rpg/adventure/start"
+    return response, 201
 
 
 def _sse(data: dict) -> str:

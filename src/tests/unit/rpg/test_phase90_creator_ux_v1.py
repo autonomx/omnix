@@ -22,13 +22,17 @@ import pytest
 # Service-level imports
 # ---------------------------------------------------------------------------
 from app.rpg.services.adventure_builder_service import (
+    ADVENTURE_PREVIEW_RESPONSE_VERSION,
     build_template_payload,
     get_templates,
     preview_setup,
     start_adventure,
     validate_setup,
 )
-from app.rpg.services.adventure_response_adapter import adapt_start_result
+from app.rpg.services.adventure_response_adapter import (
+    ADVENTURE_START_RESPONSE_VERSION,
+    adapt_start_result,
+)
 from app.rpg.creator.defaults import list_setup_templates
 from app.rpg.creator.validation import (
     ValidationResult,
@@ -598,3 +602,117 @@ class TestEndToEndFlow:
         result = start_adventure(payload)
         assert result["success"]
         assert "political intrigue" in result["world"]["genre"]
+
+
+# ===================================================================
+# Patch 7 — Regression tests for contract keys and invalid payloads
+# ===================================================================
+
+
+class TestPreviewResponseContract:
+    """Lock the preview response shape used by the frontend."""
+
+    def test_preview_has_response_version(self):
+        result = preview_setup(_minimal_setup())
+        assert result.get("response_version") == ADVENTURE_PREVIEW_RESPONSE_VERSION
+
+    def test_preview_has_required_keys(self):
+        result = preview_setup(_minimal_setup())
+        required_keys = {"success", "response_version", "ok", "validation", "preview", "resolved_context"}
+        assert required_keys.issubset(result.keys())
+
+    def test_preview_validation_shape(self):
+        result = preview_setup(_minimal_setup())
+        validation = result.get("validation", {})
+        assert "issues" in validation
+        assert "blocking" in validation
+
+    def test_preview_counts_shape(self):
+        result = preview_setup(_rich_setup())
+        counts = result.get("preview", {}).get("counts", {})
+        assert "factions" in counts
+        assert "locations" in counts
+        assert "npcs" in counts
+
+    def test_preview_resolved_context_keys(self):
+        result = preview_setup(_rich_setup())
+        ctx = result.get("resolved_context", {})
+        required_keys = {"location_id", "location_name", "npc_ids", "npc_names"}
+        assert required_keys.issubset(ctx.keys())
+
+
+class TestStartResponseContract:
+    """Lock the start response shape used by the frontend."""
+
+    def test_start_has_response_version(self):
+        result = start_adventure(_minimal_setup())
+        assert result.get("response_version") == ADVENTURE_START_RESPONSE_VERSION
+
+    def test_start_has_required_keys(self):
+        result = start_adventure(_minimal_setup())
+        required_keys = {
+            "success", "session_id", "opening", "world", "player",
+            "npcs", "locations", "factions", "memory", "worldEvents",
+            "creator",
+        }
+        assert required_keys.issubset(result.keys())
+
+    def test_start_has_version_metadata(self):
+        result = start_adventure(_minimal_setup())
+        assert result.get("start_response_version") == ADVENTURE_START_RESPONSE_VERSION
+        assert result.get("preview_response_version") == ADVENTURE_PREVIEW_RESPONSE_VERSION
+
+    def test_start_creator_metadata(self):
+        result = start_adventure(_minimal_setup())
+        creator = result.get("creator", {})
+        assert "setup_id" in creator
+
+
+class TestAdapterHandlesPartialResult:
+    """Ensure adapter handles None / partial internal output gracefully."""
+
+    def test_handles_all_none(self):
+        result = adapt_start_result({
+            "generated": None,
+            "setup": None,
+            "canon_summary": None,
+        })
+        assert result["success"] is True
+        assert result["npcs"] == []
+        assert result["locations"] == []
+        assert result["factions"] == []
+        assert result["memory"] == []
+        assert result["worldEvents"] == []
+
+    def test_handles_string_values(self):
+        """Non-list/non-dict values should be safely converted."""
+        result = adapt_start_result({
+            "generated": "broken",
+            "setup": "broken",
+            "canon_summary": "broken",
+        })
+        assert result["success"] is True
+        assert result["world"]["title"] == ""
+        assert result["player"]["name"] == "Player"
+
+    def test_handles_missing_keys(self):
+        result = adapt_start_result({})
+        assert result["success"] is True
+        assert result["session_id"]  # should generate UUID
+
+    def test_handles_npc_list_with_non_dicts(self):
+        result = adapt_start_result({
+            "ok": True,
+            "setup": {},
+            "generated": {
+                "seed_npcs": [None, "string", {"npc_id": "n1", "name": "Valid"}],
+            },
+            "canon_summary": {},
+        })
+        # Should filter out non-dict entries
+        assert len(result["npcs"]) == 1
+        assert result["npcs"][0]["name"] == "Valid"
+
+    def test_response_version_is_set(self):
+        result = adapt_start_result({})
+        assert result.get("response_version") == ADVENTURE_START_RESPONSE_VERSION

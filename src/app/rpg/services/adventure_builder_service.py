@@ -17,7 +17,85 @@ from ..creator.defaults import (
 )
 from ..creator.schema import AdventureSetup
 from ..creator.validation import validate_adventure_setup_payload
-from .adventure_response_adapter import adapt_start_result
+from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_start_result
+
+# ---------------------------------------------------------------------------
+# Response version constants — bump when the contract changes
+# ---------------------------------------------------------------------------
+
+ADVENTURE_PREVIEW_RESPONSE_VERSION = 1
+
+
+# ---------------------------------------------------------------------------
+# Preview response builder — stabilises the contract for the frontend
+# ---------------------------------------------------------------------------
+
+
+def _safe_list(value: Any) -> list[Any]:
+    """Return *value* if it is already a list, otherwise ``[]``."""
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    """Return *value* if it is already a dict, otherwise ``{}``."""
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
+    """Convert the internal ``GameLoop.prepare_new_adventure()`` output to a
+    deterministic preview response shape.
+
+    Parameters
+    ----------
+    prepared:
+        The dict returned by ``GameLoop.prepare_new_adventure()``.
+        Expected keys: ``ok``, ``validation``, ``preview``, ``resolved_context``.
+
+    Returns
+    -------
+    dict
+        Frontend-friendly payload with ``response_version``, ``success``,
+        ``ok``, ``validation``, ``preview``, and ``resolved_context``.
+    """
+    validation = _safe_dict(prepared.get("validation"))
+    preview = _safe_dict(prepared.get("preview"))
+    resolved_context = _safe_dict(prepared.get("resolved_context"))
+
+    counts = _safe_dict(preview.get("counts"))
+    warnings = _safe_list(preview.get("warnings"))
+
+    return {
+        "success": True,
+        "response_version": ADVENTURE_PREVIEW_RESPONSE_VERSION,
+        "ok": bool(prepared.get("ok")),
+        "validation": {
+            "issues": _safe_list(validation.get("issues")),
+            "blocking": bool(validation.get("blocking")),
+            "hints": _safe_list(validation.get("hints")),
+        },
+        "preview": {
+            "title": preview.get("title") or "",
+            "genre": preview.get("genre") or "",
+            "setting": preview.get("setting") or "",
+            "premise": preview.get("premise") or "",
+            "counts": {
+                "factions": counts.get("factions", 0),
+                "locations": counts.get("locations", 0),
+                "npcs": counts.get("npcs", 0),
+            },
+            "warnings": warnings,
+        },
+        "resolved_context": {
+            "location_id": resolved_context.get("location_id"),
+            "location_name": resolved_context.get("location_name") or "",
+            "npc_ids": _safe_list(resolved_context.get("npc_ids")),
+            "npc_names": _safe_list(resolved_context.get("npc_names")),
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -72,17 +150,19 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
     then resolves the starting context so the frontend can show "Opening in:
     <location>, Present: <actors>".
     """
+    from ..core.game_loop import GameLoop
     from ..creator.presenters import CreatorStatePresenter
 
     data = apply_adventure_defaults(dict(payload))
     validation = validate_adventure_setup_payload(data)
 
     if validation.is_blocking():
-        return {
-            "success": True,
+        return _build_preview_contract({
             "ok": False,
             "validation": validation.to_dict(),
-        }
+            "preview": {},
+            "resolved_context": {},
+        })
 
     setup = AdventureSetup.from_dict(data).normalize().with_defaults()
     presenter = CreatorStatePresenter()
@@ -116,13 +196,27 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
         "npc_names": npc_names,
     }
 
-    return {
-        "success": True,
+    counts = {
+        "factions": len(setup.factions),
+        "locations": len(setup.locations),
+        "npcs": len(setup.npc_seeds),
+    }
+
+    prepared = {
         "ok": True,
         "validation": validation.to_dict(),
-        "preview": preview,
+        "preview": {
+            "title": setup.title,
+            "genre": setup.genre,
+            "setting": setup.setting,
+            "premise": setup.premise,
+            "counts": counts,
+            "warnings": [],
+        },
         "resolved_context": resolved_context,
     }
+
+    return _build_preview_contract(prepared)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +227,7 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
 def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
     """Create a brand-new adventure using the structured creator pipeline.
 
-    Instantiates a minimal ``GameLoop`` (with stubbed subsystems), runs
+    Instantiates a minimal ``GameLoop`` (with explicit null dependencies), runs
     ``start_new_adventure()``, then adapts the result into the session shape
     expected by the frontend.
     """
@@ -154,16 +248,9 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
             "validation": validation.to_dict(),
         }
 
-    # Build a GameLoop with stubbed subsystems (no live LLM required at
-    # startup — the pipeline is deterministic).
-    loop = GameLoop(
-        intent_parser=_stub(),
-        world=_stub(),
-        npc_system=_stub(),
-        event_bus=_stub(),
-        story_director=_stub(),
-        scene_renderer=_stub(),
-    )
+    # Build a GameLoop with explicit null dependencies — fail-fast if creator
+    # flows touch unexpected collaborators.
+    loop = _build_game_loop()
 
     result = loop.start_new_adventure(data)
 
@@ -171,6 +258,8 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
         return {"success": False, "error": "Adventure start failed", "details": result}
 
     adapted = adapt_start_result(result)
+    adapted["preview_response_version"] = ADVENTURE_PREVIEW_RESPONSE_VERSION
+    adapted["start_response_version"] = ADVENTURE_START_RESPONSE_VERSION
     return adapted
 
 
@@ -179,24 +268,31 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class _Stub:
-    """Minimal stub that absorbs any attribute access / method call.
+class _NullDependency:
+    """Intentional null object used only for non-essential GameLoop collaborators.
 
-    ``Any`` return type is intentional — the stub must accept arbitrary
-    attribute chains (``stub.foo.bar.baz()``) without type errors so that
-    ``GameLoop`` can be instantiated with stubbed subsystems during the
-    deterministic startup pipeline.
+    This class is deliberately narrow. It should not silently absorb arbitrary
+    attribute chains, because that can hide integration regressions.
     """
 
     def __getattr__(self, name: str) -> Any:  # noqa: ANN401
-        return _Stub()
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-        return None
-
-    def __bool__(self) -> bool:
-        return False
+        raise AttributeError(
+            f"Unexpected access to null dependency attribute: {name}"
+        )
 
 
-def _stub() -> _Stub:
-    return _Stub()
+def _build_game_loop() -> "GameLoop":
+    """Construct a GameLoop instance for creator preview/start flows.
+
+    Prefer real lightweight collaborators where available. Only use explicit
+    null dependencies for collaborators that the creator pipeline does not touch.
+    """
+    from ..core.game_loop import GameLoop
+
+    # These arguments match the real GameLoop constructor signature.
+    # Non-essential collaborators use _NullDependency; essential ones
+    # should be provided with real implementations where possible.
+    return GameLoop(
+        narrator=_NullDependency(),
+        persistence=_NullDependency(),
+    )

@@ -1564,6 +1564,7 @@
     }
 
     function showSetupModal() {
+        console.warn('[RPG] Legacy showSetupModal() invoked; redirecting to Adventure Builder');
         if (typeof AdventureBuilder !== 'undefined') {
             AdventureBuilder.open();
         }
@@ -1717,15 +1718,36 @@
         // When the builder successfully launches an adventure, pipe the
         // result into the RPG feed just like legacy game creation.
         window._onAdventureBuilderLaunch = function (res) {
+            if (!res || !res.session_id) {
+                console.error('[RPG] Adventure Builder launch returned invalid payload', res);
+                alert('Failed to launch adventure: invalid session payload.');
+                return;
+            }
+
             updateState({ sessionId: res.session_id });
             localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
+            localStorage.setItem('omnix_rpg_last_creator_launch', JSON.stringify({
+                session_id: res.session_id,
+                response_version: res.response_version || 1,
+                created_at: Date.now()
+            }));
+
+            updateState({
+                world: res.world || {},
+                player: res.player || {},
+                locations: res.locations || [],
+                factions: res.factions || [],
+                npcs: res.npcs || [],
+            });
+
             if (res.opening && res.opening.trim()) {
                 applyUpdate(transformResponse({ narration: res.opening }));
             }
-            if (res.npcs && res.npcs.length) {
-                updateState({ npcs: res.npcs });
-                renderNPCs();
-            }
+
+            if (typeof renderWorld === 'function') renderWorld();
+            if (typeof renderPlayer === 'function') renderPlayer();
+            renderNPCs();
+
             if (res.memory && res.memory.length) {
                 updateState({ memory: res.memory });
             }
