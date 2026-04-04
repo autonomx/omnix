@@ -24,10 +24,6 @@ class AllianceLogic:
             return False  # Primary cannot support itself
 
         if participant.role == "ally":
-            primary_npc_id = primary_decision.get("npc_id", "")
-            if self._same_faction_bias(participant, primary_npc_id, coherence_core):
-                return True
-            # Allies support by default even without faction match
             return True
 
         if participant.relationship_to_primary == "friendly":
