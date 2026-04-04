@@ -89,25 +89,18 @@ class EncounterResolver:
 
     @staticmethod
     def detect_encounter_start(option_meta: dict[str, Any]) -> str | None:
-        """Return the encounter mode if the option signals a start, else None."""
-        # Explicit metadata flag
-        explicit = option_meta.get("encounter_start")
-        if explicit and explicit in SUPPORTED_ENCOUNTER_MODES:
-            return explicit
+        """Detect whether an option should start an encounter.
 
-        # Tag-based detection
-        tags = option_meta.get("encounter_tags", option_meta.get("tags", []))
-        for tag in tags:
-            tag_lower = tag.lower()
-            if tag_lower in _ENCOUNTER_START_TAGS:
-                return _ENCOUNTER_START_TAGS[tag_lower]
-
-        # Intent-based detection
-        intent = option_meta.get("intent_type", "")
-        if intent in _ENCOUNTER_START_TAGS:
-            return _ENCOUNTER_START_TAGS[intent]
-
-        return None
+        Explicit-only: no heuristics.
+        """
+        meta = option_meta or {}
+        value = meta.get("encounter_start")
+        if not isinstance(value, str):
+            return None
+        value = value.strip().lower()
+        if not value:
+            return None
+        return value
 
     # ------------------------------------------------------------------
     # Mode-specific resolvers

@@ -113,19 +113,32 @@ class GameplayControlController:
         # --- Phase 8.2: Merge encounter-aware options ---
         enc_ctrl = self.encounter_controller
         if enc_ctrl is not None:
-            if enc_ctrl.has_active_encounter():
-                enc_ctx = enc_ctrl.build_choice_context(player_id="player", coherence_core=coherence_core)
+            active = (
+                enc_ctrl.get_active_encounter()
+                if hasattr(enc_ctrl, "get_active_encounter")
+                else None
+            )
+            if active is not None and getattr(active, "status", None) == "active":
+                enc_ctx = enc_ctrl.build_choice_context(
+                    player_id="player",
+                    coherence_core=coherence_core,
+                )
                 if enc_ctx is not None:
                     encounter_options = self._build_active_encounter_options(enc_ctx)
-                    choice_set = self._merge_encounter_options_with_standard_options(
-                        choice_set, encounter_options,
+                    options = self._merge_encounter_options_with_standard_options(
+                        choice_set.options,
+                        encounter_options,
+                        encounter_mode=getattr(active, "mode", None),
                     )
+                    choice_set.options = options
             else:
                 start_options = self._build_encounter_start_options(coherence_core)
                 if start_options:
-                    choice_set = self._merge_encounter_options_with_standard_options(
-                        choice_set, start_options,
+                    merged = self._merge_encounter_options_with_standard_options(
+                        choice_set.options,
+                        start_options,
                     )
+                    choice_set.options = merged
 
         # --- Inject framing metadata into output ---
         choice_set.metadata.setdefault("framing", {})
@@ -276,15 +289,49 @@ class GameplayControlController:
 
     @staticmethod
     def _merge_encounter_options_with_standard_options(
-        choice_set: "ChoiceSet",
+        standard_options: list["ChoiceOption"],
         encounter_options: list["ChoiceOption"],
-    ) -> "ChoiceSet":
-        """Merge encounter options into an existing ChoiceSet.
+        encounter_mode: str | None = None,
+    ) -> list["ChoiceOption"]:
+        """Merge options with active encounter dominance.
 
-        Encounter options are prepended (higher priority). Existing
-        options remain but are not removed — the architecture does not
-        bypass normal choice model creation.
+        Combat/chase: tactical options dominate heavily.
+        Stealth/investigation: tactical options dominate, but allow a few safe scene options.
+        Diplomacy: tactical options dominate while preserving a slightly broader conversational surface.
         """
-        merged = list(encounter_options) + list(choice_set.options)
-        choice_set.options = merged
-        return choice_set
+        if not encounter_options:
+            return list(standard_options)
+
+        mode = (encounter_mode or "").strip().lower()
+
+        # Always preserve explicit escape-hatch options if marked as such.
+        preserved_standard: list["ChoiceOption"] = []
+        for option in standard_options:
+            if isinstance(option, dict):
+                meta = option.get("metadata", {}) or {}
+            else:
+                meta = getattr(option, "metadata", {}) or {}
+            if not isinstance(meta, dict):
+                meta = {}
+            if meta.get("always_available") is True:
+                preserved_standard.append(option)
+                continue
+            if meta.get("out_of_encounter") is True:
+                preserved_standard.append(option)
+                continue
+
+        if mode in {"combat", "chase"}:
+            # Hard dominance: tactical set plus only explicit escape hatches.
+            return list(encounter_options) + preserved_standard
+
+        if mode in {"stealth", "investigation"}:
+            # Medium dominance: tactical set plus a very small number of non-tactical options.
+            limited_standard = preserved_standard[:2]
+            return list(encounter_options) + limited_standard
+
+        if mode == "diplomacy":
+            # Softer dominance: tactical options first, then preserved options.
+            return list(encounter_options) + preserved_standard[:4]
+
+        # Conservative fallback
+        return list(encounter_options) + preserved_standard

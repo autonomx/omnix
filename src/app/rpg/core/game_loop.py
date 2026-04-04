@@ -1369,16 +1369,30 @@ class GameLoop:
             self.coherence_core.get_scene_summary() if self.coherence_core else {}
         )
 
-        # Phase 8.2 — detect encounter start from option metadata
-        option_meta = option.get("metadata", {}) if isinstance(option, dict) else getattr(option, "metadata", {})
-        enc_start_mode = self.encounter_resolver.detect_encounter_start(option_meta)
+        # Phase 8.2 — explicit-only encounter start
+        option_meta = (
+            option.get("metadata", {})
+            if isinstance(option, dict)
+            else getattr(option, "metadata", {})
+        ) or {}
+        enc_start_mode = None
+        if isinstance(option_meta, dict):
+            raw_mode = option_meta.get("encounter_start")
+            if isinstance(raw_mode, str) and raw_mode.strip():
+                enc_start_mode = raw_mode.strip().lower()
+
         if enc_start_mode and not self.encounter_controller.has_active_encounter():
             participants = self._build_encounter_participants(scene_summary)
             self.encounter_controller.start_encounter(
                 mode=enc_start_mode,
                 scene_summary=scene_summary,
                 participants=participants,
-                stakes=option_meta.get("encounter_stakes", "standard"),
+                active_entity_id="player",
+                metadata={
+                    "started_from_option_id": option.get("option_id")
+                    if isinstance(option, dict)
+                    else getattr(option, "option_id", None),
+                },
                 tick=self._tick_count,
             )
 

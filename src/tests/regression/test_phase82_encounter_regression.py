@@ -253,3 +253,237 @@ class TestSupportedModes:
             tick=0,
         )
         assert state.mode == "combat"
+
+
+# ==================================================================
+# 6. Explicit-only encounter start (no heuristics)
+# ==================================================================
+
+
+class TestExplicitOnlyEncounterStart:
+    """Encounter start must only fire when option metadata explicitly
+    requests it — no tag-based or intent-based heuristics."""
+
+    def test_detect_encounter_start_requires_explicit_metadata(self) -> None:
+        """Only explicit encounter_start metadata triggers start detection."""
+        resolver = EncounterResolver()
+        assert resolver.detect_encounter_start({}) is None
+        assert resolver.detect_encounter_start({"encounter_tags": ["combat"]}) is None
+        assert resolver.detect_encounter_start({"tags": ["attack"]}) is None
+        assert resolver.detect_encounter_start({"encounter_action_type": "strike"}) is None
+        assert resolver.detect_encounter_start({"intent_type": "attack"}) is None
+        assert resolver.detect_encounter_start({"encounter_start": "combat"}) == "combat"
+        assert resolver.detect_encounter_start({"encounter_start": "stealth"}) == "stealth"
+
+
+# ==================================================================
+# 7. Active encounter dominates option generation
+# ==================================================================
+
+
+class TestActiveEncounterOptionDominance:
+    """When an encounter is active, tactical options should dominate
+    the option surface according to the encounter mode."""
+
+    def test_combat_encounter_dominates_option_generation(self) -> None:
+        """Combat should return only tactical options plus escape hatches."""
+        from app.rpg.control.controller import GameplayControlController
+        from app.rpg.control.models import ChoiceOption, ChoiceSet
+
+        enc = EncounterController()
+        enc.start_encounter(
+            mode="combat",
+            scene_summary={"location": "gate"},
+            participants=[
+                {"entity_id": "player", "role": "player", "team": "player"},
+                {"entity_id": "guard_a", "role": "enemy", "team": "enemy"},
+            ],
+            tick=10,
+        )
+        controller = GameplayControlController(encounter_controller=enc)
+
+        # Build a minimal mock coherence_core
+        mock_coherence = type("MockCoherence", (), {
+            "get_scene_summary": lambda: {"location": "gate"},
+            "get_active_tensions": lambda: [],
+            "get_unresolved_threads": lambda: [],
+            "get_recent_consequences": lambda **k: [],
+            "get_last_good_anchor": lambda: {},
+            "get_state": lambda: type("MockState", (), {"contradictions": []})(),
+        })()
+
+        # Build standard options manually to simulate option_engine output
+        standard_options: list[ChoiceOption] = []
+
+        # Test the merge function directly
+        encounter_options = [
+            ChoiceOption(
+                option_id="enc_combat_strike",
+                label="Strike",
+                intent_type="strike",
+                summary="Attack enemy.",
+                tags=["tactical", "combat"],
+                priority=0.6,
+                metadata={"encounter_action_type": "strike"},
+            ),
+            ChoiceOption(
+                option_id="enc_combat_defend",
+                label="Defend",
+                intent_type="defend",
+                summary="Defend against attack.",
+                tags=["tactical", "combat"],
+                priority=0.6,
+                metadata={"encounter_action_type": "defend"},
+            ),
+        ]
+
+        # Add some standard scene options
+        standard_options = [
+            ChoiceOption(
+                option_id="scene_look",
+                label="Look around",
+                intent_type="look",
+                summary="Examine the area.",
+                tags=["scene"],
+                priority=0.5,
+            ),
+            ChoiceOption(
+                option_id="scene_talk",
+                label="Talk to guard",
+                intent_type="talk",
+                summary="Try talking to the guard.",
+                tags=["scene"],
+                priority=0.5,
+            ),
+            ChoiceOption(
+                option_id="flee_option",
+                label="Flee",
+                intent_type="flee",
+                summary="Run away.",
+                tags=["escape"],
+                priority=0.5,
+                metadata={"always_available": True},
+            ),
+        ]
+
+        merged = GameplayControlController._merge_encounter_options_with_standard_options(
+            standard_options,
+            encounter_options,
+            encounter_mode="combat",
+        )
+
+        merged_labels = [opt.label for opt in merged]
+        # Encounter options should be first
+        assert merged[0].label in ("Strike", "Defend")
+        # The always_available option should still be present
+        assert any(opt.label == "Flee" for opt in merged)
+        # But regular scene options should be excluded in combat
+        assert not any("Look around" == opt.label for opt in merged)
+        assert not any("Talk to guard" == opt.label for opt in merged)
+
+    def test_stealth_encounter_preserves_few_standard_options(self) -> None:
+        """Stealth allows a limited number of standard options."""
+        from app.rpg.control.controller import GameplayControlController
+        from app.rpg.control.models import ChoiceOption
+
+        encounter_options = [
+            ChoiceOption(
+                option_id="enc_stealth_hide",
+                label="Stay Hidden",
+                intent_type="stay_hidden",
+                summary="Remain concealed.",
+                tags=["tactical", "stealth"],
+                priority=0.6,
+            ),
+        ]
+        standard_options = [
+            ChoiceOption(option_id="o1", label="Safe1", intent_type="safe1", summary="",
+                        metadata={"always_available": True}),
+            ChoiceOption(option_id="o2", label="Safe2", intent_type="safe2", summary=""),
+            ChoiceOption(option_id="o3", label="Safe3", intent_type="safe3", summary=""),
+        ]
+
+        merged = GameplayControlController._merge_encounter_options_with_standard_options(
+            standard_options,
+            encounter_options,
+            encounter_mode="stealth",
+        )
+
+        # Encounter option first, then at most 2 preserved standard
+        assert merged[0].label == "Stay Hidden"
+        assert len(merged) <= 3  # 1 encounter + 2 preserved
+
+
+# ==================================================================
+# 8. apply_resolution ignores non-encounter fields
+# ==================================================================
+
+
+class TestApplyResolutionIgnoresNonEncounterFields:
+    """apply_resolution() must only mutate encounter-owned state."""
+
+    def test_apply_resolution_ignores_non_encounter_fields(self) -> None:
+        """Non-encounter fields in state_updates must be ignored."""
+        state = EncounterController().start_encounter(
+            mode="stealth",
+            scene_summary={"location": "hall"},
+            participants=[
+                {"entity_id": "player", "role": "player", "team": "player"},
+                {"entity_id": "guard", "role": "enemy", "team": "enemy"},
+            ],
+            tick=5,
+        )
+        ctrl = EncounterController()
+        ctrl.active_encounter = state
+
+        before_mode = state.mode
+        before_location = state.scene_location
+
+        resolution = EncounterResolution(
+            encounter_id=state.encounter_id,
+            mode=state.mode,
+            outcome_type="continue",
+            participant_updates=[{"entity_id": "guard", "status": "watchful"}],
+            objective_updates=[],
+            state_updates={
+                "pressure": "high",
+                "scene_location": "SHOULD_NOT_CHANGE",
+                "coherence_fact": {"bad": True},
+            },
+        )
+        ctrl.apply_resolution(resolution)
+        after = ctrl.get_active_encounter()
+
+        assert after is not None
+        assert after.mode == before_mode
+        assert after.scene_location == before_location
+        assert after.pressure == "high"
+
+    def test_apply_resolution_ignores_unknown_participant_fields(self) -> None:
+        """Participant updates for non-whitelisted fields are ignored."""
+        ctrl = EncounterController()
+        ctrl.start_encounter(
+            mode="combat",
+            scene_summary={"location": "arena"},
+            participants=[
+                {"entity_id": "player", "role": "player"},
+                {"entity_id": "enemy", "role": "enemy"},
+            ],
+            tick=1,
+        )
+        resolution = EncounterResolution(
+            encounter_id=ctrl.active_encounter.encounter_id,
+            mode="combat",
+            outcome_type="continue",
+            participant_updates=[{
+                "entity_id": "enemy",
+                "status": "engaged",
+                "coherence_sync": True,  # should be ignored
+                "external_truth": "bad",  # should be ignored
+            }],
+        )
+        ctrl.apply_resolution(resolution)
+
+        enemy = next(p for p in ctrl.active_encounter.participants if p.entity_id == "enemy")
+        assert enemy.status == "engaged"
+        assert not hasattr(enemy, "coherence_sync") or getattr(enemy, "coherence_sync", None) is None

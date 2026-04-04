@@ -151,7 +151,11 @@ class ActionResolver:
 
         # Phase 8.2 — Attach encounter context to resolved action metadata
         enc_ctrl = self.encounter_controller
-        if enc_ctrl is not None and hasattr(enc_ctrl, "has_active_encounter") and enc_ctrl.has_active_encounter():
+        if (
+            enc_ctrl is not None
+            and hasattr(enc_ctrl, "has_active_encounter")
+            and enc_ctrl.has_active_encounter()
+        ):
             enc_state = enc_ctrl.get_active_encounter()
             if enc_state is not None:
                 result_metadata["encounter_id"] = enc_state.encounter_id
@@ -160,6 +164,8 @@ class ActionResolver:
             opt_meta = self._get_field(option, "metadata", {}) or {}
             if isinstance(opt_meta, dict) and opt_meta.get("encounter_action_type"):
                 result_metadata["encounter_action_type"] = opt_meta["encounter_action_type"]
+            if isinstance(opt_meta, dict) and opt_meta.get("encounter_tags"):
+                result_metadata["encounter_tags"] = list(opt_meta["encounter_tags"])
 
         resolved = ResolvedAction(
             action_id=action_id,

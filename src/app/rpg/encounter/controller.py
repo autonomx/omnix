@@ -90,7 +90,13 @@ _MODE_STATE_DEFAULTS: dict[str, dict[str, Any]] = {
 
 
 class EncounterController:
-    """Authoritative owner of the current encounter state."""
+    """Authoritative owner of encounter state.
+
+    Ownership boundary:
+    - MAY mutate: active EncounterState and its nested encounter-owned models
+    - MUST NOT mutate: coherence state, social state, memory state, arc state,
+      filesystem state, external provider state, or any other truth owner
+    """
 
     def __init__(self) -> None:
         self.active_encounter: EncounterState | None = None
@@ -240,60 +246,102 @@ class EncounterController:
     def apply_resolution(
         self, resolution: EncounterResolution
     ) -> EncounterState | None:
-        """Apply an EncounterResolution to the controller-owned state.
+        """Apply an encounter resolution to the active encounter state.
 
-        Only mutates encounter state — never coherence/social/memory.
+        This method mutates ONLY encounter-owned state.
+        It must never mutate coherence, social state, memory, or any other
+        authoritative subsystem.
         """
-        if self.active_encounter is None:
-            return None
-
         state = self.active_encounter
+        if state is None:
+            return None
+        if resolution is None:
+            return state
+        if resolution.encounter_id and resolution.encounter_id != state.encounter_id:
+            return state
 
-        # --- participant updates ---
-        participant_map = {p.entity_id: p for p in state.participants}
+        # participant updates — whitelist encounter-owned fields only
+        allowed_participant_fields = {"role", "team", "status", "position", "tags", "metadata"}
+        by_id = {p.entity_id: p for p in state.participants}
         for update in resolution.participant_updates:
-            eid = update.get("entity_id")
-            if eid and eid in participant_map:
-                p = participant_map[eid]
-                if "status" in update:
-                    p.status = update["status"]
-                if "tags" in update:
-                    p.tags = list(update["tags"])
-                if "position" in update:
-                    p.position = update["position"]
+            if not isinstance(update, dict):
+                continue
+            entity_id = update.get("entity_id")
+            if not entity_id or entity_id not in by_id:
+                continue
+            participant = by_id[entity_id]
+            for key, value in update.items():
+                if key == "entity_id" or key not in allowed_participant_fields:
+                    continue
+                if key == "tags":
+                    participant.tags = list(value) if isinstance(value, list) else []
+                elif key == "metadata":
+                    participant.metadata = dict(value) if isinstance(value, dict) else {}
+                else:
+                    setattr(participant, key, value)
 
-        # --- objective updates ---
-        objective_map = {o.objective_id: o for o in state.objectives}
+        # objective updates — whitelist encounter-owned fields only
+        allowed_objective_fields = {"kind", "owner_id", "target_id", "status", "progress", "required", "metadata"}
+        objectives_by_id = {o.objective_id: o for o in state.objectives}
         for update in resolution.objective_updates:
-            oid = update.get("objective_id")
-            if oid and oid in objective_map:
-                o = objective_map[oid]
-                if "progress" in update:
-                    o.progress = update["progress"]
-                if "status" in update:
-                    o.status = update["status"]
+            if not isinstance(update, dict):
+                continue
+            objective_id = update.get("objective_id")
+            if not objective_id or objective_id not in objectives_by_id:
+                continue
+            objective = objectives_by_id[objective_id]
+            for key, value in update.items():
+                if key == "objective_id" or key not in allowed_objective_fields:
+                    continue
+                if key == "metadata":
+                    objective.metadata = dict(value) if isinstance(value, dict) else {}
+                else:
+                    setattr(objective, key, value)
 
-        # --- state-level updates ---
-        su = resolution.state_updates
-        if "pressure" in su:
-            state.pressure = su["pressure"]
-        if "stakes" in su:
-            state.stakes = su["stakes"]
-        if "mode_state" in su:
-            state.mode_state.update(su["mode_state"])
-        if "visibility" in su:
-            state.visibility.update(su["visibility"])
+        # encounter-state updates — whitelist only encounter-owned fields
+        allowed_state_fields = {
+            "status",
+            "round_index",
+            "turn_index",
+            "active_entity_id",
+            "pressure",
+            "stakes",
+            "visibility",
+            "initiative",
+            "mode_state",
+            "resolution_summary",
+            "metadata",
+        }
+        for key, value in (resolution.state_updates or {}).items():
+            if key not in allowed_state_fields:
+                continue
+            if key in {"visibility", "mode_state", "resolution_summary", "metadata"}:
+                setattr(state, key, dict(value) if isinstance(value, dict) else {})
+            elif key == "initiative":
+                setattr(state, key, list(value) if isinstance(value, list) else [])
+            else:
+                setattr(state, key, value)
 
-        # --- turn / round advancement ---
-        if su.get("advance_turn"):
+        # advance turn order only if the resolution did not already set it explicitly
+        explicit_turn_control = any(
+            key in (resolution.state_updates or {})
+            for key in ("turn_index", "round_index", "active_entity_id", "initiative", "advance_turn")
+        )
+        if not explicit_turn_control and state.status == "active":
+            self._advance_turn_order(state)
+        elif (resolution.state_updates or {}).get("advance_turn"):
             self._advance_turn_order(state)
 
-        # --- outcome handling ---
-        if resolution.outcome_type == "resolve":
-            state.status = "resolved"
-        elif resolution.outcome_type == "abort":
-            state.status = "aborted"
+        # auto-resolve if all objectives complete/failed
+        if state.objectives:
+            all_terminal = all(
+                objective.status in {"completed", "failed", "blocked"}
+                for objective in state.objectives
+            )
+            if all_terminal and state.status == "active":
+                state.status = "resolved"
 
+        self.active_encounter = state
         return state
 
     # ------------------------------------------------------------------
