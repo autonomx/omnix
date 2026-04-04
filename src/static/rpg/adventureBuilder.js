@@ -912,6 +912,8 @@ var AdventureBuilder = (function () {
         _markDirty();
 
         state.regenerating = target;
+        state.regen.target = target;
+        state.regen.loading = true;
         _setRegenerationButtonsDisabled(true, target);
 
         // Phase 1.4A: Always start with preview mode
@@ -919,15 +921,21 @@ var AdventureBuilder = (function () {
             if (!res || !res.success) {
                 alert((res && res.error) || 'Regeneration failed.');
                 state.regenerating = null;
+                state.regen.loading = false;
                 _setRegenerationButtonsDisabled(false, null);
                 return;
             }
+
+            // Store preview in normalized state
+            state.regen.preview = res;
+            state.regen.modalOpen = true;
 
             // Show diff preview modal; user chooses apply/cancel/strategy
             _showRegenPreviewModal(target, res);
         }).catch(function () {
             alert('Regeneration failed.');
             state.regenerating = null;
+            state.regen.loading = false;
             _setRegenerationButtonsDisabled(false, null);
         });
     }
@@ -935,6 +943,9 @@ var AdventureBuilder = (function () {
     function _showRegenPreviewModal(target, previewRes) {
         var diff = previewRes.diff || {};
         var summary = (diff.summary || []);
+        var rationale = previewRes.rationale
+            ? '<div class="ab-regen-rationale">' + _esc(previewRes.rationale) + '</div>'
+            : '';
 
         var hasMerge = !!MERGE_TARGETS[target];
         var hasAppend = !!APPEND_TARGETS[target];
@@ -942,6 +953,7 @@ var AdventureBuilder = (function () {
         var html = '<div class="ab-modal-overlay" id="abRegenModal">' +
             '<div class="ab-modal">' +
             '<h3>Preview: Regenerate ' + _esc(target) + '</h3>' +
+            rationale +
             '<div class="ab-diff-summary">';
 
         if (summary.length) {
@@ -969,7 +981,8 @@ var AdventureBuilder = (function () {
             html += '<button class="ab-btn ab-btn-secondary" id="abRegenApplyAppend">\u2795 Append</button>';
         }
 
-        html += '<button class="ab-btn ab-btn-cancel" id="abRegenCancel">\u274C Cancel</button>' +
+        html += '<button class="ab-btn ab-btn-secondary" id="abRegenRetry">\u267B Regenerate Again</button>' +
+            '<button class="ab-btn ab-btn-cancel" id="abRegenCancel">\u274C Cancel</button>' +
             '</div></div></div>';
 
         // Append modal to overlay
@@ -1003,8 +1016,33 @@ var AdventureBuilder = (function () {
         modal.querySelector('#abRegenCancel').addEventListener('click', function () {
             _closeRegenModal(modal);
             state.regenerating = null;
+            state.regen.modalOpen = false;
+            state.regen.preview = null;
             _setRegenerationButtonsDisabled(false, null);
         });
+
+        modal.querySelector('#abRegenRetry').addEventListener('click', function () {
+            _closeRegenModal(modal);
+            state.regen.modalOpen = false;
+            state.regen.preview = null;
+            _handleRegenerate(target);
+        });
+
+        // Keyboard shortcuts
+        modal.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                modal.remove();
+                state.regen.modalOpen = false;
+                state.regen.preview = null;
+            } else if (e.key === 'Enter') {
+                var primary = modal.querySelector('[data-strategy="replace"]') || modal.querySelector('#abRegenApplyReplace');
+                if (primary) primary.click();
+            }
+        });
+
+        // Make modal focusable for keyboard events
+        modal.tabIndex = -1;
+        modal.focus();
     }
 
     function _closeRegenModal(modal) {
@@ -1022,6 +1060,8 @@ var AdventureBuilder = (function () {
             beforeSetup: JSON.parse(JSON.stringify(state.setup)),
             timestamp: Date.now()
         });
+
+        state.regen.loading = true;
 
         AdventureBuilderApi.regenerateSection(target, state.setup, {
             mode: 'apply',
@@ -1047,6 +1087,10 @@ var AdventureBuilder = (function () {
                 resolved_context: res.resolved_context || null
             };
 
+            // Clear regen state
+            state.regen.preview = null;
+            state.regen.modalOpen = false;
+
             _saveDraft();
             _renderStep();
             _runValidation();
@@ -1055,6 +1099,7 @@ var AdventureBuilder = (function () {
             alert('Regeneration failed.');
         }).finally(function () {
             state.regenerating = null;
+            state.regen.loading = false;
             _setRegenerationButtonsDisabled(false, null);
         });
     }
@@ -1082,10 +1127,14 @@ var AdventureBuilder = (function () {
         var changedFields = diff.changed_fields || [];
         var before = res.before || {};
         var after = res.after || {};
+        var rationale = res.rationale
+            ? '<div class="ab-regen-rationale">' + _esc(res.rationale) + '</div>'
+            : '';
 
         var html = '<div class="ab-modal-overlay" id="abItemRegenModal">' +
             '<div class="ab-modal">' +
             '<h3>Preview: Regenerate ' + _esc(itemId) + '</h3>' +
+            rationale +
             '<div class="ab-diff-detail">';
 
         if (!changedFields.length) {
@@ -1105,6 +1154,7 @@ var AdventureBuilder = (function () {
         html += '</div>' +
             '<div class="ab-modal-actions">' +
             '<button class="ab-btn ab-btn-primary" id="abItemApply">\u2705 Apply</button>' +
+            '<button class="ab-btn ab-btn-secondary" id="abItemRetry">\u267B Regenerate Again</button>' +
             '<button class="ab-btn ab-btn-cancel" id="abItemCancel">\u274C Cancel</button>' +
             '</div></div></div>';
 
@@ -1142,8 +1192,48 @@ var AdventureBuilder = (function () {
             _runValidation();
         });
 
+        modal.querySelector('#abItemRetry').addEventListener('click', function () {
+            _closeRegenModal(modal);
+            _handleRegenerateItem(target, itemId);
+        });
+
         modal.querySelector('#abItemCancel').addEventListener('click', function () {
             _closeRegenModal(modal);
+        });
+
+        // Keyboard shortcuts for item modal
+        modal.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                modal.remove();
+            } else if (e.key === 'Enter') {
+                var primary = modal.querySelector('#abItemApply');
+                if (primary) primary.click();
+            }
+        });
+
+        // Make modal focusable for keyboard events
+        modal.tabIndex = -1;
+        modal.focus();
+    }
+
+    // ── Single-item regeneration with loading state ─────────────────────
+
+    function _handleRegenerateItem(target, itemId) {
+        _readCurrentStepIntoSetup();
+        _markDirty();
+        state.regen.loading = true;
+
+        AdventureBuilderApi.regenerateItem(target, itemId, state.setup).then(function (res) {
+            if (!res || !res.success) {
+                alert((res && res.error) || 'Item regeneration failed.');
+                return;
+            }
+
+            _showItemDiffModal(target, itemId, res);
+        }).catch(function () {
+            alert('Item regeneration failed.');
+        }).finally(function () {
+            state.regen.loading = false;
         });
     }
 
@@ -1157,6 +1247,11 @@ var AdventureBuilder = (function () {
         }
         state.setup = entry.beforeSetup;
         setup = state.setup;
+
+        // Clear regen state on undo
+        state.regen.preview = null;
+        state.regen.modalOpen = false;
+
         _saveDraft();
         _renderStep();
         _runValidation();

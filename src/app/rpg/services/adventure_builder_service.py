@@ -7,6 +7,7 @@ simple method interface consumed by the creator routes.
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
@@ -22,6 +23,7 @@ from ..creator.regeneration import (
     REGENERATION_TARGETS,
     TARGET_ID_FIELD,
     TARGET_STRATEGIES,
+    build_regeneration_rationale,
     compute_item_diff,
     compute_section_diff,
     generate_apply_token,
@@ -456,20 +458,41 @@ def _apply_regenerated_section(
 # ---------------------------------------------------------------------------
 
 _preview_store: dict[str, dict[str, Any]] = {}
+_PREVIEW_TTL_SEC = 300
+_MAX_PREVIEWS = 100
 
-_MAX_PREVIEW_STORE_SIZE = 50
+
+def _cleanup_preview_store(now: float | None = None) -> None:
+    """Remove expired previews and enforce max size limit."""
+    ts = now or time.time()
+    expired = [
+        token
+        for token, payload in _preview_store.items()
+        if (ts - float(payload.get("created_at", 0))) > _PREVIEW_TTL_SEC
+    ]
+    for token in expired:
+        _preview_store.pop(token, None)
+
+    if len(_preview_store) > _MAX_PREVIEWS:
+        ordered = sorted(
+            _preview_store.items(),
+            key=lambda kv: float(kv[1].get("created_at", 0)),
+        )
+        for token, _ in ordered[: max(0, len(_preview_store) - _MAX_PREVIEWS)]:
+            _preview_store.pop(token, None)
 
 
 def _store_preview(token: str, data: dict[str, Any]) -> None:
-    """Store a preview result keyed by token. Evicts oldest if limit reached."""
-    if len(_preview_store) >= _MAX_PREVIEW_STORE_SIZE:
-        oldest_key = next(iter(_preview_store))
-        _preview_store.pop(oldest_key, None)
-    _preview_store[token] = data
+    """Store a preview result keyed by token. Evicts expired/oldest if limit reached."""
+    _cleanup_preview_store()
+    entry = dict(data)
+    entry["created_at"] = time.time()
+    _preview_store[token] = entry
 
 
 def _pop_preview(token: str) -> dict[str, Any] | None:
     """Retrieve and remove a stored preview by token."""
+    _cleanup_preview_store()
     return _preview_store.pop(token, None)
 
 
@@ -588,8 +611,10 @@ def regenerate_setup_section(
         # Store preview for later apply
         _store_preview(token, {
             "target": target,
-            "regenerated": regenerated,
-            "normalized_payload": normalized_payload,
+            "setup_id": normalized_payload.get("setup_id"),
+            "before": before,
+            "after": regenerated,
+            "apply_strategy": apply_strategy,
         })
 
         return {
@@ -597,22 +622,24 @@ def regenerate_setup_section(
             "target": target,
             "mode": "preview",
             "before": before,
-            "after": after,
+            "after": regenerated,
             "diff": diff,
+            "summary": diff.get("summary", []),
+            "rationale": build_regeneration_rationale(target, normalized_payload, regenerated),
             "apply_token": token,
         }
 
     # ── Apply mode ──────────────────────────────────────────────────────
-    # If an apply_token is provided, try to use cached regenerated data
-    regenerated = None
-    if apply_token:
-        cached = _pop_preview(apply_token)
-        if cached and cached.get("target") == target:
-            regenerated = cached["regenerated"]
+    # Strict apply_token validation
+    preview = _pop_preview(apply_token)
+    if not preview:
+        return {"success": False, "error": "Invalid or expired apply_token"}
+    if preview.get("target") != target:
+        return {"success": False, "error": "Mismatched regeneration target"}
+    if preview.get("setup_id") != normalized_payload.get("setup_id"):
+        return {"success": False, "error": "Mismatched setup for apply_token"}
 
-    # If no cached data, regenerate fresh
-    if regenerated is None:
-        regenerated = _run_regeneration(normalized_payload, target)
+    regenerated = preview.get("after")
 
     next_payload = _apply_regenerated_section(
         normalized_payload, target, regenerated, strategy=effective_strategy,
@@ -623,12 +650,12 @@ def regenerate_setup_section(
         "success": True,
         "target": target,
         "mode": "apply",
-        "apply_strategy": effective_strategy,
         "updated_setup": next_payload,
         "regenerated": regenerated,
         "validation": prepared.get("validation"),
         "preview": prepared.get("preview"),
         "resolved_context": prepared.get("resolved_context"),
+        "rationale": build_regeneration_rationale(target, normalized_payload, regenerated),
     }
 
 
@@ -740,6 +767,7 @@ def regenerate_single_item(
         "validation": prepared.get("validation"),
         "preview": prepared.get("preview"),
         "resolved_context": prepared.get("resolved_context"),
+        "rationale": build_regeneration_rationale(target, normalized_payload, [after_item]),
     }
 
 

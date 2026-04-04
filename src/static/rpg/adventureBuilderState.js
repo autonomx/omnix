@@ -55,7 +55,13 @@ var AdventureBuilderState = (function () {
             preview: null,
             lastError: null,
             /** Phase 1.4D — Undo stack for regeneration rollbacks */
-            history: []
+            history: [],
+            regen: {
+                target: null,
+                preview: null,
+                modalOpen: false,
+                loading: false
+            }
         };
     }
 
@@ -134,7 +140,7 @@ var AdventureBuilderState = (function () {
     }
 
     /** Phase 1.4D — Push a snapshot onto the undo stack before applying a regeneration. */
-    var MAX_HISTORY = 20;
+    var MAX_HISTORY = 10;
 
     function pushHistory(state, entry) {
         if (!state.history) state.history = [];

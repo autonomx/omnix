@@ -106,6 +106,7 @@ def compute_section_diff(
     target: str,
     before: Any,
     after: Any,
+    id_field: str | None = None,
 ) -> dict[str, Any]:
     """Compute a human-readable diff summary between two section snapshots.
 
@@ -115,7 +116,7 @@ def compute_section_diff(
     Returns a dict with ``added``, ``removed``, ``changed``, and ``summary``.
     """
     if target in ENTITY_TARGETS:
-        return _compute_entity_diff(target, before, after)
+        return _compute_entity_diff(target, before, after, id_field)
     if target == "threads":
         return _compute_thread_diff(before, after)
     if target == "opening":
@@ -127,11 +128,13 @@ def _compute_entity_diff(
     target: str,
     before: Any,
     after: Any,
+    id_field: str | None = None,
 ) -> dict[str, Any]:
     """Diff two entity lists by id field."""
-    id_field = TARGET_ID_FIELD.get(target, "id")
-    before_list = _safe_list(before)
-    after_list = _safe_list(after)
+    if id_field is None:
+        id_field = TARGET_ID_FIELD.get(target, "id")
+    before_list = [normalize_entity(item or {}) for item in _safe_list(before)]
+    after_list = [normalize_entity(item or {}) for item in _safe_list(after)]
 
     before_ids = {_entity_id(e, id_field) for e in before_list if _entity_id(e, id_field)}
     after_ids = {_entity_id(e, id_field) for e in after_list if _entity_id(e, id_field)}
@@ -228,6 +231,40 @@ def _compute_opening_diff(
 # ---------------------------------------------------------------------------
 
 
+def _normalize_scalar(value: Any) -> Any:
+    """Normalize a scalar value for diff comparison."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def normalize_entity(entity: dict[str, Any]) -> dict[str, Any]:
+    """Normalize entities before diffing to avoid false positives."""
+    normalized: dict[str, Any] = {}
+    for key in sorted(entity.keys()):
+        value = entity[key]
+        if isinstance(value, list):
+            cleaned = [_normalize_scalar(v) for v in value]
+            cleaned = [v for v in cleaned if v not in (None, [], {})]
+            if cleaned:
+                normalized[key] = cleaned
+        elif isinstance(value, dict):
+            nested = {
+                k: _normalize_scalar(v)
+                for k, v in sorted(value.items())
+                if _normalize_scalar(v) not in (None, [], {})
+            }
+            if nested:
+                normalized[key] = nested
+        else:
+            cleaned = _normalize_scalar(value)
+            if cleaned is not None:
+                normalized[key] = cleaned
+    return normalized
+
+
 def compute_item_diff(
     before: dict[str, Any],
     after: dict[str, Any],
@@ -236,8 +273,8 @@ def compute_item_diff(
 
     Returns a dict with ``changed_fields`` listing which keys differ.
     """
-    before = before if isinstance(before, dict) else {}
-    after = after if isinstance(after, dict) else {}
+    before = normalize_entity(before or {})
+    after = normalize_entity(after or {})
 
     all_keys = set(list(before.keys()) + list(after.keys()))
     changed: list[str] = []
@@ -264,40 +301,29 @@ def merge_entity_lists(
     - If a regenerated entity's id already exists, overwrite that entity.
     - If a regenerated entity's id is new, append it.
     - Keep current entities not mentioned by regeneration.
+    - Raises ValueError if regenerated item is missing required id field.
     """
-    current_list = _safe_list(current)
-    regen_list = _safe_list(regenerated)
+    merged: dict[str, dict[str, Any]] = {}
 
-    # Build lookup for regenerated items
-    regen_map: dict[str, dict[str, Any]] = {}
-    regen_order: list[str] = []
-    for item in regen_list:
-        if isinstance(item, dict):
-            eid = item.get(id_field)
-            if eid:
-                regen_map[eid] = item
-                regen_order.append(eid)
-
-    # Start with current, overwriting where regenerated matches
-    result: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for item in current_list:
-        if not isinstance(item, dict):
+    for item in current or []:
+        item_id = item.get(id_field)
+        if not item_id:
             continue
-        eid = item.get(id_field)
-        if eid and eid in regen_map:
-            result.append(regen_map[eid])
-        else:
-            result.append(item)
-        if eid:
-            seen_ids.add(eid)
+        merged[item_id] = dict(item)
 
-    # Append new regenerated items not already in current
-    for eid in regen_order:
-        if eid not in seen_ids:
-            result.append(regen_map[eid])
-            seen_ids.add(eid)
+    for item in regenerated or []:
+        item_id = item.get(id_field)
+        if not item_id:
+            raise ValueError(f"Missing id field '{id_field}' in regenerated entity")
+        merged[item_id] = dict(item)
 
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for item_id, item in merged.items():
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        result.append(item)
     return result
 
 
@@ -331,3 +357,22 @@ def merge_thread_lists(
                 result.append(item)
                 existing_ids.add(tid)
     return result
+
+
+def build_regeneration_rationale(target: str, setup: dict[str, Any], regenerated: Any) -> str:
+    """Build a human-readable rationale for a regeneration operation."""
+    if target == "factions":
+        count = len(regenerated or [])
+        return f"Generated {count} factions aligned with the current premise, setting, and tone."
+    if target == "locations":
+        count = len(regenerated or [])
+        return f"Generated {count} locations aligned with the world setup and starting context."
+    if target == "npc_seeds":
+        count = len(regenerated or [])
+        return f"Generated {count} NPCs aligned with the current factions, locations, and premise."
+    if target == "opening":
+        return "Regenerated the opening to better match the current setup and resolved starting context."
+    if target == "threads":
+        count = len(regenerated or [])
+        return f"Generated {count} tensions/threads to increase early pressure and tie into the premise."
+    return "Regenerated content using the current creator setup."
