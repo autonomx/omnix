@@ -186,8 +186,9 @@ class UXPayloadBuilder:
     @staticmethod
     def _gather_control_output(loop: Any) -> dict | None:
         """Read the last control output from the loop."""
-        if hasattr(loop, "gameplay_control_controller"):
-            choice_set = loop.gameplay_control_controller.get_last_choice_set()
+        controller = getattr(loop, "gameplay_control_controller", None)
+        if controller is not None:
+            choice_set = controller.get_last_choice_set()
             if choice_set is not None:
                 return {"choice_set": choice_set}
         return None
