@@ -14,6 +14,8 @@ class PackRegistry:
 
     def __init__(self) -> None:
         self.packs: dict[str, AdventurePack] = {}
+        # Phase 8.5 — last pack migration report for debug inspection
+        self._last_pack_migration_report: dict | None = None
 
     def register(self, pack: AdventurePack) -> None:
         """Register a pack by its pack_id."""
@@ -55,13 +57,14 @@ class PackRegistry:
         }
 
     # ------------------------------------------------------------------
-    # Phase 8.4 — Debug summary (read-only)
+    # Phase 8.4 / 8.5 — Debug summary (read-only)
     # ------------------------------------------------------------------
 
     def build_debug_summary(self) -> dict:
         """Return a read-only debug summary for GM/debug inspection.
 
         Does not mutate registry state.
+        Phase 8.5: includes last migration report and compatibility info.
         """
         pack_summaries: list[dict] = []
         for pack in self.list_packs():
@@ -74,4 +77,5 @@ class PackRegistry:
         return {
             "active_packs": pack_summaries,
             "active_pack_count": len(pack_summaries),
+            "last_pack_migration_report": self._last_pack_migration_report,
         }

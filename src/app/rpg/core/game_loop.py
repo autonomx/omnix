@@ -69,6 +69,9 @@ from ..encounter.presenter import EncounterPresenter
 from ..world_sim.controller import WorldSimController
 from ..world_sim.presenter import WorldSimPresenter
 from ..debug.core import DebugCore
+from ..migration.save_migrator import SaveMigrator
+from ..migration.pack_migrator import PackMigrator
+from ..migration.models import CURRENT_SAVE_FORMAT_VERSION
 
 
 class TickPhase(Enum):
@@ -355,6 +358,11 @@ class GameLoop:
         self.last_dialogue_trace: dict | None = None
         self.last_control_output: dict | None = None
         self.last_action_result: dict | None = None
+
+        # PHASE 8.5 — SAVE MIGRATION / PACKAGING INTEROPERABILITY
+        self.save_migrator = SaveMigrator()
+        self.pack_migrator = PackMigrator()
+        self.last_save_migration_report: dict | None = None
 
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
@@ -1761,8 +1769,26 @@ class GameLoop:
         """Deserialize, validate, and register an adventure pack.
 
         Returns a presenter-shaped result with validation and pack info.
+        Phase 8.5: runs pack migration/normalization before registration.
         """
-        pack = AdventurePack.from_dict(pack_data)
+        # Phase 8.5 — migrate/normalize pack data before registration
+        compat = self.pack_migrator.check_compatibility(pack_data)
+        if not compat.compatible:
+            return {
+                "ok": False,
+                "validation": {"issues": compat.errors, "is_blocking": True},
+                "migration_report": compat.to_dict(),
+            }
+
+        migrated = self.pack_migrator.migrate(pack_data)
+        if migrated.report.errors:
+            return {
+                "ok": False,
+                "validation": {"issues": migrated.report.errors, "is_blocking": True},
+                "migration_report": migrated.report.to_dict(),
+            }
+
+        pack = AdventurePack.from_dict(migrated.payload)
         validation = self.pack_validator.validate(pack)
         validation_dict = validation.to_dict()
         presented_validation = self.pack_presenter.present_validation_result(validation_dict)
@@ -1771,6 +1797,7 @@ class GameLoop:
             return {
                 "ok": False,
                 "validation": presented_validation,
+                "migration_report": migrated.report.to_dict(),
             }
 
         self.pack_registry.register(pack)
@@ -1778,6 +1805,7 @@ class GameLoop:
             "ok": True,
             "validation": presented_validation,
             "pack": self.pack_presenter.present_pack(pack.to_dict()),
+            "migration_report": migrated.report.to_dict(),
         }
 
     def list_registered_packs(self) -> dict:
