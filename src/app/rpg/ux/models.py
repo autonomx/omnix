@@ -90,6 +90,7 @@ class SceneUXPayload:
     panels: list[PanelDescriptor] = field(default_factory=list)
     highlights: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    trace: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -99,6 +100,7 @@ class SceneUXPayload:
             "panels": [p.to_dict() for p in self.panels],
             "highlights": dict(self.highlights),
             "metadata": dict(self.metadata),
+            "trace": dict(self.trace),
         }
 
     @classmethod

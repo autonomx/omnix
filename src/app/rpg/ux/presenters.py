@@ -13,16 +13,10 @@ class UXPresenter:
     def present_scene_payload(self, payload: dict) -> dict:
         """Present a SceneUXPayload dict for frontend consumption."""
         return {
-            "payload_id": payload.get("payload_id", ""),
+            "id": payload.get("payload_id"),
             "scene": payload.get("scene", {}),
-            "choices": [
-                self.present_choice_card(c)
-                for c in payload.get("choices", [])
-            ],
-            "panels": [
-                self.present_panel_descriptor(p)
-                for p in payload.get("panels", [])
-            ],
+            "choices": payload.get("choices", []),
+            "panels": payload.get("panels", []),
             "highlights": payload.get("highlights", {}),
         }
 

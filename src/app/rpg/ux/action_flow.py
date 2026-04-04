@@ -60,6 +60,12 @@ class UXActionFlow:
         Delegates to ``loop.resolve_selected_option`` for the actual
         event-path execution, then wraps the result in a UX payload.
         """
+        control = getattr(loop, "gameplay_control_controller", None)
+        if control:
+            choice_set = control.get_last_choice_set()
+            valid_ids = {c["id"] for c in choice_set.get("options", [])}
+            if choice_id not in valid_ids:
+                return {"ok": False, "reason": "invalid_choice_id"}
         action_result = loop.resolve_selected_option(choice_id)
         result_payload = self._payload_builder.build_action_result_payload(
             loop, action_result

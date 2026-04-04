@@ -28,10 +28,17 @@ class PanelLayout:
 
     def build_default_layout(self) -> list[PanelDescriptor]:
         """Return the full default panel layout in deterministic order."""
-        return [
-            self._descriptor(pid, title, ptype)
-            for pid, title, ptype in _DEFAULT_PANEL_ORDER
-        ]
+        return list([
+            self._descriptor("recap", "Recap", "recap"),
+            self._descriptor("journal", "Journal", "journal"),
+            self._descriptor("codex", "Codex", "codex"),
+            self._descriptor("campaign_memory", "Campaign", "campaign_memory"),
+            self._descriptor("social", "Social", "social"),
+            self._descriptor("arc", "Arcs", "arc"),
+            self._descriptor("reveals", "Reveals", "reveals"),
+            self._descriptor("packs", "Packs", "packs"),
+            self._descriptor("scene_bias", "Scene Bias", "scene_bias"),
+        ])
 
     def build_player_layout(
         self, available_panels: dict[str, dict]

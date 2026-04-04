@@ -336,6 +336,8 @@ class GameLoop:
 
     def get_scene_payload(self) -> dict:
         """Return a unified scene payload via UXCore."""
+        if not hasattr(self, "ux_core"):
+            return {"scene": {}, "choices": [], "panels": []}
         return self.ux_core.build_scene_payload(self)
 
     def get_action_result_payload(self, action_result: dict) -> dict:
@@ -348,10 +350,14 @@ class GameLoop:
 
     def select_choice_via_ux(self, choice_id: str) -> dict:
         """Select a choice via the UX action-flow layer."""
+        if not hasattr(self, "ux_core"):
+            return {"ok": False, "reason": "ux_core_not_available"}
         return self.ux_core.select_choice(self, choice_id)
 
     def request_recap_via_ux(self) -> dict:
         """Request a recap via the UX action-flow layer."""
+        if not hasattr(self, "ux_core"):
+            return {"title": "Recap", "summary": "", "scene_summary": {}}
         return self.ux_core.request_recap(self)
 
     def set_llm_recorder(self, recorder: Any) -> None:

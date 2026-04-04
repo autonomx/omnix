@@ -31,19 +31,23 @@ class UXPayloadBuilder:
 
     def build_scene_payload(self, loop: Any) -> SceneUXPayload:
         """Build a complete scene payload from the current loop state."""
+        tick = getattr(loop, "tick_count", None)
+        payload_id = f"scene:{tick}" if tick is not None else "scene:unknown"
         scene = self._gather_scene(loop)
         control_output = self._gather_control_output(loop)
         choices = self._build_choice_cards(control_output)
         panels = self._build_panel_descriptors(loop)
         highlights = self._build_highlights(loop)
 
-        return SceneUXPayload(
-            payload_id=str(uuid.uuid4()),
+        payload = SceneUXPayload(
+            payload_id=payload_id,
             scene=scene,
             choices=choices,
             panels=panels,
             highlights=highlights,
         )
+        payload.trace = {"tick": tick}
+        return payload
 
     def build_action_result_payload(
         self, loop: Any, action_result: dict
@@ -59,6 +63,9 @@ class UXPayloadBuilder:
             updated_scene=self._gather_scene(loop),
             updated_choices=choices,
             updated_panels=panels,
+            metadata={
+                "choice_id": action_result.get("choice_id"),
+            },
         )
 
     # ------------------------------------------------------------------
@@ -86,10 +93,26 @@ class UXPayloadBuilder:
                     priority=float(opt.get("priority", 0.0)),
                 )
             )
-        return cards
+        return sorted(cards, key=lambda c: (-c.priority, c.choice_id))
 
     def _build_panel_descriptors(self, loop: Any) -> list[PanelDescriptor]:
         """Build panel descriptors reflecting currently available panels."""
+        layout = self._layout.build_default_layout()
+        filtered: list[PanelDescriptor] = []
+        for panel in layout:
+            data = None
+            if hasattr(loop, "open_panel"):
+                try:
+                    data = loop.open_panel(panel.panel_id)
+                except Exception:
+                    data = None
+
+            if data:
+                filtered.append(panel)
+
+        if filtered:
+            return filtered
+
         available: dict[str, dict] = {}
 
         # Journal
@@ -136,45 +159,16 @@ class UXPayloadBuilder:
         return self._layout.build_player_layout(available)
 
     def _build_highlights(self, loop: Any) -> dict:
-        """Build a highlights dict for the scene payload."""
-        highlights: dict[str, Any] = {}
+        """Build structured highlights for the scene payload."""
+        coherence = getattr(loop, "coherence_core", None)
+        arc = getattr(loop, "arc_control_controller", None)
 
-        # Active threads count
-        if hasattr(loop, "coherence_core") and loop.coherence_core is not None:
-            threads = loop.coherence_core.active_threads
-            highlights["active_threads_count"] = len(threads) if threads else 0
-
-        # Current location
-        if hasattr(loop, "coherence_core") and loop.coherence_core is not None:
-            scene_summary = loop.coherence_core.get_scene_summary()
-            highlights["current_location"] = scene_summary.get("location")
-
-        # Top arc
-        if hasattr(loop, "arc_control_controller") and loop.arc_control_controller is not None:
-            arcs = loop.arc_control_controller.arcs
-            if arcs:
-                first_arc = next(iter(arcs.values()))
-                highlights["top_arc"] = first_arc.arc_id if hasattr(first_arc, "arc_id") else None
-            else:
-                highlights["top_arc"] = None
-
-        # Social warning
-        if hasattr(loop, "social_state_core") and loop.social_state_core is not None:
-            state = loop.social_state_core.get_state()
-            # Flag if any relationship is at negative trust
-            warnings = []
-            for rel in state.relationships.values():
-                if hasattr(rel, "trust") and rel.trust < 0:
-                    warnings.append(rel.to_dict() if hasattr(rel, "to_dict") else str(rel))
-            highlights["social_warning"] = warnings[0] if warnings else None
-
-        # Due reveals count
-        if hasattr(loop, "arc_control_controller") and loop.arc_control_controller is not None:
-            reveals = loop.arc_control_controller.reveals
-            due = [r for r in reveals.values() if hasattr(r, "status") and r.status == "due"]
-            highlights["due_reveals_count"] = len(due)
-
-        return highlights
+        return {
+            "location": getattr(loop, "current_location", None),
+            "active_threads": len(coherence.query.get_active_threads()) if coherence else 0,
+            "top_arc": next(iter(arc.arcs.keys()), None) if arc else None,
+            "has_pending_reveals": bool(arc.reveals) if arc else False,
+        }
 
     @staticmethod
     def _gather_scene(loop: Any) -> dict:
