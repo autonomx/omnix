@@ -74,7 +74,14 @@ class UXActionFlow:
         """Return the recap panel via the existing recap mechanism."""
         if hasattr(loop, "get_recap_panel"):
             return loop.get_recap_panel()
-        return {"title": "Recap", "summary": "", "scene_summary": {}, "active_threads": [], "recent_consequences": [], "social_highlights": []}
+        return {
+            "title": "Recap",
+            "summary": "",
+            "scene_summary": {},
+            "active_threads": [],
+            "recent_consequences": [],
+            "social_highlights": [],
+        }
 
     # ------------------------------------------------------------------
     # Panel routing

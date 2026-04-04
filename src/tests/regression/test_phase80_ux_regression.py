@@ -111,19 +111,57 @@ def _build_loop():
     loop.resolve_selected_option = resolve_selected_option
 
     # Panel delegates
-    loop.get_journal_panel = lambda: loop.memory_presenter.present_journal_entries(
-        [e.to_dict() for e in loop.campaign_memory_core.journal_entries],
+    def _get_journal_panel():
+        entries = [e.to_dict() for e in loop.campaign_memory_core.journal_entries]
+        return loop.memory_presenter.present_journal_entries(entries)
+
+    def _get_recap_panel():
+        return {
+            "title": "Recap",
+            "summary": "",
+            "scene_summary": {},
+            "active_threads": [],
+            "recent_consequences": [],
+            "social_highlights": [],
+        }
+
+    def _get_codex_panel():
+        entries = [e.to_dict() for e in loop.campaign_memory_core.codex_entries.values()]
+        return loop.memory_presenter.present_codex(entries)
+
+    def _get_campaign_memory_panel():
+        return {
+            "title": "Campaign Memory",
+            "current_scene": {},
+            "active_threads": [],
+            "resolved_threads": [],
+            "major_consequences": [],
+            "social_summary": {},
+            "canon_summary": {},
+        }
+
+    loop.get_journal_panel = _get_journal_panel
+    loop.get_recap_panel = _get_recap_panel
+    loop.get_codex_panel = _get_codex_panel
+    loop.get_campaign_memory_panel = _get_campaign_memory_panel
+    loop.get_social_dashboard = lambda: {
+        "title": "Social State",
+        "relationships": [],
+        "rumors": [],
+        "alliances": [],
+    }
+    loop.get_arc_panel = lambda: loop.arc_control_presenter.present_arc_panel(
+        loop.arc_control_controller,
     )
-    loop.get_recap_panel = lambda: {"title": "Recap", "summary": "", "scene_summary": {}, "active_threads": [], "recent_consequences": [], "social_highlights": []}
-    loop.get_codex_panel = lambda: loop.memory_presenter.present_codex(
-        [e.to_dict() for e in loop.campaign_memory_core.codex_entries.values()],
+    loop.get_reveal_panel = lambda: loop.arc_control_presenter.present_reveal_panel(
+        loop.arc_control_controller,
     )
-    loop.get_campaign_memory_panel = lambda: {"title": "Campaign Memory", "current_scene": {}, "active_threads": [], "resolved_threads": [], "major_consequences": [], "social_summary": {}, "canon_summary": {}}
-    loop.get_social_dashboard = lambda: {"title": "Social State", "relationships": [], "rumors": [], "alliances": []}
-    loop.get_arc_panel = lambda: loop.arc_control_presenter.present_arc_panel(loop.arc_control_controller)
-    loop.get_reveal_panel = lambda: loop.arc_control_presenter.present_reveal_panel(loop.arc_control_controller)
-    loop.get_scene_bias_panel = lambda: loop.arc_control_presenter.present_scene_bias_panel(loop.arc_control_controller)
-    loop.list_registered_packs = lambda: loop.pack_presenter.present_pack_list([p.to_dict() for p in loop.pack_registry.list_packs()])
+    loop.get_scene_bias_panel = lambda: loop.arc_control_presenter.present_scene_bias_panel(
+        loop.arc_control_controller,
+    )
+    loop.list_registered_packs = lambda: loop.pack_presenter.present_pack_list(
+        [p.to_dict() for p in loop.pack_registry.list_packs()],
+    )
 
     loop.ux_core = UXCore()
     return loop

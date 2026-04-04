@@ -137,7 +137,14 @@ class _FunctionalLoop:
     def get_recap_panel(self):
         recap = self.campaign_memory_core.last_recap
         if recap is None:
-            return {"title": "Recap", "summary": "", "scene_summary": {}, "active_threads": [], "recent_consequences": [], "social_highlights": []}
+            return {
+                "title": "Recap",
+                "summary": "",
+                "scene_summary": {},
+                "active_threads": [],
+                "recent_consequences": [],
+                "social_highlights": [],
+            }
         return self.memory_presenter.present_recap(recap.to_dict())
 
     def get_codex_panel(self):
@@ -147,7 +154,15 @@ class _FunctionalLoop:
     def get_campaign_memory_panel(self):
         snapshot = self.campaign_memory_core.last_campaign_snapshot
         if snapshot is None:
-            return {"title": "Campaign Memory", "current_scene": {}, "active_threads": [], "resolved_threads": [], "major_consequences": [], "social_summary": {}, "canon_summary": {}}
+            return {
+                "title": "Campaign Memory",
+                "current_scene": {},
+                "active_threads": [],
+                "resolved_threads": [],
+                "major_consequences": [],
+                "social_summary": {},
+                "canon_summary": {},
+            }
         return self.memory_presenter.present_campaign_memory(snapshot.to_dict())
 
     def get_social_dashboard(self):
