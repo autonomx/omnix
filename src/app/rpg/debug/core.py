@@ -94,6 +94,7 @@ class DebugCore:
         arc_debug_summary: dict | None = None,
         recovery_debug_summary: dict | None = None,
         pack_debug_summary: dict | None = None,
+        last_save_migration_report: dict | None = None,
     ) -> dict:
         """Build a full GM inspection bundle and return presenter-safe dict.
 
@@ -129,6 +130,11 @@ class DebugCore:
             tick=tick,
             choice_id=choice_id,
         )
+
+        # Phase 8.5 — surface migration report if available
+        if last_save_migration_report is not None:
+            result["migration_report"] = last_save_migration_report
+
         return result
 
     # ------------------------------------------------------------------
