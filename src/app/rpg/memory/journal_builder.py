@@ -261,3 +261,84 @@ class JournalBuilder:
                 "action": action,
             },
         )
+
+    # ------------------------------------------------------------------
+    # Phase 8.3 — World simulation log entry
+    # ------------------------------------------------------------------
+
+    _JOURNALABLE_WORLD_EFFECT_TYPES = frozenset({
+        "faction_shift",
+        "rumor_spread",
+        "location_condition_changed",
+        "investigation_breakthrough",
+        "background_event_summary",
+        "thread_pressure_changed",
+    })
+
+    def build_world_sim_log_entry(
+        self,
+        world_effect: dict,
+        tick: int | None = None,
+        location: str | None = None,
+    ) -> JournalEntry | None:
+        """Build a journal entry from a world simulation effect dict.
+
+        Only journals meaningful world developments. Returns None if
+        the effect type is not journalable.
+        """
+        effect_type = world_effect.get("effect_type", "")
+        if effect_type not in self._JOURNALABLE_WORLD_EFFECT_TYPES:
+            return None
+
+        effect_id = world_effect.get("effect_id", "")
+        target_id = world_effect.get("target_id", "")
+        payload = world_effect.get("payload", {})
+        scope = world_effect.get("scope", "")
+
+        # Build a human-readable summary
+        summary = self._world_effect_summary(effect_type, target_id, payload)
+
+        entity_ids: list[str] = []
+        if target_id:
+            entity_ids.append(target_id)
+
+        return JournalEntry(
+            entry_id=self._entry_id("world_sim", tick, effect_id),
+            tick=tick,
+            entry_type="world_sim",
+            title=f"World: {effect_type}",
+            summary=summary,
+            entity_ids=entity_ids,
+            location=location,
+            metadata={
+                "source": "world_sim",
+                "effect_type": effect_type,
+                "scope": scope,
+                "target_id": target_id,
+            },
+        )
+
+    @staticmethod
+    def _world_effect_summary(
+        effect_type: str, target_id: str, payload: dict
+    ) -> str:
+        """Generate a summary line for a world-sim journal entry."""
+        if effect_type == "faction_shift":
+            return (
+                f"Faction '{target_id}' shifted to "
+                f"{payload.get('new_momentum', '?')} momentum, "
+                f"{payload.get('new_pressure', '?')} pressure."
+            )
+        if effect_type == "rumor_spread":
+            return f"A rumor about '{target_id}' spread to {payload.get('spread_to', '?')}."
+        if effect_type == "location_condition_changed":
+            return (
+                f"Conditions at '{target_id}' changed to "
+                f"{payload.get('new_conditions', [])}."
+            )
+        if effect_type == "thread_pressure_changed":
+            return (
+                f"World pressure shifted — {payload.get('thread_count', 0)} "
+                f"active threads."
+            )
+        return f"{effect_type} affecting {target_id}."

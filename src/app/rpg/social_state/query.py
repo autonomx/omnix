@@ -129,3 +129,53 @@ class SocialStateQuery:
                 else:
                     pressure["neutral_count"] += 1
         return pressure
+
+    # ------------------------------------------------------------------
+    # Phase 8.3 — World simulation seeding helpers
+    # ------------------------------------------------------------------
+
+    def get_known_factions(self, state: SocialState) -> list[str]:
+        """Return known faction IDs from alliances and relationships."""
+        factions: set[str] = set()
+        for alliance in state.alliances.values():
+            for eid in (
+                getattr(alliance, "entity_a", None),
+                getattr(alliance, "entity_b", None),
+            ):
+                if eid:
+                    factions.add(eid)
+        return sorted(factions)
+
+    def get_recent_rumors(
+        self, state: SocialState, limit: int = 5
+    ) -> list[dict]:
+        """Return active rumors, newest first, up to limit."""
+        active = [
+            dict(rumor.to_dict())
+            for rumor in state.rumors.values()
+            if rumor.active
+        ]
+        return active[:limit]
+
+    def get_faction_pressure_map(self, state: SocialState) -> dict[str, str]:
+        """Derive faction pressure from relationship hostility."""
+        pressure: dict[str, str] = {}
+        for rel in state.relationships.values():
+            status = getattr(rel, "status", "")
+            source = getattr(rel, "source_id", "")
+            if status in ("hostile", "enemy") and source:
+                pressure[source] = "high"
+        return pressure
+
+    def get_relationship_hotspots(self, state: SocialState) -> list[dict]:
+        """Return a list of high-tension relationship pairs."""
+        hotspots: list[dict] = []
+        for rel in state.relationships.values():
+            status = getattr(rel, "status", "")
+            if status in ("hostile", "enemy", "rival"):
+                hotspots.append({
+                    "source_id": getattr(rel, "source_id", ""),
+                    "target_id": getattr(rel, "target_id", ""),
+                    "status": status,
+                })
+        return hotspots

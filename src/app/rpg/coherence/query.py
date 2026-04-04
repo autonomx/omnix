@@ -104,3 +104,43 @@ class CoherenceQueryAPI:
         if not anchor:
             return []
         return [{"text": t} for t in anchor.active_tensions]
+
+    # ------------------------------------------------------------------
+    # Phase 8.3 — World simulation seeding helpers
+    # ------------------------------------------------------------------
+
+    def get_known_locations(self) -> list[str]:
+        """Return known location IDs from stable world facts."""
+        locations: list[str] = []
+        for key, fact in self.state.stable_world_facts.items():
+            if "location" in key.lower():
+                if fact.value and isinstance(fact.value, str):
+                    locations.append(fact.value)
+        # Also include current scene location
+        scene_loc = self.get_active_scene_location()
+        if scene_loc and scene_loc not in locations:
+            locations.append(scene_loc)
+        return sorted(set(locations))
+
+    def get_location_facts(self, location_id: str | None = None) -> dict:
+        """Return facts associated with a location."""
+        facts: list[dict] = []
+        for key, fact in self.state.stable_world_facts.items():
+            if location_id and fact.subject == location_id:
+                facts.append(fact.to_dict())
+            elif location_id and location_id in key:
+                facts.append(fact.to_dict())
+        return {"location_id": location_id, "facts": facts}
+
+    def get_active_scene_location(self) -> str | None:
+        """Return the current scene location ID, if any."""
+        location_fact = self.state.scene_facts.get("scene:location")
+        return location_fact.value if location_fact else None
+
+    def get_active_threads(self) -> list[dict]:
+        """Return all active (non-resolved) threads as dicts."""
+        return [
+            t.to_dict()
+            for t in self.state.unresolved_threads.values()
+            if t.status != "resolved"
+        ]

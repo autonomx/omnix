@@ -132,6 +132,30 @@ class CampaignMemoryCore:
             self.journal_entries.append(entry)
             self._trim_journal_if_needed()
 
+    # ------------------------------------------------------------------
+    # Phase 8.3 — World simulation log recording
+    # ------------------------------------------------------------------
+
+    def record_world_sim_log_entry(
+        self,
+        world_effect: dict,
+        tick: int | None = None,
+        location: str | None = None,
+    ) -> None:
+        """Record a world simulation effect as a journal entry if meaningful.
+
+        Only journals structurally important world developments
+        (faction_shift, rumor_spread, location_condition_changed, etc.).
+        """
+        entry = self._journal_builder.build_world_sim_log_entry(
+            world_effect=world_effect,
+            tick=tick,
+            location=location,
+        )
+        if entry is not None:
+            self.journal_entries.append(entry)
+            self._trim_journal_if_needed()
+
     def refresh_recap(
         self,
         coherence_core: Any,

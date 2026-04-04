@@ -27,6 +27,10 @@ class UXPresenter:
         encounter = payload.get("encounter")
         if encounter:
             result["encounter"] = encounter
+        # Phase 8.3 — include world if present
+        world = payload.get("world")
+        if world:
+            result["world"] = world
         return result
 
     def present_action_result_payload(self, payload: dict) -> dict:
@@ -52,6 +56,10 @@ class UXPresenter:
         encounter = payload.get("encounter")
         if encounter:
             result["encounter"] = encounter
+        # Phase 8.3 — include world if present
+        world = payload.get("world")
+        if world:
+            result["world"] = world
         return result
 
     def present_choice_card(self, card: dict) -> dict:

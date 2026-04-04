@@ -91,6 +91,7 @@ class SceneUXPayload:
     highlights: dict[str, Any] = field(default_factory=dict)
     interaction: dict[str, Any] = field(default_factory=dict)
     encounter: dict[str, Any] = field(default_factory=dict)
+    world: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     trace: dict[str, Any] = field(default_factory=dict)
 
@@ -103,6 +104,7 @@ class SceneUXPayload:
             "highlights": dict(self.highlights),
             "interaction": dict(self.interaction),
             "encounter": dict(self.encounter),
+            "world": dict(self.world),
             "metadata": dict(self.metadata),
             "trace": dict(self.trace),
         }
@@ -123,6 +125,7 @@ class SceneUXPayload:
             highlights=dict(data.get("highlights", {})),
             interaction=dict(data.get("interaction", {})),
             encounter=dict(data.get("encounter", {})),
+            world=dict(data.get("world", {})),
             metadata=dict(data.get("metadata", {})),
         )
 
@@ -138,6 +141,7 @@ class ActionResultPayload:
     updated_panels: list[PanelDescriptor] = field(default_factory=list)
     interaction: dict[str, Any] = field(default_factory=dict)
     encounter: dict[str, Any] = field(default_factory=dict)
+    world: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -149,6 +153,7 @@ class ActionResultPayload:
             "updated_panels": [p.to_dict() for p in self.updated_panels],
             "interaction": dict(self.interaction),
             "encounter": dict(self.encounter),
+            "world": dict(self.world),
             "metadata": dict(self.metadata),
         }
 
@@ -168,5 +173,6 @@ class ActionResultPayload:
             ],
             interaction=dict(data.get("interaction", {})),
             encounter=dict(data.get("encounter", {})),
+            world=dict(data.get("world", {})),
             metadata=dict(data.get("metadata", {})),
         )
