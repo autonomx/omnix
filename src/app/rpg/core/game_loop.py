@@ -1544,7 +1544,9 @@ class GameLoop:
         self.last_action_result = result_dict
         self.last_dialogue_trace = resolved_meta.get("dialogue_trace")
 
-        # Phase 8.4 — Build GM debug inspection bundle (read-only, late in flow)
+        # Phase 8.4 — Build GM debug inspection bundle (read-only, late in flow).
+        # Debug payloads must remain deterministic; IDs are derived from stable
+        # tick/choice/context inputs, never randomness.
         self.last_debug_bundle = self._build_debug_bundle(
             scene_summary=scene_summary,
             action_result=result_dict,

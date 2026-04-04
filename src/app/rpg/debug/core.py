@@ -23,7 +23,31 @@ class DebugCore:
 
     This class is stateless — it holds no mutable game state and performs
     no mutations on any subsystem.
+
+    All bundle IDs are deterministic, derived from stable inputs (tick,
+    choice_id) so that replay of the same inputs produces identical
+    debug payloads.
     """
+
+    @staticmethod
+    def _stable_part(value: object) -> str:
+        """Convert a value to a stable, ID-safe string fragment."""
+        if value is None:
+            return "none"
+        text = str(value).strip().lower()
+        if not text:
+            return "empty"
+        return text.replace(" ", "_")
+
+    @classmethod
+    def _bundle_id(
+        cls,
+        tick: int | None = None,
+        choice_id: str | None = None,
+    ) -> str:
+        """Build a deterministic GM bundle ID."""
+        tick_part = str(tick) if tick is not None else "none"
+        return f"gm-bundle:{tick_part}:{cls._stable_part(choice_id)}"
 
     def __init__(self) -> None:
         self._builder = DebugTraceBuilder()
@@ -91,7 +115,21 @@ class DebugCore:
             recovery_debug_summary=recovery_debug_summary,
             pack_debug_summary=pack_debug_summary,
         )
-        return self._presenter.present_gm_bundle(bundle)
+        result = self._presenter.present_gm_bundle(bundle)
+
+        # Attach a deterministic bundle_id to metadata
+        result.setdefault("metadata", {})
+        choice_id = None
+        if isinstance(action_result, dict):
+            choice_id = (
+                action_result.get("choice_id")
+                or action_result.get("metadata", {}).get("choice_id")
+            )
+        result["metadata"]["bundle_id"] = self._bundle_id(
+            tick=tick,
+            choice_id=choice_id,
+        )
+        return result
 
     # ------------------------------------------------------------------
     # System debug snapshot

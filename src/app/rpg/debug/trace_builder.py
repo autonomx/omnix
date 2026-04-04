@@ -6,7 +6,6 @@ Pure read-only builder logic — consumes traces, does not create new truth.
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from .models import (
@@ -32,7 +31,52 @@ class DebugTraceBuilder:
     This builder is read-only.  If a reason or trace detail is missing
     from the source data, it reports ``"unavailable"`` rather than
     fabricating explanations.
+
+    All IDs are derived from stable inputs (tick, option_id, key) so that
+    replay of the same inputs produces identical debug payloads.
     """
+
+    # ------------------------------------------------------------------
+    # Stable ID helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _stable_part(value: object) -> str:
+        """Convert a value to a stable, ID-safe string fragment."""
+        if value is None:
+            return "none"
+        text = str(value).strip().lower()
+        if not text:
+            return "empty"
+        # Replace characters unsafe for IDs
+        return text.replace(" ", "_")
+
+    @classmethod
+    def _trace_id(
+        cls,
+        scope: str,
+        tick: int | None = None,
+        key: str | None = None,
+    ) -> str:
+        """Build a deterministic trace ID."""
+        tick_part = str(tick) if tick is not None else "none"
+        key_part = cls._stable_part(key)
+        return f"debug-trace:{cls._stable_part(scope)}:{tick_part}:{key_part}"
+
+    @classmethod
+    def _node_id(
+        cls,
+        scope: str,
+        node_type: str,
+        index: int,
+        key: str | None = None,
+    ) -> str:
+        """Build a deterministic node ID."""
+        key_part = cls._stable_part(key)
+        return (
+            f"debug-node:{cls._stable_part(scope)}:"
+            f"{cls._stable_part(node_type)}:{index}:{key_part}"
+        )
 
     # ------------------------------------------------------------------
     # Choice trace
@@ -46,17 +90,27 @@ class DebugTraceBuilder:
         *control_output* is the dict returned by
         ``GameplayControlController.build_control_output()``.
         """
-        trace_id = f"choice-trace:{uuid.uuid4().hex[:8]}"
         nodes: list[DebugTraceNode] = []
         warnings: list[str] = []
 
         choice_set = control_output.get("choice_set", {})
         options = choice_set.get("options", [])
 
-        for opt in options:
+        # Build a stable key from sorted option IDs
+        choice_key = ",".join(
+            sorted(
+                str(opt.get("option_id", ""))
+                for opt in options
+                if isinstance(opt, dict)
+            )
+        )
+        trace_id = self._trace_id("choice", tick=tick, key=choice_key)
+
+        for index, opt in enumerate(options):
             reasons = self._extract_choice_reasons(opt)
+            opt_key = opt.get("option_id") if isinstance(opt, dict) else None
             node = DebugTraceNode(
-                node_id=opt.get("option_id", f"opt-{uuid.uuid4().hex[:6]}"),
+                node_id=self._node_id("choice", "choice_generation", index, key=opt_key),
                 node_type="choice_generation",
                 title=opt.get("label", ""),
                 summary=opt.get("summary", opt.get("description", "")),
@@ -87,7 +141,12 @@ class DebugTraceBuilder:
 
         if pacing or framing or external_bias:
             ctx_node = DebugTraceNode(
-                node_id=f"ctx-{uuid.uuid4().hex[:6]}",
+                node_id=self._node_id(
+                    "choice",
+                    "control_context",
+                    len(options),
+                    key="pacing_framing_bias",
+                ),
                 node_type="choice_generation",
                 title="Control Context",
                 summary="Pacing, framing, and bias context for choice generation",
@@ -120,7 +179,6 @@ class DebugTraceBuilder:
 
         *action_result* is the dict from ``ActionResolver.resolve_choice()``.
         """
-        trace_id = f"action-trace:{uuid.uuid4().hex[:8]}"
         nodes: list[DebugTraceNode] = []
         warnings: list[str] = []
 
@@ -128,12 +186,25 @@ class DebugTraceBuilder:
         events = action_result.get("events", [])
         trace_data = action_result.get("trace", {})
 
+        # Build a stable key from the resolved action
+        result_key = (
+            resolved.get("option_id")
+            or resolved.get("action_id")
+            or resolved.get("intent_type", "")
+        )
+        trace_id = self._trace_id("action", tick=tick, key=result_key)
+
         # 1. Selected choice → mapped action
         meta = resolved.get("metadata", {})
         reasons = self._extract_execution_reasons(resolved, trace_data)
 
         nodes.append(DebugTraceNode(
-            node_id=resolved.get("action_id", f"act-{uuid.uuid4().hex[:6]}"),
+            node_id=self._node_id(
+                "action",
+                "action_resolution",
+                0,
+                key=resolved.get("action_id") or resolved.get("option_id"),
+            ),
             node_type="action_resolution",
             title=f"Action: {resolved.get('intent_type', 'unknown')}",
             summary=resolved.get("summary", ""),
@@ -164,7 +235,12 @@ class DebugTraceBuilder:
                 dialogue_response, meta.get("dialogue_trace", {})
             )
             nodes.append(DebugTraceNode(
-                node_id=f"dlg-{uuid.uuid4().hex[:6]}",
+                node_id=self._node_id(
+                    "action",
+                    "dialogue_planning",
+                    1,
+                    key=dialogue_response.get("act"),
+                ),
                 node_type="dialogue_planning",
                 title=f"Dialogue: {dialogue_response.get('act', 'unknown')}",
                 summary=dialogue_response.get("summary", ""),
@@ -184,7 +260,12 @@ class DebugTraceBuilder:
         enc_id = meta.get("encounter_id")
         if enc_id:
             nodes.append(DebugTraceNode(
-                node_id=f"enc-{uuid.uuid4().hex[:6]}",
+                node_id=self._node_id(
+                    "action",
+                    "encounter_resolution",
+                    2,
+                    key=enc_id,
+                ),
                 node_type="encounter_resolution",
                 title=f"Encounter context: {meta.get('encounter_mode', 'unknown')}",
                 summary=f"Action within {meta.get('encounter_mode', '')} encounter",
@@ -206,7 +287,12 @@ class DebugTraceBuilder:
                 etype = evt.get("event_type", "unknown")
                 event_types[etype] = event_types.get(etype, 0) + 1
             nodes.append(DebugTraceNode(
-                node_id=f"evt-{uuid.uuid4().hex[:6]}",
+                node_id=self._node_id(
+                    "action",
+                    "emitted_events",
+                    3,
+                    key="events_summary",
+                ),
                 node_type="action_resolution",
                 title="Emitted Events",
                 summary=f"{len(events)} events emitted",

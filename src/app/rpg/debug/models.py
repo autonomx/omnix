@@ -42,7 +42,11 @@ SUPPORTED_DEBUG_SCOPES: frozenset[str] = frozenset({
 
 @dataclass
 class DebugTraceNode:
-    """A single node in a debug trace — one step or decision point."""
+    """A single node in a debug trace — one step or decision point.
+
+    node_id must be deterministic and derived from stable inputs
+    (tick, scope, node_type, index, key).  Never use uuid4().
+    """
 
     node_id: str
     node_type: str
@@ -81,7 +85,11 @@ class DebugTraceNode:
 
 @dataclass
 class DebugTrace:
-    """A collection of trace nodes for a single debug scope."""
+    """A collection of trace nodes for a single debug scope.
+
+    trace_id must be deterministic and derived from stable inputs
+    (tick, scope, key).  Never use uuid4().
+    """
 
     trace_id: str
     tick: int | None = None
@@ -287,7 +295,11 @@ class WorldSimExplanation:
 
 @dataclass
 class GMInspectionBundle:
-    """Full GM-facing debug inspection payload."""
+    """Full GM-facing debug inspection payload.
+
+    Any bundle identifier stored in metadata must be deterministic
+    and derived from stable inputs (tick, choice_id).  Never use uuid4().
+    """
 
     tick: int | None = None
     scene: dict[str, Any] = field(default_factory=dict)
