@@ -61,6 +61,7 @@ from ..packs.merger import PackMerger
 from ..packs.exporter import PackExporter
 from ..packs.presenters import PackPresenter
 from ..packs.models import AdventurePack
+from ..ux.core import UXCore
 
 
 class TickPhase(Enum):
@@ -323,8 +324,35 @@ class GameLoop:
         if "pack_registry" not in self._snapshot_systems:
             self._snapshot_systems.append("pack_registry")
 
+        # PHASE 8.0 — PLAYER-FACING UX LAYER (stateless presentation/orchestration)
+        self.ux_core = UXCore()
+
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
+
+    # ------------------------------------------------------------------
+    # Phase 8.0 — UX Layer Delegates
+    # ------------------------------------------------------------------
+
+    def get_scene_payload(self) -> dict:
+        """Return a unified scene payload via UXCore."""
+        return self.ux_core.build_scene_payload(self)
+
+    def get_action_result_payload(self, action_result: dict) -> dict:
+        """Return an action-result payload via UXCore."""
+        return self.ux_core.build_action_result_payload(self, action_result)
+
+    def open_panel(self, panel_id: str) -> dict:
+        """Open a named panel via UXCore."""
+        return self.ux_core.open_panel(self, panel_id)
+
+    def select_choice_via_ux(self, choice_id: str) -> dict:
+        """Select a choice via the UX action-flow layer."""
+        return self.ux_core.select_choice(self, choice_id)
+
+    def request_recap_via_ux(self) -> dict:
+        """Request a recap via the UX action-flow layer."""
+        return self.ux_core.request_recap(self)
 
     def set_llm_recorder(self, recorder: Any) -> None:
         """
