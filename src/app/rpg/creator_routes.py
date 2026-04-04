@@ -125,21 +125,63 @@ def start_adventure():
 
 @creator_bp.route("/api/rpg/adventure/regenerate", methods=["POST"])
 def regenerate_adventure_section():
-    """Regenerate a single section of the adventure setup."""
+    """Regenerate a single section of the adventure setup.
+
+    Supports ``mode: "preview"`` (diff without applying) and
+    ``mode: "apply"`` (apply the regeneration, optionally with merge strategy).
+    """
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"success": False, "error": "Missing JSON body"}), 400
 
     target = data.get("target")
     payload = data.get("setup") or {}
+    mode = data.get("mode", "apply")
+    apply_token = data.get("apply_token")
+    apply_strategy = data.get("apply_strategy", "replace")
 
     if not target:
         return jsonify({"success": False, "error": "Missing regeneration target"}), 400
 
     try:
-        result = builder.regenerate_setup_section(payload, target)
+        result = builder.regenerate_setup_section(
+            payload,
+            target,
+            mode=mode,
+            apply_token=apply_token,
+            apply_strategy=apply_strategy,
+        )
         status = 200 if result.get("success") else 400
         return jsonify(result), status
     except Exception:
         logger.exception("Failed to regenerate setup section")
         return jsonify({"success": False, "error": "Failed to regenerate setup section"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 7. POST /api/rpg/adventure/regenerate-item
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/regenerate-item", methods=["POST"])
+def regenerate_adventure_item():
+    """Regenerate a single entity within a section of the adventure setup."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    target = data.get("target")
+    item_id = data.get("item_id")
+    payload = data.get("setup") or {}
+
+    if not target:
+        return jsonify({"success": False, "error": "Missing regeneration target"}), 400
+    if not item_id:
+        return jsonify({"success": False, "error": "Missing item_id"}), 400
+
+    try:
+        result = builder.regenerate_single_item(payload, target, item_id)
+        status = 200 if result.get("success") else 400
+        return jsonify(result), status
+    except Exception:
+        logger.exception("Failed to regenerate single item")
+        return jsonify({"success": False, "error": "Failed to regenerate single item"}), 500

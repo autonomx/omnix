@@ -338,6 +338,7 @@ var AdventureBuilder = (function () {
     // ── Step 3: World Seeds ──
 
     function _renderStep3(body) {
+        var undoDisabled = AdventureBuilderState.hasHistory(state) ? '' : ' disabled';
         var html = '<div class="ab-section">' +
             '<h4>Factions</h4>' +
             '<div class="ab-inline-actions">' +
@@ -361,6 +362,9 @@ var AdventureBuilder = (function () {
             '</div>' +
             '<div id="abNpcList"></div>' +
             '<button class="ab-btn ab-btn-add" id="abAddNpc">+ Add NPC</button>' +
+            '</div>' +
+            '<div class="ab-section ab-undo-section">' +
+            '<button id="abUndoRegen" class="ab-btn ab-btn-secondary ab-btn-sm"' + undoDisabled + '>\u21A9 Undo Last Regeneration</button>' +
             '</div>';
         body.innerHTML = html;
 
@@ -393,6 +397,10 @@ var AdventureBuilder = (function () {
 
         var regenNpcsBtn = body.querySelector('#abRegenNpcs');
         if (regenNpcsBtn) regenNpcsBtn.addEventListener('click', function () { _handleRegenerate('npc_seeds'); });
+
+        // Undo button binding for Step 3
+        var undoBtn = body.querySelector('#abUndoRegen');
+        if (undoBtn) undoBtn.addEventListener('click', function () { _handleUndo(); });
     }
 
     // -- Faction cards
@@ -406,6 +414,7 @@ var AdventureBuilder = (function () {
             html += '<div class="ab-entity-card" data-idx="' + i + '">' +
                 '<div class="ab-entity-header">' +
                     '<span class="ab-entity-summary">' + _esc(f.name || 'Unnamed Faction') + '</span>' +
+                    '<button class="ab-entity-regen" data-type="factions" data-id="' + _esc(f.faction_id || '') + '" title="Regenerate this faction">\u267B</button>' +
                     '<button class="ab-entity-del" data-type="faction" data-idx="' + i + '">\uD83D\uDDD1\uFE0F</button>' +
                     '<button class="ab-entity-toggle" data-idx="' + i + '">\u25BC</button>' +
                 '</div>' +
@@ -420,6 +429,7 @@ var AdventureBuilder = (function () {
         list.innerHTML = html;
         _attachEntityToggle(list);
         _attachEntityDelete(list, 'faction');
+        _attachEntityRegen(list);
         _attachAutoSlug(list, 'Faction');
         _attachChipEditors(list);
     }
@@ -435,6 +445,7 @@ var AdventureBuilder = (function () {
             html += '<div class="ab-entity-card" data-idx="' + i + '">' +
                 '<div class="ab-entity-header">' +
                     '<span class="ab-entity-summary">' + _esc(loc.name || 'Unnamed Location') + '</span>' +
+                    '<button class="ab-entity-regen" data-type="locations" data-id="' + _esc(loc.location_id || '') + '" title="Regenerate this location">\u267B</button>' +
                     '<button class="ab-entity-del" data-type="location" data-idx="' + i + '">\uD83D\uDDD1\uFE0F</button>' +
                     '<button class="ab-entity-toggle" data-idx="' + i + '">\u25BC</button>' +
                 '</div>' +
@@ -449,6 +460,7 @@ var AdventureBuilder = (function () {
         list.innerHTML = html;
         _attachEntityToggle(list);
         _attachEntityDelete(list, 'location');
+        _attachEntityRegen(list);
         _attachAutoSlug(list, 'Location');
         _attachChipEditors(list);
     }
@@ -464,6 +476,7 @@ var AdventureBuilder = (function () {
             html += '<div class="ab-entity-card" data-idx="' + i + '">' +
                 '<div class="ab-entity-header">' +
                     '<span class="ab-entity-summary">' + _esc(npc.name || 'Unnamed NPC') + '</span>' +
+                    '<button class="ab-entity-regen" data-type="npc_seeds" data-id="' + _esc(npc.npc_id || '') + '" title="Regenerate this NPC">\u267B</button>' +
                     '<button class="ab-entity-del" data-type="npc" data-idx="' + i + '">\uD83D\uDDD1\uFE0F</button>' +
                     '<button class="ab-entity-toggle" data-idx="' + i + '">\u25BC</button>' +
                 '</div>' +
@@ -482,6 +495,7 @@ var AdventureBuilder = (function () {
         list.innerHTML = html;
         _attachEntityToggle(list);
         _attachEntityDelete(list, 'npc');
+        _attachEntityRegen(list);
         _attachAutoSlug(list, 'Npc');
         _attachChipEditors(list);
     }
@@ -507,6 +521,19 @@ var AdventureBuilder = (function () {
                 else if (type === 'location') { setup.locations.splice(idx, 1); _markDirty(); _renderLocationCards(); }
                 else if (type === 'npc') { setup.npc_seeds.splice(idx, 1); _markDirty(); _renderNpcCards(); }
                 _markDirty();
+            });
+        });
+    }
+
+    function _attachEntityRegen(container) {
+        container.querySelectorAll('.ab-entity-regen').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = btn.getAttribute('data-type');
+                var itemId = btn.getAttribute('data-id');
+                if (target && itemId) {
+                    _readCurrentStepIntoSetup();
+                    _handleRegenerateItem(target, itemId);
+                }
             });
         });
     }
@@ -591,6 +618,7 @@ var AdventureBuilder = (function () {
 
     function _renderStep5(body) {
         _readCurrentStepIntoSetup();
+        var undoDisabled = AdventureBuilderState.hasHistory(state) ? '' : ' disabled';
         var html = '<div class="ab-section">' +
             '<h4>Setup Summary</h4>' +
             '<div id="abReviewSummary" class="ab-review-block"></div>' +
@@ -601,6 +629,7 @@ var AdventureBuilder = (function () {
             '<div class="ab-inline-actions">' +
                 '<button id="abRegenOpening" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Opening</button>' +
                 '<button id="abRegenThreads" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Tensions</button>' +
+                '<button id="abUndoRegen" class="ab-btn ab-btn-secondary ab-btn-sm"' + undoDisabled + '>\u21A9 Undo Last Regeneration</button>' +
             '</div>' +
             '</div>' +
             '<div class="ab-section">' +
@@ -626,6 +655,10 @@ var AdventureBuilder = (function () {
 
         var regenThreadsBtn = body.querySelector('#abRegenThreads');
         if (regenThreadsBtn) regenThreadsBtn.addEventListener('click', function () { _handleRegenerate('threads'); });
+
+        // Undo button binding for Step 5
+        var undoBtn = body.querySelector('#abUndoRegen');
+        if (undoBtn) undoBtn.addEventListener('click', function () { _handleUndo(); });
     }
 
     function _buildReviewSummary() {
@@ -850,7 +883,7 @@ var AdventureBuilder = (function () {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Regeneration controller
+    // Regeneration controller (Phase 1.4A — preview/apply flow)
     // ─────────────────────────────────────────────────────────────────────────
 
     var REGEN_TARGETS = [
@@ -869,6 +902,11 @@ var AdventureBuilder = (function () {
         threads: '\u267B Regenerate Tensions'
     };
 
+    // Targets that support merge strategy
+    var MERGE_TARGETS = { factions: true, locations: true, npc_seeds: true };
+    // Targets that support append strategy
+    var APPEND_TARGETS = { threads: true };
+
     function _handleRegenerate(target) {
         _readCurrentStepIntoSetup();
         _markDirty();
@@ -876,8 +914,123 @@ var AdventureBuilder = (function () {
         state.regenerating = target;
         _setRegenerationButtonsDisabled(true, target);
 
-        AdventureBuilderApi.regenerateSection(target, state.setup).then(function (res) {
+        // Phase 1.4A: Always start with preview mode
+        AdventureBuilderApi.regenerateSection(target, state.setup, { mode: 'preview' }).then(function (res) {
             if (!res || !res.success) {
+                alert((res && res.error) || 'Regeneration failed.');
+                state.regenerating = null;
+                _setRegenerationButtonsDisabled(false, null);
+                return;
+            }
+
+            // Show diff preview modal; user chooses apply/cancel/strategy
+            _showRegenPreviewModal(target, res);
+        }).catch(function () {
+            alert('Regeneration failed.');
+            state.regenerating = null;
+            _setRegenerationButtonsDisabled(false, null);
+        });
+    }
+
+    function _showRegenPreviewModal(target, previewRes) {
+        var diff = previewRes.diff || {};
+        var summary = (diff.summary || []);
+
+        var hasMerge = !!MERGE_TARGETS[target];
+        var hasAppend = !!APPEND_TARGETS[target];
+
+        var html = '<div class="ab-modal-overlay" id="abRegenModal">' +
+            '<div class="ab-modal">' +
+            '<h3>Preview: Regenerate ' + _esc(target) + '</h3>' +
+            '<div class="ab-diff-summary">';
+
+        if (summary.length) {
+            summary.forEach(function (line) {
+                html += '<div class="ab-diff-line">' + _esc(line) + '</div>';
+            });
+        } else {
+            html += '<div class="ab-diff-line ab-muted">No changes detected.</div>';
+        }
+
+        html += '<div class="ab-diff-stats">' +
+            '<span class="ab-diff-added">+' + (diff.added || 0) + ' added</span> ' +
+            '<span class="ab-diff-removed">\u2212' + (diff.removed || 0) + ' removed</span> ' +
+            '<span class="ab-diff-changed">\u0394' + (diff.changed || 0) + ' changed</span>' +
+            '</div>';
+
+        html += '</div>' +
+            '<div class="ab-modal-actions">' +
+            '<button class="ab-btn ab-btn-primary" id="abRegenApplyReplace">\u2705 Replace All</button>';
+
+        if (hasMerge) {
+            html += '<button class="ab-btn ab-btn-secondary" id="abRegenApplyMerge">\U0001f500 Merge New</button>';
+        }
+        if (hasAppend) {
+            html += '<button class="ab-btn ab-btn-secondary" id="abRegenApplyAppend">\u2795 Append</button>';
+        }
+
+        html += '<button class="ab-btn ab-btn-cancel" id="abRegenCancel">\u274C Cancel</button>' +
+            '</div></div></div>';
+
+        // Append modal to overlay
+        var modalContainer = document.createElement('div');
+        modalContainer.innerHTML = html;
+        var modal = modalContainer.firstChild;
+        (overlayEl || document.body).appendChild(modal);
+
+        // Bind buttons
+        var applyToken = previewRes.apply_token;
+
+        modal.querySelector('#abRegenApplyReplace').addEventListener('click', function () {
+            _closeRegenModal(modal);
+            _applyRegeneration(target, applyToken, 'replace');
+        });
+
+        if (hasMerge) {
+            modal.querySelector('#abRegenApplyMerge').addEventListener('click', function () {
+                _closeRegenModal(modal);
+                _applyRegeneration(target, applyToken, 'merge');
+            });
+        }
+
+        if (hasAppend) {
+            modal.querySelector('#abRegenApplyAppend').addEventListener('click', function () {
+                _closeRegenModal(modal);
+                _applyRegeneration(target, applyToken, 'append');
+            });
+        }
+
+        modal.querySelector('#abRegenCancel').addEventListener('click', function () {
+            _closeRegenModal(modal);
+            state.regenerating = null;
+            _setRegenerationButtonsDisabled(false, null);
+        });
+    }
+
+    function _closeRegenModal(modal) {
+        if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
+    }
+
+    function _applyRegeneration(target, applyToken, strategy) {
+        _setRegenerationButtonsDisabled(true, target);
+
+        // Phase 1.4D: push undo snapshot before applying
+        AdventureBuilderState.pushHistory(state, {
+            type: 'regeneration',
+            target: target,
+            strategy: strategy,
+            beforeSetup: JSON.parse(JSON.stringify(state.setup)),
+            timestamp: Date.now()
+        });
+
+        AdventureBuilderApi.regenerateSection(target, state.setup, {
+            mode: 'apply',
+            apply_token: applyToken,
+            apply_strategy: strategy
+        }).then(function (res) {
+            if (!res || !res.success) {
+                // Roll back the undo entry we just pushed
+                AdventureBuilderState.popHistory(state);
                 alert((res && res.error) || 'Regeneration failed.');
                 return;
             }
@@ -898,11 +1051,115 @@ var AdventureBuilder = (function () {
             _renderStep();
             _runValidation();
         }).catch(function () {
+            AdventureBuilderState.popHistory(state);
             alert('Regeneration failed.');
         }).finally(function () {
             state.regenerating = null;
             _setRegenerationButtonsDisabled(false, null);
         });
+    }
+
+    // ── Single-item regeneration (Phase 1.4C) ─────────────────────────
+
+    function _handleRegenerateItem(target, itemId) {
+        _readCurrentStepIntoSetup();
+        _markDirty();
+
+        AdventureBuilderApi.regenerateItem(target, itemId, state.setup).then(function (res) {
+            if (!res || !res.success) {
+                alert((res && res.error) || 'Item regeneration failed.');
+                return;
+            }
+
+            _showItemDiffModal(target, itemId, res);
+        }).catch(function () {
+            alert('Item regeneration failed.');
+        });
+    }
+
+    function _showItemDiffModal(target, itemId, res) {
+        var diff = res.diff || {};
+        var changedFields = diff.changed_fields || [];
+        var before = res.before || {};
+        var after = res.after || {};
+
+        var html = '<div class="ab-modal-overlay" id="abItemRegenModal">' +
+            '<div class="ab-modal">' +
+            '<h3>Preview: Regenerate ' + _esc(itemId) + '</h3>' +
+            '<div class="ab-diff-detail">';
+
+        if (!changedFields.length) {
+            html += '<div class="ab-diff-line ab-muted">No changes detected.</div>';
+        } else {
+            changedFields.forEach(function (field) {
+                var oldVal = before[field];
+                var newVal = after[field];
+                html += '<div class="ab-diff-field">' +
+                    '<strong>' + _esc(field) + '</strong>' +
+                    '<div class="ab-diff-old">\u2212 ' + _esc(String(oldVal != null ? oldVal : '')) + '</div>' +
+                    '<div class="ab-diff-new">+ ' + _esc(String(newVal != null ? newVal : '')) + '</div>' +
+                    '</div>';
+            });
+        }
+
+        html += '</div>' +
+            '<div class="ab-modal-actions">' +
+            '<button class="ab-btn ab-btn-primary" id="abItemApply">\u2705 Apply</button>' +
+            '<button class="ab-btn ab-btn-cancel" id="abItemCancel">\u274C Cancel</button>' +
+            '</div></div></div>';
+
+        var modalContainer = document.createElement('div');
+        modalContainer.innerHTML = html;
+        var modal = modalContainer.firstChild;
+        (overlayEl || document.body).appendChild(modal);
+
+        modal.querySelector('#abItemApply').addEventListener('click', function () {
+            _closeRegenModal(modal);
+
+            // Push undo snapshot
+            AdventureBuilderState.pushHistory(state, {
+                type: 'item_regeneration',
+                target: target,
+                item_id: itemId,
+                beforeSetup: JSON.parse(JSON.stringify(state.setup)),
+                timestamp: Date.now()
+            });
+
+            if (res.updated_setup) {
+                state.setup = res.updated_setup;
+                setup = state.setup;
+            }
+            state.validation = res.validation || null;
+            state.preview = {
+                ok: true,
+                preview: res.preview || null,
+                validation: res.validation || null,
+                resolved_context: res.resolved_context || null
+            };
+
+            _saveDraft();
+            _renderStep();
+            _runValidation();
+        });
+
+        modal.querySelector('#abItemCancel').addEventListener('click', function () {
+            _closeRegenModal(modal);
+        });
+    }
+
+    // ── Undo last regeneration (Phase 1.4D) ───────────────────────────
+
+    function _handleUndo() {
+        var entry = AdventureBuilderState.popHistory(state);
+        if (!entry || !entry.beforeSetup) {
+            alert('Nothing to undo.');
+            return;
+        }
+        state.setup = entry.beforeSetup;
+        setup = state.setup;
+        _saveDraft();
+        _renderStep();
+        _runValidation();
     }
 
     function _setRegenerationButtonsDisabled(disabled, activeTarget) {
@@ -917,6 +1174,11 @@ var AdventureBuilder = (function () {
                 btn.textContent = REGEN_LABELS[pair[1]];
             }
         });
+        // Update undo button visibility
+        var undoBtn = overlayEl.querySelector('#abUndoRegen');
+        if (undoBtn) {
+            undoBtn.disabled = !AdventureBuilderState.hasHistory(state);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

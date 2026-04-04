@@ -413,3 +413,136 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     font-size: 0.95rem;
 }
+
+/* ── Phase 1.4 — Regeneration diff preview modal ──────────────────────── */
+
+.ab-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.ab-modal {
+    background: #1a1a2e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 20px 24px;
+    max-width: 520px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.ab-modal h3 {
+    margin: 0 0 14px;
+    font-size: 1.1rem;
+    color: #e0e0e0;
+}
+
+.ab-diff-summary {
+    margin-bottom: 16px;
+}
+
+.ab-diff-line {
+    padding: 4px 0;
+    font-size: 0.92rem;
+    color: #ccc;
+}
+
+.ab-diff-stats {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    display: flex;
+    gap: 12px;
+}
+
+.ab-diff-added {
+    color: #6fcf97;
+}
+
+.ab-diff-removed {
+    color: #eb5757;
+}
+
+.ab-diff-changed {
+    color: #f2c94c;
+}
+
+.ab-diff-detail {
+    margin-bottom: 16px;
+}
+
+.ab-diff-field {
+    margin-bottom: 10px;
+    padding: 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.ab-diff-field strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #aaa;
+    margin-bottom: 4px;
+}
+
+.ab-diff-old {
+    color: #eb5757;
+    font-size: 0.88rem;
+    padding: 2px 0;
+    word-break: break-word;
+}
+
+.ab-diff-new {
+    color: #6fcf97;
+    font-size: 0.88rem;
+    padding: 2px 0;
+    word-break: break-word;
+}
+
+.ab-modal-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+
+.ab-btn-cancel {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ccc;
+}
+
+.ab-btn-cancel:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/* Per-entity regeneration button */
+.ab-entity-regen {
+    background: none;
+    border: none;
+    color: #6fcf97;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.ab-entity-regen:hover {
+    background: rgba(111, 207, 151, 0.15);
+}
+
+/* Undo section */
+.ab-undo-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
