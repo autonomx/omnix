@@ -1,4 +1,4 @@
-"""Phase 7.4 / 7.5 — NPC Agency Engine.
+"""Phase 7.4 / 7.5 / 7.6 — NPC Agency Engine.
 
 Orchestrates context building, policy decision, and response building
 for NPC social interactions. Returns a structured payload for resolver
@@ -6,6 +6,9 @@ integration and debugging.
 
 Phase 7.5 addition: optional GroupDynamicsEngine integration for
 multi-actor secondary reactions and rumor seeding.
+
+Phase 7.6 addition: optional social_state_core integration for
+reading persistent social state into relationship building and context.
 """
 
 from __future__ import annotations
@@ -42,6 +45,7 @@ class NPCAgencyEngine:
         coherence_core: Any,
         gm_state: Any,
         control_output: dict | None = None,
+        social_state_core: Any | None = None,
     ) -> dict:
         """Resolve a social interaction through NPC agency.
 
@@ -54,7 +58,7 @@ class NPCAgencyEngine:
             }
         """
         context = self._build_context(
-            mapped_action, coherence_core, gm_state, control_output
+            mapped_action, coherence_core, gm_state, control_output, social_state_core
         )
         decision = self.decision_policy.decide(context)
         events = self.response_builder.build_events(decision, mapped_action)
@@ -88,17 +92,19 @@ class NPCAgencyEngine:
         coherence_core: Any,
         gm_state: Any,
         control_output: dict | None = None,
+        social_state_core: Any | None = None,
     ) -> NPCDecisionContext:
         """Assemble full decision context from available state."""
         npc_id = mapped_action.get("target_id") or "unknown_npc"
         target_id = mapped_action.get("target_id")
         intent_type = mapped_action.get("intent_type", "talk_to_npc")
 
-        # Build relationship view
+        # Build relationship view (Phase 7.6: with persistent social state)
         relationship = self.relationship_builder.build(
             npc_id=npc_id,
             target_id=target_id,
             coherence_core=coherence_core,
+            social_state_core=social_state_core,
         )
 
         # Build faction alignment
@@ -127,6 +133,19 @@ class NPCAgencyEngine:
         if control_output and isinstance(control_output, dict):
             pacing = dict(control_output.get("pacing", {}))
 
+        # Phase 7.6 — Build social view metadata if social state is available
+        context_metadata: dict[str, Any] = {}
+        if social_state_core is not None:
+            try:
+                social_query = social_state_core.get_query()
+                social_state = social_state_core.get_state()
+                social_view = social_query.build_npc_social_view(
+                    social_state, npc_id, target_id
+                )
+                context_metadata["social_view"] = social_view
+            except (AttributeError, TypeError):
+                pass
+
         return NPCDecisionContext(
             npc_id=npc_id,
             intent_type=intent_type,
@@ -139,6 +158,7 @@ class NPCAgencyEngine:
             faction_alignment=faction_alignment,
             pacing=pacing,
             gm_context=gm_context,
+            metadata=context_metadata,
         )
 
     def _get_scene_summary(self, coherence_core: Any) -> dict:
