@@ -38,6 +38,7 @@ class UXPayloadBuilder:
         choices = self._build_choice_cards(control_output)
         panels = self._build_panel_descriptors(loop)
         highlights = self._build_highlights(loop)
+        interaction = self._build_interaction_payload(loop)
 
         payload = SceneUXPayload(
             payload_id=payload_id,
@@ -45,6 +46,7 @@ class UXPayloadBuilder:
             choices=choices,
             panels=panels,
             highlights=highlights,
+            interaction=interaction,
         )
         payload.trace = {"tick": tick}
         return payload
@@ -56,6 +58,7 @@ class UXPayloadBuilder:
         panels = self._build_panel_descriptors(loop)
         control_output = self._gather_control_output(loop)
         choices = self._build_choice_cards(control_output)
+        interaction = self._build_interaction_payload(loop)
 
         return ActionResultPayload(
             result_id=str(uuid.uuid4()),
@@ -63,6 +66,7 @@ class UXPayloadBuilder:
             updated_scene=self._gather_scene(loop),
             updated_choices=choices,
             updated_panels=panels,
+            interaction=interaction,
             metadata={
                 "choice_id": action_result.get("choice_id"),
             },
@@ -186,3 +190,15 @@ class UXPayloadBuilder:
             if choice_set is not None:
                 return {"choice_set": choice_set}
         return None
+
+    # ------------------------------------------------------------------
+    # Phase 8.1 — Interaction payload
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_interaction_payload(loop: Any) -> dict:
+        """Read the latest dialogue response from the loop, if present."""
+        response = getattr(loop, "last_dialogue_response", None)
+        if response and isinstance(response, dict):
+            return dict(response)
+        return {}

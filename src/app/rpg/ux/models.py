@@ -89,6 +89,7 @@ class SceneUXPayload:
     choices: list[PlayerChoiceCard] = field(default_factory=list)
     panels: list[PanelDescriptor] = field(default_factory=list)
     highlights: dict[str, Any] = field(default_factory=dict)
+    interaction: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     trace: dict[str, Any] = field(default_factory=dict)
 
@@ -99,6 +100,7 @@ class SceneUXPayload:
             "choices": [c.to_dict() for c in self.choices],
             "panels": [p.to_dict() for p in self.panels],
             "highlights": dict(self.highlights),
+            "interaction": dict(self.interaction),
             "metadata": dict(self.metadata),
             "trace": dict(self.trace),
         }
@@ -117,6 +119,7 @@ class SceneUXPayload:
                 for p in data.get("panels", [])
             ],
             highlights=dict(data.get("highlights", {})),
+            interaction=dict(data.get("interaction", {})),
             metadata=dict(data.get("metadata", {})),
         )
 
@@ -130,6 +133,7 @@ class ActionResultPayload:
     updated_scene: dict[str, Any] = field(default_factory=dict)
     updated_choices: list[PlayerChoiceCard] = field(default_factory=list)
     updated_panels: list[PanelDescriptor] = field(default_factory=list)
+    interaction: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -139,6 +143,7 @@ class ActionResultPayload:
             "updated_scene": dict(self.updated_scene),
             "updated_choices": [c.to_dict() for c in self.updated_choices],
             "updated_panels": [p.to_dict() for p in self.updated_panels],
+            "interaction": dict(self.interaction),
             "metadata": dict(self.metadata),
         }
 
@@ -156,5 +161,6 @@ class ActionResultPayload:
                 PanelDescriptor.from_dict(p)
                 for p in data.get("updated_panels", [])
             ],
+            interaction=dict(data.get("interaction", {})),
             metadata=dict(data.get("metadata", {})),
         )
