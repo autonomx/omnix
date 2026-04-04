@@ -74,8 +74,19 @@ class GameplayControlController:
         coherence_core: Any,
         gm_state: Any,
         tick: int | None = None,
+        external_bias: dict | None = None,
     ) -> dict:
-        """Build the full control output for the current tick."""
+        """Build the full control output for the current tick.
+
+        Args:
+            coherence_core: Canonical coherence state.
+            gm_state: GM directive state.
+            tick: Current tick number.
+            external_bias: Optional external bias dict (Phase 7.8).
+                If present, applied after base choice generation to
+                annotate the output with steering hints.  Must remain
+                deterministic and must not directly mutate coherence.
+        """
 
         # --- Update systems ---
         self.pacing_controller.update_from_coherence(coherence_core)
@@ -107,11 +118,17 @@ class GameplayControlController:
         # --- Record presentation ---
         self.framing_engine.mark_choice_set_presented(choice_set, tick=tick)
 
-        return {
+        output = {
             "choice_set": choice_set.to_dict(),
             "pacing": self.pacing_controller.get_state().to_dict(),
             "framing": self.framing_engine.get_state().to_dict(),
         }
+
+        # --- Phase 7.8: Apply external bias after base generation ---
+        if external_bias:
+            output["external_bias"] = dict(external_bias)
+
+        return output
 
     def mark_choice_set_presented(
         self, choice_set: dict, tick: int | None = None

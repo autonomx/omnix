@@ -103,6 +103,44 @@ class GMCommandProcessor:
         if lowered == "lower danger":
             return {"command": "lower_danger"}
 
+        # --- Phase 7.8 arc-control patterns ---
+
+        m = re.match(r"focus arc\s+(\S+)", lowered)
+        if m:
+            return {"command": "focus_arc", "arc_id": m.group(1)}
+
+        m = re.match(r"hold reveal\s+(\S+)(?:\s+(.+))?", lowered)
+        if m:
+            return {
+                "command": "hold_reveal",
+                "reveal_id": m.group(1),
+                "reason": (m.group(2) or "").strip(),
+            }
+
+        m = re.match(r"release reveal\s+(\S+)", lowered)
+        if m:
+            return {"command": "release_reveal", "reveal_id": m.group(1)}
+
+        m = re.match(r"set pacing\s+(\S+)\s+(\S+)", lowered)
+        if m:
+            return {
+                "command": "set_pacing",
+                "bias_type": m.group(1),
+                "level": m.group(2),
+            }
+
+        m = re.match(r"bias scene\s+(\S+)", lowered)
+        if m:
+            return {"command": "bias_scene", "scene_type": m.group(1)}
+
+        m = re.match(r"accelerate arc\s+(\S+)", lowered)
+        if m:
+            return {"command": "accelerate_arc", "arc_id": m.group(1)}
+
+        m = re.match(r"delay arc\s+(\S+)", lowered)
+        if m:
+            return {"command": "delay_arc", "arc_id": m.group(1)}
+
         # --- legacy patterns ---
 
         if lowered == "restate canon":
@@ -176,6 +214,21 @@ class GMCommandProcessor:
             return self.command_raise_danger(command, gm_state, coherence_core)
         if name == "lower_danger":
             return self.command_lower_danger(command, gm_state, coherence_core)
+        # Phase 7.8 arc-control commands
+        if name == "focus_arc":
+            return self.command_focus_arc(command, gm_state, coherence_core)
+        if name == "hold_reveal":
+            return self.command_hold_reveal(command, gm_state, coherence_core)
+        if name == "release_reveal":
+            return self.command_release_reveal(command, gm_state, coherence_core)
+        if name == "set_pacing":
+            return self.command_set_pacing(command, gm_state, coherence_core)
+        if name == "bias_scene":
+            return self.command_bias_scene(command, gm_state, coherence_core)
+        if name == "accelerate_arc":
+            return self.command_accelerate_arc(command, gm_state, coherence_core)
+        if name == "delay_arc":
+            return self.command_delay_arc(command, gm_state, coherence_core)
         return {"ok": False, "reason": "unknown_command"}
 
     # ------------------------------------------------------------------
@@ -474,6 +527,129 @@ class GMCommandProcessor:
             directive_type="danger",
             scope="scene",
             level="low",
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    # ------------------------------------------------------------------
+    # Phase 7.8 arc-control command handlers
+    # ------------------------------------------------------------------
+
+    def command_focus_arc(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        """Focus on a specific narrative arc via a pin-thread directive."""
+        arc_id = command.get("arc_id", "")
+        if not arc_id:
+            return {"ok": False, "reason": "missing_arc_id"}
+        directive = PinThreadDirective(
+            directive_id=f"gm:focus_arc:{arc_id}",
+            directive_type="pin_thread",
+            scope="global",
+            thread_id=arc_id,
+            priority="high",
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_hold_reveal(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        """Hold a scheduled reveal by adding a reveal directive with held timing."""
+        reveal_id = command.get("reveal_id", "")
+        if not reveal_id:
+            return {"ok": False, "reason": "missing_reveal_id"}
+        reason = command.get("reason", "held by GM")
+        directive = RevealDirective(
+            directive_id=f"gm:hold_reveal:{reveal_id}",
+            directive_type="reveal",
+            scope="global",
+            reveal_type="hold",
+            target_id=reveal_id,
+            timing="held",
+            metadata={"hold_reason": reason},
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_release_reveal(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        """Release a held reveal back to scheduled timing."""
+        reveal_id = command.get("reveal_id", "")
+        if not reveal_id:
+            return {"ok": False, "reason": "missing_reveal_id"}
+        directive = RevealDirective(
+            directive_id=f"gm:release_reveal:{reveal_id}",
+            directive_type="reveal",
+            scope="global",
+            reveal_type="release",
+            target_id=reveal_id,
+            timing="soon",
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_set_pacing(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        """Set a pacing bias (e.g., 'set pacing danger high')."""
+        bias_type = command.get("bias_type", "")
+        level = command.get("level", "medium")
+        if not bias_type:
+            return {"ok": False, "reason": "missing_bias_type"}
+        # Map pacing bias types to danger level directives for downstream consumption
+        if bias_type == "danger":
+            directive = DangerDirective(
+                directive_id=f"gm:pacing_danger_{level}",
+                directive_type="danger",
+                scope="global",
+                level=level,
+            )
+        else:
+            # For non-danger pacing biases, create a tone directive as approximation
+            directive = ToneDirective(
+                directive_id=f"gm:pacing_{bias_type}_{level}",
+                directive_type="tone",
+                scope="global",
+                tone=f"{bias_type}_{level}",
+            )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_bias_scene(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        """Bias the next scene toward a specific type."""
+        scene_type = command.get("scene_type", "balanced")
+        directive = OptionFramingDirective(
+            directive_id=f"gm:bias_scene:{scene_type}",
+            directive_type="option_framing",
+            scope="scene",
+            force=True,
+            metadata={"scene_type_bias": scene_type},
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_accelerate_arc(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        """Accelerate a narrative arc by pinning its thread with high priority."""
+        arc_id = command.get("arc_id", "")
+        if not arc_id:
+            return {"ok": False, "reason": "missing_arc_id"}
+        directive = PinThreadDirective(
+            directive_id=f"gm:accelerate_arc:{arc_id}",
+            directive_type="pin_thread",
+            scope="global",
+            thread_id=arc_id,
+            priority="high",
+            metadata={"accelerated": True},
+        )
+        gm_state.add_directive(directive)
+        return {"ok": True, "directive_id": directive.directive_id}
+
+    def command_delay_arc(self, command: dict, gm_state: Any, coherence_core: Any) -> dict:
+        """Delay a narrative arc by pinning its thread with low priority."""
+        arc_id = command.get("arc_id", "")
+        if not arc_id:
+            return {"ok": False, "reason": "missing_arc_id"}
+        directive = PinThreadDirective(
+            directive_id=f"gm:delay_arc:{arc_id}",
+            directive_type="pin_thread",
+            scope="global",
+            thread_id=arc_id,
+            priority="low",
+            metadata={"delayed": True},
         )
         gm_state.add_directive(directive)
         return {"ok": True, "directive_id": directive.directive_id}
