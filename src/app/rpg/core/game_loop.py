@@ -1213,10 +1213,15 @@ class GameLoop:
     def _init_execution_systems(self) -> None:
         """Initialize the action resolver for scene execution."""
         from ..control.controller import GameplayControlController
+        from ..group_dynamics.group_engine import GroupDynamicsEngine
         from ..npc_agency.agency_engine import NPCAgencyEngine
-        self.action_resolver = ActionResolver(
-            npc_agency_engine=NPCAgencyEngine(),
+        agency_engine = NPCAgencyEngine(
+            group_dynamics_engine=GroupDynamicsEngine(),
         )
+        self.action_resolver = ActionResolver(
+            npc_agency_engine=agency_engine,
+        )
+        self.npc_agency_engine = agency_engine
         # GameplayControlController is already initialized by _init_creator_systems
         # via build_control_output. We create one for direct option lookup.
         if not hasattr(self, "gameplay_control_controller"):

@@ -204,6 +204,11 @@ class CreatorStatePresenter:
         if npc_decision:
             result["npc_decision"] = self.present_npc_decision(npc_decision)
 
+        # Phase 7.5 — Include group dynamics if present
+        group_dynamics = metadata.get("group_dynamics")
+        if group_dynamics:
+            result["group_dynamics"] = self.present_group_dynamics(group_dynamics)
+
         return result
 
     def present_scene_transition(self, transition: dict | None) -> dict | None:
@@ -230,4 +235,51 @@ class CreatorStatePresenter:
             "response_type": decision.get("response_type") or "unknown",
             "summary": decision.get("summary") or "",
             "modifiers": list(decision.get("modifiers") or []),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 7.5 — Group dynamics presenters
+    # ------------------------------------------------------------------
+
+    def present_secondary_reaction(self, reaction: dict) -> dict:
+        """Present a secondary reaction in a UI-safe format."""
+        return {
+            "npc_id": reaction.get("npc_id") or "unknown",
+            "reaction_type": reaction.get("reaction_type") or "unknown",
+            "summary": reaction.get("summary") or "",
+            "modifiers": list(reaction.get("modifiers") or []),
+        }
+
+    def present_group_dynamics(self, group: dict) -> dict:
+        """Present group dynamics in a UI-safe format."""
+        participants = group.get("participants") or []
+        crowd_state = group.get("crowd_state") or {}
+        secondary_reactions = group.get("secondary_reactions") or []
+        rumor_seeds = group.get("rumor_seeds") or []
+
+        return {
+            "participants": [
+                {
+                    "npc_id": p.get("npc_id") or "unknown",
+                    "role": p.get("role") or "unknown",
+                    "faction_id": p.get("faction_id"),
+                }
+                for p in participants
+            ],
+            "crowd_state": {
+                "mood": crowd_state.get("mood") or "neutral",
+                "tension": crowd_state.get("tension") or "low",
+                "support_level": crowd_state.get("support_level") or "mixed",
+            },
+            "secondary_reactions": [
+                self.present_secondary_reaction(r) for r in secondary_reactions
+            ],
+            "rumor_seeds": [
+                {
+                    "rumor_id": s.get("rumor_id") or "unknown",
+                    "rumor_type": s.get("rumor_type") or "unknown",
+                    "summary": s.get("summary") or "",
+                }
+                for s in rumor_seeds
+            ],
         }

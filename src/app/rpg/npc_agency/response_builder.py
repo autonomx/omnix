@@ -1,7 +1,10 @@
-"""Phase 7.4 — NPC Response Builder.
+"""Phase 7.4 / 7.5 — NPC Response Builder.
 
 Converts NPCDecisionResult into structured action consequence events.
 All events follow the standard event bus format.
+
+Phase 7.5: decision_summary included in emitted payloads more consistently
+to support downstream reducers and presenter usage.
 """
 
 from __future__ import annotations
@@ -63,6 +66,7 @@ class NPCResponseBuilder:
                 npc_id=npc_id,
                 source="npc_agency",
                 summary=decision.summary,
+                decision_summary=decision.summary,
                 outcome=decision.outcome,
                 modifiers=decision.modifiers,
             ),
@@ -84,6 +88,7 @@ class NPCResponseBuilder:
                 npc_id=npc_id,
                 source="npc_agency",
                 summary=decision.summary,
+                decision_summary=decision.summary,
                 outcome=decision.outcome,
                 modifiers=decision.modifiers,
             ),
@@ -105,6 +110,7 @@ class NPCResponseBuilder:
                 npc_id=npc_id,
                 source="npc_agency",
                 summary=decision.summary,
+                decision_summary=decision.summary,
                 outcome=decision.outcome,
                 modifiers=decision.modifiers,
             ),
@@ -126,6 +132,7 @@ class NPCResponseBuilder:
                 npc_id=npc_id,
                 source="npc_agency",
                 summary=decision.summary,
+                decision_summary=decision.summary,
                 outcome=decision.outcome,
                 modifiers=decision.modifiers,
             ),
@@ -147,6 +154,7 @@ class NPCResponseBuilder:
                 npc_id=npc_id,
                 source="npc_agency",
                 summary=decision.summary,
+                decision_summary=decision.summary,
                 outcome=decision.outcome,
                 modifiers=decision.modifiers,
             ),
@@ -168,6 +176,7 @@ class NPCResponseBuilder:
                 npc_id=npc_id,
                 source="npc_agency",
                 summary=decision.summary,
+                decision_summary=decision.summary,
                 outcome=decision.outcome,
                 modifiers=decision.modifiers,
             ),
