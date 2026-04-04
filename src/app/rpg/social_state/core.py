@@ -57,3 +57,44 @@ class SocialStateCore:
     def deserialize_state(self, data: dict) -> None:
         """Restore social state from a serialized snapshot."""
         self.state = SocialState.from_dict(data)
+
+    # ------------------------------------------------------------------
+    # Phase 7.9 — Pack seed integration
+    # ------------------------------------------------------------------
+
+    def load_social_seed(self, payload: dict) -> None:
+        """Seed reputation, relationships, rumors, and alliances from a pack.
+
+        Uses the tracker/log APIs rather than raw dict mutation to
+        maintain the same invariants as event-driven updates.
+        """
+        for seed in payload.get("social_seeds", []):
+            if not isinstance(seed, dict):
+                continue
+            seed_type = seed.get("type", "")
+            if seed_type == "reputation":
+                self.reputation_graph.set_edge(
+                    source=seed.get("source", ""),
+                    target=seed.get("target", ""),
+                    value=seed.get("value", 0),
+                    reason=seed.get("reason", "pack_seed"),
+                )
+            elif seed_type == "relationship":
+                self.relationship_tracker.set_relationship(
+                    entity_a=seed.get("entity_a", ""),
+                    entity_b=seed.get("entity_b", ""),
+                    status=seed.get("status", "neutral"),
+                    reason=seed.get("reason", "pack_seed"),
+                )
+            elif seed_type == "rumor":
+                self.rumor_log.add_rumor(
+                    rumor_id=seed.get("rumor_id", ""),
+                    content=seed.get("content", ""),
+                    source=seed.get("source", "pack_seed"),
+                )
+            elif seed_type == "alliance":
+                self.alliance_tracker.add_alliance(
+                    alliance_id=seed.get("alliance_id", ""),
+                    members=seed.get("members", []),
+                    reason=seed.get("reason", "pack_seed"),
+                )

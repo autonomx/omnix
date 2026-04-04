@@ -162,3 +162,37 @@ class ArcControlController:
             for k, v in data.get("scene_biases", {}).items()
         }
         self._mode = data.get("mode", "live")
+
+    # ------------------------------------------------------------------
+    # Phase 7.9 — Pack seed integration
+    # ------------------------------------------------------------------
+
+    def load_arc_seed(self, payload: dict) -> None:
+        """Upsert arcs, reveals, pacing plans, and biases from a pack seed.
+
+        This is an explicit seed-application path. It does not bypass
+        coherence — it populates arc control state for subsequent
+        director context building.
+        """
+        from .models import NarrativeArc, RevealDirectiveState, PacingPlanState, SceneBiasState
+
+        for arc_data in payload.get("arcs", []):
+            if not isinstance(arc_data, dict):
+                continue
+            arc_id = arc_data.get("arc_id", "")
+            if arc_id:
+                self.arcs[arc_id] = NarrativeArc.from_dict(arc_data)
+
+        for reveal_data in payload.get("reveal_seeds", []):
+            if not isinstance(reveal_data, dict):
+                continue
+            reveal_id = reveal_data.get("reveal_id", "")
+            if reveal_id:
+                self.reveals[reveal_id] = RevealDirectiveState.from_dict(reveal_data)
+
+        for pacing_data in payload.get("pacing_presets", []):
+            if not isinstance(pacing_data, dict):
+                continue
+            plan_id = pacing_data.get("plan_id", "")
+            if plan_id:
+                self.pacing_plans[plan_id] = PacingPlanState.from_dict(pacing_data)

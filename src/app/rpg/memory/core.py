@@ -172,3 +172,56 @@ class CampaignMemoryCore:
             k: CodexEntry.from_dict(v) for k, v in data.get("codex_entries", {}).items()
         }
         self._mode = data.get("mode", "live")
+
+    # ------------------------------------------------------------------
+    # Phase 7.9 — Pack seed integration
+    # ------------------------------------------------------------------
+
+    def load_memory_seed(self, payload: dict) -> None:
+        """Seed codex entries from a pack.
+
+        Adds codex-compatible entries from pack locations, factions,
+        NPCs, and threads into the codex_entries dict. This is an
+        optional convenience — memory is a derived read-model.
+        """
+        for loc in payload.get("locations", []):
+            if not isinstance(loc, dict):
+                continue
+            loc_id = loc.get("location_id", "")
+            if loc_id:
+                entry = CodexEntry(
+                    entry_id=f"pack_location:{loc_id}",
+                    entry_type="location",
+                    title=loc.get("name", loc_id),
+                    summary=loc.get("description", ""),
+                    metadata={"source": "pack_seed", "pack_id": payload.get("pack_id", "")},
+                )
+                self.codex_entries[entry.entry_id] = entry
+
+        for faction in payload.get("factions", []):
+            if not isinstance(faction, dict):
+                continue
+            fid = faction.get("faction_id", "")
+            if fid:
+                entry = CodexEntry(
+                    entry_id=f"pack_faction:{fid}",
+                    entry_type="faction",
+                    title=faction.get("name", fid),
+                    summary=faction.get("description", ""),
+                    metadata={"source": "pack_seed", "pack_id": payload.get("pack_id", "")},
+                )
+                self.codex_entries[entry.entry_id] = entry
+
+        for npc in payload.get("npcs", []):
+            if not isinstance(npc, dict):
+                continue
+            npc_id = npc.get("npc_id", "")
+            if npc_id:
+                entry = CodexEntry(
+                    entry_id=f"pack_npc:{npc_id}",
+                    entry_type="npc",
+                    title=npc.get("name", npc_id),
+                    summary=npc.get("description", ""),
+                    metadata={"source": "pack_seed", "pack_id": payload.get("pack_id", "")},
+                )
+                self.codex_entries[entry.entry_id] = entry
