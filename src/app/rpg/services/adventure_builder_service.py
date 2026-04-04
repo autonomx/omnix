@@ -180,7 +180,13 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 class _Stub:
-    """Minimal stub that absorbs any attribute access / method call."""
+    """Minimal stub that absorbs any attribute access / method call.
+
+    ``Any`` return type is intentional — the stub must accept arbitrary
+    attribute chains (``stub.foo.bar.baz()``) without type errors so that
+    ``GameLoop`` can be instantiated with stubbed subsystems during the
+    deterministic startup pipeline.
+    """
 
     def __getattr__(self, name: str) -> Any:  # noqa: ANN401
         return _Stub()

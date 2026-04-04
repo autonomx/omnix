@@ -13,7 +13,7 @@ var AdventureBuilderApi = (function () {
     var BASE = '/api/rpg/adventure';
 
     function _json(res) {
-        if (!res.ok) throw new Error('API error (' + res.status + ')');
+        if (!res.ok) throw new Error('API error at ' + res.url + ' (' + res.status + ')');
         return res.json();
     }
 

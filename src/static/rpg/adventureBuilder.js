@@ -302,7 +302,7 @@ var AdventureBuilder = (function () {
                         setup[k] = tplData[k];
                     }
                 });
-                if (!setup.setup_id) setup.setup_id = 'adventure_' + Date.now().toString(36);
+                if (!setup.setup_id) setup.setup_id = 'adventure_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
                 if (!setup.title) setup.title = (name || '').replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
                 _saveDraft();
                 _renderStep();
@@ -777,7 +777,7 @@ var AdventureBuilder = (function () {
         setup.mood = _val('abMood') || null;
         if (!setup.metadata) setup.metadata = {};
         setup.metadata.player_name = _val('abPlayerName') || 'Player';
-        if (!setup.setup_id) setup.setup_id = 'adventure_' + Date.now().toString(36);
+        if (!setup.setup_id) setup.setup_id = 'adventure_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
     }
 
     function _readStep2() {
