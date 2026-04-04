@@ -1,4 +1,4 @@
-"""Phase 7.3 / 7.4 / 7.5 / 7.6 — Action Resolver.
+"""Phase 7.3 / 7.4 / 7.5 / 7.6 / 8.1 — Action Resolver.
 
 Main entry point for resolving a selected ChoiceOption into deterministic
 events. Does NOT directly call coherence methods — returns events only.
@@ -11,6 +11,9 @@ metadata and trace.
 
 Phase 7.6 addition: optional social_state_core parameter for passing
 persistent social state into NPC agency resolution.
+
+Phase 8.1 addition: optional dialogue_core for structured dialogue response
+planning attached to resolved action metadata.
 """
 
 from __future__ import annotations
@@ -58,11 +61,13 @@ class ActionResolver:
         consequence_builder: Optional[ConsequenceBuilder] = None,
         transition_builder: Optional[SceneTransitionBuilder] = None,
         npc_agency_engine: Optional[Any] = None,
+        dialogue_core: Optional[Any] = None,
     ) -> None:
         self.intent_mapper = intent_mapper or ActionIntentMapper()
         self.consequence_builder = consequence_builder or ConsequenceBuilder()
         self.transition_builder = transition_builder or SceneTransitionBuilder()
         self.npc_agency_engine = npc_agency_engine
+        self.dialogue_core = dialogue_core
 
     def resolve_choice(
         self,
@@ -483,8 +488,56 @@ class ActionResolver:
         for e in events:
             self._validate_event(e)
 
+        # Phase 8.1 — Build structured dialogue response if dialogue_core is available
+        self._attach_dialogue_payload(
+            resolved, coherence_core, gm_state, npc_decision,
+            social_state_core=social_state_core,
+        )
+
         return ActionResolutionResult(
             resolved_action=resolved,
             events=events,
             trace=trace,
         )
+
+    # ------------------------------------------------------------------
+    # Phase 8.1 — Dialogue payload attachment
+    # ------------------------------------------------------------------
+
+    def _attach_dialogue_payload(
+        self,
+        resolved: ResolvedAction,
+        coherence_core: Any,
+        gm_state: Any,
+        npc_decision: dict | None,
+        social_state_core: Any | None = None,
+    ) -> None:
+        """Attach structured dialogue output to resolved action metadata.
+
+        Does nothing when dialogue_core is None, preserving Phase 7.4
+        fallback behaviour.
+        """
+        if self.dialogue_core is None:
+            return
+
+        intent_type = resolved.intent_type or ""
+        if intent_type not in ("talk_to_npc", "social_contact", "unknown") and resolved.outcome not in (
+            "refuse", "threaten", "redirect", "agree", "assist", "delay", "offer",
+        ):
+            return
+
+        try:
+            payload = self.dialogue_core.build_interaction_response(
+                speaker_id=resolved.target_id or "",
+                listener_id=None,
+                coherence_core=coherence_core,
+                social_state_core=social_state_core,
+                resolved_action=resolved,
+                npc_decision=npc_decision,
+            )
+        except Exception:
+            return
+
+        resolved.metadata["dialogue_response"] = payload.get("response")
+        resolved.metadata["dialogue_trace"] = payload.get("trace")
+        resolved.metadata["dialogue_log_entry"] = payload.get("log_entry")

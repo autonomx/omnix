@@ -62,6 +62,7 @@ from ..packs.exporter import PackExporter
 from ..packs.presenters import PackPresenter
 from ..packs.models import AdventurePack
 from ..ux.core import UXCore
+from ..dialogue.core import DialogueCore
 
 
 class TickPhase(Enum):
@@ -1320,10 +1321,14 @@ class GameLoop:
         agency_engine = NPCAgencyEngine(
             group_dynamics_engine=GroupDynamicsEngine(),
         )
+        # Phase 8.1 — Dialogue planning layer
+        self.dialogue_core = DialogueCore()
         self.action_resolver = ActionResolver(
             npc_agency_engine=agency_engine,
+            dialogue_core=self.dialogue_core,
         )
         self.npc_agency_engine = agency_engine
+        self.last_dialogue_response: dict | None = None
         # GameplayControlController is already initialized by _init_creator_systems
         # via build_control_output. We create one for direct option lookup.
         if not hasattr(self, "gameplay_control_controller"):
@@ -1386,6 +1391,27 @@ class GameLoop:
                     creator_canon_state=getattr(self, "creator_canon_state", None),
                     tick=self._tick_count,
                 )
+
+        # Phase 8.1 — Store latest dialogue response for UX surface
+        resolved_meta = result_dict.get("resolved_action", {}).get("metadata", {})
+        if resolved_meta.get("dialogue_response"):
+            self.last_dialogue_response = resolved_meta["dialogue_response"]
+        else:
+            self.last_dialogue_response = None
+
+        # Phase 8.1 — Record dialogue log entry into journal if meaningful
+        dialogue_log = resolved_meta.get("dialogue_log_entry")
+        if (
+            dialogue_log
+            and hasattr(self, "campaign_memory_core")
+            and self.campaign_memory_core is not None
+        ):
+            scene = self.coherence_core.get_scene_summary() if self.coherence_core else {}
+            self.campaign_memory_core.record_dialogue_log_entry(
+                dialogue_log=dialogue_log,
+                tick=self._tick_count,
+                location=scene.get("location"),
+            )
 
         return {
             "ok": True,

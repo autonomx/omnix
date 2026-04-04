@@ -161,3 +161,51 @@ class JournalBuilder:
         """Generate a deterministic entry ID."""
         tick_part = str(tick) if tick is not None else "none"
         return f"journal:{prefix}:{tick_part}:{key}:{index}"
+
+    # ------------------------------------------------------------------
+    # Phase 8.1 — Dialogue log entry
+    # ------------------------------------------------------------------
+
+    _JOURNALABLE_DIALOGUE_ACTS = frozenset({
+        "refusal", "threat", "offer", "reveal_hint", "agreement", "redirect", "warn",
+    })
+
+    def build_dialogue_log_entry(
+        self,
+        dialogue_log: dict,
+        tick: int | None = None,
+        location: str | None = None,
+    ) -> JournalEntry | None:
+        """Build a journal entry from a dialogue log entry dict.
+
+        Only journals meaningful interaction classes. Returns None if
+        the act is not journalable.
+        """
+        act = dialogue_log.get("act", "")
+        if act not in self._JOURNALABLE_DIALOGUE_ACTS:
+            return None
+
+        speaker_id = dialogue_log.get("speaker_id", "")
+        listener_id = dialogue_log.get("listener_id")
+        summary = dialogue_log.get("summary", "")
+        line = dialogue_log.get("line", "")
+        entry_id_key = dialogue_log.get("entry_id", speaker_id)
+
+        entity_ids = [eid for eid in [speaker_id, listener_id] if eid]
+
+        return JournalEntry(
+            entry_id=self._entry_id("dialogue", tick, entry_id_key),
+            tick=tick,
+            entry_type="dialogue",
+            title=f"Dialogue: {act}",
+            summary=summary or line,
+            entity_ids=entity_ids,
+            location=location,
+            metadata={
+                "source": "dialogue_log",
+                "act": act,
+                "interaction_type": act,
+                "speaker_id": speaker_id,
+                "listener_id": listener_id,
+            },
+        )

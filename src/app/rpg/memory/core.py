@@ -84,6 +84,30 @@ class CampaignMemoryCore:
             overflow = len(self.journal_entries) - self._max_entries
             self.journal_entries = self.journal_entries[overflow:]
 
+    # ------------------------------------------------------------------
+    # Phase 8.1 — Dialogue log recording
+    # ------------------------------------------------------------------
+
+    def record_dialogue_log_entry(
+        self,
+        dialogue_log: dict,
+        tick: int | None = None,
+        location: str | None = None,
+    ) -> None:
+        """Record a dialogue log entry as a journal entry if meaningful.
+
+        Only journals structurally important interactions (refusal, threat,
+        offer, reveal_hint, agreement, redirect, warn).
+        """
+        entry = self._journal_builder.build_dialogue_log_entry(
+            dialogue_log=dialogue_log,
+            tick=tick,
+            location=location,
+        )
+        if entry is not None:
+            self.journal_entries.append(entry)
+            self._trim_journal_if_needed()
+
     def refresh_recap(
         self,
         coherence_core: Any,

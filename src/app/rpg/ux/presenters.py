@@ -12,17 +12,22 @@ class UXPresenter:
 
     def present_scene_payload(self, payload: dict) -> dict:
         """Present a SceneUXPayload dict for frontend consumption."""
-        return {
+        result = {
             "id": payload.get("payload_id"),
             "scene": payload.get("scene", {}),
             "choices": payload.get("choices", []),
             "panels": payload.get("panels", []),
             "highlights": payload.get("highlights", {}),
         }
+        # Phase 8.1 — include interaction if present
+        interaction = payload.get("interaction")
+        if interaction:
+            result["interaction"] = interaction
+        return result
 
     def present_action_result_payload(self, payload: dict) -> dict:
         """Present an ActionResultPayload dict for frontend consumption."""
-        return {
+        result = {
             "result_id": payload.get("result_id", ""),
             "action_result": payload.get("action_result", {}),
             "updated_scene": payload.get("updated_scene", {}),
@@ -35,6 +40,11 @@ class UXPresenter:
                 for p in payload.get("updated_panels", [])
             ],
         }
+        # Phase 8.1 — include interaction if present
+        interaction = payload.get("interaction")
+        if interaction:
+            result["interaction"] = interaction
+        return result
 
     def present_choice_card(self, card: dict) -> dict:
         """Present a single PlayerChoiceCard dict."""
