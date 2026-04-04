@@ -1,8 +1,11 @@
-"""Phase 7.4 — NPC Agency Engine.
+"""Phase 7.4 / 7.5 — NPC Agency Engine.
 
 Orchestrates context building, policy decision, and response building
 for NPC social interactions. Returns a structured payload for resolver
 integration and debugging.
+
+Phase 7.5 addition: optional GroupDynamicsEngine integration for
+multi-actor secondary reactions and rumor seeding.
 """
 
 from __future__ import annotations
@@ -25,11 +28,13 @@ class NPCAgencyEngine:
         faction_builder: Optional[FactionContextBuilder] = None,
         decision_policy: Optional[NPCDecisionPolicy] = None,
         response_builder: Optional[NPCResponseBuilder] = None,
+        group_dynamics_engine: Optional[Any] = None,
     ) -> None:
         self.relationship_builder = relationship_builder or RelationshipStateBuilder()
         self.faction_builder = faction_builder or FactionContextBuilder()
         self.decision_policy = decision_policy or NPCDecisionPolicy()
         self.response_builder = response_builder or NPCResponseBuilder()
+        self.group_dynamics_engine = group_dynamics_engine
 
     def resolve_social_interaction(
         self,
@@ -45,6 +50,7 @@ class NPCAgencyEngine:
                 "context": {...},
                 "decision": {...},
                 "events": [...],
+                "group": {...},   # optional, Phase 7.5
             }
         """
         context = self._build_context(
@@ -53,11 +59,28 @@ class NPCAgencyEngine:
         decision = self.decision_policy.decide(context)
         events = self.response_builder.build_events(decision, mapped_action)
 
-        return {
+        result: dict[str, Any] = {
             "context": context.to_dict(),
             "decision": decision.to_dict(),
             "events": events,
         }
+
+        # Phase 7.5 — Resolve group dynamics if engine is available
+        primary_npc_id = mapped_action.get("target_id")
+        if (
+            self.group_dynamics_engine is not None
+            and primary_npc_id
+        ):
+            group_result = self.group_dynamics_engine.resolve_group_dynamics(
+                primary_npc_id=primary_npc_id,
+                primary_decision=decision.to_dict(),
+                coherence_core=coherence_core,
+            )
+            result["group"] = group_result
+            # Merge group events into the primary event list
+            result["events"] = events + group_result.get("events", [])
+
+        return result
 
     def _build_context(
         self,

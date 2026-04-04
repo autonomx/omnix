@@ -559,6 +559,91 @@ def reduce_npc_response_redirected(state: Any, event: dict) -> List[CoherenceMut
     return _reduce_npc_response(state, event, "npc_response_redirected")
 
 
+# ------------------------------------------------------------------
+# Phase 7.5 — Group dynamics reducers
+# ------------------------------------------------------------------
+
+def _reduce_group_secondary(
+    state: Any, event: dict, consequence_type: str
+) -> List[CoherenceMutation]:
+    """Shared reducer logic for group secondary reaction events."""
+    payload = event["payload"]
+    npc_id = payload.get("npc_id", "unknown_npc")
+    summary = payload.get("summary") or f"NPC {consequence_type}"
+    return [
+        CoherenceMutation(
+            action="record_consequence",
+            target="consequence",
+            data={
+                "consequence_id": f"cons:{event.get('event_id') or consequence_type}:{npc_id}",
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+                "summary": summary,
+                "entity_ids": [npc_id],
+                "consequence_type": consequence_type,
+                "metadata": {
+                    "reaction_type": payload.get("reaction_type"),
+                    "modifiers": payload.get("modifiers", []),
+                },
+            },
+        )
+    ]
+
+
+def reduce_npc_secondary_supported(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_secondary_supported events from group dynamics."""
+    return _reduce_group_secondary(state, event, "npc_secondary_supported")
+
+
+def reduce_npc_secondary_opposed(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_secondary_opposed events from group dynamics."""
+    return _reduce_group_secondary(state, event, "npc_secondary_opposed")
+
+
+def reduce_npc_secondary_observed(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle npc_secondary_observed events from group dynamics."""
+    return _reduce_group_secondary(state, event, "npc_secondary_observed")
+
+
+def reduce_rumor_seeded(state: Any, event: dict) -> List[CoherenceMutation]:
+    """Handle rumor_seeded events from group dynamics.
+
+    Records the rumor seed as a consequence with rumor metadata.
+    Does not create a full rumor propagation system yet.
+    """
+    payload = event["payload"]
+    rumor_id = payload.get("rumor_id", "unknown_rumor")
+    source_npc_id = payload.get("source_npc_id")
+    subject_id = payload.get("subject_id")
+    summary = payload.get("summary") or "Rumor seeded"
+
+    entity_ids = []
+    if source_npc_id:
+        entity_ids.append(source_npc_id)
+    if subject_id and subject_id != source_npc_id:
+        entity_ids.append(subject_id)
+
+    return [
+        CoherenceMutation(
+            action="record_consequence",
+            target="consequence",
+            data={
+                "consequence_id": f"cons:rumor:{rumor_id}",
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+                "summary": summary,
+                "entity_ids": entity_ids,
+                "consequence_type": "rumor_seeded",
+                "metadata": {
+                    "rumor_id": rumor_id,
+                    "rumor_type": payload.get("rumor_type"),
+                    "location": payload.get("location"),
+                },
+            },
+        )
+    ]
+
+
 REDUCERS = {
     "scene_started": reduce_scene_started,
     "scene_generated": reduce_scene_generated,
@@ -586,6 +671,11 @@ REDUCERS = {
     "npc_response_delayed": reduce_npc_response_delayed,
     "npc_response_threatened": reduce_npc_response_threatened,
     "npc_response_redirected": reduce_npc_response_redirected,
+    # Phase 7.5 — Group dynamics event types
+    "npc_secondary_supported": reduce_npc_secondary_supported,
+    "npc_secondary_opposed": reduce_npc_secondary_opposed,
+    "npc_secondary_observed": reduce_npc_secondary_observed,
+    "rumor_seeded": reduce_rumor_seeded,
 }
 
 

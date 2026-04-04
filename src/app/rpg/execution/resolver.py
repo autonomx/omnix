@@ -1,10 +1,13 @@
-"""Phase 7.3 / 7.4 — Action Resolver.
+"""Phase 7.3 / 7.4 / 7.5 — Action Resolver.
 
 Main entry point for resolving a selected ChoiceOption into deterministic
 events. Does NOT directly call coherence methods — returns events only.
 
 Phase 7.4 addition: social_contact resolution delegates to NPCAgencyEngine
 for decision-driven NPC interaction outcomes.
+
+Phase 7.5 addition: group dynamics metadata preserved in resolved action
+metadata and trace.
 """
 
 from __future__ import annotations
@@ -35,6 +38,11 @@ SUPPORTED_EVENT_TYPES = frozenset({
     "npc_response_delayed",
     "npc_response_threatened",
     "npc_response_redirected",
+    # Phase 7.5 — Group dynamics event types
+    "npc_secondary_supported",
+    "npc_secondary_opposed",
+    "npc_secondary_observed",
+    "rumor_seeded",
 })
 
 
@@ -387,6 +395,9 @@ class ActionResolver:
         npc_decision = agency_result.get("decision", {})
         npc_events = agency_result.get("events", [])
 
+        # Phase 7.5 — Group dynamics result
+        group_result = agency_result.get("group")
+
         # Override evaluation outcome with NPC decision (Phase 7.4)
         outcome_map = {
             "agree": "success",
@@ -438,17 +449,24 @@ class ActionResolver:
                 "mapped_action": dict(mapped_action),
                 "evaluation": dict(evaluation),
                 "npc_decision": dict(npc_decision),
+                **({"group_dynamics": group_result} if group_result else {}),
             },
         )
+
+        trace: dict = {
+            "mapped_action": dict(mapped_action),
+            "constraint_evaluation": dict(constraint_evaluation),
+            "evaluation": dict(evaluation),
+            "npc_decision": dict(npc_decision),
+            "event_types": [e.get("type") for e in npc_events],
+        }
+        if group_result:
+            trace["group_event_types"] = [
+                e.get("type") for e in group_result.get("events", [])
+            ]
 
         return ActionResolutionResult(
             resolved_action=resolved,
             events=npc_events,
-            trace={
-                "mapped_action": dict(mapped_action),
-                "constraint_evaluation": dict(constraint_evaluation),
-                "evaluation": dict(evaluation),
-                "npc_decision": dict(npc_decision),
-                "event_types": [e.get("type") for e in npc_events],
-            },
+            trace=trace,
         )
