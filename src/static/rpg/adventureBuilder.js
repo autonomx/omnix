@@ -6,7 +6,7 @@
  * - shared shell/summary rendering moved to AdventureBuilderRenderer
  * - step-specific control flow stays here
  */
-/* global AdventureBuilderApi, AdventureBuilderState, AdventureBuilderRenderer */
+/* global AdventureBuilderApi, AdventureBuilderState, AdventureBuilderRenderer, AdventureBuilderWorldGraph */
 
 var AdventureBuilder = (function () {
     'use strict';
@@ -52,6 +52,12 @@ var AdventureBuilder = (function () {
 
     function _markDirty() {
         AdventureBuilderState.markDirty(state);
+        // Phase 2 — invalidate world inspection cache on setup changes
+        if (state.worldInspection) {
+            state.worldInspection.graph = null;
+            state.worldInspection.simulation = null;
+            state.worldInspection.inspector = null;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -141,7 +147,12 @@ var AdventureBuilder = (function () {
         currentStep = Math.max(1, Math.min(STEP_COUNT, n));
         state.step = currentStep;
         _renderStep();
-        if (currentStep === 5) { _runValidation(); _runPreview(); }
+        if (currentStep === 5) {
+            _runValidation();
+            _runPreview();
+            // Phase 2 — pre-fetch world inspection data
+            _fetchWorldInspection(null);
+        }
     }
 
     function _renderStep() {
@@ -671,6 +682,76 @@ var AdventureBuilder = (function () {
     function _renderStep5(body) {
         _readCurrentStepIntoSetup();
         var undoDisabled = AdventureBuilderState.hasHistory(state) ? '' : ' disabled';
+
+        // Phase 2 — Top-level tab strip for Step 5 sub-views
+        var step5Tab = state.worldInspection ? (state.worldInspection.activeTab || 'summary') : 'summary';
+
+        var html = '<div class="ab-step5-tabs" id="abStep5Tabs"></div>';
+        html += '<div class="ab-step5-content" id="abStep5Content"></div>';
+        body.innerHTML = html;
+
+        _renderStep5Tabs(body, step5Tab);
+        _renderStep5TabContent(body, step5Tab, undoDisabled);
+    }
+
+    function _renderStep5Tabs(body, activeTab) {
+        var tabsEl = body.querySelector('#abStep5Tabs');
+        if (!tabsEl) return;
+        var tabs = [
+            { id: 'summary', icon: '📋', label: 'Summary' },
+            { id: 'validation', icon: '✅', label: 'Validation' },
+            { id: 'preview', icon: '👁️', label: 'Preview' },
+            { id: 'worldgraph', icon: '🕸️', label: 'World Graph' },
+            { id: 'simulation', icon: '📊', label: 'Simulation' },
+            { id: 'inspector', icon: '🔍', label: 'Inspector' }
+        ];
+        var html = '<div class="ab-wg-tabs">';
+        tabs.forEach(function (t) {
+            var active = t.id === activeTab ? ' ab-wg-tab-active' : '';
+            html += '<button class="ab-wg-tab' + active + '" data-tab="' + t.id + '">' + t.icon + ' ' + _esc(t.label) + '</button>';
+        });
+        html += '</div>';
+        tabsEl.innerHTML = html;
+
+        tabsEl.querySelectorAll('.ab-wg-tab').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var tab = btn.getAttribute('data-tab');
+                if (!state.worldInspection) state.worldInspection = {};
+                state.worldInspection.activeTab = tab;
+                _renderStep5(overlayEl.querySelector('#abBody'));
+            });
+        });
+    }
+
+    function _renderStep5TabContent(body, activeTab, undoDisabled) {
+        var contentEl = body.querySelector('#abStep5Content');
+        if (!contentEl) return;
+
+        switch (activeTab) {
+            case 'summary':
+                _renderStep5Summary(contentEl, undoDisabled);
+                break;
+            case 'validation':
+                _renderStep5Validation(contentEl);
+                break;
+            case 'preview':
+                _renderStep5Preview(contentEl);
+                break;
+            case 'worldgraph':
+                _renderStep5WorldGraph(contentEl);
+                break;
+            case 'simulation':
+                _renderStep5Simulation(contentEl);
+                break;
+            case 'inspector':
+                _renderStep5Inspector(contentEl);
+                break;
+            default:
+                _renderStep5Summary(contentEl, undoDisabled);
+        }
+    }
+
+    function _renderStep5Summary(contentEl, undoDisabled) {
         var html = '<div class="ab-section">' +
             '<h4>Setup Summary</h4>' +
             '<div id="abReviewSummary" class="ab-review-block"></div>' +
@@ -685,43 +766,205 @@ var AdventureBuilder = (function () {
             '</div>' +
             '</div>' +
             '<div class="ab-section">' +
-            '<h4>Validation</h4>' +
-            '<div id="abReviewValidation" class="ab-review-block"></div>' +
-            '</div>' +
-            '<div class="ab-section">' +
             '<h4>Health Check</h4>' +
             '<div id="abHealthWarnings" class="ab-review-block"><p class="ab-muted">Analyzing setup\u2026</p></div>' +
-            '</div>' +
-            '<div class="ab-section">' +
-            '<h4>Preview</h4>' +
-            '<div id="abReviewPreview" class="ab-review-block"><p class="ab-muted">Loading preview\u2026</p></div>' +
             '</div>';
-        body.innerHTML = html;
+        contentEl.innerHTML = html;
 
-        var sumEl = body.querySelector('#abReviewSummary');
+        var sumEl = contentEl.querySelector('#abReviewSummary');
         sumEl.innerHTML = _buildReviewSummary();
 
-        _renderReviewValidation();
-
-        // Phase 1.5 — render inline health warnings from current setup
-        var healthEl = body.querySelector('#abHealthWarnings');
+        var healthEl = contentEl.querySelector('#abHealthWarnings');
         if (healthEl) {
             var healthHtml = _renderHealthWarnings({ health: _computeClientHealth() });
             healthEl.innerHTML = healthHtml || '<p class="ab-success">\u2705 Setup looks good!</p>';
         }
 
-        _runPreview();
-
-        // Regeneration button bindings for Step 5
-        var regenOpeningBtn = body.querySelector('#abRegenOpening');
+        // Regeneration button bindings
+        var regenOpeningBtn = contentEl.querySelector('#abRegenOpening');
         if (regenOpeningBtn) regenOpeningBtn.addEventListener('click', function () { _handleRegenerate('opening'); });
-
-        var regenThreadsBtn = body.querySelector('#abRegenThreads');
+        var regenThreadsBtn = contentEl.querySelector('#abRegenThreads');
         if (regenThreadsBtn) regenThreadsBtn.addEventListener('click', function () { _handleRegenerate('threads'); });
-
-        // Undo button binding for Step 5
-        var undoBtn = body.querySelector('#abUndoRegen');
+        var undoBtn = contentEl.querySelector('#abUndoRegen');
         if (undoBtn) undoBtn.addEventListener('click', function () { _handleUndo(); });
+    }
+
+    function _renderStep5Validation(contentEl) {
+        var html = '<div class="ab-section">' +
+            '<h4>Validation</h4>' +
+            '<div id="abReviewValidation" class="ab-review-block"><p class="ab-muted">Loading\u2026</p></div>' +
+            '</div>';
+        contentEl.innerHTML = html;
+        _runValidation();
+        _renderReviewValidation();
+    }
+
+    function _renderStep5Preview(contentEl) {
+        var html = '<div class="ab-section">' +
+            '<h4>Preview</h4>' +
+            '<div id="abReviewPreview" class="ab-review-block"><p class="ab-muted">Loading preview\u2026</p></div>' +
+            '</div>';
+        contentEl.innerHTML = html;
+        _runPreview();
+    }
+
+    function _renderStep5WorldGraph(contentEl) {
+        var html = '<div class="ab-section ab-wg-section">' +
+            '<div id="abWgControls" class="ab-wg-controls-container"></div>' +
+            '<div id="abWgLegend"></div>' +
+            '<div id="abWgCanvas" class="ab-wg-canvas"></div>' +
+            '<div id="abWgNodeInspector" class="ab-wg-node-inspector"></div>' +
+            '</div>';
+        contentEl.innerHTML = html;
+        _fetchAndRenderWorldGraph(contentEl);
+    }
+
+    function _renderStep5Simulation(contentEl) {
+        var html = '<div class="ab-section ab-wg-section">' +
+            '<div id="abWgSimulation" class="ab-wg-sim-container"><p class="ab-muted">Loading simulation\u2026</p></div>' +
+            '</div>';
+        contentEl.innerHTML = html;
+        _fetchAndRenderSimulation(contentEl);
+    }
+
+    function _renderStep5Inspector(contentEl) {
+        var wi = state.worldInspection || {};
+        var html = '<div class="ab-section ab-wg-section">' +
+            '<div id="abWgInspectorPanel" class="ab-wg-inspector-container"></div>' +
+            '</div>';
+        contentEl.innerHTML = html;
+
+        var panel = contentEl.querySelector('#abWgInspectorPanel');
+        if (wi.inspector && wi.selectedNodeId) {
+            AdventureBuilderWorldGraph.renderInspector(panel, wi.selectedNodeId, wi.inspector);
+        } else if (wi.inspector) {
+            // Show all entities as a list
+            _renderInspectorEntityList(panel, wi.inspector);
+        } else {
+            panel.innerHTML = '<p class="ab-muted">Loading inspector data\u2026</p>';
+            _fetchWorldInspection(function () {
+                var wi2 = state.worldInspection || {};
+                if (wi2.inspector) {
+                    _renderInspectorEntityList(panel, wi2.inspector);
+                }
+            });
+        }
+    }
+
+    var _DEFAULT_NODE_CONFIG = { icon: '●', color: '#666' };
+
+    function _renderInspectorEntityList(container, inspectorData) {
+        if (!inspectorData || !inspectorData.entities) {
+            container.innerHTML = '<div class="ab-wg-inspector-empty">No entity data available</div>';
+            return;
+        }
+        var entities = inspectorData.entities;
+        var ids = Object.keys(entities);
+        if (!ids.length) {
+            container.innerHTML = '<div class="ab-wg-inspector-empty">No entities in this setup</div>';
+            return;
+        }
+        var html = '<div class="ab-wg-entity-list">';
+        html += '<h5>All Entities (' + ids.length + ')</h5>';
+        ids.forEach(function (eid) {
+            var e = entities[eid];
+            var nc = (typeof AdventureBuilderWorldGraph !== 'undefined' && AdventureBuilderWorldGraph.NODE_CONFIG[e.type]) || _DEFAULT_NODE_CONFIG;
+            html += '<div class="ab-wg-entity-list-item" data-id="' + _esc(eid) + '">' +
+                '<span class="ab-wg-entity-icon" style="color:' + nc.color + '">' + nc.icon + '</span>' +
+                '<span class="ab-wg-entity-name">' + _esc(e.name || e.title || eid) + '</span>' +
+                '<span class="ab-wg-entity-type">' + _esc(e.type) + '</span>' +
+                '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+
+        container.querySelectorAll('.ab-wg-entity-list-item').forEach(function (item) {
+            item.addEventListener('click', function () {
+                var eid = item.getAttribute('data-id');
+                state.worldInspection.selectedNodeId = eid;
+                AdventureBuilderWorldGraph.renderInspector(container, eid, inspectorData);
+            });
+        });
+    }
+
+    // ── World graph fetch and render ──
+
+    var _wgFilterType = 'all';
+    var _wgSearchQuery = '';
+
+    function _fetchWorldInspection(callback) {
+        var wi = state.worldInspection;
+        if (!wi || !wi.activeTab) {
+            state.worldInspection = { loading: false, graph: null, simulation: null, inspector: null, selectedNodeId: null, activeTab: 'summary' };
+        }
+        if (state.worldInspection.loading) return;
+        state.worldInspection.loading = true;
+
+        AdventureBuilderApi.inspectWorld(state.setup).then(function (res) {
+            state.worldInspection.loading = false;
+            if (res.success) {
+                state.worldInspection.graph = res.graph;
+                state.worldInspection.simulation = res.simulation;
+                state.worldInspection.inspector = res.inspector;
+            }
+            if (callback) callback(res);
+        }).catch(function () {
+            state.worldInspection.loading = false;
+            if (callback) callback(null);
+        });
+    }
+
+    function _fetchAndRenderWorldGraph(contentEl) {
+        var canvas = contentEl.querySelector('#abWgCanvas');
+        var controls = contentEl.querySelector('#abWgControls');
+        var legend = contentEl.querySelector('#abWgLegend');
+        var inspector = contentEl.querySelector('#abWgNodeInspector');
+
+        var wi = state.worldInspection || {};
+
+        function _rerender() {
+            AdventureBuilderWorldGraph.renderGraphControls(controls, {
+                filterType: _wgFilterType,
+                searchQuery: _wgSearchQuery,
+                onFilterChange: function (f) { _wgFilterType = f; _rerender(); },
+                onSearchChange: function (q) { _wgSearchQuery = q; _rerender(); }
+            });
+            AdventureBuilderWorldGraph.renderLegend(legend);
+            AdventureBuilderWorldGraph.renderGraph(canvas, wi.graph, {
+                selectedNodeId: wi.selectedNodeId,
+                filterType: _wgFilterType,
+                searchQuery: _wgSearchQuery,
+                onNodeClick: function (nodeId) {
+                    wi.selectedNodeId = nodeId;
+                    _rerender();
+                }
+            });
+            AdventureBuilderWorldGraph.renderInspector(inspector, wi.selectedNodeId, wi.inspector);
+        }
+
+        if (wi.graph) {
+            _rerender();
+        } else {
+            canvas.innerHTML = '<p class="ab-muted">Loading world graph\u2026</p>';
+            _fetchWorldInspection(function () {
+                wi = state.worldInspection || {};
+                _rerender();
+            });
+        }
+    }
+
+    function _fetchAndRenderSimulation(contentEl) {
+        var simEl = contentEl.querySelector('#abWgSimulation');
+        var wi = state.worldInspection || {};
+
+        if (wi.simulation) {
+            AdventureBuilderWorldGraph.renderSimulation(simEl, wi.simulation);
+        } else {
+            _fetchWorldInspection(function () {
+                var wi2 = state.worldInspection || {};
+                AdventureBuilderWorldGraph.renderSimulation(simEl, wi2.simulation);
+            });
+        }
     }
 
     function _buildReviewSummary() {

@@ -581,3 +581,395 @@
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.06);
 }
+
+/* =====================================================================
+   Phase 2 — World Graph / Simulation / Inspector
+   ===================================================================== */
+
+/* ─── Step 5 tab strip ────────────────────────────────────────────── */
+
+.ab-step5-tabs {
+    padding: 0 0 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ab-step5-content {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.ab-wg-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.ab-wg-tab {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px 8px 0 0;
+    color: rgba(255, 255, 255, 0.6);
+    padding: 8px 14px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.ab-wg-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.ab-wg-tab-active {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border-bottom-color: transparent;
+}
+
+/* ─── World Graph section ─────────────────────────────────────────── */
+
+.ab-wg-section {
+    padding: 8px 0;
+}
+
+.ab-wg-canvas {
+    min-height: 350px;
+    max-height: 500px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    margin: 8px 0;
+}
+
+.ab-wg-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.ab-wg-label {
+    pointer-events: none;
+    fill: var(--text-color, #e0e0e0);
+    opacity: 0.85;
+}
+
+.ab-wg-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+/* ─── Graph controls ──────────────────────────────────────────────── */
+
+.ab-wg-controls-container {
+    margin-bottom: 4px;
+}
+
+.ab-wg-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ab-wg-filter-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.ab-wg-filter-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ab-wg-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.ab-wg-filter-active {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.ab-wg-search {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-color, #e0e0e0);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.82rem;
+    width: 160px;
+}
+
+.ab-wg-search::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* ─── Legend ───────────────────────────────────────────────────────── */
+
+.ab-wg-legend {
+    display: flex;
+    gap: 12px;
+    padding: 4px 0;
+    flex-wrap: wrap;
+}
+
+.ab-wg-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.ab-wg-legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+/* ─── Inspector panel ─────────────────────────────────────────────── */
+
+.ab-wg-node-inspector {
+    margin-top: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.ab-wg-inspector-container {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.ab-wg-inspector-empty {
+    padding: 24px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+.ab-wg-inspector {
+    padding: 8px 0;
+}
+
+.ab-wg-inspector-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.ab-wg-inspector-icon {
+    font-size: 1.4rem;
+}
+
+.ab-wg-inspector-name {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.ab-wg-inspector-type {
+    margin-left: auto;
+    font-size: 0.78rem;
+    opacity: 0.5;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ab-wg-inspector-field {
+    padding: 4px 12px;
+    font-size: 0.88rem;
+}
+
+.ab-wg-field-label {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.82rem;
+}
+
+.ab-wg-field-value {
+    color: var(--text-color, #e0e0e0);
+}
+
+.ab-wg-inspector-list {
+    padding: 4px 12px;
+    font-size: 0.88rem;
+}
+
+.ab-wg-inspector-list ul {
+    margin: 4px 0 4px 16px;
+    padding: 0;
+}
+
+.ab-wg-inspector-list li {
+    padding: 2px 0;
+}
+
+.ab-wg-id {
+    font-size: 0.75rem;
+    opacity: 0.4;
+}
+
+/* ─── Entity list (Inspector tab) ─────────────────────────────────── */
+
+.ab-wg-entity-list h5 {
+    margin: 0 0 8px 0;
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.ab-wg-entity-list-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ab-wg-entity-list-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.ab-wg-entity-icon {
+    font-size: 1.1rem;
+}
+
+.ab-wg-entity-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.ab-wg-entity-type {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    opacity: 0.4;
+    letter-spacing: 0.5px;
+}
+
+/* ─── Simulation panel ────────────────────────────────────────────── */
+
+.ab-wg-sim-container {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.ab-wg-sim-empty {
+    padding: 24px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+.ab-wg-simulation {
+    padding: 4px 0;
+}
+
+.ab-wg-sim-section {
+    margin-bottom: 16px;
+}
+
+.ab-wg-sim-title {
+    margin: 0 0 8px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.ab-wg-sim-counts {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ab-wg-count-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    min-width: 70px;
+}
+
+.ab-wg-count-icon {
+    font-size: 1.3rem;
+    margin-bottom: 4px;
+}
+
+.ab-wg-count-num {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.ab-wg-count-label {
+    font-size: 0.75rem;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.ab-wg-sim-item {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.88rem;
+}
+
+.ab-wg-sim-item-name {
+    font-weight: 500;
+}
+
+.ab-wg-sim-item-detail {
+    margin-left: 8px;
+    font-size: 0.78rem;
+    opacity: 0.5;
+}
+
+.ab-wg-sim-hot {
+    background: rgba(243, 156, 18, 0.08);
+    border-left: 3px solid #f39c12;
+    margin-bottom: 4px;
+}
+
+.ab-wg-sim-tension {
+    background: rgba(231, 76, 60, 0.08);
+    border-left: 3px solid #e74c3c;
+    margin-bottom: 4px;
+}
+
+.ab-wg-sim-warnings {
+    background: rgba(241, 196, 15, 0.06);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.ab-wg-sim-warn {
+    color: #f1c40f;
+    font-size: 0.85rem;
+}
+
+.ab-wg-sim-opening-text {
+    padding: 8px 12px;
+    background: rgba(155, 89, 182, 0.08);
+    border-radius: 6px;
+    margin-top: 4px;
+}

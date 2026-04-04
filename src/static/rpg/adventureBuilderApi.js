@@ -124,6 +124,19 @@ var AdventureBuilderApi = (function () {
         }).then(_json);
     }
 
+    /**
+     * Fetch world graph, simulation summary, and entity inspector (Phase 2).
+     *
+     * @param {Object} setup - Current setup payload
+     */
+    function inspectWorld(setup) {
+        return fetch(BASE + '/inspect-world', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setup: setup }),
+        }).then(_json);
+    }
+
     return {
         getTemplates: getTemplates,
         buildTemplate: buildTemplate,
@@ -133,5 +146,6 @@ var AdventureBuilderApi = (function () {
         regenerateItem: regenerateItem,
         regenerateMultiple: regenerateMultiple,
         startAdventure: startAdventure,
+        inspectWorld: inspectWorld,
     };
 })();
