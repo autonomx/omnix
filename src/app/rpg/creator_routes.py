@@ -54,8 +54,8 @@ def build_adventure_template():
         if not result.get("success"):
             return jsonify(result), 404
         return jsonify(result)
-    except ValueError as exc:
-        return jsonify({"success": False, "error": str(exc)}), 404
+    except ValueError:
+        return jsonify({"success": False, "error": f"Unknown template: {template_name}"}), 404
     except Exception:
         logger.exception("Failed to build template")
         return jsonify({"success": False, "error": "Failed to build template"}), 500
