@@ -216,3 +216,23 @@ def regenerate_multiple_items():
     except Exception:
         logger.exception("Failed to regenerate multiple items")
         return jsonify({"success": False, "error": "Failed to regenerate multiple items"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 9. POST /api/rpg/adventure/inspect-world  (Phase 2)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/inspect-world", methods=["POST"])
+def inspect_world():
+    """Compute the world graph, simulation summary, and entity inspector."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    payload = data.get("setup") or data
+    try:
+        result = builder.inspect_world(payload)
+        return jsonify(result)
+    except Exception:
+        logger.exception("Failed to inspect world")
+        return jsonify({"success": False, "error": "Failed to inspect world"}), 500

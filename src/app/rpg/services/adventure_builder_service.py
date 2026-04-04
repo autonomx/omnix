@@ -920,3 +920,30 @@ def regenerate_multiple_items_service(
         "updated_setup": next_payload,
         "health": compute_creator_health(next_payload),
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — World Graph + Simulation Inspector
+# ---------------------------------------------------------------------------
+
+
+def inspect_world(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute a world graph, simulation summary, and entity inspector.
+
+    Read-only and deterministic — does not modify the setup.
+
+    Parameters
+    ----------
+    payload :
+        Raw setup dict (same shape as other creator endpoints).
+
+    Returns
+    -------
+    dict
+        ``{"success": True, "graph": {...}, "simulation": {...}, "inspector": {...}}``
+    """
+    from ..creator.world_graph import inspect_world as _inspect
+
+    data = dict(payload or {})
+    data = apply_adventure_defaults(data)
+    return _inspect(data)
