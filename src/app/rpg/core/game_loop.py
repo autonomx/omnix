@@ -63,6 +63,9 @@ from ..packs.presenters import PackPresenter
 from ..packs.models import AdventurePack
 from ..ux.core import UXCore
 from ..dialogue.core import DialogueCore
+from ..encounter.controller import EncounterController
+from ..encounter.resolver import EncounterResolver
+from ..encounter.presenter import EncounterPresenter
 
 
 class TickPhase(Enum):
@@ -327,6 +330,14 @@ class GameLoop:
 
         # PHASE 8.0 — PLAYER-FACING UX LAYER (stateless presentation/orchestration)
         self.ux_core = UXCore()
+
+        # PHASE 8.2 — ENCOUNTER SYSTEM (tactical mode overlay)
+        self.encounter_controller = EncounterController()
+        self.encounter_resolver = EncounterResolver()
+        self.encounter_presenter = EncounterPresenter()
+        self.last_encounter_resolution: dict | None = None
+        if "encounter_controller" not in self._snapshot_systems:
+            self._snapshot_systems.append("encounter_controller")
 
         # PHASE 6.5 — RECOVERY MANAGER
         self._init_recovery_manager()
@@ -1346,6 +1357,8 @@ class GameLoop:
         This is the main entry point for the scene execution layer.
         It resolves the option, emits events, and applies both coherence
         and social state updates through their respective event/reducer paths.
+
+        Phase 8.2: Also handles encounter start, resolution, and journaling.
         """
         option = self.gameplay_control_controller.select_option(option_id)
         if option is None:
@@ -1355,6 +1368,19 @@ class GameLoop:
         scene_summary = (
             self.coherence_core.get_scene_summary() if self.coherence_core else {}
         )
+
+        # Phase 8.2 — detect encounter start from option metadata
+        option_meta = option.get("metadata", {}) if isinstance(option, dict) else getattr(option, "metadata", {})
+        enc_start_mode = self.encounter_resolver.detect_encounter_start(option_meta)
+        if enc_start_mode and not self.encounter_controller.has_active_encounter():
+            participants = self._build_encounter_participants(scene_summary)
+            self.encounter_controller.start_encounter(
+                mode=enc_start_mode,
+                scene_summary=scene_summary,
+                participants=participants,
+                stakes=option_meta.get("encounter_stakes", "standard"),
+                tick=self._tick_count,
+            )
 
         result = self.action_resolver.resolve_choice(
             option=option,
@@ -1377,6 +1403,39 @@ class GameLoop:
                 self.coherence_core.apply_events(raw_events)
             if self.social_state_core is not None:
                 self.social_state_core.apply_events(raw_events)
+
+        # Phase 8.2 — encounter resolution
+        self.last_encounter_resolution = None
+        if self.encounter_controller.has_active_encounter():
+            resolved_action = result_dict.get("resolved_action", {})
+            enc_resolution = self.encounter_resolver.resolve_action(
+                encounter_state=self.encounter_controller.get_active_encounter(),
+                resolved_action=resolved_action,
+                scene_summary=scene_summary,
+                coherence_core=self.coherence_core,
+                social_state_core=self.social_state_core,
+                arc_control_controller=getattr(self, "arc_control_controller", None),
+                tick=self._tick_count,
+            )
+            if enc_resolution is not None:
+                self.encounter_controller.apply_resolution(enc_resolution)
+                self.last_encounter_resolution = enc_resolution.to_dict()
+
+                # Journal meaningful encounter events
+                journal_payload = self.encounter_presenter.present_journal_payload(
+                    enc_resolution,
+                    self.encounter_controller.get_active_encounter(),
+                )
+                if (
+                    journal_payload
+                    and hasattr(self, "campaign_memory_core")
+                    and self.campaign_memory_core is not None
+                ):
+                    self.campaign_memory_core.record_encounter_log_entry(
+                        encounter_log=journal_payload,
+                        tick=self._tick_count,
+                        location=scene_summary.get("location"),
+                    )
 
         # Phase 7.7 — record journal entries and refresh memory panels
         # Fix 6: only refresh recap/snapshot when there are meaningful events
@@ -1427,6 +1486,22 @@ class GameLoop:
             "resolution": result_dict,
             "scene_summary": scene_summary,
         }
+
+    def _build_encounter_participants(self, scene_summary: dict) -> list[dict]:
+        """Build participant dicts from scene_summary for encounter start."""
+        participants: list[dict] = [{"entity_id": "player", "role": "player"}]
+        present_actors = scene_summary.get("present_actors", [])
+        for actor in present_actors:
+            if isinstance(actor, str) and actor != "player":
+                participants.append({"entity_id": actor, "role": "neutral"})
+            elif isinstance(actor, dict):
+                eid = actor.get("entity_id", actor.get("id", ""))
+                if eid and eid != "player":
+                    participants.append({
+                        "entity_id": eid,
+                        "role": actor.get("role", "neutral"),
+                    })
+        return participants
 
     def _emit_action_resolution_events(self, result: dict) -> None:
         """Emit resolved action events into the EventBus."""

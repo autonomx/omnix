@@ -204,3 +204,45 @@ class ArcControlController:
             plan_id = pacing_data.get("plan_id", "")
             if plan_id:
                 self.pacing_plans[plan_id] = PacingPlanState.from_dict(pacing_data)
+
+    # ------------------------------------------------------------------
+    # Phase 8.2 — Encounter guidance (read-only)
+    # ------------------------------------------------------------------
+
+    def build_encounter_guidance(
+        self, encounter_mode: str | None = None
+    ) -> dict:
+        """Return deterministic encounter-level guidance from arc state.
+
+        This is read-only and does not mutate arc state. The guidance
+        can bias encounter resolution, e.g. whether diplomacy cracks
+        quickly or investigation yields a breakthrough.
+        """
+        plan = self._pacing_plan_controller.get_active_plan(self.pacing_plans)
+        bias = self._scene_bias_controller.get_active_bias(self.scene_biases)
+
+        guidance: dict = {
+            "preferred_pressure": "medium",
+            "should_escalate": False,
+            "should_delay_resolution": False,
+            "stakes_bias": "standard",
+            "mode_bias": encounter_mode,
+        }
+
+        if plan is not None:
+            guidance["preferred_pressure"] = plan.metadata.get(
+                "preferred_pressure", "medium"
+            )
+            guidance["should_escalate"] = plan.metadata.get(
+                "should_escalate", False
+            )
+            guidance["should_delay_resolution"] = plan.metadata.get(
+                "should_delay_resolution", False
+            )
+
+        if bias is not None:
+            guidance["stakes_bias"] = bias.metadata.get(
+                "stakes_bias", "standard"
+            )
+
+        return guidance

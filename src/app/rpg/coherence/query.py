@@ -70,3 +70,37 @@ class CoherenceQueryAPI:
             commitments=commitments,
             recent_consequences=consequences,
         ).to_dict()
+
+    # ------------------------------------------------------------------
+    # Phase 8.2 — Encounter seeding helpers
+    # ------------------------------------------------------------------
+
+    def get_scene_entities(self) -> list[str]:
+        """Return entity IDs present in the current scene."""
+        anchor = self.state.continuity_anchors[-1] if self.state.continuity_anchors else None
+        if not anchor:
+            return []
+        return list(anchor.present_actors)
+
+    def get_location_hazards(self) -> list[dict]:
+        """Return hazard facts for the current scene location."""
+        hazards: list[dict] = []
+        for key, fact in self.state.scene_facts.items():
+            if "hazard" in key.lower() or "danger" in key.lower():
+                hazards.append(fact.to_dict())
+        return hazards
+
+    def get_relevant_points_of_interest(self) -> list[dict]:
+        """Return points of interest in the current scene."""
+        pois: list[dict] = []
+        for key, fact in self.state.scene_facts.items():
+            if "poi" in key.lower() or "point_of_interest" in key.lower() or "clue" in key.lower():
+                pois.append(fact.to_dict())
+        return pois
+
+    def get_immediate_threats(self) -> list[dict]:
+        """Return active tensions / threats from the latest anchor."""
+        anchor = self.state.continuity_anchors[-1] if self.state.continuity_anchors else None
+        if not anchor:
+            return []
+        return [{"text": t} for t in anchor.active_tensions]

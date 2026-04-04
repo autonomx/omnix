@@ -62,12 +62,14 @@ class ActionResolver:
         transition_builder: Optional[SceneTransitionBuilder] = None,
         npc_agency_engine: Optional[Any] = None,
         dialogue_core: Optional[Any] = None,
+        encounter_controller: Optional[Any] = None,
     ) -> None:
         self.intent_mapper = intent_mapper or ActionIntentMapper()
         self.consequence_builder = consequence_builder or ConsequenceBuilder()
         self.transition_builder = transition_builder or SceneTransitionBuilder()
         self.npc_agency_engine = npc_agency_engine
         self.dialogue_core = dialogue_core
+        self.encounter_controller = encounter_controller
 
     def resolve_choice(
         self,
@@ -142,6 +144,23 @@ class ActionResolver:
         option_id = self._get_field(option, "option_id", "unknown")
         action_id = self._resolved_action_id(option)
 
+        result_metadata: dict[str, Any] = {
+            "mapped_action": dict(mapped_action),
+            "evaluation": dict(evaluation),
+        }
+
+        # Phase 8.2 — Attach encounter context to resolved action metadata
+        enc_ctrl = self.encounter_controller
+        if enc_ctrl is not None and hasattr(enc_ctrl, "has_active_encounter") and enc_ctrl.has_active_encounter():
+            enc_state = enc_ctrl.get_active_encounter()
+            if enc_state is not None:
+                result_metadata["encounter_id"] = enc_state.encounter_id
+                result_metadata["encounter_mode"] = enc_state.mode
+            # Propagate encounter_action_type from option metadata
+            opt_meta = self._get_field(option, "metadata", {}) or {}
+            if isinstance(opt_meta, dict) and opt_meta.get("encounter_action_type"):
+                result_metadata["encounter_action_type"] = opt_meta["encounter_action_type"]
+
         resolved = ResolvedAction(
             action_id=action_id,
             option_id=option_id,
@@ -151,10 +170,7 @@ class ActionResolver:
             outcome=evaluation.get("outcome", "success"),
             consequences=consequences,
             transition=transition,
-            metadata={
-                "mapped_action": dict(mapped_action),
-                "evaluation": dict(evaluation),
-            },
+            metadata=result_metadata,
         )
 
         return ActionResolutionResult(

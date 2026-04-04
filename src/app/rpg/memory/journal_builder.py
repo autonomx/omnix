@@ -209,3 +209,55 @@ class JournalBuilder:
                 "listener_id": listener_id,
             },
         )
+
+    # ------------------------------------------------------------------
+    # Phase 8.2 — Encounter log entry
+    # ------------------------------------------------------------------
+
+    _JOURNALABLE_ENCOUNTER_KINDS = frozenset({
+        "encounter_started",
+        "encounter_resolved",
+        "objective_completed",
+        "objective_failed",
+        "combat_turning_point",
+        "stealth_exposed",
+        "investigation_breakthrough",
+        "diplomacy_breakthrough",
+        "chase_outcome",
+    })
+
+    def build_encounter_log_entry(
+        self,
+        encounter_log: dict,
+        tick: int | None = None,
+        location: str | None = None,
+    ) -> JournalEntry | None:
+        """Build a journal entry from an encounter log dict.
+
+        Only journals meaningful encounter milestones. Returns None if
+        the encounter event is not journalable.
+        """
+        kind = encounter_log.get("kind", "")
+        if kind not in self._JOURNALABLE_ENCOUNTER_KINDS:
+            return None
+
+        encounter_id = encounter_log.get("encounter_id", "")
+        mode = encounter_log.get("mode", "")
+        summary = encounter_log.get("summary", "")
+        action = encounter_log.get("action", "")
+
+        return JournalEntry(
+            entry_id=self._entry_id("encounter", tick, encounter_id),
+            tick=tick,
+            entry_type="encounter",
+            title=f"Encounter: {kind}",
+            summary=summary or f"{kind} during {mode} encounter",
+            location=location,
+            metadata={
+                "source": "encounter_log",
+                "kind": kind,
+                "encounter_id": encounter_id,
+                "mode": mode,
+                "action": action,
+            },
+        )

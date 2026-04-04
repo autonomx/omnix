@@ -108,6 +108,30 @@ class CampaignMemoryCore:
             self.journal_entries.append(entry)
             self._trim_journal_if_needed()
 
+    # ------------------------------------------------------------------
+    # Phase 8.2 — Encounter log recording
+    # ------------------------------------------------------------------
+
+    def record_encounter_log_entry(
+        self,
+        encounter_log: dict,
+        tick: int | None = None,
+        location: str | None = None,
+    ) -> None:
+        """Record an encounter log entry as a journal entry if meaningful.
+
+        Only journals significant encounter milestones (encounter started,
+        resolved, objective completed/failed, turning points).
+        """
+        entry = self._journal_builder.build_encounter_log_entry(
+            encounter_log=encounter_log,
+            tick=tick,
+            location=location,
+        )
+        if entry is not None:
+            self.journal_entries.append(entry)
+            self._trim_journal_if_needed()
+
     def refresh_recap(
         self,
         coherence_core: Any,
