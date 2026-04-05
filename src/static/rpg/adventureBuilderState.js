@@ -80,7 +80,12 @@ var AdventureBuilderState = (function () {
                 activeTab: 'summary',
                 previousGraph: null,
                 graphDiff: null,
-                layoutMode: 'auto'
+                layoutMode: 'auto',
+                /** Phase 2.5 — Snapshot timeline + compare */
+                snapshots: [],
+                selectedSnapshotIndex: null,
+                compareMode: false,
+                entityHistory: null
             }
         };
     }
