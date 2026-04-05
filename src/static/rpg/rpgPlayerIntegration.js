@@ -12,12 +12,43 @@ import { renderPlayerView } from "./rpgPlayerRenderer.js";
 import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
 import { renderDialogueState, renderSuggestedReplies, appendDialogueReply, clearDialogueUI } from "./rpgDialogueRenderer.js";
 
+// Phase 8.4.6 — Inspector integration
+import { RPGInspectorUI } from "./rpgInspectorUI.js";
+
 export class RPGPlayerIntegration {
   constructor(setupPayload = null) {
     this.setupPayload = setupPayload;
     this.playerClient = new RPGPlayerClient();
     this.dialogueClient = new RPGDialogueClient();
+    this.inspectorUI = null; // Phase 8.4.6 — Inspector UI instance
+    this._inspectorRefreshTimer = null; // Phase 8.4.6 fix — debounce refresh
     bindDialogueInput((text) => this.sendDialogueMessage(text));
+  }
+
+  // Phase 8.4.6 — Bootstrap hooks for inspector
+  ensureInspector() {
+    if (this.inspectorUI) return this.inspectorUI;
+    this.inspectorUI = new RPGInspectorUI(
+      () => this.setupPayload || {},
+      () => {
+        const meta = (this.setupPayload || {}).metadata || {};
+        return meta.simulation_state || {};
+      }
+    );
+    this.inspectorUI.bind();
+    return this.inspectorUI;
+  }
+
+  // Phase 8.4.6 — Debounced helper to refresh inspector after state changes
+  _refreshInspector() {
+    if (this._inspectorRefreshTimer) {
+      clearTimeout(this._inspectorRefreshTimer);
+    }
+    this._inspectorRefreshTimer = setTimeout(async () => {
+      const inspector = this.ensureInspector();
+      await inspector.refreshTimeline();
+      await inspector.refreshAudit();
+    }, 50);
   }
 
   setSetupPayload(payload) {
@@ -55,6 +86,7 @@ export class RPGPlayerIntegration {
     if (result) {
       this.setupPayload = result.setupPayload;
       rpgPlayerState.playerState = result.playerState;
+      await this._refreshInspector();
     }
     return result;
   }
@@ -71,6 +103,7 @@ export class RPGPlayerIntegration {
     if (result) {
       this.setupPayload = result.setupPayload;
       rpgPlayerState.playerState = result.playerState;
+      await this._refreshInspector();
     }
     return result;
   }
@@ -84,6 +117,7 @@ export class RPGPlayerIntegration {
       rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
       renderDialogueState(result.dialogue_state);
       renderSuggestedReplies(result.dialogue_state, (text) => this.sendDialogueMessage(text));
+      await this._refreshInspector();
     }
     return result;
   }
@@ -110,6 +144,7 @@ export class RPGPlayerIntegration {
       renderDialogueState(result.dialogue_state);
       renderSuggestedReplies(result.dialogue_state, (text) => this.sendDialogueMessage(text));
       appendDialogueReply(result.reply);
+      await this._refreshInspector();
     }
     return result;
   }
@@ -122,6 +157,7 @@ export class RPGPlayerIntegration {
       rpgPlayerState.playerState = rpgPlayerState.playerState || {};
       rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
       clearDialogueUI();
+      await this._refreshInspector();
     }
     return result;
   }
