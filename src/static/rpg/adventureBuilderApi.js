@@ -187,6 +187,32 @@ var AdventureBuilderApi = (function () {
         }).then(_json);
     }
 
+    /**
+     * Advance the world simulation by one tick (Phase 3A).
+     *
+     * @param {Object} setup - Current setup payload
+     */
+    function simulateStep(setup) {
+        return fetch(BASE + '/simulate-step', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setup: setup }),
+        }).then(_json);
+    }
+
+    /**
+     * Get the current simulation state without advancing (Phase 3A).
+     *
+     * @param {Object} setup - Current setup payload
+     */
+    function getSimulationState(setup) {
+        return fetch(BASE + '/simulation-state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setup: setup }),
+        }).then(_json);
+    }
+
     return {
         getTemplates: getTemplates,
         buildTemplate: buildTemplate,
@@ -200,5 +226,7 @@ var AdventureBuilderApi = (function () {
         inspectWorldSnapshot: inspectWorldSnapshot,
         compareWorld: compareWorld,
         compareEntity: compareEntity,
+        simulateStep: simulateStep,
+        getSimulationState: getSimulationState,
     };
 })();

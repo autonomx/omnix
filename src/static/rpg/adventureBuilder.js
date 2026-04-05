@@ -847,11 +847,92 @@ var AdventureBuilder = (function () {
     }
 
     function _renderStep5Simulation(contentEl) {
-        var html = '<div class="ab-section ab-wg-section">' +
-            '<div id="abWgSimulation" class="ab-wg-sim-container"><p class="ab-muted">Loading simulation\u2026</p></div>' +
-            '</div>';
+        var wi = state.worldInspection || {};
+        var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false };
+        var simState = rt.state;
+        var tickLabel = simState ? simState.tick : '—';
+        var stepping = rt.stepping;
+
+        var html = '<div class="ab-section ab-wg-section">';
+
+        // ── Simulation controls row ──
+        html += '<div class="ab-sim-controls">';
+        html += '<button id="abSimAdvance" class="ab-btn ab-btn-primary ab-btn-sm"' + (stepping ? ' disabled' : '') + '>\u23ED Advance Simulation</button>';
+        html += '<span class="ab-sim-tick-badge">Tick: <strong>' + _esc(String(tickLabel)) + '</strong></span>';
+        html += '</div>';
+
+        // ── Last-step summary ──
+        if (rt.lastSummary && rt.lastSummary.length) {
+            html += '<div class="ab-sim-summary"><h5>Last Step Summary</h5><ul>';
+            rt.lastSummary.forEach(function (line) {
+                html += '<li>' + _esc(line) + '</li>';
+            });
+            html += '</ul></div>';
+        }
+
+        // ── Simulation diff panel ──
+        html += '<div id="abSimDiffPanel"></div>';
+
+        // ── Static simulation summary (from world inspection) ──
+        html += '<div id="abWgSimulation" class="ab-wg-sim-container"><p class="ab-muted">Loading simulation\u2026</p></div>';
+
+        html += '</div>';
         contentEl.innerHTML = html;
+
+        // Render simulation diff if available
+        var diffPanel = contentEl.querySelector('#abSimDiffPanel');
+        if (diffPanel && rt.lastDiff) {
+            AdventureBuilderTimeline.renderSimulationDiff(diffPanel, rt.lastDiff, rt.lastSummary || []);
+        }
+
+        // Render the static simulation summary
         _fetchAndRenderSimulation(contentEl);
+
+        // Wire up the advance button
+        var advBtn = contentEl.querySelector('#abSimAdvance');
+        if (advBtn) {
+            advBtn.addEventListener('click', function () {
+                _handleAdvanceSimulation(contentEl);
+            });
+        }
+    }
+
+    function _handleAdvanceSimulation(contentEl) {
+        var wi = state.worldInspection;
+        if (!wi) return;
+        if (!wi.simulationRuntime) {
+            wi.simulationRuntime = { state: null, lastDiff: null, lastSummary: [], stepping: false };
+        }
+        if (wi.simulationRuntime.stepping) return;
+        wi.simulationRuntime.stepping = true;
+        _renderStep5Simulation(contentEl);
+
+        AdventureBuilderApi.simulateStep(state.setup).then(function (res) {
+            wi.simulationRuntime.stepping = false;
+            if (res.success) {
+                // Update setup
+                if (res.updated_setup) {
+                    state.setup = res.updated_setup;
+                    setup = state.setup;
+                    AdventureBuilderState.saveDraft(state.setup);
+                }
+                // Update world inspection data
+                if (res.graph) wi.graph = res.graph;
+                if (res.simulation) wi.simulation = res.simulation;
+                if (res.inspector) wi.inspector = res.inspector;
+                // Update runtime
+                wi.simulationRuntime.state = res.simulation_state || null;
+                wi.simulationRuntime.lastDiff = res.simulation_diff || null;
+                wi.simulationRuntime.lastSummary = res.summary || [];
+                // Capture snapshot
+                var tick = (res.simulation_state && res.simulation_state.tick) || '?';
+                _captureWorldSnapshot('After Simulation Tick ' + tick);
+            }
+            _renderStep5Simulation(contentEl);
+        }).catch(function () {
+            wi.simulationRuntime.stepping = false;
+            _renderStep5Simulation(contentEl);
+        });
     }
 
     function _renderStep5Inspector(contentEl) {

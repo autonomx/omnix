@@ -1027,3 +1027,72 @@ def compare_world_entity(
     )
 
     return {"success": True, **result}
+
+
+# ---------------------------------------------------------------------------
+# Phase 3A — World Simulation Engine
+# ---------------------------------------------------------------------------
+
+
+def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
+    """Advance the world simulation by one tick.
+
+    Deterministic and non-destructive — returns a copy of the setup
+    with the simulation state updated in ``metadata.simulation_state``.
+
+    Returns
+    -------
+    dict
+        ``{"success": True, "updated_setup": ..., "simulation_state": ...,
+        "simulation_diff": ..., "summary": [...], "graph": ...,
+        "simulation": ..., "inspector": ...}``
+    """
+    from ..creator.world_graph import inspect_world as _inspect
+    from ..creator.world_simulation import (
+        compute_simulation_diff,
+        step_simulation_state,
+        summarize_simulation_step,
+    )
+
+    data = dict(payload or {})
+    data = apply_adventure_defaults(data)
+
+    step_result = step_simulation_state(data)
+    next_setup = step_result["next_setup"]
+    before_state = step_result["before_state"]
+    after_state = step_result["after_state"]
+
+    diff = compute_simulation_diff(before_state, after_state)
+    summary = summarize_simulation_step(diff)
+
+    # Re-run world inspection on the updated setup
+    inspection = _inspect(next_setup)
+
+    return {
+        "success": True,
+        "updated_setup": next_setup,
+        "simulation_state": after_state,
+        "simulation_diff": diff,
+        "summary": summary,
+        "graph": inspection.get("graph"),
+        "simulation": inspection.get("simulation"),
+        "inspector": inspection.get("inspector"),
+    }
+
+
+def get_simulation_state(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the current simulation state (or initialise it).
+
+    Read-only — does not advance the tick.
+    """
+    from ..creator.world_simulation import build_initial_simulation_state
+
+    data = dict(payload or {})
+    data = apply_adventure_defaults(data)
+
+    meta = data.get("metadata") or {}
+    sim_state = meta.get("simulation_state")
+    if not sim_state or "tick" not in sim_state:
+        sim_state = build_initial_simulation_state(data)
+
+    return {"success": True, "simulation_state": sim_state}
