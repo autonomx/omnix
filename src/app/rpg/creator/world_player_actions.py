@@ -42,9 +42,42 @@ def _safe_list(value: Any) -> list[Any]:
     return []
 
 
+def _safe_str(value: Any) -> str:
+    """Return *value* as a string."""
+    if value is None:
+        return ""
+    return str(value)
+
+
 def _cap(value: int, lo: int = 0, hi: int = 5) -> int:
     """Clamp *value* to [lo, hi]."""
     return max(lo, min(hi, value))
+
+
+def _infer_affected_npc_ids(
+    simulation_state: dict[str, Any],
+    location_id: str = "",
+    faction_id: str = "",
+    target_id: str = "",
+) -> list[str]:
+    """Infer NPC IDs affected by an action based on npc_index."""
+    simulation_state = simulation_state or {}
+    npc_index = simulation_state.get("npc_index") or {}
+    affected = []
+
+    for npc_id, npc in sorted(npc_index.items()):
+        npc_loc = _safe_str(npc.get("location_id"))
+        npc_faction = _safe_str(npc.get("faction_id"))
+        if location_id and npc_loc == location_id:
+            affected.append(npc_id)
+            continue
+        if faction_id and npc_faction == faction_id:
+            affected.append(npc_id)
+            continue
+        if target_id and npc_id == target_id:
+            affected.append(npc_id)
+
+    return sorted(set(affected))
 
 
 # ---------------------------------------------------------------------------
@@ -145,9 +178,18 @@ def apply_player_action(
             "type": "player_intervention",
             "origin": "player_action",
             "action_type": action_type,
+            "actor": "player",
             "target_id": target_id,
+            "target_kind": "thread",
+            "location_id": "",
+            "faction_id": "",
+            "affected_npc_ids": _infer_affected_npc_ids(
+                simulation_state=state,
+                target_id=target_id,
+            ),
             "summary": f"Player intervened in thread '{target_id}' (pressure {old_pressure} → {new_pressure})",
             "severity": "positive",
+            "salience": 0.8,
         })
         action_applied = True
 
@@ -171,9 +213,18 @@ def apply_player_action(
             "type": "player_support",
             "origin": "player_action",
             "action_type": action_type,
+            "actor": "player",
             "target_id": target_id,
+            "target_kind": "faction",
+            "location_id": "",
+            "faction_id": target_id,
+            "affected_npc_ids": _infer_affected_npc_ids(
+                simulation_state=state,
+                faction_id=target_id,
+            ),
             "summary": f"Player supported faction '{target_id}' (pressure {old_pressure} → {new_pressure})",
             "severity": "positive",
+            "salience": 0.8,
         })
         action_applied = True
 
@@ -209,10 +260,19 @@ def apply_player_action(
             "type": "player_escalation",
             "origin": "player_action",
             "action_type": action_type,
+            "actor": "player",
             "target_id": target_id,
+            "target_kind": "thread",
+            "location_id": "",
+            "faction_id": "",
             "related_factions": related_factions,
+            "affected_npc_ids": _infer_affected_npc_ids(
+                simulation_state=state,
+                target_id=target_id,
+            ),
             "summary": f"Player escalated conflict in thread '{target_id}' (pressure {old_pressure} → {new_pressure})",
             "severity": "negative",
+            "salience": 0.9,
         })
         action_applied = True
 

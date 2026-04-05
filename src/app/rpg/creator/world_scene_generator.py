@@ -53,6 +53,35 @@ def _safe_str(v: Any, default: str = "") -> str:
     return str(v)
 
 
+def _collect_scene_actors(source_id, simulation_state, max_actors=4):
+    """Collect NPC actors relevant to a scene source from Phase 6 state."""
+    simulation_state = simulation_state or {}
+    npc_index = simulation_state.get("npc_index") or {}
+    npc_minds = simulation_state.get("npc_minds") or {}
+
+    actors = []
+    for npc_id, npc in sorted(npc_index.items()):
+        npc_location_id = _safe_str(npc.get("location_id"))
+        npc_faction_id = _safe_str(npc.get("faction_id"))
+
+        if source_id and (source_id == npc_location_id or source_id == npc_faction_id or source_id == npc_id):
+            actor = {
+                "id": npc_id,
+                "name": _safe_str(npc.get("name")) or npc_id,
+                "role": _safe_str(npc.get("role")),
+                "faction_id": npc_faction_id,
+                "location_id": npc_location_id,
+            }
+            mind = npc_minds.get(npc_id) or {}
+            if isinstance(mind, dict):
+                actor["mind_context"] = {
+                    "last_decision": mind.get("last_decision") or {},
+                }
+            actors.append(actor)
+
+    return actors[:max_actors]
+
+
 def _build_scene_id(source_id: str, suffix: str) -> str:
     """Build a stable scene id from source and suffix.
 
@@ -432,6 +461,42 @@ def generate_scenes_from_simulation(
     # Also pull from non-incident sources (threads, hotspots)
     extra = generate_extra_scenes(state, max_scenes=max_scenes, already=len(scenes))
     scenes.extend(extra)
+
+    # Phase 6: Enrich scenes with NPC actors from simulation state
+    for scene in scenes:
+        source_id = scene.get("source_incident_id") or ""
+        # Also try to match by scene actors (which are often source_ids)
+        if not source_id and scene.get("actors"):
+            source_id = _safe_str(scene["actors"][0]) if scene["actors"] else ""
+
+        enriched_actors = list(scene.get("actors") or [])
+        enriched_actors.extend(_collect_scene_actors(
+            source_id=source_id,
+            simulation_state=state,
+            max_actors=4,
+        ))
+
+        deduped = []
+        seen_actor_ids = set()
+        for actor in enriched_actors:
+            if isinstance(actor, dict):
+                actor_id = _safe_str(actor.get("id"))
+            else:
+                actor_id = _safe_str(actor)
+                actor = {"id": actor_id, "name": actor_id}
+
+            if not actor_id or actor_id in seen_actor_ids:
+                continue
+            seen_actor_ids.add(actor_id)
+            deduped.append(actor)
+
+        scene["actors"] = deduped[:6]
+        scene["primary_npc_ids"] = [
+            a["id"]
+            for a in deduped
+            if isinstance(a, dict) and _safe_str(a.get("id"))
+            and (state.get("npc_index") or {}).get(_safe_str(a.get("id")))
+        ][:4]
 
     return scenes[:max_scenes]
 
