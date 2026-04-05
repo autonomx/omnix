@@ -49,6 +49,9 @@ var AdventureBuilderTimeline = (function () {
             var fields = [];
             if (b.label !== a.label) fields.push('label');
             if (b.type !== a.type) fields.push('type');
+            // Quick local diff — JSON.stringify is order-sensitive but acceptable
+            // here since the authoritative diff comes from the Python backend
+            // which normalizes and sorts meta properly.
             if (JSON.stringify(b.meta || {}) !== JSON.stringify(a.meta || {})) fields.push('meta');
             if (fields.length) changed.push({ id: id, fields: fields });
         });

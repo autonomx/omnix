@@ -29,6 +29,7 @@ var AdventureBuilder = (function () {
 
     var STEP_COUNT = 5;
     var DEBOUNCE_MS = 400;
+    var MAX_SNAPSHOTS = 20;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Persistence / state mutations
@@ -914,8 +915,6 @@ var AdventureBuilder = (function () {
     }
 
     // ── Phase 2.5 — Timeline & Diff tab renderers ──
-
-    var MAX_SNAPSHOTS = 20;
 
     function _captureWorldSnapshot(label) {
         var wi = state.worldInspection;
