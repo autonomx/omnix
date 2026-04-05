@@ -1319,3 +1319,120 @@
     font-size: 0.82rem;
     margin-bottom: 2px;
 }
+
+
+/* ─── Phase 3A — Simulation controls ───────────────────────────────────── */
+
+.ab-sim-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ab-sim-tick-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 999px;
+    background: rgba(52, 152, 219, 0.15);
+    color: #3498db;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.ab-sim-summary {
+    margin-bottom: 16px;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 8px;
+    border-left: 3px solid #3498db;
+}
+
+.ab-sim-summary h5 {
+    margin: 0 0 6px 0;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.ab-sim-summary ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.ab-sim-summary li {
+    margin-bottom: 2px;
+}
+
+/* ─── Phase 3A — Simulation diff cards ─────────────────────────────────── */
+
+.ab-sim-diff {
+    margin-bottom: 20px;
+}
+
+.ab-sim-diff h5 {
+    margin: 0 0 10px 0;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.ab-sim-diff-summary {
+    margin: 0 0 12px 0;
+    padding-left: 18px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.ab-sim-diff-card {
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ab-sim-diff-card h6 {
+    margin: 0 0 8px 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.ab-sim-diff-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 0.84rem;
+}
+
+.ab-sim-diff-id {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.ab-sim-diff-arrow {
+    color: rgba(255, 255, 255, 0.6);
+    font-family: monospace;
+    font-size: 0.82rem;
+}
+
+/* ─── Phase 3A — Severity colors ───────────────────────────────────────── */
+
+.ab-sim-severity-low {
+    background: rgba(46, 204, 113, 0.06);
+}
+
+.ab-sim-severity-active {
+    background: rgba(241, 196, 15, 0.08);
+}
+
+.ab-sim-severity-critical {
+    background: rgba(231, 76, 60, 0.10);
+}

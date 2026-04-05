@@ -89,6 +89,13 @@ var AdventureBuilderState = (function () {
                 diffFilters: {
                     nodeType: 'all',
                     changeType: 'all'
+                },
+                /** Phase 3A — Simulation runtime */
+                simulationRuntime: {
+                    state: null,
+                    lastDiff: null,
+                    lastSummary: [],
+                    stepping: false
                 }
             }
         };

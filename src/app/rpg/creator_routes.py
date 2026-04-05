@@ -309,3 +309,43 @@ def compare_entity():
     except Exception:
         logger.exception("Failed to compare entity")
         return jsonify({"success": False, "error": "Failed to compare entity"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 13. POST /api/rpg/adventure/simulate-step  (Phase 3A)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/simulate-step", methods=["POST"])
+def simulate_step():
+    """Advance the world simulation by one tick."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    payload = data.get("setup") or data
+    try:
+        result = builder.advance_world_simulation(payload)
+        return jsonify(result)
+    except Exception:
+        logger.exception("Failed to advance simulation step")
+        return jsonify({"success": False, "error": "Failed to advance simulation step"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 14. POST /api/rpg/adventure/simulation-state  (Phase 3A)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/simulation-state", methods=["POST"])
+def simulation_state():
+    """Return the current simulation state (or initialise it)."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    payload = data.get("setup") or data
+    try:
+        result = builder.get_simulation_state(payload)
+        return jsonify(result)
+    except Exception:
+        logger.exception("Failed to get simulation state")
+        return jsonify({"success": False, "error": "Failed to get simulation state"}), 500

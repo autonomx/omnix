@@ -432,6 +432,112 @@ var AdventureBuilderTimeline = (function () {
         return _esc(String(val));
     }
 
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Phase 3A — Simulation diff renderer
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Render a structured simulation diff panel.
+     *
+     * @param {HTMLElement} container - DOM element to render into
+     * @param {Object} diff - Simulation diff from backend
+     * @param {string[]} summary - Summary lines from backend
+     */
+    function renderSimulationDiff(container, diff, summary) {
+        if (!container) return;
+        diff = diff || {};
+        summary = summary || [];
+
+        var html = '<div class="ab-sim-diff">';
+        html += '<h5>Simulation Diff — Tick ' + _esc(String(diff.tick_before || 0)) + ' → ' + _esc(String(diff.tick_after || 0)) + '</h5>';
+
+        // Summary lines
+        if (summary.length) {
+            html += '<ul class="ab-sim-diff-summary">';
+            summary.forEach(function (line) {
+                html += '<li>' + _esc(line) + '</li>';
+            });
+            html += '</ul>';
+        }
+
+        // Threads changed
+        var threads = diff.threads_changed || [];
+        if (threads.length) {
+            html += '<div class="ab-sim-diff-card">';
+            html += '<h6>Threads (' + threads.length + ' changed)</h6>';
+            threads.forEach(function (c) {
+                var beforeP = (c.before && c.before.pressure != null) ? c.before.pressure : '?';
+                var afterP = (c.after && c.after.pressure != null) ? c.after.pressure : '?';
+                var severity = _threadSeverityClass(typeof afterP === 'number' ? afterP : 0);
+                html += '<div class="ab-sim-diff-row ' + severity + '">';
+                html += '<span class="ab-sim-diff-id">' + _esc(c.id || '') + '</span>';
+                html += '<span class="ab-sim-diff-arrow">pressure: ' + _esc(String(beforeP)) + ' → ' + _esc(String(afterP)) + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Factions changed
+        var factions = diff.factions_changed || [];
+        if (factions.length) {
+            html += '<div class="ab-sim-diff-card">';
+            html += '<h6>Factions (' + factions.length + ' changed)</h6>';
+            factions.forEach(function (c) {
+                var beforeP = (c.before && c.before.pressure != null) ? c.before.pressure : '?';
+                var afterP = (c.after && c.after.pressure != null) ? c.after.pressure : '?';
+                var severity = _factionSeverityClass(typeof afterP === 'number' ? afterP : 0);
+                html += '<div class="ab-sim-diff-row ' + severity + '">';
+                html += '<span class="ab-sim-diff-id">' + _esc(c.id || '') + '</span>';
+                html += '<span class="ab-sim-diff-arrow">pressure: ' + _esc(String(beforeP)) + ' → ' + _esc(String(afterP)) + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Locations changed
+        var locations = diff.locations_changed || [];
+        if (locations.length) {
+            html += '<div class="ab-sim-diff-card">';
+            html += '<h6>Locations (' + locations.length + ' changed)</h6>';
+            locations.forEach(function (c) {
+                var beforeH = (c.before && c.before.heat != null) ? c.before.heat : '?';
+                var afterH = (c.after && c.after.heat != null) ? c.after.heat : '?';
+                var severity = _locationSeverityClass(typeof afterH === 'number' ? afterH : 0);
+                html += '<div class="ab-sim-diff-row ' + severity + '">';
+                html += '<span class="ab-sim-diff-id">' + _esc(c.id || '') + '</span>';
+                html += '<span class="ab-sim-diff-arrow">heat: ' + _esc(String(beforeH)) + ' → ' + _esc(String(afterH)) + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        if (!threads.length && !factions.length && !locations.length) {
+            html += '<p class="ab-muted">No changes in this tick.</p>';
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    function _threadSeverityClass(pressure) {
+        if (pressure <= 1) return 'ab-sim-severity-low';
+        if (pressure <= 3) return 'ab-sim-severity-active';
+        return 'ab-sim-severity-critical';
+    }
+
+    function _factionSeverityClass(pressure) {
+        if (pressure === 0) return 'ab-sim-severity-low';
+        if (pressure <= 2) return 'ab-sim-severity-active';
+        return 'ab-sim-severity-critical';
+    }
+
+    function _locationSeverityClass(heat) {
+        if (heat <= 1) return 'ab-sim-severity-low';
+        if (heat <= 3) return 'ab-sim-severity-active';
+        return 'ab-sim-severity-critical';
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Public API
     // ─────────────────────────────────────────────────────────────────────
@@ -443,6 +549,7 @@ var AdventureBuilderTimeline = (function () {
         renderDiffFilters: renderDiffFilters,
         renderTimeline: renderTimeline,
         renderDiffTab: renderDiffTab,
-        renderEntityCompare: renderEntityCompare
+        renderEntityCompare: renderEntityCompare,
+        renderSimulationDiff: renderSimulationDiff
     };
 })();
