@@ -1063,7 +1063,9 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
     after_state = step_result["after_state"]
 
     diff = compute_simulation_diff(before_state, after_state)
-    summary = summarize_simulation_step(diff)
+    events = step_result.get("events", [])
+    consequences = step_result.get("consequences", [])
+    summary = summarize_simulation_step(diff, events=events, consequences=consequences)
 
     # Re-run world inspection on the updated setup
     inspection = _inspect(next_setup)
@@ -1074,6 +1076,8 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
         "simulation_state": after_state,
         "simulation_diff": diff,
         "summary": summary,
+        "events": events,
+        "consequences": consequences,
         "graph": inspection.get("graph"),
         "simulation": inspection.get("simulation"),
         "inspector": inspection.get("inspector"),

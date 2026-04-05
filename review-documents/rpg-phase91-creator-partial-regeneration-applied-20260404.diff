@@ -1,0 +1,864 @@
+diff --git a/src/app/rpg/creator/regeneration.py b/src/app/rpg/creator/regeneration.py
+index 6bccbc8..b7192a9 100644
+--- a/src/app/rpg/creator/regeneration.py
++++ b/src/app/rpg/creator/regeneration.py
+@@ -106,6 +106,7 @@ def compute_section_diff(
+     target: str,
+     before: Any,
+     after: Any,
++    id_field: str | None = None,
+ ) -> dict[str, Any]:
+     """Compute a human-readable diff summary between two section snapshots.
+ 
+@@ -115,7 +116,7 @@ def compute_section_diff(
+     Returns a dict with ``added``, ``removed``, ``changed``, and ``summary``.
+     """
+     if target in ENTITY_TARGETS:
+-        return _compute_entity_diff(target, before, after)
++        return _compute_entity_diff(target, before, after, id_field)
+     if target == "threads":
+         return _compute_thread_diff(before, after)
+     if target == "opening":
+@@ -127,11 +128,13 @@ def _compute_entity_diff(
+     target: str,
+     before: Any,
+     after: Any,
++    id_field: str | None = None,
+ ) -> dict[str, Any]:
+     """Diff two entity lists by id field."""
+-    id_field = TARGET_ID_FIELD.get(target, "id")
+-    before_list = _safe_list(before)
+-    after_list = _safe_list(after)
++    if id_field is None:
++        id_field = TARGET_ID_FIELD.get(target, "id")
++    before_list = [normalize_entity(item or {}) for item in _safe_list(before)]
++    after_list = [normalize_entity(item or {}) for item in _safe_list(after)]
+ 
+     before_ids = {_entity_id(e, id_field) for e in before_list if _entity_id(e, id_field)}
+     after_ids = {_entity_id(e, id_field) for e in after_list if _entity_id(e, id_field)}
+@@ -228,6 +231,40 @@ def _compute_opening_diff(
+ # ---------------------------------------------------------------------------
+ 
+ 
++def _normalize_scalar(value: Any) -> Any:
++    """Normalize a scalar value for diff comparison."""
++    if value in (None, ""):
++        return None
++    if isinstance(value, str):
++        return value.strip()
++    return value
++
++
++def normalize_entity(entity: dict[str, Any]) -> dict[str, Any]:
++    """Normalize entities before diffing to avoid false positives."""
++    normalized: dict[str, Any] = {}
++    for key in sorted(entity.keys()):
++        value = entity[key]
++        if isinstance(value, list):
++            cleaned = [_normalize_scalar(v) for v in value]
++            cleaned = [v for v in cleaned if v not in (None, [], {})]
++            if cleaned:
++                normalized[key] = cleaned
++        elif isinstance(value, dict):
++            nested = {
++                k: _normalize_scalar(v)
++                for k, v in sorted(value.items())
++                if _normalize_scalar(v) not in (None, [], {})
++            }
++            if nested:
++                normalized[key] = nested
++        else:
++            cleaned = _normalize_scalar(value)
++            if cleaned is not None:
++                normalized[key] = cleaned
++    return normalized
++
++
+ def compute_item_diff(
+     before: dict[str, Any],
+     after: dict[str, Any],
+@@ -236,8 +273,8 @@ def compute_item_diff(
+ 
+     Returns a dict with ``changed_fields`` listing which keys differ.
+     """
+-    before = before if isinstance(before, dict) else {}
+-    after = after if isinstance(after, dict) else {}
++    before = normalize_entity(before or {})
++    after = normalize_entity(after or {})
+ 
+     all_keys = set(list(before.keys()) + list(after.keys()))
+     changed: list[str] = []
+@@ -264,40 +301,29 @@ def merge_entity_lists(
+     - If a regenerated entity's id already exists, overwrite that entity.
+     - If a regenerated entity's id is new, append it.
+     - Keep current entities not mentioned by regeneration.
++    - Raises ValueError if regenerated item is missing required id field.
+     """
+-    current_list = _safe_list(current)
+-    regen_list = _safe_list(regenerated)
+-
+-    # Build lookup for regenerated items
+-    regen_map: dict[str, dict[str, Any]] = {}
+-    regen_order: list[str] = []
+-    for item in regen_list:
+-        if isinstance(item, dict):
+-            eid = item.get(id_field)
+-            if eid:
+-                regen_map[eid] = item
+-                regen_order.append(eid)
++    merged: dict[str, dict[str, Any]] = {}
+ 
+-    # Start with current, overwriting where regenerated matches
+-    result: list[dict[str, Any]] = []
+-    seen_ids: set[str] = set()
+-    for item in current_list:
+-        if not isinstance(item, dict):
++    for item in current or []:
++        item_id = item.get(id_field)
++        if not item_id:
+             continue
+-        eid = item.get(id_field)
+-        if eid and eid in regen_map:
+-            result.append(regen_map[eid])
+-        else:
+-            result.append(item)
+-        if eid:
+-            seen_ids.add(eid)
++        merged[item_id] = dict(item)
+ 
+-    # Append new regenerated items not already in current
+-    for eid in regen_order:
+-        if eid not in seen_ids:
+-            result.append(regen_map[eid])
+-            seen_ids.add(eid)
++    for item in regenerated or []:
++        item_id = item.get(id_field)
++        if not item_id:
++            raise ValueError(f"Missing id field '{id_field}' in regenerated entity")
++        merged[item_id] = dict(item)
+ 
++    seen: set[str] = set()
++    result: list[dict[str, Any]] = []
++    for item_id, item in merged.items():
++        if item_id in seen:
++            continue
++        seen.add(item_id)
++        result.append(item)
+     return result
+ 
+ 
+@@ -330,4 +356,23 @@ def merge_thread_lists(
+             if tid and tid not in existing_ids:
+                 result.append(item)
+                 existing_ids.add(tid)
+-    return result
+\ No newline at end of file
++    return result
++
++
++def build_regeneration_rationale(target: str, setup: dict[str, Any], regenerated: Any) -> str:
++    """Build a human-readable rationale for a regeneration operation."""
++    if target == "factions":
++        count = len(regenerated or [])
++        return f"Generated {count} factions aligned with the current premise, setting, and tone."
++    if target == "locations":
++        count = len(regenerated or [])
++        return f"Generated {count} locations aligned with the world setup and starting context."
++    if target == "npc_seeds":
++        count = len(regenerated or [])
++        return f"Generated {count} NPCs aligned with the current factions, locations, and premise."
++    if target == "opening":
++        return "Regenerated the opening to better match the current setup and resolved starting context."
++    if target == "threads":
++        count = len(regenerated or [])
++        return f"Generated {count} tensions/threads to increase early pressure and tie into the premise."
++    return "Regenerated content using the current creator setup."
+diff --git a/src/app/rpg/services/adventure_builder_service.py b/src/app/rpg/services/adventure_builder_service.py
+index fb7d747..5f325b5 100644
+--- a/src/app/rpg/services/adventure_builder_service.py
++++ b/src/app/rpg/services/adventure_builder_service.py
+@@ -7,6 +7,7 @@ simple method interface consumed by the creator routes.
+ 
+ from __future__ import annotations
+ 
++import time
+ import uuid
+ from typing import Any
+ 
+@@ -22,6 +23,7 @@ from ..creator.regeneration import (
+     REGENERATION_TARGETS,
+     TARGET_ID_FIELD,
+     TARGET_STRATEGIES,
++    build_regeneration_rationale,
+     compute_item_diff,
+     compute_section_diff,
+     generate_apply_token,
+@@ -456,20 +458,41 @@ def _apply_regenerated_section(
+ # ---------------------------------------------------------------------------
+ 
+ _preview_store: dict[str, dict[str, Any]] = {}
+-
+-_MAX_PREVIEW_STORE_SIZE = 50
++_PREVIEW_TTL_SEC = 300
++_MAX_PREVIEWS = 100
++
++
++def _cleanup_preview_store(now: float | None = None) -> None:
++    """Remove expired previews and enforce max size limit."""
++    ts = now or time.time()
++    expired = [
++        token
++        for token, payload in _preview_store.items()
++        if (ts - float(payload.get("created_at", 0))) > _PREVIEW_TTL_SEC
++    ]
++    for token in expired:
++        _preview_store.pop(token, None)
++
++    if len(_preview_store) > _MAX_PREVIEWS:
++        ordered = sorted(
++            _preview_store.items(),
++            key=lambda kv: float(kv[1].get("created_at", 0)),
++        )
++        for token, _ in ordered[: max(0, len(_preview_store) - _MAX_PREVIEWS)]:
++            _preview_store.pop(token, None)
+ 
+ 
+ def _store_preview(token: str, data: dict[str, Any]) -> None:
+-    """Store a preview result keyed by token. Evicts oldest if limit reached."""
+-    if len(_preview_store) >= _MAX_PREVIEW_STORE_SIZE:
+-        oldest_key = next(iter(_preview_store))
+-        _preview_store.pop(oldest_key, None)
+-    _preview_store[token] = data
++    """Store a preview result keyed by token. Evicts expired/oldest if limit reached."""
++    _cleanup_preview_store()
++    entry = dict(data)
++    entry["created_at"] = time.time()
++    _preview_store[token] = entry
+ 
+ 
+ def _pop_preview(token: str) -> dict[str, Any] | None:
+     """Retrieve and remove a stored preview by token."""
++    _cleanup_preview_store()
+     return _preview_store.pop(token, None)
+ 
+ 
+@@ -588,8 +611,10 @@ def regenerate_setup_section(
+         # Store preview for later apply
+         _store_preview(token, {
+             "target": target,
+-            "regenerated": regenerated,
+-            "normalized_payload": normalized_payload,
++            "setup_id": normalized_payload.get("setup_id"),
++            "before": before,
++            "after": regenerated,
++            "apply_strategy": apply_strategy,
+         })
+ 
+         return {
+@@ -597,22 +622,24 @@ def regenerate_setup_section(
+             "target": target,
+             "mode": "preview",
+             "before": before,
+-            "after": after,
++            "after": regenerated,
+             "diff": diff,
++            "summary": diff.get("summary", []),
++            "rationale": build_regeneration_rationale(target, normalized_payload, regenerated),
+             "apply_token": token,
+         }
+ 
+     # ── Apply mode ──────────────────────────────────────────────────────
+-    # If an apply_token is provided, try to use cached regenerated data
+-    regenerated = None
+-    if apply_token:
+-        cached = _pop_preview(apply_token)
+-        if cached and cached.get("target") == target:
+-            regenerated = cached["regenerated"]
+-
+-    # If no cached data, regenerate fresh
+-    if regenerated is None:
+-        regenerated = _run_regeneration(normalized_payload, target)
++    # Strict apply_token validation
++    preview = _pop_preview(apply_token)
++    if not preview:
++        return {"success": False, "error": "Invalid or expired apply_token"}
++    if preview.get("target") != target:
++        return {"success": False, "error": "Mismatched regeneration target"}
++    if preview.get("setup_id") != normalized_payload.get("setup_id"):
++        return {"success": False, "error": "Mismatched setup for apply_token"}
++
++    regenerated = preview.get("after")
+ 
+     next_payload = _apply_regenerated_section(
+         normalized_payload, target, regenerated, strategy=effective_strategy,
+@@ -623,12 +650,12 @@ def regenerate_setup_section(
+         "success": True,
+         "target": target,
+         "mode": "apply",
+-        "apply_strategy": effective_strategy,
+         "updated_setup": next_payload,
+         "regenerated": regenerated,
+         "validation": prepared.get("validation"),
+         "preview": prepared.get("preview"),
+         "resolved_context": prepared.get("resolved_context"),
++        "rationale": build_regeneration_rationale(target, normalized_payload, regenerated),
+     }
+ 
+ 
+@@ -740,6 +767,7 @@ def regenerate_single_item(
+         "validation": prepared.get("validation"),
+         "preview": prepared.get("preview"),
+         "resolved_context": prepared.get("resolved_context"),
++        "rationale": build_regeneration_rationale(target, normalized_payload, [after_item]),
+     }
+ 
+ 
+diff --git a/src/static/rpg/adventureBuilder.css b/src/static/rpg/adventureBuilder.css
+index 163e4e9..b67d813 100644
+--- a/src/static/rpg/adventureBuilder.css
++++ b/src/static/rpg/adventureBuilder.css
+@@ -546,3 +546,13 @@
+     padding-top: 8px;
+     border-top: 1px solid rgba(255, 255, 255, 0.06);
+ }
++
++/* Regeneration rationale */
++.ab-regen-rationale {
++    margin: 0 0 12px;
++    padding: 10px 12px;
++    border-radius: 10px;
++    background: rgba(255,255,255,0.05);
++    border: 1px solid rgba(255,255,255,0.08);
++    line-height: 1.4;
++}
+diff --git a/src/static/rpg/adventureBuilder.js b/src/static/rpg/adventureBuilder.js
+index cba79a8..48c7af0 100644
+--- a/src/static/rpg/adventureBuilder.js
++++ b/src/static/rpg/adventureBuilder.js
+@@ -912,6 +912,8 @@ var AdventureBuilder = (function () {
+         _markDirty();
+ 
+         state.regenerating = target;
++        state.regen.target = target;
++        state.regen.loading = true;
+         _setRegenerationButtonsDisabled(true, target);
+ 
+         // Phase 1.4A: Always start with preview mode
+@@ -919,15 +921,21 @@ var AdventureBuilder = (function () {
+             if (!res || !res.success) {
+                 alert((res && res.error) || 'Regeneration failed.');
+                 state.regenerating = null;
++                state.regen.loading = false;
+                 _setRegenerationButtonsDisabled(false, null);
+                 return;
+             }
+ 
++            // Store preview in normalized state
++            state.regen.preview = res;
++            state.regen.modalOpen = true;
++
+             // Show diff preview modal; user chooses apply/cancel/strategy
+             _showRegenPreviewModal(target, res);
+         }).catch(function () {
+             alert('Regeneration failed.');
+             state.regenerating = null;
++            state.regen.loading = false;
+             _setRegenerationButtonsDisabled(false, null);
+         });
+     }
+@@ -935,6 +943,9 @@ var AdventureBuilder = (function () {
+     function _showRegenPreviewModal(target, previewRes) {
+         var diff = previewRes.diff || {};
+         var summary = (diff.summary || []);
++        var rationale = previewRes.rationale
++            ? '<div class="ab-regen-rationale">' + _esc(previewRes.rationale) + '</div>'
++            : '';
+ 
+         var hasMerge = !!MERGE_TARGETS[target];
+         var hasAppend = !!APPEND_TARGETS[target];
+@@ -942,6 +953,7 @@ var AdventureBuilder = (function () {
+         var html = '<div class="ab-modal-overlay" id="abRegenModal">' +
+             '<div class="ab-modal">' +
+             '<h3>Preview: Regenerate ' + _esc(target) + '</h3>' +
++            rationale +
+             '<div class="ab-diff-summary">';
+ 
+         if (summary.length) {
+@@ -969,7 +981,8 @@ var AdventureBuilder = (function () {
+             html += '<button class="ab-btn ab-btn-secondary" id="abRegenApplyAppend">\u2795 Append</button>';
+         }
+ 
+-        html += '<button class="ab-btn ab-btn-cancel" id="abRegenCancel">\u274C Cancel</button>' +
++        html += '<button class="ab-btn ab-btn-secondary" id="abRegenRetry">\u267B Regenerate Again</button>' +
++            '<button class="ab-btn ab-btn-cancel" id="abRegenCancel">\u274C Cancel</button>' +
+             '</div></div></div>';
+ 
+         // Append modal to overlay
+@@ -1003,8 +1016,33 @@ var AdventureBuilder = (function () {
+         modal.querySelector('#abRegenCancel').addEventListener('click', function () {
+             _closeRegenModal(modal);
+             state.regenerating = null;
++            state.regen.modalOpen = false;
++            state.regen.preview = null;
+             _setRegenerationButtonsDisabled(false, null);
+         });
++
++        modal.querySelector('#abRegenRetry').addEventListener('click', function () {
++            _closeRegenModal(modal);
++            state.regen.modalOpen = false;
++            state.regen.preview = null;
++            _handleRegenerate(target);
++        });
++
++        // Keyboard shortcuts
++        modal.addEventListener('keydown', function (e) {
++            if (e.key === 'Escape') {
++                modal.remove();
++                state.regen.modalOpen = false;
++                state.regen.preview = null;
++            } else if (e.key === 'Enter') {
++                var primary = modal.querySelector('[data-strategy="replace"]') || modal.querySelector('#abRegenApplyReplace');
++                if (primary) primary.click();
++            }
++        });
++
++        // Make modal focusable for keyboard events
++        modal.tabIndex = -1;
++        modal.focus();
+     }
+ 
+     function _closeRegenModal(modal) {
+@@ -1023,6 +1061,8 @@ var AdventureBuilder = (function () {
+             timestamp: Date.now()
+         });
+ 
++        state.regen.loading = true;
++
+         AdventureBuilderApi.regenerateSection(target, state.setup, {
+             mode: 'apply',
+             apply_token: applyToken,
+@@ -1047,6 +1087,10 @@ var AdventureBuilder = (function () {
+                 resolved_context: res.resolved_context || null
+             };
+ 
++            // Clear regen state
++            state.regen.preview = null;
++            state.regen.modalOpen = false;
++
+             _saveDraft();
+             _renderStep();
+             _runValidation();
+@@ -1055,6 +1099,7 @@ var AdventureBuilder = (function () {
+             alert('Regeneration failed.');
+         }).finally(function () {
+             state.regenerating = null;
++            state.regen.loading = false;
+             _setRegenerationButtonsDisabled(false, null);
+         });
+     }
+@@ -1082,10 +1127,14 @@ var AdventureBuilder = (function () {
+         var changedFields = diff.changed_fields || [];
+         var before = res.before || {};
+         var after = res.after || {};
++        var rationale = res.rationale
++            ? '<div class="ab-regen-rationale">' + _esc(res.rationale) + '</div>'
++            : '';
+ 
+         var html = '<div class="ab-modal-overlay" id="abItemRegenModal">' +
+             '<div class="ab-modal">' +
+             '<h3>Preview: Regenerate ' + _esc(itemId) + '</h3>' +
++            rationale +
+             '<div class="ab-diff-detail">';
+ 
+         if (!changedFields.length) {
+@@ -1105,6 +1154,7 @@ var AdventureBuilder = (function () {
+         html += '</div>' +
+             '<div class="ab-modal-actions">' +
+             '<button class="ab-btn ab-btn-primary" id="abItemApply">\u2705 Apply</button>' +
++            '<button class="ab-btn ab-btn-secondary" id="abItemRetry">\u267B Regenerate Again</button>' +
+             '<button class="ab-btn ab-btn-cancel" id="abItemCancel">\u274C Cancel</button>' +
+             '</div></div></div>';
+ 
+@@ -1142,9 +1192,49 @@ var AdventureBuilder = (function () {
+             _runValidation();
+         });
+ 
++        modal.querySelector('#abItemRetry').addEventListener('click', function () {
++            _closeRegenModal(modal);
++            _handleRegenerateItem(target, itemId);
++        });
++
+         modal.querySelector('#abItemCancel').addEventListener('click', function () {
+             _closeRegenModal(modal);
+         });
++
++        // Keyboard shortcuts for item modal
++        modal.addEventListener('keydown', function (e) {
++            if (e.key === 'Escape') {
++                modal.remove();
++            } else if (e.key === 'Enter') {
++                var primary = modal.querySelector('#abItemApply');
++                if (primary) primary.click();
++            }
++        });
++
++        // Make modal focusable for keyboard events
++        modal.tabIndex = -1;
++        modal.focus();
++    }
++
++    // ── Single-item regeneration with loading state ─────────────────────
++
++    function _handleRegenerateItem(target, itemId) {
++        _readCurrentStepIntoSetup();
++        _markDirty();
++        state.regen.loading = true;
++
++        AdventureBuilderApi.regenerateItem(target, itemId, state.setup).then(function (res) {
++            if (!res || !res.success) {
++                alert((res && res.error) || 'Item regeneration failed.');
++                return;
++            }
++
++            _showItemDiffModal(target, itemId, res);
++        }).catch(function () {
++            alert('Item regeneration failed.');
++        }).finally(function () {
++            state.regen.loading = false;
++        });
+     }
+ 
+     // ── Undo last regeneration (Phase 1.4D) ───────────────────────────
+@@ -1157,6 +1247,11 @@ var AdventureBuilder = (function () {
+         }
+         state.setup = entry.beforeSetup;
+         setup = state.setup;
++
++        // Clear regen state on undo
++        state.regen.preview = null;
++        state.regen.modalOpen = false;
++
+         _saveDraft();
+         _renderStep();
+         _runValidation();
+diff --git a/src/static/rpg/adventureBuilderState.js b/src/static/rpg/adventureBuilderState.js
+index 87d57ed..1a57f6e 100644
+--- a/src/static/rpg/adventureBuilderState.js
++++ b/src/static/rpg/adventureBuilderState.js
+@@ -55,7 +55,13 @@ var AdventureBuilderState = (function () {
+             preview: null,
+             lastError: null,
+             /** Phase 1.4D — Undo stack for regeneration rollbacks */
+-            history: []
++            history: [],
++            regen: {
++                target: null,
++                preview: null,
++                modalOpen: false,
++                loading: false
++            }
+         };
+     }
+ 
+@@ -134,7 +140,7 @@ var AdventureBuilderState = (function () {
+     }
+ 
+     /** Phase 1.4D — Push a snapshot onto the undo stack before applying a regeneration. */
+-    var MAX_HISTORY = 20;
++    var MAX_HISTORY = 10;
+ 
+     function pushHistory(state, entry) {
+         if (!state.history) state.history = [];
+diff --git a/src/tests/unit/rpg/test_phase91_creator_partial_regeneration.py b/src/tests/unit/rpg/test_phase91_creator_partial_regeneration.py
+index ff87097..bf8826f 100644
+--- a/src/tests/unit/rpg/test_phase91_creator_partial_regeneration.py
++++ b/src/tests/unit/rpg/test_phase91_creator_partial_regeneration.py
+@@ -32,6 +32,21 @@ def _minimal_setup(**overrides):
+     return payload
+ 
+ 
++def _preview_and_apply(payload, target):
++    """Two-step preview → apply using the new strict token contract."""
++    from app.rpg.services.adventure_builder_service import regenerate_setup_section
++
++    # Step 1: Preview to get a valid token
++    preview = regenerate_setup_section(payload, target, mode="preview")
++    assert preview["success"] is True
++    token = preview["apply_token"]
++
++    # Step 2: Apply using the token — use mode="apply" explicitly
++    return regenerate_setup_section(
++        payload, target, mode="apply", apply_token=token,
++    )
++
++
+ def _assert_success_contract(result, target):
+     assert result["success"] is True
+     assert result["target"] == target
+@@ -80,7 +95,7 @@ class TestRegenerateSetupSection:
+                 "tags": [],
+             }],
+         )
+-        result = regenerate_setup_section(payload, "factions")
++        result = _preview_and_apply(payload, "factions")
+ 
+         _assert_success_contract(result, "factions")
+         updated = result["updated_setup"]
+@@ -107,7 +122,7 @@ class TestRegenerateSetupSection:
+                 "goals": [],
+             }],
+         )
+-        result = regenerate_setup_section(payload, "locations")
++        result = _preview_and_apply(payload, "locations")
+ 
+         _assert_success_contract(result, "locations")
+         # Original faction should remain intact
+@@ -132,7 +147,7 @@ class TestRegenerateSetupSection:
+                 "must_survive": False,
+             }],
+         )
+-        result = regenerate_setup_section(payload, "npc_seeds")
++        result = _preview_and_apply(payload, "npc_seeds")
+ 
+         _assert_success_contract(result, "npc_seeds")
+         # Other sections should remain intact
+@@ -142,10 +157,8 @@ class TestRegenerateSetupSection:
+         assert updated["npc_seeds"] == result["regenerated"]
+ 
+     def test_regenerate_opening_updates_start_state(self):
+-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
+-
+         payload = _minimal_setup()
+-        result = regenerate_setup_section(payload, "opening")
++        result = _preview_and_apply(payload, "opening")
+ 
+         _assert_success_contract(result, "opening")
+         updated = result["updated_setup"]
+@@ -162,10 +175,8 @@ class TestRegenerateSetupSection:
+             assert updated["starting_npc_ids"] == resolved["npc_ids"]
+ 
+     def test_regenerate_threads_returns_threads(self):
+-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
+-
+         payload = _minimal_setup()
+-        result = regenerate_setup_section(payload, "threads")
++        result = _preview_and_apply(payload, "threads")
+ 
+         _assert_success_contract(result, "threads")
+         # Threads should be stored in metadata for preview
+@@ -194,6 +205,40 @@ class TestRegenerateSetupSection:
+         assert result["error"] == "Setup has blocking validation issues"
+         assert result["validation"]["blocking"] is True
+ 
++    def test_invalid_preview_token_returns_error(self):
++        from app.rpg.services.adventure_builder_service import regenerate_setup_section
++
++        result = regenerate_setup_section(
++            _minimal_setup(), "factions", mode="apply", apply_token="bogus_token"
++        )
++
++        assert result["success"] is False
++        assert "Invalid or expired apply_token" in result["error"]
++
++    def test_mismatched_target_returns_error(self):
++        from app.rpg.services.adventure_builder_service import regenerate_setup_section
++
++        # Get a preview for factions
++        preview = regenerate_setup_section(_minimal_setup(), "factions", mode="preview")
++        token = preview["apply_token"]
++
++        # Try to apply it for locations — should fail
++        result = regenerate_setup_section(
++            _minimal_setup(), "locations", mode="apply", apply_token=token
++        )
++
++        assert result["success"] is False
++        assert "Mismatched regeneration target" in result["error"]
++
++    def test_preview_response_includes_rationale(self):
++        from app.rpg.services.adventure_builder_service import regenerate_setup_section
++
++        result = regenerate_setup_section(_minimal_setup(), "factions", mode="preview")
++        assert result["success"] is True
++        assert "rationale" in result
++        assert isinstance(result["rationale"], str)
++        assert len(result["rationale"]) > 0
++
+ 
+ class TestApplyRegeneratedSection:
+     """Direct tests for the merge helper to lock exact apply semantics."""
+@@ -277,63 +322,65 @@ class TestRegenerateEndpoint:
+             if not target:
+                 return jsonify({"success": False, "error": "Missing target", "validation": {"blocking": False}}), 400
+             setup = data.get("setup", {})
+-            result = regenerate_setup_section(setup, target)
++            # Support preview → apply flow
++            mode = data.get("mode", "apply")
++            apply_token = data.get("apply_token")
++            result = regenerate_setup_section(setup, target, mode=mode, apply_token=apply_token)
+             http_status = 200 if result["success"] else 400
+             return jsonify(result), http_status
+ 
+         with app.test_client() as client:
+             yield client
+ 
++    def _preview_then_apply(self, client, target, setup=None):
++        """Helper to perform the two-step preview => apply contract via endpoint.
++
++        Uses the same setup payload for both calls so setup_id matches.
++        """
++        setup = setup or _minimal_setup()
++        # Step 1: Preview
++        preview_resp = client.post("/api/rpg/adventure/regenerate", json={
++            "target": target,
++            "setup": setup,
++            "mode": "preview",
++        })
++        assert preview_resp.status_code == 200, preview_resp.get_data(as_text=True)
++        preview_data = preview_resp.get_json()
++        assert "apply_token" in preview_data
++
++        # Step 2: Apply with token — reuse same setup object
++        apply_resp = client.post("/api/rpg/adventure/regenerate", json={
++            "target": target,
++            "setup": setup,
++            "mode": "apply",
++            "apply_token": preview_data["apply_token"],
++        })
++        assert apply_resp.status_code == 200, apply_resp.get_data(as_text=True)
++        return apply_resp.get_json()
++
+     def test_regenerate_factions_via_endpoint(self, client):
+-        payload = {
+-            "target": "factions",
+-            "setup": _minimal_setup(),
+-        }
+-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
+-        assert resp.status_code == 200
+-        data = resp.get_json()
++        data = self._preview_then_apply(client, "factions")
+         _assert_success_contract(data, "factions")
++        assert isinstance(data["updated_setup"].get("factions"), list)
+ 
+     def test_regenerate_locations_via_endpoint(self, client):
+-        payload = {
+-            "target": "locations",
+-            "setup": _minimal_setup(),
+-        }
+-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
+-        assert resp.status_code == 200
+-        data = resp.get_json()
++        data = self._preview_then_apply(client, "locations")
+         _assert_success_contract(data, "locations")
++        assert isinstance(data["updated_setup"].get("locations"), list)
+ 
+     def test_regenerate_npc_seeds_via_endpoint(self, client):
+-        payload = {
+-            "target": "npc_seeds",
+-            "setup": _minimal_setup(),
+-        }
+-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
+-        assert resp.status_code == 200
+-        data = resp.get_json()
++        data = self._preview_then_apply(client, "npc_seeds")
+         _assert_success_contract(data, "npc_seeds")
++        assert isinstance(data["updated_setup"].get("npc_seeds"), list)
+ 
+     def test_regenerate_opening_via_endpoint(self, client):
+-        payload = {
+-            "target": "opening",
+-            "setup": _minimal_setup(),
+-        }
+-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
+-        assert resp.status_code == 200
+-        data = resp.get_json()
++        data = self._preview_then_apply(client, "opening")
+         _assert_success_contract(data, "opening")
+         metadata = data["updated_setup"].get("metadata", {})
+         assert "regenerated_opening" in metadata
+ 
+     def test_regenerate_threads_via_endpoint(self, client):
+-        payload = {
+-            "target": "threads",
+-            "setup": _minimal_setup(),
+-        }
+-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
+-        assert resp.status_code == 200
+-        data = resp.get_json()
++        data = self._preview_then_apply(client, "threads")
+         _assert_success_contract(data, "threads")
+         assert data["updated_setup"]["metadata"]["regenerated_threads"] == data["regenerated"]
+ 
+@@ -363,6 +410,33 @@ class TestRegenerateEndpoint:
+         )
+         assert resp.status_code == 400
+ 
++    def test_preview_mode_returns_token(self, client):
++        payload = {
++            "target": "factions",
++            "setup": _minimal_setup(),
++            "mode": "preview",
++        }
++        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
++        assert resp.status_code == 200
++        data = resp.get_json()
++        assert "apply_token" in data
++        assert "before" in data
++        assert "after" in data
++        assert "diff" in data
++
++    def test_apply_with_invalid_token_returns_400(self, client):
++        payload = {
++            "target": "factions",
++            "setup": _minimal_setup(),
++            "mode": "apply",
++            "apply_token": "invalid",
++        }
++        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
++        assert resp.status_code == 400
++        data = resp.get_json()
++        assert data["success"] is False
++        assert "Invalid or expired apply_token" in data["error"]
++
+ 
+ # ─────────────────────────────────────────────────────────────
+ # Merge semantics tests
+@@ -373,13 +447,11 @@ class TestMergeSemantics:
+     """Verify that regeneration only touches the requested section."""
+ 
+     def test_factions_replace_preserves_other_sections(self):
+-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
+-
+         payload = _minimal_setup(
+             factions=[{"faction_id": "old", "name": "Old", "description": "x", "goals": []}],
+             locations=[{"location_id": "loc_a", "name": "Alpha", "description": "desc", "tags": []}],
+         )
+-        result = regenerate_setup_section(payload, "factions")
++        result = _preview_and_apply(payload, "factions")
+         _assert_success_contract(result, "factions")
+ 
+         updated = result["updated_setup"]
+@@ -390,10 +462,8 @@ class TestMergeSemantics:
+         _assert_core_fields_preserved(payload, updated)
+ 
+     def test_opening_updates_start_state_fields(self):
+-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
+-
+         payload = _minimal_setup()
+-        result = regenerate_setup_section(payload, "opening")
++        result = _preview_and_apply(payload, "opening")
+         _assert_success_contract(result, "opening")
+ 
+         updated = result["updated_setup"]
+@@ -409,10 +479,8 @@ class TestMergeSemantics:
+         _assert_core_fields_preserved(payload, updated)
+ 
+     def test_threads_land_in_metadata(self):
+-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
+-
+         payload = _minimal_setup()
+-        result = regenerate_setup_section(payload, "threads")
++        result = _preview_and_apply(payload, "threads")
+         _assert_success_contract(result, "threads")
+ 
+         updated = result["updated_setup"]

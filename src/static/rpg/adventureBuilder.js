@@ -848,7 +848,7 @@ var AdventureBuilder = (function () {
 
     function _renderStep5Simulation(contentEl) {
         var wi = state.worldInspection || {};
-        var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false };
+        var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false, lastEvents: [], lastConsequences: [] };
         var simState = rt.state;
         var tickLabel = simState ? simState.tick : '—';
         var stepping = rt.stepping;
@@ -860,6 +860,27 @@ var AdventureBuilder = (function () {
         html += '<button id="abSimAdvance" class="ab-btn ab-btn-primary ab-btn-sm"' + (stepping ? ' disabled' : '') + '>\u23ED Advance Simulation</button>';
         html += '<span class="ab-sim-tick-badge">Tick: <strong>' + _esc(String(tickLabel)) + '</strong></span>';
         html += '</div>';
+
+        // ── Simulation history timeline ──
+        if (simState && simState.history && simState.history.length) {
+            html += '<div class="ab-sim-history">';
+            html += '<h5>Simulation History</h5>';
+            simState.history.slice(-5).forEach(function (h) {
+                var changeInfo = '';
+                if (h.changes) {
+                    var parts = [];
+                    if (h.changes.threads) parts.push(h.changes.threads + ' thread' + (h.changes.threads !== 1 ? 's' : ''));
+                    if (h.changes.factions) parts.push(h.changes.factions + ' faction' + (h.changes.factions !== 1 ? 's' : ''));
+                    if (h.changes.locations) parts.push(h.changes.locations + ' location' + (h.changes.locations !== 1 ? 's' : ''));
+                    if (parts.length) changeInfo = ' <span class="ab-sim-history-changes">(' + parts.join(', ') + ')</span>';
+                }
+                html += '<div class="ab-sim-history-row">';
+                html += '<span class="ab-sim-history-tick">Tick ' + h.tick + '</span>' + changeInfo;
+                html += '<span class="ab-sim-history-summary">' + _esc((h.summary || []).join(', ')) + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
 
         // ── Last-step summary ──
         if (rt.lastSummary && rt.lastSummary.length) {
@@ -882,7 +903,13 @@ var AdventureBuilder = (function () {
         // Render simulation diff if available
         var diffPanel = contentEl.querySelector('#abSimDiffPanel');
         if (diffPanel && rt.lastDiff) {
-            AdventureBuilderTimeline.renderSimulationDiff(diffPanel, rt.lastDiff, rt.lastSummary || []);
+            AdventureBuilderTimeline.renderSimulationDiff(
+                diffPanel,
+                rt.lastDiff,
+                rt.lastSummary || [],
+                rt.lastEvents,
+                rt.lastConsequences
+            );
         }
 
         // Render the static simulation summary
@@ -924,6 +951,8 @@ var AdventureBuilder = (function () {
                 wi.simulationRuntime.state = res.simulation_state || null;
                 wi.simulationRuntime.lastDiff = res.simulation_diff || null;
                 wi.simulationRuntime.lastSummary = res.summary || [];
+                wi.simulationRuntime.lastEvents = res.events || [];
+                wi.simulationRuntime.lastConsequences = res.consequences || [];
                 // Capture snapshot
                 var tick = (res.simulation_state && res.simulation_state.tick) || '?';
                 _captureWorldSnapshot('After Simulation Tick ' + tick);

@@ -443,22 +443,50 @@ var AdventureBuilderTimeline = (function () {
      * @param {HTMLElement} container - DOM element to render into
      * @param {Object} diff - Simulation diff from backend
      * @param {string[]} summary - Summary lines from backend
+     * @param {Object[]} events - Events generated from diff
+     * @param {Object[]} consequences - Consequences generated from events
      */
-    function renderSimulationDiff(container, diff, summary) {
+    function renderSimulationDiff(container, diff, summary, events, consequences) {
         if (!container) return;
         diff = diff || {};
         summary = summary || [];
+        events = events || [];
+        consequences = consequences || [];
 
         var html = '<div class="ab-sim-diff">';
         html += '<h5>Simulation Diff — Tick ' + _esc(String(diff.tick_before || 0)) + ' → ' + _esc(String(diff.tick_after || 0)) + '</h5>';
 
         // Summary lines
         if (summary.length) {
-            html += '<ul class="ab-sim-diff-summary">';
+            html += '<div class="ab-sim-summary">';
             summary.forEach(function (line) {
-                html += '<li>' + _esc(line) + '</li>';
+                html += '<div class="ab-sim-summary-line">' + _esc(line) + '</div>';
             });
-            html += '</ul>';
+            html += '</div>';
+        }
+
+        // Events
+        if (events.length) {
+            html += '<div class="ab-sim-events"><h5>Events</h5>';
+            events.forEach(function (evt) {
+                html += '<div class="ab-sim-event-card ab-sim-event-' + _esc(evt.severity || 'neutral') + '">' +
+                    '<div class="ab-sim-event-type">' + _esc(evt.type || 'event') + '</div>' +
+                    '<div class="ab-sim-event-summary">' + _esc(evt.summary || '') + '</div>' +
+                '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Consequences
+        if (consequences.length) {
+            html += '<div class="ab-sim-consequences"><h5>Consequences</h5>';
+            consequences.forEach(function (c) {
+                html += '<div class="ab-sim-consequence-card">' +
+                    '<div class="ab-sim-event-type">' + _esc(c.type || 'consequence') + '</div>' +
+                    '<div class="ab-sim-event-summary">' + _esc(c.summary || '') + '</div>' +
+                '</div>';
+            });
+            html += '</div>';
         }
 
         // Threads changed
@@ -512,7 +540,7 @@ var AdventureBuilderTimeline = (function () {
             html += '</div>';
         }
 
-        if (!threads.length && !factions.length && !locations.length) {
+        if (!threads.length && !factions.length && !locations.length && !events.length && !consequences.length) {
             html += '<p class="ab-muted">No changes in this tick.</p>';
         }
 

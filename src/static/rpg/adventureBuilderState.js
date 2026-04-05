@@ -95,7 +95,9 @@ var AdventureBuilderState = (function () {
                     state: null,
                     lastDiff: null,
                     lastSummary: [],
-                    stepping: false
+                    stepping: false,
+                    lastEvents: [],
+                    lastConsequences: []
                 }
             }
         };

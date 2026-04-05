@@ -1,0 +1,1692 @@
+diff --git a/rpg-design.txt b/rpg-design.txt
+index 91c7384..1f382ef 100644
+--- a/rpg-design.txt
++++ b/rpg-design.txt
+@@ -1,609 +1,533 @@
+-Here is the Phase 7.3 — Scene Execution Layer file-by-file implementation spec for the coding LLM.
+-
+-This phase turns your current control layer into a full gameplay loop:
+-
+-ChoiceSet / ChoiceOption exist
+-GM and pacing/framing can shape options
+-now player choice must resolve into structured events
+-those events must flow through EventBus
+-CoherenceCore must absorb them
+-director/renderer then consume updated truth
+-
+-The key rule for 7.3:
+-
+-Option selection never mutates state directly.
+-It resolves into events, and existing reducers/system boundaries remain the authority path.
+-
+-This preserves:
+-
+-determinism
+-replay/snapshot safety
+-coherence authority
+-inspectability/debugging
+-Phase 7.3 goals
+-Main outcomes
+-Structured action resolution
+-selecting an option results in an explicit ResolvedAction
+-that action emits deterministic events
+-Option types gain gameplay meaning
+-investigate_thread
+-talk_to_npc
+-travel_to_location
+-press_for_reveal
+-reduce_tension
+-request_recap
+-Consequences become explicit
+-not just prose
+-not direct state mutation
+-emitted as structured events
+-Scene transitions become formalized
+-especially location travel and focus changes
+-Action traces become inspectable
+-“why did this action emit these events?”
+-useful for debugging and GM tools later
+-New package
+-
+-Create:
+-
+-src/app/rpg/execution/__init__.py
+-src/app/rpg/execution/models.py
+-src/app/rpg/execution/intent_mapping.py
+-src/app/rpg/execution/consequences.py
+-src/app/rpg/execution/transitions.py
+-src/app/rpg/execution/resolver.py
+-
+-Keep execution separate from:
+-
+-creator setup
+-narrative renderer
+-coherence core
+-File-by-file implementation
+-src/app/rpg/execution/__init__.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Exports:
+-
+-ResolvedAction
+-ActionResolutionResult
+-ActionConsequence
+-SceneTransition
+-ActionIntentMapper
+-ConsequenceBuilder
+-SceneTransitionBuilder
+-ActionResolver
+-src/app/rpg/execution/models.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Purpose:
+-
+-explicit structured models for action resolution
+-Dataclasses
+-ActionConsequence
+-
+-Fields:
+-
+-consequence_id: str
+-consequence_type: str
+-summary: str
+-event_type: str
+-payload: dict[str, Any]
+-metadata: dict[str, Any] = field(default_factory=dict)
+-
+-Methods:
+-
+-to_dict(self) -> dict
+-@classmethod from_dict(cls, data: dict) -> "ActionConsequence"
+-SceneTransition
+-
+-Fields:
+-
+-transition_id: str
+-transition_type: str
+-from_location: str | None
+-to_location: str | None
+-summary: str
+-metadata: dict[str, Any] = field(default_factory=dict)
+-
+-Methods:
+-
+-to_dict(self) -> dict
+-@classmethod from_dict(cls, data: dict) -> "SceneTransition"
+-ResolvedAction
+-
+-Fields:
+-
+-action_id: str
+-option_id: str
+-intent_type: str
+-target_id: str | None
+-summary: str
+-consequences: list[ActionConsequence] = field(default_factory=list)
+-transition: SceneTransition | None = None
+-metadata: dict[str, Any] = field(default_factory=dict)
+-
+-Methods:
+-
+-to_dict(self) -> dict
+-@classmethod from_dict(cls, data: dict) -> "ResolvedAction"
+-ActionResolutionResult
+-
+-Fields:
+-
+-resolved_action: ResolvedAction
+-events: list[dict] = field(default_factory=list)
+-trace: dict[str, Any] = field(default_factory=dict)
+-
+-Methods:
+-
+-to_dict(self) -> dict
+-@classmethod from_dict(cls, data: dict) -> "ActionResolutionResult"
+-Important rule
+-
+-These models are not the state owner. They are resolution artifacts.
+-
+-src/app/rpg/execution/intent_mapping.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Purpose:
+-
+-map ChoiceOption.intent_type into resolution categories and defaults
+-Class
+-
+-ActionIntentMapper
+-
+-Methods
+-map_option(self, option: Any) -> dict
+-_map_investigate_thread(self, option: Any) -> dict
+-_map_talk_to_npc(self, option: Any) -> dict
+-_map_travel_to_location(self, option: Any) -> dict
+-_map_request_recap(self, option: Any) -> dict
+-_map_default(self, option: Any) -> dict
+-Behavior
+-
+-Example output:
+-
+-{
+-    "intent_type": "investigate_thread",
+-    "resolution_type": "thread_progress",
+-    "target_id": "thread_x",
+-    "summary": "Investigate unresolved thread thread_x",
+-}
+-
+-This keeps resolution logic cleaner and makes it easier to extend new option types later.
+-
+-src/app/rpg/execution/consequences.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Purpose:
+-
+-build deterministic consequences from mapped action intents
+-Class
+-
+-ConsequenceBuilder
+-
+-Methods
+-build(self, mapped_action: dict, coherence_core: Any, gm_state: Any) -> list[ActionConsequence]
+-_build_thread_progress_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+-_build_social_contact_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+-_build_location_travel_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+-_build_recap_consequences(self, mapped_action: dict, coherence_core: Any) -> list[ActionConsequence]
+-_make_consequence(self, consequence_id: str, consequence_type: str, summary: str, event_type: str, payload: dict[str, Any], metadata: dict[str, Any] | None = None) -> ActionConsequence
+-Behavior by option type
+-investigate_thread
+-
+-Emit consequences like:
+-
+-thread_progressed
+-possibly scene_fact_established for a lead/clue placeholder if appropriate
+-do not invent hidden content yet; keep simple
+-talk_to_npc
+-
+-Emit:
+-
+-npc_interaction_started
+-possibly commitment_created if your current reducers support it later
+-for now keep it minimal and structured
+-travel_to_location
+-
+-Emit:
+-
+-scene_transition_requested
+-npc_moved only if your system currently uses player as actor analog; otherwise avoid fake actor facts
+-prefer explicit scene transition event
+-request_recap
+-
+-Emit:
+-
+-recap_requested
+-Important rule
+-
+-Only emit supported, meaningful events. Do not invent many new event types unless you also integrate reducers/consumers for them.
+-
+-src/app/rpg/execution/transitions.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Purpose:
+-
+-build explicit scene transitions when an action changes the scene
+-Class
+-
+-SceneTransitionBuilder
+-
+-Methods
+-build(self, mapped_action: dict, coherence_core: Any) -> SceneTransition | None
+-_build_location_transition(self, mapped_action: dict, coherence_core: Any) -> SceneTransition | None
+-Behavior
+-
+-For travel actions:
+-
+-inspect current scene summary location
+-build a transition record from current → target location
+-
+-This is mainly for traceability and downstream scene execution clarity.
+-
+-src/app/rpg/execution/resolver.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Purpose:
+-
+-main entrypoint for resolving a selected ChoiceOption
+-Class
+-
+-ActionResolver
+-
+-Methods
+-__init__(self, intent_mapper: ActionIntentMapper | None = None, consequence_builder: ConsequenceBuilder | None = None, transition_builder: SceneTransitionBuilder | None = None) -> None
+-resolve_choice(self, option: Any, coherence_core: Any, gm_state: Any) -> ActionResolutionResult
+-_resolved_action_id(self, option: Any) -> str
+-_build_events(self, consequences: list[ActionConsequence], transition: SceneTransition | None) -> list[dict]
+-Behavior
+-map option intent
+-build consequences
+-build scene transition if needed
+-transform consequences + transition into event list
+-return structured ActionResolutionResult
+-Event output shape
+-
+-Each emitted event should be dict-like and ready for EventBus.emit(Event(...))
+-
+-Example:
+-
+-{
+-    "type": "thread_progressed",
+-    "payload": {
+-        "thread_id": "thread_x",
+-        "source": "action_resolver",
+-    }
+-}
+-Important rule
+-
+-Do not directly call coherence methods here.
+-Return events only.
+-
+-Modify existing control layer
+-src/app/rpg/control/models.py
+-
+-Diff path:
+-
+-MODIFY EXISTING FILE
+-
+-Purpose:
+-
+-make choice options usable for resolution and UI continuity
+-Add fields to ChoiceOption
+-selected: bool = False
+-resolution_type: str | None = None
+-
+-Update:
+-
+-to_dict()
+-from_dict()
+-Why
+-
+-This helps:
+-
+-action resolver
+-future UI selection state
+-stable option-to-action semantics
+-src/app/rpg/control/option_engine.py
+-
+-Diff path:
+-
+-MODIFY EXISTING FILE
+-
+-Purpose:
+-
+-enrich generated options with resolution_type
+-Update _make_option(...)
+-
+-Add param:
+-
+-resolution_type: str | None = None
+-Update option builders
+-
+-Set:
+-
+-investigate_thread → resolution_type="thread_progress"
+-talk_to_npc → resolution_type="social_contact"
+-travel_to_location → resolution_type="location_travel"
+-request_recap → resolution_type="recap"
+-
+-This keeps action mapping simpler and more stable.
+-
+-src/app/control/controller.py or src/app/rpg/control/controller.py
+-
+-Diff path:
+-
+-MODIFY EXISTING FILE
+-
+-Purpose:
+-
+-allow current choice set retrieval plus future selection context
+-Add methods
+-get_last_choice_set(self) -> dict | None
+-select_option(self, option_id: str) -> dict | None
+-Behavior
+-
+-For now:
+-
+-get_last_choice_set() returns FramingState.last_choice_set
+-select_option(option_id) searches that stored choice set and returns the chosen option dict
+-
+-This is a helper for GameLoop integration.
+-
+-Modify GameLoop
+-src/app/rpg/core/game_loop.py
+-
+-Diff path:
+-
+-MODIFY EXISTING FILE
+-
+-Purpose:
+-
+-integrate action resolution into the live loop
+-Add imports
+-ActionResolver
+-In _init_creator_systems() or appropriate init area
+-
+-Initialize:
+-
+-self.action_resolver = ActionResolver()
+-
+-If you prefer separation, add _init_execution_systems() and register any stateful systems if needed.
+-ActionResolver itself is stateless, so snapshot registration is not required.
+-
+-Add methods
+-get_last_choice_set(self) -> dict | None
+-resolve_selected_option(self, option_id: str) -> dict
+-_emit_action_resolution_events(self, result: dict) -> None
+-Behavior of resolve_selected_option(option_id)
+-get current/last choice set from GameplayControlController
+-find option by option_id
+-resolve with ActionResolver
+-emit resulting events into EventBus
+-apply coherence updates on those action events immediately or on next tick depending on your loop policy
+-Recommended approach
+-
+-For 7.3, keep it simple and explicit:
+-
+-resolve_selected_option(...) should:
+-resolve
+-emit events
+-apply coherence immediately for those action events
+-return the action resolution result
+-
+-That gives you a usable interaction path outside the normal tick loop.
+-
+-Example implementation shape
+-def resolve_selected_option(self, option_id: str) -> dict:
+-    option = self.gameplay_control_controller.select_option(option_id)
+-    if option is None:
+-        return {"ok": False, "reason": "unknown_option", "option_id": option_id}
+-
+-    result = self.action_resolver.resolve_choice(
+-        option=option,
+-        coherence_core=self.coherence_core,
+-        gm_state=self.gm_directive_state,
+-    )
+-
+-    self._emit_action_resolution_events(result.to_dict())
+-    self._apply_coherence_updates_from_action_result(result.to_dict())
+-
+-    return {
+-        "ok": True,
+-        "resolution": result.to_dict(),
+-        "scene_summary": self.coherence_core.get_scene_summary(),
+-    }
+-Add helper
+-_apply_coherence_updates_from_action_result(self, result: dict) -> dict
+-
+-This should extract events and apply them via CoherenceCore.
+-
+-Important rule
+-
+-Do not directly mutate coherence from the option itself. Always go through emitted events.
+-
+-Optional coherence reducer additions
+-src/app/rpg/coherence/reducers.py
+-
+-Diff path:
+-
+-MODIFY EXISTING FILE ONLY IF NEEDED
+-
+-If your current reducers do not already support useful action-generated event types, add minimal reducer coverage for:
+-
+-thread_progressed
+-npc_interaction_started
+-scene_transition_requested
+-recap_requested
+-Suggested reducer methods
+-reduce_thread_progressed(state, event: dict) -> list[CoherenceMutation]
+-reduce_npc_interaction_started(state, event: dict) -> list[CoherenceMutation]
+-reduce_scene_transition_requested(state, event: dict) -> list[CoherenceMutation]
+-reduce_recap_requested(state, event: dict) -> list[CoherenceMutation]
+-
+-Keep them conservative:
+-
+-thread progress updates notes / updated_tick
+-interaction can record a consequence
+-scene transition can push a new anchor or update scene location
+-recap requested can record a consequence only
+-
+-Only add these if needed by your actual resolver event set.
+-
+-Presenters
+-src/app/rpg/creator/presenters.py
+-
+-Diff path:
+-
+-MODIFY EXISTING FILE
+-
+-Purpose:
+-
+-present action resolution results in a UI-safe way
+-Add methods
+-present_action_resolution(self, resolution: dict) -> dict
+-present_scene_transition(self, transition: dict | None) -> dict | None
+-Behavior
+-
+-Output shape:
+-
+-{
+-    "title": "Action Result",
+-    "action": {...},
+-    "events": [...],
+-    "transition": {...} | None,
+-}
+-
+-Do not expose raw internal objects. Use mapped dicts only.
+-
+-Tests
+-src/tests/unit/rpg/test_phase73_scene_execution_unit.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Cover:
+-
+-action model roundtrip
+-intent mapping for each supported option type
+-consequence generation for thread/NPC/location/recap options
+-transition generation for location travel
+-resolver emits deterministic event list
+-stable resolved action ids
+-
+-Suggested tests:
+-
+-test_action_consequence_roundtrip()
+-test_scene_transition_roundtrip()
+-test_resolved_action_roundtrip()
+-test_intent_mapper_maps_thread_option()
+-test_consequence_builder_creates_thread_progress_event()
+-test_transition_builder_creates_location_transition()
+-test_action_resolver_builds_deterministic_events()
+-src/tests/functional/test_phase73_scene_execution_functional.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Cover:
+-
+-resolving a selected option emits events
+-coherence updates after resolution
+-travel option updates scene location via event path
+-request recap emits recap event and produces stable result payload
+-
+-Suggested tests:
+-
+-test_resolve_selected_thread_option_updates_coherence()
+-test_resolve_selected_location_option_updates_scene_summary()
+-test_resolve_unknown_option_returns_error()
+-test_present_action_resolution_returns_ui_safe_shape()
+-src/tests/regression/test_phase73_scene_execution_regression.py
+-
+-Diff path:
+-
+-NEW FILE
+-
+-Cover:
+-
+-resolving same option in same state produces same events
+-resolution does not directly mutate coherence without events
+-choice selection stays stable across snapshot/restore if choice set is preserved
+-resolver does not invent unrelated event types
+-
+-Suggested tests:
+-
+-test_action_resolution_is_deterministic_for_same_choice_set()
+-test_action_resolution_uses_event_path_not_direct_mutation()
+-test_selected_option_resolution_remains_stable_after_restore()
+-test_resolver_emits_only_supported_event_types()
+-Implementation order for coding LLM
+-Commit 1
+-
+-Create execution package:
+-
+-src/app/rpg/execution/__init__.py
+-src/app/rpg/execution/models.py
+-src/app/rpg/execution/intent_mapping.py
+-src/app/rpg/execution/consequences.py
+-src/app/rpg/execution/transitions.py
+-src/app/rpg/execution/resolver.py
+-Commit 2
+-
+-Modify control package:
+-
+-src/app/rpg/control/models.py
+-src/app/rpg/control/option_engine.py
+-src/app/rpg/control/controller.py
+-Commit 3
+-
+-Modify game loop and presenters:
+-
+-src/app/rpg/core/game_loop.py
+-src/app/rpg/creator/presenters.py
+-Commit 4
+-
+-If needed, add minimal reducer support:
+-
+-src/app/rpg/coherence/reducers.py
+-Commit 5
+-
+-Add tests:
+-
+-src/tests/unit/rpg/test_phase73_scene_execution_unit.py
+-src/tests/functional/test_phase73_scene_execution_functional.py
+-src/tests/regression/test_phase73_scene_execution_regression.py
+-Coding rules
+-action resolution must remain deterministic
+-no LLMs in resolution logic
+-no direct coherence mutation from selected options
+-all action effects go through structured emitted events
+-keep scene transitions explicit and inspectable
+-do not over-invent event types; prefer minimal meaningful set
+-keep presenters UI-safe and read-only
+-Short prompt for the coding LLM
+-
+-Implement Phase 7.3 — Scene Execution Layer.
+-
+-Create app.rpg.execution with action resolution models, intent mapping, consequence building, scene transition building, and an ActionResolver. Update the control layer so options include stable resolution_type, and integrate resolve_selected_option(option_id) into GameLoop. Selected options must resolve into deterministic emitted events that then update coherence through the existing event/reducer path. Add unit, functional, and regression tests proving deterministic action resolution, explicit transitions, and event-path-only state updates.
+\ No newline at end of file
++diff --git a/src/app/rpg/creator/world_events.py b/src/app/rpg/creator/world_events.py
++new file mode 100644
++index 0000000..1111111
++--- /dev/null
+++++ b/src/app/rpg/creator/world_events.py
++@@
+++"""Phase 3B — Consequences + Event Generation.
+++
+++Deterministic event/consequence generation from simulation state deltas.
+++No randomness. All events are derived from structured before/after state.
+++"""
+++
+++from __future__ import annotations
+++
+++from typing import Any
+++
+++
+++def _safe_dict(value: Any) -> dict[str, Any]:
+++    return value if isinstance(value, dict) else {}
+++
+++
+++def _safe_list(value: Any) -> list[Any]:
+++    return value if isinstance(value, list) else []
+++
+++
+++def _thread_event(thread_id: str, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
+++    before_pressure = int(before.get("pressure", 0))
+++    after_pressure = int(after.get("pressure", 0))
+++    before_status = before.get("status")
+++    after_status = after.get("status")
+++
+++    if after_pressure > before_pressure:
+++        return {
+++            "event_id": f"evt_thread_escalation_{thread_id}",
+++            "type": "thread_escalation",
+++            "entity_id": thread_id,
+++            "severity": after_status or "active",
+++            "summary": f"Thread {thread_id} escalated from {before_status or 'unknown'} to {after_status or 'unknown'}.",
+++            "details": {
+++                "before_pressure": before_pressure,
+++                "after_pressure": after_pressure,
+++                "before_status": before_status,
+++                "after_status": after_status,
+++            },
+++        }
+++
+++    if after_pressure < before_pressure:
+++        return {
+++            "event_id": f"evt_thread_cooling_{thread_id}",
+++            "type": "thread_cooling",
+++            "entity_id": thread_id,
+++            "severity": after_status or "low",
+++            "summary": f"Thread {thread_id} cooled from {before_status or 'unknown'} to {after_status or 'unknown'}.",
+++            "details": {
+++                "before_pressure": before_pressure,
+++                "after_pressure": after_pressure,
+++                "before_status": before_status,
+++                "after_status": after_status,
+++            },
+++        }
+++
+++    return None
+++
+++
+++def _faction_event(faction_id: str, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
+++    before_status = before.get("status")
+++    after_status = after.get("status")
+++    if before_status == after_status:
+++        return None
+++    return {
+++        "event_id": f"evt_faction_shift_{faction_id}",
+++        "type": "faction_reaction",
+++        "entity_id": faction_id,
+++        "severity": after_status or "stable",
+++        "summary": f"Faction {faction_id} shifted from {before_status or 'unknown'} to {after_status or 'unknown'}.",
+++        "details": {
+++            "before": before,
+++            "after": after,
+++        },
+++    }
+++
+++
+++def _location_event(location_id: str, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any] | None:
+++    before_heat = int(before.get("heat", 0))
+++    after_heat = int(after.get("heat", 0))
+++    before_status = before.get("status")
+++    after_status = after.get("status")
+++
+++    if after_status == "hot" and before_status != "hot":
+++        return {
+++            "event_id": f"evt_location_hot_{location_id}",
+++            "type": "location_hotspot",
+++            "entity_id": location_id,
+++            "severity": "hot",
+++            "summary": f"Location {location_id} became a hotspot.",
+++            "details": {
+++                "before_heat": before_heat,
+++                "after_heat": after_heat,
+++                "before_status": before_status,
+++                "after_status": after_status,
+++            },
+++        }
+++
+++    if after_heat < before_heat:
+++        return {
+++            "event_id": f"evt_location_cooling_{location_id}",
+++            "type": "location_cooling",
+++            "entity_id": location_id,
+++            "severity": after_status or "quiet",
+++            "summary": f"Location {location_id} cooled from {before_status or 'unknown'} to {after_status or 'unknown'}.",
+++            "details": {
+++                "before_heat": before_heat,
+++                "after_heat": after_heat,
+++                "before_status": before_status,
+++                "after_status": after_status,
+++            },
+++        }
+++
+++    return None
+++
+++
+++def generate_world_events(simulation_diff: dict[str, Any]) -> list[dict[str, Any]]:
+++    """Generate deterministic events from simulation diffs."""
+++    events: list[dict[str, Any]] = []
+++
+++    for change in _safe_list(simulation_diff.get("threads_changed")):
+++        thread_id = change.get("id")
+++        if not thread_id:
+++            continue
+++        evt = _thread_event(thread_id, _safe_dict(change.get("before")), _safe_dict(change.get("after")))
+++        if evt:
+++            events.append(evt)
+++
+++    for change in _safe_list(simulation_diff.get("factions_changed")):
+++        faction_id = change.get("id")
+++        if not faction_id:
+++            continue
+++        evt = _faction_event(faction_id, _safe_dict(change.get("before")), _safe_dict(change.get("after")))
+++        if evt:
+++            events.append(evt)
+++
+++    for change in _safe_list(simulation_diff.get("locations_changed")):
+++        location_id = change.get("id")
+++        if not location_id:
+++            continue
+++        evt = _location_event(location_id, _safe_dict(change.get("before")), _safe_dict(change.get("after")))
+++        if evt:
+++            events.append(evt)
+++
+++    return events
+++
+++
+++def generate_consequences(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+++    """Generate structured consequences from events."""
+++    consequences: list[dict[str, Any]] = []
+++
+++    for evt in _safe_list(events):
+++        evt_type = evt.get("type")
+++        entity_id = evt.get("entity_id")
+++
+++        if evt_type == "thread_escalation":
+++            consequences.append({
+++                "consequence_id": f"cnsq_{entity_id}_pressure",
+++                "type": "pressure_increase",
+++                "entity_id": entity_id,
+++                "summary": f"Escalation in {entity_id} increases world pressure.",
+++                "source_event_id": evt.get("event_id"),
+++            })
+++        elif evt_type == "faction_reaction":
+++            consequences.append({
+++                "consequence_id": f"cnsq_{entity_id}_reaction",
+++                "type": "faction_response",
+++                "entity_id": entity_id,
+++                "summary": f"Faction {entity_id} is likely to respond to mounting strain.",
+++                "source_event_id": evt.get("event_id"),
+++            })
+++        elif evt_type == "location_hotspot":
+++            consequences.append({
+++                "consequence_id": f"cnsq_{entity_id}_hotspot",
+++                "type": "hotspot",
+++                "entity_id": entity_id,
+++                "summary": f"{entity_id} is now a hotspot and may produce further incidents.",
+++                "source_event_id": evt.get("event_id"),
+++            })
+++
+++    return consequences
++diff --git a/src/app/rpg/creator/world_simulation.py b/src/app/rpg/creator/world_simulation.py
++index 2222222..3333333 100644
++--- a/src/app/rpg/creator/world_simulation.py
+++++ b/src/app/rpg/creator/world_simulation.py
++@@
++ from __future__ import annotations
++ import copy
+++import hashlib
+++import json
++ from typing import Any
+++from .world_events import generate_world_events, generate_consequences
++@@
++ MAX_HISTORY = 20
++@@
++ def _cap(value: int, lo: int = 0, hi: int = 5) -> int:
++     return max(lo, min(hi, value))
++@@
+++def _step_hash(state: dict[str, Any]) -> str:
+++    payload = json.dumps(state, sort_keys=True, separators=(",", ":"))
+++    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:8]
+++
+++
++ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
++@@
++     return {
++         "tick": 0,
++         "threads": threads_state,
++         "factions": factions_state,
++         "locations": locations_state,
++         "history": [],
+++        "events": [],
+++        "consequences": [],
+++        "step_hash": _step_hash({
+++            "tick": 0,
+++            "threads": threads_state,
+++            "factions": factions_state,
+++            "locations": locations_state,
+++        }),
++     }
++@@
++ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
++@@
++-    diff = compute_simulation_diff(before_state, after_state)
++-    summary = summarize_simulation_step(diff)
+++    diff = compute_simulation_diff(before_state, after_state)
+++    events = generate_world_events(diff)
+++    consequences = generate_consequences(events)
+++    summary = summarize_simulation_step(diff, events=events, consequences=consequences)
++ 
++     history = _safe_list(after_state.get("history"))
++     history.append({
++         "tick": after_state["tick"],
++         "summary": summary,
+++        "changes": {
+++            "threads": len(_safe_list(diff.get("threads_changed"))),
+++            "factions": len(_safe_list(diff.get("factions_changed"))),
+++            "locations": len(_safe_list(diff.get("locations_changed"))),
+++            "events": len(events),
+++            "consequences": len(consequences),
+++        },
++     })
++     history = history[-MAX_HISTORY:]
++     after_state["history"] = history
+++    after_state["events"] = events
+++    after_state["consequences"] = consequences
+++    after_state["step_hash"] = _step_hash({
+++        "tick": after_state["tick"],
+++        "threads": after_state["threads"],
+++        "factions": after_state["factions"],
+++        "locations": after_state["locations"],
+++    })
++ 
++     next_setup = copy.deepcopy(setup_payload)
++     metadata = _safe_dict(next_setup.get("metadata"))
++     metadata["simulation_state"] = after_state
++     next_setup["metadata"] = metadata
++ 
++     return {
++         "updated_setup": next_setup,
++         "before_state": before_state,
++         "after_state": after_state,
++         "simulation_diff": diff,
++         "summary": summary,
+++        "events": events,
+++        "consequences": consequences,
++     }
++@@
++-def summarize_simulation_step(diff: dict[str, Any]) -> list[str]:
+++def summarize_simulation_step(
+++    diff: dict[str, Any],
+++    events: list[dict[str, Any]] | None = None,
+++    consequences: list[dict[str, Any]] | None = None,
+++) -> list[str]:
++     lines: list[str] = []
++@@
++     # Locations — group by resulting status
++     loc_changes = _safe_list(diff.get("locations_changed"))
++     if loc_changes:
++         loc_by_status: dict[str, int] = {}
++         for c in loc_changes:
++@@
++         for status, count in sorted(loc_by_status.items()):
++             lines.append(f"{count} location{'s' if count != 1 else ''} became {status}")
+++
+++    evt_count = len(_safe_list(events))
+++    if evt_count:
+++        lines.append(f"{evt_count} world event{'s' if evt_count != 1 else ''} generated")
+++
+++    cnsq_count = len(_safe_list(consequences))
+++    if cnsq_count:
+++        lines.append(f"{cnsq_count} consequence{'s' if cnsq_count != 1 else ''} generated")
++     return lines
++diff --git a/src/app/rpg/services/adventure_builder_service.py b/src/app/rpg/services/adventure_builder_service.py
++index 4444444..5555555 100644
++--- a/src/app/rpg/services/adventure_builder_service.py
+++++ b/src/app/rpg/services/adventure_builder_service.py
++@@
++ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
++@@
++     return {
++         "success": True,
++         "updated_setup": updated_setup,
++         "simulation_state": after_state,
++         "simulation_diff": result["simulation_diff"],
++         "summary": result["summary"],
+++        "events": result.get("events", []),
+++        "consequences": result.get("consequences", []),
++         "graph": inspected.get("graph"),
++         "simulation": inspected.get("simulation"),
++         "inspector": inspected.get("inspector"),
++     }
++@@
++ def get_simulation_state(payload: dict[str, Any]) -> dict[str, Any]:
++@@
++     return {
++         "success": True,
++         "simulation_state": state,
++     }
++diff --git a/src/static/rpg/adventureBuilderState.js b/src/static/rpg/adventureBuilderState.js
++index 6666666..7777777 100644
++--- a/src/static/rpg/adventureBuilderState.js
+++++ b/src/static/rpg/adventureBuilderState.js
++@@
++                 simulationRuntime: {
++                     state: null,
++                     lastDiff: null,
++                     lastSummary: [],
++-                    stepping: false
+++                    stepping: false,
+++                    lastEvents: [],
+++                    lastConsequences: []
++                 }
++             }
++         };
++     }
++diff --git a/src/static/rpg/adventureBuilderTimeline.js b/src/static/rpg/adventureBuilderTimeline.js
++index 8888888..9999999 100644
++--- a/src/static/rpg/adventureBuilderTimeline.js
+++++ b/src/static/rpg/adventureBuilderTimeline.js
++@@
++-    function renderSimulationDiff(container, diff, summary) {
+++    function renderSimulationDiff(container, diff, summary, events, consequences) {
++         if (!container) return;
++         diff = diff || {};
++         summary = summary || [];
+++        events = events || [];
+++        consequences = consequences || [];
++ 
++         var html = '<div class="ab-sim-diff">';
++@@
++         if (summary.length) {
++             html += '<div class="ab-sim-summary">';
++             summary.forEach(function (line) {
++                 html += '<div class="ab-sim-summary-line">' + _esc(line) + '</div>';
++             });
++             html += '</div>';
++         }
+++
+++        if (events.length) {
+++            html += '<div class="ab-sim-events"><h5>Events</h5>';
+++            events.forEach(function (evt) {
+++                html += '<div class="ab-sim-event-card ab-sim-event-' + _esc(evt.severity || 'neutral') + '">' +
+++                    '<div class="ab-sim-event-type">' + _esc(evt.type || 'event') + '</div>' +
+++                    '<div class="ab-sim-event-summary">' + _esc(evt.summary || '') + '</div>' +
+++                '</div>';
+++            });
+++            html += '</div>';
+++        }
+++
+++        if (consequences.length) {
+++            html += '<div class="ab-sim-consequences"><h5>Consequences</h5>';
+++            consequences.forEach(function (c) {
+++                html += '<div class="ab-sim-consequence-card">' +
+++                    '<div class="ab-sim-event-type">' + _esc(c.type || 'consequence') + '</div>' +
+++                    '<div class="ab-sim-event-summary">' + _esc(c.summary || '') + '</div>' +
+++                '</div>';
+++            });
+++            html += '</div>';
+++        }
++ 
++         container.innerHTML = html;
++     }
++@@
++         renderSimulationDiff: renderSimulationDiff,
++     };
++ })();
++diff --git a/src/static/rpg/adventureBuilder.js b/src/static/rpg/adventureBuilder.js
++index aaaaaaa..bbbbbbb 100644
++--- a/src/static/rpg/adventureBuilder.js
+++++ b/src/static/rpg/adventureBuilder.js
++@@
++     function _renderStep5Simulation(contentEl) {
++         var wi = state.worldInspection || {};
++         var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false };
++         var simState = rt.state;
++         var tickLabel = simState ? simState.tick : '—';
++@@
++         var summaryEl = contentEl.querySelector('#abSimLastSummary');
++         if (summaryEl) {
++-            AdventureBuilderTimeline.renderSimulationDiff(summaryEl, rt.lastDiff, rt.lastSummary);
+++            AdventureBuilderTimeline.renderSimulationDiff(
+++                summaryEl,
+++                rt.lastDiff,
+++                rt.lastSummary,
+++                rt.lastEvents,
+++                rt.lastConsequences
+++            );
++         }
++@@
++         btn.addEventListener('click', function () {
++             rt.stepping = true;
++             _renderStep();
++             AdventureBuilderApi.simulateStep(state.setup).then(function (res) {
++                 if (!res || !res.success) {
++@@
++                 wi.simulationRuntime.state = res.simulation_state || null;
++                 wi.simulationRuntime.lastDiff = res.simulation_diff || null;
++                 wi.simulationRuntime.lastSummary = res.summary || [];
+++                wi.simulationRuntime.lastEvents = res.events || [];
+++                wi.simulationRuntime.lastConsequences = res.consequences || [];
++                 _captureWorldSnapshot('After Simulation Tick ' + String((res.simulation_state && res.simulation_state.tick) || '?'));
++                 _renderStep();
++             }).catch(function () {
++                 alert('Simulation step failed.');
++             }).finally(function () {
++diff --git a/src/static/rpg/adventureBuilder.css b/src/static/rpg/adventureBuilder.css
++index ccccccc..ddddddd 100644
++--- a/src/static/rpg/adventureBuilder.css
+++++ b/src/static/rpg/adventureBuilder.css
++@@
++ .ab-sim-summary-line {
++     margin-bottom: 6px;
++ }
+++
+++.ab-sim-events,
+++.ab-sim-consequences {
+++    margin-top: 16px;
+++}
+++
+++.ab-sim-event-card,
+++.ab-sim-consequence-card {
+++    padding: 10px 12px;
+++    border-radius: 10px;
+++    margin-bottom: 8px;
+++    background: rgba(255, 255, 255, 0.04);
+++    border: 1px solid rgba(255, 255, 255, 0.08);
+++}
+++
+++.ab-sim-event-critical {
+++    border-color: rgba(248, 113, 113, 0.45);
+++}
+++
+++.ab-sim-event-active {
+++    border-color: rgba(147, 197, 253, 0.45);
+++}
+++
+++.ab-sim-event-low {
+++    border-color: rgba(110, 231, 183, 0.35);
+++}
+++
+++.ab-sim-event-type {
+++    font-size: 0.8rem;
+++    text-transform: uppercase;
+++    opacity: 0.75;
+++    margin-bottom: 4px;
+++}
+++
+++.ab-sim-event-summary {
+++    line-height: 1.4;
+++}
++diff --git a/src/tests/unit/rpg/test_phase30_world_simulation.py b/src/tests/unit/rpg/test_phase30_world_simulation.py
++index eeeeeee..fffffff 100644
++--- a/src/tests/unit/rpg/test_phase30_world_simulation.py
+++++ b/src/tests/unit/rpg/test_phase30_world_simulation.py
++@@
++ def test_build_initial_simulation_state_shape():
++     from app.rpg.creator.world_simulation import build_initial_simulation_state
++ 
++     state = build_initial_simulation_state(_minimal_setup())
++     assert "tick" in state
++     assert "threads" in state
++     assert "factions" in state
++     assert "locations" in state
++     assert "history" in state
+++    assert "events" in state
+++    assert "consequences" in state
+++    assert "step_hash" in state
++@@
++ def test_step_simulation_state_returns_expected_shape():
++     from app.rpg.creator.world_simulation import step_simulation_state
++ 
++     result = step_simulation_state(_minimal_setup())
++     assert "updated_setup" in result
++     assert "before_state" in result
++     assert "after_state" in result
++     assert "simulation_diff" in result
++     assert "summary" in result
+++    assert "events" in result
+++    assert "consequences" in result
++@@
+++def test_step_simulation_state_generates_events_and_consequences():
+++    from app.rpg.creator.world_simulation import step_simulation_state
+++
+++    result = step_simulation_state(_minimal_setup())
+++    assert isinstance(result["events"], list)
+++    assert isinstance(result["consequences"], list)
+++
+++
+++def test_step_hash_is_deterministic_for_same_input():
+++    from app.rpg.creator.world_simulation import step_simulation_state
+++
+++    a = step_simulation_state(_minimal_setup())
+++    b = step_simulation_state(_minimal_setup())
+++    assert a["after_state"]["step_hash"] == b["after_state"]["step_hash"]
+++
++@@
++ def test_advance_world_simulation_service():
++     from app.rpg.services.adventure_builder_service import advance_world_simulation
++ 
++     result = advance_world_simulation(_minimal_setup())
++     assert result["success"] is True
++     assert "updated_setup" in result
++     assert "simulation_state" in result
++     assert "simulation_diff" in result
++     assert "summary" in result
+++    assert "events" in result
+++    assert "consequences" in result
+\ No newline at end of file
+diff --git a/src/app/rpg/creator/world_simulation.py b/src/app/rpg/creator/world_simulation.py
+index 186bdcb..57aacb3 100644
+--- a/src/app/rpg/creator/world_simulation.py
++++ b/src/app/rpg/creator/world_simulation.py
+@@ -1,6 +1,6 @@
+ """Phase 3A — World Simulation Engine Core.
+ 
+-Provides deterministic, read-only simulation state management for the
++Provides deterministic, stateful simulation state management for the
+ adventure builder.  All functions accept a raw ``setup_payload`` dict
+ (the same shape the creator routes already traffic) and return plain
+ dicts suitable for JSON serialization.
+@@ -8,21 +8,27 @@ dicts suitable for JSON serialization.
+ Simulation state lives in ``metadata.simulation_state`` so it stays
+ compatible with the existing creator flow.
+ 
+-Rules are intentionally simple and fully deterministic:
++Rules are intentionally simple and fully deterministic with **stateful
++pressure evolution**: values step up or down from their previous state
++rather than being recomputed from scratch each tick.
+ 
+-* **Threads** — base pressure 1, +1 per connected faction beyond 1,
+-  +1 if connected to a hot location.  Capped at 5.
+-* **Factions** — pressure = count of connected active/critical threads.
+-  Capped at 5.
+-* **Locations** — heat = NPCs there + threads connected there.
+-  Capped at 5.
++* **Threads** — base pressure steps up if connected to multiple factions
++  or a hot location; steps down otherwise.  Capped at 0-5.
++* **Factions** — pressure steps up if any connected threads are active;
++  steps down otherwise.  Capped at 0-5.
++* **Locations** — heat steps up if NPCs or threads present; steps down
++  otherwise.  Faction pressure >= 3 also pushes heat up.  Capped at 0-5.
+ """
+ 
+ from __future__ import annotations
+ 
+ import copy
++import hashlib
++import json
+ from typing import Any
+ 
++from .world_events import generate_world_events, generate_consequences
++
+ 
+ # ---------------------------------------------------------------------------
+ # Constants
+@@ -54,6 +60,16 @@ def _cap(value: int, lo: int = 0, hi: int = PRESSURE_CAP) -> int:
+     return max(lo, min(hi, value))
+ 
+ 
++def _step_up(v: int) -> int:
++    """Increment pressure by one level, capped at 5."""
++    return _cap(v + 1)
++
++
++def _step_down(v: int) -> int:
++    """Decrement pressure by one level, floored at 0."""
++    return _cap(v - 1)
++
++
+ def _thread_status(pressure: int) -> str:
+     if pressure <= 1:
+         return "low"
+@@ -202,13 +218,17 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
+         pressure = _cap(active_critical)
+         fac_states[fid] = {"pressure": pressure, "status": _faction_status(pressure)}
+ 
+-    return {
++    after_state = {
+         "tick": 0,
+         "threads": thr_states,
+         "factions": fac_states,
+         "locations": loc_states,
+         "history": [],
++        "events": [],
++        "consequences": [],
+     }
++    after_state["step_hash"] = _step_hash(after_state)
++    return after_state
+ 
+ 
+ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+@@ -219,6 +239,10 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+     If ``metadata.simulation_state`` is missing the initial state is
+     computed first.  The updated simulation state is written into a
+     *copy* of the setup so the original is never mutated.
++
++    Uses **stateful pressure evolution**: each entity's pressure/heat
++    steps up or down from its previous value based on current conditions,
++    rather than being recomputed from scratch.
+     """
+     setup = copy.deepcopy(_safe_dict(setup_payload))
+     meta = setup.setdefault("metadata", {})
+@@ -231,25 +255,162 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+     before_state = copy.deepcopy(current)
+     next_tick = current.get("tick", 0) + 1
+ 
+-    # Recompute pressures/heat for the new tick using current setup data
+-    fresh = build_initial_simulation_state(setup)
++    # Extract current setup data for condition evaluation
++    threads = _extract_threads(setup)
++    factions = _extract_factions(setup)
++    locations = _extract_locations(setup)
++    npcs = _extract_npcs(setup)
++
++    # Build lookup structures
++    faction_ids = {f.get("faction_id") for f in factions if f.get("faction_id")}
++    location_ids = {loc.get("location_id") for loc in locations if loc.get("location_id")}
++
++    # NPC → location map
++    npc_location_map: dict[str, list[str]] = {}
++    for npc in npcs:
++        loc_id = npc.get("location_id")
++        if loc_id and loc_id in location_ids:
++            npc_location_map.setdefault(loc_id, []).append(npc.get("npc_id", ""))
++
++    # Thread → faction / location maps
++    thread_faction_map: dict[str, list[str]] = {}
++    thread_location_map: dict[str, list[str]] = {}
++    location_thread_count: dict[str, int] = {}
++
++    for thr in threads:
++        tid = thr.get("thread_id", "")
++        fac_ids = [
++            fid for fid in _safe_list(thr.get("faction_ids"))
++            if fid and fid in faction_ids
++        ]
++        loc_ids = [
++            lid for lid in _safe_list(thr.get("location_ids"))
++            if lid and lid in location_ids
++        ]
++        thread_faction_map[tid] = fac_ids
++        thread_location_map[tid] = loc_ids
++        for lid in loc_ids:
++            location_thread_count[lid] = location_thread_count.get(lid, 0) + 1
++
++    # Build reverse map: faction_id → list of connected thread_ids
++    faction_thread_map: dict[str, list[str]] = {}
++    for tid, fac_ids in thread_faction_map.items():
++        for fid in fac_ids:
++            faction_thread_map.setdefault(fid, []).append(tid)
+ 
+-    # The "next" state is the fresh computation with the incremented tick
++    # Get previous states for stateful evolution
++    prev_threads = _safe_dict(current.get("threads"))
++    prev_factions = _safe_dict(current.get("factions"))
++    prev_locations = _safe_dict(current.get("locations"))
++
++    # --- Step 1: Compute location heat with stateful evolution ---
++    loc_states: dict[str, dict[str, Any]] = {}
++    for loc in locations:
++        lid = loc.get("location_id", "")
++        if not lid:
++            continue
++        npc_count = len(npc_location_map.get(lid, []))
++        thread_count = location_thread_count.get(lid, 0)
++        prev_heat = prev_locations.get(lid, {}).get("heat", 0)
++
++        if npc_count + thread_count > 0:
++            heat = _step_up(prev_heat)
++        else:
++            heat = _step_down(prev_heat)
++
++        loc_states[lid] = {"heat": heat, "status": _location_status(heat)}
++
++    # --- Step 2: Compute thread pressure with stateful evolution ---
++    thr_states: dict[str, dict[str, Any]] = {}
++    for thr in threads:
++        tid = thr.get("thread_id", "")
++        if not tid:
++            continue
++        fac_count = len(thread_faction_map.get(tid, []))
++        prev_pressure = prev_threads.get(tid, {}).get("pressure", 1)
++
++        # Determine escalation conditions
++        delta = 0
++        if fac_count > 1:
++            delta += 1
++        # +1 if connected to any hot location
++        location_is_hot = False
++        for lid in thread_location_map.get(tid, []):
++            loc_st = loc_states.get(lid, {})
++            if loc_st.get("status") == "hot":
++                location_is_hot = True
++                delta += 1
++                break
++
++        if delta > 0:
++            pressure = _step_up(prev_pressure)
++        else:
++            pressure = _step_down(prev_pressure)
++
++        thr_states[tid] = {"pressure": pressure, "status": _thread_status(pressure)}
++
++    # --- Step 3: Compute faction pressure with stateful evolution ---
++    fac_states: dict[str, dict[str, Any]] = {}
++    for fac in factions:
++        fid = fac.get("faction_id", "")
++        if not fid:
++            continue
++        active_thread_ids = faction_thread_map.get(fid, [])
++        active_threads_count = len(active_thread_ids)
++        prev_pressure = prev_factions.get(fid, {}).get("pressure", 0)
++
++        if active_threads_count > 0:
++            pressure = _step_up(prev_pressure)
++        else:
++            pressure = _step_down(prev_pressure)
++
++        fac_states[fid] = {"pressure": pressure, "status": _faction_status(pressure)}
++
++    # --- Step 4: Faction → location feedback loop ---
++    # If faction_pressure >= 3, push heat up on connected locations
++    for fid, fstate in fac_states.items():
++        faction_pressure = fstate.get("pressure", 0)
++        if faction_pressure >= 3:
++            # Find locations connected to this faction's threads
++            for tid in faction_thread_map.get(fid, []):
++                for lid in thread_location_map.get(tid, []):
++                    if lid in loc_states:
++                        loc_states[lid]["heat"] = _step_up(loc_states[lid]["heat"])
++                        loc_states[lid]["status"] = _location_status(loc_states[lid]["heat"])
++
++    # Build after_state
+     after_state: dict[str, Any] = {
+         "tick": next_tick,
+-        "threads": fresh["threads"],
+-        "factions": fresh["factions"],
+-        "locations": fresh["locations"],
++        "threads": thr_states,
++        "factions": fac_states,
++        "locations": loc_states,
+         "history": list(current.get("history", [])),
+     }
+ 
+-    # Build diff + summary and append to history
++    # Build diff + summary and append to history with change counts
+     diff = compute_simulation_diff(before_state, after_state)
+-    summary = summarize_simulation_step(diff)
+-    after_state["history"].append({"tick": next_tick, "summary": summary})
++    events = generate_world_events(diff)
++    consequences = generate_consequences(events)
++    summary = summarize_simulation_step(diff, events=events, consequences=consequences)
++    after_state["history"].append({
++        "tick": next_tick,
++        "summary": summary,
++        "changes": {
++            "threads": len(diff.get("threads_changed", [])),
++            "factions": len(diff.get("factions_changed", [])),
++            "locations": len(diff.get("locations_changed", [])),
++            "events": len(events),
++            "consequences": len(consequences),
++        },
++    })
+     if len(after_state["history"]) > MAX_HISTORY:
+         after_state["history"] = after_state["history"][-MAX_HISTORY:]
+ 
++    # Add step hash for traceability
++    after_state["step_hash"] = _step_hash(after_state)
++    after_state["events"] = events
++    after_state["consequences"] = consequences
++
+     # Write back into setup copy
+     meta["simulation_state"] = after_state
+     setup["metadata"] = meta
+@@ -258,6 +419,8 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+         "next_setup": setup,
+         "before_state": before_state,
+         "after_state": after_state,
++        "events": events,
++        "consequences": consequences,
+     }
+ 
+ 
+@@ -313,7 +476,27 @@ def compute_simulation_diff(
+     }
+ 
+ 
+-def summarize_simulation_step(diff: dict[str, Any]) -> list[str]:
++def _step_hash(state: dict[str, Any]) -> str:
++    """Compute a stable hash of the simulation state for traceability."""
++    # Exclude history and step_hash itself to keep hash stable
++    stable = {
++        "tick": state.get("tick"),
++        "threads": state.get("threads", {}),
++        "factions": state.get("factions", {}),
++        "locations": state.get("locations", {}),
++    }
++    try:
++        s = json.dumps(stable, sort_keys=True)
++        return hashlib.sha1(s.encode()).hexdigest()[:8]
++    except Exception:
++        return "00000000"
++
++
++def summarize_simulation_step(
++    diff: dict[str, Any],
++    events: list[dict[str, Any]] | None = None,
++    consequences: list[dict[str, Any]] | None = None,
++) -> list[str]:
+     """Return human-readable summary lines for the diff."""
+     diff = _safe_dict(diff)
+     lines: list[str] = []
+@@ -356,4 +539,11 @@ def summarize_simulation_step(diff: dict[str, Any]) -> list[str]:
+         for status, count in sorted(loc_by_status.items()):
+             lines.append(f"{count} location{'s' if count != 1 else ''} became {status}")
+ 
++    evt_count = len(_safe_list(events))
++    if evt_count:
++        lines.append(f"{evt_count} world event{'s' if evt_count != 1 else ''} generated")
++
++    cnsq_count = len(_safe_list(consequences))
++    if cnsq_count:
++        lines.append(f"{cnsq_count} consequence{'s' if cnsq_count != 1 else ''} generated")
+     return lines
+diff --git a/src/app/rpg/services/adventure_builder_service.py b/src/app/rpg/services/adventure_builder_service.py
+index 25dff59..30c4839 100644
+--- a/src/app/rpg/services/adventure_builder_service.py
++++ b/src/app/rpg/services/adventure_builder_service.py
+@@ -1063,7 +1063,9 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
+     after_state = step_result["after_state"]
+ 
+     diff = compute_simulation_diff(before_state, after_state)
+-    summary = summarize_simulation_step(diff)
++    events = step_result.get("events", [])
++    consequences = step_result.get("consequences", [])
++    summary = summarize_simulation_step(diff, events=events, consequences=consequences)
+ 
+     # Re-run world inspection on the updated setup
+     inspection = _inspect(next_setup)
+@@ -1074,6 +1076,8 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
+         "simulation_state": after_state,
+         "simulation_diff": diff,
+         "summary": summary,
++        "events": events,
++        "consequences": consequences,
+         "graph": inspection.get("graph"),
+         "simulation": inspection.get("simulation"),
+         "inspector": inspection.get("inspector"),
+diff --git a/src/static/rpg/adventureBuilder.css b/src/static/rpg/adventureBuilder.css
+index c0242dc..c47a3d0 100644
+--- a/src/static/rpg/adventureBuilder.css
++++ b/src/static/rpg/adventureBuilder.css
+@@ -1436,3 +1436,50 @@
+ .ab-sim-severity-critical {
+     background: rgba(231, 76, 60, 0.10);
+ }
++
++/* ─── Phase 3A — Simulation history timeline ───────────────────────────── */
++
++.ab-sim-history {
++    margin-bottom: 16px;
++    padding: 12px 16px;
++    background: rgba(255, 255, 255, 0.02);
++    border-radius: 8px;
++    border: 1px solid rgba(255, 255, 255, 0.06);
++}
++
++.ab-sim-history h5 {
++    margin: 0 0 8px 0;
++    font-size: 0.9rem;
++    color: rgba(255, 255, 255, 0.8);
++}
++
++.ab-sim-history-row {
++    display: flex;
++    align-items: baseline;
++    gap: 12px;
++    padding: 6px 0;
++    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
++    font-size: 0.84rem;
++}
++
++.ab-sim-history-row:last-child {
++    border-bottom: none;
++}
++
++.ab-sim-history-tick {
++    font-weight: 600;
++    color: #3498db;
++    white-space: nowrap;
++    min-width: 50px;
++}
++
++.ab-sim-history-changes {
++    color: rgba(255, 255, 255, 0.5);
++    font-size: 0.78rem;
++    white-space: nowrap;
++}
++
++.ab-sim-history-summary {
++    flex: 1;
++    color: rgba(255, 255, 255, 0.7);
++}
+diff --git a/src/static/rpg/adventureBuilder.js b/src/static/rpg/adventureBuilder.js
+index 321560f..5e2a66f 100644
+--- a/src/static/rpg/adventureBuilder.js
++++ b/src/static/rpg/adventureBuilder.js
+@@ -848,7 +848,7 @@ var AdventureBuilder = (function () {
+ 
+     function _renderStep5Simulation(contentEl) {
+         var wi = state.worldInspection || {};
+-        var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false };
++        var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false, lastEvents: [], lastConsequences: [] };
+         var simState = rt.state;
+         var tickLabel = simState ? simState.tick : '—';
+         var stepping = rt.stepping;
+@@ -861,6 +861,27 @@ var AdventureBuilder = (function () {
+         html += '<span class="ab-sim-tick-badge">Tick: <strong>' + _esc(String(tickLabel)) + '</strong></span>';
+         html += '</div>';
+ 
++        // ── Simulation history timeline ──
++        if (simState && simState.history && simState.history.length) {
++            html += '<div class="ab-sim-history">';
++            html += '<h5>Simulation History</h5>';
++            simState.history.slice(-5).forEach(function (h) {
++                var changeInfo = '';
++                if (h.changes) {
++                    var parts = [];
++                    if (h.changes.threads) parts.push(h.changes.threads + ' thread' + (h.changes.threads !== 1 ? 's' : ''));
++                    if (h.changes.factions) parts.push(h.changes.factions + ' faction' + (h.changes.factions !== 1 ? 's' : ''));
++                    if (h.changes.locations) parts.push(h.changes.locations + ' location' + (h.changes.locations !== 1 ? 's' : ''));
++                    if (parts.length) changeInfo = ' <span class="ab-sim-history-changes">(' + parts.join(', ') + ')</span>';
++                }
++                html += '<div class="ab-sim-history-row">';
++                html += '<span class="ab-sim-history-tick">Tick ' + h.tick + '</span>' + changeInfo;
++                html += '<span class="ab-sim-history-summary">' + _esc((h.summary || []).join(', ')) + '</span>';
++                html += '</div>';
++            });
++            html += '</div>';
++        }
++
+         // ── Last-step summary ──
+         if (rt.lastSummary && rt.lastSummary.length) {
+             html += '<div class="ab-sim-summary"><h5>Last Step Summary</h5><ul>';
+@@ -882,7 +903,13 @@ var AdventureBuilder = (function () {
+         // Render simulation diff if available
+         var diffPanel = contentEl.querySelector('#abSimDiffPanel');
+         if (diffPanel && rt.lastDiff) {
+-            AdventureBuilderTimeline.renderSimulationDiff(diffPanel, rt.lastDiff, rt.lastSummary || []);
++            AdventureBuilderTimeline.renderSimulationDiff(
++                diffPanel,
++                rt.lastDiff,
++                rt.lastSummary || [],
++                rt.lastEvents,
++                rt.lastConsequences
++            );
+         }
+ 
+         // Render the static simulation summary
+@@ -924,6 +951,8 @@ var AdventureBuilder = (function () {
+                 wi.simulationRuntime.state = res.simulation_state || null;
+                 wi.simulationRuntime.lastDiff = res.simulation_diff || null;
+                 wi.simulationRuntime.lastSummary = res.summary || [];
++                wi.simulationRuntime.lastEvents = res.events || [];
++                wi.simulationRuntime.lastConsequences = res.consequences || [];
+                 // Capture snapshot
+                 var tick = (res.simulation_state && res.simulation_state.tick) || '?';
+                 _captureWorldSnapshot('After Simulation Tick ' + tick);
+diff --git a/src/static/rpg/adventureBuilderState.js b/src/static/rpg/adventureBuilderState.js
+index 61bbef8..bb0cc30 100644
+--- a/src/static/rpg/adventureBuilderState.js
++++ b/src/static/rpg/adventureBuilderState.js
+@@ -95,7 +95,9 @@ var AdventureBuilderState = (function () {
+                     state: null,
+                     lastDiff: null,
+                     lastSummary: [],
+-                    stepping: false
++                    stepping: false,
++                    lastEvents: [],
++                    lastConsequences: []
+                 }
+             }
+         };
+diff --git a/src/static/rpg/adventureBuilderTimeline.js b/src/static/rpg/adventureBuilderTimeline.js
+index 8cb167b..1d8663e 100644
+--- a/src/static/rpg/adventureBuilderTimeline.js
++++ b/src/static/rpg/adventureBuilderTimeline.js
+@@ -443,22 +443,50 @@ var AdventureBuilderTimeline = (function () {
+      * @param {HTMLElement} container - DOM element to render into
+      * @param {Object} diff - Simulation diff from backend
+      * @param {string[]} summary - Summary lines from backend
++     * @param {Object[]} events - Events generated from diff
++     * @param {Object[]} consequences - Consequences generated from events
+      */
+-    function renderSimulationDiff(container, diff, summary) {
++    function renderSimulationDiff(container, diff, summary, events, consequences) {
+         if (!container) return;
+         diff = diff || {};
+         summary = summary || [];
++        events = events || [];
++        consequences = consequences || [];
+ 
+         var html = '<div class="ab-sim-diff">';
+         html += '<h5>Simulation Diff — Tick ' + _esc(String(diff.tick_before || 0)) + ' → ' + _esc(String(diff.tick_after || 0)) + '</h5>';
+ 
+         // Summary lines
+         if (summary.length) {
+-            html += '<ul class="ab-sim-diff-summary">';
++            html += '<div class="ab-sim-summary">';
+             summary.forEach(function (line) {
+-                html += '<li>' + _esc(line) + '</li>';
++                html += '<div class="ab-sim-summary-line">' + _esc(line) + '</div>';
+             });
+-            html += '</ul>';
++            html += '</div>';
++        }
++
++        // Events
++        if (events.length) {
++            html += '<div class="ab-sim-events"><h5>Events</h5>';
++            events.forEach(function (evt) {
++                html += '<div class="ab-sim-event-card ab-sim-event-' + _esc(evt.severity || 'neutral') + '">' +
++                    '<div class="ab-sim-event-type">' + _esc(evt.type || 'event') + '</div>' +
++                    '<div class="ab-sim-event-summary">' + _esc(evt.summary || '') + '</div>' +
++                '</div>';
++            });
++            html += '</div>';
++        }
++
++        // Consequences
++        if (consequences.length) {
++            html += '<div class="ab-sim-consequences"><h5>Consequences</h5>';
++            consequences.forEach(function (c) {
++                html += '<div class="ab-sim-consequence-card">' +
++                    '<div class="ab-sim-event-type">' + _esc(c.type || 'consequence') + '</div>' +
++                    '<div class="ab-sim-event-summary">' + _esc(c.summary || '') + '</div>' +
++                '</div>';
++            });
++            html += '</div>';
+         }
+ 
+         // Threads changed
+@@ -512,7 +540,7 @@ var AdventureBuilderTimeline = (function () {
+             html += '</div>';
+         }
+ 
+-        if (!threads.length && !factions.length && !locations.length) {
++        if (!threads.length && !factions.length && !locations.length && !events.length && !consequences.length) {
+             html += '<p class="ab-muted">No changes in this tick.</p>';
+         }
+ 

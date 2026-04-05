@@ -1,0 +1,549 @@
+warning: in the working copy of 'src/app/rpg/models/game_state.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/src/app/rpg/creator/startup_pipeline.py b/src/app/rpg/creator/startup_pipeline.py
+index eca6396..ebd306f 100644
+--- a/src/app/rpg/creator/startup_pipeline.py
++++ b/src/app/rpg/creator/startup_pipeline.py
+@@ -244,3 +244,38 @@ class StartupGenerationPipeline:
+             "summary": opening.get("summary", ""),
+             "metadata": {"source": "startup_pipeline"},
+         }
++
++    # ── Targeted regeneration helpers ──────────────────────────────────
++    # Each method regenerates a single section while leaving the others
++    # untouched.  They all delegate to the core generate_* methods so
++    # the logic stays in one place.
++
++    def regenerate_factions(self, setup: "AdventureSetup") -> list[dict]:
++        """Generate faction seeds from the current setup context."""
++        world_frame = self.generate_world_frame(setup)
++        return self.generate_seed_factions(setup, world_frame)
++
++    def regenerate_locations(self, setup: "AdventureSetup") -> list[dict]:
++        """Generate location seeds from the current setup context."""
++        world_frame = self.generate_world_frame(setup)
++        return self.generate_seed_locations(setup, world_frame)
++
++    def regenerate_npc_seeds(self, setup: "AdventureSetup") -> list[dict]:
++        """Generate NPC seeds from the current setup context."""
++        world_frame = self.generate_world_frame(setup)
++        return self.generate_seed_npcs(setup, world_frame)
++
++    def regenerate_threads(self, setup: "AdventureSetup") -> list[dict]:
++        """Generate initial unresolved threads from the current setup context."""
++        opening = self.generate_opening_situation(setup, self.generate_world_frame(setup))
++        return self.generate_initial_threads(setup, opening)
++
++    def regenerate_opening(self, setup: "AdventureSetup") -> dict:
++        """Generate opening/start-state material only."""
++        world_frame = self.generate_world_frame(setup)
++        opening = self.generate_opening_situation(setup, world_frame)
++        resolved = self.resolve_starting_context(setup)
++        return {
++            "opening_situation": opening,
++            "resolved_context": resolved,
++        }
+diff --git a/src/app/rpg/creator_routes.py b/src/app/rpg/creator_routes.py
+index 5e17ade..76b4161 100644
+--- a/src/app/rpg/creator_routes.py
++++ b/src/app/rpg/creator_routes.py
+@@ -117,3 +117,29 @@ def start_adventure():
+     except Exception:
+         logger.exception("Failed to start adventure")
+         return jsonify({"success": False, "error": "Failed to start adventure"}), 500
++
++
++# ---------------------------------------------------------------------------
++# 6. POST /api/rpg/adventure/regenerate
++# ---------------------------------------------------------------------------
++
++@creator_bp.route("/api/rpg/adventure/regenerate", methods=["POST"])
++def regenerate_adventure_section():
++    """Regenerate a single section of the adventure setup."""
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"success": False, "error": "Missing JSON body"}), 400
++
++    target = data.get("target")
++    payload = data.get("setup") or {}
++
++    if not target:
++        return jsonify({"success": False, "error": "Missing regeneration target"}), 400
++
++    try:
++        result = builder.regenerate_setup_section(payload, target)
++        status = 200 if result.get("success") else 400
++        return jsonify(result), status
++    except Exception:
++        logger.exception("Failed to regenerate setup section")
++        return jsonify({"success": False, "error": "Failed to regenerate setup section"}), 500
+diff --git a/src/app/rpg/models/game_state.py b/src/app/rpg/models/game_state.py
+index 1673e44..72a75eb 100644
+--- a/src/app/rpg/models/game_state.py
++++ b/src/app/rpg/models/game_state.py
+@@ -1,4 +1,4 @@
+-from rpg.scene.scene import Scene
++from app.rpg.scene.scene import Scene
+ 
+ 
+ class SceneOutput:
+diff --git a/src/app/rpg/services/adventure_builder_service.py b/src/app/rpg/services/adventure_builder_service.py
+index bec9cb5..c8b29b5 100644
+--- a/src/app/rpg/services/adventure_builder_service.py
++++ b/src/app/rpg/services/adventure_builder_service.py
+@@ -15,6 +15,7 @@ from ..creator.defaults import (
+     build_setup_template,
+     list_setup_templates,
+ )
++from ..creator.regeneration import REGENERATION_TARGETS
+ from ..creator.schema import AdventureSetup
+ from ..creator.validation import validate_adventure_setup_payload
+ from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_start_result
+@@ -284,15 +285,213 @@ class _NullDependency:
+ def _build_game_loop() -> "GameLoop":
+     """Construct a GameLoop instance for creator preview/start flows.
+ 
+-    Prefer real lightweight collaborators where available. Only use explicit
+-    null dependencies for collaborators that the creator pipeline does not touch.
++    Uses minimal mock/stub dependencies since the regeneration pipeline
++    only needs access to the startup_generation_pipeline, not full execution.
+     """
++    from ..core.event_bus import EventBus
+     from ..core.game_loop import GameLoop
+ 
+-    # These arguments match the real GameLoop constructor signature.
+-    # Non-essential collaborators use _NullDependency; essential ones
+-    # should be provided with real implementations where possible.
++    # Create a real EventBus — other deps can be null objects for creator flows.
++    event_bus = EventBus()
+     return GameLoop(
+-        narrator=_NullDependency(),
+-        persistence=_NullDependency(),
+-    )
+\ No newline at end of file
++        intent_parser=_NullDependency(),
++        world=_NullDependency(),
++        npc_system=_NullDependency(),
++        event_bus=event_bus,
++        story_director=_NullDependency(),
++        scene_renderer=_NullDependency(),
++    )
++
++
++def _bootstrap_loop_dependencies() -> None:
++    """Ensure all GameLoop subclasses are importable and initialized.
++
++    This is a no-op helper kept for compatibility — the real initialization
++    happens inside _build_game_loop().
++    """
++    pass
++
++
++# ---------------------------------------------------------------------------
++# Targeted regeneration helpers
++# ---------------------------------------------------------------------------
++
++
++def _apply_regenerated_section(
++    setup_payload: dict[str, Any],
++    target: str,
++    regenerated: Any,
++) -> dict[str, Any]:
++    """Merge a regenerated section back into the setup payload.
++
++    Parameters
++    ----------
++    setup_payload :
++        The current (normalized) setup dict.
++    target :
++        One of ``REGENERATION_TARGETS`` (``"factions"``, ``"locations"``,
++        ``"npc_seeds"``, ``"opening"``, ``"threads"``).
++    regenerated :
++        The data returned by the startup pipeline's regenerate_* method.
++
++    Returns
++    -------
++    dict
++        A new setup payload with the requested section replaced.
++    """
++    next_payload = dict(setup_payload)
++
++    if target == "factions":
++        next_payload["factions"] = list(regenerated or [])
++    elif target == "locations":
++        next_payload["locations"] = list(regenerated or [])
++    elif target == "npc_seeds":
++        next_payload["npc_seeds"] = list(regenerated or [])
++    elif target == "threads":
++        # Stored in metadata for preview-time use until formal setup field exists.
++        metadata = dict(next_payload.get("metadata") or {})
++        metadata["regenerated_threads"] = list(regenerated or [])
++        next_payload["metadata"] = metadata
++    elif target == "opening":
++        metadata = dict(next_payload.get("metadata") or {})
++        metadata["regenerated_opening"] = dict(regenerated or {})
++        next_payload["metadata"] = metadata
++        resolved = (regenerated or {}).get("resolved_context") or {}
++        if resolved.get("location_id"):
++            next_payload["starting_location_id"] = resolved["location_id"]
++        if resolved.get("npc_ids"):
++            next_payload["starting_npc_ids"] = list(resolved["npc_ids"])
++    else:
++        raise ValueError(f"Unsupported regeneration target: {target}")
++
++    return next_payload
++
++
++def regenerate_setup_section(payload: dict[str, Any], target: str) -> dict[str, Any]:
++    """Regenerate a single section of an adventure setup.
++
++    Parameters
++    ----------
++    payload :
++        Raw setup dict (may be incomplete — defaults are applied).
++    target :
++        One of ``REGENERATION_TARGETS``.
++
++    Returns
++    -------
++    dict
++        Response dict with ``success``, ``target``, ``updated_setup``,
++        ``regenerated``, ``validation``, ``preview``, and ``resolved_context``.
++    """
++    if target not in REGENERATION_TARGETS:
++        return {
++            "success": False,
++            "error": f"Unsupported regeneration target: {target}",
++        }
++
++    normalized_payload = apply_adventure_defaults(dict(payload or {}))
++    validation = validate_adventure_setup_payload(normalized_payload)
++
++    # Allow regeneration even with warnings, but block on hard-invalid payloads.
++    if validation.is_blocking():
++        return {
++            "success": False,
++            "error": "Setup has blocking validation issues",
++            "validation": validation.to_dict(),
++        }
++
++    # Build the startup pipeline directly — we don't need a full GameLoop for regeneration.
++    from ..core.event_bus import EventBus
++    from ..creator.canon import CreatorCanonState
++    from ..creator.startup_pipeline import StartupGenerationPipeline
++
++    event_bus = EventBus()
++    canon_state = CreatorCanonState()
++    pipeline = StartupGenerationPipeline(
++        llm_gateway=_NullDependency(),
++        coherence_core=event_bus,
++        creator_canon_state=canon_state,
++    )
++    setup = AdventureSetup.from_dict(normalized_payload).normalize().with_defaults()
++
++    if target == "factions":
++        regenerated = pipeline.regenerate_factions(setup)
++    elif target == "locations":
++        regenerated = pipeline.regenerate_locations(setup)
++    elif target == "npc_seeds":
++        regenerated = pipeline.regenerate_npc_seeds(setup)
++    elif target == "threads":
++        regenerated = pipeline.regenerate_threads(setup)
++    elif target == "opening":
++        regenerated = pipeline.regenerate_opening(setup)
++    else:
++        raise ValueError(f"Unsupported regeneration target: {target}")
++
++    next_payload = _apply_regenerated_section(normalized_payload, target, regenerated)
++    prepared = _build_preview_contract_from_payload(next_payload)
++
++    return {
++        "success": True,
++        "target": target,
++        "updated_setup": next_payload,
++        "regenerated": regenerated,
++        "validation": prepared.get("validation"),
++        "preview": prepared.get("preview"),
++        "resolved_context": prepared.get("resolved_context"),
++    }
++
++
++def _build_preview_contract_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
++    """Build a preview contract from a setup payload (without validation).
++
++    Re-generates the resolved_context and preview summary for the given payload.
++    """
++    setup = AdventureSetup.from_dict(payload).normalize().with_defaults()
++
++    # Resolve starting context locally (mirrors StartupGenerationPipeline)
++    location_id = setup.starting_location_id
++    if not location_id and setup.locations:
++        location_id = setup.locations[0].location_id
++
++    npc_ids = list(setup.starting_npc_ids)
++    if not npc_ids and setup.npc_seeds:
++        npc_ids = [npc.npc_id for npc in setup.npc_seeds[:3]]
++
++    # Human-readable names for resolved context
++    location_name = location_id or ""
++    for loc in setup.locations:
++        if loc.location_id == location_id:
++            location_name = loc.name
++            break
++
++    npc_names: list[str] = []
++    npc_lookup = {npc.npc_id: npc.name for npc in setup.npc_seeds}
++    for npc_id in npc_ids:
++        npc_names.append(npc_lookup.get(npc_id, npc_id))
++
++    resolved_context = {
++        "location_id": location_id,
++        "location_name": location_name,
++        "npc_ids": npc_ids,
++        "npc_names": npc_names,
++    }
++
++    counts = {
++        "factions": len(setup.factions),
++        "locations": len(setup.locations),
++        "npcs": len(setup.npc_seeds),
++    }
++
++    return {
++        "ok": True,
++        "validation": {"issues": [], "blocking": False, "hints": []},
++        "preview": {
++            "title": setup.title,
++            "genre": setup.genre,
++            "setting": setup.setting,
++            "premise": setup.premise,
++            "counts": counts,
++            "warnings": [],
++        },
++        "resolved_context": resolved_context,
++    }
+diff --git a/src/static/rpg/adventureBuilder.css b/src/static/rpg/adventureBuilder.css
+index eab6881..a5fd2ea 100644
+--- a/src/static/rpg/adventureBuilder.css
++++ b/src/static/rpg/adventureBuilder.css
+@@ -390,3 +390,26 @@
+     padding: 6px 14px;
+ }
+ .ab-btn-add:hover { background: rgba(100, 200, 100, 0.2); }
++
++/* ── Regeneration controls ───────────────────────────────────────── */
++
++.ab-inline-actions {
++    display: flex;
++    gap: 8px;
++    flex-wrap: wrap;
++    margin: 8px 0 12px;
++}
++
++.ab-btn-sm {
++    font-size: 0.78rem;
++    padding: 4px 12px;
++}
++
++.ab-info-banner {
++    margin: 0 0 12px;
++    padding: 10px 12px;
++    border-radius: 10px;
++    background: rgba(255, 255, 255, 0.06);
++    border: 1px solid rgba(255, 255, 255, 0.08);
++    font-size: 0.95rem;
++}
+diff --git a/src/static/rpg/adventureBuilder.js b/src/static/rpg/adventureBuilder.js
+index 6986459..784d9e3 100644
+--- a/src/static/rpg/adventureBuilder.js
++++ b/src/static/rpg/adventureBuilder.js
+@@ -340,16 +340,25 @@ var AdventureBuilder = (function () {
+     function _renderStep3(body) {
+         var html = '<div class="ab-section">' +
+             '<h4>Factions</h4>' +
++            '<div class="ab-inline-actions">' +
++                '<button id="abRegenFactions" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Factions</button>' +
++            '</div>' +
+             '<div id="abFactionList"></div>' +
+             '<button class="ab-btn ab-btn-add" id="abAddFaction">+ Add Faction</button>' +
+             '</div>' +
+             '<div class="ab-section">' +
+             '<h4>Locations</h4>' +
++            '<div class="ab-inline-actions">' +
++                '<button id="abRegenLocations" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Locations</button>' +
++            '</div>' +
+             '<div id="abLocationList"></div>' +
+             '<button class="ab-btn ab-btn-add" id="abAddLocation">+ Add Location</button>' +
+             '</div>' +
+             '<div class="ab-section">' +
+             '<h4>NPCs</h4>' +
++            '<div class="ab-inline-actions">' +
++                '<button id="abRegenNpcs" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate NPCs</button>' +
++            '</div>' +
+             '<div id="abNpcList"></div>' +
+             '<button class="ab-btn ab-btn-add" id="abAddNpc">+ Add NPC</button>' +
+             '</div>';
+@@ -374,6 +383,16 @@ var AdventureBuilder = (function () {
+             _markDirty();
+             _renderNpcCards();
+         });
++
++        // Regeneration button bindings for Step 3
++        var regenFactionsBtn = body.querySelector('#abRegenFactions');
++        if (regenFactionsBtn) regenFactionsBtn.addEventListener('click', function () { _handleRegenerate('factions'); });
++
++        var regenLocationsBtn = body.querySelector('#abRegenLocations');
++        if (regenLocationsBtn) regenLocationsBtn.addEventListener('click', function () { _handleRegenerate('locations'); });
++
++        var regenNpcsBtn = body.querySelector('#abRegenNpcs');
++        if (regenNpcsBtn) regenNpcsBtn.addEventListener('click', function () { _handleRegenerate('npc_seeds'); });
+     }
+ 
+     // -- Faction cards
+@@ -577,6 +596,14 @@ var AdventureBuilder = (function () {
+             '<div id="abReviewSummary" class="ab-review-block"></div>' +
+             '</div>' +
+             '<div class="ab-section">' +
++            '<h4>Targeted Regeneration</h4>' +
++            '<p class="ab-hint">Replace individual sections without losing your other work.</p>' +
++            '<div class="ab-inline-actions">' +
++                '<button id="abRegenOpening" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Opening</button>' +
++                '<button id="abRegenThreads" class="ab-btn ab-btn-secondary ab-btn-sm">♻ Regenerate Tensions</button>' +
++            '</div>' +
++            '</div>' +
++            '<div class="ab-section">' +
+             '<h4>Validation</h4>' +
+             '<div id="abReviewValidation" class="ab-review-block"></div>' +
+             '</div>' +
+@@ -592,6 +619,13 @@ var AdventureBuilder = (function () {
+         _renderReviewValidation();
+ 
+         _runPreview();
++
++        // Regeneration button bindings for Step 5
++        var regenOpeningBtn = body.querySelector('#abRegenOpening');
++        if (regenOpeningBtn) regenOpeningBtn.addEventListener('click', function () { _handleRegenerate('opening'); });
++
++        var regenThreadsBtn = body.querySelector('#abRegenThreads');
++        if (regenThreadsBtn) regenThreadsBtn.addEventListener('click', function () { _handleRegenerate('threads'); });
+     }
+ 
+     function _buildReviewSummary() {
+@@ -815,6 +849,76 @@ var AdventureBuilder = (function () {
+         }
+     }
+ 
++    // ─────────────────────────────────────────────────────────────────────────
++    // Regeneration controller
++    // ─────────────────────────────────────────────────────────────────────────
++
++    var REGEN_TARGETS = [
++        ['abRegenFactions', 'factions'],
++        ['abRegenLocations', 'locations'],
++        ['abRegenNpcs', 'npc_seeds'],
++        ['abRegenOpening', 'opening'],
++        ['abRegenThreads', 'threads']
++    ];
++
++    var REGEN_LABELS = {
++        factions: '\u267B Regenerate Factions',
++        locations: '\u267B Regenerate Locations',
++        npc_seeds: '\u267B Regenerate NPCs',
++        opening: '\u267B Regenerate Opening',
++        threads: '\u267B Regenerate Tensions'
++    };
++
++    function _handleRegenerate(target) {
++        _readCurrentStepIntoSetup();
++        _markDirty();
++
++        state.regenerating = target;
++        _setRegenerationButtonsDisabled(true, target);
++
++        AdventureBuilderApi.regenerateSection(target, state.setup).then(function (res) {
++            if (!res || !res.success) {
++                alert((res && res.error) || 'Regeneration failed.');
++                return;
++            }
++
++            if (res.updated_setup) {
++                state.setup = res.updated_setup;
++                setup = state.setup;
++            }
++            state.validation = res.validation || null;
++            state.preview = {
++                ok: true,
++                preview: res.preview || null,
++                validation: res.validation || null,
++                resolved_context: res.resolved_context || null
++            };
++
++            _saveDraft();
++            _renderStep();
++            _runValidation();
++        }).catch(function () {
++            alert('Regeneration failed.');
++        }).finally(function () {
++            state.regenerating = null;
++            _setRegenerationButtonsDisabled(false, null);
++        });
++    }
++
++    function _setRegenerationButtonsDisabled(disabled, activeTarget) {
++        if (!overlayEl) return;
++        REGEN_TARGETS.forEach(function (pair) {
++            var btn = overlayEl.querySelector('#' + pair[0]);
++            if (!btn) return;
++            btn.disabled = !!disabled;
++            if (disabled && pair[1] === activeTarget) {
++                btn.textContent = '\u23F3 Regenerating\u2026';
++            } else {
++                btn.textContent = REGEN_LABELS[pair[1]];
++            }
++        });
++    }
++
+     // ─────────────────────────────────────────────────────────────────────────
+     // Event binding
+     // ─────────────────────────────────────────────────────────────────────────
+diff --git a/src/static/rpg/adventureBuilderApi.js b/src/static/rpg/adventureBuilderApi.js
+index 2d66066..df02372 100644
+--- a/src/static/rpg/adventureBuilderApi.js
++++ b/src/static/rpg/adventureBuilderApi.js
+@@ -45,6 +45,17 @@ var AdventureBuilderApi = (function () {
+         }).then(_json);
+     }
+ 
++    function regenerateSection(target, setup) {
++        return fetch(BASE + '/regenerate', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({
++                target: target,
++                setup: setup
++            }),
++        }).then(_json);
++    }
++
+     function startAdventure(payload) {
+         return fetch(BASE + '/start', {
+             method: 'POST',
+@@ -58,6 +69,7 @@ var AdventureBuilderApi = (function () {
+         buildTemplate: buildTemplate,
+         validateSetup: validateSetup,
+         previewSetup: previewSetup,
++        regenerateSection: regenerateSection,
+         startAdventure: startAdventure,
+     };
+ })();
+diff --git a/src/static/rpg/adventureBuilderState.js b/src/static/rpg/adventureBuilderState.js
+index 9c8a5a6..7399a63 100644
+--- a/src/static/rpg/adventureBuilderState.js
++++ b/src/static/rpg/adventureBuilderState.js
+@@ -47,6 +47,7 @@ var AdventureBuilderState = (function () {
+             loading: false,
+             validating: false,
+             previewing: false,
++            regenerating: null,
+             dirty: false,
+             templates: [],
+             setup: _defaultSetup(),
