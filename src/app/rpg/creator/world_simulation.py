@@ -45,6 +45,7 @@ from .world_incidents import (
 )
 from app.rpg.ai.llm_mind import NPCMind
 from .world_debug import summarize_tick_changes
+from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
 from app.rpg.social import (
     ReputationGraph,
     AllianceSystem,
@@ -776,6 +777,20 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         "projected_outcome_count": len(projected_outcomes),
         "world_consequence_count": len((history_state.get("sandbox_state") or {}).get("world_consequences") or []),
     }
+
+    history_state.setdefault("save_meta", {})
+    history_state["save_meta"]["schema_version"] = CURRENT_RPG_SCHEMA_VERSION
+    history_state["save_meta"]["engine_version"] = ENGINE_VERSION
+
+    history_state.setdefault("timeline", {})
+    timeline_events = list((history_state["timeline"].get("ticks") or []))
+    timeline_events.append({
+        "tick": int(history_state.get("tick", 0) or 0),
+        "event_count": len(history_state.get("events") or []),
+        "consequence_count": len(history_state.get("consequences") or []),
+        "sandbox_summary": dict(history_state.get("sandbox_summary") or {}),
+    })
+    history_state["timeline"]["ticks"] = timeline_events[-200:]
 
     # --- Phase 7: GM overrides ---
     gm_overrides = history_state.get("gm_overrides") or {}

@@ -1,0 +1,151 @@
+"""Regression tests for Phase 8.4 -- Debug / Analytics / GM Inspection.
+
+Verifies that the analytics layer, GM hooks, and inspection routes do not
+break existing world_debug, world_simulation, and overall creator flow.
+"""
+from __future__ import annotations
+
+import json
+import pytest
+
+from app import create_app
+from app.rpg.analytics.tick_diff import build_tick_diff
+from app.rpg.analytics.timeline import build_timeline_summary, get_timeline_tick
+from app.rpg.analytics.npc_reasoning import inspect_npc_reasoning
+from app.rpg.analytics.gm_hooks import (
+    gm_force_npc_goal,
+    gm_force_faction_trend,
+    gm_append_debug_note,
+)
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def client():
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        yield client
+
+
+@pytest.fixture
+def base_sim_state():
+    """Return a minimal simulation state for tests."""
+    return {
+        "tick": 1,
+        "events": [],
+        "consequences": [],
+        "social_state": {"reputation": {}, "alliances": [], "rumors": [], "group_positions": {}},
+        "sandbox_state": {"world_consequences": []},
+        "npc_minds": {
+            "npc1": {"beliefs": {}, "goals": [], "memory": {"entries": []}, "last_decision": {}}
+        },
+        "npc_index": {
+            "npc1": {"name": "Guard", "role": "guard", "faction_id": "watch", "location_id": "gate"}
+        },
+        "timeline": {"ticks": []},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tick diff regression
+# ---------------------------------------------------------------------------
+
+class TestTickDiffRegression:
+    def test_build_tick_diff_safe_with_none(self):
+        """build_tick_diff should gracefully handle None inputs."""
+        diff = build_tick_diff(None, None)
+        assert diff["tick_before"] == 0
+        assert diff["tick_after"] == 0
+        assert diff["new_events"] == []
+
+    def test_build_tick_diff_with_extra_keys(self):
+        """Extra top-level keys in state should not blow up the diff."""
+        before = {"tick": 1, "events": [], "consequences": [], "social_state": {}, "sandbox_state": {}, "npc_minds": {}}
+        after = dict(before, foo="bar", tick=2)
+        diff = build_tick_diff(before, after)
+        assert diff["tick_before"] == 1
+        assert diff["tick_after"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Timeline regression
+# ---------------------------------------------------------------------------
+
+class TestTimelineRegression:
+    def test_build_timeline_summary_empty(self, base_sim_state):
+        summary = build_timeline_summary(base_sim_state)
+        assert summary["current_tick"] == 1
+        assert summary["snapshot_count"] == 0
+
+    def test_build_timeline_summary_with_snapshots(self, base_sim_state):
+        base_sim_state["snapshots"] = [
+            {"tick": 0, "snapshot_id": "s0", "label": "start"},
+            {"tick": 1, "snapshot_id": "s1", "label": "step1"},
+        ]
+        summary = build_timeline_summary(base_sim_state)
+        assert summary["snapshot_count"] == 2
+
+    def test_get_timeline_tick_missing(self, base_sim_state):
+        result = get_timeline_tick(base_sim_state, 99)
+        assert result["snapshot"] == {}
+
+    def test_safety_with_corrupt_state(self):
+        summary = build_timeline_summary("not-a-dict")
+        assert summary["snapshot_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# NPC reasoning regression
+# ---------------------------------------------------------------------------
+
+class TestNPCReasoningRegression:
+    def test_inspect_npc_reasoning_with_base_state(self, base_sim_state):
+        out = inspect_npc_reasoning(base_sim_state, "npc1")
+        assert out["npc"]["npc_id"] == "npc1"
+
+    def test_inspect_npc_reasoning_unknown(self, base_sim_state):
+        out = inspect_npc_reasoning(base_sim_state, "unknown")
+        assert out["npc"]["name"] == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# GM hooks regression
+# ---------------------------------------------------------------------------
+
+class TestGMHooksRegression:
+    def test_force_npc_goal_preserves_state(self, base_sim_state):
+        out = gm_force_npc_goal(base_sim_state, "npc1", {"goal_id": "g1"})
+        assert len(out["npc_minds"]["npc1"]["goals"]) == 1
+
+    def test_force_faction_trend_adds_sandbox(self, base_sim_state):
+        out = gm_force_faction_trend(base_sim_state, "faction1", {"aggression": 0.3})
+        assert out["sandbox_state"]["faction_trends"]["faction1"]["aggression"] == 0.3
+
+    def test_debug_note_bounded(self, base_sim_state):
+        state = base_sim_state
+        for i in range(60):
+            state = gm_append_debug_note(state, f"note-{i}")
+        assert len(state["debug_meta"]["gm_notes"]) == 50
+
+
+# ---------------------------------------------------------------------------
+# API routes regression
+# ---------------------------------------------------------------------------
+
+class TestInspectionRoutesRegression:
+    def test_timeline_returns_200_with_empty_state(self, client):
+        res = client.post("/api/rpg/inspect/timeline", json={"setup_payload": {}})
+        assert res.status_code == 200
+
+    def test_npc_reasoning_returns_200_with_empty_state(self, client):
+        payload = {"setup_payload": {}, "npc_id": "npc1"}
+        res = client.post("/api/rpg/inspect/npc_reasoning", json=payload)
+        assert res.status_code == 200
+
+    def test_tick_diff_returns_200_with_empty(self, client):
+        res = client.post("/api/rpg/inspect/tick_diff", json={"before_state": {}, "after_state": {}})
+        assert res.status_code == 200

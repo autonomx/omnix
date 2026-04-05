@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION
+
 _MAX_ITEMS = 12
 
 
@@ -82,6 +84,7 @@ def summarize_social_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     ][:_MAX_ITEMS]
 
     return {
+        "schema_version": CURRENT_RPG_SCHEMA_VERSION,
         "active_alliances": active_alliances,
         "active_rumors": active_rumors,
         "group_positions": {

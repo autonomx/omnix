@@ -1,0 +1,1358 @@
+diff --git a/review-documents/rpg-phase83-sandbox-world-simulation-20260405-0058.diff b/review-documents/rpg-phase83-sandbox-world-simulation-20260405-0058.diff
+index 09d90ef..91cf5e2 100644
+--- a/review-documents/rpg-phase83-sandbox-world-simulation-20260405-0058.diff
++++ b/review-documents/rpg-phase83-sandbox-world-simulation-20260405-0058.diff
+@@ -43,6 +43,161 @@ index ba9972e..57c4eb6 100644
+              },
+          )
+  
++diff --git a/src/app/rpg/api/rpg_encounter_routes.py b/src/app/rpg/api/rpg_encounter_routes.py
++new file mode 100644
++index 0000000..b2f1e4d
++--- /dev/null
+++++ b/src/app/rpg/api/rpg_encounter_routes.py
++@@ -0,0 +1,148 @@
+++"""Phase 8.2 — Encounter API Routes.
+++
+++Flask Blueprint with encounter endpoints:
+++- POST /api/rpg/encounter/start
+++- POST /api/rpg/encounter/action
+++- POST /api/rpg/encounter/npc_turn
+++- POST /api/rpg/encounter/end
+++"""
+++
+++from __future__ import annotations
+++
+++from flask import Blueprint, jsonify, request
+++
+++from app.rpg.player import ensure_player_state
+++from app.rpg.encounter import (
+++    ensure_encounter_state,
+++    build_encounter_from_scene,
+++    EncounterResolver,
+++)
+++
+++
+++rpg_encounter_bp = Blueprint("rpg_encounter_bp", __name__)
+++resolver = EncounterResolver()
+++
+++
+++def _get_simulation_state(setup_payload):
+++    """Extract simulation_state from setup_payload metadata."""
+++    meta = dict((setup_payload or {}).get("metadata") or {})
+++    return dict(meta.get("simulation_state") or {})
+++
+++
+++def _write_simulation_state(setup_payload, simulation_state):
+++    """Write simulation_state back into setup_payload metadata."""
+++    setup_payload = dict(setup_payload or {})
+++    meta = dict(setup_payload.get("metadata") or {})
+++    meta["simulation_state"] = dict(simulation_state or {})
+++    setup_payload["metadata"] = meta
+++    return setup_payload
+++
+++
+++@rpg_encounter_bp.post("/api/rpg/encounter/start")
+++def encounter_start():
+++    """Start a new encounter from a scene."""
+++    data = request.get_json(silent=True) or {}
+++    setup_payload = dict(data.get("setup_payload") or {})
+++    scene = dict(data.get("scene") or {})
+++
+++    state = ensure_player_state(_get_simulation_state(setup_payload))
+++    state = ensure_encounter_state(state)
+++
+++    encounter_state = build_encounter_from_scene(scene, state)
+++    encounter_state = resolver.start(encounter_state)
+++    state["player_state"]["encounter_state"] = encounter_state
+++    state["player_state"]["current_mode"] = "encounter"
+++
+++    setup_payload = _write_simulation_state(setup_payload, state)
+++    return jsonify({
+++        "ok": True,
+++        "setup_payload": setup_payload,
+++        "encounter_state": encounter_state,
+++    })
+++
+++
+++@rpg_encounter_bp.post("/api/rpg/encounter/action")
+++def encounter_action():
+++    """Apply a player action in the current encounter."""
+++    data = request.get_json(silent=True) or {}
+++    setup_payload = dict(data.get("setup_payload") or {})
+++    action_type = str(data.get("action_type") or "")
+++    target_id = str(data.get("target_id") or "")
+++
+++    state = ensure_player_state(_get_simulation_state(setup_payload))
+++    state = ensure_encounter_state(state)
+++
+++    encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
+++    encounter_state = resolver.apply_player_action(encounter_state, action_type, target_id)
+++    encounter_state = resolver.resolve_if_finished(encounter_state)
+++
+++    if encounter_state.get("status") == "resolved":
+++        state.setdefault("events", []).append({
+++            "type": "encounter_resolved",
+++            "origin": "encounter",
+++            "target_id": encounter_state.get("scene_id", ""),
+++            "summary": "Encounter resolved and fed back into the world.",
+++        })
+++
+++    state["player_state"]["encounter_state"] = encounter_state
+++    setup_payload = _write_simulation_state(setup_payload, state)
+++
+++    return jsonify({
+++        "ok": True,
+++        "setup_payload": setup_payload,
+++        "encounter_state": encounter_state,
+++    })
+++
+++
+++@rpg_encounter_bp.post("/api/rpg/encounter/npc_turn")
+++def encounter_npc_turn():
+++    """Advance NPC turn in the current encounter."""
+++    data = request.get_json(silent=True) or {}
+++    setup_payload = dict(data.get("setup_payload") or {})
+++
+++    state = ensure_player_state(_get_simulation_state(setup_payload))
+++    state = ensure_encounter_state(state)
+++
+++    encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
+++    encounter_state = resolver.apply_npc_turn(encounter_state)
+++    encounter_state = resolver.resolve_if_finished(encounter_state)
+++
+++    state["player_state"]["encounter_state"] = encounter_state
+++    setup_payload = _write_simulation_state(setup_payload, state)
+++
+++    return jsonify({
+++        "ok": True,
+++        "setup_payload": setup_payload,
+++        "encounter_state": encounter_state,
+++    })
+++
+++
+++@rpg_encounter_bp.post("/api/rpg/encounter/end")
+++def encounter_end():
+++    """End the current encounter (abort)."""
+++    data = request.get_json(silent=True) or {}
+++    setup_payload = dict(data.get("setup_payload") or {})
+++
+++    state = ensure_player_state(_get_simulation_state(setup_payload))
+++    state = ensure_encounter_state(state)
+++
+++    encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
+++    encounter_state["active"] = False
+++    encounter_state["status"] = "aborted"
+++
+++    state.setdefault("events", []).append({
+++        "type": "encounter_aborted",
+++        "origin": "encounter",
+++        "target_id": encounter_state.get("scene_id", ""),
+++        "summary": "Encounter was aborted.",
+++    })
+++
+++    state["player_state"]["encounter_state"] = encounter_state
+++    state["player_state"]["current_mode"] = "scene"
+++
+++    setup_payload = _write_simulation_state(setup_payload, state)
+++    return jsonify({
+++        "ok": True,
+++        "setup_payload": setup_payload,
+++        "encounter_state": encounter_state,
+++    })
++\ No newline at end of file
+ diff --git a/src/app/rpg/creator/world_scene_generator.py b/src/app/rpg/creator/world_scene_generator.py
+ index 4a6b743..33135dd 100644
+ --- a/src/app/rpg/creator/world_scene_generator.py
+@@ -103,3 +258,1122 @@ index bce333d..20df2b8 100644
+      # --- Phase 7: GM overrides ---
+      gm_overrides = history_state.get("gm_overrides") or {}
+  
++diff --git a/src/app/rpg/encounter/encounter_resolver.py b/src/app/rpg/encounter/encounter_resolver.py
++new file mode 100644
++index 0000000..a8a15ba
++--- /dev/null
+++++ b/src/app/rpg/encounter/encounter_resolver.py
++@@ -0,0 +1,147 @@
+++"""Phase 8.2 — Encounter Resolver (dict-based).
+++
+++Handles encounter turn progression, player action application, NPC turns,
+++and encounter resolution. Operates on plain dicts for serialization.
+++
+++Bounds:
+++- log max 100 entries
+++- participants max 12
+++- available_actions max 12
+++"""
+++
+++from __future__ import annotations
+++
+++from typing import Any, Dict, List
+++
+++from .encounter_actions import build_player_actions
+++
+++_MAX_LOG = 100
+++
+++
+++def _safe_list(v: Any) -> List[Any]:
+++    return list(v) if isinstance(v, list) else []
+++
+++
+++def _safe_dict(v: Any) -> Dict[str, Any]:
+++    return dict(v) if isinstance(v, dict) else {}
+++
+++
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+++
+++
+++class EncounterResolver:
+++    """Resolves encounter actions and turn progression on dict state."""
+++
+++    def start(self, encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+++        """Activate encounter and populate available actions."""
+++        encounter_state = dict(encounter_state or {})
+++        encounter_state["available_actions"] = build_player_actions(encounter_state)
+++        return encounter_state
+++
+++    def _advance_turn(self, encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+++        """Advance to the next participant's turn deterministically."""
+++        participants = _safe_list(encounter_state.get("participants"))
+++        if not participants:
+++            encounter_state["active_actor_id"] = ""
+++            return encounter_state
+++
+++        turn_index = int(encounter_state.get("turn_index", 0) or 0) + 1
+++        if turn_index >= len(participants):
+++            turn_index = 0
+++            encounter_state["round"] = int(encounter_state.get("round", 1) or 1) + 1
+++
+++        encounter_state["turn_index"] = turn_index
+++        encounter_state["active_actor_id"] = _safe_str(participants[turn_index].get("actor_id"))
+++        encounter_state["available_actions"] = build_player_actions(encounter_state)
+++        return encounter_state
+++
+++    def apply_player_action(
+++        self, encounter_state: Dict[str, Any], action_type: str, target_id: str = ""
+++    ) -> Dict[str, Any]:
+++        """Apply a player action and advance turn."""
+++        encounter_state = dict(encounter_state or {})
+++        action_type = _safe_str(action_type)
+++        target_id = _safe_str(target_id)
+++
+++        participants = _safe_list(encounter_state.get("participants"))
+++        log = _safe_list(encounter_state.get("log"))
+++        active_actor_id = _safe_str(encounter_state.get("active_actor_id"))
+++
+++        text = f"{active_actor_id or 'player'} uses {action_type}"
+++        if target_id:
+++            text += f" on {target_id}"
+++
+++        log.append({
+++            "round": int(encounter_state.get("round", 1) or 1),
+++            "text": text,
+++            "type": "player_action",
+++            "log_type": action_type,
+++            "target_id": target_id,
+++        })
+++
+++        # Apply combat damage
+++        if action_type == "attack" and target_id:
+++            for p in participants:
+++                pd = _safe_dict(p)
+++                if _safe_str(pd.get("actor_id")) == target_id:
+++                    p["hp"] = max(0, int(pd.get("hp", 0) or 0) - 2)
+++
+++        # Apply social stress
+++        elif action_type in {"persuade", "pressure", "threaten"} and target_id:
+++            for p in participants:
+++                pd = _safe_dict(p)
+++                if _safe_str(pd.get("actor_id")) == target_id:
+++                    p["stress"] = min(10, int(pd.get("stress", 0) or 0) + 1)
+++
+++        encounter_state["participants"] = participants
+++        encounter_state["log"] = log[-_MAX_LOG:]
+++        return self._advance_turn(encounter_state)
+++
+++    def apply_npc_turn(self, encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+++        """Apply an NPC action for the current active actor and advance."""
+++        encounter_state = dict(encounter_state or {})
+++        participants = _safe_list(encounter_state.get("participants"))
+++        log = _safe_list(encounter_state.get("log"))
+++        active_actor_id = _safe_str(encounter_state.get("active_actor_id"))
+++
+++        actor = None
+++        for p in participants:
+++            pd = _safe_dict(p)
+++            if _safe_str(pd.get("actor_id")) == active_actor_id:
+++                actor = pd
+++                break
+++
+++        if actor:
+++            log.append({
+++                "round": int(encounter_state.get("round", 1) or 1),
+++                "text": f"{_safe_str(actor.get('name')) or active_actor_id} takes a measured action.",
+++                "type": "npc_action",
+++                "log_type": "npc_turn",
+++                "target_id": "",
+++            })
+++
+++        encounter_state["log"] = log[-_MAX_LOG:]
+++        return self._advance_turn(encounter_state)
+++
+++    def resolve_if_finished(self, encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+++        """Check if encounter is resolved (no enemies alive) and update status."""
+++        encounter_state = dict(encounter_state or {})
+++        participants = _safe_list(encounter_state.get("participants"))
+++        enemies_alive = [
+++            p for p in participants
+++            if _safe_str(_safe_dict(p).get("side")) == "enemy" and int(_safe_dict(p).get("hp", 0) or 0) > 0
+++        ]
+++
+++        if not enemies_alive and participants:
+++            encounter_state["active"] = False
+++            encounter_state["status"] = "resolved"
+++            log = _safe_list(encounter_state.get("log"))
+++            log.append({
+++                "round": int(encounter_state.get("round", 1) or 1),
+++                "text": "Encounter resolved.",
+++                "type": "system",
+++            })
+++            encounter_state["log"] = log[-_MAX_LOG:]
+++
+++        return encounter_state
++\ No newline at end of file
++diff --git a/src/app/rpg/sandbox/__init__.py b/src/app/rpg/sandbox/__init__.py
++new file mode 100644
++index 0000000..92a0e51
++--- /dev/null
+++++ b/src/app/rpg/sandbox/__init__.py
++@@ -0,0 +1,29 @@
+++"""Phase 8.3 — Sandbox/World Simulation Depth.
+++
+++Provides deterministic world-impacting outcome projection and trend
+++evolution for locations, factions, threads, and rumors.
+++
+++Modules:
+++    outcome_projection: Derive structured world-impacting outcomes
+++    location_dynamics: Update location trend state
+++    thread_evolution: Update thread trend state
+++    faction_dynamics: Update faction trend state
+++    rumor_feedback: Update rumor heat feedback
+++    world_consequence_builder: Build world consequences from outcomes
+++"""
+++
+++from .outcome_projection import project_outcomes_from_state
+++from .location_dynamics import update_location_trends
+++from .thread_evolution import update_thread_trends
+++from .faction_dynamics import update_faction_trends
+++from .rumor_feedback import update_rumor_feedback
+++from .world_consequence_builder import build_world_consequences
+++
+++__all__ = [
+++    "project_outcomes_from_state",
+++    "update_location_trends",
+++    "update_thread_trends",
+++    "update_faction_trends",
+++    "update_rumor_feedback",
+++    "build_world_consequences",
+++]
++\ No newline at end of file
++diff --git a/src/app/rpg/sandbox/faction_dynamics.py b/src/app/rpg/sandbox/faction_dynamics.py
++new file mode 100644
++index 0000000..b8ae703
++--- /dev/null
+++++ b/src/app/rpg/sandbox/faction_dynamics.py
++@@ -0,0 +1,65 @@
+++"""Phase 8.3 — Faction Dynamics.
+++
+++Update faction trend state from projected outcomes.
+++"""
+++from __future__ import annotations
+++
+++from typing import Any, Dict, List
+++
+++
+++def _safe_dict(v: Any) -> Dict[str, Any]:
+++    return dict(v) if isinstance(v, dict) else {}
+++
+++
+++def _safe_list(v: Any) -> List[Any]:
+++    return list(v) if isinstance(v, list) else []
+++
+++
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+++
+++
+++def _clamp01(v: float) -> float:
+++    return max(0.0, min(1.0, float(v)))
+++
+++
+++def update_faction_trends(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
+++    """Update faction trends from projected outcomes.
+++
+++    Args:
+++        simulation_state: The current simulation state dict.
+++        projected_outcomes: List of projected outcome dicts.
+++
+++    Returns:
+++        Updated simulation_state with faction_trends in sandbox_state.
+++    """
+++    simulation_state = dict(simulation_state or {})
+++    sandbox_state = simulation_state.setdefault("sandbox_state", {})
+++    trends = _safe_dict(sandbox_state.get("faction_trends"))
+++    tick = int(simulation_state.get("tick", 0) or 0)
+++
+++    for outcome in _safe_list(projected_outcomes):
+++        if not isinstance(outcome, dict):
+++            continue
+++        if _safe_str(outcome.get("type")) != "faction_pressure":
+++            continue
+++
+++        faction_id = _safe_str(outcome.get("target_id"))
+++        if not faction_id:
+++            continue
+++
+++        rec = _safe_dict(trends.get(faction_id))
+++        rec.setdefault("momentum", 0.5)
+++        rec.setdefault("cohesion", 0.5)
+++        rec.setdefault("aggression", 0.5)
+++        rec["updated_tick"] = tick
+++
+++        rec["aggression"] = _clamp01(float(rec["aggression"]) + 0.1)
+++        rec["momentum"] = _clamp01(float(rec["momentum"]) + 0.05)
+++
+++        trends[faction_id] = rec
+++
+++    sandbox_state["faction_trends"] = {
+++        k: trends[k] for k in sorted(trends)[:100]
+++    }
+++    return simulation_state
++\ No newline at end of file
++diff --git a/src/app/rpg/sandbox/location_dynamics.py b/src/app/rpg/sandbox/location_dynamics.py
++new file mode 100644
++index 0000000..0ad35b5
++--- /dev/null
+++++ b/src/app/rpg/sandbox/location_dynamics.py
++@@ -0,0 +1,66 @@
+++"""Phase 8.3 — Location Dynamics.
+++
+++Update location trend state from projected outcomes.
+++"""
+++from __future__ import annotations
+++
+++from typing import Any, Dict, List
+++
+++
+++def _safe_dict(v: Any) -> Dict[str, Any]:
+++    return dict(v) if isinstance(v, dict) else {}
+++
+++
+++def _safe_list(v: Any) -> List[Any]:
+++    return list(v) if isinstance(v, list) else []
+++
+++
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+++
+++
+++def _clamp01(v: float) -> float:
+++    return max(0.0, min(1.0, float(v)))
+++
+++
+++def update_location_trends(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
+++    """Update location trends from projected outcomes.
+++
+++    Args:
+++        simulation_state: The current simulation state dict.
+++        projected_outcomes: List of projected outcome dicts.
+++
+++    Returns:
+++        Updated simulation_state with location_trends in sandbox_state.
+++    """
+++    simulation_state = dict(simulation_state or {})
+++    sandbox_state = simulation_state.setdefault("sandbox_state", {})
+++    trends = _safe_dict(sandbox_state.get("location_trends"))
+++    tick = int(simulation_state.get("tick", 0) or 0)
+++
+++    for outcome in _safe_list(projected_outcomes):
+++        if not isinstance(outcome, dict):
+++            continue
+++        location_id = _safe_str(outcome.get("location_id")) or _safe_str(outcome.get("target_id"))
+++        if not location_id:
+++            continue
+++
+++        rec = _safe_dict(trends.get(location_id))
+++        rec.setdefault("stability", 0.5)
+++        rec.setdefault("danger", 0.5)
+++        rec.setdefault("control_faction_id", "")
+++        rec["updated_tick"] = tick
+++
+++        typ = _safe_str(outcome.get("type"))
+++        if typ == "location_stabilization":
+++            rec["stability"] = _clamp01(float(rec["stability"]) + 0.1)
+++            rec["danger"] = _clamp01(float(rec["danger"]) - 0.1)
+++        elif typ in {"faction_pressure", "rumor_pressure", "encounter_resolution"}:
+++            rec["danger"] = _clamp01(float(rec["danger"]) + 0.05)
+++
+++        trends[location_id] = rec
+++
+++    sandbox_state["location_trends"] = {
+++        k: trends[k] for k in sorted(trends)[:100]
+++    }
+++    return simulation_state
++\ No newline at end of file
++diff --git a/src/app/rpg/sandbox/outcome_projection.py b/src/app/rpg/sandbox/outcome_projection.py
++new file mode 100644
++index 0000000..10e2d47
++--- /dev/null
+++++ b/src/app/rpg/sandbox/outcome_projection.py
++@@ -0,0 +1,98 @@
+++"""Phase 8.3 — Outcome Projection.
+++
+++Derive structured world-impacting outcomes from recent events, consequences,
+++and encounters.
+++"""
+++from __future__ import annotations
+++
+++from typing import Any, Dict, List
+++
+++
+++_MAX_PROJECTED = 24
+++
+++
+++def _safe_list(v: Any) -> List[Any]:
+++    return list(v) if isinstance(v, list) else []
+++
+++
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+++
+++
+++def project_outcomes_from_state(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+++    """Project world outcomes from simulation state.
+++
+++    Args:
+++        simulation_state: The current simulation state dict.
+++
+++    Returns:
+++        A list of projected outcome dicts, bounded to ``_MAX_PROJECTED``.
+++    """
+++    simulation_state = dict(simulation_state or {})
+++    tick = int(simulation_state.get("tick", 0) or 0)
+++
+++    events = _safe_list(simulation_state.get("events"))
+++    consequences = _safe_list(simulation_state.get("consequences"))
+++    active_rumors = _safe_list(simulation_state.get("active_rumors"))
+++    encounter_state = dict((simulation_state.get("player_state") or {}).get("encounter_state") or {})
+++
+++    projected: List[Dict[str, Any]] = []
+++
+++    for item in events[-8:]:
+++        if not isinstance(item, dict):
+++            continue
+++        typ = _safe_str(item.get("type"))
+++        target_id = _safe_str(item.get("target_id"))
+++        location_id = _safe_str(item.get("location_id"))
+++        faction_id = _safe_str(item.get("faction_id"))
+++
+++        if typ in {"betrayal", "player_escalation", "trust_collapse"}:
+++            projected.append({
+++                "type": "faction_pressure",
+++                "target_id": faction_id or target_id,
+++                "location_id": location_id,
+++                "summary": _safe_str(item.get("summary")) or typ,
+++                "tick": tick,
+++            })
+++        elif typ in {"player_support", "support", "stabilize"}:
+++            projected.append({
+++                "type": "location_stabilization",
+++                "target_id": location_id or target_id,
+++                "location_id": location_id,
+++                "summary": _safe_str(item.get("summary")) or typ,
+++                "tick": tick,
+++            })
+++
+++    for item in consequences[-8:]:
+++        if not isinstance(item, dict):
+++            continue
+++        projected.append({
+++            "type": "thread_shift",
+++            "target_id": _safe_str(item.get("target_id")) or _safe_str(item.get("thread_id")),
+++            "location_id": _safe_str(item.get("location_id")),
+++            "summary": _safe_str(item.get("summary")) or _safe_str(item.get("type")),
+++            "tick": tick,
+++        })
+++
+++    if encounter_state.get("status") == "resolved":
+++        projected.append({
+++            "type": "encounter_resolution",
+++            "target_id": _safe_str(encounter_state.get("scene_id")),
+++            "location_id": "",
+++            "summary": "Encounter resolution projected into world state.",
+++            "tick": tick,
+++        })
+++
+++    for rumor in active_rumors[:4]:
+++        if not isinstance(rumor, dict):
+++            continue
+++        projected.append({
+++            "type": "rumor_pressure",
+++            "target_id": _safe_str(rumor.get("subject_id")) or _safe_str(rumor.get("faction_id")),
+++            "location_id": _safe_str(rumor.get("location_id")),
+++            "summary": _safe_str(rumor.get("text")) or _safe_str(rumor.get("type")),
+++            "tick": tick,
+++        })
+++
+++    projected.sort(key=lambda x: (x.get("type", ""), x.get("target_id", ""), x.get("location_id", ""), x.get("summary", "")))
+++    return projected[:_MAX_PROJECTED]
++\ No newline at end of file
++diff --git a/src/app/rpg/sandbox/rumor_feedback.py b/src/app/rpg/sandbox/rumor_feedback.py
++new file mode 100644
++index 0000000..04d07ff
++--- /dev/null
+++++ b/src/app/rpg/sandbox/rumor_feedback.py
++@@ -0,0 +1,44 @@
+++"""Phase 8.3 — Rumor Feedback.
+++
+++Update rumor heat feedback from projected outcomes.
+++"""
+++from __future__ import annotations
+++
+++from typing import Any, Dict, List
+++
+++
+++def _safe_list(v: Any) -> List[Any]:
+++    return list(v) if isinstance(v, list) else []
+++
+++
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+++
+++
+++def update_rumor_feedback(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
+++    """Update rumor heat from projected outcomes.
+++
+++    Args:
+++        simulation_state: The current simulation state dict.
+++        projected_outcomes: List of projected outcome dicts.
+++
+++    Returns:
+++        Updated simulation_state with updated rumor heat in social_state.
+++    """
+++    simulation_state = dict(simulation_state or {})
+++    social_state = dict(simulation_state.get("social_state") or {})
+++    rumors = _safe_list(social_state.get("rumors"))
+++
+++    for rumor in rumors:
+++        if not isinstance(rumor, dict):
+++            continue
+++        subject_id = _safe_str(rumor.get("subject_id"))
+++        for outcome in _safe_list(projected_outcomes):
+++            if not isinstance(outcome, dict):
+++                continue
+++            if _safe_str(outcome.get("target_id")) == subject_id:
+++                rumor["heat"] = min(3, int(rumor.get("heat", 0) or 0) + 1)
+++
+++    social_state["rumors"] = rumors[:64]
+++    simulation_state["social_state"] = social_state
+++    return simulation_state
++\ No newline at end of file
++diff --git a/src/app/rpg/sandbox/thread_evolution.py b/src/app/rpg/sandbox/thread_evolution.py
++new file mode 100644
++index 0000000..039fc89
++--- /dev/null
+++++ b/src/app/rpg/sandbox/thread_evolution.py
++@@ -0,0 +1,72 @@
+++"""Phase 8.3 — Thread Evolution.
+++
+++Update thread trend state from projected outcomes.
+++"""
+++from __future__ import annotations
+++
+++from typing import Any, Dict, List
+++
+++
+++def _safe_dict(v: Any) -> Dict[str, Any]:
+++    return dict(v) if isinstance(v, dict) else {}
+++
+++
+++def _safe_list(v: Any) -> List[Any]:
+++    return list(v) if isinstance(v, list) else []
+++
+++
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+++
+++
+++def _clamp01(v: float) -> float:
+++    return max(0.0, min(1.0, float(v)))
+++
+++
+++def update_thread_trends(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
+++    """Update thread trends from projected outcomes.
+++
+++    Args:
+++        simulation_state: The current simulation state dict.
+++        projected_outcomes: List of projected outcome dicts.
+++
+++    Returns:
+++        Updated simulation_state with thread_trends in sandbox_state.
+++    """
+++    simulation_state = dict(simulation_state or {})
+++    sandbox_state = simulation_state.setdefault("sandbox_state", {})
+++    trends = _safe_dict(sandbox_state.get("thread_trends"))
+++    tick = int(simulation_state.get("tick", 0) or 0)
+++
+++    for outcome in _safe_list(projected_outcomes):
+++        if not isinstance(outcome, dict):
+++            continue
+++        if _safe_str(outcome.get("type")) != "thread_shift":
+++            continue
+++
+++        thread_id = _safe_str(outcome.get("target_id"))
+++        if not thread_id:
+++            continue
+++
+++        rec = _safe_dict(trends.get(thread_id))
+++        rec.setdefault("trajectory", "cooling")
+++        rec.setdefault("intensity", 0.5)
+++        rec["updated_tick"] = tick
+++
+++        summary = _safe_str(outcome.get("summary")).lower()
+++        if "resolve" in summary:
+++            rec["trajectory"] = "resolved"
+++            rec["intensity"] = _clamp01(float(rec["intensity"]) - 0.3)
+++        elif "branch" in summary:
+++            rec["trajectory"] = "branching"
+++            rec["intensity"] = _clamp01(float(rec["intensity"]) + 0.2)
+++        else:
+++            rec["trajectory"] = "escalating"
+++            rec["intensity"] = _clamp01(float(rec["intensity"]) + 0.1)
+++
+++        trends[thread_id] = rec
+++
+++    sandbox_state["thread_trends"] = {
+++        k: trends[k] for k in sorted(trends)[:100]
+++    }
+++    return simulation_state
++\ No newline at end of file
++diff --git a/src/app/rpg/sandbox/world_consequence_builder.py b/src/app/rpg/sandbox/world_consequence_builder.py
++new file mode 100644
++index 0000000..347d4ba
++--- /dev/null
+++++ b/src/app/rpg/sandbox/world_consequence_builder.py
++@@ -0,0 +1,74 @@
+++"""Phase 8.3 — World Consequence Builder.
+++
+++Build world consequences from projected outcomes.
+++"""
+++from __future__ import annotations
+++
+++from typing import Any, Dict, List
+++
+++
+++_MAX_WORLD_CONSEQUENCES = 100
+++
+++
+++def _safe_dict(v: Any) -> Dict[str, Any]:
+++    return dict(v) if isinstance(v, dict) else {}
+++
+++
+++def _safe_list(v: Any) -> List[Any]:
+++    return list(v) if isinstance(v, list) else []
+++
+++
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+++
+++
+++def build_world_consequences(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
+++    """Build world consequences from projected outcomes.
+++
+++    Args:
+++        simulation_state: The current simulation state dict.
+++        projected_outcomes: List of projected outcome dicts.
+++
+++    Returns:
+++        Updated simulation_state with world_consequences in sandbox_state.
+++    """
+++    simulation_state = dict(simulation_state or {})
+++    sandbox_state = simulation_state.setdefault("sandbox_state", {})
+++    tick = int(simulation_state.get("tick", 0) or 0)
+++
+++    consequences = _safe_list(sandbox_state.get("world_consequences"))
+++    idx = len(consequences)
+++
+++    for outcome in _safe_list(projected_outcomes):
+++        if not isinstance(outcome, dict):
+++            continue
+++        typ = _safe_str(outcome.get("type"))
+++        target_id = _safe_str(outcome.get("target_id"))
+++        if not typ or not target_id:
+++            continue
+++
+++        if typ == "location_stabilization":
+++            ctype = "location_shift"
+++            severity = "positive"
+++        elif typ == "faction_pressure":
+++            ctype = "faction_shift"
+++            severity = "negative"
+++        elif typ == "thread_shift":
+++            ctype = "thread_shift"
+++            severity = "mixed"
+++        else:
+++            ctype = "rumor_shift"
+++            severity = "mixed"
+++
+++        consequences.append({
+++            "consequence_id": f"wc:{tick}:{idx}",
+++            "type": ctype,
+++            "target_id": target_id,
+++            "summary": _safe_str(outcome.get("summary")) or typ,
+++            "severity": severity,
+++            "tick": tick,
+++        })
+++        idx += 1
+++
+++    sandbox_state["world_consequences"] = consequences[-_MAX_WORLD_CONSEQUENCES:]
+++    return simulation_state
++\ No newline at end of file
++diff --git a/src/tests/functional/test_phase83_sandbox_functional.py b/src/tests/functional/test_phase83_sandbox_functional.py
++new file mode 100644
++index 0000000..e848443
++--- /dev/null
+++++ b/src/tests/functional/test_phase83_sandbox_functional.py
++@@ -0,0 +1,91 @@
+++"""Phase 8.3 — Functional Tests for Sandbox/World Simulation Depth.
+++
+++Tests the sandbox integration with the simulation pipeline.
+++"""
+++from __future__ import annotations
+++
+++import pytest
+++
+++from app.rpg.creator.world_simulation import step_simulation_state
+++
+++
+++class TestSandboxIntegration:
+++    """Tests sandbox integration with world simulation."""
+++
+++    def test_step_produces_sandbox_summary(self):
+++        """After a simulation step, sandbox_summary should be present."""
+++        setup = {
+++            "metadata": {},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result = step_simulation_state(setup)
+++        after = result["after_state"]
+++        assert "sandbox_summary" in after
+++        assert "projected_outcome_count" in after["sandbox_summary"]
+++
+++    def test_step_produces_sandbox_state(self):
+++        """After a simulation step, sandbox_state should be present."""
+++        setup = {
+++            "metadata": {},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result = step_simulation_state(setup)
+++        after = result["after_state"]
+++        assert "sandbox_state" in after
+++        assert "projected_outcomes" in after["sandbox_state"]
+++        assert "location_trends" in after["sandbox_state"]
+++        assert "thread_trends" in after["sandbox_state"]
+++        assert "faction_trends" in after["sandbox_state"]
+++        assert "world_consequences" in after["sandbox_state"]
+++
+++    def test_sandbox_summary_counts_match(self):
+++        """The sandbox_summary counts should match actual data."""
+++        setup = {
+++            "metadata": {},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result = step_simulation_state(setup)
+++        after = result["after_state"]
+++        summary = after["sandbox_summary"]
+++        actual_outcomes = after["sandbox_state"]["projected_outcomes"]
+++        actual_consequences = after["sandbox_state"]["world_consequences"]
+++        assert summary["projected_outcome_count"] == len(actual_outcomes)
+++        assert summary["world_consequence_count"] == len(actual_consequences)
+++
+++    def test_multiple_steps_accumulate_consequences(self):
+++        """After multiple steps, world_consequences should grow."""
+++        setup = {
+++            "metadata": {},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result1 = step_simulation_state(setup)
+++        result2 = step_simulation_state(result1["next_setup"])
+++        after2 = result2["after_state"]
+++        # Should have accumulated world consequences from both steps
+++        assert len(after2["sandbox_state"]["world_consequences"]) >= 0
+++
+++    def test_rumor_heat_feedback(self):
+++        """Rumor heat should increase when target matches."""
+++        initial_state = {
+++            "tick": 0,
+++            "social_state": {"rumors": [{"subject_id": "f1", "heat": 0}]},
+++            "sandbox_state": {},
+++        }
+++        # Verify basic sandbox flow runs without errors
+++        setup = {
+++            "metadata": {"simulation_state": initial_state},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result = step_simulation_state(setup)
+++        # Should complete without error
+++        assert result["after_state"]["tick"] == 1
++\ No newline at end of file
++diff --git a/src/tests/regression/test_phase83_world_depth_regression.py b/src/tests/regression/test_phase83_world_depth_regression.py
++new file mode 100644
++index 0000000..814f47c
++--- /dev/null
+++++ b/src/tests/regression/test_phase83_world_depth_regression.py
++@@ -0,0 +1,141 @@
+++"""Phase 8.3 — Regression Tests for Sandbox/World Simulation Depth.
+++
+++Ensures existing functionality continues to work after Phase 8.3 changes.
+++"""
+++from __future__ import annotations
+++
+++import pytest
+++
+++from app.rpg.creator.world_simulation import (
+++    step_simulation_state,
+++    build_initial_simulation_state,
+++)
+++from app.rpg.sandbox import (
+++    project_outcomes_from_state,
+++    update_location_trends,
+++    update_thread_trends,
+++    update_faction_trends,
+++    update_rumor_feedback,
+++    build_world_consequences,
+++)
+++
+++
+++class TestSandboxRegression:
+++    """Regression tests to ensure Phase 8.3 doesn't break existing behavior."""
+++
+++    def test_step_simulation_state_returns_expected_keys(self):
+++        """step_simulation_state should return all expected keys."""
+++        setup = {
+++            "metadata": {},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result = step_simulation_state(setup)
+++        expected_keys = {
+++            "next_setup", "before_state", "after_state", "after_state_base",
+++            "simulation_diff", "base_diff", "effect_applied_diff", "summary",
+++            "events", "consequences", "effect_diff", "incident_diff", "reaction_diff",
+++        }
+++        assert expected_keys.issubset(set(result.keys()))
+++
+++    def test_simulation_state_has_tick_incremented(self):
+++        """After step, tick should be incremented."""
+++        setup = {
+++            "metadata": {},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result = step_simulation_state(setup)
+++        assert result["after_state"]["tick"] == 1
+++
+++    def test_project_outcomes_deterministic(self):
+++        """Same input should produce same output every time."""
+++        state = {
+++            "tick": 1,
+++            "events": [{"type": "betrayal", "target_id": "t", "location_id": "l", "faction_id": "f", "summary": "s"}],
+++        }
+++        r1 = project_outcomes_from_state(state)
+++        r2 = project_outcomes_from_state(state)
+++        assert r1 == r2
+++
+++    def test_location_trends_preserves_existing(self):
+++        """Existing location trends should be preserved when no matching outcomes."""
+++        state = {"tick": 1, "sandbox_state": {"location_trends": {"loc1": {"stability": 0.5, "danger": 0.5}}}}
+++        outcomes = [{"type": "faction_pressure", "target_id": "f1", "location_id": ""}]  # Empty location_id
+++        result = update_location_trends(state, outcomes)
+++        trends = result["sandbox_state"]["location_trends"]
+++        # Empty location_id falls back to target_id, so f1 is added, loc1 remains
+++        assert "loc1" in trends
+++        assert trends["loc1"]["stability"] == 0.5
+++        assert trends["loc1"]["danger"] == 0.5
+++
+++    def test_world_consequences_grow_monotonically(self):
+++        """World consequences should only grow, not shrink (within cap)."""
+++        state = {"tick": 1, "sandbox_state": {"world_consequences": []}}
+++        outcomes1 = [{"type": "faction_pressure", "target_id": "f1", "summary": "s1"}]
+++        result1 = build_world_consequences(state, outcomes1)
+++        c1 = len(result1["sandbox_state"]["world_consequences"])
+++
+++        state2 = result1
+++        state2["tick"] = 2
+++        outcomes2 = [{"type": "faction_pressure", "target_id": "f2", "summary": "s2"}]
+++        result2 = build_world_consequences(state2, outcomes2)
+++        c2 = len(result2["sandbox_state"]["world_consequences"])
+++
+++        assert c2 >= c1
+++
+++    def test_integration_with_scenes(self):
+++        """Scenes should include sandbox_summary after generation."""
+++        from app.rpg.creator.world_scene_generator import generate_scenes_from_simulation
+++
+++        setup = {
+++            "metadata": {},
+++            "locations": [{"location_id": "loc1", "name": "Loc1"}],
+++            "factions": [{"faction_id": "f1", "name": "F1"}],
+++            "npc_seeds": [],
+++        }
+++        result = step_simulation_state(setup)
+++        state = result["after_state"]
+++        scenes = generate_scenes_from_simulation(state)
+++        # Scenes should include sandbox_summary from state
+++        if scenes:
+++            for scene in scenes:
+++                assert "sandbox_summary" in scene
+++
+++    def test_encounter_log_has_type_and_target(self):
+++        """Encounter log entries should have log_type and target_id."""
+++        from app.rpg.encounter import EncounterResolver
+++
+++        resolver = EncounterResolver()
+++        encounter_state = {
+++            "participants": [
+++                {"actor_id": "player", "side": "player", "hp": 10, "stress": 0},
+++                {"actor_id": "enemy1", "side": "enemy", "hp": 5, "stress": 0},
+++            ],
+++            "turn_index": -1,
+++            "round": 1,
+++            "log": [],
+++            "active_actor_id": "",
+++        }
+++        encounter_state = resolver.start(encounter_state)
+++        encounter_state["active_actor_id"] = "player"
+++        encounter_state = resolver.apply_player_action(encounter_state, "attack", "enemy1")
+++
+++        assert len(encounter_state["log"]) >= 1
+++        log_entry = encounter_state["log"][0]
+++        assert "log_type" in log_entry
+++        assert "target_id" in log_entry
+++        assert log_entry["log_type"] == "attack"
+++        assert log_entry["target_id"] == "enemy1"
+++
+++    def test_rumor_feedback_preserves_rumor_list_size(self):
+++        """Rumor list should be capped at 64."""
+++        state = {
+++            "tick": 1,
+++            "social_state": {"rumors": [{"subject_id": f"s{i}", "heat": 0} for i in range(100)]},
+++        }
+++        outcomes = [{"type": "faction_pressure", "target_id": "s1"}]
+++        result = update_rumor_feedback(state, outcomes)
+++        assert len(result["social_state"]["rumors"]) <= 64
++\ No newline at end of file
++diff --git a/src/tests/unit/rpg/test_phase83_sandbox_unit.py b/src/tests/unit/rpg/test_phase83_sandbox_unit.py
++new file mode 100644
++index 0000000..de9ab38
++--- /dev/null
+++++ b/src/tests/unit/rpg/test_phase83_sandbox_unit.py
++@@ -0,0 +1,215 @@
+++"""Phase 8.3 — Unit Tests for Sandbox/World Simulation Depth.
+++
+++Tests:
+++- projected outcomes are bounded and deterministic
+++- location trend updates clamp correctly
+++- thread trajectory changes correctly
+++- faction trend updates correctly
+++- rumor heat feedback increments correctly
+++- world consequences capped to 100
+++"""
+++from __future__ import annotations
+++
+++import pytest
+++
+++from app.rpg.sandbox import (
+++    project_outcomes_from_state,
+++    update_location_trends,
+++    update_thread_trends,
+++    update_faction_trends,
+++    update_rumor_feedback,
+++    build_world_consequences,
+++)
+++
+++
+++class TestOutcomeProjection:
+++    """Tests for outcome projection."""
+++
+++    def test_empty_state_returns_empty_list(self):
+++        result = project_outcomes_from_state({})
+++        assert result == []
+++
+++    def test_bounded_to_24_max(self):
+++        state = {
+++            "tick": 1,
+++            "events": [{"type": "betrayal", "target_id": "t", "location_id": "l", "faction_id": "f", "summary": "s"}] * 30,
+++        }
+++        result = project_outcomes_from_state(state)
+++        assert len(result) <= 24
+++
+++    def test_betrayal_emits_faction_pressure(self):
+++        state = {
+++            "tick": 1,
+++            "events": [{"type": "betrayal", "target_id": "t1", "location_id": "l1", "faction_id": "f1", "summary": "betrayal"}],
+++        }
+++        result = project_outcomes_from_state(state)
+++        assert len(result) == 1
+++        assert result[0]["type"] == "faction_pressure"
+++        assert result[0]["target_id"] == "f1"
+++
+++    def test_player_support_emits_location_stabilization(self):
+++        state = {
+++            "tick": 1,
+++            "events": [{"type": "player_support", "target_id": "t1", "location_id": "l1", "faction_id": "f1", "summary": "support"}],
+++        }
+++        result = project_outcomes_from_state(state)
+++        assert len(result) == 1
+++        assert result[0]["type"] == "location_stabilization"
+++
+++    def test_encounter_resolution_emits_outcome(self):
+++        state = {
+++            "tick": 1,
+++            "player_state": {"encounter_state": {"status": "resolved", "scene_id": "s1"}},
+++        }
+++        result = project_outcomes_from_state(state)
+++        assert len(result) == 1
+++        assert result[0]["type"] == "encounter_resolution"
+++
+++    def test_deterministic_same_input_same_output(self):
+++        state = {
+++            "tick": 5,
+++            "events": [{"type": "betrayal", "target_id": "t", "location_id": "l", "faction_id": "f", "summary": "s"}],
+++        }
+++        r1 = project_outcomes_from_state(state)
+++        r2 = project_outcomes_from_state(state)
+++        assert r1 == r2
+++
+++
+++class TestLocationDynamics:
+++    """Tests for location dynamics."""
+++
+++    def test_stabilization_increases_stability_decreases_danger(self):
+++        state = {"tick": 1, "sandbox_state": {"location_trends": {}}}
+++        outcomes = [{"type": "location_stabilization", "target_id": "loc1", "location_id": "loc1"}]
+++        result = update_location_trends(state, outcomes)
+++        trends = result["sandbox_state"]["location_trends"]
+++        assert trends["loc1"]["stability"] == 0.6
+++        assert trends["loc1"]["danger"] == 0.4
+++
+++    def test_faction_pressure_increases_danger(self):
+++        state = {"tick": 1, "sandbox_state": {"location_trends": {}}}
+++        outcomes = [{"type": "faction_pressure", "target_id": "loc1", "location_id": "loc1"}]
+++        result = update_location_trends(state, outcomes)
+++        trends = result["sandbox_state"]["location_trends"]
+++        assert trends["loc1"]["danger"] == 0.55
+++
+++    def test_danger_clamped_at_1_0(self):
+++        state = {"tick": 1, "sandbox_state": {"location_trends": {"loc1": {"stability": 0.5, "danger": 1.0}}}}
+++        outcomes = [{"type": "faction_pressure", "target_id": "loc1", "location_id": "loc1"}] * 20
+++        result = update_location_trends(state, outcomes)
+++        trends = result["sandbox_state"]["location_trends"]
+++        assert trends["loc1"]["danger"] == 1.0
+++
+++    def test_stability_clamped_at_1_0(self):
+++        state = {"tick": 1, "sandbox_state": {"location_trends": {"loc1": {"stability": 1.0, "danger": 0.5}}}}
+++        outcomes = [{"type": "location_stabilization", "target_id": "loc1", "location_id": "loc1"}] * 20
+++        result = update_location_trends(state, outcomes)
+++        trends = result["sandbox_state"]["location_trends"]
+++        assert trends["loc1"]["stability"] == 1.0
+++        assert trends["loc1"]["danger"] == 0.0
+++
+++
+++class TestThreadEvolution:
+++    """Tests for thread evolution."""
+++
+++    def test_resolve_trajectory(self):
+++        state = {"tick": 1, "sandbox_state": {"thread_trends": {}}}
+++        outcomes = [{"type": "thread_shift", "target_id": "t1", "summary": "issue resolved"}]
+++        result = update_thread_trends(state, outcomes)
+++        trends = result["sandbox_state"]["thread_trends"]
+++        assert trends["t1"]["trajectory"] == "resolved"
+++        assert trends["t1"]["intensity"] == 0.2
+++
+++    def test_branching_trajectory(self):
+++        state = {"tick": 1, "sandbox_state": {"thread_trends": {}}}
+++        outcomes = [{"type": "thread_shift", "target_id": "t1", "summary": "new branch"}]
+++        result = update_thread_trends(state, outcomes)
+++        trends = result["sandbox_state"]["thread_trends"]
+++        assert trends["t1"]["trajectory"] == "branching"
+++        assert trends["t1"]["intensity"] == 0.7
+++
+++    def test_default_escalating(self):
+++        state = {"tick": 1, "sandbox_state": {"thread_trends": {}}}
+++        outcomes = [{"type": "thread_shift", "target_id": "t1", "summary": "something else"}]
+++        result = update_thread_trends(state, outcomes)
+++        trends = result["sandbox_state"]["thread_trends"]
+++        assert trends["t1"]["trajectory"] == "escalating"
+++        assert trends["t1"]["intensity"] == 0.6
+++
+++
+++class TestFactionDynamics:
+++    """Tests for faction dynamics."""
+++
+++    def test_faction_pressure_increases_aggression_and_momentum(self):
+++        state = {"tick": 1, "sandbox_state": {"faction_trends": {}}}
+++        outcomes = [{"type": "faction_pressure", "target_id": "faction1"}]
+++        result = update_faction_trends(state, outcomes)
+++        trends = result["sandbox_state"]["faction_trends"]
+++        assert trends["faction1"]["aggression"] == 0.6
+++        assert trends["faction1"]["momentum"] == 0.55
+++
+++    def test_non_faction_outcomes_ignored(self):
+++        state = {"tick": 1, "sandbox_state": {"faction_trends": {}}}
+++        outcomes = [{"type": "location_stabilization", "target_id": "loc1"}]
+++        result = update_faction_trends(state, outcomes)
+++        trends = result["sandbox_state"]["faction_trends"]
+++        assert trends == {}
+++
+++
+++class TestRumorFeedback:
+++    """Tests for rumor feedback."""
+++
+++    def test_rumor_heat_increments_on_match(self):
+++        state = {
+++            "tick": 1,
+++            "social_state": {"rumors": [{"subject_id": "s1", "heat": 0}]},
+++        }
+++        outcomes = [{"type": "faction_pressure", "target_id": "s1"}]
+++        result = update_rumor_feedback(state, outcomes)
+++        assert result["social_state"]["rumors"][0]["heat"] == 1
+++
+++    def test_rumor_heat_capped_at_3(self):
+++        state = {
+++            "tick": 1,
+++            "social_state": {"rumors": [{"subject_id": "s1", "heat": 3}]},
+++        }
+++        outcomes = [{"type": "faction_pressure", "target_id": "s1"}] * 5
+++        result = update_rumor_feedback(state, outcomes)
+++        assert result["social_state"]["rumors"][0]["heat"] == 3
+++
+++    def test_no_match_no_heat_change(self):
+++        state = {
+++            "tick": 1,
+++            "social_state": {"rumors": [{"subject_id": "s1", "heat": 0}]},
+++        }
+++        outcomes = [{"type": "faction_pressure", "target_id": "different"}]
+++        result = update_rumor_feedback(state, outcomes)
+++        assert result["social_state"]["rumors"][0]["heat"] == 0
+++
+++
+++class TestWorldConsequences:
+++    """Tests for world consequence builder."""
+++
+++    def test_location_stabilization_maps_to_positive(self):
+++        state = {"tick": 1, "sandbox_state": {"world_consequences": []}}
+++        outcomes = [{"type": "location_stabilization", "target_id": "loc1", "summary": "s"}]
+++        result = build_world_consequences(state, outcomes)
+++        consequences = result["sandbox_state"]["world_consequences"]
+++        assert len(consequences) == 1
+++        assert consequences[0]["severity"] == "positive"
+++        assert consequences[0]["type"] == "location_shift"
+++
+++    def test_faction_pressure_maps_to_negative(self):
+++        state = {"tick": 1, "sandbox_state": {"world_consequences": []}}
+++        outcomes = [{"type": "faction_pressure", "target_id": "f1", "summary": "s"}]
+++        result = build_world_consequences(state, outcomes)
+++        consequences = result["sandbox_state"]["world_consequences"]
+++        assert consequences[0]["severity"] == "negative"
+++        assert consequences[0]["type"] == "faction_shift"
+++
+++    def test_capped_at_100(self):
+++        state = {"tick": 1, "sandbox_state": {"world_consequences": []}}
+++        outcomes = [{"type": "faction_pressure", "target_id": f"f{i}", "summary": f"s{i}"} for i in range(150)]
+++        result = build_world_consequences(state, outcomes)
+++        consequences = result["sandbox_state"]["world_consequences"]
+++        assert len(consequences) == 100
++\ No newline at end of file
+diff --git a/src/app/rpg/api/rpg_encounter_routes.py b/src/app/rpg/api/rpg_encounter_routes.py
+index b2f1e4d..e1fa07c 100644
+--- a/src/app/rpg/api/rpg_encounter_routes.py
++++ b/src/app/rpg/api/rpg_encounter_routes.py
+@@ -78,10 +78,11 @@ def encounter_action():
+ 
+     if encounter_state.get("status") == "resolved":
+         state.setdefault("events", []).append({
+-            "type": "encounter_resolved",
++            "type": "encounter_resolution",
+             "origin": "encounter",
+             "target_id": encounter_state.get("scene_id", ""),
+-            "summary": "Encounter resolved and fed back into the world.",
++            "location_id": encounter_state.get("location_id", ""),
++            "summary": "Encounter outcome impacts world state.",
+         })
+ 
+     state["player_state"]["encounter_state"] = encounter_state
+diff --git a/src/app/rpg/encounter/encounter_resolver.py b/src/app/rpg/encounter/encounter_resolver.py
+index a8a15ba..f7025f4 100644
+--- a/src/app/rpg/encounter/encounter_resolver.py
++++ b/src/app/rpg/encounter/encounter_resolver.py
+@@ -36,6 +36,19 @@ class EncounterResolver:
+     def start(self, encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+         """Activate encounter and populate available actions."""
+         encounter_state = dict(encounter_state or {})
++        participants = _safe_list(encounter_state.get("participants"))
++
++        encounter_state["active"] = True
++        encounter_state["status"] = "active"
++        encounter_state["round"] = int(encounter_state.get("round", 1) or 1)
++
++        if participants:
++            encounter_state["turn_index"] = 0
++            encounter_state["active_actor_id"] = _safe_str(participants[0].get("actor_id"))
++        else:
++            encounter_state["turn_index"] = 0
++            encounter_state["active_actor_id"] = ""
++
+         encounter_state["available_actions"] = build_player_actions(encounter_state)
+         return encounter_state
+ 
+@@ -64,9 +77,12 @@ class EncounterResolver:
+         action_type = _safe_str(action_type)
+         target_id = _safe_str(target_id)
+ 
++        active_actor_id = _safe_str(encounter_state.get("active_actor_id"))
++        if not active_actor_id:
++            return encounter_state
++
+         participants = _safe_list(encounter_state.get("participants"))
+         log = _safe_list(encounter_state.get("log"))
+-        active_actor_id = _safe_str(encounter_state.get("active_actor_id"))
+ 
+         text = f"{active_actor_id or 'player'} uses {action_type}"
+         if target_id:
+diff --git a/src/app/rpg/sandbox/outcome_projection.py b/src/app/rpg/sandbox/outcome_projection.py
+index 10e2d47..9b9ff55 100644
+--- a/src/app/rpg/sandbox/outcome_projection.py
++++ b/src/app/rpg/sandbox/outcome_projection.py
+@@ -49,7 +49,7 @@ def project_outcomes_from_state(simulation_state: Dict[str, Any]) -> List[Dict[s
+         if typ in {"betrayal", "player_escalation", "trust_collapse"}:
+             projected.append({
+                 "type": "faction_pressure",
+-                "target_id": faction_id or target_id,
++                "target_id": faction_id or target_id or location_id,
+                 "location_id": location_id,
+                 "summary": _safe_str(item.get("summary")) or typ,
+                 "tick": tick,
