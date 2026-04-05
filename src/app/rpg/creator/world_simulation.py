@@ -334,20 +334,26 @@ def summarize_simulation_step(diff: dict[str, Any]) -> list[str]:
         if deescalated:
             lines.append(f"{deescalated} thread{'s' if deescalated != 1 else ''} de-escalated")
 
-    # Factions
+    # Factions — group by resulting status
     fac_changes = _safe_list(diff.get("factions_changed"))
     if fac_changes:
+        fac_by_status: dict[str, int] = {}
         for c in fac_changes:
             after_p = c.get("after", {}).get("pressure", 0)
             status = _faction_status(after_p)
-            lines.append(f"1 faction became {status}")
+            fac_by_status[status] = fac_by_status.get(status, 0) + 1
+        for status, count in sorted(fac_by_status.items()):
+            lines.append(f"{count} faction{'s' if count != 1 else ''} became {status}")
 
-    # Locations
+    # Locations — group by resulting status
     loc_changes = _safe_list(diff.get("locations_changed"))
     if loc_changes:
+        loc_by_status: dict[str, int] = {}
         for c in loc_changes:
             after_h = c.get("after", {}).get("heat", 0)
             status = _location_status(after_h)
-            lines.append(f"1 location became {status}")
+            loc_by_status[status] = loc_by_status.get(status, 0) + 1
+        for status, count in sorted(loc_by_status.items()):
+            lines.append(f"{count} location{'s' if count != 1 else ''} became {status}")
 
     return lines
