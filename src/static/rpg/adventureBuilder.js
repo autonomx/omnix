@@ -848,7 +848,17 @@ var AdventureBuilder = (function () {
 
     function _renderStep5Simulation(contentEl) {
         var wi = state.worldInspection || {};
-        var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false, lastEvents: [], lastConsequences: [] };
+        var rt = (wi.simulationRuntime) || {
+            state: null,
+            lastDiff: null,
+            lastSummary: [],
+            stepping: false,
+            lastEvents: [],
+            lastConsequences: [],
+            lastEffectDiff: null,
+            lastIncidentDiff: null,
+            lastReactionDiff: null
+        };
         var simState = rt.state;
         var tickLabel = simState ? simState.tick : '—';
         var stepping = rt.stepping;
@@ -909,7 +919,10 @@ var AdventureBuilder = (function () {
                 rt.lastSummary || [],
                 rt.lastEvents,
                 rt.lastConsequences,
-                rt.lastEffectDiff
+                rt.lastEffectDiff,
+                rt.lastIncidentDiff,
+                rt.lastReactionDiff,
+                rt.state
             );
         }
 
@@ -955,6 +968,8 @@ var AdventureBuilder = (function () {
                 wi.simulationRuntime.lastEvents = res.events || [];
                 wi.simulationRuntime.lastConsequences = res.consequences || [];
                 wi.simulationRuntime.lastEffectDiff = res.effect_diff || null;
+                wi.simulationRuntime.lastIncidentDiff = res.incident_diff || null;
+                wi.simulationRuntime.lastReactionDiff = res.reaction_diff || null;
                 // Capture snapshot
                 var tick = (res.simulation_state && res.simulation_state.tick) || '?';
                 _captureWorldSnapshot('After Simulation Tick ' + tick);

@@ -445,13 +445,21 @@ var AdventureBuilderTimeline = (function () {
      * @param {string[]} summary - Summary lines from backend
      * @param {Object[]} events - Events generated from diff
      * @param {Object[]} consequences - Consequences generated from events
+     * @param {Object} effectDiff - Active effects diff from backend
+     * @param {Object} incidentDiff - Incident diff from backend
+     * @param {Object} reactionDiff - Policy reaction diff from backend
+     * @param {Object} state - Current simulation state
      */
-    function renderSimulationDiff(container, diff, summary, events, consequences) {
+    function renderSimulationDiff(container, diff, summary, events, consequences, effectDiff, incidentDiff, reactionDiff, state) {
         if (!container) return;
         diff = diff || {};
         summary = summary || [];
         events = events || [];
         consequences = consequences || [];
+        effectDiff = effectDiff || {};
+        incidentDiff = incidentDiff || {};
+        reactionDiff = reactionDiff || {};
+        state = state || {};
 
         var html = '<div class="ab-sim-diff">';
         html += '<h5>Simulation Diff — Tick ' + _esc(String(diff.tick_before || 0)) + ' → ' + _esc(String(diff.tick_after || 0)) + '</h5>';
@@ -507,6 +515,51 @@ var AdventureBuilderTimeline = (function () {
             html += '</div>';
         }
 
+        // Incident diff
+        var incAdded = incidentDiff.added || [];
+        var incRemoved = incidentDiff.removed || [];
+        var incChanged = incidentDiff.changed || [];
+        if (incAdded.length || incRemoved.length || incChanged.length) {
+            html += '<div class="ab-sim-incidents"><h5>Incidents</h5>';
+            if (incAdded.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Spawned</strong><pre>' + _esc(JSON.stringify(incAdded, null, 2)) + '</pre></div>';
+            }
+            if (incRemoved.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Resolved</strong><pre>' + _esc(JSON.stringify(incRemoved, null, 2)) + '</pre></div>';
+            }
+            if (incChanged.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Changed</strong><pre>' + _esc(JSON.stringify(incChanged, null, 2)) + '</pre></div>';
+            }
+            html += '</div>';
+        }
+
+        // Policy reactions
+        var rxnAdded = reactionDiff.added || [];
+        var rxnRemoved = reactionDiff.removed || [];
+        if (rxnAdded.length || rxnRemoved.length) {
+            html += '<div class="ab-sim-reactions"><h5>Policy Reactions</h5>';
+            if (rxnAdded.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Triggered</strong><pre>' + _esc(JSON.stringify(rxnAdded, null, 2)) + '</pre></div>';
+            }
+            if (rxnRemoved.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Cleared</strong><pre>' + _esc(JSON.stringify(rxnRemoved, null, 2)) + '</pre></div>';
+            }
+            html += '</div>';
+        }
+
+        // Live incidents from current state
+        var liveIncidents = state.incidents || [];
+        if (liveIncidents.length) {
+            html += '<div class="ab-sim-live-incidents"><h5>Active Incidents</h5>';
+            liveIncidents.forEach(function (inc) {
+                html += '<div class="ab-sim-event-card ab-sim-event-' + _esc(inc.severity || 'neutral') + '">' +
+                    '<div class="ab-sim-event-type">' + _esc(inc.type || 'incident') + '</div>' +
+                    '<div class="ab-sim-event-summary">' + _esc(inc.summary || '') + '</div>' +
+                '</div>';
+            });
+            html += '</div>';
+        }
+
         // Threads changed
         var threads = diff.threads_changed || [];
         if (threads.length) {
@@ -558,7 +611,9 @@ var AdventureBuilderTimeline = (function () {
             html += '</div>';
         }
 
-        if (!threads.length && !factions.length && !locations.length && !events.length && !consequences.length) {
+        if (!threads.length && !factions.length && !locations.length && !events.length && !consequences.length &&
+            !incAdded.length && !incRemoved.length && !incChanged.length &&
+            !rxnAdded.length && !rxnRemoved.length && !liveIncidents.length) {
             html += '<p class="ab-muted">No changes in this tick.</p>';
         }
 

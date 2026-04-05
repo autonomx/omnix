@@ -1,495 +1,7 @@
-Phase 3D goal
+Here’s the remaining Phase 3D patch diff to finish the feature properly: UI wiring, rendering, styling, and tests. It builds directly on the backend work you already landed and on the gaps called out in your review doc.
 
-Turn this:
-
-tick → diff → events → consequences → active effects → next tick influence
-
-into this:
-
-tick → diff → events → consequences → effects → incidents → policy reactions → next tick influence
-
-So the world gains not just momentum, but visible emergent situations.
-
-What Phase 3D adds
-Backend
-incident spawning rules
-faction policy engine
-incident persistence + expiry
-incident diff
-policy reaction records
-summaries for incidents/policies
-Frontend
-incidents in simulation panel
-policy reactions in diff panel
-incident history visibility
-Design rules
-Must stay deterministic
-
-No randomness.
-
-Must stay bounded
-
-Cap incidents and reactions.
-
-Must stay inspectable
-
-Each incident/reaction needs:
-
-id
-type
-source entity
-severity
-summary
-duration
-New simulation state fields
-
-Add to metadata.simulation_state:
-
-{
-  "incidents": [
-    {
-      "incident_id": "inc_thr_market_critical",
-      "type": "thread_crisis",
-      "source_type": "thread",
-      "source_id": "thr_market",
-      "severity": "critical",
-      "summary": "Thread thr_market has reached crisis level.",
-      "duration": 2
-    }
-  ],
-  "policy_reactions": [
-    {
-      "reaction_id": "rxn_fac_red_knives_strained",
-      "type": "faction_crackdown",
-      "faction_id": "fac_red_knives",
-      "severity": "strained",
-      "summary": "Faction fac_red_knives is tightening control in response to strain."
-    }
-  ]
-}
-Deterministic rules for Phase 3D
-Incident spawning
-Thread incidents
-
-If a thread becomes critical:
-
-spawn thread_crisis
-Location incidents
-
-If a location becomes hot:
-
-spawn location_flashpoint
-Faction incidents
-
-If a faction becomes strained:
-
-spawn faction_instability
-Policy reactions
-Faction policy rules
-
-If faction is watchful:
-
-spawn faction_alert
-
-If faction is strained:
-
-spawn faction_crackdown
-
-If faction pressure drops to stable from higher:
-
-spawn faction_relief
-
-These are descriptive for now, but structured for future enforcement.
-
-New backend module
-
-Create:
-
-src/app/rpg/creator/world_incidents.py
-
-This module owns:
-
-incident spawning
-incident decay
-reaction generation
-incident/reaction diff
-Full apply-this-patch diff
-diff --git a/src/app/rpg/creator/world_incidents.py b/src/app/rpg/creator/world_incidents.py
-new file mode 100644
-index 0000000..1111111
---- /dev/null
-+++ b/src/app/rpg/creator/world_incidents.py
-@@
-+"""Phase 3D — Incident Engine + Policy System.
-+
-+Deterministic incident spawning and faction policy reactions derived from
-+simulation state transitions.
-+"""
-+
-+from __future__ import annotations
-+
-+from typing import Any
-+
-+MAX_INCIDENTS = 50
-+MAX_POLICY_REACTIONS = 50
-+
-+
-+def _safe_dict(value: Any) -> dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> list[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def spawn_incidents_from_state_diff(
-+    simulation_diff: dict[str, Any],
-+) -> list[dict[str, Any]]:
-+    incidents: list[dict[str, Any]] = []
-+
-+    for change in _safe_list(simulation_diff.get("threads_changed")):
-+        thread_id = change.get("id")
-+        after = _safe_dict(change.get("after"))
-+        if thread_id and after.get("status") == "critical":
-+            incidents.append({
-+                "incident_id": f"inc_{thread_id}_critical",
-+                "type": "thread_crisis",
-+                "source_type": "thread",
-+                "source_id": thread_id,
-+                "severity": "critical",
-+                "summary": f"Thread {thread_id} has reached crisis level.",
-+                "duration": 2,
-+            })
-+
-+    for change in _safe_list(simulation_diff.get("locations_changed")):
-+        location_id = change.get("id")
-+        after = _safe_dict(change.get("after"))
-+        if location_id and after.get("status") == "hot":
-+            incidents.append({
-+                "incident_id": f"inc_{location_id}_hot",
-+                "type": "location_flashpoint",
-+                "source_type": "location",
-+                "source_id": location_id,
-+                "severity": "hot",
-+                "summary": f"Location {location_id} has become a flashpoint.",
-+                "duration": 2,
-+            })
-+
-+    for change in _safe_list(simulation_diff.get("factions_changed")):
-+        faction_id = change.get("id")
-+        after = _safe_dict(change.get("after"))
-+        if faction_id and after.get("status") == "strained":
-+            incidents.append({
-+                "incident_id": f"inc_{faction_id}_strained",
-+                "type": "faction_instability",
-+                "source_type": "faction",
-+                "source_id": faction_id,
-+                "severity": "strained",
-+                "summary": f"Faction {faction_id} is showing signs of instability.",
-+                "duration": 2,
-+            })
-+
-+    return incidents[:MAX_INCIDENTS]
-+
-+
-+def generate_policy_reactions(
-+    simulation_diff: dict[str, Any],
-+) -> list[dict[str, Any]]:
-+    reactions: list[dict[str, Any]] = []
-+
-+    for change in _safe_list(simulation_diff.get("factions_changed")):
-+        faction_id = change.get("id")
-+        before = _safe_dict(change.get("before"))
-+        after = _safe_dict(change.get("after"))
-+        if not faction_id:
-+            continue
-+
-+        before_status = before.get("status")
-+        after_status = after.get("status")
-+
-+        if after_status == "watchful":
-+            reactions.append({
-+                "reaction_id": f"rxn_{faction_id}_alert",
-+                "type": "faction_alert",
-+                "faction_id": faction_id,
-+                "severity": "watchful",
-+                "summary": f"Faction {faction_id} is on alert.",
-+            })
-+        elif after_status == "strained":
-+            reactions.append({
-+                "reaction_id": f"rxn_{faction_id}_crackdown",
-+                "type": "faction_crackdown",
-+                "faction_id": faction_id,
-+                "severity": "strained",
-+                "summary": f"Faction {faction_id} is tightening control in response to strain.",
-+            })
-+        elif before_status in {"watchful", "strained"} and after_status == "stable":
-+            reactions.append({
-+                "reaction_id": f"rxn_{faction_id}_relief",
-+                "type": "faction_relief",
-+                "faction_id": faction_id,
-+                "severity": "stable",
-+                "summary": f"Faction {faction_id} has stabilized.",
-+            })
-+
-+    return reactions[:MAX_POLICY_REACTIONS]
-+
-+
-+def merge_incidents(
-+    current_incidents: list[dict[str, Any]],
-+    new_incidents: list[dict[str, Any]],
-+) -> list[dict[str, Any]]:
-+    merged: dict[str, dict[str, Any]] = {}
-+    for inc in _safe_list(current_incidents):
-+        iid = inc.get("incident_id")
-+        if iid:
-+            merged[iid] = dict(inc)
-+    for inc in _safe_list(new_incidents):
-+        iid = inc.get("incident_id")
-+        if iid:
-+            merged[iid] = dict(inc)
-+    return sorted(merged.values(), key=lambda i: i.get("incident_id", ""))[:MAX_INCIDENTS]
-+
-+
-+def decay_incidents(incidents: list[dict[str, Any]]) -> list[dict[str, Any]]:
-+    remaining: list[dict[str, Any]] = []
-+    for inc in _safe_list(incidents):
-+        item = dict(inc)
-+        duration = int(item.get("duration", 0)) - 1
-+        if duration > 0:
-+            item["duration"] = duration
-+            remaining.append(item)
-+    return remaining[:MAX_INCIDENTS]
-+
-+
-+def compute_incident_diff(
-+    before_incidents: list[dict[str, Any]],
-+    after_incidents: list[dict[str, Any]],
-+) -> dict[str, Any]:
-+    before_map = {
-+        x.get("incident_id"): x for x in _safe_list(before_incidents) if x.get("incident_id")
-+    }
-+    after_map = {
-+        x.get("incident_id"): x for x in _safe_list(after_incidents) if x.get("incident_id")
-+    }
-+
-+    added = sorted([iid for iid in after_map if iid not in before_map])
-+    removed = sorted([iid for iid in before_map if iid not in after_map])
-+    changed: list[dict[str, Any]] = []
-+
-+    for iid in sorted(set(before_map.keys()) & set(after_map.keys())):
-+        before = before_map[iid]
-+        after = after_map[iid]
-+        fields: list[str] = []
-+        for key in sorted(set(before.keys()) | set(after.keys())):
-+            if before.get(key) != after.get(key):
-+                fields.append(key)
-+        if fields:
-+            changed.append({
-+                "id": iid,
-+                "fields": fields,
-+            })
-+
-+    return {
-+        "added": added,
-+        "removed": removed,
-+        "changed": changed,
-+    }
-+
-+
-+def compute_policy_reaction_diff(
-+    before_reactions: list[dict[str, Any]],
-+    after_reactions: list[dict[str, Any]],
-+) -> dict[str, Any]:
-+    before_ids = sorted([x.get("reaction_id") for x in _safe_list(before_reactions) if x.get("reaction_id")])
-+    after_ids = sorted([x.get("reaction_id") for x in _safe_list(after_reactions) if x.get("reaction_id")])
-+    return {
-+        "added": sorted([rid for rid in after_ids if rid not in before_ids]),
-+        "removed": sorted([rid for rid in before_ids if rid not in after_ids]),
-+    }
-diff --git a/src/app/rpg/creator/world_simulation.py b/src/app/rpg/creator/world_simulation.py
-index 4444444..5555555 100644
---- a/src/app/rpg/creator/world_simulation.py
-+++ b/src/app/rpg/creator/world_simulation.py
-@@
- from .world_effects import (
-     apply_effects_to_simulation_state,
-     build_effects_from_consequences,
-     compute_effect_diff,
-     decay_active_effects,
-     merge_active_effects,
- )
-+from .world_incidents import (
-+    compute_incident_diff,
-+    compute_policy_reaction_diff,
-+    decay_incidents,
-+    generate_policy_reactions,
-+    merge_incidents,
-+    spawn_incidents_from_state_diff,
-+)
-@@
- def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
-@@
-     return {
-         "tick": 0,
-         "threads": threads_state,
-         "factions": factions_state,
-         "locations": locations_state,
-         "history": [],
-         "events": [],
-         "consequences": [],
-         "active_effects": [],
-+        "incidents": [],
-+        "policy_reactions": [],
-         "step_hash": _step_hash({
-             "tick": 0,
-             "threads": threads_state,
-             "factions": factions_state,
-             "locations": locations_state,
-             "active_effects": [],
-+            "incidents": [],
-         }),
-     }
-@@
- def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
-@@
-     before_state = copy.deepcopy(current)
-     before_effects = _safe_list(current.get("active_effects"))
-+    before_incidents = _safe_list(current.get("incidents"))
-+    before_reactions = _safe_list(current.get("policy_reactions"))
-     next_tick = current.get("tick", 0) + 1
-@@
-     after_state["active_effects"] = after_effects
- 
-     # 3. Apply effects to the after-state and recompute diff.
-     after_state = apply_effects_to_simulation_state(after_state)
-     diff = compute_simulation_diff(before_state, after_state)
-     effect_diff = compute_effect_diff(before_effects, after_effects)
-+
-+    # 4. Spawn incidents and policy reactions from the updated state diff.
-+    new_incidents = spawn_incidents_from_state_diff(diff)
-+    merged_incidents = merge_incidents(before_incidents, new_incidents)
-+    after_incidents = decay_incidents(merged_incidents)
-+    after_state["incidents"] = after_incidents
-+
-+    after_reactions = generate_policy_reactions(diff)
-+    after_state["policy_reactions"] = after_reactions
-+
-+    incident_diff = compute_incident_diff(before_incidents, after_incidents)
-+    reaction_diff = compute_policy_reaction_diff(before_reactions, after_reactions)
- 
-     summary = summarize_simulation_step(
-         diff,
-         events=events,
-         consequences=consequences,
-         effect_diff=effect_diff,
-+        incident_diff=incident_diff,
-+        reaction_diff=reaction_diff,
-     )
-@@
-             "events": len(events),
-             "consequences": len(consequences),
-             "effects": len(_safe_list(effect_diff.get("added"))),
-+            "incidents": len(_safe_list(incident_diff.get("added"))),
-+            "reactions": len(_safe_list(reaction_diff.get("added"))),
-         },
-     })
-@@
-     after_state["events"] = events
-     after_state["consequences"] = consequences
-     after_state["step_hash"] = _step_hash({
-         "tick": after_state["tick"],
-         "threads": after_state["threads"],
-         "factions": after_state["factions"],
-         "locations": after_state["locations"],
-         "active_effects": after_state.get("active_effects", []),
-+        "incidents": after_state.get("incidents", []),
-     })
-@@
-     return {
-         "updated_setup": next_setup,
-         "before_state": before_state,
-         "after_state": after_state,
-         "simulation_diff": diff,
-         "summary": summary,
-         "events": events,
-         "consequences": consequences,
-         "effect_diff": effect_diff,
-+        "incident_diff": incident_diff,
-+        "reaction_diff": reaction_diff,
-     }
-@@
- def summarize_simulation_step(
-     diff: dict[str, Any],
-     events: list[dict[str, Any]] | None = None,
-     consequences: list[dict[str, Any]] | None = None,
-     effect_diff: dict[str, Any] | None = None,
-+    incident_diff: dict[str, Any] | None = None,
-+    reaction_diff: dict[str, Any] | None = None,
- ) -> list[str]:
-     lines: list[str] = []
-@@
-     eff_removed = len(_safe_list(_safe_dict(effect_diff).get("removed")))
-     if eff_added:
-         lines.append(f"{eff_added} active effect{'s' if eff_added != 1 else ''} added")
-     if eff_removed:
-         lines.append(f"{eff_removed} active effect{'s' if eff_removed != 1 else ''} expired")
-+
-+    inc_added = len(_safe_list(_safe_dict(incident_diff).get("added")))
-+    inc_removed = len(_safe_list(_safe_dict(incident_diff).get("removed")))
-+    if inc_added:
-+        lines.append(f"{inc_added} incident{'s' if inc_added != 1 else ''} spawned")
-+    if inc_removed:
-+        lines.append(f"{inc_removed} incident{'s' if inc_removed != 1 else ''} resolved")
-+
-+    rxn_added = len(_safe_list(_safe_dict(reaction_diff).get("added")))
-+    if rxn_added:
-+        lines.append(f"{rxn_added} policy reaction{'s' if rxn_added != 1 else ''} triggered")
-     return lines
-diff --git a/src/app/rpg/services/adventure_builder_service.py b/src/app/rpg/services/adventure_builder_service.py
-index 6666666..7777777 100644
---- a/src/app/rpg/services/adventure_builder_service.py
-+++ b/src/app/rpg/services/adventure_builder_service.py
-@@
- def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
-@@
-     return {
-         "success": True,
-         "updated_setup": updated_setup,
-         "simulation_state": after_state,
-         "simulation_diff": result["simulation_diff"],
-         "summary": result["summary"],
-         "events": result.get("events", []),
-         "consequences": result.get("consequences", []),
-         "effect_diff": result.get("effect_diff", {}),
-+        "incident_diff": result.get("incident_diff", {}),
-+        "reaction_diff": result.get("reaction_diff", {}),
-         "graph": inspected.get("graph"),
-         "simulation": inspected.get("simulation"),
-         "inspector": inspected.get("inspector"),
-     }
-diff --git a/src/static/rpg/adventureBuilderState.js b/src/static/rpg/adventureBuilderState.js
-index 8888888..9999999 100644
---- a/src/static/rpg/adventureBuilderState.js
-+++ b/src/static/rpg/adventureBuilderState.js
-@@
-                 simulationRuntime: {
-                     state: null,
-                     lastDiff: null,
-                     lastSummary: [],
-                     stepping: false,
-                     lastEvents: [],
-                     lastConsequences: [],
--                    lastEffectDiff: null
-+                    lastEffectDiff: null,
-+                    lastIncidentDiff: null,
-+                    lastReactionDiff: null
-                 }
-             }
-         };
-     }
 diff --git a/src/static/rpg/adventureBuilderTimeline.js b/src/static/rpg/adventureBuilderTimeline.js
-index aaaaaaa..bbbbbbb 100644
+index 1267421..3a91bc2 100644
 --- a/src/static/rpg/adventureBuilderTimeline.js
 +++ b/src/static/rpg/adventureBuilderTimeline.js
 @@
@@ -504,41 +16,57 @@ index aaaaaaa..bbbbbbb 100644
 +        incidentDiff = incidentDiff || {};
 +        reactionDiff = reactionDiff || {};
 +        state = state || {};
+ 
+         var html = '<div class="ab-sim-diff">';
+         html += '<h5>Simulation Diff — Tick ' + _esc(String(diff.tick_before || 0)) + ' → ' + _esc(String(diff.tick_after || 0)) + '</h5>';
 @@
          if ((effectDiff.added && effectDiff.added.length) || (effectDiff.removed && effectDiff.removed.length) || (effectDiff.changed && effectDiff.changed.length)) {
              html += '<div class="ab-sim-effects"><h5>Active Effects</h5>';
+             if (effectDiff.added && effectDiff.added.length) {
+                 html += '<div class="ab-sim-effects-block"><strong>Added</strong><pre>' + _esc(JSON.stringify(effectDiff.added, null, 2)) + '</pre></div>';
+             }
 @@
+             }
              html += '</div>';
          }
 +
-+        if ((incidentDiff.added && incidentDiff.added.length) || (incidentDiff.removed && incidentDiff.removed.length) || (incidentDiff.changed && incidentDiff.changed.length)) {
++        // Incident diff
++        var incAdded = incidentDiff.added || [];
++        var incRemoved = incidentDiff.removed || [];
++        var incChanged = incidentDiff.changed || [];
++        if (incAdded.length || incRemoved.length || incChanged.length) {
 +            html += '<div class="ab-sim-incidents"><h5>Incidents</h5>';
-+            if (incidentDiff.added && incidentDiff.added.length) {
-+                html += '<div class="ab-sim-effects-block"><strong>Spawned</strong><pre>' + _esc(JSON.stringify(incidentDiff.added, null, 2)) + '</pre></div>';
++            if (incAdded.length) {
++                html += '<div class="ab-sim-effects-block"><strong>Spawned</strong><pre>' + _esc(JSON.stringify(incAdded, null, 2)) + '</pre></div>';
 +            }
-+            if (incidentDiff.removed && incidentDiff.removed.length) {
-+                html += '<div class="ab-sim-effects-block"><strong>Resolved</strong><pre>' + _esc(JSON.stringify(incidentDiff.removed, null, 2)) + '</pre></div>';
++            if (incRemoved.length) {
++                html += '<div class="ab-sim-effects-block"><strong>Resolved</strong><pre>' + _esc(JSON.stringify(incRemoved, null, 2)) + '</pre></div>';
 +            }
-+            if (incidentDiff.changed && incidentDiff.changed.length) {
-+                html += '<div class="ab-sim-effects-block"><strong>Changed</strong><pre>' + _esc(JSON.stringify(incidentDiff.changed, null, 2)) + '</pre></div>';
++            if (incChanged.length) {
++                html += '<div class="ab-sim-effects-block"><strong>Changed</strong><pre>' + _esc(JSON.stringify(incChanged, null, 2)) + '</pre></div>';
 +            }
 +            html += '</div>';
 +        }
 +
-+        if ((reactionDiff.added && reactionDiff.added.length) || (reactionDiff.removed && reactionDiff.removed.length)) {
++        // Policy reactions
++        var rxnAdded = reactionDiff.added || [];
++        var rxnRemoved = reactionDiff.removed || [];
++        if (rxnAdded.length || rxnRemoved.length) {
 +            html += '<div class="ab-sim-reactions"><h5>Policy Reactions</h5>';
-+            if (reactionDiff.added && reactionDiff.added.length) {
-+                html += '<div class="ab-sim-effects-block"><strong>Triggered</strong><pre>' + _esc(JSON.stringify(reactionDiff.added, null, 2)) + '</pre></div>';
++            if (rxnAdded.length) {
++                html += '<div class="ab-sim-effects-block"><strong>Triggered</strong><pre>' + _esc(JSON.stringify(rxnAdded, null, 2)) + '</pre></div>';
 +            }
-+            if (reactionDiff.removed && reactionDiff.removed.length) {
-+                html += '<div class="ab-sim-effects-block"><strong>Cleared</strong><pre>' + _esc(JSON.stringify(reactionDiff.removed, null, 2)) + '</pre></div>';
++            if (rxnRemoved.length) {
++                html += '<div class="ab-sim-effects-block"><strong>Cleared</strong><pre>' + _esc(JSON.stringify(rxnRemoved, null, 2)) + '</pre></div>';
 +            }
 +            html += '</div>';
 +        }
 +
-+        if (state.incidents && state.incidents.length) {
++        // Live incidents from current state
++        var liveIncidents = state.incidents || [];
++        if (liveIncidents.length) {
 +            html += '<div class="ab-sim-live-incidents"><h5>Active Incidents</h5>';
-+            state.incidents.forEach(function (inc) {
++            liveIncidents.forEach(function (inc) {
 +                html += '<div class="ab-sim-event-card ab-sim-event-' + _esc(inc.severity || 'neutral') + '">' +
 +                    '<div class="ab-sim-event-type">' + _esc(inc.type || 'incident') + '</div>' +
 +                    '<div class="ab-sim-event-summary">' + _esc(inc.summary || '') + '</div>' +
@@ -546,16 +74,45 @@ index aaaaaaa..bbbbbbb 100644
 +            });
 +            html += '</div>';
 +        }
-     }
+ 
+         // Threads changed
+         var threads = diff.threads_changed || [];
+         if (threads.length) {
+             html += '<div class="ab-sim-changes"><h5>Threads</h5>';
+@@
+-        if (!threads.length && !factions.length && !locations.length && !events.length && !consequences.length) {
++        if (!threads.length && !factions.length && !locations.length && !events.length && !consequences.length &&
++            !incAdded.length && !incRemoved.length && !incChanged.length &&
++            !rxnAdded.length && !rxnRemoved.length && !liveIncidents.length) {
+             html += '<p class="ab-muted">No changes in this tick.</p>';
+         }
+ 
+         html += '</div>';
+         container.innerHTML = html;
 diff --git a/src/static/rpg/adventureBuilder.js b/src/static/rpg/adventureBuilder.js
-index ccccccc..ddddddd 100644
+index 09cd74f..f4db2c1 100644
 --- a/src/static/rpg/adventureBuilder.js
 +++ b/src/static/rpg/adventureBuilder.js
 @@
+-        var rt = (wi.simulationRuntime) || { state: null, lastDiff: null, lastSummary: [], stepping: false, lastEvents: [], lastConsequences: [] };
++        var rt = (wi.simulationRuntime) || {
++            state: null,
++            lastDiff: null,
++            lastSummary: [],
++            stepping: false,
++            lastEvents: [],
++            lastConsequences: [],
++            lastEffectDiff: null,
++            lastIncidentDiff: null,
++            lastReactionDiff: null
++        };
+@@
+         var diffPanel = contentEl.querySelector('#abSimDiffPanel');
+         if (diffPanel && rt.lastDiff) {
              AdventureBuilderTimeline.renderSimulationDiff(
-                 summaryEl,
+                 diffPanel,
                  rt.lastDiff,
-                 rt.lastSummary,
+                 rt.lastSummary || [],
                  rt.lastEvents,
                  rt.lastConsequences,
 -                rt.lastEffectDiff
@@ -566,15 +123,20 @@ index ccccccc..ddddddd 100644
              );
          }
 @@
+                 wi.simulationRuntime.state = res.simulation_state || null;
+                 wi.simulationRuntime.lastDiff = res.simulation_diff || null;
+                 wi.simulationRuntime.lastSummary = res.summary || [];
                  wi.simulationRuntime.lastEvents = res.events || [];
                  wi.simulationRuntime.lastConsequences = res.consequences || [];
                  wi.simulationRuntime.lastEffectDiff = res.effect_diff || null;
 +                wi.simulationRuntime.lastIncidentDiff = res.incident_diff || null;
 +                wi.simulationRuntime.lastReactionDiff = res.reaction_diff || null;
-                 _captureWorldSnapshot('After Simulation Tick ' + String((res.simulation_state && res.simulation_state.tick) || '?'));
+                 // Capture snapshot
+                 var tick = (res.simulation_state && res.simulation_state.tick) || '?';
+                 _captureWorldSnapshot('After Simulation Tick ' + tick);
                  _renderStep();
 diff --git a/src/static/rpg/adventureBuilder.css b/src/static/rpg/adventureBuilder.css
-index eeeeeee..fffffff 100644
+index db22dbb..e638a58 100644
 --- a/src/static/rpg/adventureBuilder.css
 +++ b/src/static/rpg/adventureBuilder.css
 @@
@@ -587,8 +149,120 @@ index eeeeeee..fffffff 100644
 +.ab-sim-live-incidents {
      margin-top: 16px;
  }
+ 
+ .ab-sim-effects-block {
+     margin-bottom: 10px;
+@@
+ .ab-sim-effects-block pre {
+     background: rgba(255, 255, 255, 0.04);
+     border-radius: 6px;
+     padding: 8px;
+     font-size: 0.78rem;
+     overflow-x: auto;
+     max-height: 200px;
+ }
++
++.ab-sim-incidents h5,
++.ab-sim-reactions h5,
++.ab-sim-live-incidents h5 {
++    margin: 0 0 8px 0;
++}
+diff --git a/src/tests/unit/rpg/test_phase30_world_incidents.py b/src/tests/unit/rpg/test_phase30_world_incidents.py
+new file mode 100644
+index 0000000..4d7f2a1
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase30_world_incidents.py
+@@
++"""Phase 3D — Incident engine unit tests."""
++
++from __future__ import annotations
++
++from app.rpg.creator.world_incidents import (
++    compute_incident_diff,
++    compute_policy_reaction_diff,
++    decay_incidents,
++    generate_policy_reactions,
++    merge_incidents,
++    spawn_incidents_from_state_diff,
++)
++
++
++def _sample_diff():
++    return {
++        "threads_changed": [
++            {
++                "id": "thr_market",
++                "before": {"pressure": 3, "status": "active"},
++                "after": {"pressure": 4, "status": "critical"},
++            }
++        ],
++        "locations_changed": [
++            {
++                "id": "loc_docks",
++                "before": {"heat": 3, "status": "active"},
++                "after": {"heat": 4, "status": "hot"},
++            }
++        ],
++        "factions_changed": [
++            {
++                "id": "fac_knives",
++                "before": {"pressure": 2, "status": "watchful"},
++                "after": {"pressure": 3, "status": "strained"},
++            }
++        ],
++    }
++
++
++def test_spawn_incidents_from_state_diff():
++    incidents = spawn_incidents_from_state_diff(_sample_diff())
++    ids = {x["incident_id"] for x in incidents}
++    assert "inc_thr_market_critical" in ids
++    assert "inc_loc_docks_hot" in ids
++    assert "inc_fac_knives_strained" in ids
++
++
++def test_generate_policy_reactions():
++    reactions = generate_policy_reactions(_sample_diff())
++    ids = {x["reaction_id"] for x in reactions}
++    assert "rxn_fac_knives_crackdown" in ids
++
++
++def test_merge_incidents_dedupes():
++    current = [{"incident_id": "inc_a", "type": "thread_crisis", "duration": 2}]
++    new = [{"incident_id": "inc_a", "type": "thread_crisis", "duration": 1}]
++    merged = merge_incidents(current, new)
++    assert len(merged) == 1
++    assert merged[0]["incident_id"] == "inc_a"
++
++
++def test_decay_incidents_removes_expired():
++    incidents = [
++        {"incident_id": "inc_a", "duration": 2},
++        {"incident_id": "inc_b", "duration": 1},
++    ]
++    decayed = decay_incidents(incidents)
++    ids = {x["incident_id"] for x in decayed}
++    assert "inc_a" in ids
++    assert "inc_b" not in ids
++
++
++def test_compute_incident_diff_shape():
++    before = [{"incident_id": "inc_a", "duration": 2}]
++    after = [{"incident_id": "inc_b", "duration": 2}]
++    diff = compute_incident_diff(before, after)
++    assert diff["added"] == ["inc_b"]
++    assert diff["removed"] == ["inc_a"]
++    assert diff["changed"] == []
++
++
++def test_compute_policy_reaction_diff_shape():
++    before = [{"reaction_id": "rxn_a"}]
++    after = [{"reaction_id": "rxn_b"}]
++    diff = compute_policy_reaction_diff(before, after)
++    assert diff["added"] == ["rxn_b"]
++    assert diff["removed"] == ["rxn_a"]
 diff --git a/src/tests/unit/rpg/test_phase30_world_simulation.py b/src/tests/unit/rpg/test_phase30_world_simulation.py
-index 1111112..2222223 100644
+index 2222223..733b34e 100644
 --- a/src/tests/unit/rpg/test_phase30_world_simulation.py
 +++ b/src/tests/unit/rpg/test_phase30_world_simulation.py
 @@
@@ -596,65 +270,54 @@ index 1111112..2222223 100644
      from app.rpg.creator.world_simulation import step_simulation_state
  
      result = step_simulation_state(_minimal_setup())
+     assert "updated_setup" in result
 @@
-     assert "events" in result
-     assert "consequences" in result
      assert "effect_diff" in result
-+    assert "incident_diff" in result
-+    assert "reaction_diff" in result
+     assert "incident_diff" in result
+     assert "reaction_diff" in result
 @@
- def test_active_effects_present_in_after_state():
-@@
-     assert "active_effects" in result["after_state"]
-     assert isinstance(result["after_state"]["active_effects"], list)
-+
-+
-+def test_incidents_present_in_after_state():
-+    from app.rpg.creator.world_simulation import step_simulation_state
-+
-+    result = step_simulation_state(_minimal_setup())
-+    assert "incidents" in result["after_state"]
-+    assert isinstance(result["after_state"]["incidents"], list)
-+
-+
-+def test_policy_reactions_present_in_after_state():
-+    from app.rpg.creator.world_simulation import step_simulation_state
-+
-+    result = step_simulation_state(_minimal_setup())
-+    assert "policy_reactions" in result["after_state"]
-+    assert isinstance(result["after_state"]["policy_reactions"], list)
-@@
- def test_effect_diff_shape():
-@@
-     assert "changed" in diff
-+
-+
-+def test_incident_and_reaction_diff_shape():
-+    from app.rpg.creator.world_simulation import step_simulation_state
-+
-+    result = step_simulation_state(_minimal_setup())
-+    inc = result["incident_diff"]
-+    rxn = result["reaction_diff"]
-+    assert "added" in inc
-+    assert "removed" in inc
-+    assert "changed" in inc
-+    assert "added" in rxn
-+    assert "removed" in rxn
-@@
- def test_service_returns_effect_diff():
-     from app.rpg.services.adventure_builder_service import advance_world_simulation
+ def test_incidents_present_in_after_state():
+     from app.rpg.creator.world_simulation import step_simulation_state
  
-     result = advance_world_simulation(_minimal_setup())
-     assert result["success"] is True
-     assert "effect_diff" in result
+     result = step_simulation_state(_minimal_setup())
+     assert "incidents" in result["after_state"]
+     assert isinstance(result["after_state"]["incidents"], list)
+@@
+ def test_policy_reactions_present_in_after_state():
+     from app.rpg.creator.world_simulation import step_simulation_state
+ 
+     result = step_simulation_state(_minimal_setup())
+     assert "policy_reactions" in result["after_state"]
+     assert isinstance(result["after_state"]["policy_reactions"], list)
+@@
+ def test_incident_and_reaction_diff_shape():
+     from app.rpg.creator.world_simulation import step_simulation_state
+ 
+     result = step_simulation_state(_minimal_setup())
+     inc = result["incident_diff"]
+     rxn = result["reaction_diff"]
+     assert "added" in inc
+     assert "removed" in inc
+     assert "changed" in inc
+     assert "added" in rxn
+     assert "removed" in rxn
++
++
++def test_service_returns_incident_and_reaction_diff():
++    from app.rpg.services.adventure_builder_service import advance_world_simulation
++
++    result = advance_world_simulation(_minimal_setup())
++    assert result["success"] is True
 +    assert "incident_diff" in result
 +    assert "reaction_diff" in result
-What Phase 3D changes
++    assert isinstance(result["incident_diff"], dict)
++    assert isinstance(result["reaction_diff"], dict)
+Notes on this patch
 
-It makes the world produce visible situations — incidents and policy reactions — instead of only invisible momentum. That is the bridge from simulation internals to gameplay-facing world behavior.
+This completes the missing Phase 3D surfaces your review called out:
 
-It also keeps the system deterministic and inspectable:
-
-incidents are structured and bounded
-reactions are explicit and diffed
-UI now surfaces incidents/reactions alongside effects, events, and consequences
+UI rendering in the timeline/simulation diff panel
+wiring response fields into builder state
+styling for incidents/reactions
+unit coverage for world_incidents.py
+service-level regression coverage for incident/reaction passthrough.

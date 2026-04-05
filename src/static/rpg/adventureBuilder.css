@@ -1371,7 +1371,14 @@
 
 /* ─── Phase 3A — Simulation diff cards ─────────────────────────────────── */
 
-.ab-sim-effects {
+.ab-sim-events {
+    margin-top: 16px;
+}
+
+.ab-sim-effects,
+.ab-sim-incidents,
+.ab-sim-reactions,
+.ab-sim-live-incidents {
     margin-top: 16px;
 }
 
@@ -1386,6 +1393,12 @@
     font-size: 0.78rem;
     overflow-x: auto;
     max-height: 200px;
+}
+
+.ab-sim-incidents h5,
+.ab-sim-reactions h5,
+.ab-sim-live-incidents h5 {
+    margin: 0 0 8px 0;
 }
 
 .ab-sim-diff {

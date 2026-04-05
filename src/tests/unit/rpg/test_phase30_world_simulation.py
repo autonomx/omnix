@@ -696,6 +696,8 @@ class TestServiceAdvanceWorldSimulation:
         assert "graph" in result
         assert "simulation" in result
         assert "inspector" in result
+        assert "incident_diff" in result
+        assert "reaction_diff" in result
 
     def test_advance_increments_tick(self):
         from app.rpg.services.adventure_builder_service import advance_world_simulation
