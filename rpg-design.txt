@@ -1,100 +1,1317 @@
-🚀 Now: Phase 5 — LLM Scene Engine + NPC Behavior
+It is written to fit your current codebase shape from src/app/rpg, while replacing the current partial ai/llm_mind prototype with the deterministic Phase 6 architecture you described.
 
-This is where your system becomes:
+I am assuming:
 
-storytelling + simulation hybrid
+existing simulation state already lives in metadata.simulation_state
+creator/world_simulation.py is the authoritative stepper
+creator/world_player_actions.py emits player events/consequences
+creator/world_scene_generator.py builds scenes from simulation output
+ai/world_scene_narrator.py builds NPC reaction context from scene actors
 
-🎯 Phase 5 Goal
+I am also keeping this constrained so it does not break current APIs.
 
-Turn:
+Phase 6 — Literal Apply-This-Patch Diff Spec
+1) Replace and normalize ai/llm_mind module layout
+FILE: src/app/rpg/ai/llm_mind/__init__.py
+REPLACE ENTIRE FILE WITH:
+from .belief_model import BeliefModel
+from .npc_memory import NPCMemory
+from .goal_engine import GoalEngine
+from .npc_decision import NPCDecision
+from .npc_prompt_builder import NPCPromptBuilder
+from .npc_response_parser import NPCResponseParser
+from .npc_decision_validator import NPCDecisionValidator
+from .npc_mind import NPCMind
 
-Scene (structured)
+__all__ = [
+    "BeliefModel",
+    "NPCMemory",
+    "GoalEngine",
+    "NPCDecision",
+    "NPCPromptBuilder",
+    "NPCResponseParser",
+    "NPCDecisionValidator",
+    "NPCMind",
+]
+2) Replace old memory module with deterministic NPC memory
+FILE: src/app/rpg/ai/llm_mind/npc_memory.py
+CREATE NEW FILE:
+from __future__ import annotations
 
-into:
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
-Scene → Narrative → NPC reactions → Dialogue → Player response
-🧩 What Phase 5 adds
-Backend
-scene → prompt builder
-NPC intent generation
-narrative generation
-structured parsing
-Frontend
-“Play Scene” button
-narrative display
-NPC dialogue blocks
-🔥 APPLY-THIS-PATCH — Phase 5
-1. NEW FILE — world_scene_narrator.py
-diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
-new file mode 100644
---- /dev/null
-+++ b/src/app/rpg/ai/world_scene_narrator.py
-@@
-+"""Phase 5 — Scene Narration Engine"""
-+
-+from typing import Any
-+
-+
-+def build_scene_prompt(scene: dict[str, Any], state: dict[str, Any]) -> str:
-+    return f"""
-+You are a narrative engine.
-+
-+Scene:
-+{scene['title']}
-+
-+Summary:
-+{scene['summary']}
-+
-+Actors:
-+{scene.get('actors', [])}
-+
-+Stakes:
-+{scene.get('stakes')}
-+
-+Describe what happens next in 2–3 paragraphs.
-+Include character reactions and tension.
-+"""
-+
-+
-+def parse_scene_response(text: str) -> dict[str, Any]:
-+    return {
-+        "narrative": text,
-+        "choices": [
-+            {"id": "choice_1", "text": "Take action"},
-+            {"id": "choice_2", "text": "Observe"},
-+        ]
-+    }
-2. SERVICE PATCH
-@@
-+from app.rpg.ai.world_scene_narrator import build_scene_prompt, parse_scene_response
-@@
-+def play_scene(scene, state):
-+    prompt = build_scene_prompt(scene, state)
-+    response = llm.generate(prompt)
-+    parsed = parse_scene_response(response)
-+    return parsed
-3. ROUTE
-+@bp.route("/scene/play", methods=["POST"])
-+def play_scene_route():
-+    payload = request.json
-+    return jsonify(play_scene(payload["scene"], payload["state"]))
-4. FRONTEND
-+html += '<button class="ab-play-scene">Play Scene</button>';
-5. HANDLER
-+function _playScene(scene) {
-+    fetch('/api/rpg/scene/play', {
-+        method: 'POST',
-+        body: JSON.stringify({ scene, state: wi.simulationRuntime.state })
-+    })
-+    .then(r => r.json())
-+    .then(res => {
-+        _renderNarrative(res.narrative);
-+    });
-+}
-🧠 What Phase 5 unlocks
 
-You now get:
+_MAX_MEMORIES = 32
 
-Simulation → Scene → Narrative → Player → Action → Simulation
 
-👉 That’s a full AI-driven RPG loop
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _memory_sort_key(item: Dict[str, Any]):
+    salience = _safe_float(item.get("salience"), 0.0)
+    tick = int(item.get("tick", 0) or 0)
+    memory_id = _safe_str(item.get("memory_id"))
+    return (-salience, -tick, memory_id)
+
+
+@dataclass
+class NPCMemory:
+    npc_id: str
+    entries: List[Dict[str, Any]] = field(default_factory=list)
+    max_entries: int = _MAX_MEMORIES
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "npc_id": self.npc_id,
+            "entries": [dict(entry) for entry in self.entries],
+            "max_entries": int(self.max_entries),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "NPCMemory":
+        data = data or {}
+        npc_id = _safe_str(data.get("npc_id"))
+        max_entries = int(data.get("max_entries", _MAX_MEMORIES) or _MAX_MEMORIES)
+        raw_entries = data.get("entries") or []
+        entries: List[Dict[str, Any]] = []
+        for item in raw_entries:
+            if not isinstance(item, dict):
+                continue
+            entries.append({
+                "memory_id": _safe_str(item.get("memory_id")),
+                "tick": int(item.get("tick", 0) or 0),
+                "type": _safe_str(item.get("type")),
+                "actor": _safe_str(item.get("actor")),
+                "target_id": _safe_str(item.get("target_id")),
+                "target_kind": _safe_str(item.get("target_kind")),
+                "location_id": _safe_str(item.get("location_id")),
+                "faction_id": _safe_str(item.get("faction_id")),
+                "summary": _safe_str(item.get("summary")),
+                "salience": _clamp01(_safe_float(item.get("salience"), 0.0)),
+            })
+        memory = cls(npc_id=npc_id, entries=entries, max_entries=max_entries)
+        memory._trim()
+        return memory
+
+    def _trim(self) -> None:
+        self.entries = sorted(self.entries, key=_memory_sort_key)[: self.max_entries]
+        self.entries = sorted(
+            self.entries,
+            key=lambda item: (
+                int(item.get("tick", 0) or 0),
+                _safe_str(item.get("memory_id")),
+            ),
+        )
+
+    def remember(self, event: Dict[str, Any], tick: int, index: int = 0) -> None:
+        event = event or {}
+        event_type = _safe_str(event.get("type")) or "unknown"
+        actor = _safe_str(event.get("actor"))
+        target_id = _safe_str(event.get("target_id"))
+        target_kind = _safe_str(event.get("target_kind"))
+        location_id = _safe_str(event.get("location_id"))
+        faction_id = _safe_str(event.get("faction_id"))
+        summary = _safe_str(event.get("summary")) or event_type
+
+        salience = _clamp01(_safe_float(event.get("salience"), 0.4))
+        if actor == "player":
+            salience = max(salience, 0.7)
+        if target_id == self.npc_id:
+            salience = max(salience, 0.9)
+
+        memory_id = f"mem:{self.npc_id}:{tick}:{index}:{event_type}:{target_id or 'none'}"
+
+        self.entries.append({
+            "memory_id": memory_id,
+            "tick": int(tick),
+            "type": event_type,
+            "actor": actor,
+            "target_id": target_id,
+            "target_kind": target_kind,
+            "location_id": location_id,
+            "faction_id": faction_id,
+            "summary": summary,
+            "salience": salience,
+        })
+        self._trim()
+
+    def remember_many(self, events: List[Dict[str, Any]], tick: int) -> None:
+        for index, event in enumerate(events):
+            self.remember(event, tick=tick, index=index)
+
+    def top_memories(self, limit: int = 5) -> List[Dict[str, Any]]:
+        ranked = sorted(self.entries, key=_memory_sort_key)
+        return [dict(item) for item in ranked[: max(0, limit)]]
+
+    def summary(self, limit: int = 5) -> List[Dict[str, Any]]:
+        return self.top_memories(limit=limit)
+3) Fully implement deterministic belief model
+FILE: src/app/rpg/ai/llm_mind/belief_model.py
+REPLACE ENTIRE FILE WITH:
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict
+
+
+_BELIEF_KEYS = ("trust", "fear", "respect", "hostility")
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _clamp_signed(value: float) -> float:
+    return max(-1.0, min(1.0, value))
+
+
+def _empty_belief_record() -> Dict[str, float]:
+    return {
+        "trust": 0.0,
+        "fear": 0.0,
+        "respect": 0.0,
+        "hostility": 0.0,
+    }
+
+
+@dataclass
+class BeliefModel:
+    beliefs: Dict[str, Dict[str, float]] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        normalized: Dict[str, Dict[str, float]] = {}
+        for target_id, record in sorted(self.beliefs.items()):
+            normalized[target_id] = {
+                key: _clamp_signed(_safe_float(record.get(key), 0.0))
+                for key in _BELIEF_KEYS
+            }
+        return {"beliefs": normalized}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "BeliefModel":
+        data = data or {}
+        raw = data.get("beliefs") or {}
+        beliefs: Dict[str, Dict[str, float]] = {}
+        for target_id, record in raw.items():
+            if not isinstance(record, dict):
+                continue
+            beliefs[_safe_str(target_id)] = {
+                key: _clamp_signed(_safe_float(record.get(key), 0.0))
+                for key in _BELIEF_KEYS
+            }
+        return cls(beliefs=beliefs)
+
+    def _ensure_target(self, target_id: str) -> Dict[str, float]:
+        target_id = _safe_str(target_id)
+        if target_id not in self.beliefs:
+            self.beliefs[target_id] = _empty_belief_record()
+        return self.beliefs[target_id]
+
+    def update_belief(self, target_id: str, key: str, delta: float) -> float:
+        if key not in _BELIEF_KEYS:
+            return 0.0
+        record = self._ensure_target(target_id)
+        record[key] = _clamp_signed(_safe_float(record.get(key), 0.0) + float(delta))
+        return record[key]
+
+    def get_beliefs(self, target_id: str) -> Dict[str, float]:
+        record = self._ensure_target(target_id)
+        return dict(record)
+
+    def summarize(self, limit: int = 8) -> Dict[str, Dict[str, float]]:
+        items = sorted(self.beliefs.items(), key=lambda pair: pair[0])
+        out: Dict[str, Dict[str, float]] = {}
+        for target_id, record in items[: max(0, limit)]:
+            out[target_id] = dict(record)
+        return out
+
+    def update_from_event(self, event: Dict[str, Any], npc_context: Dict[str, Any]) -> None:
+        event = event or {}
+        npc_context = npc_context or {}
+
+        actor = _safe_str(event.get("actor"))
+        event_type = _safe_str(event.get("type"))
+        target_id = _safe_str(event.get("target_id"))
+        faction_id = _safe_str(event.get("faction_id"))
+        location_id = _safe_str(event.get("location_id"))
+
+        npc_id = _safe_str(npc_context.get("npc_id"))
+        npc_faction_id = _safe_str(npc_context.get("faction_id"))
+        npc_location_id = _safe_str(npc_context.get("location_id"))
+
+        # Direct player/NPC relationship updates
+        if actor == "player":
+            if event_type in {"help", "support", "assist"}:
+                self.update_belief("player", "trust", 0.20)
+                self.update_belief("player", "respect", 0.10)
+
+            if event_type in {"threaten", "coerce"}:
+                self.update_belief("player", "fear", 0.25)
+                self.update_belief("player", "hostility", 0.15)
+                self.update_belief("player", "trust", -0.15)
+
+            if event_type in {"attack", "betray", "sabotage"}:
+                self.update_belief("player", "hostility", 0.40)
+                self.update_belief("player", "trust", -0.40)
+                self.update_belief("player", "fear", 0.20)
+
+            if event_type in {"negotiate", "parley"}:
+                self.update_belief("player", "respect", 0.10)
+
+        # If event affects this NPC directly
+        if target_id and target_id == npc_id:
+            if actor == "player":
+                self.update_belief("player", "respect", 0.10)
+                if event_type in {"help", "support"}:
+                    self.update_belief("player", "trust", 0.20)
+                elif event_type in {"attack", "threaten", "coerce"}:
+                    self.update_belief("player", "hostility", 0.30)
+                    self.update_belief("player", "fear", 0.20)
+
+        # Faction alignment effects
+        if npc_faction_id and faction_id and faction_id == npc_faction_id:
+            if actor == "player":
+                if event_type in {"help", "support", "stabilize"}:
+                    self.update_belief("player", "trust", 0.15)
+                    self.update_belief("player", "respect", 0.10)
+                elif event_type in {"attack", "sabotage", "destabilize"}:
+                    self.update_belief("player", "hostility", 0.20)
+                    self.update_belief("player", "trust", -0.20)
+
+        # Locality effects
+        if npc_location_id and location_id and location_id == npc_location_id:
+            if actor == "player":
+                if event_type in {"stabilize", "protect"}:
+                    self.update_belief("player", "respect", 0.10)
+                elif event_type in {"cause_chaos", "destabilize", "attack"}:
+                    self.update_belief("player", "fear", 0.10)
+                    self.update_belief("player", "hostility", 0.10)
+4) Refactor goal engine into deterministic Phase 6 version
+FILE: src/app/rpg/ai/llm_mind/goal_engine.py
+REPLACE ENTIRE FILE WITH:
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
+
+_MAX_GOALS = 5
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _goal_sort_key(goal: Dict[str, Any]):
+    priority = _safe_float(goal.get("priority"), 0.0)
+    goal_id = _safe_str(goal.get("goal_id"))
+    return (-priority, goal_id)
+
+
+@dataclass
+class GoalEngine:
+    goals: List[Dict[str, Any]] = field(default_factory=list)
+    max_goals: int = _MAX_GOALS
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "goals": [dict(goal) for goal in self.goals],
+            "max_goals": int(self.max_goals),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "GoalEngine":
+        data = data or {}
+        raw_goals = data.get("goals") or []
+        max_goals = int(data.get("max_goals", _MAX_GOALS) or _MAX_GOALS)
+        goals: List[Dict[str, Any]] = []
+        for item in raw_goals:
+            if not isinstance(item, dict):
+                continue
+            goals.append({
+                "goal_id": _safe_str(item.get("goal_id")),
+                "type": _safe_str(item.get("type")),
+                "target_id": _safe_str(item.get("target_id")),
+                "priority": _safe_float(item.get("priority"), 0.0),
+                "reason": _safe_str(item.get("reason")),
+                "status": _safe_str(item.get("status")) or "active",
+                "progress": _safe_float(item.get("progress"), 0.0),
+            })
+        engine = cls(goals=goals, max_goals=max_goals)
+        engine.goals = sorted(engine.goals, key=_goal_sort_key)[: engine.max_goals]
+        return engine
+
+    def _make_goal(
+        self,
+        npc_id: str,
+        goal_type: str,
+        target_id: str,
+        priority: float,
+        reason: str,
+    ) -> Dict[str, Any]:
+        goal_id = f"goal:{npc_id}:{goal_type}:{target_id or 'none'}"
+        return {
+            "goal_id": goal_id,
+            "type": goal_type,
+            "target_id": target_id,
+            "priority": float(priority),
+            "reason": reason,
+            "status": "active",
+            "progress": 0.0,
+        }
+
+    def generate_goals(
+        self,
+        npc_context: Dict[str, Any],
+        simulation_state: Dict[str, Any],
+        belief_summary: Dict[str, Dict[str, float]],
+        memory_summary: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        npc_context = npc_context or {}
+        simulation_state = simulation_state or {}
+        belief_summary = belief_summary or {}
+
+        npc_id = _safe_str(npc_context.get("npc_id"))
+        npc_location_id = _safe_str(npc_context.get("location_id"))
+        npc_faction_id = _safe_str(npc_context.get("faction_id"))
+
+        player_beliefs = belief_summary.get("player", {})
+        trust = _safe_float(player_beliefs.get("trust"), 0.0)
+        fear = _safe_float(player_beliefs.get("fear"), 0.0)
+        hostility = _safe_float(player_beliefs.get("hostility"), 0.0)
+
+        locations = simulation_state.get("locations") or {}
+        location_state = locations.get(npc_location_id) or {}
+        location_pressure = _safe_float(location_state.get("pressure"), 0.0)
+
+        goals: List[Dict[str, Any]] = []
+
+        if location_pressure >= 2.0 and npc_location_id:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="stabilize_location",
+                target_id=npc_location_id,
+                priority=0.80 + min(location_pressure * 0.05, 0.15),
+                reason="Local pressure is elevated",
+            ))
+
+        if npc_faction_id:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="support_faction",
+                target_id=npc_faction_id,
+                priority=0.45,
+                reason="Faction loyalty baseline",
+            ))
+
+        if hostility >= 0.35:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="retaliate",
+                target_id="player",
+                priority=0.70 + min(hostility * 0.20, 0.20),
+                reason="Player is viewed as hostile",
+            ))
+        elif fear >= 0.35:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="avoid_player",
+                target_id="player",
+                priority=0.65 + min(fear * 0.20, 0.20),
+                reason="Player is viewed as threatening",
+            ))
+        elif trust >= 0.35:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="approach_player",
+                target_id="player",
+                priority=0.60 + min(trust * 0.20, 0.20),
+                reason="Player is viewed as trustworthy",
+            ))
+        else:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="observe",
+                target_id="player",
+                priority=0.35,
+                reason="Maintain awareness of player",
+            ))
+
+        if memory_summary:
+            top_memory = memory_summary[0]
+            top_target = _safe_str(top_memory.get("target_id"))
+            top_type = _safe_str(top_memory.get("type"))
+            if top_target and top_target != "player" and top_type in {"incident", "attack", "destabilize", "threaten"}:
+                goals.append(self._make_goal(
+                    npc_id=npc_id,
+                    goal_type="investigate",
+                    target_id=top_target,
+                    priority=0.55,
+                    reason=f"Recent salient memory: {top_type}",
+                ))
+
+        goals = sorted(goals, key=_goal_sort_key)
+
+        deduped: List[Dict[str, Any]] = []
+        seen = set()
+        for goal in goals:
+            goal_id = goal["goal_id"]
+            if goal_id in seen:
+                continue
+            seen.add(goal_id)
+            deduped.append(goal)
+
+        return deduped[: self.max_goals]
+
+    def merge_goals(self, generated: List[Dict[str, Any]]) -> None:
+        generated = generated or []
+        merged = {}
+        for goal in self.goals + generated:
+            goal_id = _safe_str(goal.get("goal_id"))
+            if not goal_id:
+                continue
+            existing = merged.get(goal_id)
+            if existing is None or _safe_float(goal.get("priority"), 0.0) > _safe_float(existing.get("priority"), 0.0):
+                merged[goal_id] = dict(goal)
+        self.goals = sorted(merged.values(), key=_goal_sort_key)[: self.max_goals]
+
+    def top_goal(self) -> Dict[str, Any] | None:
+        if not self.goals:
+            return None
+        return dict(sorted(self.goals, key=_goal_sort_key)[0])
+
+    def advance_from_event(self, event: Dict[str, Any]) -> None:
+        event = event or {}
+        target_id = _safe_str(event.get("target_id"))
+        event_type = _safe_str(event.get("type"))
+
+        updated: List[Dict[str, Any]] = []
+        for goal in self.goals:
+            new_goal = dict(goal)
+            if target_id and target_id == _safe_str(goal.get("target_id")):
+                progress = _safe_float(goal.get("progress"), 0.0)
+                if event_type in {"help", "support", "stabilize", "investigate", "negotiate"}:
+                    progress += 0.25
+                elif event_type in {"attack", "sabotage", "retaliate"}:
+                    progress += 0.15
+                new_goal["progress"] = min(progress, 1.0)
+            updated.append(new_goal)
+        self.goals = sorted(updated, key=_goal_sort_key)[: self.max_goals]
+5) Add explicit structured decision model
+FILE: src/app/rpg/ai/llm_mind/npc_decision.py
+CREATE NEW FILE:
+from __future__ import annotations
+
+from dataclasses import dataclass, asdict
+from typing import Any, Dict
+
+
+@dataclass
+class NPCDecision:
+    npc_id: str
+    tick: int
+    intent: str
+    action_type: str
+    target_id: str
+    target_kind: str
+    location_id: str
+    reason: str
+    dialogue_hint: str
+    urgency: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "NPCDecision":
+        data = data or {}
+        return cls(
+            npc_id=str(data.get("npc_id") or ""),
+            tick=int(data.get("tick", 0) or 0),
+            intent=str(data.get("intent") or "wait"),
+            action_type=str(data.get("action_type") or "wait"),
+            target_id=str(data.get("target_id") or ""),
+            target_kind=str(data.get("target_kind") or ""),
+            location_id=str(data.get("location_id") or ""),
+            reason=str(data.get("reason") or ""),
+            dialogue_hint=str(data.get("dialogue_hint") or ""),
+            urgency=float(data.get("urgency", 0.0) or 0.0),
+        )
+
+    @classmethod
+    def fallback(
+        cls,
+        npc_id: str,
+        tick: int,
+        location_id: str,
+        reason: str = "No strong action selected",
+    ) -> "NPCDecision":
+        return cls(
+            npc_id=npc_id,
+            tick=tick,
+            intent="wait",
+            action_type="wait",
+            target_id="",
+            target_kind="",
+            location_id=location_id,
+            reason=reason,
+            dialogue_hint="The NPC hesitates and watches events unfold.",
+            urgency=0.10,
+        )
+6) Add prompt builder placeholder, but keep decisions deterministic-first
+FILE: src/app/rpg/ai/llm_mind/npc_prompt_builder.py
+CREATE NEW FILE:
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+class NPCPromptBuilder:
+    def build_decision_prompt(
+        self,
+        npc_context: Dict[str, Any],
+        belief_summary: Dict[str, Dict[str, float]],
+        memory_summary: List[Dict[str, Any]],
+        goals: List[Dict[str, Any]],
+        simulation_state: Dict[str, Any],
+    ) -> str:
+        npc_name = str(npc_context.get("name") or npc_context.get("npc_id") or "Unknown NPC")
+        return (
+            f"NPC: {npc_name}\n"
+            f"Beliefs: {belief_summary}\n"
+            f"Memory: {memory_summary}\n"
+            f"Goals: {goals}\n"
+            f"Context keys: {sorted((simulation_state or {}).keys())}\n"
+        )
+7) Add parser placeholder
+FILE: src/app/rpg/ai/llm_mind/npc_response_parser.py
+CREATE NEW FILE:
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+class NPCResponseParser:
+    def parse_decision(self, payload: Any) -> Dict[str, Any]:
+        if isinstance(payload, dict):
+            return dict(payload)
+        return {}
+8) Add decision validator
+FILE: src/app/rpg/ai/llm_mind/npc_decision_validator.py
+CREATE NEW FILE:
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+_ALLOWED_INTENTS = {
+    "observe",
+    "support",
+    "confront",
+    "avoid",
+    "investigate",
+    "negotiate",
+    "stabilize",
+    "retaliate",
+    "wait",
+}
+
+_ALLOWED_ACTION_TYPES = {
+    "observe",
+    "support",
+    "confront",
+    "avoid",
+    "investigate",
+    "negotiate",
+    "stabilize",
+    "retaliate",
+    "wait",
+}
+
+
+class NPCDecisionValidator:
+    def validate(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        data = dict(data or {})
+
+        intent = str(data.get("intent") or "wait")
+        action_type = str(data.get("action_type") or "wait")
+
+        if intent not in _ALLOWED_INTENTS:
+            data["intent"] = "wait"
+        if action_type not in _ALLOWED_ACTION_TYPES:
+            data["action_type"] = "wait"
+
+        data["npc_id"] = str(data.get("npc_id") or "")
+        data["tick"] = int(data.get("tick", 0) or 0)
+        data["target_id"] = str(data.get("target_id") or "")
+        data["target_kind"] = str(data.get("target_kind") or "")
+        data["location_id"] = str(data.get("location_id") or "")
+        data["reason"] = str(data.get("reason") or "")
+        data["dialogue_hint"] = str(data.get("dialogue_hint") or "")
+        data["urgency"] = float(data.get("urgency", 0.0) or 0.0)
+        return data
+9) Rebuild orchestrator
+FILE: src/app/rpg/ai/llm_mind/npc_mind.py
+REPLACE ENTIRE FILE WITH:
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from .belief_model import BeliefModel
+from .goal_engine import GoalEngine
+from .npc_decision import NPCDecision
+from .npc_decision_validator import NPCDecisionValidator
+from .npc_memory import NPCMemory
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+class NPCMind:
+    def __init__(
+        self,
+        npc_id: str,
+        memory: NPCMemory | None = None,
+        beliefs: BeliefModel | None = None,
+        goal_engine: GoalEngine | None = None,
+        last_decision: Dict[str, Any] | None = None,
+        last_seen_tick: int = 0,
+    ):
+        self.npc_id = npc_id
+        self.memory = memory or NPCMemory(npc_id=npc_id)
+        self.beliefs = beliefs or BeliefModel()
+        self.goal_engine = goal_engine or GoalEngine()
+        self.last_decision = dict(last_decision or {})
+        self.last_seen_tick = int(last_seen_tick or 0)
+        self.validator = NPCDecisionValidator()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "npc_id": self.npc_id,
+            "memory": self.memory.to_dict(),
+            "beliefs": self.beliefs.to_dict(),
+            "goals": self.goal_engine.to_dict(),
+            "last_decision": dict(self.last_decision),
+            "last_seen_tick": self.last_seen_tick,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "NPCMind":
+        data = data or {}
+        npc_id = _safe_str(data.get("npc_id"))
+        return cls(
+            npc_id=npc_id,
+            memory=NPCMemory.from_dict(data.get("memory")),
+            beliefs=BeliefModel.from_dict(data.get("beliefs")),
+            goal_engine=GoalEngine.from_dict(data.get("goals")),
+            last_decision=data.get("last_decision") or {},
+            last_seen_tick=int(data.get("last_seen_tick", 0) or 0),
+        )
+
+    def _event_is_relevant(self, event: Dict[str, Any], npc_context: Dict[str, Any]) -> bool:
+        event = event or {}
+        npc_context = npc_context or {}
+
+        npc_id = _safe_str(npc_context.get("npc_id"))
+        npc_faction_id = _safe_str(npc_context.get("faction_id"))
+        npc_location_id = _safe_str(npc_context.get("location_id"))
+
+        actor = _safe_str(event.get("actor"))
+        target_id = _safe_str(event.get("target_id"))
+        faction_id = _safe_str(event.get("faction_id"))
+        location_id = _safe_str(event.get("location_id"))
+        affected_npc_ids = event.get("affected_npc_ids") or []
+
+        if actor == "player":
+            return True
+        if target_id and target_id == npc_id:
+            return True
+        if npc_faction_id and faction_id and faction_id == npc_faction_id:
+            return True
+        if npc_location_id and location_id and location_id == npc_location_id:
+            return True
+        if npc_id and npc_id in affected_npc_ids:
+            return True
+        return False
+
+    def observe_events(self, events: List[Dict[str, Any]], tick: int, npc_context: Dict[str, Any]) -> None:
+        relevant: List[Dict[str, Any]] = []
+        for event in events or []:
+            if self._event_is_relevant(event, npc_context):
+                relevant.append(event)
+
+        self.memory.remember_many(relevant, tick=tick)
+        for event in relevant:
+            self.beliefs.update_from_event(event, npc_context=npc_context)
+            self.goal_engine.advance_from_event(event)
+
+        self.last_seen_tick = int(tick)
+
+    def refresh_goals(self, simulation_state: Dict[str, Any], npc_context: Dict[str, Any]) -> None:
+        generated = self.goal_engine.generate_goals(
+            npc_context=npc_context,
+            simulation_state=simulation_state,
+            belief_summary=self.beliefs.summarize(limit=8),
+            memory_summary=self.memory.summary(limit=5),
+        )
+        self.goal_engine.merge_goals(generated)
+
+    def decide(self, simulation_state: Dict[str, Any], npc_context: Dict[str, Any], tick: int) -> NPCDecision:
+        top_goal = self.goal_engine.top_goal()
+        location_id = _safe_str(npc_context.get("location_id"))
+
+        if not top_goal:
+            decision = NPCDecision.fallback(
+                npc_id=self.npc_id,
+                tick=tick,
+                location_id=location_id,
+                reason="No active goals",
+            )
+            self.last_decision = decision.to_dict()
+            return decision
+
+        goal_type = _safe_str(top_goal.get("type"))
+        target_id = _safe_str(top_goal.get("target_id"))
+        reason = _safe_str(top_goal.get("reason"))
+        priority = float(top_goal.get("priority", 0.0) or 0.0)
+
+        mapping = {
+            "stabilize_location": ("stabilize", "stabilize", "location", "The NPC acts to restore order."),
+            "support_faction": ("support", "support", "faction", "The NPC rallies support for their faction."),
+            "retaliate": ("retaliate", "retaliate", "actor", "The NPC moves against a perceived enemy."),
+            "avoid_player": ("avoid", "avoid", "actor", "The NPC keeps their distance."),
+            "approach_player": ("negotiate", "negotiate", "actor", "The NPC cautiously opens contact."),
+            "observe": ("observe", "observe", "actor", "The NPC watches closely."),
+            "investigate": ("investigate", "investigate", "entity", "The NPC looks into suspicious developments."),
+        }
+        intent, action_type, target_kind, dialogue_hint = mapping.get(
+            goal_type,
+            ("wait", "wait", "", "The NPC waits and reassesses."),
+        )
+
+        raw = {
+            "npc_id": self.npc_id,
+            "tick": int(tick),
+            "intent": intent,
+            "action_type": action_type,
+            "target_id": target_id,
+            "target_kind": target_kind,
+            "location_id": location_id,
+            "reason": reason,
+            "dialogue_hint": dialogue_hint,
+            "urgency": priority,
+        }
+        validated = self.validator.validate(raw)
+        decision = NPCDecision.from_dict(validated)
+        self.last_decision = decision.to_dict()
+        return decision
+
+    def apply_player_action_feedback(self, action_event: Dict[str, Any], npc_context: Dict[str, Any], tick: int) -> None:
+        if self._event_is_relevant(action_event, npc_context):
+            self.memory.remember(action_event, tick=tick, index=0)
+            self.beliefs.update_from_event(action_event, npc_context=npc_context)
+
+    def build_narrator_context(self) -> Dict[str, Any]:
+        return {
+            "memory_summary": self.memory.summary(limit=5),
+            "belief_summary": self.beliefs.summarize(limit=8),
+            "active_goals": [dict(goal) for goal in self.goal_engine.goals],
+            "last_decision": dict(self.last_decision),
+        }
+10) Remove old duplicate module files or convert them into compatibility wrappers
+
+You likely already have:
+
+memory.py
+decision.py
+prompt_builder.py
+response_parser.py
+validator.py
+
+To avoid breakage, do not hard-delete yet if other imports exist.
+
+FILE: src/app/rpg/ai/llm_mind/memory.py
+REPLACE ENTIRE FILE WITH:
+from .npc_memory import NPCMemory
+
+__all__ = ["NPCMemory"]
+FILE: src/app/rpg/ai/llm_mind/decision.py
+REPLACE ENTIRE FILE WITH:
+from .npc_decision import NPCDecision
+
+__all__ = ["NPCDecision"]
+FILE: src/app/rpg/ai/llm_mind/prompt_builder.py
+REPLACE ENTIRE FILE WITH:
+from .npc_prompt_builder import NPCPromptBuilder
+
+__all__ = ["NPCPromptBuilder"]
+FILE: src/app/rpg/ai/llm_mind/response_parser.py
+REPLACE ENTIRE FILE WITH:
+from .npc_response_parser import NPCResponseParser
+
+__all__ = ["NPCResponseParser"]
+FILE: src/app/rpg/ai/llm_mind/validator.py
+REPLACE ENTIRE FILE WITH:
+from .npc_decision_validator import NPCDecisionValidator
+
+__all__ = ["NPCDecisionValidator"]
+11) Integrate Phase 6 state into world simulation
+FILE: src/app/rpg/creator/world_simulation.py
+PATCH: add imports near top
+
+Add:
+
+from app.rpg.ai.llm_mind import NPCMind
+
+If imports in this file are relative, use the local style already used by the file. Match existing convention.
+
+PATCH: add helper functions near existing utility helpers
+
+Insert these helpers:
+
+def _safe_str(value):
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _iter_npc_definitions(setup_payload):
+    """
+    Best-effort extractor for NPC definitions from creator setup.
+    Supports either:
+      - setup_payload["npcs"] = [...]
+      - nested sections that contain npc-like dicts
+    """
+    setup_payload = setup_payload or {}
+
+    direct = setup_payload.get("npcs")
+    if isinstance(direct, list):
+        for item in direct:
+            if isinstance(item, dict):
+                yield item
+
+    for section_key in ("world", "actors", "entities", "cast"):
+        section = setup_payload.get(section_key)
+        if isinstance(section, dict):
+            npcs = section.get("npcs")
+            if isinstance(npcs, list):
+                for item in npcs:
+                    if isinstance(item, dict):
+                        yield item
+
+
+def _build_npc_index(setup_payload):
+    npc_index = {}
+    for item in _iter_npc_definitions(setup_payload):
+        npc_id = _safe_str(item.get("id") or item.get("npc_id"))
+        if not npc_id:
+            continue
+        npc_index[npc_id] = {
+            "npc_id": npc_id,
+            "name": _safe_str(item.get("name")) or npc_id,
+            "role": _safe_str(item.get("role")),
+            "faction_id": _safe_str(item.get("faction_id")),
+            "location_id": _safe_str(item.get("location_id")),
+        }
+    return dict(sorted(npc_index.items()))
+
+
+def _load_npc_minds(simulation_state, npc_index):
+    simulation_state = simulation_state or {}
+    raw = simulation_state.get("npc_minds") or {}
+    minds = {}
+    for npc_id, npc_ctx in sorted(npc_index.items()):
+        if npc_id in raw and isinstance(raw[npc_id], dict):
+            minds[npc_id] = NPCMind.from_dict(raw[npc_id])
+        else:
+            minds[npc_id] = NPCMind(npc_id=npc_id)
+    return minds
+
+
+def _decision_to_event(decision_dict, npc_context, tick):
+    decision_dict = decision_dict or {}
+    npc_context = npc_context or {}
+
+    npc_id = _safe_str(decision_dict.get("npc_id"))
+    action_type = _safe_str(decision_dict.get("action_type"))
+    target_id = _safe_str(decision_dict.get("target_id"))
+    target_kind = _safe_str(decision_dict.get("target_kind"))
+    location_id = _safe_str(decision_dict.get("location_id")) or _safe_str(npc_context.get("location_id"))
+    urgency = float(decision_dict.get("urgency", 0.0) or 0.0)
+
+    if action_type in {"wait", ""}:
+        return None
+
+    return {
+        "event_id": f"npc_event:{tick}:{npc_id}:{action_type}:{target_id or 'none'}",
+        "tick": int(tick),
+        "type": action_type,
+        "actor": npc_id,
+        "target_id": target_id,
+        "target_kind": target_kind,
+        "location_id": location_id,
+        "faction_id": _safe_str(npc_context.get("faction_id")),
+        "summary": _safe_str(decision_dict.get("reason")) or f"{npc_id} chooses to {action_type}",
+        "salience": min(max(urgency, 0.2), 1.0),
+        "source": "npc_mind",
+    }
+PATCH: in the main simulation step function, after normal world state step is computed, load and update NPC minds
+
+You need to locate your main tick function, likely something like:
+
+step_simulation_state(...)
+or similar.
+
+In that function:
+
+A) After you have access to:
+setup_payload
+current_state / simulation_state
+next_tick
+newly created events / consequences / incidents
+
+insert:
+
+npc_index = _build_npc_index(setup_payload)
+npc_minds = _load_npc_minds(current_state, npc_index)
+
+observed_events = []
+for bucket_name in ("events", "consequences", "incidents"):
+    bucket = current_state.get(bucket_name) or []
+    if isinstance(bucket, list):
+        for item in bucket:
+            if isinstance(item, dict):
+                observed_events.append(item)
+
+new_npc_decisions = []
+new_npc_events = []
+
+for npc_id, mind in sorted(npc_minds.items()):
+    npc_context = dict(npc_index.get(npc_id) or {"npc_id": npc_id})
+    mind.observe_events(observed_events, tick=next_tick, npc_context=npc_context)
+    mind.refresh_goals(simulation_state=current_state, npc_context=npc_context)
+    decision = mind.decide(simulation_state=current_state, npc_context=npc_context, tick=next_tick)
+    decision_dict = decision.to_dict()
+    new_npc_decisions.append(decision_dict)
+
+    npc_event = _decision_to_event(decision_dict, npc_context=npc_context, tick=next_tick)
+    if npc_event is not None:
+        new_npc_events.append(npc_event)
+B) Bound and store outputs
+
+After that, insert:
+
+new_npc_decisions = sorted(
+    new_npc_decisions,
+    key=lambda item: (
+        str(item.get("npc_id") or ""),
+        str(item.get("action_type") or ""),
+        str(item.get("target_id") or ""),
+    ),
+)[:12]
+
+new_npc_events = sorted(
+    new_npc_events,
+    key=lambda item: (
+        str(item.get("actor") or ""),
+        str(item.get("type") or ""),
+        str(item.get("target_id") or ""),
+    ),
+)[:12]
+C) Persist into next simulation state
+
+When building the outgoing state, add:
+
+next_state["npc_index"] = npc_index
+next_state["npc_minds"] = {
+    npc_id: mind.to_dict()
+    for npc_id, mind in sorted(npc_minds.items())
+}
+next_state["npc_decisions"] = list(new_npc_decisions)
+D) Merge NPC events into regular event stream
+
+Wherever you currently assign next events, merge them in:
+
+existing_events = next_state.get("events") or []
+next_state["events"] = list(existing_events) + list(new_npc_events)
+
+If your engine already trims or sorts events, run the same normalization after merging.
+
+12) Feed player actions into NPC minds
+FILE: src/app/rpg/creator/world_player_actions.py
+
+You need to make player action events richer, not just generic thread pressure updates.
+
+PATCH: add/ensure event payload fields
+
+Where you build action result events, ensure every emitted player-facing event contains:
+
+{
+    "actor": "player",
+    "target_id": ...,
+    "target_kind": ...,
+    "location_id": ...,
+    "faction_id": ...,
+    "affected_npc_ids": [...],
+    "summary": ...,
+    "salience": ...,
+}
+PATCH: add helper functions near top
+def _safe_str(value):
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _infer_affected_npc_ids(simulation_state, location_id="", faction_id="", target_id=""):
+    simulation_state = simulation_state or {}
+    npc_index = simulation_state.get("npc_index") or {}
+    affected = []
+
+    for npc_id, npc in sorted(npc_index.items()):
+        npc_loc = _safe_str(npc.get("location_id"))
+        npc_faction = _safe_str(npc.get("faction_id"))
+        if location_id and npc_loc == location_id:
+            affected.append(npc_id)
+            continue
+        if faction_id and npc_faction == faction_id:
+            affected.append(npc_id)
+            continue
+        if target_id and npc_id == target_id:
+            affected.append(npc_id)
+
+    return sorted(set(affected))
+PATCH: for each player action event you emit, attach inferred metadata
+
+Example shape for any event emitted from player action handling:
+
+event = {
+    "event_id": ...,
+    "tick": ...,
+    "type": "support",  # or "attack", "threaten", "negotiate", etc
+    "actor": "player",
+    "target_id": target_id,
+    "target_kind": target_kind,
+    "location_id": location_id,
+    "faction_id": faction_id,
+    "affected_npc_ids": _infer_affected_npc_ids(
+        simulation_state=current_state,
+        location_id=location_id,
+        faction_id=faction_id,
+        target_id=target_id,
+    ),
+    "summary": "...",
+    "salience": 0.8,
+}
+
+Do this for the major action types first:
+
+intervene/help
+attack/escalate
+negotiate/parley
+support faction
+destabilize / sabotage
+
+The exact action names should match your current action enum. Keep the patch aligned to existing action constants.
+
+13) Enrich scene actors with real NPCs
+FILE: src/app/rpg/creator/world_scene_generator.py
+PATCH: add helpers near top
+def _safe_str(value):
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _collect_scene_actors(source_id, simulation_state, max_actors=4):
+    simulation_state = simulation_state or {}
+    npc_index = simulation_state.get("npc_index") or {}
+    npc_minds = simulation_state.get("npc_minds") or {}
+
+    actors = []
+    for npc_id, npc in sorted(npc_index.items()):
+        npc_location_id = _safe_str(npc.get("location_id"))
+        npc_faction_id = _safe_str(npc.get("faction_id"))
+
+        if source_id and (source_id == npc_location_id or source_id == npc_faction_id or source_id == npc_id):
+            actor = {
+                "id": npc_id,
+                "name": _safe_str(npc.get("name")) or npc_id,
+                "role": _safe_str(npc.get("role")),
+                "faction_id": npc_faction_id,
+                "location_id": npc_location_id,
+            }
+            mind = npc_minds.get(npc_id) or {}
+            if isinstance(mind, dict):
+                actor["mind_context"] = {
+                    "last_decision": mind.get("last_decision") or {},
+                }
+            actors.append(actor)
+
+    return actors[:max_actors]
+PATCH: when building each scene, append enriched actors
+
+Find the place where a scene dict is created, likely something like:
+
+scene = {
+    ...
+    "actors": [...],
+}
+
+Change to:
+
+scene_actors = list(scene.get("actors") or [])
+scene_actors.extend(_collect_scene_actors(source_id=scene.get("source_id"), simulation_state=simulation_state, max_actors=4))
+
+deduped = []
+seen_actor_ids = set()
+for actor in scene_actors:
+    if isinstance(actor, dict):
+        actor_id = _safe_str(actor.get("id"))
+    else:
+        actor_id = _safe_str(actor)
+        actor = {"id": actor_id, "name": actor_id}
+
+    if not actor_id or actor_id in seen_actor_ids:
+        continue
+    seen_actor_ids.add(actor_id)
+    deduped.append(actor)
+
+scene["actors"] = deduped[:6]
+scene["primary_npc_ids"] = [
+    actor["id"]
+    for actor in deduped
+    if isinstance(actor, dict) and str(actor.get("id", "")).startswith("npc_")
+][:4]
+
+If your code uses a different NPC id convention, adjust the prefix rule or drop it and use npc_index membership instead.
+
+14) Make narrator consume Phase 6 mind context
+FILE: src/app/rpg/ai/world_scene_narrator.py
+
+You already appear to have NPC reaction generation here. The goal is to attach real memory/belief/goal context before prompting.
+
+PATCH: add helper near narrator utility section
+def _safe_str(value):
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _attach_npc_mind_context(actor, simulation_state):
+    actor = dict(actor or {})
+    simulation_state = simulation_state or {}
+
+    npc_id = _safe_str(actor.get("id"))
+    npc_minds = simulation_state.get("npc_minds") or {}
+    mind = npc_minds.get(npc_id) or {}
+
+    if isinstance(mind, dict):
+        actor["memory_summary"] = ((mind.get("memory") or {}).get("entries") or [])[:5]
+        actor["belief_summary"] = ((mind.get("beliefs") or {}).get("beliefs") or {})
+        actor["active_goals"] = ((mind.get("goals") or {}).get("goals") or [])[:5]
+        actor["last_decision"] = mind.get("last_decision") or {}
+
+    return actor
+PATCH: before _generate_npc_reactions(...) uses scene actors, enrich them
+
+Find where scene actors are passed into reaction generation.
+
+Insert:
+
+simulation_state = (
+    (state or {}).get("simulation_state")
+    or (state or {}).get("metadata", {}).get("simulation_state")
+    or {}
+)
+
+enriched_actors = []
+for actor in scene.get("actors") or []:
+    if isinstance(actor, dict):
+        enriched_actors.append(_attach_npc_mind_context(actor, simulation_state))
+    else:
+        enriched_actors.append(actor)
+
+Then replace downstream usage of scene["actors"] with enriched_actors for NPC reaction generation.
+
+PATCH: strengthen NPC reaction prompt context
+
+Where your narrator builds NPC reaction prompt payloads, ensure each NPC actor contributes:
+
+{
+    "id": actor.get("id"),
+    "name": actor.get("name"),
+    "role": actor.get("role"),
+    "belief_summary": actor.get("belief_summary", {}),
+    "memory_summary": actor.get("memory_summary", []),
+    "active_goals": actor.get("active_goals", []),
+    "last_decision": actor.get("last_decision", {}),
+}
+
+And prompt guidance should explicitly instruct:
+
+# add this guidance to the NPC reaction prompt template
+- Use the NPC's active goals to shape what they want right now.
+- Use belief_summary about the player to determine tone.
+- Use memory_summary to maintain continuity.
+- Use last_decision so reactions align with recent intent.
+- Do not contradict the provided structured state.
+15) Persist simulation state through service layer if needed
+FILE: src/app/rpg/services/adventure_builder_service.py
+
+This file likely passes simulation state between APIs.
+
+PATCH: ensure npc_index, npc_minds, and npc_decisions are preserved
+
+Wherever simulation state is:
+
+created
+copied
+serialized back into metadata
+
+ensure the following keys are preserved untouched:
+
+"npc_index"
+"npc_minds"
+"npc_decisions"
+
+If you have normalization logic that white-lists known simulation keys, extend it with those three.
+
+16) Add deterministic tests
+FILE: tests/unit/rpg/test_npc_memory.py
