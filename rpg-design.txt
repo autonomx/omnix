@@ -1,49 +1,89 @@
-Phase 10 — Literal apply-this-patch diff spec
-1) Create presentation package exports
-src/app/rpg/presentation/__init__.py
+PART 1/6 — NEW RUNTIME PACKAGE + MODELS
+1) Add file
+src/app/rpg/runtime/__init__.py
 *** Begin Patch
-*** Add File: src/app/rpg/presentation/__init__.py
-+from .personality_state import (
-+    ensure_personality_state,
-+    get_actor_personality_profile,
-+    build_personality_summary,
-+)
-+from .dialogue_prompt_builder import (
-+    build_dialogue_llm_payload,
-+    build_scene_llm_payload,
-+)
-+from .dialogue_fallbacks import (
-+    build_deterministic_dialogue_fallback,
-+    build_deterministic_scene_fallback,
-+)
-+from .speaker_cards import (
-+    build_speaker_card,
-+    build_party_speaker_cards,
+*** Add File: src/app/rpg/runtime/__init__.py
++"""Phase 10.5 — Expressive runtime layer.
++
++Owns deterministic runtime dialogue state used between simulation/narrative
++systems and read-only presentation builders.
++"""
++from .dialogue_runtime import (
++    ensure_runtime_state,
++    get_runtime_dialogue_state,
++    build_runtime_turn_id,
++    build_runtime_sequence_id,
++    get_runtime_emotion,
 +)
 +
 +__all__ = [
-+    "ensure_personality_state",
-+    "get_actor_personality_profile",
-+    "build_personality_summary",
-+    "build_dialogue_llm_payload",
-+    "build_scene_llm_payload",
-+    "build_deterministic_dialogue_fallback",
-+    "build_deterministic_scene_fallback",
-+    "build_speaker_card",
-+    "build_party_speaker_cards",
++    "ensure_runtime_state",
++    "get_runtime_dialogue_state",
++    "build_runtime_turn_id",
++    "build_runtime_sequence_id",
++    "get_runtime_emotion",
 +]
 *** End Patch
-2) Add deterministic personality state helpers
-src/app/rpg/presentation/personality_state.py
+2) Add file
+src/app/rpg/runtime/dialogue_runtime.py
 *** Begin Patch
-*** Add File: src/app/rpg/presentation/personality_state.py
+*** Add File: src/app/rpg/runtime/dialogue_runtime.py
++"""Phase 10.5 — Deterministic expressive runtime dialogue state.
++
++This module owns runtime dialogue state only.
++
++Rules:
++    - Deterministic / replay-safe
++    - Bounded state
++    - Inspector-visible under simulation_state["runtime_state"]
++    - No presentation logic
++    - No hidden LLM calls
++"""
 +from __future__ import annotations
 +
-+from typing import Any, Dict, List
++from typing import Any, Dict, List, Tuple
 +
 +
-+_MAX_TRAITS = 8
-+_MAX_STYLE_TAGS = 8
++_MAX_RUNTIME_TURNS = 20
++_MAX_TURN_CHUNKS = 12
++_MAX_STREAM_CHUNKS = 40
++_MAX_PENDING_INTERRUPTION = 4
++_MAX_INTERRUPTION_LOG = 12
++_MAX_EMOTION_ACTORS = 16
++
++_VALID_TURN_STATUS = {
++    "pending",
++    "streaming",
++    "complete",
++    "interrupted",
++}
++
++_VALID_ROLES = {
++    "player",
++    "companion",
++    "npc",
++    "system",
++}
++
++_VALID_EMOTIONS = {
++    "neutral",
++    "warm",
++    "supportive",
++    "tense",
++    "wary",
++    "stern",
++    "shaken",
++}
++
++_EMOTION_ORDER = {
++    "neutral": 0,
++    "warm": 1,
++    "supportive": 2,
++    "tense": 3,
++    "wary": 4,
++    "stern": 5,
++    "shaken": 6,
++}
 +
 +
 +def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -58,459 +98,11 @@ src/app/rpg/presentation/personality_state.py
 +    return "" if v is None else str(v)
 +
 +
-+def _normalize_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
-+    profile = _safe_dict(profile)
-+    return {
-+        "actor_id": _safe_str(profile.get("actor_id")),
-+        "display_name": _safe_str(profile.get("display_name")),
-+        "tone": _safe_str(profile.get("tone") or "neutral"),
-+        "voice_style": _safe_str(profile.get("voice_style") or "plain"),
-+        "traits": [
-+            _safe_str(v)
-+            for v in _safe_list(profile.get("traits"))[:_MAX_TRAITS]
-+            if _safe_str(v)
-+        ],
-+        "style_tags": [
-+            _safe_str(v)
-+            for v in _safe_list(profile.get("style_tags"))[:_MAX_STYLE_TAGS]
-+            if _safe_str(v)
-+        ],
-+        "temperature_hint": _safe_str(profile.get("temperature_hint") or "low"),
-+    }
-+
-+
-+def ensure_personality_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    personality_state = _safe_dict(presentation_state.get("personality_state"))
-+    profiles_in = _safe_dict(personality_state.get("profiles"))
-+
-+    profiles_out: Dict[str, Dict[str, Any]] = {}
-+    for actor_id in sorted(profiles_in.keys()):
-+        normalized = _normalize_profile(profiles_in.get(actor_id))
-+        normalized["actor_id"] = _safe_str(actor_id or normalized.get("actor_id"))
-+        profiles_out[str(actor_id)] = normalized
-+
-+    personality_state["profiles"] = profiles_out
-+    presentation_state["personality_state"] = personality_state
-+    simulation_state["presentation_state"] = presentation_state
-+    return simulation_state
-+
-+
-+def get_actor_personality_profile(simulation_state: Dict[str, Any], actor_id: str, default_name: str = "") -> Dict[str, Any]:
-+    simulation_state = ensure_personality_state(simulation_state)
-+    actor_id = _safe_str(actor_id)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    personality_state = _safe_dict(presentation_state.get("personality_state"))
-+    profiles = _safe_dict(personality_state.get("profiles"))
-+
-+    profile = _normalize_profile(profiles.get(actor_id))
-+    if not profile.get("actor_id"):
-+        profile["actor_id"] = actor_id
-+    if not profile.get("display_name"):
-+        profile["display_name"] = _safe_str(default_name or actor_id)
-+    return profile
-+
-+
-+def build_personality_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = ensure_personality_state(simulation_state)
-+    profiles = _safe_dict(
-+        _safe_dict(_safe_dict(simulation_state.get("presentation_state")).get("personality_state")).get("profiles")
-+    )
-+    return {
-+        "profile_count": len(profiles),
-+        "actor_ids": sorted(profiles.keys())[:20],
-+    }
-*** End Patch
-3) Add LLM payload builders
-src/app/rpg/presentation/dialogue_prompt_builder.py
-*** Begin Patch
-*** Add File: src/app/rpg/presentation/dialogue_prompt_builder.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from .personality_state import get_actor_personality_profile
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_list(v: Any) -> List[Any]:
-+    return list(v) if isinstance(v, list) else []
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def _compact_history(messages: List[Dict[str, Any]], limit: int = 12) -> List[Dict[str, Any]]:
-+    out = []
-+    for msg in _safe_list(messages)[-limit:]:
-+        if not isinstance(msg, dict):
-+            continue
-+        out.append({
-+            "speaker": _safe_str(msg.get("speaker")),
-+            "text": _safe_str(msg.get("text")),
-+        })
-+    return out
-+
-+
-+def build_dialogue_llm_payload(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any], actor_id: str, actor_name: str = "") -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    dialogue_state = _safe_dict(dialogue_state)
-+    profile = get_actor_personality_profile(simulation_state, actor_id, default_name=actor_name)
-+
-+    return {
-+        "mode": "dialogue",
-+        "actor_id": _safe_str(actor_id),
-+        "actor_name": _safe_str(actor_name or profile.get("display_name")),
-+        "personality": profile,
-+        "dialogue_context": {
-+            "scene_id": _safe_str(dialogue_state.get("scene_id")),
-+            "location_id": _safe_str(dialogue_state.get("location_id")),
-+            "topic": _safe_str(dialogue_state.get("topic")),
-+            "history": _compact_history(_safe_list(dialogue_state.get("transcript"))),
-+        },
-+        "instructions": {
-+            "stay_in_character": True,
-+            "respect_simulation_authority": True,
-+            "do_not_invent_world_facts": True,
-+            "prefer_short_responses": True,
-+        },
-+    }
-+
-+
-+def build_scene_llm_payload(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    scene_state = _safe_dict(scene_state)
-+    return {
-+        "mode": "scene_narration",
-+        "scene_context": {
-+            "scene_id": _safe_str(scene_state.get("scene_id")),
-+            "location_id": _safe_str(scene_state.get("location_id")),
-+            "tone": _safe_str(scene_state.get("tone")),
-+            "summary": _safe_str(scene_state.get("summary")),
-+        },
-+        "instructions": {
-+            "respect_simulation_authority": True,
-+            "do_not_resolve_uncommitted_actions": True,
-+            "prefer_grounded sensory detail": True,
-+        },
-+    }
-*** End Patch
-4) Add deterministic fallbacks
-src/app/rpg/presentation/dialogue_fallbacks.py
-*** Begin Patch
-*** Add File: src/app/rpg/presentation/dialogue_fallbacks.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def build_deterministic_dialogue_fallback(actor_profile: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
-+    actor_profile = _safe_dict(actor_profile)
-+    dialogue_state = _safe_dict(dialogue_state)
-+    name = _safe_str(actor_profile.get("display_name") or actor_profile.get("actor_id") or "Speaker")
-+    tone = _safe_str(actor_profile.get("tone") or "neutral")
-+    topic = _safe_str(dialogue_state.get("topic") or "the situation")
-+
-+    if tone == "warm":
-+        text = f"{name} responds calmly about {topic}."
-+    elif tone == "stern":
-+        text = f"{name} answers in a firm, restrained way about {topic}."
-+    elif tone == "wary":
-+        text = f"{name} responds cautiously, measuring every word about {topic}."
-+    else:
-+        text = f"{name} responds about {topic}."
-+
-+    return {
-+        "ok": True,
-+        "source": "deterministic_fallback",
-+        "text": text,
-+    }
-+
-+
-+def build_deterministic_scene_fallback(scene_state: Dict[str, Any]) -> Dict[str, Any]:
-+    scene_state = _safe_dict(scene_state)
-+    tone = _safe_str(scene_state.get("tone") or "neutral")
-+    location_id = _safe_str(scene_state.get("location_id") or "the area")
-+
-+    if tone == "tense":
-+        text = f"Tension lingers over {location_id} as everyone measures the next move."
-+    elif tone == "calm":
-+        text = f"The scene at {location_id} settles into a quieter rhythm."
-+    else:
-+        text = f"The scene continues at {location_id}."
-+
-+    return {
-+        "ok": True,
-+        "source": "deterministic_fallback",
-+        "text": text,
-+    }
-*** End Patch
-5) Add speaker-card builders
-src/app/rpg/presentation/speaker_cards.py
-*** Begin Patch
-*** Add File: src/app/rpg/presentation/speaker_cards.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from .personality_state import get_actor_personality_profile
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_list(v: Any) -> List[Any]:
-+    return list(v) if isinstance(v, list) else []
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def build_speaker_card(simulation_state: Dict[str, Any], actor_id: str, actor_name: str = "") -> Dict[str, Any]:
-+    profile = get_actor_personality_profile(simulation_state, actor_id, default_name=actor_name)
-+    return {
-+        "actor_id": _safe_str(actor_id),
-+        "display_name": _safe_str(profile.get("display_name") or actor_name or actor_id),
-+        "tone": _safe_str(profile.get("tone")),
-+        "voice_style": _safe_str(profile.get("voice_style")),
-+        "traits": _safe_list(profile.get("traits"))[:5],
-+        "style_tags": _safe_list(profile.get("style_tags"))[:5],
-+    }
-+
-+
-+def build_party_speaker_cards(simulation_state: Dict[str, Any], companions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-+    cards = []
-+    for comp in _safe_list(companions):
-+        if not isinstance(comp, dict):
-+            continue
-+        cards.append(
-+            build_speaker_card(
-+                simulation_state,
-+                _safe_str(comp.get("npc_id")),
-+                actor_name=_safe_str(comp.get("name")),
-+            )
-+        )
-+    return cards[:6]
-*** End Patch
-6) Extend player party view with speaker cards
-src/app/rpg/player/player_party.py
-*** Begin Patch
-*** Update File: src/app/rpg/player/player_party.py
-@@
- from app.rpg.party import (
-     ensure_party_state,
-     build_party_summary,
-     build_companion_presence_summary,
- )
-+from app.rpg.presentation import build_party_speaker_cards
-@@
- def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-     """Build the full party view for UI display, including narrative presence."""
-     simulation_state = ensure_player_party(simulation_state)
-     player_state = _safe_dict(simulation_state.get("player_state"))
-     party_state = _safe_dict(player_state.get("party_state"))
-+    companions = list((party_state.get("companions") or []))
-     return {
-         "party_state": party_state,
-         "party_summary": build_party_summary(player_state),
-         "presence_summary": build_companion_presence_summary(player_state),
-+        "speaker_cards": build_party_speaker_cards(simulation_state, companions),
-     }
-*** End Patch
-7) Ensure presentation/personality state exists during player-state setup
-src/app/rpg/player/player_scene_state.py
-*** Begin Patch
-*** Update File: src/app/rpg/player/player_scene_state.py
-@@
- def ensure_player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-@@
-     player_state.setdefault("party_state", {
-         "companions": [],
-         "max_size": 3,
-     })
-+
-+    simulation_state.setdefault("presentation_state", {
-+        "personality_state": {
-+            "profiles": {},
-+        },
-+    })
- 
-     return simulation_state
-*** End Patch
-
-8) Add presentation routes
-
-Create additive routes for:
-
-building a presentation-ready scene payload
-building a presentation-ready dialogue payload
-returning stable speaker card data
-returning personality/presentation metadata for the frontend
-
-These should remain read-only builders unless you intentionally call a recorder in a separate mutation path.
-
-File: src/app/rpg/api/rpg_presentation_routes.py
-*** Begin Patch
-*** Add File: src/app/rpg/api/rpg_presentation_routes.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from flask import Blueprint, jsonify, request
-+
-+from app.rpg.player import ensure_player_state, ensure_player_party
-+from app.rpg.presentation import (
-+    build_scene_presentation_payload,
-+    build_dialogue_presentation_payload,
-+    build_speaker_cards,
-+)
-+
-+
-+rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _get_simulation_state(setup_payload: Dict[str, Any]) -> Dict[str, Any]:
-+    setup_payload = _safe_dict(setup_payload)
-+    return _safe_dict(setup_payload.get("simulation_state"))
-+
-+
-+def _write_simulation_state(setup_payload: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    setup_payload = dict(setup_payload or {})
-+    setup_payload["simulation_state"] = dict(simulation_state or {})
-+    return setup_payload
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/presentation/scene")
-+def presentation_scene():
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    scene_state = _safe_dict(data.get("scene_state"))
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+
-+    payload = build_scene_presentation_payload(simulation_state, scene_state)
-+
-+    return jsonify({
-+        "ok": True,
-+        "presentation": payload,
-+        "setup_payload": _write_simulation_state(setup_payload, simulation_state),
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/presentation/dialogue")
-+def presentation_dialogue():
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    dialogue_state = _safe_dict(data.get("dialogue_state"))
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+
-+    payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
-+
-+    return jsonify({
-+        "ok": True,
-+        "presentation": payload,
-+        "setup_payload": _write_simulation_state(setup_payload, simulation_state),
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/presentation/speakers")
-+def presentation_speakers():
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    scene_state = _safe_dict(data.get("scene_state"))
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+
-+    cards = build_speaker_cards(simulation_state, scene_state)
-+
-+    return jsonify({
-+        "ok": True,
-+        "speaker_cards": cards,
-+    })
-*** End Patch
-9) Register presentation blueprint
-
-Patch the file where RPG blueprints are registered.
-
-File: <THE FILE THAT REGISTERS RPG API BLUEPRINTS>
-*** Begin Patch
-*** Update File: <THE FILE THAT REGISTERS RPG API BLUEPRINTS>
-@@
- from app.rpg.api.rpg_player_routes import rpg_player_bp
- from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
-+from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
-@@
- app.register_blueprint(rpg_player_bp)
- app.register_blueprint(rpg_encounter_bp)
-+app.register_blueprint(rpg_presentation_bp)
-*** End Patch
-
-Use the real Flask app/bootstrap file that already registers the other RPG blueprints.
-
-10) Add presentation package exports
-File: src/app/rpg/presentation/__init__.py
-*** Begin Patch
-*** Add File: src/app/rpg/presentation/__init__.py
-+from .scene_presentation import (
-+    build_scene_presentation_payload,
-+)
-+from .dialogue_presentation import (
-+    build_dialogue_presentation_payload,
-+)
-+from .speaker_cards import (
-+    build_speaker_cards,
-+)
-+from .personality import (
-+    build_personality_prompt_hints,
-+    build_personality_style_tags,
-+)
-+
-+__all__ = [
-+    "build_scene_presentation_payload",
-+    "build_dialogue_presentation_payload",
-+    "build_speaker_cards",
-+    "build_personality_prompt_hints",
-+    "build_personality_style_tags",
-+]
-*** End Patch
-11) Add personality style system
-File: src/app/rpg/presentation/personality.py
-*** Begin Patch
-*** Add File: src/app/rpg/presentation/personality.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
 +
 +
 +def _safe_float(v: Any, default: float = 0.0) -> float:
@@ -520,57 +112,309 @@ File: src/app/rpg/presentation/personality.py
 +        return default
 +
 +
-+def build_personality_style_tags(actor: Dict[str, Any]) -> List[str]:
-+    actor = _safe_dict(actor)
-+    loyalty = _safe_float(actor.get("loyalty"), 0.0)
-+    morale = _safe_float(actor.get("morale"), 0.5)
-+    role = _safe_str(actor.get("role") or "ally")
-+
-+    tags: List[str] = []
-+
-+    if loyalty < -0.3:
-+        tags.append("cold")
-+    elif loyalty > 0.6:
-+        tags.append("supportive")
-+    else:
-+        tags.append("neutral")
-+
-+    if morale < 0.3:
-+        tags.append("shaken")
-+    elif morale > 0.7:
-+        tags.append("confident")
-+
-+    if role == "support":
-+        tags.append("careful")
-+    elif role == "guard":
-+        tags.append("protective")
-+    elif role == "scout":
-+        tags.append("alert")
-+
-+    return tags[:6]
++def _clamp(v: float, lo: float, hi: float) -> float:
++    return max(lo, min(hi, v))
 +
 +
-+def build_personality_prompt_hints(actor: Dict[str, Any]) -> Dict[str, Any]:
-+    actor = _safe_dict(actor)
-+    name = _safe_str(actor.get("name") or actor.get("npc_id") or "Unknown")
-+    tags = build_personality_style_tags(actor)
++def _normalize_status(v: Any) -> str:
++    value = _safe_str(v).strip().lower()
++    return value if value in _VALID_TURN_STATUS else "complete"
++
++
++def _normalize_role(v: Any) -> str:
++    value = _safe_str(v).strip().lower()
++    return value if value in _VALID_ROLES else "npc"
++
++
++def _normalize_emotion_name(v: Any) -> str:
++    value = _safe_str(v).strip().lower()
++    return value if value in _VALID_EMOTIONS else "neutral"
++
++
++def build_runtime_sequence_id(tick: int, sequence_index: int) -> str:
++    """Build a deterministic runtime sequence id."""
++    return f"seq:{_safe_int(tick)}:{_safe_int(sequence_index)}"
++
++
++def build_runtime_turn_id(tick: int, sequence_index: int, actor_id: str) -> str:
++    """Build a deterministic runtime turn id."""
++    return f"turn:{_safe_int(tick)}:{_safe_int(sequence_index)}:{_safe_str(actor_id)}"
++
++
++def _sort_key_turn(turn: Dict[str, Any]) -> Tuple[int, int, str]:
++    return (
++        _safe_int(turn.get("tick"), 0),
++        _safe_int(turn.get("sequence_index"), 0),
++        _safe_str(turn.get("actor_id")),
++    )
++
++
++def _sort_key_chunk(chunk: Dict[str, Any]) -> Tuple[str, int, str]:
++    return (
++        _safe_str(chunk.get("turn_id")),
++        _safe_int(chunk.get("chunk_index"), 0),
++        _safe_str(chunk.get("actor_id")),
++    )
++
++
++def _sort_key_pending_interrupt(item: Dict[str, Any]) -> Tuple[int, str, str]:
++    return (
++        _safe_int(item.get("priority"), 0),
++        _safe_str(item.get("actor_id")),
++        _safe_str(item.get("target_id")),
++    )
++
++
++def _sort_key_interrupt_log(item: Dict[str, Any]) -> Tuple[int, str, str]:
++    return (
++        _safe_int(item.get("tick"), 0),
++        _safe_str(item.get("actor_id")),
++        _safe_str(item.get("target_id")),
++    )
++
++
++def _sort_key_emotion_entry(item: Dict[str, Any]) -> Tuple[int, str]:
++    return (
++        _EMOTION_ORDER.get(_normalize_emotion_name(item.get("emotion")), 999),
++        _safe_str(item.get("actor_id")),
++    )
++
++
++def _normalize_stream_chunk(chunk: Dict[str, Any]) -> Dict[str, Any]:
++    chunk = _safe_dict(chunk)
++    return {
++        "turn_id": _safe_str(chunk.get("turn_id")),
++        "chunk_index": max(0, _safe_int(chunk.get("chunk_index"), 0)),
++        "actor_id": _safe_str(chunk.get("actor_id")),
++        "speaker_id": _safe_str(chunk.get("speaker_id")),
++        "text": _safe_str(chunk.get("text")),
++        "final": bool(chunk.get("final")),
++    }
++
++
++def _normalize_turn(turn: Dict[str, Any]) -> Dict[str, Any]:
++    turn = _safe_dict(turn)
++    chunks = [
++        _normalize_stream_chunk(v)
++        for v in _safe_list(turn.get("chunks"))
++        if isinstance(v, dict)
++    ]
++    chunks = sorted(chunks, key=_sort_key_chunk)[:_MAX_TURN_CHUNKS]
 +
 +    return {
-+        "name": name,
-+        "style_tags": tags,
-+        "speech_guidance": "Use concise, character-consistent phrasing grounded in current scene context.",
++        "turn_id": _safe_str(turn.get("turn_id")),
++        "sequence_id": _safe_str(turn.get("sequence_id")),
++        "tick": _safe_int(turn.get("tick"), 0),
++        "sequence_index": max(0, _safe_int(turn.get("sequence_index"), 0)),
++        "actor_id": _safe_str(turn.get("actor_id")),
++        "speaker_id": _safe_str(turn.get("speaker_id")),
++        "speaker_name": _safe_str(turn.get("speaker_name")),
++        "role": _normalize_role(turn.get("role")),
++        "text": _safe_str(turn.get("text")),
++        "status": _normalize_status(turn.get("status")),
++        "emotion": _normalize_emotion_name(turn.get("emotion")),
++        "interruption": bool(turn.get("interruption")),
++        "interrupt_target_id": _safe_str(turn.get("interrupt_target_id")),
++        "chunks": chunks,
 +    }
++
++
++def _normalize_pending_interruption(item: Dict[str, Any]) -> Dict[str, Any]:
++    item = _safe_dict(item)
++    return {
++        "actor_id": _safe_str(item.get("actor_id")),
++        "target_id": _safe_str(item.get("target_id")),
++        "reason": _safe_str(item.get("reason")),
++        "priority": _safe_int(item.get("priority"), 0),
++    }
++
++
++def _normalize_interrupt_log_item(item: Dict[str, Any]) -> Dict[str, Any]:
++    item = _safe_dict(item)
++    return {
++        "tick": _safe_int(item.get("tick"), 0),
++        "actor_id": _safe_str(item.get("actor_id")),
++        "target_id": _safe_str(item.get("target_id")),
++        "reason": _safe_str(item.get("reason")),
++        "turn_id": _safe_str(item.get("turn_id")),
++    }
++
++
++def _normalize_emotion_entry(actor_id: str, entry: Dict[str, Any]) -> Dict[str, Any]:
++    entry = _safe_dict(entry)
++    return {
++        "actor_id": _safe_str(actor_id),
++        "emotion": _normalize_emotion_name(entry.get("emotion")),
++        "intensity": _clamp(_safe_float(entry.get("intensity"), 0.0), 0.0, 1.0),
++        "updated_tick": _safe_int(entry.get("updated_tick"), 0),
++    }
++
++
++def _normalize_emotions_map(emotions_in: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
++    emotions_in = _safe_dict(emotions_in)
++    pairs: List[Tuple[str, Dict[str, Any]]] = []
++
++    for actor_id in sorted(emotions_in.keys()):
++        normalized = _normalize_emotion_entry(actor_id, emotions_in.get(actor_id))
++        pairs.append((_safe_str(actor_id), normalized))
++
++    pairs = pairs[:_MAX_EMOTION_ACTORS]
++
++    return {
++        actor_id: normalized
++        for actor_id, normalized in pairs
++        if actor_id
++    }
++
++
++def _normalize_stream_state(stream_state: Dict[str, Any]) -> Dict[str, Any]:
++    stream_state = _safe_dict(stream_state)
++    chunks = [
++        _normalize_stream_chunk(v)
++        for v in _safe_list(stream_state.get("chunks"))
++        if isinstance(v, dict)
++    ]
++    chunks = sorted(chunks, key=_sort_key_chunk)[:_MAX_STREAM_CHUNKS]
++    return {
++        "active": bool(stream_state.get("active")),
++        "active_turn_id": _safe_str(stream_state.get("active_turn_id")),
++        "chunks": chunks,
++    }
++
++
++def _normalize_dialogue_state(dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
++    dialogue_state = _safe_dict(dialogue_state)
++
++    turns = [
++        _normalize_turn(v)
++        for v in _safe_list(dialogue_state.get("turns"))
++        if isinstance(v, dict)
++    ]
++    turns = sorted(turns, key=_sort_key_turn)[-_MAX_RUNTIME_TURNS:]
++
++    pending_interruptions = [
++        _normalize_pending_interruption(v)
++        for v in _safe_list(dialogue_state.get("pending_interruptions"))
++        if isinstance(v, dict)
++    ]
++    pending_interruptions = sorted(
++        pending_interruptions,
++        key=_sort_key_pending_interrupt,
++    )[:_MAX_PENDING_INTERRUPTION]
++
++    interruption_log = [
++        _normalize_interrupt_log_item(v)
++        for v in _safe_list(dialogue_state.get("interruption_log"))
++        if isinstance(v, dict)
++    ]
++    interruption_log = sorted(
++        interruption_log,
++        key=_sort_key_interrupt_log,
++    )[-_MAX_INTERRUPTION_LOG:]
++
++    emotions = _normalize_emotions_map(dialogue_state.get("emotions"))
++    stream_state = _normalize_stream_state(dialogue_state.get("stream"))
++
++    active_sequence_id = _safe_str(dialogue_state.get("active_sequence_id"))
++    active_turn_id = _safe_str(dialogue_state.get("active_turn_id"))
++    sequence_tick = _safe_int(dialogue_state.get("sequence_tick"), 0)
++    turn_cursor = max(0, _safe_int(dialogue_state.get("turn_cursor"), 0))
++
++    return {
++        "active_sequence_id": active_sequence_id,
++        "active_turn_id": active_turn_id,
++        "sequence_tick": sequence_tick,
++        "turn_cursor": turn_cursor,
++        "turns": turns,
++        "pending_interruptions": pending_interruptions,
++        "interruption_log": interruption_log,
++        "stream": stream_state,
++        "emotions": emotions,
++    }
++
++
++def ensure_runtime_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Ensure simulation_state contains normalized runtime dialogue state.
++
++    This function mutates simulation_state in-place and returns it.
++    """
++    if not isinstance(simulation_state, dict):
++        simulation_state = {}
++
++    runtime_state = simulation_state.setdefault("runtime_state", {})
++    if not isinstance(runtime_state, dict):
++        runtime_state = simulation_state["runtime_state"] = {}
++
++    dialogue_state = runtime_state.get("dialogue")
++    runtime_state["dialogue"] = _normalize_dialogue_state(dialogue_state)
++    simulation_state["runtime_state"] = runtime_state
++    return simulation_state
++
++
++def get_runtime_dialogue_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Return normalized runtime dialogue state."""
++    simulation_state = ensure_runtime_state(simulation_state)
++    runtime_state = _safe_dict(simulation_state.get("runtime_state"))
++    return _safe_dict(runtime_state.get("dialogue"))
++
++
++def get_runtime_emotion(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
++    """Return normalized runtime emotional continuity record for an actor."""
++    actor_id = _safe_str(actor_id)
++    if not actor_id:
++        return {
++            "actor_id": "",
++            "emotion": "neutral",
++            "intensity": 0.0,
++            "updated_tick": 0,
++        }
++
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    emotions = _safe_dict(dialogue_state.get("emotions"))
++    if actor_id not in emotions:
++        return {
++            "actor_id": actor_id,
++            "emotion": "neutral",
++            "intensity": 0.0,
++            "updated_tick": 0,
++        }
++    return _normalize_emotion_entry(actor_id, emotions.get(actor_id))
 *** End Patch
-12) Add speaker card builder
-File: src/app/rpg/presentation/speaker_cards.py
+3) Update file
+src/app/rpg/presentation/__init__.py
+
+Add runtime bridge export placeholder now so later parts can wire in cleanly.
+
 *** Begin Patch
-*** Add File: src/app/rpg/presentation/speaker_cards.py
+*** Update File: src/app/rpg/presentation/__init__.py
+@@
+ from .scene_presentation import build_scene_presentation_payload
+ from .dialogue_presentation import build_dialogue_presentation_payload
++from .runtime_bridge import build_runtime_presentation_payload
+ 
+ __all__ = [
+     "build_scene_presentation_payload",
+     "build_dialogue_presentation_payload",
++    "build_runtime_presentation_payload",
+ ]
+*** End Patch
+4) Add file
+src/app/rpg/presentation/runtime_bridge.py
+
+For Part 1, this is just the pure normalized bridge shell. Later parts will expand what it exposes.
+
+*** Begin Patch
+*** Add File: src/app/rpg/presentation/runtime_bridge.py
++"""Phase 10.5 — Runtime-to-presentation bridge.
++
++Pure read-only bridge from normalized runtime dialogue state to presentation
++payload shape.
++"""
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.party import build_companion_presence_summary
-+from .personality import build_personality_style_tags
++from app.rpg.runtime import get_runtime_dialogue_state
 +
 +
 +def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -585,420 +429,3169 @@ File: src/app/rpg/presentation/speaker_cards.py
 +    return "" if v is None else str(v)
 +
 +
-+def build_speaker_cards(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    simulation_state = _safe_dict(simulation_state)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    scene_state = _safe_dict(scene_state)
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
 +
-+    cards: List[Dict[str, Any]] = []
 +
-+    cards.append({
-+        "speaker_id": "player",
-+        "name": "Player",
-+        "kind": "player",
-+        "portrait_key": "player",
-+        "style_tags": ["player"],
-+        "location_id": _safe_str(scene_state.get("location_id")),
-+    })
++def _safe_float(v: Any, default: float = 0.0) -> float:
++    try:
++        return float(v)
++    except Exception:
++        return default
 +
-+    presence = build_companion_presence_summary(player_state)
-+    for comp in _safe_list(presence.get("present_companions")):
-+        style_tags = build_personality_style_tags(comp)
-+        cards.append({
-+            "speaker_id": _safe_str(comp.get("npc_id")),
-+            "name": _safe_str(comp.get("name")),
-+            "kind": "companion",
-+            "portrait_key": _safe_str(comp.get("npc_id")),
-+            "style_tags": style_tags,
-+            "location_id": _safe_str(scene_state.get("location_id")),
++
++def _build_turn_payload(turn: Dict[str, Any]) -> Dict[str, Any]:
++    turn = _safe_dict(turn)
++    chunks = [
++        {
++            "turn_id": _safe_str(chunk.get("turn_id")),
++            "chunk_index": _safe_int(chunk.get("chunk_index"), 0),
++            "actor_id": _safe_str(chunk.get("actor_id")),
++            "speaker_id": _safe_str(chunk.get("speaker_id")),
++            "text": _safe_str(chunk.get("text")),
++            "final": bool(chunk.get("final")),
++        }
++        for chunk in _safe_list(turn.get("chunks"))
++        if isinstance(chunk, dict)
++    ]
++    return {
++        "turn_id": _safe_str(turn.get("turn_id")),
++        "sequence_id": _safe_str(turn.get("sequence_id")),
++        "tick": _safe_int(turn.get("tick"), 0),
++        "sequence_index": _safe_int(turn.get("sequence_index"), 0),
++        "actor_id": _safe_str(turn.get("actor_id")),
++        "speaker_id": _safe_str(turn.get("speaker_id")),
++        "speaker_name": _safe_str(turn.get("speaker_name")),
++        "role": _safe_str(turn.get("role")),
++        "text": _safe_str(turn.get("text")),
++        "status": _safe_str(turn.get("status")),
++        "emotion": _safe_str(turn.get("emotion")),
++        "interruption": bool(turn.get("interruption")),
++        "interrupt_target_id": _safe_str(turn.get("interrupt_target_id")),
++        "chunks": chunks,
++    }
++
++
++def build_runtime_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Build a pure presentation payload from runtime dialogue state."""
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++
++    turns = [
++        _build_turn_payload(v)
++        for v in _safe_list(dialogue_state.get("turns"))
++        if isinstance(v, dict)
++    ]
++
++    stream_state = _safe_dict(dialogue_state.get("stream"))
++    stream_chunks = [
++        {
++            "turn_id": _safe_str(chunk.get("turn_id")),
++            "chunk_index": _safe_int(chunk.get("chunk_index"), 0),
++            "actor_id": _safe_str(chunk.get("actor_id")),
++            "speaker_id": _safe_str(chunk.get("speaker_id")),
++            "text": _safe_str(chunk.get("text")),
++            "final": bool(chunk.get("final")),
++        }
++        for chunk in _safe_list(stream_state.get("chunks"))
++        if isinstance(chunk, dict)
++    ]
++
++    emotions = []
++    for actor_id in sorted(_safe_dict(dialogue_state.get("emotions")).keys()):
++        item = _safe_dict(_safe_dict(dialogue_state.get("emotions")).get(actor_id))
++        emotions.append({
++            "actor_id": _safe_str(actor_id),
++            "emotion": _safe_str(item.get("emotion") or "neutral"),
++            "intensity": _safe_float(item.get("intensity"), 0.0),
++            "updated_tick": _safe_int(item.get("updated_tick"), 0),
 +        })
 +
-+    return sorted(cards, key=lambda c: (_safe_str(c.get("kind")), _safe_str(c.get("speaker_id"))))
-*** End Patch
-13) Add scene presentation builder
-File: src/app/rpg/presentation/scene_presentation.py
-*** Begin Patch
-*** Add File: src/app/rpg/presentation/scene_presentation.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.party import (
-+    build_companion_scene_context,
-+    choose_scene_interjections,
-+    build_companion_scene_reactions,
-+    build_companion_presence_summary,
-+)
-+from .speaker_cards import build_speaker_cards
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_list(v: Any):
-+    return list(v) if isinstance(v, list) else []
-+
-+
-+def build_scene_presentation_payload(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    scene_state = _safe_dict(scene_state)
-+
-+    scene_context = build_companion_scene_context(simulation_state, scene_state)
-+    interjections = choose_scene_interjections(simulation_state, scene_state)
-+    reactions = build_companion_scene_reactions(player_state, scene_state)
-+    presence_summary = build_companion_presence_summary(player_state)
-+    speaker_cards = build_speaker_cards(simulation_state, scene_state)
-+
 +    return {
-+        "scene_id": scene_state.get("scene_id"),
-+        "tone": scene_state.get("tone"),
-+        "location_id": scene_state.get("location_id"),
-+        "scene_context": scene_context,
-+        "speaker_cards": speaker_cards,
-+        "companion_interjections": _safe_list(interjections)[:3],
-+        "companion_reactions": _safe_list(reactions)[:4],
-+        "presence_summary": presence_summary,
++        "runtime_dialogue": {
++            "active_sequence_id": _safe_str(dialogue_state.get("active_sequence_id")),
++            "active_turn_id": _safe_str(dialogue_state.get("active_turn_id")),
++            "sequence_tick": _safe_int(dialogue_state.get("sequence_tick"), 0),
++            "turn_cursor": _safe_int(dialogue_state.get("turn_cursor"), 0),
++            "turns": turns,
++            "pending_interruptions": _safe_list(dialogue_state.get("pending_interruptions")),
++            "interruption_log": _safe_list(dialogue_state.get("interruption_log")),
++            "stream": {
++                "active": bool(stream_state.get("active")),
++                "active_turn_id": _safe_str(stream_state.get("active_turn_id")),
++                "chunks": stream_chunks,
++            },
++            "emotions": emotions,
++        }
 +    }
 *** End Patch
-14) Add dialogue presentation builder
-File: src/app/rpg/presentation/dialogue_presentation.py
+5) Add tests
+src/tests/functional/test_phase105_runtime_models_functional.py
 *** Begin Patch
-*** Add File: src/app/rpg/presentation/dialogue_presentation.py
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.party import (
-+    build_companion_dialogue_context,
-+    build_companion_presence_summary,
+*** Add File: src/tests/functional/test_phase105_runtime_models_functional.py
++from app.rpg.runtime.dialogue_runtime import (
++    ensure_runtime_state,
++    get_runtime_dialogue_state,
++    build_runtime_sequence_id,
++    build_runtime_turn_id,
++    get_runtime_emotion,
 +)
-+from .speaker_cards import build_speaker_cards
 +
 +
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
++def test_phase105_runtime_state_is_created_and_normalized():
++    state = ensure_runtime_state({})
++    dialogue = get_runtime_dialogue_state(state)
++
++    assert "runtime_state" in state
++    assert "dialogue" in state["runtime_state"]
++    assert dialogue["active_sequence_id"] == ""
++    assert dialogue["active_turn_id"] == ""
++    assert dialogue["sequence_tick"] == 0
++    assert dialogue["turn_cursor"] == 0
++    assert dialogue["turns"] == []
++    assert dialogue["pending_interruptions"] == []
++    assert dialogue["interruption_log"] == []
++    assert dialogue["stream"]["active"] is False
++    assert dialogue["stream"]["active_turn_id"] == ""
++    assert dialogue["stream"]["chunks"] == []
++    assert dialogue["emotions"] == {}
 +
 +
-+def build_dialogue_presentation_payload(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    dialogue_state = _safe_dict(dialogue_state)
++def test_phase105_runtime_ids_are_deterministic():
++    assert build_runtime_sequence_id(12, 3) == "seq:12:3"
++    assert build_runtime_turn_id(12, 3, "npc:guard") == "turn:12:3:npc:guard"
 +
-+    dialogue_context = build_companion_dialogue_context(simulation_state, dialogue_state)
-+    presence_summary = build_companion_presence_summary(player_state)
-+    speaker_cards = build_speaker_cards(simulation_state, dialogue_state)
 +
-+    return {
-+        "dialogue_id": dialogue_state.get("dialogue_id"),
-+        "speaker_id": dialogue_state.get("speaker_id"),
-+        "speaker_cards": speaker_cards,
-+        "dialogue_context": dialogue_context,
-+        "presence_summary": presence_summary,
++def test_phase105_runtime_state_is_bounded():
++    raw_turns = []
++    for i in range(30):
++        raw_turns.append({
++            "turn_id": f"turn:7:{i}:npc:{i}",
++            "sequence_id": "seq:7:0",
++            "tick": 7,
++            "sequence_index": i,
++            "actor_id": f"npc:{i}",
++            "speaker_id": f"npc:{i}",
++            "speaker_name": f"NPC {i}",
++            "role": "npc",
++            "text": f"line {i}",
++            "status": "complete",
++            "emotion": "neutral",
++            "interruption": False,
++            "interrupt_target_id": "",
++            "chunks": [],
++        })
++
++    state = ensure_runtime_state({
++        "runtime_state": {
++            "dialogue": {
++                "turns": raw_turns,
++            }
++        }
++    })
++    dialogue = get_runtime_dialogue_state(state)
++    assert len(dialogue["turns"]) == 20
++    assert dialogue["turns"][0]["sequence_index"] == 10
++    assert dialogue["turns"][-1]["sequence_index"] == 29
++
++
++def test_phase105_runtime_emotion_defaults_to_neutral():
++    state = ensure_runtime_state({})
++    emotion = get_runtime_emotion(state, "comp:lyra")
++    assert emotion == {
++        "actor_id": "comp:lyra",
++        "emotion": "neutral",
++        "intensity": 0.0,
++        "updated_tick": 0,
 +    }
 *** End Patch
-15) Extend player party view with presentation hints
-File: src/app/rpg/player/player_party.py
+END OF PART 1/6
+
+PART 2/6 — DIALOGUE RUNTIME MUTATORS
+1) Update file
+src/app/rpg/runtime/__init__.py
+
+Export the new mutators added in this part.
+
 *** Begin Patch
-*** Update File: src/app/rpg/player/player_party.py
+*** Update File: src/app/rpg/runtime/__init__.py
 @@
- from app.rpg.party import (
-     ensure_party_state,
-     build_party_summary,
-     build_companion_presence_summary,
+ from .dialogue_runtime import (
+     ensure_runtime_state,
+     get_runtime_dialogue_state,
+     build_runtime_turn_id,
+     build_runtime_sequence_id,
+     get_runtime_emotion,
++    begin_runtime_turn,
++    append_runtime_stream_chunk,
++    finalize_runtime_turn,
++    mark_runtime_turn_interrupted,
++    trim_runtime_state,
  )
-+from app.rpg.presentation import build_speaker_cards
+ 
+ __all__ = [
+     "ensure_runtime_state",
+     "get_runtime_dialogue_state",
+     "build_runtime_turn_id",
+     "build_runtime_sequence_id",
+     "get_runtime_emotion",
++    "begin_runtime_turn",
++    "append_runtime_stream_chunk",
++    "finalize_runtime_turn",
++    "mark_runtime_turn_interrupted",
++    "trim_runtime_state",
+ ]
+*** End Patch
+2) Update file
+src/app/rpg/runtime/dialogue_runtime.py
+
+Add the runtime mutator API: begin turn, append structured chunk, finalize turn, interrupt turn, trim state.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
 @@
- def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+ def get_runtime_emotion(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
 @@
-     return {
-         "party_state": party_state,
-         "party_summary": build_party_summary(player_state),
-         "presence_summary": build_companion_presence_summary(player_state),
-+        "speaker_cards": build_speaker_cards(simulation_state, {}),
+     return _normalize_emotion_entry(actor_id, emotions.get(actor_id))
++
++
++def _set_runtime_dialogue_state(
++    simulation_state: Dict[str, Any],
++    dialogue_state: Dict[str, Any],
++) -> Dict[str, Any]:
++    """Persist normalized dialogue runtime state back into simulation_state."""
++    simulation_state = ensure_runtime_state(simulation_state)
++    runtime_state = _safe_dict(simulation_state.get("runtime_state"))
++    runtime_state["dialogue"] = _normalize_dialogue_state(dialogue_state)
++    simulation_state["runtime_state"] = runtime_state
++    return simulation_state
++
++
++def _find_turn_index_by_id(turns: List[Dict[str, Any]], turn_id: str) -> int:
++    turn_id = _safe_str(turn_id)
++    for idx, turn in enumerate(turns):
++        if _safe_str(_safe_dict(turn).get("turn_id")) == turn_id:
++            return idx
++    return -1
++
++
++def _dedupe_and_sort_turn_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    deduped: Dict[Tuple[str, int, str], Dict[str, Any]] = {}
++    for chunk in chunks:
++        normalized = _normalize_stream_chunk(chunk)
++        key = (
++            _safe_str(normalized.get("turn_id")),
++            _safe_int(normalized.get("chunk_index"), 0),
++            _safe_str(normalized.get("actor_id")),
++        )
++        deduped[key] = normalized
++    out = sorted(deduped.values(), key=_sort_key_chunk)
++    return out[:_MAX_TURN_CHUNKS]
++
++
++def _dedupe_and_sort_global_stream_chunks(
++    chunks: List[Dict[str, Any]],
++) -> List[Dict[str, Any]]:
++    deduped: Dict[Tuple[str, int, str], Dict[str, Any]] = {}
++    for chunk in chunks:
++        normalized = _normalize_stream_chunk(chunk)
++        key = (
++            _safe_str(normalized.get("turn_id")),
++            _safe_int(normalized.get("chunk_index"), 0),
++            _safe_str(normalized.get("actor_id")),
++        )
++        deduped[key] = normalized
++    out = sorted(deduped.values(), key=_sort_key_chunk)
++    return out[-_MAX_STREAM_CHUNKS:]
++
++
++def _rebuild_turn_text_from_chunks(turn: Dict[str, Any]) -> str:
++    turn = _normalize_turn(turn)
++    parts: List[str] = []
++    for chunk in _safe_list(turn.get("chunks")):
++        chunk = _normalize_stream_chunk(chunk)
++        text = _safe_str(chunk.get("text"))
++        if text:
++            parts.append(text)
++    return "".join(parts)
++
++
++def trim_runtime_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Normalize and trim runtime dialogue state to bounded caps."""
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def begin_runtime_turn(
++    simulation_state: Dict[str, Any],
++    *,
++    tick: int,
++    sequence_index: int,
++    actor_id: str,
++    speaker_id: str = "",
++    speaker_name: str = "",
++    role: str = "npc",
++    sequence_id: str = "",
++    text: str = "",
++    status: str = "pending",
++    interruption: bool = False,
++    interrupt_target_id: str = "",
++) -> Dict[str, Any]:
++    """Begin or replace a runtime turn deterministically.
++
++    If a turn with the same turn_id already exists, it is replaced in place.
++    """
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    turns = list(_safe_list(dialogue_state.get("turns")))
++
++    tick = _safe_int(tick, 0)
++    sequence_index = max(0, _safe_int(sequence_index, 0))
++    actor_id = _safe_str(actor_id)
++    speaker_id = _safe_str(speaker_id) or actor_id
++    speaker_name = _safe_str(speaker_name)
++    role = _normalize_role(role)
++    status = _normalize_status(status if status else "pending")
++    if status == "complete":
++        status = "pending"
++
++    if not actor_id:
++        return simulation_state
++
++    if not sequence_id:
++        sequence_id = build_runtime_sequence_id(tick, 0)
++    sequence_id = _safe_str(sequence_id)
++    turn_id = build_runtime_turn_id(tick, sequence_index, actor_id)
++
++    emotion_record = get_runtime_emotion(simulation_state, actor_id)
++    turn = _normalize_turn({
++        "turn_id": turn_id,
++        "sequence_id": sequence_id,
++        "tick": tick,
++        "sequence_index": sequence_index,
++        "actor_id": actor_id,
++        "speaker_id": speaker_id,
++        "speaker_name": speaker_name,
++        "role": role,
++        "text": _safe_str(text),
++        "status": status,
++        "emotion": emotion_record.get("emotion", "neutral"),
++        "interruption": bool(interruption),
++        "interrupt_target_id": _safe_str(interrupt_target_id),
++        "chunks": [],
++    })
++
++    existing_idx = _find_turn_index_by_id(turns, turn_id)
++    if existing_idx >= 0:
++        turns[existing_idx] = turn
++    else:
++        turns.append(turn)
++
++    turns = sorted([_normalize_turn(v) for v in turns], key=_sort_key_turn)[-_MAX_RUNTIME_TURNS:]
++
++    stream_state = _safe_dict(dialogue_state.get("stream"))
++    stream_state["active"] = True
++    stream_state["active_turn_id"] = turn_id
++
++    dialogue_state["active_sequence_id"] = sequence_id
++    dialogue_state["active_turn_id"] = turn_id
++    dialogue_state["sequence_tick"] = tick
++    dialogue_state["turn_cursor"] = sequence_index
++    dialogue_state["turns"] = turns
++    dialogue_state["stream"] = stream_state
++
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def append_runtime_stream_chunk(
++    simulation_state: Dict[str, Any],
++    *,
++    turn_id: str,
++    actor_id: str,
++    speaker_id: str = "",
++    text: str,
++    chunk_index: int,
++    final: bool = False,
++) -> Dict[str, Any]:
++    """Append a structured runtime stream chunk deterministically.
++
++    Duplicate chunk keys overwrite older copies deterministically.
++    """
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    turns = list(_safe_list(dialogue_state.get("turns")))
++    stream_state = _safe_dict(dialogue_state.get("stream"))
++
++    turn_id = _safe_str(turn_id)
++    actor_id = _safe_str(actor_id)
++    speaker_id = _safe_str(speaker_id) or actor_id
++    text = _safe_str(text)
++    chunk_index = max(0, _safe_int(chunk_index, 0))
++
++    if not turn_id or not actor_id:
++        return simulation_state
++
++    chunk = _normalize_stream_chunk({
++        "turn_id": turn_id,
++        "chunk_index": chunk_index,
++        "actor_id": actor_id,
++        "speaker_id": speaker_id,
++        "text": text,
++        "final": bool(final),
++    })
++
++    turn_idx = _find_turn_index_by_id(turns, turn_id)
++    if turn_idx < 0:
++        return simulation_state
++
++    turn = _normalize_turn(turns[turn_idx])
++    turn_chunks = list(_safe_list(turn.get("chunks")))
++    turn_chunks.append(chunk)
++    turn_chunks = _dedupe_and_sort_turn_chunks(turn_chunks)
++    turn["chunks"] = turn_chunks
++    turn["text"] = _rebuild_turn_text_from_chunks(turn)
++    if turn["status"] not in {"complete", "interrupted"}:
++        turn["status"] = "streaming"
++
++    turns[turn_idx] = _normalize_turn(turn)
++    turns = sorted(turns, key=_sort_key_turn)[-_MAX_RUNTIME_TURNS:]
++
++    global_chunks = list(_safe_list(stream_state.get("chunks")))
++    global_chunks.append(chunk)
++    stream_state["chunks"] = _dedupe_and_sort_global_stream_chunks(global_chunks)
++    stream_state["active"] = True
++    stream_state["active_turn_id"] = turn_id
++
++    dialogue_state["turns"] = turns
++    dialogue_state["active_turn_id"] = turn_id
++    dialogue_state["stream"] = stream_state
++
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def finalize_runtime_turn(
++    simulation_state: Dict[str, Any],
++    *,
++    turn_id: str,
++    final_text: str = "",
++    final_chunk_text: str = "",
++) -> Dict[str, Any]:
++    """Finalize a runtime turn and mark stream completion for that turn."""
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    turns = list(_safe_list(dialogue_state.get("turns")))
++    stream_state = _safe_dict(dialogue_state.get("stream"))
++
++    turn_id = _safe_str(turn_id)
++    if not turn_id:
++        return simulation_state
++
++    turn_idx = _find_turn_index_by_id(turns, turn_id)
++    if turn_idx < 0:
++        return simulation_state
++
++    turn = _normalize_turn(turns[turn_idx])
++    turn_chunks = list(_safe_list(turn.get("chunks")))
++
++    if final_chunk_text:
++        next_index = 0
++        if turn_chunks:
++            next_index = max(
++                _safe_int(_safe_dict(v).get("chunk_index"), 0)
++                for v in turn_chunks
++            ) + 1
++        final_chunk = _normalize_stream_chunk({
++            "turn_id": turn_id,
++            "chunk_index": next_index,
++            "actor_id": _safe_str(turn.get("actor_id")),
++            "speaker_id": _safe_str(turn.get("speaker_id")),
++            "text": _safe_str(final_chunk_text),
++            "final": True,
++        })
++        turn_chunks.append(final_chunk)
++        turn_chunks = _dedupe_and_sort_turn_chunks(turn_chunks)
++        turn["chunks"] = turn_chunks
++
++        global_chunks = list(_safe_list(stream_state.get("chunks")))
++        global_chunks.append(final_chunk)
++        stream_state["chunks"] = _dedupe_and_sort_global_stream_chunks(global_chunks)
++
++    if final_text:
++        turn["text"] = _safe_str(final_text)
++    else:
++        turn["text"] = _rebuild_turn_text_from_chunks(turn)
++
++    turn["status"] = "complete"
++    turns[turn_idx] = _normalize_turn(turn)
++    turns = sorted(turns, key=_sort_key_turn)[-_MAX_RUNTIME_TURNS:]
++
++    if _safe_str(stream_state.get("active_turn_id")) == turn_id:
++        stream_state["active"] = False
++        stream_state["active_turn_id"] = ""
++
++    dialogue_state["turns"] = turns
++    dialogue_state["stream"] = stream_state
++    dialogue_state["active_turn_id"] = ""
++
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def mark_runtime_turn_interrupted(
++    simulation_state: Dict[str, Any],
++    *,
++    turn_id: str,
++    interrupt_actor_id: str,
++    reason: str = "",
++) -> Dict[str, Any]:
++    """Mark a runtime turn as interrupted and append bounded interruption log."""
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    turns = list(_safe_list(dialogue_state.get("turns")))
++    stream_state = _safe_dict(dialogue_state.get("stream"))
++    interruption_log = list(_safe_list(dialogue_state.get("interruption_log")))
++
++    turn_id = _safe_str(turn_id)
++    interrupt_actor_id = _safe_str(interrupt_actor_id)
++    reason = _safe_str(reason)
++
++    if not turn_id or not interrupt_actor_id:
++        return simulation_state
++
++    turn_idx = _find_turn_index_by_id(turns, turn_id)
++    if turn_idx < 0:
++        return simulation_state
++
++    turn = _normalize_turn(turns[turn_idx])
++    turn["status"] = "interrupted"
++    turn["interruption"] = True
++    turn["interrupt_target_id"] = interrupt_actor_id
++    if not turn.get("text"):
++        turn["text"] = _rebuild_turn_text_from_chunks(turn)
++    turns[turn_idx] = _normalize_turn(turn)
++    turns = sorted(turns, key=_sort_key_turn)[-_MAX_RUNTIME_TURNS:]
++
++    interruption_log.append({
++        "tick": _safe_int(turn.get("tick"), 0),
++        "actor_id": interrupt_actor_id,
++        "target_id": _safe_str(turn.get("actor_id")),
++        "reason": reason,
++        "turn_id": turn_id,
++    })
++    interruption_log = [
++        _normalize_interrupt_log_item(v)
++        for v in interruption_log
++        if isinstance(v, dict)
++    ]
++    interruption_log = sorted(interruption_log, key=_sort_key_interrupt_log)[-_MAX_INTERRUPTION_LOG:]
++
++    if _safe_str(stream_state.get("active_turn_id")) == turn_id:
++        stream_state["active"] = False
++        stream_state["active_turn_id"] = ""
++
++    dialogue_state["turns"] = turns
++    dialogue_state["interruption_log"] = interruption_log
++    dialogue_state["stream"] = stream_state
++    dialogue_state["active_turn_id"] = ""
++
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
+*** End Patch
+3) Add tests
+src/tests/functional/test_phase105_runtime_mutators_functional.py
+*** Begin Patch
+*** Add File: src/tests/functional/test_phase105_runtime_mutators_functional.py
++from app.rpg.runtime.dialogue_runtime import (
++    begin_runtime_turn,
++    append_runtime_stream_chunk,
++    finalize_runtime_turn,
++    mark_runtime_turn_interrupted,
++    get_runtime_dialogue_state,
++)
++
++
++def test_phase105_begin_runtime_turn_creates_pending_turn():
++    state = {}
++    state = begin_runtime_turn(
++        state,
++        tick=15,
++        sequence_index=1,
++        actor_id="comp:lyra",
++        speaker_id="comp:lyra",
++        speaker_name="Lyra",
++        role="companion",
++        sequence_id="seq:15:0",
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    assert dialogue["active_sequence_id"] == "seq:15:0"
++    assert dialogue["active_turn_id"] == "turn:15:1:comp:lyra"
++    assert dialogue["sequence_tick"] == 15
++    assert dialogue["turn_cursor"] == 1
++    assert dialogue["stream"]["active"] is True
++    assert dialogue["stream"]["active_turn_id"] == "turn:15:1:comp:lyra"
++    assert len(dialogue["turns"]) == 1
++
++    turn = dialogue["turns"][0]
++    assert turn["turn_id"] == "turn:15:1:comp:lyra"
++    assert turn["status"] == "pending"
++    assert turn["emotion"] == "neutral"
++    assert turn["chunks"] == []
++
++
++def test_phase105_append_runtime_stream_chunk_updates_turn_and_global_stream():
++    state = {}
++    state = begin_runtime_turn(
++        state,
++        tick=20,
++        sequence_index=2,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:20:0",
++    )
++
++    state = append_runtime_stream_chunk(
++        state,
++        turn_id="turn:20:2:npc:guard",
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        text="Hold ",
++        chunk_index=0,
++        final=False,
++    )
++    state = append_runtime_stream_chunk(
++        state,
++        turn_id="turn:20:2:npc:guard",
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        text="there.",
++        chunk_index=1,
++        final=False,
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    turn = dialogue["turns"][0]
++
++    assert turn["status"] == "streaming"
++    assert turn["text"] == "Hold there."
++    assert len(turn["chunks"]) == 2
++    assert len(dialogue["stream"]["chunks"]) == 2
++    assert dialogue["stream"]["active"] is True
++    assert dialogue["stream"]["active_turn_id"] == "turn:20:2:npc:guard"
++
++
++def test_phase105_append_runtime_stream_chunk_dedupes_by_turn_id_chunk_index_actor():
++    state = {}
++    state = begin_runtime_turn(
++        state,
++        tick=22,
++        sequence_index=0,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:22:0",
++    )
++
++    state = append_runtime_stream_chunk(
++        state,
++        turn_id="turn:22:0:npc:guard",
++        actor_id="npc:guard",
++        text="Old",
++        chunk_index=0,
++    )
++    state = append_runtime_stream_chunk(
++        state,
++        turn_id="turn:22:0:npc:guard",
++        actor_id="npc:guard",
++        text="New",
++        chunk_index=0,
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    turn = dialogue["turns"][0]
++    assert len(turn["chunks"]) == 1
++    assert turn["chunks"][0]["text"] == "New"
++    assert turn["text"] == "New"
++
++
++def test_phase105_finalize_runtime_turn_marks_complete_and_stops_stream():
++    state = {}
++    state = begin_runtime_turn(
++        state,
++        tick=30,
++        sequence_index=3,
++        actor_id="comp:lyra",
++        speaker_id="comp:lyra",
++        speaker_name="Lyra",
++        role="companion",
++        sequence_id="seq:30:0",
++    )
++    state = append_runtime_stream_chunk(
++        state,
++        turn_id="turn:30:3:comp:lyra",
++        actor_id="comp:lyra",
++        text="We should move.",
++        chunk_index=0,
++    )
++    state = finalize_runtime_turn(
++        state,
++        turn_id="turn:30:3:comp:lyra",
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    turn = dialogue["turns"][0]
++    assert turn["status"] == "complete"
++    assert turn["text"] == "We should move."
++    assert dialogue["stream"]["active"] is False
++    assert dialogue["stream"]["active_turn_id"] == ""
++    assert dialogue["active_turn_id"] == ""
++
++
++def test_phase105_finalize_runtime_turn_can_append_final_chunk():
++    state = {}
++    state = begin_runtime_turn(
++        state,
++        tick=31,
++        sequence_index=0,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:31:0",
++    )
++    state = append_runtime_stream_chunk(
++        state,
++        turn_id="turn:31:0:npc:guard",
++        actor_id="npc:guard",
++        text="Stop",
++        chunk_index=0,
++    )
++    state = finalize_runtime_turn(
++        state,
++        turn_id="turn:31:0:npc:guard",
++        final_chunk_text=" now.",
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    turn = dialogue["turns"][0]
++    assert turn["status"] == "complete"
++    assert turn["text"] == "Stop now."
++    assert turn["chunks"][-1]["final"] is True
++
++
++def test_phase105_mark_runtime_turn_interrupted_marks_turn_and_logs_event():
++    state = {}
++    state = begin_runtime_turn(
++        state,
++        tick=40,
++        sequence_index=1,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:40:0",
++    )
++    state = append_runtime_stream_chunk(
++        state,
++        turn_id="turn:40:1:npc:guard",
++        actor_id="npc:guard",
++        text="Wait ",
++        chunk_index=0,
++    )
++    state = mark_runtime_turn_interrupted(
++        state,
++        turn_id="turn:40:1:npc:guard",
++        interrupt_actor_id="comp:lyra",
++        reason="protective_reaction",
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    turn = dialogue["turns"][0]
++    assert turn["status"] == "interrupted"
++    assert turn["interruption"] is True
++    assert turn["interrupt_target_id"] == "comp:lyra"
++    assert turn["text"] == "Wait "
++    assert dialogue["stream"]["active"] is False
++    assert dialogue["stream"]["active_turn_id"] == ""
++    assert len(dialogue["interruption_log"]) == 1
++    assert dialogue["interruption_log"][0]["actor_id"] == "comp:lyra"
++    assert dialogue["interruption_log"][0]["target_id"] == "npc:guard"
++    assert dialogue["interruption_log"][0]["reason"] == "protective_reaction"
+*** End Patch
+4) Add tests
+src/tests/unit/test_phase105_runtime_mutators_unit.py
+*** Begin Patch
+*** Add File: src/tests/unit/test_phase105_runtime_mutators_unit.py
++from app.rpg.runtime.dialogue_runtime import (
++    _dedupe_and_sort_turn_chunks,
++    _dedupe_and_sort_global_stream_chunks,
++    _rebuild_turn_text_from_chunks,
++)
++
++
++def test_phase105_dedupe_and_sort_turn_chunks_overwrites_duplicates():
++    chunks = [
++        {
++            "turn_id": "turn:1:0:npc:a",
++            "chunk_index": 1,
++            "actor_id": "npc:a",
++            "speaker_id": "npc:a",
++            "text": "B",
++            "final": False,
++        },
++        {
++            "turn_id": "turn:1:0:npc:a",
++            "chunk_index": 0,
++            "actor_id": "npc:a",
++            "speaker_id": "npc:a",
++            "text": "A",
++            "final": False,
++        },
++        {
++            "turn_id": "turn:1:0:npc:a",
++            "chunk_index": 1,
++            "actor_id": "npc:a",
++            "speaker_id": "npc:a",
++            "text": "B2",
++            "final": False,
++        },
++    ]
++
++    out = _dedupe_and_sort_turn_chunks(chunks)
++    assert len(out) == 2
++    assert out[0]["chunk_index"] == 0
++    assert out[0]["text"] == "A"
++    assert out[1]["chunk_index"] == 1
++    assert out[1]["text"] == "B2"
++
++
++def test_phase105_dedupe_and_sort_global_stream_chunks_is_bounded():
++    chunks = []
++    for i in range(60):
++        chunks.append({
++            "turn_id": "turn:2:0:npc:a",
++            "chunk_index": i,
++            "actor_id": "npc:a",
++            "speaker_id": "npc:a",
++            "text": str(i),
++            "final": False,
++        })
++
++    out = _dedupe_and_sort_global_stream_chunks(chunks)
++    assert len(out) == 40
++    assert out[0]["chunk_index"] == 20
++    assert out[-1]["chunk_index"] == 59
++
++
++def test_phase105_rebuild_turn_text_from_chunks_joins_sorted_text():
++    turn = {
++        "chunks": [
++            {
++                "turn_id": "turn:3:0:npc:a",
++                "chunk_index": 2,
++                "actor_id": "npc:a",
++                "speaker_id": "npc:a",
++                "text": "c",
++                "final": False,
++            },
++            {
++                "turn_id": "turn:3:0:npc:a",
++                "chunk_index": 0,
++                "actor_id": "npc:a",
++                "speaker_id": "npc:a",
++                "text": "a",
++                "final": False,
++            },
++            {
++                "turn_id": "turn:3:0:npc:a",
++                "chunk_index": 1,
++                "actor_id": "npc:a",
++                "speaker_id": "npc:a",
++                "text": "b",
++                "final": False,
++            },
++        ]
++    }
++
++    assert _rebuild_turn_text_from_chunks(turn) == "abc"
+*** End Patch
+END OF PART 2/6
+
+Next chunk is:
+
+Part 3/6: streaming + interruption logic
+
+Part 3/6: streaming + interruption logic
+
+Below is Part 3/6 only.
+
+Hard boundary: this message contains only
+Part 3/6: streaming + interruption logic
+
+PART 3/6 — STREAMING + INTERRUPTION LOGIC
+1) Update file
+src/app/rpg/runtime/__init__.py
+
+Export the sequence builder and interruption selectors added in this part.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/__init__.py
+@@
+ from .dialogue_runtime import (
+     ensure_runtime_state,
+     get_runtime_dialogue_state,
+     build_runtime_turn_id,
+     build_runtime_sequence_id,
+     get_runtime_emotion,
+     begin_runtime_turn,
+     append_runtime_stream_chunk,
+     finalize_runtime_turn,
+     mark_runtime_turn_interrupted,
+     trim_runtime_state,
++    build_runtime_turn_sequence,
++    choose_runtime_interruptions,
++    apply_runtime_interruptions,
++    start_runtime_sequence,
++    stream_runtime_text_segments,
+ )
+@@
+     "begin_runtime_turn",
+     "append_runtime_stream_chunk",
+     "finalize_runtime_turn",
+     "mark_runtime_turn_interrupted",
+     "trim_runtime_state",
++    "build_runtime_turn_sequence",
++    "choose_runtime_interruptions",
++    "apply_runtime_interruptions",
++    "start_runtime_sequence",
++    "stream_runtime_text_segments",
+ ]
+*** End Patch
+2) Update file
+src/app/rpg/runtime/dialogue_runtime.py
+
+Add deterministic sequence construction, interruption selection, interruption application, and structured streaming helpers.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ _MAX_PENDING_INTERRUPTION = 4
+ _MAX_INTERRUPTION_LOG = 12
+ _MAX_EMOTION_ACTORS = 16
++_MAX_INTERRUPTS_PER_TICK = 2
++_MAX_SEQUENCE_ACTORS = 8
+@@
+ def mark_runtime_turn_interrupted(
+     simulation_state: Dict[str, Any],
+@@
+ 
+     return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def _role_precedence(role: str) -> int:
++    role = _normalize_role(role)
++    if role == "player":
++        return 0
++    if role == "companion":
++        return 1
++    if role == "npc":
++        return 2
++    return 3
++
++
++def _normalize_sequence_actor(item: Dict[str, Any], default_role: str = "npc") -> Dict[str, Any]:
++    item = _safe_dict(item)
++    actor_id = _safe_str(item.get("actor_id"))
++    return {
++        "actor_id": actor_id,
++        "speaker_id": _safe_str(item.get("speaker_id")) or actor_id,
++        "speaker_name": _safe_str(item.get("speaker_name")),
++        "role": _normalize_role(item.get("role") or default_role),
++        "sequence_index": max(0, _safe_int(item.get("sequence_index"), 0)),
++        "priority": _safe_int(item.get("priority"), 0),
++        "present": bool(item.get("present", True)),
++        "can_speak": bool(item.get("can_speak", True)),
++        "interrupt_priority": _safe_int(item.get("interrupt_priority"), 0),
++        "interjection_score": _safe_int(item.get("interjection_score"), 0),
++    }
++
++
++def _sort_key_sequence_actor(item: Dict[str, Any]) -> Tuple[int, int, str]:
++    item = _normalize_sequence_actor(item)
++    return (
++        _role_precedence(item.get("role")),
++        _safe_int(item.get("priority"), 0),
++        _safe_str(item.get("actor_id")),
++    )
++
++
++def _normalize_interruption_candidate(item: Dict[str, Any]) -> Dict[str, Any]:
++    item = _safe_dict(item)
++    actor_id = _safe_str(item.get("actor_id"))
++    target_id = _safe_str(item.get("target_id"))
++    role = _normalize_role(item.get("role") or "companion")
++    return {
++        "actor_id": actor_id,
++        "target_id": target_id,
++        "turn_id": _safe_str(item.get("turn_id")),
++        "reason": _safe_str(item.get("reason")),
++        "priority": _safe_int(item.get("priority"), 0),
++        "role": role,
++        "target_sequence_index": max(0, _safe_int(item.get("target_sequence_index"), 0)),
++    }
++
++
++def _sort_key_interruption_candidate(item: Dict[str, Any]) -> Tuple[int, int, int, str, str]:
++    item = _normalize_interruption_candidate(item)
++    return (
++        -_safe_int(item.get("priority"), 0),
++        _safe_int(item.get("target_sequence_index"), 0),
++        _role_precedence(item.get("role")),
++        _safe_str(item.get("actor_id")),
++        _safe_str(item.get("target_id")),
++    )
++
++
++def _extract_actor_list(values: Any, role: str) -> List[Dict[str, Any]]:
++    out: List[Dict[str, Any]] = []
++    for idx, item in enumerate(_safe_list(values)):
++        if isinstance(item, dict):
++            normalized = _normalize_sequence_actor({
++                "actor_id": item.get("actor_id") or item.get("id") or item.get("speaker_id"),
++                "speaker_id": item.get("speaker_id") or item.get("actor_id") or item.get("id"),
++                "speaker_name": item.get("speaker_name") or item.get("name"),
++                "role": item.get("role") or role,
++                "sequence_index": idx,
++                "priority": _safe_int(item.get("priority"), idx),
++                "present": item.get("present", True),
++                "can_speak": item.get("can_speak", True),
++                "interrupt_priority": item.get("interrupt_priority", 0),
++                "interjection_score": item.get("interjection_score", 0),
++            }, default_role=role)
++        else:
++            normalized = _normalize_sequence_actor({
++                "actor_id": item,
++                "speaker_id": item,
++                "speaker_name": "",
++                "role": role,
++                "sequence_index": idx,
++                "priority": idx,
++                "present": True,
++                "can_speak": True,
++                "interrupt_priority": 0,
++                "interjection_score": 0,
++            }, default_role=role)
++
++        actor_id = _safe_str(normalized.get("actor_id"))
++        if actor_id:
++            out.append(normalized)
++    return out
++
++
++def build_runtime_turn_sequence(
++    simulation_state: Dict[str, Any],
++    *,
++    player_actor_id: str = "",
++    player_speaker_name: str = "",
++    companions: List[Any] | None = None,
++    npcs: List[Any] | None = None,
++) -> List[Dict[str, Any]]:
++    """Build a deterministic multi-speaker runtime sequence for one exchange.
++
++    Order outside combat:
++        1. player
++        2. companions (stable sorted)
++        3. npcs (stable sorted)
++    """
++    simulation_state = ensure_runtime_state(simulation_state)
++
++    if companions is None:
++        companions = simulation_state.get("companions", [])
++    if npcs is None:
++        npcs = simulation_state.get("nearby_npcs", [])
++
++    player_id = _safe_str(player_actor_id or simulation_state.get("player_id") or "player")
++    player_record = _normalize_sequence_actor({
++        "actor_id": player_id,
++        "speaker_id": player_id,
++        "speaker_name": player_speaker_name,
++        "role": "player",
++        "sequence_index": 0,
++        "priority": 0,
++        "present": True,
++        "can_speak": True,
++    }, default_role="player")
++
++    companion_records = [
++        v for v in _extract_actor_list(companions, "companion")
++        if bool(v.get("present")) and bool(v.get("can_speak"))
++    ]
++    companion_records = sorted(companion_records, key=_sort_key_sequence_actor)
++
++    npc_records = [
++        v for v in _extract_actor_list(npcs, "npc")
++        if bool(v.get("present")) and bool(v.get("can_speak"))
++    ]
++    npc_records = sorted(npc_records, key=_sort_key_sequence_actor)
++
++    combined: List[Dict[str, Any]] = [player_record]
++    combined.extend(companion_records)
++    combined.extend(npc_records)
++
++    deduped: List[Dict[str, Any]] = []
++    seen = set()
++    for item in combined:
++        actor_id = _safe_str(item.get("actor_id"))
++        if not actor_id or actor_id in seen:
++            continue
++        seen.add(actor_id)
++        deduped.append(item)
++
++    deduped = deduped[:_MAX_SEQUENCE_ACTORS]
++
++    for idx, item in enumerate(deduped):
++        item["sequence_index"] = idx
++
++    return deduped
++
++
++def start_runtime_sequence(
++    simulation_state: Dict[str, Any],
++    *,
++    tick: int,
++    sequence_index: int = 0,
++    player_actor_id: str = "",
++    player_speaker_name: str = "",
++    companions: List[Any] | None = None,
++    npcs: List[Any] | None = None,
++) -> Dict[str, Any]:
++    """Start a new runtime sequence and seed active sequence metadata."""
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++
++    tick = _safe_int(tick, 0)
++    sequence_index = max(0, _safe_int(sequence_index, 0))
++    sequence_id = build_runtime_sequence_id(tick, sequence_index)
++    participants = build_runtime_turn_sequence(
++        simulation_state,
++        player_actor_id=player_actor_id,
++        player_speaker_name=player_speaker_name,
++        companions=companions,
++        npcs=npcs,
++    )
++
++    dialogue_state["active_sequence_id"] = sequence_id
++    dialogue_state["active_turn_id"] = ""
++    dialogue_state["sequence_tick"] = tick
++    dialogue_state["turn_cursor"] = 0
++    dialogue_state["pending_interruptions"] = []
++    dialogue_state["stream"] = {
++        "active": False,
++        "active_turn_id": "",
++        "chunks": list(_safe_list(_safe_dict(dialogue_state.get("stream")).get("chunks")))[-_MAX_STREAM_CHUNKS:],
++    }
++    dialogue_state["sequence_participants"] = participants
++
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def choose_runtime_interruptions(
++    simulation_state: Dict[str, Any],
++    *,
++    active_turn_id: str,
++    sequence: List[Dict[str, Any]] | None = None,
++    context: Dict[str, Any] | None = None,
++) -> List[Dict[str, Any]]:
++    """Choose deterministic bounded interruption candidates.
++
++    This selector is pure with respect to return value. It does not mutate state.
++    """
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    turns = list(_safe_list(dialogue_state.get("turns")))
++    interruption_log = list(_safe_list(dialogue_state.get("interruption_log")))
++    context = _safe_dict(context)
++
++    active_turn_id = _safe_str(active_turn_id)
++    if not active_turn_id:
++        return []
++
++    active_turn_idx = _find_turn_index_by_id(turns, active_turn_id)
++    if active_turn_idx < 0:
++        return []
++
++    active_turn = _normalize_turn(turns[active_turn_idx])
++    active_tick = _safe_int(active_turn.get("tick"), 0)
++    active_actor_id = _safe_str(active_turn.get("actor_id"))
++
++    if sequence is None:
++        sequence = _safe_list(dialogue_state.get("sequence_participants"))
++
++    sequence_items = [
++        _normalize_sequence_actor(v)
++        for v in _safe_list(sequence)
++        if isinstance(v, dict)
++    ]
++
++    by_actor_id = {
++        _safe_str(v.get("actor_id")): v
++        for v in sequence_items
++        if _safe_str(v.get("actor_id"))
++    }
++
++    interruption_count_this_tick = 0
++    interrupted_actor_ids_this_tick = set()
++    interrupted_target_ids_this_tick = set()
++    for item in interruption_log:
++        item = _normalize_interrupt_log_item(item)
++        if _safe_int(item.get("tick"), 0) != active_tick:
++            continue
++        interruption_count_this_tick += 1
++        interrupted_actor_ids_this_tick.add(_safe_str(item.get("actor_id")))
++        interrupted_target_ids_this_tick.add(_safe_str(item.get("target_id")))
++
++    if interruption_count_this_tick >= _MAX_INTERRUPTS_PER_TICK:
++        return []
++
++    target_sequence_index = 0
++    if active_actor_id in by_actor_id:
++        target_sequence_index = _safe_int(by_actor_id[active_actor_id].get("sequence_index"), 0)
++
++    base_priority_bonus = _safe_int(context.get("interruption_priority_bonus"), 0)
++    threat_tag = bool(context.get("threat"))
++    tension_tag = bool(context.get("tension"))
++
++    candidates: List[Dict[str, Any]] = []
++    for item in sequence_items:
++        actor_id = _safe_str(item.get("actor_id"))
++        if not actor_id or actor_id == active_actor_id:
++            continue
++        if actor_id in interrupted_actor_ids_this_tick:
++            continue
++        if active_actor_id in interrupted_target_ids_this_tick:
++            continue
++
++        role = _normalize_role(item.get("role"))
++        if role not in {"companion", "npc"}:
++            continue
++
++        emotion_record = get_runtime_emotion(simulation_state, actor_id)
++        emotion_name = _safe_str(emotion_record.get("emotion"))
++        emotion_intensity = _safe_float(emotion_record.get("intensity"), 0.0)
++
++        priority = 0
++        priority += _safe_int(item.get("interrupt_priority"), 0)
++        priority += _safe_int(item.get("interjection_score"), 0)
++        priority += base_priority_bonus
++        if threat_tag:
++            priority += 2
++        if tension_tag:
++            priority += 1
++        if role == "companion":
++            priority += 1
++        if emotion_name in {"tense", "stern", "wary", "shaken"}:
++            priority += 1
++        if emotion_intensity >= 0.75:
++            priority += 1
++
++        reason = _safe_str(context.get("reason"))
++        if not reason:
++            if threat_tag and role == "companion":
++                reason = "protective_reaction"
++            elif tension_tag:
++                reason = "tense_interjection"
++            else:
++                reason = "runtime_interjection"
++
++        candidates.append(_normalize_interruption_candidate({
++            "actor_id": actor_id,
++            "target_id": active_actor_id,
++            "turn_id": active_turn_id,
++            "reason": reason,
++            "priority": priority,
++            "role": role,
++            "target_sequence_index": target_sequence_index,
++        }))
++
++    deduped: Dict[Tuple[str, str], Dict[str, Any]] = {}
++    for item in candidates:
++        key = (
++            _safe_str(item.get("actor_id")),
++            _safe_str(item.get("target_id")),
++        )
++        current = deduped.get(key)
++        if current is None or _sort_key_interruption_candidate(item) < _sort_key_interruption_candidate(current):
++            deduped[key] = item
++
++    out = sorted(deduped.values(), key=_sort_key_interruption_candidate)
++    out = out[: max(0, _MAX_INTERRUPTS_PER_TICK - interruption_count_this_tick)]
++    out = out[:_MAX_PENDING_INTERRUPTION]
++    return out
++
++
++def apply_runtime_interruptions(
++    simulation_state: Dict[str, Any],
++    *,
++    candidates: List[Dict[str, Any]],
++) -> Dict[str, Any]:
++    """Persist pending interruption candidates to runtime state deterministically."""
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++
++    normalized = [
++        _normalize_pending_interruption(v)
++        for v in _safe_list(candidates)
++        if isinstance(v, dict)
++    ]
++    normalized = sorted(normalized, key=_sort_key_pending_interrupt)[:_MAX_PENDING_INTERRUPTION]
++    dialogue_state["pending_interruptions"] = normalized
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def stream_runtime_text_segments(
++    simulation_state: Dict[str, Any],
++    *,
++    turn_id: str,
++    actor_id: str,
++    speaker_id: str = "",
++    segments: List[str],
++    finalize: bool = True,
++    final_text: str = "",
++) -> Dict[str, Any]:
++    """Append a deterministic ordered list of text segments as structured stream chunks."""
++    simulation_state = ensure_runtime_state(simulation_state)
++
++    normalized_segments = [_safe_str(v) for v in _safe_list(segments)]
++    for idx, segment in enumerate(normalized_segments):
++        simulation_state = append_runtime_stream_chunk(
++            simulation_state,
++            turn_id=turn_id,
++            actor_id=actor_id,
++            speaker_id=speaker_id,
++            text=segment,
++            chunk_index=idx,
++            final=False,
++        )
++
++    if finalize:
++        simulation_state = finalize_runtime_turn(
++            simulation_state,
++            turn_id=turn_id,
++            final_text=final_text,
++        )
++
++    return simulation_state
+*** End Patch
+3) Update file
+src/app/rpg/runtime/dialogue_runtime.py
+
+Teach normalization about sequence_participants so the sequence metadata remains bounded and inspector-visible.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def _normalize_dialogue_state(dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
+     dialogue_state = _safe_dict(dialogue_state)
+@@
+     emotions = _normalize_emotions_map(dialogue_state.get("emotions"))
+     stream_state = _normalize_stream_state(dialogue_state.get("stream"))
++    sequence_participants = [
++        _normalize_sequence_actor(v)
++        for v in _safe_list(dialogue_state.get("sequence_participants"))
++        if isinstance(v, dict)
++    ]
++    sequence_participants = sorted(
++        sequence_participants,
++        key=lambda item: (
++            _safe_int(item.get("sequence_index"), 0),
++            _role_precedence(item.get("role")),
++            _safe_str(item.get("actor_id")),
++        ),
++    )[:_MAX_SEQUENCE_ACTORS]
+ 
+     active_sequence_id = _safe_str(dialogue_state.get("active_sequence_id"))
+     active_turn_id = _safe_str(dialogue_state.get("active_turn_id"))
+     sequence_tick = _safe_int(dialogue_state.get("sequence_tick"), 0)
+     turn_cursor = max(0, _safe_int(dialogue_state.get("turn_cursor"), 0))
+@@
+         "interruption_log": interruption_log,
+         "stream": stream_state,
+         "emotions": emotions,
++        "sequence_participants": sequence_participants,
      }
 *** End Patch
-16) Add frontend client for presentation routes
-File: src/static/rpg/rpgPresentationClient.js
+4) Add tests
+src/tests/functional/test_phase105_streaming_interruptions_functional.py
 *** Begin Patch
-*** Add File: src/static/rpg/rpgPresentationClient.js
-+export class RPGPresentationClient {
-+  constructor(baseUrl = "") {
-+    this.baseUrl = baseUrl;
-+  }
-+
-+  async _post(path, payload) {
-+    const res = await fetch(`${this.baseUrl}${path}`, {
-+      method: "POST",
-+      headers: { "Content-Type": "application/json" },
-+      body: JSON.stringify(payload || {}),
-+    });
-+    if (!res.ok) {
-+      throw new Error(`Presentation API error: ${res.status} at ${path}`);
-+    }
-+    return res.json();
-+  }
-+
-+  async getScenePresentation(setupPayload, sceneState) {
-+    return this._post("/api/rpg/presentation/scene", {
-+      setup_payload: setupPayload,
-+      scene_state: sceneState,
-+    });
-+  }
-+
-+  async getDialoguePresentation(setupPayload, dialogueState) {
-+    return this._post("/api/rpg/presentation/dialogue", {
-+      setup_payload: setupPayload,
-+      dialogue_state: dialogueState,
-+    });
-+  }
-+
-+  async getSpeakerCards(setupPayload, sceneState) {
-+    return this._post("/api/rpg/presentation/speakers", {
-+      setup_payload: setupPayload,
-+      scene_state: sceneState,
-+    });
-+  }
-+}
-*** End Patch
-17) Add presentation renderer
-File: src/static/rpg/rpgPresentationRenderer.js
-*** Begin Patch
-*** Add File: src/static/rpg/rpgPresentationRenderer.js
-+function escapeHtml(str) {
-+  return String(str || "")
-+    .replace(/&/g, "&amp;")
-+    .replace(/</g, "&lt;")
-+    .replace(/>/g, "&gt;")
-+    .replace(/"/g, "&quot;")
-+    .replace(/'/g, "&#039;");
-+}
-+
-+function renderStyleTags(tags) {
-+  const list = Array.isArray(tags) ? tags : [];
-+  if (!list.length) return "";
-+  return `
-+    <div class="rpg-speaker-tags">
-+      ${list.map((tag) => `<span class="rpg-speaker-tag">${escapeHtml(tag)}</span>`).join("")}
-+    </div>
-+  `;
-+}
-+
-+export function renderSpeakerCards(cards) {
-+  const list = Array.isArray(cards) ? cards : [];
-+  return `
-+    <div class="rpg-speaker-card-list">
-+      ${list.map((card) => `
-+        <div class="rpg-speaker-card" data-speaker-id="${escapeHtml(card.speaker_id)}">
-+          <div class="rpg-speaker-card-name">${escapeHtml(card.name || card.speaker_id)}</div>
-+          <div class="rpg-speaker-card-kind">${escapeHtml(card.kind || "")}</div>
-+          ${renderStyleTags(card.style_tags)}
-+        </div>
-+      `).join("")}
-+    </div>
-+  `;
-+}
-+
-+export function renderScenePresentation(presentation) {
-+  const payload = presentation || {};
-+  const interjections = Array.isArray(payload.companion_interjections) ? payload.companion_interjections : [];
-+  const reactions = Array.isArray(payload.companion_reactions) ? payload.companion_reactions : [];
-+
-+  return `
-+    <div class="rpg-presentation-block">
-+      <div class="rpg-presentation-header">
-+        <h3>Scene Presentation</h3>
-+        <div class="rpg-presentation-meta">
-+          <span>${escapeHtml(payload.scene_id || "")}</span>
-+          <span>${escapeHtml(payload.tone || "")}</span>
-+        </div>
-+      </div>
-+      ${renderSpeakerCards(payload.speaker_cards || [])}
-+      <div class="rpg-presentation-section">
-+        <h4>Companion Interjections</h4>
-+        ${
-+          interjections.length
-+            ? interjections.map((it) => `<div class="codex-item">${escapeHtml(it.summary || "")}</div>`).join("")
-+            : `<div class="codex-item">No interjections</div>`
-+        }
-+      </div>
-+      <div class="rpg-presentation-section">
-+        <h4>Companion Reactions</h4>
-+        ${
-+          reactions.length
-+            ? reactions.map((it) => `<div class="codex-item">${escapeHtml(it.summary || "")}</div>`).join("")
-+            : `<div class="codex-item">No reactions</div>`
-+        }
-+      </div>
-+    </div>
-+  `;
-+}
-+
-+export function renderDialoguePresentation(presentation) {
-+  const payload = presentation || {};
-+  return `
-+    <div class="rpg-presentation-block">
-+      <div class="rpg-presentation-header">
-+        <h3>Dialogue Presentation</h3>
-+        <div class="rpg-presentation-meta">
-+          <span>${escapeHtml(payload.dialogue_id || "")}</span>
-+          <span>${escapeHtml(payload.speaker_id || "")}</span>
-+        </div>
-+      </div>
-+      ${renderSpeakerCards(payload.speaker_cards || [])}
-+    </div>
-+  `;
-+}
-*** End Patch
-18) Wire presentation into player UI
-File: src/static/rpg/rpgPlayerUI.js
-*** Begin Patch
-*** Update File: src/static/rpg/rpgPlayerUI.js
-@@
- import { RPGPartyClient } from "./rpgPartyClient.js";
- import { renderPartyPanel } from "./rpgPartyRenderer.js";
-+import { RPGPresentationClient } from "./rpgPresentationClient.js";
-+import { renderScenePresentation, renderDialoguePresentation } from "./rpgPresentationRenderer.js";
-@@
- const partyClient = new RPGPartyClient();
-+const presentationClient = new RPGPresentationClient();
-@@
- export async function loadParty(setupPayload) {
-@@
- }
-+
-+export async function loadScenePresentation(setupPayload, sceneState) {
-+  try {
-+    const res = await presentationClient.getScenePresentation(setupPayload, sceneState || {});
-+    const el = document.getElementById("rpg-presentation-scene");
-+    if (!el) return {};
-+    el.innerHTML = renderScenePresentation(res.presentation || {});
-+    return res.presentation || {};
-+  } catch (err) {
-+    console.error("Failed to load scene presentation:", err);
-+    return {};
-+  }
-+}
-+
-+export async function loadDialoguePresentation(setupPayload, dialogueState) {
-+  try {
-+    const res = await presentationClient.getDialoguePresentation(setupPayload, dialogueState || {});
-+    const el = document.getElementById("rpg-presentation-dialogue");
-+    if (!el) return {};
-+    el.innerHTML = renderDialoguePresentation(res.presentation || {});
-+    return res.presentation || {};
-+  } catch (err) {
-+    console.error("Failed to load dialogue presentation:", err);
-+    return {};
-+  }
-+}
-*** End Patch
-19) Add presentation containers to shell
-
-If your UI shell is in HTML:
-
-*** Begin Patch
-*** Update File: src/templates/index.html
-@@
- <div id="rpg-inventory"></div>
- <div id="rpg-party"></div>
-+<div id="rpg-presentation-scene"></div>
-+<div id="rpg-presentation-dialogue"></div>
-*** End Patch
-
-If your side panel DOM is built in JavaScript, add equivalent sibling containers there instead.
-
-20) Add tests for presentation layer
-File: src/tests/unit/rpg/test_phase10_presentation.py
-*** Begin Patch
-*** Add File: src/tests/unit/rpg/test_phase10_presentation.py
-+from app.rpg.presentation import (
-+    build_scene_presentation_payload,
-+    build_dialogue_presentation_payload,
-+    build_speaker_cards,
-+    build_personality_style_tags,
+*** Add File: src/tests/functional/test_phase105_streaming_interruptions_functional.py
++from app.rpg.runtime.dialogue_runtime import (
++    start_runtime_sequence,
++    build_runtime_turn_sequence,
++    begin_runtime_turn,
++    choose_runtime_interruptions,
++    apply_runtime_interruptions,
++    stream_runtime_text_segments,
++    get_runtime_dialogue_state,
 +)
 +
 +
-+def test_build_personality_style_tags_returns_deterministic_tags():
-+    actor = {"npc_id": "npc_a", "name": "A", "loyalty": 0.8, "morale": 0.9, "role": "support"}
-+    one = build_personality_style_tags(actor)
-+    two = build_personality_style_tags(actor)
-+    assert one == two
++def test_phase105_build_runtime_turn_sequence_orders_player_then_companions_then_npcs():
++    state = {"player_id": "player:hero"}
++    sequence = build_runtime_turn_sequence(
++        state,
++        companions=[
++            {"actor_id": "comp:zane", "speaker_name": "Zane"},
++            {"actor_id": "comp:lyra", "speaker_name": "Lyra"},
++        ],
++        npcs=[
++            {"actor_id": "npc:guard_b", "speaker_name": "Guard B"},
++            {"actor_id": "npc:guard_a", "speaker_name": "Guard A"},
++        ],
++    )
++
++    assert [v["actor_id"] for v in sequence] == [
++        "player:hero",
++        "comp:lyra",
++        "comp:zane",
++        "npc:guard_a",
++        "npc:guard_b",
++    ]
++    assert [v["sequence_index"] for v in sequence] == [0, 1, 2, 3, 4]
 +
 +
-+def test_build_speaker_cards_includes_player():
-+    simulation_state = {"player_state": {"party_state": {"companions": []}}}
-+    cards = build_speaker_cards(simulation_state, {"scene_id": "scene_gate"})
-+    assert any(card.get("speaker_id") == "player" for card in cards)
++def test_phase105_start_runtime_sequence_seeds_active_sequence_metadata():
++    state = {"player_id": "player:hero"}
++    state = start_runtime_sequence(
++        state,
++        tick=100,
++        sequence_index=2,
++        companions=[{"actor_id": "comp:lyra"}],
++        npcs=[{"actor_id": "npc:guard"}],
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    assert dialogue["active_sequence_id"] == "seq:100:2"
++    assert dialogue["sequence_tick"] == 100
++    assert dialogue["active_turn_id"] == ""
++    assert dialogue["turn_cursor"] == 0
++    assert [v["actor_id"] for v in dialogue["sequence_participants"]] == [
++        "player:hero",
++        "comp:lyra",
++        "npc:guard",
++    ]
 +
 +
-+def test_scene_presentation_payload_has_expected_keys():
-+    simulation_state = {"player_state": {"party_state": {"companions": []}}}
-+    payload = build_scene_presentation_payload(simulation_state, {"scene_id": "scene_1", "tone": "tense"})
-+    assert "speaker_cards" in payload
-+    assert "companion_interjections" in payload
-+    assert "companion_reactions" in payload
++def test_phase105_choose_runtime_interruptions_is_deterministic_and_bounded():
++    state = {"player_id": "player:hero"}
++    state = start_runtime_sequence(
++        state,
++        tick=110,
++        companions=[
++            {"actor_id": "comp:lyra", "interrupt_priority": 2, "interjection_score": 1},
++            {"actor_id": "comp:zane", "interrupt_priority": 1, "interjection_score": 0},
++        ],
++        npcs=[
++            {"actor_id": "npc:guard", "interrupt_priority": 3, "interjection_score": 0},
++        ],
++    )
++    state = begin_runtime_turn(
++        state,
++        tick=110,
++        sequence_index=3,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:110:0",
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    candidates = choose_runtime_interruptions(
++        state,
++        active_turn_id="turn:110:3:npc:guard",
++        sequence=dialogue["sequence_participants"],
++        context={"threat": True},
++    )
++
++    assert len(candidates) <= 2
++    assert [v["actor_id"] for v in candidates] == ["comp:lyra", "comp:zane"]
++    assert all(v["target_id"] == "npc:guard" for v in candidates)
++    assert all(v["reason"] == "protective_reaction" for v in candidates)
 +
 +
-+def test_dialogue_presentation_payload_has_expected_keys():
-+    simulation_state = {"player_state": {"party_state": {"companions": []}}}
-+    payload = build_dialogue_presentation_payload(simulation_state, {"dialogue_id": "dlg_1", "speaker_id": "npc_x"})
-+    assert "speaker_cards" in payload
-+    assert "dialogue_context" in payload
++def test_phase105_apply_runtime_interruptions_persists_pending_candidates():
++    state = {}
++    state = apply_runtime_interruptions(
++        state,
++        candidates=[
++            {
++                "actor_id": "comp:zane",
++                "target_id": "npc:guard",
++                "reason": "runtime_interjection",
++                "priority": 1,
++            },
++            {
++                "actor_id": "comp:lyra",
++                "target_id": "npc:guard",
++                "reason": "runtime_interjection",
++                "priority": 3,
++            },
++        ],
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    assert [v["actor_id"] for v in dialogue["pending_interruptions"]] == [
++        "comp:zane",
++        "comp:lyra",
++    ]
++
++
++def test_phase105_stream_runtime_text_segments_appends_chunks_and_finalizes():
++    state = {}
++    state = begin_runtime_turn(
++        state,
++        tick=120,
++        sequence_index=1,
++        actor_id="comp:lyra",
++        speaker_id="comp:lyra",
++        speaker_name="Lyra",
++        role="companion",
++        sequence_id="seq:120:0",
++    )
++    state = stream_runtime_text_segments(
++        state,
++        turn_id="turn:120:1:comp:lyra",
++        actor_id="comp:lyra",
++        speaker_id="comp:lyra",
++        segments=["We ", "should ", "go."],
++        finalize=True,
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    turn = dialogue["turns"][0]
++    assert turn["text"] == "We should go."
++    assert turn["status"] == "complete"
++    assert len(turn["chunks"]) == 3
++    assert dialogue["stream"]["active"] is False
 *** End Patch
-21) Add functional tests for routes
-File: src/tests/functional/test_phase10_presentation_routes.py
+5) Add tests
+src/tests/unit/test_phase105_interruptions_unit.py
 *** Begin Patch
-*** Add File: src/tests/functional/test_phase10_presentation_routes.py
-+def test_presentation_scene_route(client):
-+    res = client.post("/api/rpg/presentation/scene", json={
-+        "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
-+        "scene_state": {"scene_id": "scene_gate", "tone": "tense"},
-+    })
-+    assert res.status_code == 200
-+    data = res.get_json() or {}
-+    assert data.get("ok") is True
-+    assert "presentation" in data
+*** Add File: src/tests/unit/test_phase105_interruptions_unit.py
++from app.rpg.runtime.dialogue_runtime import (
++    _normalize_interruption_candidate,
++    _sort_key_interruption_candidate,
++    _normalize_sequence_actor,
++    _role_precedence,
++)
 +
 +
-+def test_presentation_dialogue_route(client):
-+    res = client.post("/api/rpg/presentation/dialogue", json={
-+        "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
-+        "dialogue_state": {"dialogue_id": "dlg_1", "speaker_id": "npc_1"},
++def test_phase105_role_precedence_is_stable():
++    assert _role_precedence("player") == 0
++    assert _role_precedence("companion") == 1
++    assert _role_precedence("npc") == 2
++    assert _role_precedence("system") == 3
++
++
++def test_phase105_normalize_sequence_actor_defaults_are_safe():
++    item = _normalize_sequence_actor({"actor_id": "comp:lyra"})
++    assert item["actor_id"] == "comp:lyra"
++    assert item["speaker_id"] == "comp:lyra"
++    assert item["role"] == "npc"
++    assert item["present"] is True
++    assert item["can_speak"] is True
++
++
++def test_phase105_interruptions_sort_higher_priority_first_then_stable_tiebreaks():
++    a = _normalize_interruption_candidate({
++        "actor_id": "comp:zane",
++        "target_id": "npc:guard",
++        "priority": 2,
++        "role": "companion",
++        "target_sequence_index": 3,
 +    })
-+    assert res.status_code == 200
-+    data = res.get_json() or {}
-+    assert data.get("ok") is True
-+    assert "presentation" in data
++    b = _normalize_interruption_candidate({
++        "actor_id": "comp:lyra",
++        "target_id": "npc:guard",
++        "priority": 3,
++        "role": "companion",
++        "target_sequence_index": 3,
++    })
++
++    assert _sort_key_interruption_candidate(b) < _sort_key_interruption_candidate(a)
 *** End Patch
-22) Phase 10 completion checklist
+6) Update file
+src/app/rpg/presentation/runtime_bridge.py
 
-After applying sections 8–22, Phase 10 should provide:
+Expose sequence_participants and ensure pending interruptions are normalized into stable outward payload shape.
 
-presentation routes for scene/dialogue payloads
-stable speaker card system
-deterministic personality style tags
-frontend presentation rendering
-additive UI containers
-unit + functional coverage
-no mutation hidden inside presentation builders
-23) Immediate review focus
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/runtime_bridge.py
+@@
+ def build_runtime_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+@@
+     emotions = []
+     for actor_id in sorted(_safe_dict(dialogue_state.get("emotions")).keys()):
+         item = _safe_dict(_safe_dict(dialogue_state.get("emotions")).get(actor_id))
+         emotions.append({
+             "actor_id": _safe_str(actor_id),
+             "emotion": _safe_str(item.get("emotion") or "neutral"),
+             "intensity": _safe_float(item.get("intensity"), 0.0),
+             "updated_tick": _safe_int(item.get("updated_tick"), 0),
+         })
++
++    sequence_participants = []
++    for item in _safe_list(dialogue_state.get("sequence_participants")):
++        item = _safe_dict(item)
++        if not item:
++            continue
++        sequence_participants.append({
++            "actor_id": _safe_str(item.get("actor_id")),
++            "speaker_id": _safe_str(item.get("speaker_id")),
++            "speaker_name": _safe_str(item.get("speaker_name")),
++            "role": _safe_str(item.get("role")),
++            "sequence_index": _safe_int(item.get("sequence_index"), 0),
++        })
++
++    pending_interruptions = []
++    for item in _safe_list(dialogue_state.get("pending_interruptions")):
++        item = _safe_dict(item)
++        if not item:
++            continue
++        pending_interruptions.append({
++            "actor_id": _safe_str(item.get("actor_id")),
++            "target_id": _safe_str(item.get("target_id")),
++            "reason": _safe_str(item.get("reason")),
++            "priority": _safe_int(item.get("priority"), 0),
++        })
+ 
+     return {
+         "runtime_dialogue": {
+             "active_sequence_id": _safe_str(dialogue_state.get("active_sequence_id")),
+             "active_turn_id": _safe_str(dialogue_state.get("active_turn_id")),
+             "sequence_tick": _safe_int(dialogue_state.get("sequence_tick"), 0),
+             "turn_cursor": _safe_int(dialogue_state.get("turn_cursor"), 0),
++            "sequence_participants": sequence_participants,
+             "turns": turns,
+-            "pending_interruptions": _safe_list(dialogue_state.get("pending_interruptions")),
++            "pending_interruptions": pending_interruptions,
+             "interruption_log": _safe_list(dialogue_state.get("interruption_log")),
+             "stream": {
+                 "active": bool(stream_state.get("active")),
+                 "active_turn_id": _safe_str(stream_state.get("active_turn_id")),
+                 "chunks": stream_chunks,
+*** End Patch
+END OF PART 3/6
 
-When you implement this phase, review these hotspots first:
+Next chunk is:
 
-presentation routes registered in the real Flask bootstrap file
-build_speaker_cards() does not include absent/downed companions unless intentionally desired
-scene/dialogue builders remain pure and do not record narrative events
-frontend does not assume presentation payload contains transcript text unless actually provided
-renderSpeakerCards() handles empty style tags and missing names safely
-24) Next recommended follow-up
+Part 4/6: emotional continuity
 
-After this patch, the best next pass is not a new phase number but a Phase 10 polish/fix pass for:
+Part 4/6: emotional continuity
 
-portrait asset mapping
-accessibility labels
-speaker card selection states
-richer interjection styling
-mobile layout cleanup
+Below is Part 4/6 only.
+
+Hard boundary: this message contains only
+Part 4/6: emotional continuity
+
+PART 4/6 — EMOTIONAL CONTINUITY
+1) Update file
+src/app/rpg/runtime/__init__.py
+
+Export the emotional continuity helpers added in this part.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/__init__.py
+@@
+ from .dialogue_runtime import (
+     ensure_runtime_state,
+     get_runtime_dialogue_state,
+     build_runtime_turn_id,
+     build_runtime_sequence_id,
+     get_runtime_emotion,
+     begin_runtime_turn,
+     append_runtime_stream_chunk,
+     finalize_runtime_turn,
+     mark_runtime_turn_interrupted,
+     trim_runtime_state,
+     build_runtime_turn_sequence,
+     choose_runtime_interruptions,
+     apply_runtime_interruptions,
+     start_runtime_sequence,
+     stream_runtime_text_segments,
++    update_runtime_emotion,
++    decay_runtime_emotions,
++    build_runtime_style_tags,
++    build_runtime_fallback_text,
+ )
+@@
+     "build_runtime_turn_sequence",
+     "choose_runtime_interruptions",
+     "apply_runtime_interruptions",
+     "start_runtime_sequence",
+     "stream_runtime_text_segments",
++    "update_runtime_emotion",
++    "decay_runtime_emotions",
++    "build_runtime_style_tags",
++    "build_runtime_fallback_text",
+ ]
+*** End Patch
+2) Update file
+src/app/rpg/runtime/dialogue_runtime.py
+
+Add emotional continuity mutators, deterministic decay, and read-only derivation helpers for style tags and fallback text.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def stream_runtime_text_segments(
+     simulation_state: Dict[str, Any],
+@@
+ 
+     return simulation_state
++
++
++def _sort_key_emotion_actor_entry(item: Tuple[str, Dict[str, Any]]) -> Tuple[int, str, int]:
++    actor_id, payload = item
++    payload = _normalize_emotion_entry(actor_id, payload)
++    return (
++        _safe_int(payload.get("updated_tick"), 0),
++        _safe_str(actor_id),
++        _EMOTION_ORDER.get(_safe_str(payload.get("emotion")), 999),
++    )
++
++
++def update_runtime_emotion(
++    simulation_state: Dict[str, Any],
++    *,
++    actor_id: str,
++    emotion: str,
++    intensity: float,
++    tick: int,
++) -> Dict[str, Any]:
++    """Update bounded short-term emotional continuity for one actor."""
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    emotions = _safe_dict(dialogue_state.get("emotions"))
++
++    actor_id = _safe_str(actor_id)
++    if not actor_id:
++        return simulation_state
++
++    normalized = _normalize_emotion_entry(actor_id, {
++        "emotion": emotion,
++        "intensity": intensity,
++        "updated_tick": tick,
++    })
++    emotions[actor_id] = normalized
++
++    items = sorted(emotions.items(), key=_sort_key_emotion_actor_entry)
++    if len(items) > _MAX_EMOTION_ACTORS:
++        items = items[-_MAX_EMOTION_ACTORS:]
++
++    dialogue_state["emotions"] = {
++        _safe_str(k): _normalize_emotion_entry(k, v)
++        for k, v in items
++        if _safe_str(k)
++    }
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def decay_runtime_emotions(
++    simulation_state: Dict[str, Any],
++    *,
++    tick: int,
++) -> Dict[str, Any]:
++    """Deterministically decay emotional continuity by tick delta.
++
++    Decay rule:
++        - subtract 0.15 per elapsed tick
++        - if resulting intensity <= 0.10 => neutral / 0.0
++    """
++    simulation_state = ensure_runtime_state(simulation_state)
++    dialogue_state = get_runtime_dialogue_state(simulation_state)
++    emotions = _safe_dict(dialogue_state.get("emotions"))
++    tick = _safe_int(tick, 0)
++
++    out: Dict[str, Dict[str, Any]] = {}
++    for actor_id in sorted(emotions.keys()):
++        current = _normalize_emotion_entry(actor_id, emotions.get(actor_id))
++        updated_tick = _safe_int(current.get("updated_tick"), 0)
++        delta = max(0, tick - updated_tick)
++        intensity = _safe_float(current.get("intensity"), 0.0)
++        if delta > 0:
++            intensity = _clamp(intensity - (0.15 * delta), 0.0, 1.0)
++
++        emotion_name = _safe_str(current.get("emotion"))
++        if intensity <= 0.10:
++            emotion_name = "neutral"
++            intensity = 0.0
++
++        out[actor_id] = _normalize_emotion_entry(actor_id, {
++            "emotion": emotion_name,
++            "intensity": intensity,
++            "updated_tick": tick if delta > 0 else updated_tick,
++        })
++
++    items = sorted(out.items(), key=_sort_key_emotion_actor_entry)
++    if len(items) > _MAX_EMOTION_ACTORS:
++        items = items[-_MAX_EMOTION_ACTORS:]
++
++    dialogue_state["emotions"] = {
++        _safe_str(k): _normalize_emotion_entry(k, v)
++        for k, v in items
++        if _safe_str(k)
++    }
++    return _set_runtime_dialogue_state(simulation_state, dialogue_state)
++
++
++def build_runtime_style_tags(
++    simulation_state: Dict[str, Any],
++    *,
++    actor_id: str,
++    base_tags: List[Any] | None = None,
++) -> List[str]:
++    """Build read-only style tags with runtime emotional overlay."""
++    actor_id = _safe_str(actor_id)
++    tags = [_safe_str(v).strip() for v in _safe_list(base_tags) if _safe_str(v).strip()]
++    deduped = set(tags)
++
++    emotion = get_runtime_emotion(simulation_state, actor_id)
++    emotion_name = _safe_str(emotion.get("emotion") or "neutral")
++    intensity = _safe_float(emotion.get("intensity"), 0.0)
++
++    if actor_id and emotion_name and emotion_name != "neutral" and intensity > 0.0:
++        deduped.add(f"emotion:{emotion_name}")
++
++    return sorted(deduped)
++
++
++def build_runtime_fallback_text(
++    simulation_state: Dict[str, Any],
++    *,
++    actor_id: str,
++    base_text: str = "",
++) -> str:
++    """Build deterministic fallback text influenced by short-term emotion.
++
++    This is used only when upstream generation is absent or empty.
++    """
++    base_text = _safe_str(base_text).strip()
++    if base_text:
++        return base_text
++
++    emotion = get_runtime_emotion(simulation_state, actor_id)
++    emotion_name = _safe_str(emotion.get("emotion") or "neutral")
++
++    if emotion_name == "warm":
++        return "I am with you."
++    if emotion_name == "supportive":
++        return "We can handle this together."
++    if emotion_name == "tense":
++        return "Stay ready."
++    if emotion_name == "wary":
++        return "Something feels off."
++    if emotion_name == "stern":
++        return "Focus."
++    if emotion_name == "shaken":
++        return "Give me a moment."
++    return "..."
+*** End Patch
+3) Update file
+src/app/rpg/runtime/dialogue_runtime.py
+
+When beginning a turn, snapshot the actor’s current emotional state into the turn record.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def begin_runtime_turn(
+     simulation_state: Dict[str, Any],
+@@
+     if not actor_id:
+         return simulation_state
+ 
+     if not sequence_id:
+         sequence_id = build_runtime_sequence_id(tick, 0)
+     sequence_id = _safe_str(sequence_id)
+     turn_id = build_runtime_turn_id(tick, sequence_index, actor_id)
+ 
+     emotion_record = get_runtime_emotion(simulation_state, actor_id)
+@@
+         "chunks": [],
+     })
+*** End Patch
+4) Update file
+src/app/rpg/runtime/dialogue_runtime.py
+
+When finalizing a turn, preserve or infer final text using the runtime fallback text helper.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def finalize_runtime_turn(
+     simulation_state: Dict[str, Any],
+@@
+-    if final_text:
+-        turn["text"] = _safe_str(final_text)
+-    else:
+-        turn["text"] = _rebuild_turn_text_from_chunks(turn)
++    if final_text:
++        turn["text"] = _safe_str(final_text)
++    else:
++        rebuilt = _rebuild_turn_text_from_chunks(turn)
++        turn["text"] = build_runtime_fallback_text(
++            simulation_state,
++            actor_id=_safe_str(turn.get("actor_id")),
++            base_text=rebuilt,
++        )
+ 
+     turn["status"] = "complete"
+*** End Patch
+5) Update file
+src/app/rpg/runtime/dialogue_runtime.py
+
+When a turn is interrupted and has no assembled text yet, use fallback text rather than leaving it blank.
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def mark_runtime_turn_interrupted(
+     simulation_state: Dict[str, Any],
+@@
+-    if not turn.get("text"):
+-        turn["text"] = _rebuild_turn_text_from_chunks(turn)
++    if not turn.get("text"):
++        rebuilt = _rebuild_turn_text_from_chunks(turn)
++        turn["text"] = build_runtime_fallback_text(
++            simulation_state,
++            actor_id=_safe_str(turn.get("actor_id")),
++            base_text=rebuilt,
++        )
+*** End Patch
+6) Update file
+src/app/rpg/presentation/runtime_bridge.py
+
+Expose emotion-derived style tags in the runtime presentation payload.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/runtime_bridge.py
+@@
+-from app.rpg.runtime import get_runtime_dialogue_state
++from app.rpg.runtime import (
++    get_runtime_dialogue_state,
++    build_runtime_style_tags,
++)
+@@
+ def _build_turn_payload(turn: Dict[str, Any]) -> Dict[str, Any]:
+     turn = _safe_dict(turn)
+@@
+     return {
+         "turn_id": _safe_str(turn.get("turn_id")),
+         "sequence_id": _safe_str(turn.get("sequence_id")),
+         "tick": _safe_int(turn.get("tick"), 0),
+         "sequence_index": _safe_int(turn.get("sequence_index"), 0),
+         "actor_id": _safe_str(turn.get("actor_id")),
+         "speaker_id": _safe_str(turn.get("speaker_id")),
+         "speaker_name": _safe_str(turn.get("speaker_name")),
+         "role": _safe_str(turn.get("role")),
+         "text": _safe_str(turn.get("text")),
+         "status": _safe_str(turn.get("status")),
+         "emotion": _safe_str(turn.get("emotion")),
++        "style_tags": [],
+         "interruption": bool(turn.get("interruption")),
+         "interrupt_target_id": _safe_str(turn.get("interrupt_target_id")),
+         "chunks": chunks,
+     }
+@@
+     turns = [
+         _build_turn_payload(v)
+         for v in _safe_list(dialogue_state.get("turns"))
+         if isinstance(v, dict)
+     ]
++    for idx, turn in enumerate(turns):
++        turns[idx]["style_tags"] = build_runtime_style_tags(
++            simulation_state,
++            actor_id=_safe_str(turn.get("actor_id")),
++            base_tags=[],
++        )
+*** End Patch
+7) Add tests
+src/tests/functional/test_phase105_emotional_continuity_functional.py
+*** Begin Patch
+*** Add File: src/tests/functional/test_phase105_emotional_continuity_functional.py
++from app.rpg.runtime.dialogue_runtime import (
++    update_runtime_emotion,
++    decay_runtime_emotions,
++    get_runtime_emotion,
++    begin_runtime_turn,
++    finalize_runtime_turn,
++    build_runtime_style_tags,
++    build_runtime_fallback_text,
++)
++
++
++def test_phase105_update_runtime_emotion_persists_normalized_entry():
++    state = {}
++    state = update_runtime_emotion(
++        state,
++        actor_id="comp:lyra",
++        emotion="tense",
++        intensity=0.8,
++        tick=100,
++    )
++
++    emotion = get_runtime_emotion(state, "comp:lyra")
++    assert emotion["actor_id"] == "comp:lyra"
++    assert emotion["emotion"] == "tense"
++    assert emotion["intensity"] == 0.8
++    assert emotion["updated_tick"] == 100
++
++
++def test_phase105_decay_runtime_emotions_reduces_intensity_by_tick_delta():
++    state = {}
++    state = update_runtime_emotion(
++        state,
++        actor_id="comp:lyra",
++        emotion="tense",
++        intensity=0.8,
++        tick=100,
++    )
++    state = decay_runtime_emotions(
++        state,
++        tick=102,
++    )
++
++    emotion = get_runtime_emotion(state, "comp:lyra")
++    assert emotion["emotion"] == "tense"
++    assert round(emotion["intensity"], 2) == 0.50
++    assert emotion["updated_tick"] == 102
++
++
++def test_phase105_decay_runtime_emotions_returns_to_neutral_when_low():
++    state = {}
++    state = update_runtime_emotion(
++        state,
++        actor_id="npc:guard",
++        emotion="stern",
++        intensity=0.2,
++        tick=50,
++    )
++    state = decay_runtime_emotions(
++        state,
++        tick=51,
++    )
++
++    emotion = get_runtime_emotion(state, "npc:guard")
++    assert emotion["emotion"] == "neutral"
++    assert emotion["intensity"] == 0.0
++    assert emotion["updated_tick"] == 51
++
++
++def test_phase105_build_runtime_style_tags_overlays_emotion_tag():
++    state = {}
++    state = update_runtime_emotion(
++        state,
++        actor_id="comp:lyra",
++        emotion="supportive",
++        intensity=0.9,
++        tick=10,
++    )
++
++    tags = build_runtime_style_tags(
++        state,
++        actor_id="comp:lyra",
++        base_tags=["gentle", "measured"],
++    )
++    assert tags == ["emotion:supportive", "gentle", "measured"]
++
++
++def test_phase105_build_runtime_fallback_text_depends_on_emotion():
++    state = {}
++    state = update_runtime_emotion(
++        state,
++        actor_id="comp:lyra",
++        emotion="wary",
++        intensity=0.7,
++        tick=10,
++    )
++
++    text = build_runtime_fallback_text(
++        state,
++        actor_id="comp:lyra",
++        base_text="",
++    )
++    assert text == "Something feels off."
++
++
++def test_phase105_finalize_runtime_turn_uses_emotional_fallback_when_text_empty():
++    state = {}
++    state = update_runtime_emotion(
++        state,
++        actor_id="comp:lyra",
++        emotion="supportive",
++        intensity=0.6,
++        tick=200,
++    )
++    state = begin_runtime_turn(
++        state,
++        tick=200,
++        sequence_index=1,
++        actor_id="comp:lyra",
++        speaker_id="comp:lyra",
++        speaker_name="Lyra",
++        role="companion",
++        sequence_id="seq:200:0",
++    )
++    state = finalize_runtime_turn(
++        state,
++        turn_id="turn:200:1:comp:lyra",
++    )
++
++    from app.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
++    dialogue = get_runtime_dialogue_state(state)
++    turn = dialogue["turns"][0]
++    assert turn["status"] == "complete"
++    assert turn["text"] == "We can handle this together."
++    assert turn["emotion"] == "supportive"
+*** End Patch
+8) Add tests
+src/tests/unit/test_phase105_emotions_unit.py
+*** Begin Patch
+*** Add File: src/tests/unit/test_phase105_emotions_unit.py
++from app.rpg.runtime.dialogue_runtime import (
++    _normalize_emotion_name,
++    _normalize_emotion_entry,
++    build_runtime_fallback_text,
++    build_runtime_style_tags,
++)
++
++
++def test_phase105_normalize_emotion_name_falls_back_to_neutral():
++    assert _normalize_emotion_name("tense") == "tense"
++    assert _normalize_emotion_name("invalid") == "neutral"
++    assert _normalize_emotion_name(None) == "neutral"
++
++
++def test_phase105_normalize_emotion_entry_clamps_intensity():
++    entry = _normalize_emotion_entry("comp:lyra", {
++        "emotion": "warm",
++        "intensity": 5.0,
++        "updated_tick": "7",
++    })
++    assert entry == {
++        "actor_id": "comp:lyra",
++        "emotion": "warm",
++        "intensity": 1.0,
++        "updated_tick": 7,
++    }
++
++
++def test_phase105_build_runtime_style_tags_ignores_neutral_emotion_overlay():
++    state = {}
++    tags = build_runtime_style_tags(
++        state,
++        actor_id="npc:guard",
++        base_tags=["brief"],
++    )
++    assert tags == ["brief"]
++
++
++def test_phase105_build_runtime_fallback_text_prefers_base_text():
++    state = {}
++    assert build_runtime_fallback_text(
++        state,
++        actor_id="npc:guard",
++        base_text="Already have text.",
++    ) == "Already have text."
+*** End Patch
+END OF PART 4/6
+
+Next chunk is:
+
+Part 5/6: presentation bridge + routes
+
+Part 5/6: presentation bridge + routes
+Thought for 16s
+
+Below is Part 5/6 only.
+
+Hard boundary: this message contains only
+Part 5/6: presentation bridge + routes
+
+Note: this part is aligned to the actual files present in your uploaded src.zip, including:
+
+src/app/rpg/presentation/__init__.py
+src/app/rpg/api/rpg_presentation_routes.py
+src/app/rpg/presentation/personality_state.py
+PART 5/6 — PRESENTATION BRIDGE + ROUTES
+1) Update file
+src/app/rpg/presentation/__init__.py
+
+Export the runtime bridge from the actual presentation package.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/__init__.py
+@@
+ from .dialogue_fallbacks import (
+     build_deterministic_dialogue_fallback,
+     build_deterministic_scene_fallback,
+ )
++from .runtime_bridge import (
++    build_runtime_presentation_payload,
++)
+@@
+     "build_dialogue_llm_payload",
+     "build_scene_llm_payload",
+     "build_deterministic_dialogue_fallback",
+     "build_deterministic_scene_fallback",
++    "build_runtime_presentation_payload",
+ ]
+*** End Patch
+2) Update file
+src/app/rpg/presentation/runtime_bridge.py
+
+Refine the bridge so it emits stable presentation payloads for turns, stream state, participants, emotions, interruptions, and derived style tags.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/runtime_bridge.py
+@@
+ """Phase 10.5 — Runtime-to-presentation bridge.
+ 
+ Pure read-only bridge from normalized runtime dialogue state to presentation
+ payload shape.
+ """
+ from __future__ import annotations
+ 
+ from typing import Any, Dict, List
+ 
+ from app.rpg.runtime import (
+     get_runtime_dialogue_state,
+     build_runtime_style_tags,
+ )
+@@
+ def _build_turn_payload(turn: Dict[str, Any]) -> Dict[str, Any]:
+     turn = _safe_dict(turn)
+@@
+     return {
+         "turn_id": _safe_str(turn.get("turn_id")),
+         "sequence_id": _safe_str(turn.get("sequence_id")),
+         "tick": _safe_int(turn.get("tick"), 0),
+         "sequence_index": _safe_int(turn.get("sequence_index"), 0),
+         "actor_id": _safe_str(turn.get("actor_id")),
+         "speaker_id": _safe_str(turn.get("speaker_id")),
+         "speaker_name": _safe_str(turn.get("speaker_name")),
+         "role": _safe_str(turn.get("role")),
+         "text": _safe_str(turn.get("text")),
+         "status": _safe_str(turn.get("status")),
+         "emotion": _safe_str(turn.get("emotion")),
+         "style_tags": [],
+         "interruption": bool(turn.get("interruption")),
+         "interrupt_target_id": _safe_str(turn.get("interrupt_target_id")),
+         "chunks": chunks,
+     }
+@@
+ def build_runtime_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Build a pure presentation payload from runtime dialogue state."""
+     dialogue_state = get_runtime_dialogue_state(simulation_state)
+ 
+     turns = [
+         _build_turn_payload(v)
+         for v in _safe_list(dialogue_state.get("turns"))
+         if isinstance(v, dict)
+     ]
+     for idx, turn in enumerate(turns):
+         turns[idx]["style_tags"] = build_runtime_style_tags(
+             simulation_state,
+             actor_id=_safe_str(turn.get("actor_id")),
+             base_tags=[],
+         )
+@@
+     sequence_participants = []
+     for item in _safe_list(dialogue_state.get("sequence_participants")):
+         item = _safe_dict(item)
+         if not item:
+             continue
+         sequence_participants.append({
+             "actor_id": _safe_str(item.get("actor_id")),
+             "speaker_id": _safe_str(item.get("speaker_id")),
+             "speaker_name": _safe_str(item.get("speaker_name")),
+             "role": _safe_str(item.get("role")),
+             "sequence_index": _safe_int(item.get("sequence_index"), 0),
+         })
++    sequence_participants = sorted(
++        sequence_participants,
++        key=lambda item: (
++            _safe_int(item.get("sequence_index"), 0),
++            _safe_str(item.get("role")),
++            _safe_str(item.get("actor_id")),
++        ),
++    )
+ 
+     pending_interruptions = []
+     for item in _safe_list(dialogue_state.get("pending_interruptions")):
+         item = _safe_dict(item)
+         if not item:
+             continue
+         pending_interruptions.append({
+             "actor_id": _safe_str(item.get("actor_id")),
+             "target_id": _safe_str(item.get("target_id")),
+             "reason": _safe_str(item.get("reason")),
+             "priority": _safe_int(item.get("priority"), 0),
+         })
++    pending_interruptions = sorted(
++        pending_interruptions,
++        key=lambda item: (
++            _safe_int(item.get("priority"), 0),
++            _safe_str(item.get("actor_id")),
++            _safe_str(item.get("target_id")),
++        ),
++    )
++
++    interruption_log = []
++    for item in _safe_list(dialogue_state.get("interruption_log")):
++        item = _safe_dict(item)
++        if not item:
++            continue
++        interruption_log.append({
++            "tick": _safe_int(item.get("tick"), 0),
++            "actor_id": _safe_str(item.get("actor_id")),
++            "target_id": _safe_str(item.get("target_id")),
++            "reason": _safe_str(item.get("reason")),
++            "turn_id": _safe_str(item.get("turn_id")),
++        })
++    interruption_log = sorted(
++        interruption_log,
++        key=lambda item: (
++            _safe_int(item.get("tick"), 0),
++            _safe_str(item.get("actor_id")),
++            _safe_str(item.get("target_id")),
++        ),
++    )
+ 
+     return {
+         "runtime_dialogue": {
+             "active_sequence_id": _safe_str(dialogue_state.get("active_sequence_id")),
+             "active_turn_id": _safe_str(dialogue_state.get("active_turn_id")),
+             "sequence_tick": _safe_int(dialogue_state.get("sequence_tick"), 0),
+             "turn_cursor": _safe_int(dialogue_state.get("turn_cursor"), 0),
+             "sequence_participants": sequence_participants,
+             "turns": turns,
+             "pending_interruptions": pending_interruptions,
+-            "interruption_log": _safe_list(dialogue_state.get("interruption_log")),
++            "interruption_log": interruption_log,
+             "stream": {
+                 "active": bool(stream_state.get("active")),
+                 "active_turn_id": _safe_str(stream_state.get("active_turn_id")),
+                 "chunks": stream_chunks,
+             },
+             "emotions": emotions,
+         }
+     }
+*** End Patch
+3) Update file
+src/app/rpg/api/rpg_presentation_routes.py
+
+Merge runtime output into the actual presentation routes.
+
+*** Begin Patch
+*** Update File: src/app/rpg/api/rpg_presentation_routes.py
+@@
+ from app.rpg.presentation import (
+     build_scene_presentation_payload,
+     build_dialogue_presentation_payload,
++    build_runtime_presentation_payload,
+ )
+ from app.rpg.presentation.speaker_cards import build_speaker_cards
+@@
+ def presentation_scene():
+@@
+     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+     simulation_state = ensure_player_party(simulation_state)
+ 
+     payload = build_scene_presentation_payload(simulation_state, scene_state)
++    runtime_payload = build_runtime_presentation_payload(simulation_state)
++    if isinstance(payload, dict):
++        payload = dict(payload)
++        payload["runtime"] = runtime_payload
+ 
+     return jsonify({
+         "ok": True,
+         "presentation": payload,
+     })
+@@
+ def presentation_dialogue():
+@@
+     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+     simulation_state = ensure_player_party(simulation_state)
+ 
+     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
++    runtime_payload = build_runtime_presentation_payload(simulation_state)
++    if isinstance(payload, dict):
++        payload = dict(payload)
++        payload["runtime"] = runtime_payload
+ 
+     return jsonify({
+         "ok": True,
+         "presentation": payload,
+     })
+@@
+ def presentation_speakers():
+@@
+     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+     simulation_state = ensure_player_party(simulation_state)
+ 
+     cards = build_speaker_cards(simulation_state, scene_state)
++    runtime_payload = build_runtime_presentation_payload(simulation_state)
+ 
+     return jsonify({
+         "ok": True,
+         "speaker_cards": cards,
++        "runtime": runtime_payload,
+     })
+*** End Patch
+4) Update file
+src/app/rpg/presentation/personality_state.py
+
+Overlay runtime emotion into personality output without mutating stored personality profiles.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/personality_state.py
+@@
+ from __future__ import annotations
+ 
+ from typing import Any, Dict, List
++
++from app.rpg.runtime import build_runtime_style_tags
+@@
+ def get_actor_personality_profile(simulation_state: Dict[str, Any], actor_id: str, default_name: str = "") -> Dict[str, Any]:
+@@
+-    return _normalize_profile(profiles.get(actor_id, {}))
++    profile = _normalize_profile(profiles.get(actor_id, {}))
++    profile["style_tags"] = build_runtime_style_tags(
++        simulation_state,
++        actor_id=actor_id,
++        base_tags=profile.get("style_tags", []),
++    )
++    return profile
+*** End Patch
+5) Update file
+src/app/rpg/presentation/personality_state.py
+
+Make personality summaries expose runtime emotional overlay visibility for inspector-friendly debugging.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/personality_state.py
+@@
+ def build_personality_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Build a summary of all personality profiles."""
+     simulation_state = ensure_personality_state(simulation_state)
+     profiles = _safe_dict(
+         _safe_dict(_safe_dict(simulation_state.get("presentation_state")).get("personality_state")).get("profiles")
+     )
++    emotional_overlay_actor_ids = []
++    for actor_id in sorted(profiles.keys()):
++        profile = get_actor_personality_profile(simulation_state, actor_id)
++        style_tags = _safe_list(profile.get("style_tags"))
++        if any(_safe_str(v).startswith("emotion:") for v in style_tags):
++            emotional_overlay_actor_ids.append(actor_id)
+     return {
+         "profile_count": len(profiles),
+         "actor_ids": sorted(profiles.keys())[:20],
++        "emotional_overlay_actor_ids": emotional_overlay_actor_ids[:20],
+     }
+*** End Patch
+6) Add tests
+src/tests/functional/test_phase105_presentation_routes_functional.py
+
+This validates the actual route integration.
+
+*** Begin Patch
+*** Add File: src/tests/functional/test_phase105_presentation_routes_functional.py
++from app import create_app
++
++
++def test_phase105_scene_presentation_route_includes_runtime_payload():
++    app = create_app()
++    client = app.test_client()
++
++    response = client.post(
++        "/api/rpg/presentation/scene",
++        json={
++            "setup_payload": {
++                "simulation_state": {
++                    "player_state": {
++                        "actor_id": "player:hero",
++                        "name": "Hero",
++                    },
++                    "runtime_state": {
++                        "dialogue": {
++                            "active_sequence_id": "seq:10:0",
++                            "active_turn_id": "turn:10:1:comp:lyra",
++                            "sequence_tick": 10,
++                            "turn_cursor": 1,
++                            "turns": [
++                                {
++                                    "turn_id": "turn:10:1:comp:lyra",
++                                    "sequence_id": "seq:10:0",
++                                    "tick": 10,
++                                    "sequence_index": 1,
++                                    "actor_id": "comp:lyra",
++                                    "speaker_id": "comp:lyra",
++                                    "speaker_name": "Lyra",
++                                    "role": "companion",
++                                    "text": "We should go.",
++                                    "status": "complete",
++                                    "emotion": "tense",
++                                    "interruption": False,
++                                    "interrupt_target_id": "",
++                                    "chunks": [],
++                                }
++                            ],
++                            "stream": {
++                                "active": False,
++                                "active_turn_id": "",
++                                "chunks": [],
++                            },
++                            "pending_interruptions": [],
++                            "interruption_log": [],
++                            "emotions": {
++                                "comp:lyra": {
++                                    "emotion": "tense",
++                                    "intensity": 0.8,
++                                    "updated_tick": 10,
++                                }
++                            },
++                            "sequence_participants": [
++                                {
++                                    "actor_id": "player:hero",
++                                    "speaker_id": "player:hero",
++                                    "speaker_name": "Hero",
++                                    "role": "player",
++                                    "sequence_index": 0,
++                                },
++                                {
++                                    "actor_id": "comp:lyra",
++                                    "speaker_id": "comp:lyra",
++                                    "speaker_name": "Lyra",
++                                    "role": "companion",
++                                    "sequence_index": 1,
++                                },
++                            ],
++                        }
++                    },
++                }
++            },
++            "scene_state": {
++                "location_id": "loc:test",
++                "location_name": "Test Scene",
++            },
++        },
++    )
++
++    assert response.status_code == 200
++    payload = response.get_json()
++    assert payload["ok"] is True
++    assert "runtime" in payload["presentation"]
++    assert payload["presentation"]["runtime"]["runtime_dialogue"]["active_sequence_id"] == "seq:10:0"
++
++
++def test_phase105_dialogue_presentation_route_includes_runtime_payload():
++    app = create_app()
++    client = app.test_client()
++
++    response = client.post(
++        "/api/rpg/presentation/dialogue",
++        json={
++            "setup_payload": {
++                "simulation_state": {
++                    "player_state": {
++                        "actor_id": "player:hero",
++                        "name": "Hero",
++                    },
++                    "runtime_state": {
++                        "dialogue": {
++                            "active_sequence_id": "seq:20:0",
++                            "active_turn_id": "",
++                            "sequence_tick": 20,
++                            "turn_cursor": 1,
++                            "turns": [],
++                            "stream": {
++                                "active": False,
++                                "active_turn_id": "",
++                                "chunks": [],
++                            },
++                            "pending_interruptions": [],
++                            "interruption_log": [],
++                            "emotions": {},
++                            "sequence_participants": [],
++                        }
++                    },
++                }
++            },
++            "dialogue_state": {
++                "speaker_id": "comp:lyra",
++                "speaker_name": "Lyra",
++                "text": "Test",
++            },
++        },
++    )
++
++    assert response.status_code == 200
++    payload = response.get_json()
++    assert payload["ok"] is True
++    assert "runtime" in payload["presentation"]
++    assert payload["presentation"]["runtime"]["runtime_dialogue"]["sequence_tick"] == 20
++
++
++def test_phase105_speakers_route_includes_runtime_payload():
++    app = create_app()
++    client = app.test_client()
++
++    response = client.post(
++        "/api/rpg/presentation/speakers",
++        json={
++            "setup_payload": {
++                "simulation_state": {
++                    "player_state": {
++                        "actor_id": "player:hero",
++                        "name": "Hero",
++                    },
++                    "runtime_state": {
++                        "dialogue": {
++                            "active_sequence_id": "",
++                            "active_turn_id": "",
++                            "sequence_tick": 0,
++                            "turn_cursor": 0,
++                            "turns": [],
++                            "stream": {
++                                "active": False,
++                                "active_turn_id": "",
++                                "chunks": [],
++                            },
++                            "pending_interruptions": [],
++                            "interruption_log": [],
++                            "emotions": {},
++                            "sequence_participants": [],
++                        }
++                    },
++                }
++            },
++            "scene_state": {},
++        },
++    )
++
++    assert response.status_code == 200
++    payload = response.get_json()
++    assert payload["ok"] is True
++    assert "runtime" in payload
++    assert "runtime_dialogue" in payload["runtime"]
+*** End Patch
+7) Add tests
+src/tests/regression/test_phase105_presentation_runtime_regression.py
+
+Regression coverage for stable payload shape.
+
+*** Begin Patch
+*** Add File: src/tests/regression/test_phase105_presentation_runtime_regression.py
++from app.rpg.presentation.runtime_bridge import build_runtime_presentation_payload
++
++
++def test_phase105_runtime_bridge_payload_shape_is_stable():
++    state = {
++        "runtime_state": {
++            "dialogue": {
++                "active_sequence_id": "seq:9:0",
++                "active_turn_id": "turn:9:1:comp:lyra",
++                "sequence_tick": 9,
++                "turn_cursor": 1,
++                "turns": [
++                    {
++                        "turn_id": "turn:9:1:comp:lyra",
++                        "sequence_id": "seq:9:0",
++                        "tick": 9,
++                        "sequence_index": 1,
++                        "actor_id": "comp:lyra",
++                        "speaker_id": "comp:lyra",
++                        "speaker_name": "Lyra",
++                        "role": "companion",
++                        "text": "Move.",
++                        "status": "complete",
++                        "emotion": "stern",
++                        "interruption": False,
++                        "interrupt_target_id": "",
++                        "chunks": [],
++                    }
++                ],
++                "pending_interruptions": [
++                    {
++                        "actor_id": "comp:zane",
++                        "target_id": "npc:guard",
++                        "reason": "runtime_interjection",
++                        "priority": 1,
++                    }
++                ],
++                "interruption_log": [
++                    {
++                        "tick": 9,
++                        "actor_id": "comp:zane",
++                        "target_id": "npc:guard",
++                        "reason": "runtime_interjection",
++                        "turn_id": "turn:9:2:comp:zane",
++                    }
++                ],
++                "stream": {
++                    "active": False,
++                    "active_turn_id": "",
++                    "chunks": [],
++                },
++                "emotions": {
++                    "comp:lyra": {
++                        "emotion": "stern",
++                        "intensity": 0.7,
++                        "updated_tick": 9,
++                    }
++                },
++                "sequence_participants": [
++                    {
++                        "actor_id": "player:hero",
++                        "speaker_id": "player:hero",
++                        "speaker_name": "Hero",
++                        "role": "player",
++                        "sequence_index": 0,
++                    },
++                    {
++                        "actor_id": "comp:lyra",
++                        "speaker_id": "comp:lyra",
++                        "speaker_name": "Lyra",
++                        "role": "companion",
++                        "sequence_index": 1,
++                    },
++                ],
++            }
++        }
++    }
++
++    payload = build_runtime_presentation_payload(state)
++    runtime = payload["runtime_dialogue"]
++
++    assert sorted(runtime.keys()) == sorted([
++        "active_sequence_id",
++        "active_turn_id",
++        "sequence_tick",
++        "turn_cursor",
++        "sequence_participants",
++        "turns",
++        "pending_interruptions",
++        "interruption_log",
++        "stream",
++        "emotions",
++    ])
++    assert runtime["turns"][0]["style_tags"] == ["emotion:stern"]
+*** End Patch
+END OF PART 5/6
+
+Next chunk is:
+
+Part 6/6: bug pass + fix patches
+
+Part 6/6: bug pass + fix patches
+
+Below is Part 6/6 only.
+
+Hard boundary: this message contains only
+Part 6/6: bug pass + fix patches
+
+PART 6/6 — BUG PASS + FIX PATCHES
+
+This final chunk does two things:
+
+adds a targeted review / bug pass for Phase 10.5
+applies the required fix patches to prevent the most likely issues:
+normalization dropping sequence_participants
+runtime bridge import failures if package export order changes
+route merge safety
+personality overlay duplication edge cases
+interruption ordering bug
+missing bounded regression coverage
+1) BUG PASS CHECKLIST
+
+Use this after Parts 1–5 are applied.
+
+Determinism
+ same simulation_state produces byte-identical runtime payload
+ no wall-clock time used
+ no UUID / random IDs used
+ all actor collections are stably sorted
+ interruptions are selected with deterministic tie-breaks
+Bounded state
+ dialogue.turns <= 20
+ per-turn chunks <= 12
+ global stream chunks <= 40
+ pending interruptions <= 4
+ interruption log <= 12
+ emotion actors <= 16
+ sequence participants <= 8
+Runtime / presentation separation
+ runtime_bridge.py does not mutate simulation_state
+ no builder writes back into presentation/personality source state
+ all mutation is confined to runtime mutators
+Emotional continuity
+ emotion tags appear read-only in output
+ neutral emotion does not add emotion:neutral
+ fallback text is deterministic
+ decay is tick-based only
+Route integration
+ /api/rpg/presentation/scene includes presentation.runtime
+ /api/rpg/presentation/dialogue includes presentation.runtime
+ /api/rpg/presentation/speakers includes top-level runtime
+ existing response keys remain intact
+2) FIX PATCH — normalize sequence_participants safely
+
+In earlier chunks, start_runtime_sequence() writes sequence_participants, but Part 1’s _normalize_dialogue_state() originally did not include it. Part 3 added it, but this fix makes the structure more defensive and keeps backward compatibility if the field is absent.
+
+Update file
+
+src/app/rpg/runtime/dialogue_runtime.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def _normalize_dialogue_state(dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
+     dialogue_state = _safe_dict(dialogue_state)
+@@
+-    sequence_participants = [
+-        _normalize_sequence_actor(v)
+-        for v in _safe_list(dialogue_state.get("sequence_participants"))
+-        if isinstance(v, dict)
+-    ]
++    sequence_participants_in = dialogue_state.get("sequence_participants", [])
++    sequence_participants = [
++        _normalize_sequence_actor(v)
++        for v in _safe_list(sequence_participants_in)
++        if isinstance(v, dict)
++    ]
+     sequence_participants = sorted(
+         sequence_participants,
+         key=lambda item: (
+             _safe_int(item.get("sequence_index"), 0),
+             _role_precedence(item.get("role")),
+             _safe_str(item.get("actor_id")),
+         ),
+     )[:_MAX_SEQUENCE_ACTORS]
+*** End Patch
+3) FIX PATCH — stable interruption ordering bug
+
+Earlier parts sorted pending interruptions by ascending priority because _sort_key_pending_interrupt() returned raw priority. That is wrong if higher priority should win.
+
+Update file
+
+src/app/rpg/runtime/dialogue_runtime.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def _sort_key_pending_interrupt(item: Dict[str, Any]) -> Tuple[int, str, str]:
+     return (
+-        _safe_int(item.get("priority"), 0),
++        -_safe_int(item.get("priority"), 0),
+         _safe_str(item.get("actor_id")),
+         _safe_str(item.get("target_id")),
+     )
+*** End Patch
+4) FIX PATCH — make presentation bridge resilient to runtime package export drift
+
+This avoids fragile import behavior if app.rpg.runtime.__init__ is modified later.
+
+Update file
+
+src/app/rpg/presentation/runtime_bridge.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/runtime_bridge.py
+@@
+-from app.rpg.runtime import (
+-    get_runtime_dialogue_state,
+-    build_runtime_style_tags,
+-)
++from app.rpg.runtime.dialogue_runtime import (
++    get_runtime_dialogue_state,
++    build_runtime_style_tags,
++)
+*** End Patch
+5) FIX PATCH — route merge safety for non-dict payloads
+
+If any presentation builder unexpectedly returns a non-dict in some edge case, avoid throwing and preserve backward compatibility.
+
+Update file
+
+src/app/rpg/api/rpg_presentation_routes.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/api/rpg_presentation_routes.py
+@@
+     payload = build_scene_presentation_payload(simulation_state, scene_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+-    if isinstance(payload, dict):
+-        payload = dict(payload)
+-        payload["runtime"] = runtime_payload
++    if isinstance(payload, dict):
++        payload = dict(payload)
++        payload["runtime"] = runtime_payload
++    else:
++        payload = {
++            "content": payload,
++            "runtime": runtime_payload,
++        }
+@@
+     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+-    if isinstance(payload, dict):
+-        payload = dict(payload)
+-        payload["runtime"] = runtime_payload
++    if isinstance(payload, dict):
++        payload = dict(payload)
++        payload["runtime"] = runtime_payload
++    else:
++        payload = {
++            "content": payload,
++            "runtime": runtime_payload,
++        }
+*** End Patch
+6) FIX PATCH — prevent duplicate runtime emotion tags in personality output
+
+Even though build_runtime_style_tags() dedupes, this patch guarantees normalized sorted tags at the personality boundary too.
+
+Update file
+
+src/app/rpg/presentation/personality_state.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/personality_state.py
+@@
+ def get_actor_personality_profile(simulation_state: Dict[str, Any], actor_id: str, default_name: str = "") -> Dict[str, Any]:
+@@
+     profile = _normalize_profile(profiles.get(actor_id, {}))
+-    profile["style_tags"] = build_runtime_style_tags(
++    profile["style_tags"] = sorted(build_runtime_style_tags(
+         simulation_state,
+         actor_id=actor_id,
+         base_tags=profile.get("style_tags", []),
+-    )
++    ))
+     return profile
+*** End Patch
+7) FIX PATCH — ensure finalized turns keep final emotion snapshot stable
+
+If emotion changes after the turn begins but before finalization, the turn record should preserve the turn-start emotion snapshot, not silently drift.
+
+Update file
+
+src/app/rpg/runtime/dialogue_runtime.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def finalize_runtime_turn(
+     simulation_state: Dict[str, Any],
+@@
+     if final_text:
+         turn["text"] = _safe_str(final_text)
+     else:
+         rebuilt = _rebuild_turn_text_from_chunks(turn)
+         turn["text"] = build_runtime_fallback_text(
+             simulation_state,
+             actor_id=_safe_str(turn.get("actor_id")),
+             base_text=rebuilt,
+         )
+ 
++    # Preserve the emotion snapshot captured on the turn, rather than
++    # re-reading live runtime emotion here.
++    turn["emotion"] = _normalize_emotion_name(turn.get("emotion"))
+     turn["status"] = "complete"
+*** End Patch
+8) FIX PATCH — ensure interrupted turns keep emotion snapshot stable
+Update file
+
+src/app/rpg/runtime/dialogue_runtime.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/runtime/dialogue_runtime.py
+@@
+ def mark_runtime_turn_interrupted(
+     simulation_state: Dict[str, Any],
+@@
+     if not turn.get("text"):
+         rebuilt = _rebuild_turn_text_from_chunks(turn)
+         turn["text"] = build_runtime_fallback_text(
+             simulation_state,
+             actor_id=_safe_str(turn.get("actor_id")),
+             base_text=rebuilt,
+         )
++    turn["emotion"] = _normalize_emotion_name(turn.get("emotion"))
+     turns[turn_idx] = _normalize_turn(turn)
+*** End Patch
+9) FIX PATCH — add bounded regression coverage for sequence participants
+Add file
+
+src/tests/regression/test_phase105_runtime_bounds_regression.py
+
+*** Begin Patch
+*** Add File: src/tests/regression/test_phase105_runtime_bounds_regression.py
++from app.rpg.runtime.dialogue_runtime import (
++    ensure_runtime_state,
++    get_runtime_dialogue_state,
++    start_runtime_sequence,
++)
++
++
++def test_phase105_sequence_participants_are_bounded_to_eight():
++    companions = [{"actor_id": f"comp:{i}"} for i in range(10)]
++    npcs = [{"actor_id": f"npc:{i}"} for i in range(10)]
++
++    state = {"player_id": "player:hero"}
++    state = start_runtime_sequence(
++        state,
++        tick=5,
++        sequence_index=0,
++        companions=companions,
++        npcs=npcs,
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    assert len(dialogue["sequence_participants"]) == 8
++    assert dialogue["sequence_participants"][0]["actor_id"] == "player:hero"
++
++
++def test_phase105_runtime_state_normalization_preserves_empty_sequence_participants():
++    state = ensure_runtime_state({
++        "runtime_state": {
++            "dialogue": {
++                "sequence_participants": [],
++            }
++        }
++    })
++    dialogue = get_runtime_dialogue_state(state)
++    assert dialogue["sequence_participants"] == []
+*** End Patch
+10) FIX PATCH — add deterministic regression coverage for interruption priority ordering
+Add file
+
+src/tests/regression/test_phase105_interruption_priority_regression.py
+
+*** Begin Patch
+*** Add File: src/tests/regression/test_phase105_interruption_priority_regression.py
++from app.rpg.runtime.dialogue_runtime import (
++    apply_runtime_interruptions,
++    get_runtime_dialogue_state,
++)
++
++
++def test_phase105_pending_interruptions_sort_highest_priority_first():
++    state = {}
++    state = apply_runtime_interruptions(
++        state,
++        candidates=[
++            {
++                "actor_id": "comp:low",
++                "target_id": "npc:guard",
++                "reason": "runtime_interjection",
++                "priority": 1,
++            },
++            {
++                "actor_id": "comp:high",
++                "target_id": "npc:guard",
++                "reason": "runtime_interjection",
++                "priority": 5,
++            },
++        ],
++    )
++
++    dialogue = get_runtime_dialogue_state(state)
++    assert [v["actor_id"] for v in dialogue["pending_interruptions"]] == [
++        "comp:high",
++        "comp:low",
++    ]
+*** End Patch
+11) FIX PATCH — add regression for route fallback wrapper behavior
+Add file
+
+src/tests/regression/test_phase105_route_merge_safety_regression.py
+
+*** Begin Patch
+*** Add File: src/tests/regression/test_phase105_route_merge_safety_regression.py
++from unittest.mock import patch
++
++from app import create_app
++
++
++def test_phase105_scene_route_wraps_non_dict_payload_and_keeps_runtime():
++    app = create_app()
++    client = app.test_client()
++
++    with patch(
++        "app.rpg.api.rpg_presentation_routes.build_scene_presentation_payload",
++        return_value="scene-text"
++    ):
++        response = client.post(
++            "/api/rpg/presentation/scene",
++            json={
++                "setup_payload": {
++                    "simulation_state": {
++                        "player_state": {
++                            "actor_id": "player:hero",
++                            "name": "Hero",
++                        }
++                    }
++                },
++                "scene_state": {},
++            },
++        )
++
++    assert response.status_code == 200
++    data = response.get_json()
++    assert data["presentation"]["content"] == "scene-text"
++    assert "runtime" in data["presentation"]
+*** End Patch
+12) POST-PATCH REVIEW NOTES
+
+After Parts 1–6, the main expected Phase 10.5 structure is:
+
+presentation_payload = {
+    ...existing_phase_10_fields...,
+    "runtime": {
+        "runtime_dialogue": {
+            "active_sequence_id": str,
+            "active_turn_id": str,
+            "sequence_tick": int,
+            "turn_cursor": int,
+            "sequence_participants": [...],
+            "turns": [...],
+            "pending_interruptions": [...],
+            "interruption_log": [...],
+            "stream": {
+                "active": bool,
+                "active_turn_id": str,
+                "chunks": [...],
+            },
+            "emotions": [...],
+        }
+    }
+}
+
+And the owned mutable state is:
+
+simulation_state["runtime_state"]["dialogue"]
+
+That keeps:
+
+mutation in runtime
+rendering in presentation
+visibility in inspector/tick diff
+deterministic bounded behavior
+END OF PART 6/6
+
+You now have the full strict-chunked Phase 10.5 patch spec end-to-end.

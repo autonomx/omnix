@@ -30,6 +30,9 @@ from .dialogue_fallbacks import (
     build_deterministic_dialogue_fallback,
     build_deterministic_scene_fallback,
 )
+from .runtime_bridge import (
+    build_runtime_presentation_payload,
+)
 
 __all__ = [
     "build_personality_prompt_hints",
@@ -45,4 +48,5 @@ __all__ = [
     "build_scene_llm_payload",
     "build_deterministic_dialogue_fallback",
     "build_deterministic_scene_fallback",
+    "build_runtime_presentation_payload",
 ]
