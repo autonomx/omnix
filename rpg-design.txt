@@ -1,790 +1,878 @@
-Phase 6.5 — Social Simulation
+Phase 8.1 — Dialogue System with LLM Prompts + UI Integration
 
-Same level, literal apply-this-patch spec.
+full literal apply-this-patch diff spec
 
 Goal
 
 Move from:
 
-isolated NPC minds reacting to player/world events
+“dialogue mode” as a state flag
 
 To:
 
-NPCs and factions influencing each other through:
-alliances
-betrayals
-rumor spread
-group decisions
+a real dialogue loop:
+start conversation
+send player message
+generate NPC reply
+return structured dialogue choices
+persist transcript
+expose it in frontend UI
 
-Design rules
+Rules:
 
-deterministic only
-bounded lists/maps
-serialized state everywhere
-no random spread
-no direct narrator-owned state
-social outputs must become simulation events/consequences first
-New systems in Phase 6.5
-
-Create a new package:
-
-src/app/rpg/social/
+simulation remains authoritative
+dialogue state is serializable
+LLM output is parsed/validated
+deterministic fallback exists
+no freeform unbounded transcript growth
+New backend files
+src/app/rpg/ai/dialogue/
   __init__.py
-  reputation_graph.py
-  alliance_system.py
-  betrayal_propagation.py
-  rumor_system.py
-  group_decision.py
+  dialogue_prompt_builder.py
+  dialogue_response_parser.py
+  dialogue_manager.py
 
-And integrate with:
+src/app/rpg/api/
+  rpg_dialogue_routes.py
+New frontend files
+src/static/rpg/
+  rpgDialogueClient.js
+  rpgDialogueRenderer.js
+State additions
 
-src/app/rpg/creator/world_simulation.py
-src/app/rpg/creator/world_player_actions.py
-src/app/rpg/creator/world_scene_generator.py
-src/app/rpg/ai/world_scene_narrator.py
-Social state shape
+Under simulation_state["player_state"] add:
 
-Add under simulation_state:
-
-"social_state": {
-    "reputation": {
-        "<source_id>": {
-            "<target_id>": {
-                "trust": 0.0,
-                "fear": 0.0,
-                "respect": 0.0,
-                "hostility": 0.0,
-            }
-        }
-    },
-    "alliances": [
-        {
-            "alliance_id": "ally:faction_a:faction_b",
-            "member_ids": ["faction_a", "faction_b"],
-            "strength": 0.6,
-            "status": "active",
-            "reason": "Shared opposition to faction_c",
-        }
-    ],
-    "rumors": [
-        {
-            "rumor_id": "rumor:tick:idx",
-            "type": "player_support|player_escalation|betrayal|faction_conflict",
-            "subject_id": "player",
-            "source_id": "npc_guard_1",
-            "location_id": "south_gate",
-            "faction_id": "city_watch",
-            "text": "The player backed the city watch at South Gate.",
-            "reach": 2,
-            "credibility": 0.7,
-            "heat": 2,
-            "tick": 4,
-            "status": "active",
-        }
-    ],
-    "group_positions": {
-        "<faction_id>": {
-            "target_id": "player",
-            "stance": "support|oppose|watch|fear",
-            "score": 0.4,
-            "updated_tick": 4,
-        }
-    }
+"dialogue_state": {
+    "active": False,
+    "npc_id": "",
+    "scene_id": "",
+    "turn_index": 0,
+    "history": [],
+    "suggested_replies": [],
 }
 
 Bounds:
 
-max reputation edges per source: 24
-max alliances: 32
-max rumors: 64
-max active rumors surfaced per tick: 8
-max group positions: 32
-File-by-file apply-this-patch spec
-1. Create src/app/rpg/social/__init__.py
-from .reputation_graph import ReputationGraph
-from .alliance_system import AllianceSystem
-from .betrayal_propagation import BetrayalPropagation
-from .rumor_system import RumorSystem
-from .group_decision import GroupDecisionEngine
-
-__all__ = [
-    "ReputationGraph",
-    "AllianceSystem",
-    "BetrayalPropagation",
-    "RumorSystem",
-    "GroupDecisionEngine",
-]
-2. Create src/app/rpg/social/reputation_graph.py
-from __future__ import annotations
-from typing import Any, Dict
-
-_KEYS = ("trust", "fear", "respect", "hostility")
-_MAX_TARGETS_PER_SOURCE = 24
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        return float(v)
-    except Exception:
-        return default
-
-
-def _clamp(v: float) -> float:
-    return max(-1.0, min(1.0, v))
-
-
-class ReputationGraph:
-    def __init__(self, edges: Dict[str, Dict[str, Dict[str, float]]] | None = None):
-        self.edges: Dict[str, Dict[str, Dict[str, float]]] = {}
-        raw = edges or {}
-        for source_id, targets in raw.items():
-            source_id = _safe_str(source_id)
-            if not source_id or not isinstance(targets, dict):
-                continue
-            self.edges[source_id] = {}
-            for target_id, rec in sorted(targets.items()):
-                target_id = _safe_str(target_id)
-                if not target_id or not isinstance(rec, dict):
-                    continue
-                self.edges[source_id][target_id] = {
-                    key: _clamp(_safe_float(rec.get(key), 0.0))
-                    for key in _KEYS
-                }
-            self._trim_source(source_id)
-
-    def _ensure(self, source_id: str, target_id: str) -> Dict[str, float]:
-        source_id = _safe_str(source_id)
-        target_id = _safe_str(target_id)
-        source = self.edges.setdefault(source_id, {})
-        rec = source.setdefault(target_id, {key: 0.0 for key in _KEYS})
-        return rec
-
-    def update(self, source_id: str, target_id: str, key: str, delta: float) -> float:
-        if key not in _KEYS:
-            return 0.0
-        rec = self._ensure(source_id, target_id)
-        rec[key] = _clamp(rec.get(key, 0.0) + _safe_float(delta))
-        self._trim_source(_safe_str(source_id))
-        return rec[key]
-
-    def get(self, source_id: str, target_id: str) -> Dict[str, float]:
-        source_id = _safe_str(source_id)
-        target_id = _safe_str(target_id)
-        return dict((self.edges.get(source_id) or {}).get(target_id) or {key: 0.0 for key in _KEYS})
-
-    def top_targets(self, source_id: str, limit: int = 8):
-        source = self.edges.get(_safe_str(source_id)) or {}
-        items = list(source.items())
-        items.sort(
-            key=lambda item: (
-                -(abs(item[1].get("trust", 0.0)) + abs(item[1].get("hostility", 0.0)) + abs(item[1].get("fear", 0.0)) + abs(item[1].get("respect", 0.0))),
-                item[0],
-            )
-        )
-        return [(target_id, dict(rec)) for target_id, rec in items[:max(0, limit)]]
-
-    def _trim_source(self, source_id: str):
-        source = self.edges.get(source_id) or {}
-        items = list(source.items())
-        items.sort(
-            key=lambda item: (
-                -(abs(item[1].get("trust", 0.0)) + abs(item[1].get("hostility", 0.0)) + abs(item[1].get("fear", 0.0)) + abs(item[1].get("respect", 0.0))),
-                item[0],
-            )
-        )
-        self.edges[source_id] = dict(items[:_MAX_TARGETS_PER_SOURCE])
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {source_id: {target_id: dict(rec) for target_id, rec in targets.items()} for source_id, targets in self.edges.items()}
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any] | None):
-        return cls(data or {})
-3. Create src/app/rpg/social/alliance_system.py
-from __future__ import annotations
-from typing import Any, Dict, List
-
-
-_MAX_ALLIANCES = 32
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        return float(v)
-    except Exception:
-        return default
-
-
-def _alliance_id(member_ids: List[str]) -> str:
-    members = sorted(_safe_str(m) for m in member_ids if _safe_str(m))
-    return "ally:" + ":".join(members[:4])
-
-
-class AllianceSystem:
-    def __init__(self, alliances: List[Dict[str, Any]] | None = None):
-        self.alliances: List[Dict[str, Any]] = []
-        for item in alliances or []:
-            if isinstance(item, dict):
-                self.alliances.append({
-                    "alliance_id": _safe_str(item.get("alliance_id")),
-                    "member_ids": sorted([_safe_str(m) for m in (item.get("member_ids") or []) if _safe_str(m)]),
-                    "strength": max(0.0, min(1.0, _safe_float(item.get("strength"), 0.0))),
-                    "status": _safe_str(item.get("status")) or "active",
-                    "reason": _safe_str(item.get("reason")),
-                })
-        self._trim()
-
-    def propose_or_strengthen(self, member_ids: List[str], reason: str, delta: float = 0.1):
-        member_ids = sorted([_safe_str(m) for m in member_ids if _safe_str(m)])
-        if len(member_ids) < 2:
-            return None
-        alliance_id = _alliance_id(member_ids)
-        for item in self.alliances:
-            if item["alliance_id"] == alliance_id:
-                item["strength"] = min(1.0, item["strength"] + _safe_float(delta, 0.1))
-                item["status"] = "active"
-                if reason:
-                    item["reason"] = _safe_str(reason)
-                self._trim()
-                return dict(item)
-        created = {
-            "alliance_id": alliance_id,
-            "member_ids": member_ids,
-            "strength": max(0.0, min(1.0, _safe_float(delta, 0.1))),
-            "status": "active",
-            "reason": _safe_str(reason),
-        }
-        self.alliances.append(created)
-        self._trim()
-        return dict(created)
-
-    def weaken_or_break(self, member_ids: List[str], reason: str, delta: float = 0.2):
-        member_ids = sorted([_safe_str(m) for m in member_ids if _safe_str(m)])
-        alliance_id = _alliance_id(member_ids)
-        for item in self.alliances:
-            if item["alliance_id"] == alliance_id:
-                item["strength"] = max(0.0, item["strength"] - _safe_float(delta, 0.2))
-                if item["strength"] <= 0.05:
-                    item["status"] = "broken"
-                if reason:
-                    item["reason"] = _safe_str(reason)
-                self._trim()
-                return dict(item)
-        return None
-
-    def active_for_member(self, member_id: str, limit: int = 8):
-        member_id = _safe_str(member_id)
-        items = [dict(item) for item in self.alliances if item.get("status") == "active" and member_id in (item.get("member_ids") or [])]
-        items.sort(key=lambda item: (-item.get("strength", 0.0), item.get("alliance_id", "")))
-        return items[:max(0, limit)]
-
-    def _trim(self):
-        self.alliances.sort(key=lambda item: (-item.get("strength", 0.0), item.get("alliance_id", "")))
-        self.alliances = self.alliances[:_MAX_ALLIANCES]
-
-    def to_dict(self):
-        return [dict(item) for item in self.alliances]
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(data or [])
-4. Create src/app/rpg/social/betrayal_propagation.py
-from __future__ import annotations
-from typing import Any, Dict, List
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-class BetrayalPropagation:
-    @staticmethod
-    def apply(event: Dict[str, Any], social_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-        event = event or {}
-        social_state = social_state or {}
-        if _safe_str(event.get("type")) != "betrayal":
-            return []
-
-        source_id = _safe_str(event.get("source_id"))
-        target_id = _safe_str(event.get("target_id"))
-        faction_id = _safe_str(event.get("faction_id"))
-        location_id = _safe_str(event.get("location_id"))
-
-        out: List[Dict[str, Any]] = []
-
-        if faction_id:
-            out.append({
-                "type": "social_shock",
-                "origin": "betrayal_propagation",
-                "source_id": source_id,
-                "target_id": faction_id,
-                "target_kind": "faction",
-                "location_id": location_id,
-                "summary": f"Betrayal involving {source_id or 'unknown'} destabilized faction '{faction_id}'.",
-                "severity": "negative",
-                "salience": 0.8,
-            })
-
-        if target_id:
-            out.append({
-                "type": "trust_collapse",
-                "origin": "betrayal_propagation",
-                "source_id": source_id,
-                "target_id": target_id,
-                "target_kind": "entity",
-                "location_id": location_id,
-                "summary": f"Trust collapsed between '{source_id}' and '{target_id}'.",
-                "severity": "negative",
-                "salience": 0.9,
-            })
-
-        return out[:4]
-5. Create src/app/rpg/social/rumor_system.py
-from __future__ import annotations
-from typing import Any, Dict, List
-
-
-_MAX_RUMORS = 64
-_MAX_NEW_RUMORS_PER_TICK = 8
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        return float(v)
-    except Exception:
-        return default
-
-
-class RumorSystem:
-    def __init__(self, rumors: List[Dict[str, Any]] | None = None):
-        self.rumors: List[Dict[str, Any]] = []
-        for item in rumors or []:
-            if isinstance(item, dict):
-                self.rumors.append({
-                    "rumor_id": _safe_str(item.get("rumor_id")),
-                    "type": _safe_str(item.get("type")),
-                    "subject_id": _safe_str(item.get("subject_id")),
-                    "source_id": _safe_str(item.get("source_id")),
-                    "location_id": _safe_str(item.get("location_id")),
-                    "faction_id": _safe_str(item.get("faction_id")),
-                    "text": _safe_str(item.get("text")),
-                    "reach": int(item.get("reach", 1) or 1),
-                    "credibility": max(0.0, min(1.0, _safe_float(item.get("credibility"), 0.5))),
-                    "heat": int(item.get("heat", 1) or 1),
-                    "tick": int(item.get("tick", 0) or 0),
-                    "status": _safe_str(item.get("status")) or "active",
-                })
-        self._trim()
-
-    def spawn_from_events(self, events: List[Dict[str, Any]], tick: int) -> List[Dict[str, Any]]:
-        created: List[Dict[str, Any]] = []
-        idx = 0
-        for event in events or []:
-            if not isinstance(event, dict):
-                continue
-            typ = _safe_str(event.get("type"))
-            if typ not in {"player_support", "player_escalation", "betrayal", "social_shock", "trust_collapse"}:
-                continue
-            rumor = {
-                "rumor_id": f"rumor:{int(tick)}:{idx}",
-                "type": typ,
-                "subject_id": _safe_str(event.get("target_id")) or _safe_str(event.get("subject_id")) or "unknown",
-                "source_id": _safe_str(event.get("source_id")) or _safe_str(event.get("actor")),
-                "location_id": _safe_str(event.get("location_id")),
-                "faction_id": _safe_str(event.get("faction_id")),
-                "text": _safe_str(event.get("summary")) or typ,
-                "reach": 1,
-                "credibility": 0.7 if _safe_str(event.get("actor")) == "player" else 0.6,
-                "heat": 2,
-                "tick": int(tick),
-                "status": "active",
-            }
-            created.append(rumor)
-            idx += 1
-            if len(created) >= _MAX_NEW_RUMORS_PER_TICK:
-                break
-        self.rumors.extend(created)
-        self._trim()
-        return [dict(item) for item in created]
-
-    def advance(self):
-        for item in self.rumors:
-            if item.get("status") != "active":
-                continue
-            heat = int(item.get("heat", 0) or 0)
-            reach = int(item.get("reach", 0) or 0)
-            if heat > 0:
-                item["heat"] = heat - 1
-                item["reach"] = min(3, reach + 1)
-            else:
-                item["reach"] = max(0, reach - 1)
-                if item["reach"] == 0:
-                    item["status"] = "cold"
-        self._trim()
-
-    def active(self, limit: int = 8):
-        items = [dict(item) for item in self.rumors if item.get("status") == "active"]
-        items.sort(key=lambda item: (-int(item.get("heat", 0) or 0), -int(item.get("reach", 0) or 0), item.get("rumor_id", "")))
-        return items[:max(0, limit)]
-
-    def _trim(self):
-        self.rumors.sort(key=lambda item: (-int(item.get("tick", 0) or 0), item.get("rumor_id", "")))
-        self.rumors = self.rumors[:_MAX_RUMORS]
-
-    def to_dict(self):
-        return [dict(item) for item in self.rumors]
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(data or [])
-6. Create src/app/rpg/social/group_decision.py
-from __future__ import annotations
-from typing import Any, Dict
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-class GroupDecisionEngine:
-    def __init__(self, positions: Dict[str, Dict[str, Any]] | None = None):
-        self.positions = dict(positions or {})
-
-    def evaluate_faction(self, faction_id: str, member_npc_minds: Dict[str, Dict[str, Any]], tick: int):
-        faction_id = _safe_str(faction_id)
-        trust = 0.0
-        hostility = 0.0
-        fear = 0.0
-        count = 0
-
-        for _, mind in sorted((member_npc_minds or {}).items()):
-            beliefs = (mind.get("beliefs") or {}).get("player") or {}
-            trust += float(beliefs.get("trust", 0.0) or 0.0)
-            hostility += float(beliefs.get("hostility", 0.0) or 0.0)
-            fear += float(beliefs.get("fear", 0.0) or 0.0)
-            count += 1
-
-        if count <= 0:
-            stance = "watch"
-            score = 0.0
-        else:
-            avg_trust = trust / count
-            avg_hostility = hostility / count
-            avg_fear = fear / count
-
-            if avg_hostility >= 0.30:
-                stance = "oppose"
-                score = avg_hostility
-            elif avg_trust >= 0.30:
-                stance = "support"
-                score = avg_trust
-            elif avg_fear >= 0.30:
-                stance = "fear"
-                score = avg_fear
-            else:
-                stance = "watch"
-                score = max(avg_trust, avg_hostility, avg_fear)
-
-        self.positions[faction_id] = {
-            "target_id": "player",
-            "stance": stance,
-            "score": round(score, 4),
-            "updated_tick": int(tick),
-        }
-        return dict(self.positions[faction_id])
-
-    def to_dict(self):
-        return {k: dict(v) for k, v in self.positions.items()}
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(data or {})
-Integration patches
-7. Patch src/app/rpg/creator/world_simulation.py
-
-Add imports:
-
-from app.rpg.social import (
-    ReputationGraph,
-    AllianceSystem,
-    BetrayalPropagation,
-    RumorSystem,
-    GroupDecisionEngine,
-)
-
-Add helpers:
-
-def _load_social_state(current):
-    current = current or {}
-    social_state = current.get("social_state") or {}
-    return {
-        "reputation": ReputationGraph.from_dict(social_state.get("reputation")).to_dict(),
-        "alliances": AllianceSystem.from_dict(social_state.get("alliances")).to_dict(),
-        "rumors": RumorSystem.from_dict(social_state.get("rumors")).to_dict(),
-        "group_positions": GroupDecisionEngine.from_dict(social_state.get("group_positions")).to_dict(),
-    }
-
-Then inside step_simulation_state(...), after Phase 6 NPC decisions are computed and before final state writeback:
-
-social_state = _load_social_state(history_state)
-
-reputation = ReputationGraph.from_dict(social_state.get("reputation"))
-alliances = AllianceSystem.from_dict(social_state.get("alliances"))
-rumors = RumorSystem.from_dict(social_state.get("rumors"))
-group_engine = GroupDecisionEngine.from_dict(social_state.get("group_positions"))
-
-all_events = []
-for bucket_name in ("events", "consequences"):
-    bucket = history_state.get(bucket_name) or []
-    if isinstance(bucket, list):
-        for item in bucket:
-            if isinstance(item, dict):
-                all_events.append(item)
-
-# 6.5.1 reputation updates from player-facing and betrayal events
-for event in all_events:
-    typ = str(event.get("type") or "")
-    actor = str(event.get("actor") or "")
-    target_id = str(event.get("target_id") or "")
-    faction_id = str(event.get("faction_id") or "")
-
-    if actor == "player" and faction_id:
-        if typ == "player_support":
-            reputation.update(faction_id, "player", "trust", 0.20)
-            reputation.update(faction_id, "player", "respect", 0.10)
-        elif typ == "player_escalation":
-            reputation.update(faction_id, "player", "hostility", 0.20)
-            reputation.update(faction_id, "player", "fear", 0.10)
-
-    if typ == "betrayal":
-        source_id = str(event.get("source_id") or "")
-        if source_id and target_id:
-            reputation.update(source_id, target_id, "hostility", 0.40)
-            reputation.update(target_id, source_id, "trust", -0.40)
-
-# 6.5.2 alliances
-faction_ids = sorted({
-    str(npc.get("faction_id") or "")
-    for npc in (history_state.get("npc_index") or {}).values()
-    if str(npc.get("faction_id") or "")
-})
-for faction_id in faction_ids:
-    faction_view = reputation.get(faction_id, "player")
-    if faction_view.get("hostility", 0.0) >= 0.30:
-        opposing = [other for other in faction_ids if other != faction_id and reputation.get(other, "player").get("hostility", 0.0) >= 0.30]
-        if opposing:
-            alliances.propose_or_strengthen([faction_id, opposing[0]], "Shared opposition to player", delta=0.10)
-
-# 6.5.3 betrayal propagation
-social_events = []
-for event in all_events:
-    social_events.extend(BetrayalPropagation.apply(event, social_state))
-
-if social_events:
-    history_state.setdefault("events", []).extend(social_events[:8])
-
-# 6.5.4 rumors
-new_rumors = rumors.spawn_from_events(all_events + social_events, tick=tick)
-rumors.advance()
-
-# 6.5.5 group positions from NPC minds
-npc_index = history_state.get("npc_index") or {}
-npc_minds = history_state.get("npc_minds") or {}
-members_by_faction = {}
-for npc_id, npc in sorted(npc_index.items()):
-    faction_id = str(npc.get("faction_id") or "")
-    if not faction_id:
-        continue
-    members_by_faction.setdefault(faction_id, {})
-    if npc_id in npc_minds and isinstance(npc_minds[npc_id], dict):
-        members_by_faction[faction_id][npc_id] = npc_minds[npc_id]
-
-for faction_id, member_minds in sorted(members_by_faction.items()):
-    group_engine.evaluate_faction(faction_id, member_minds, tick=tick)
-
-history_state["social_state"] = {
-    "reputation": reputation.to_dict(),
-    "alliances": alliances.to_dict(),
-    "rumors": rumors.to_dict(),
-    "group_positions": group_engine.to_dict(),
+history max 40 messages
+suggested replies max 5
+
+Message shape:
+
+{
+    "speaker": "player|npc",
+    "npc_id": "",
+    "text": "",
+    "turn_index": 0,
 }
-history_state["active_rumors"] = rumors.active(limit=8)
-8. Patch src/app/rpg/creator/world_player_actions.py
+1. Create src/app/rpg/ai/dialogue/__init__.py
+diff --git a/src/app/rpg/ai/dialogue/__init__.py b/src/app/rpg/ai/dialogue/__init__.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/__init__.py
+@@ -0,0 +1,9 @@
++from .dialogue_prompt_builder import build_dialogue_prompt
++from .dialogue_response_parser import parse_dialogue_response
++from .dialogue_manager import DialogueManager
++
++__all__ = [
++    "build_dialogue_prompt",
++    "parse_dialogue_response",
++    "DialogueManager",
++]
+2. Create src/app/rpg/ai/dialogue/dialogue_prompt_builder.py
+diff --git a/src/app/rpg/ai/dialogue/dialogue_prompt_builder.py b/src/app/rpg/ai/dialogue/dialogue_prompt_builder.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/dialogue_prompt_builder.py
+@@ -0,0 +1,91 @@
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def build_dialogue_prompt(
++    npc: Dict[str, Any],
++    scene: Dict[str, Any],
++    player_state: Dict[str, Any],
++    npc_mind: Dict[str, Any],
++    player_message: str,
++) -> str:
++    npc = _safe_dict(npc)
++    scene = _safe_dict(scene)
++    player_state = _safe_dict(player_state)
++    npc_mind = _safe_dict(npc_mind)
++
++    beliefs = _safe_dict(npc_mind.get("beliefs")).get("player", {})
++    goals = _safe_list(npc_mind.get("goals"))[:3]
++    last_decision = _safe_dict(npc_mind.get("last_decision"))
++    dialogue_state = _safe_dict(player_state.get("dialogue_state"))
++    history = _safe_list(dialogue_state.get("history"))[-6:]
++
++    history_lines = []
++    for item in history:
++        if not isinstance(item, dict):
++            continue
++        speaker = _safe_str(item.get("speaker")) or "unknown"
++        text = _safe_str(item.get("text"))
++        if text:
++            history_lines.append(f"{speaker}: {text}")
++
++    return f"""
++You are generating an RPG NPC dialogue reply.
++
++NPC:
++- id: {_safe_str(npc.get("npc_id") or npc.get("id"))}
++- name: {_safe_str(npc.get("name"))}
++- role: {_safe_str(npc.get("role"))}
++- faction_id: {_safe_str(npc.get("faction_id"))}
++- location_id: {_safe_str(npc.get("location_id"))}
++
++Scene:
++- id: {_safe_str(scene.get("scene_id") or scene.get("id"))}
++- title: {_safe_str(scene.get("title"))}
++- type: {_safe_str(scene.get("scene_type") or scene.get("type"))}
++
++NPC mind:
++- beliefs about player: {beliefs}
++- active goals: {goals}
++- last decision: {last_decision}
++
++Recent dialogue:
++{chr(10).join(history_lines) if history_lines else "(none)"}
++
++Player message:
++{player_message}
++
++Return JSON only with keys:
++- reply_text: string
++- tone: string
++- suggested_replies: array of up to 4 short strings
++- intent: string
++""".strip()
+3. Create src/app/rpg/ai/dialogue/dialogue_response_parser.py
+diff --git a/src/app/rpg/ai/dialogue/dialogue_response_parser.py b/src/app/rpg/ai/dialogue/dialogue_response_parser.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/dialogue_response_parser.py
+@@ -0,0 +1,57 @@
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def parse_dialogue_response(payload: Dict[str, Any] | None) -> Dict[str, Any]:
++    payload = dict(payload or {})
++
++    suggested = []
++    for item in _safe_list(payload.get("suggested_replies"))[:4]:
++        text = _safe_str(item).strip()
++        if text:
++            suggested.append(text)
++
++    reply_text = _safe_str(payload.get("reply_text")).strip()
++    if not reply_text:
++        reply_text = "The NPC studies you carefully before responding."
++
++    return {
++        "reply_text": reply_text,
++        "tone": _safe_str(payload.get("tone")) or "neutral",
++        "intent": _safe_str(payload.get("intent")) or "respond",
++        "suggested_replies": suggested[:4],
++    }
+4. Create src/app/rpg/ai/dialogue/dialogue_manager.py
+diff --git a/src/app/rpg/ai/dialogue/dialogue_manager.py b/src/app/rpg/ai/dialogue/dialogue_manager.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/dialogue_manager.py
+@@ -0,0 +1,170 @@
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from .dialogue_prompt_builder import build_dialogue_prompt
++from .dialogue_response_parser import parse_dialogue_response
++from app.rpg.player import ensure_player_state
++
++
++_MAX_HISTORY = 40
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++class DialogueManager:
++    def __init__(self, llm_client=None):
++        self.llm_client = llm_client
++
++    def _ensure_dialogue_state(self, simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++        simulation_state = ensure_player_state(simulation_state)
++        player_state = simulation_state["player_state"]
++        dialogue_state = player_state.setdefault("dialogue_state", {})
++        dialogue_state.setdefault("active", False)
++        dialogue_state.setdefault("npc_id", "")
++        dialogue_state.setdefault("scene_id", "")
++        dialogue_state.setdefault("turn_index", 0)
++        dialogue_state.setdefault("history", [])
++        dialogue_state.setdefault("suggested_replies", [])
++        return simulation_state
++
++    def start_dialogue(self, simulation_state: Dict[str, Any], npc_id: str, scene_id: str = "") -> Dict[str, Any]:
++        simulation_state = self._ensure_dialogue_state(simulation_state)
++        dialogue_state = simulation_state["player_state"]["dialogue_state"]
++        dialogue_state["active"] = True
++        dialogue_state["npc_id"] = _safe_str(npc_id)
++        dialogue_state["scene_id"] = _safe_str(scene_id)
++        dialogue_state["turn_index"] = 0
++        dialogue_state["history"] = []
++        dialogue_state["suggested_replies"] = []
++        simulation_state["player_state"]["current_mode"] = "dialogue"
++        simulation_state["player_state"]["active_npc_id"] = _safe_str(npc_id)
++        return simulation_state
++
++    def end_dialogue(self, simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++        simulation_state = self._ensure_dialogue_state(simulation_state)
++        dialogue_state = simulation_state["player_state"]["dialogue_state"]
++        dialogue_state["active"] = False
++        dialogue_state["npc_id"] = ""
++        dialogue_state["scene_id"] = ""
++        dialogue_state["suggested_replies"] = []
++        simulation_state["player_state"]["current_mode"] = "scene"
++        simulation_state["player_state"]["active_npc_id"] = ""
++        return simulation_state
++
++    def _fallback_reply(self, npc: Dict[str, Any], player_message: str) -> Dict[str, Any]:
++        npc_name = _safe_str(npc.get("name")) or "The NPC"
++        msg = _safe_str(player_message).lower()
++
++        if "help" in msg:
++            reply = f"{npc_name} nods cautiously. “I may be able to help, if your intentions are true.”"
++            replies = ["What do you know?", "Can I trust you?", "What do you need?"]
++        elif "who" in msg or "what" in msg:
++            reply = f"{npc_name} considers your question before answering carefully."
++            replies = ["Tell me more.", "Why does that matter?", "Who else knows?"]
++        else:
++            reply = f"{npc_name} listens in silence, then answers in a measured tone."
++            replies = ["Go on.", "Why?", "What happens next?"]
++
++        return {
++            "reply_text": reply,
++            "tone": "measured",
++            "intent": "respond",
++            "suggested_replies": replies[:4],
++        }
++
++    def send_message(
++        self,
++        simulation_state: Dict[str, Any],
++        npc: Dict[str, Any],
++        scene: Dict[str, Any],
++        npc_mind: Dict[str, Any],
++        player_message: str,
++    ) -> Dict[str, Any]:
++        simulation_state = self._ensure_dialogue_state(simulation_state)
++        dialogue_state = simulation_state["player_state"]["dialogue_state"]
++
++        turn_index = int(dialogue_state.get("turn_index", 0) or 0)
++        history = _safe_list(dialogue_state.get("history"))
++
++        history.append({
++            "speaker": "player",
++            "npc_id": _safe_str(dialogue_state.get("npc_id")),
++            "text": _safe_str(player_message),
++            "turn_index": turn_index,
++        })
++
++        parsed = None
++        if self.llm_client:
++            prompt = build_dialogue_prompt(
++                npc=npc,
++                scene=scene,
++                player_state=simulation_state["player_state"],
++                npc_mind=npc_mind,
++                player_message=player_message,
++            )
++            try:
++                raw = self.llm_client.generate_json(prompt)
++                parsed = parse_dialogue_response(raw)
++            except Exception:
++                parsed = None
++
++        if not parsed:
++            parsed = self._fallback_reply(npc, player_message)
++
++        history.append({
++            "speaker": "npc",
++            "npc_id": _safe_str(dialogue_state.get("npc_id")),
++            "text": _safe_str(parsed.get("reply_text")),
++            "turn_index": turn_index,
++        })
++
++        dialogue_state["history"] = history[-_MAX_HISTORY:]
++        dialogue_state["turn_index"] = turn_index + 1
++        dialogue_state["suggested_replies"] = list(parsed.get("suggested_replies") or [])[:4]
++
++        return {
++            "simulation_state": simulation_state,
++            "reply": parsed,
++            "dialogue_state": dict(dialogue_state),
++        }
+5. Patch src/app/rpg/player/player_dialogue_state.py
+diff --git a/src/app/rpg/player/player_dialogue_state.py b/src/app/rpg/player/player_dialogue_state.py
+index XXXXXXX..PHASE8101 100644
+--- a/src/app/rpg/player/player_dialogue_state.py
++++ b/src/app/rpg/player/player_dialogue_state.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
+ from typing import Any, Dict
++
+ from .player_scene_state import ensure_player_state
+@@ -12,6 +13,13 @@ def enter_dialogue_mode(
+ ) -> Dict[str, Any]:
+     simulation_state = ensure_player_state(simulation_state)
+     player_state = simulation_state["player_state"]
++    dialogue_state = player_state.setdefault("dialogue_state", {})
++    dialogue_state.setdefault("active", False)
++    dialogue_state.setdefault("npc_id", "")
++    dialogue_state.setdefault("scene_id", "")
++    dialogue_state.setdefault("turn_index", 0)
++    dialogue_state.setdefault("history", [])
++    dialogue_state.setdefault("suggested_replies", [])
+     player_state["current_mode"] = "dialogue"
+     player_state["active_npc_id"] = _safe_str(npc_id)
+     if scene_id:
+@@ -19,6 +27,11 @@ def enter_dialogue_mode(
++    dialogue_state["active"] = True
++    dialogue_state["npc_id"] = _safe_str(npc_id)
++    dialogue_state["scene_id"] = _safe_str(scene_id)
+     return simulation_state
+ 
+@@ -26,6 +39,12 @@ def exit_dialogue_mode(
+ ) -> Dict[str, Any]:
+     simulation_state = ensure_player_state(simulation_state)
+     player_state = simulation_state["player_state"]
++    dialogue_state = player_state.setdefault("dialogue_state", {})
+     player_state["current_mode"] = _safe_str(fallback_mode) or "scene"
+     player_state["active_npc_id"] = ""
++    dialogue_state["active"] = False
++    dialogue_state["npc_id"] = ""
++    dialogue_state["scene_id"] = ""
++    dialogue_state["suggested_replies"] = []
+     return simulation_state
+6. Create src/app/rpg/api/rpg_dialogue_routes.py
+diff --git a/src/app/rpg/api/rpg_dialogue_routes.py b/src/app/rpg/api/rpg_dialogue_routes.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/rpg/api/rpg_dialogue_routes.py
+@@ -0,0 +1,146 @@
++from __future__ import annotations
++
++from flask import Blueprint, jsonify, request
++
++from app.rpg.ai.dialogue import DialogueManager
++from app.rpg.player import ensure_player_state
++
++
++rpg_dialogue_bp = Blueprint("rpg_dialogue_bp", __name__)
++dialogue_manager = DialogueManager()
++
++
++def _load_setup_payload():
++    data = request.get_json(silent=True) or {}
++    return dict(data.get("setup_payload") or {})
++
++
++def _get_simulation_state(setup_payload):
++    meta = dict((setup_payload or {}).get("metadata") or {})
++    return dict(meta.get("simulation_state") or {})
++
++
++def _write_simulation_state(setup_payload, simulation_state):
++    setup_payload = dict(setup_payload or {})
++    meta = dict(setup_payload.get("metadata") or {})
++    meta["simulation_state"] = dict(simulation_state or {})
++    setup_payload["metadata"] = meta
++    return setup_payload
++
++
++def _get_scene(setup_payload, scene_id: str):
++    meta = dict((setup_payload or {}).get("metadata") or {})
++    scenes = list(meta.get("scenes") or [])
++    for scene in scenes:
++        if isinstance(scene, dict) and str(scene.get("scene_id") or scene.get("id") or "") == str(scene_id):
++            return dict(scene)
++    return {}
++
++
++def _get_npc_and_mind(simulation_state, npc_id: str):
++    npc_index = dict((simulation_state or {}).get("npc_index") or {})
++    npc_minds = dict((simulation_state or {}).get("npc_minds") or {})
++    return dict(npc_index.get(npc_id) or {}), dict(npc_minds.get(npc_id) or {})
++
++
++@rpg_dialogue_bp.post("/api/rpg/dialogue/start")
++def dialogue_start():
++    data = request.get_json(silent=True) or {}
++    setup_payload = dict(data.get("setup_payload") or {})
++    npc_id = str(data.get("npc_id") or "")
++    scene_id = str(data.get("scene_id") or "")
++
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    state = dialogue_manager.start_dialogue(state, npc_id=npc_id, scene_id=scene_id)
++    setup_payload = _write_simulation_state(setup_payload, state)
++
++    return jsonify({
++        "ok": True,
++        "setup_payload": setup_payload,
++        "dialogue_state": state.get("player_state", {}).get("dialogue_state", {}),
++    })
++
++
++@rpg_dialogue_bp.post("/api/rpg/dialogue/message")
++def dialogue_message():
++    data = request.get_json(silent=True) or {}
++    setup_payload = dict(data.get("setup_payload") or {})
++    npc_id = str(data.get("npc_id") or "")
++    scene_id = str(data.get("scene_id") or "")
++    player_message = str(data.get("message") or "")
++
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    scene = _get_scene(setup_payload, scene_id)
++    npc, npc_mind = _get_npc_and_mind(state, npc_id)
++
++    result = dialogue_manager.send_message(
++      simulation_state=state,
++      npc=npc,
++      scene=scene,
++      npc_mind=npc_mind,
++      player_message=player_message,
++    )
++
++    state = result["simulation_state"]
++    setup_payload = _write_simulation_state(setup_payload, state)
++
++    return jsonify({
++        "ok": True,
++        "setup_payload": setup_payload,
++        "reply": result["reply"],
++        "dialogue_state": result["dialogue_state"],
++    })
++
++
++@rpg_dialogue_bp.post("/api/rpg/dialogue/end")
++def dialogue_end():
++    data = request.get_json(silent=True) or {}
++    setup_payload = dict(data.get("setup_payload") or {})
++
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    state = dialogue_manager.end_dialogue(state)
++    setup_payload = _write_simulation_state(setup_payload, state)
++
++    return jsonify({
++        "ok": True,
++        "setup_payload": setup_payload,
++        "dialogue_state": state.get("player_state", {}).get("dialogue_state", {}),
++    })
+7. Register the dialogue blueprint
+diff --git a/src/app/__init__.py b/src/app/__init__.py
+index XXXXXXX..PHASE8102 100644
+--- a/src/app/__init__.py
++++ b/src/app/__init__.py
+@@ -21,6 +21,7 @@ def create_app() -> Flask:
+     from app.rpg.api.rpg_debug_routes import rpg_debug_bp
+     from app.rpg.api.rpg_player_routes import rpg_player_bp
++    from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
+@@ -56,6 +57,7 @@ def create_app() -> Flask:
+     app.register_blueprint(rpg_debug_bp)
+     app.register_blueprint(rpg_player_bp)
++    app.register_blueprint(rpg_dialogue_bp)
+ 
+     return app
+8. Create src/static/rpg/rpgDialogueClient.js
+diff --git a/src/static/rpg/rpgDialogueClient.js b/src/static/rpg/rpgDialogueClient.js
+new file mode 100644
+--- /dev/null
++++ b/src/static/rpg/rpgDialogueClient.js
+@@ -0,0 +1,56 @@
++export class RPGDialogueClient {
++  async _post(path, payload) {
++    const res = await fetch(path, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(payload || {}),
++    });
++    if (!res.ok) {
++      throw new Error(`Dialogue request failed: ${res.status}`);
++    }
++    return res.json();
++  }
++
++  async start(setupPayload, npcId, sceneId) {
++    return this._post("/api/rpg/dialogue/start", {
++      setup_payload: setupPayload,
++      npc_id: npcId,
++      scene_id: sceneId,
++    });
++  }
++
++  async sendMessage(setupPayload, npcId, sceneId, message) {
++    return this._post("/api/rpg/dialogue/message", {
++      setup_payload: setupPayload,
++      npc_id: npcId,
++      scene_id: sceneId,
++      message,
++    });
++  }
++
++  async end(setupPayload) {
++    return this._post("/api/rpg/dialogue/end", {
++      setup_payload: setupPayload,
++    });
++  }
++}
+9. Create src/static/rpg/rpgDialogueRenderer.js
+diff --git a/src/static/rpg/rpgDialogueRenderer.js b/src/static/rpg/rpgDialogueRenderer.js
+new file mode 100644
+--- /dev/null
++++ b/src/static/rpg/rpgDialogueRenderer.js
+@@ -0,0 +1,132 @@
++function safeArray(v) {
++  return Array.isArray(v) ? v : [];
++}
++
++function esc(str) {
++  return String(str ?? "")
++    .replaceAll("&", "&amp;")
++    .replaceAll("<", "&lt;")
++    .replaceAll(">", "&gt;")
++    .replaceAll('"', "&quot;")
++    .replaceAll("'", "&#39;");
++}
++
++export function renderDialogueState(dialogueState) {
++  const root = document.getElementById("rpg-dialogue-history");
++  if (!root) return;
++  const history = safeArray(dialogueState?.history);
++  root.innerHTML = history.map(item => `
++    <div class="rpg-dialogue-line rpg-dialogue-${esc(item.speaker)}">
++      <div class="rpg-dialogue-speaker">${esc(item.speaker)}</div>
++      <div class="rpg-dialogue-text">${esc(item.text)}</div>
++    </div>
++  `).join("");
++}
++
++export function renderSuggestedReplies(dialogueState, onSelect) {
++  const root = document.getElementById("rpg-dialogue-suggestions");
++  if (!root) return;
++  const replies = safeArray(dialogueState?.suggested_replies);
++  root.innerHTML = "";
++  replies.forEach((text) => {
++    const btn = document.createElement("button");
++    btn.className = "rpg-dialogue-suggestion";
++    btn.textContent = text;
++    btn.onclick = () => onSelect && onSelect(text);
++    root.appendChild(btn);
++  });
++}
++
++export function appendDialogueReply(reply) {
++  const root = document.getElementById("rpg-dialogue-latest-reply");
++  if (!root) return;
++  root.innerHTML = `
++    <div class="rpg-dialogue-reply-text">${esc(reply?.reply_text || "")}</div>
++    <div class="rpg-dialogue-reply-meta">${esc(reply?.tone || "neutral")} · ${esc(reply?.intent || "respond")}</div>
++  `;
++}
+10. Patch src/static/rpg/rpgPlayerIntegration.js
+diff --git a/src/static/rpg/rpgPlayerIntegration.js b/src/static/rpg/rpgPlayerIntegration.js
+index 0d73a95..PHASE8103 100644
+--- a/src/static/rpg/rpgPlayerIntegration.js
++++ b/src/static/rpg/rpgPlayerIntegration.js
+@@ -1,9 +1,11 @@
+ import { RPGPlayerClient } from "./rpgPlayerClient.js";
++import { RPGDialogueClient } from "./rpgDialogueClient.js";
+ import { rpgPlayerState, updatePlayerViewFromResponse, updatePlayerStateFromResponse } from "./rpgPlayerState.js";
+ import { renderPlayerView } from "./rpgPlayerRenderer.js";
+ import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels } from "./rpgPlayerUI.js";
++import { renderDialogueState, renderSuggestedReplies, appendDialogueReply } from "./rpgDialogueRenderer.js";
+ 
+ export class RPGPlayerIntegration {
+   constructor(setupPayload = null) {
+     this.setupPayload = setupPayload;
+     this.playerClient = new RPGPlayerClient();
++    this.dialogueClient = new RPGDialogueClient();
+   }
+@@ -58,6 +60,53 @@ export class RPGPlayerIntegration {
+     return result;
+   }
+ 
++  async startDialogue(npcId, sceneId) {
++    if (!this.setupPayload) return null;
++    const result = await this.dialogueClient.start(this.setupPayload, npcId, sceneId);
++    if (result) {
++      this.setupPayload = result.setup_payload;
++      rpgPlayerState.playerState = rpgPlayerState.playerState || {};
++      rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
++      renderDialogueState(result.dialogue_state);
++      renderSuggestedReplies(result.dialogue_state, (text) => this.sendDialogueMessage(text));
++    }
++    return result;
++  }
++
++  async sendDialogueMessage(message) {
++    if (!this.setupPayload) return null;
++    const playerState = rpgPlayerState.playerState || {};
++    const dialogueState = playerState.dialogue_state || {};
++    const npcId = dialogueState.npc_id || playerState.active_npc_id || "";
++    const sceneId = dialogueState.scene_id || playerState.current_scene_id || "";
++    if (!npcId) return null;
++
++    const result = await this.dialogueClient.sendMessage(
++      this.setupPayload,
++      npcId,
++      sceneId,
++      message
++    );
++
++    if (result) {
++      this.setupPayload = result.setup_payload;
++      rpgPlayerState.playerState = rpgPlayerState.playerState || {};
++      rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
++      renderDialogueState(result.dialogue_state);
++      renderSuggestedReplies(result.dialogue_state, (text) => this.sendDialogueMessage(text));
++      appendDialogueReply(result.reply);
++    }
++    return result;
++  }
++
++  async endDialogueSession() {
++    if (!this.setupPayload) return null;
++    const result = await this.dialogueClient.end(this.setupPayload);
++    if (result) {
++      this.setupPayload = result.setup_payload;
++      rpgPlayerState.playerState = rpgPlayerState.playerState || {};
++      rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
++    }
++    return result;
++  }
++
+   /**
+    * Refresh all side panels (journal, codex, objectives).
+    */
+11. Patch src/static/rpg/rpgPlayerUI.js
+diff --git a/src/static/rpg/rpgPlayerUI.js b/src/static/rpg/rpgPlayerUI.js
+index f382719..PHASE8104 100644
+--- a/src/static/rpg/rpgPlayerUI.js
++++ b/src/static/rpg/rpgPlayerUI.js
+@@ -1,6 +1,7 @@
+ import { RPGPlayerClient } from "./rpgPlayerClient.js";
+ 
+ const playerClient = new RPGPlayerClient();
++
+@@ -93,6 +94,28 @@ export async function handleExitDialogue(setupPayload) {
+   }
+ }
+ 
+ export async function refreshSidePanels(setupPayload) {
+   await Promise.all([
+     loadJournal(setupPayload),
+     loadCodex(setupPayload),
+     loadObjectives(setupPayload),
+   ]);
+ }
++
++export function bindDialogueInput(onSubmit) {
++  const input = document.getElementById("rpg-dialogue-input");
++  const btn = document.getElementById("rpg-dialogue-send");
++  if (!input || !btn) return;
++
++  const submit = () => {
++    const text = (input.value || "").trim();
++    if (!text) return;
++    input.value = "";
++    onSubmit && onSubmit(text);
++  };
++
++  btn.onclick = submit;
++  input.addEventListener("keydown", (e) => {
++    if (e.key === "Enter") {
++      submit();
++    }
++  });
++}
+12. Patch src/templates/rpg.html
 
-Enrich player events further so social systems can consume them deterministically.
+Add dialogue UI shell.
 
-For support events, ensure:
+diff --git a/src/templates/rpg.html b/src/templates/rpg.html
+index XXXXXXX..PHASE8105 100644
+--- a/src/templates/rpg.html
++++ b/src/templates/rpg.html
+@@ -1,6 +1,33 @@
+ ...
++<div id="rpg-dialogue-panel" class="rpg-dialogue-panel">
++  <div class="rpg-dialogue-header">
++    <strong>Dialogue</strong>
++  </div>
++  <div id="rpg-dialogue-latest-reply" class="rpg-dialogue-latest-reply"></div>
++  <div id="rpg-dialogue-history" class="rpg-dialogue-history"></div>
++  <div id="rpg-dialogue-suggestions" class="rpg-dialogue-suggestions"></div>
++  <div class="rpg-dialogue-input-row">
++    <input id="rpg-dialogue-input" type="text" placeholder="Say something..." />
++    <button id="rpg-dialogue-send" type="button">Send</button>
++  </div>
++</div>
++
++<style>
++  .rpg-dialogue-panel { margin-top: 16px; border: 1px solid #ddd; border-radius: 10px; padding: 12px; background: #fff; }
++  .rpg-dialogue-history { max-height: 280px; overflow-y: auto; margin: 12px 0; }
++  .rpg-dialogue-line { margin-bottom: 8px; }
++  .rpg-dialogue-speaker { font-size: 12px; opacity: 0.7; text-transform: uppercase; }
++  .rpg-dialogue-text { font-size: 14px; }
++  .rpg-dialogue-suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
++  .rpg-dialogue-suggestion { cursor: pointer; }
++  .rpg-dialogue-input-row { display: flex; gap: 8px; }
++  .rpg-dialogue-input-row input { flex: 1; }
++</style>
+ ...
+13. Patch your main frontend boot file
 
-"source_id": "player",
-"subject_id": target_id,
+Use your actual entry file. I’ll assume src/static/rpg/rpgPlayerIntegration.js is used from the main RPG page controller.
 
-For escalation events, ensure:
+diff --git a/src/static/rpg/rpgPlayerIntegration.js b/src/static/rpg/rpgPlayerIntegration.js
+index PHASE8103..PHASE8106 100644
+--- a/src/static/rpg/rpgPlayerIntegration.js
++++ b/src/static/rpg/rpgPlayerIntegration.js
+@@ -3,7 +3,7 @@ import { RPGDialogueClient } from "./rpgDialogueClient.js";
+ import { rpgPlayerState, updatePlayerViewFromResponse, updatePlayerStateFromResponse } from "./rpgPlayerState.js";
+ import { renderPlayerView } from "./rpgPlayerRenderer.js";
+-import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels } from "./rpgPlayerUI.js";
++import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
+ import { renderDialogueState, renderSuggestedReplies, appendDialogueReply } from "./rpgDialogueRenderer.js";
+@@ -12,6 +12,7 @@ export class RPGPlayerIntegration {
+   constructor(setupPayload = null) {
+     this.setupPayload = setupPayload;
+     this.playerClient = new RPGPlayerClient();
+     this.dialogueClient = new RPGDialogueClient();
++    bindDialogueInput((text) => this.sendDialogueMessage(text));
+   }
+14. Optional bridge event for click-to-talk from actor cards
 
-"source_id": "player",
-"subject_id": target_id,
+If your actor cards already render clickable elements, dispatch:
 
-Add new action handling if not already present:
+diff --git a/src/static/rpg/rpgPlayerRenderer.js b/src/static/rpg/rpgPlayerRenderer.js
+index a72c2ec..PHASE8107 100644
+--- a/src/static/rpg/rpgPlayerRenderer.js
++++ b/src/static/rpg/rpgPlayerRenderer.js
+@@ -22,6 +22,15 @@ function renderActors(view) {
+   actors.forEach((a) => {
+     const div = document.createElement("div");
+     div.className = "actor";
+     div.textContent = `${a.name || a.id} (${a.role || "unknown"})`;
++    div.onclick = () => {
++      window.dispatchEvent(new CustomEvent("rpg:enterDialogue", {
++        detail: {
++          npc_id: a.id || "",
++          scene_id: view.scene_id || "",
++        },
++      }));
++    };
+     el.appendChild(div);
+   });
+ }
 
-New action: BETRAY_FACTION
+Then in your main app controller:
 
-Patch into apply_player_action(...):
+diff --git a/src/static/rpg/rpgMode.js b/src/static/rpg/rpgMode.js
+index XXXXXXX..PHASE8108 100644
+--- a/src/static/rpg/rpgMode.js
++++ b/src/static/rpg/rpgMode.js
+@@ -1,5 +1,6 @@
+ ...
++import { RPGPlayerIntegration } from "./rpgPlayerIntegration.js";
+ ...
+@@ -20,6 +21,18 @@
++let rpgPlayerIntegration = null;
++
++function ensureRpgPlayerIntegration(setupPayload) {
++  if (!rpgPlayerIntegration) {
++    rpgPlayerIntegration = new RPGPlayerIntegration(setupPayload || null);
++  }
++  if (setupPayload) {
++    rpgPlayerIntegration.setSetupPayload(setupPayload);
++  }
++  return rpgPlayerIntegration;
++}
++
++window.addEventListener("rpg:enterDialogue", async (e) => {
++  const integration = ensureRpgPlayerIntegration(window.currentRpgSetupPayload || null);
++  await integration.startDialogue(e.detail.npc_id, e.detail.scene_id);
++});
+15. Minimal tests for Phase 8.1
 
-elif action_type == "BETRAY_FACTION":
-    event = {
-        "type": "betrayal",
-        "origin": "player_action",
-        "action_type": action_type,
-        "actor": "player",
-        "source_id": "player",
-        "target_id": target_id,
-        "target_kind": "faction",
-        "faction_id": target_id,
-        "location_id": "",
-        "affected_npc_ids": _infer_affected_npc_ids(
-            simulation_state=state,
-            faction_id=target_id,
-        ),
-        "summary": f"Player betrayed faction '{target_id}'.",
-        "severity": "negative",
-        "salience": 0.9,
-    }
-    events.append(event)
+Create:
 
-Do not directly mutate alliance or rumor state here. Only emit the event.
+src/tests/unit/rpg/test_phase81_dialogue_manager.py
+src/tests/functional/test_phase81_dialogue_routes.py
+src/tests/unit/rpg/test_phase81_frontend_dialogue_files.py
 
-9. Patch src/app/rpg/creator/world_scene_generator.py
+Suggested coverage:
 
-Add social signals into scenes.
-
-After scene creation, enrich each scene with:
-
-scene["active_rumors"] = [
-    dict(item)
-    for item in (state.get("active_rumors") or [])[:3]
-]
-scene["faction_positions"] = {
-    key: dict(value)
-    for key, value in sorted((state.get("social_state", {}).get("group_positions") or {}).items())
-}
-scene["active_alliances"] = [
-    dict(item)
-    for item in (state.get("social_state", {}).get("alliances") or [])
-    if item.get("status") == "active"
-][:3]
-
-Also extend _collect_scene_actors(...) so actor dicts include faction stance if available:
-
-group_positions = (simulation_state.get("social_state") or {}).get("group_positions") or {}
-if npc_faction_id and npc_faction_id in group_positions:
-    actor["faction_position"] = dict(group_positions[npc_faction_id])
-10. Patch src/app/rpg/ai/world_scene_narrator.py
-
-Add helper:
-
-def _attach_social_context(scene, simulation_state):
-    scene = dict(scene or {})
-    simulation_state = simulation_state or {}
-    social_state = simulation_state.get("social_state") or {}
-    scene["active_rumors"] = [dict(item) for item in (simulation_state.get("active_rumors") or [])[:3]]
-    scene["active_alliances"] = [
-        dict(item)
-        for item in (social_state.get("alliances") or [])
-        if item.get("status") == "active"
-    ][:3]
-    scene["faction_positions"] = {
-        k: dict(v)
-        for k, v in sorted((social_state.get("group_positions") or {}).items())
-    }
-    return scene
-
-Before reaction prompt generation:
-
-pass the scene through _attach_social_context(...)
-
-Update NPC reaction prompt builder so it includes:
-
-rumor snippets
-faction stance toward player
-alliance pressure
-betrayal fallout
-
-Add to prompt text:
-
-rumor_info = f"Rumors in circulation: {scene.get('active_rumors', [])}" if scene.get("active_rumors") else ""
-alliance_info = f"Active alliances: {scene.get('active_alliances', [])}" if scene.get("active_alliances") else ""
-faction_position_info = f"Faction positions: {scene.get('faction_positions', {})}" if scene.get("faction_positions") else ""
-
-Include those fields in the prompt body.
-
-Suggested compatibility fix before 6.5
-
-Patch npc_decision.py back to safe rehydration:
-
-@classmethod
-def from_dict(cls, data: Dict[str, Any] | None):
-    data = data or {}
-    return cls(
-        npc_id=str(data.get("npc_id") or ""),
-        tick=int(data.get("tick", 0) or 0),
-        intent=str(data.get("intent") or "wait"),
-        action_type=str(data.get("action_type") or "wait"),
-        target_id=str(data.get("target_id") or ""),
-        target_kind=str(data.get("target_kind") or ""),
-        location_id=str(data.get("location_id") or ""),
-        reason=str(data.get("reason") or ""),
-        dialogue_hint=str(data.get("dialogue_hint") or ""),
-        urgency=float(data.get("urgency", 0.0) or 0.0),
-    )
-
-And patch npc_memory.py to add:
-
-def top_memories(self, limit: int = 5) -> List[Dict[str, Any]]:
-    ranked = sorted(
-        self.entries,
-        key=lambda x: (-x["salience"], -x["tick"], x["memory_id"])
-    )
-    return [dict(item) for item in ranked[:max(0, limit)]]
-
-That keeps 6.5 safer without bloating the Phase 6 implementation.
-
-Success criteria for Phase 6.5
+DialogueManager.start_dialogue()
+DialogueManager.send_message() fallback path
+transcript bounded to 40
+suggested replies bounded to 4
+/api/rpg/dialogue/start
+/api/rpg/dialogue/message
+/api/rpg/dialogue/end
+frontend files exist and export expected methods
+Success criteria
 
 After this patch:
 
-player betrays/supports/escalates
-factions update social reputation toward player
-hostile factions can form alliances
-betrayal emits social fallout events
-rumors persist and spread deterministically
-factions derive shared stance from member NPC minds
-scenes and narration reflect rumor pressure and alliance tension
-Test plan for 6.5
+clicking an actor can enter dialogue
+player can type a message
+NPC responds through dialogue manager
+transcript persists in player_state.dialogue_state
+suggested replies render as buttons
+exiting dialogue returns player to scene mode
+backend and frontend remain bounded and serializable
+Review summary of your current state
 
-Add:
+Your current Phase 8 frontend patch is ready for this next layer because:
 
-tests/unit/rpg/test_phase65_social_simulation.py
-tests/functional/test_phase65_social_simulation_functional.py
-tests/regression/test_phase65_social_simulation_regression.py
+player route wiring exists
+integration wrapper exists
+renderer/state split is already in place
+player_view is already flowing from narration into UI state
 
-Cover:
-
-reputation clamping and top-target trim
-alliance create/strengthen/break
-betrayal propagation output determinism
-rumor spawn/advance/cooling
-faction stance aggregation from NPC minds
-simulation persistence of social_state
-scene enrichment with rumor/alliance/faction stance
-narrator social context injection
+The only thing missing was the actual conversation loop. This Phase 8.1 patch adds it cleanly on top.

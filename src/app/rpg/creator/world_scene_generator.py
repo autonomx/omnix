@@ -15,6 +15,14 @@ from __future__ import annotations
 
 from typing import Any
 
+# Phase 8: player-facing state updates
+from app.rpg.player import (
+    ensure_player_state,
+    set_current_scene,
+    update_journal_from_state,
+    update_codex_from_state,
+)
+
 # ---------------------------------------------------------------------------
 # Scene type constants
 # ---------------------------------------------------------------------------
@@ -473,6 +481,46 @@ def generate_scenes_from_simulation(
         if not source_id and scene.get("actors"):
             source_id = _safe_str(scene["actors"][0]) if scene["actors"] else ""
 
+        # Phase 7: Add debug context to scenes
+        source_id_for_debug = _safe_str(scene.get("source_incident_id") or "")
+        if not source_id_for_debug:
+            scene_actors = scene.get("actors") or []
+            if isinstance(scene_actors, list) and scene_actors:
+                source_id_for_debug = _safe_str(scene_actors[0])
+
+        scene["debug_context"] = {
+            "tick": int(state.get("tick", 0) or 0),
+            "source_id": source_id_for_debug,
+            "active_rumor_count": len(state.get("active_rumors") or []),
+            "has_social_state": bool(state.get("social_state")),
+        }
+        scene["debug_context"]["top_pressure_sources"] = {
+            "threads": sorted(
+                [
+                    {"id": k, "pressure": int(v.get("pressure", 0) or 0)}
+                    for k, v in (state.get("threads") or {}).items()
+                    if isinstance(v, dict)
+                ],
+                key=lambda x: (-x["pressure"], x["id"])
+            )[:3],
+            "factions": sorted(
+                [
+                    {"id": k, "pressure": int(v.get("pressure", 0) or 0)}
+                    for k, v in (state.get("factions") or {}).items()
+                    if isinstance(v, dict)
+                ],
+                key=lambda x: (-x["pressure"], x["id"])
+            )[:3],
+            "locations": sorted(
+                [
+                    {"id": k, "pressure": int(v.get("pressure", 0) or 0)}
+                    for k, v in (state.get("locations") or {}).items()
+                    if isinstance(v, dict)
+                ],
+                key=lambda x: (-x["pressure"], x["id"])
+            )[:3],
+        }
+
         # Phase 6.5: attach scene-level social context
         social_state = state.get("social_state") or {}
         scene["active_rumors"] = [
@@ -517,6 +565,28 @@ def generate_scenes_from_simulation(
             if isinstance(a, dict) and _safe_str(a.get("id"))
             and (state.get("npc_index") or {}).get(_safe_str(a.get("id")))
         ][:4]
+
+    # Phase 8: player-facing state update from primary scene
+    # We need to mutate the original dict in-place for downstream consumers
+    if scenes:
+        primary_scene = scenes[0]
+        active_npc_id = ""
+        scene_actors = primary_scene.get("actors") or []
+        for actor in scene_actors:
+            if isinstance(actor, dict) and actor.get("id"):
+                active_npc_id = str(actor.get("id"))
+                break
+        updated = set_current_scene(
+            state,
+            primary_scene,
+            mode="scene",
+            active_npc_id=active_npc_id,
+        )
+        updated = update_journal_from_state(updated, primary_scene)
+        updated = update_codex_from_state(updated)
+        # Copy player_state back to original state dict
+        if "player_state" in updated:
+            state["player_state"] = updated["player_state"]
 
     return scenes[:max_scenes]
 

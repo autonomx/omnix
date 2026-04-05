@@ -44,6 +44,7 @@ from .world_incidents import (
     spawn_incidents_from_state_diff,
 )
 from app.rpg.ai.llm_mind import NPCMind
+from .world_debug import summarize_tick_changes
 from app.rpg.social import (
     ReputationGraph,
     AllianceSystem,
@@ -751,6 +752,33 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         "group_positions": group_engine.to_dict(),
     }
     history_state["active_rumors"] = rumors.active(limit=8)
+
+    # --- Phase 7: GM overrides ---
+    gm_overrides = history_state.get("gm_overrides") or {}
+
+    forced_positions = gm_overrides.get("forced_faction_positions") or {}
+    if forced_positions:
+        history_state.setdefault("social_state", {})
+        history_state["social_state"].setdefault("group_positions", {})
+        for faction_id, position in sorted(forced_positions.items()):
+            history_state["social_state"]["group_positions"][str(faction_id)] = dict(position or {})
+
+    forced_npc_beliefs = gm_overrides.get("forced_npc_beliefs") or {}
+    if forced_npc_beliefs:
+        history_state.setdefault("npc_minds", {})
+        for npc_id, belief_targets in sorted(forced_npc_beliefs.items()):
+            if npc_id not in history_state["npc_minds"] or not isinstance(history_state["npc_minds"][npc_id], dict):
+                continue
+            mind = history_state["npc_minds"][npc_id]
+            mind.setdefault("beliefs", {})
+            for target_id, patch in sorted((belief_targets or {}).items()):
+                mind["beliefs"][str(target_id)] = dict(patch or {})
+
+    # --- Phase 7: Debug Meta Tracking ---
+    history_state.setdefault("debug_meta", {})
+    history_state["debug_meta"]["last_step_reason"] = history_state["debug_meta"].get("last_step_reason") or "manual_step"
+    history_state["debug_meta"]["last_step_tick"] = int(history_state.get("tick", 0) or 0)
+    history_state["debug_meta"]["last_tick_changes"] = summarize_tick_changes(before_state, history_state)
 
     # Write back into setup copy (final state with effects applied)
     meta["simulation_state"] = history_state

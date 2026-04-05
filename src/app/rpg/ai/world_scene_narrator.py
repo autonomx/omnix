@@ -20,6 +20,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+# Phase 8: player-facing encounter view
+from app.rpg.player import build_encounter_view
+
 logger = logging.getLogger(__name__)
 
 
@@ -212,6 +215,8 @@ def build_npc_reaction_prompt(
     faction_position_info = f"Faction positions: {scene.get('faction_positions', {})}" if scene.get("faction_positions") else ""
     goals_list_info = f"Active goals: {npc_active_goals}" if npc_active_goals else ""
     last_decision_info = f"Last decision: {npc_last_decision}" if npc_last_decision else ""
+    # Phase 7: Add debug context info for explainability
+    debug_context_info = f"Scene debug context: {scene.get('debug_context', {})}" if scene.get("debug_context") else ""
 
     prompt = f"""You are generating NPC reactions for an RPG.
 
@@ -227,6 +232,7 @@ Character: {npc_name}
 {faction_position_info}
 {goals_list_info}
 {last_decision_info}
+{debug_context_info}
 
 Scene: {scene_title}
 
@@ -622,6 +628,22 @@ class SceneNarrator:
             if r.dialogue
         ]
 
+        # Phase 8: player-facing packaged view
+        player_view = {
+            "scene_id": scene.get("scene_id") or scene.get("id", ""),
+            "scene_title": scene.get("title", ""),
+            "mode": "scene",
+            "active_npc_id": (
+                npc_reactions[0].npc_id
+                if npc_reactions
+                else ""
+            ),
+            "encounter": build_encounter_view(scene, state),
+            "active_rumors": list(scene.get("active_rumors") or [])[:3],
+            "active_alliances": list(scene.get("active_alliances") or [])[:3],
+            "faction_positions": dict(scene.get("faction_positions") or {}),
+        }
+
         return NarrativeResult(
             narrative=narrative,
             choices=choices,
@@ -632,6 +654,7 @@ class SceneNarrator:
                 "scene_id": scene.get("id"),
                 "npc_count": len(npc_reactions),
                 "choice_count": len(choices),
+                "player_view": player_view,
             },
         )
 

@@ -22,6 +22,9 @@ from __future__ import annotations
 
 from typing import Any
 
+# Phase 8: player-facing action summaries
+from app.rpg.player import ensure_player_state
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -321,6 +324,27 @@ def apply_player_action(
     state["events"] = events
     state["consequences"] = consequences
     state["action_diff"] = action_diff  # new key for causality tracking
+
+    # Phase 7: add debug reason to action_diff
+    action_diff["debug_reason"] = {
+        "action_type": action_type,
+        "target_id": target_id,
+        "events_added_count": len(events),
+        "consequences_added_count": len(action_diff.get("consequences_added") or []),
+    }
+
+    # Phase 8: lightweight player-facing action summary
+    state = ensure_player_state(state)
+    player_state = state["player_state"]
+    objectives = list(player_state.get("active_objectives") or [])
+    objectives.append({
+        "objective_id": f"obj:{action_type}:{target_id}",
+        "type": action_type,
+        "target_id": target_id,
+        "status": "active",
+        "tick": int(state.get("tick", 0) or 0),
+    })
+    player_state["active_objectives"] = objectives[-20:]
 
     return state
 
