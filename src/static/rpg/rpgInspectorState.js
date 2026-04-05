@@ -11,6 +11,10 @@ export const rpgInspectorState = {
   selectedTickView: null,
   selectedNpcId: "",
   npcReasoning: null,
+  timelineQuery: "",
+  worldConsequenceFilter: "all",
+  causalTrace: [],
+  loading: false,
   isOpen: false,
 };
 
@@ -21,4 +25,8 @@ export function resetInspectorState() {
   rpgInspectorState.selectedTickView = null;
   rpgInspectorState.selectedNpcId = "";
   rpgInspectorState.npcReasoning = null;
+  rpgInspectorState.timelineQuery = "";
+  rpgInspectorState.worldConsequenceFilter = "all";
+  rpgInspectorState.causalTrace = [];
+  rpgInspectorState.loading = false;
 }

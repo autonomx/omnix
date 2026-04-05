@@ -1,114 +1,89 @@
-Goal:
+Below is the Phase 8.4.7 — Inspector UX Polish full literal apply-this-patch diff spec.
 
-timeline panel
-latest diff panel
-NPC reasoning drawer
-GM action controls
-debug note UI
-faction trend editor
-tick browser
+This phase sits on top of your completed 8.4 / 8.4.5 / 8.4.6 stack and focuses on making the inspector genuinely ergonomic:
 
-This phase is about making the inspection layer actually usable.
+filters
+visual diff rendering
+causal tracing
+better tick selection UX
+searchable NPC inspection
+cleaner GM/debug workflows
 
-1. Create src/static/rpg/rpgInspectorClient.js
-diff --git a/src/static/rpg/rpgInspectorClient.js b/src/static/rpg/rpgInspectorClient.js
+It is the natural next step from the 8.4.6 frontend inspector work you just landed.
+
+Goal
+
+Turn the inspector from:
+
+raw but powerful
+
+Into:
+
+fast to use
+visually scannable
+causally informative
+useful during active iteration
+New frontend capabilities
+
+Add:
+
+timeline filter controls
+diff rendering panel
+causal trace panel
+quick NPC inspect dropdown/search
+selected tick highlighting
+persisted inspector open state
+loading state
+debounced inspector refresh
+
+No backend route changes are strictly required for this phase. It builds on the existing inspection APIs.
+
+1. Create src/static/rpg/rpgInspectorFilters.js
+diff --git a/src/static/rpg/rpgInspectorFilters.js b/src/static/rpg/rpgInspectorFilters.js
 new file mode 100644
 --- /dev/null
-+++ b/src/static/rpg/rpgInspectorClient.js
-@@ -0,0 +1,87 @@
-+export class RPGInspectorClient {
-+  async _post(path, payload) {
-+    const res = await fetch(path, {
-+      method: "POST",
-+      headers: { "Content-Type": "application/json" },
-+      body: JSON.stringify(payload || {}),
-+    });
-+    if (!res.ok) {
-+      throw new Error(`Inspector request failed: ${res.status}`);
-+    }
-+    return res.json();
-+  }
-+
-+  async getTimeline(setupPayload) {
-+    return this._post("/api/rpg/inspect/timeline", {
-+      setup_payload: setupPayload,
-+    });
-+  }
-+
-+  async getTimelineTick(setupPayload, tick) {
-+    return this._post("/api/rpg/inspect/timeline_tick", {
-+      setup_payload: setupPayload,
-+      tick,
-+    });
-+  }
-+
-+  async getTickDiff(beforeState, afterState) {
-+    return this._post("/api/rpg/inspect/tick_diff", {
-+      before_state: beforeState,
-+      after_state: afterState,
-+    });
-+  }
-+
-+  async getNpcReasoning(setupPayload, npcId) {
-+    return this._post("/api/rpg/inspect/npc_reasoning", {
-+      setup_payload: setupPayload,
-+      npc_id: npcId,
-+    });
-+  }
-+
-+  async forceNpcGoal(setupPayload, npcId, goal) {
-+    return this._post("/api/rpg/gm/force_npc_goal", {
-+      setup_payload: setupPayload,
-+      npc_id: npcId,
-+      goal,
-+    });
-+  }
-+
-+  async forceFactionTrend(setupPayload, factionId, trendPatch) {
-+    return this._post("/api/rpg/gm/force_faction_trend", {
-+      setup_payload: setupPayload,
-+      faction_id: factionId,
-+      trend_patch: trendPatch,
-+    });
-+  }
-+
-+  async addDebugNote(setupPayload, note) {
-+    return this._post("/api/rpg/gm/debug_note", {
-+      setup_payload: setupPayload,
-+      note,
-+    });
-+  }
++++ b/src/static/rpg/rpgInspectorFilters.js
+@@ -0,0 +1,61 @@
++export function filterTimelineSnapshots(snapshots, query) {
++  const q = String(query || "").trim().toLowerCase();
++  const rows = Array.isArray(snapshots) ? snapshots : [];
++  if (!q) return rows;
++  return rows.filter((row) => {
++    const tick = String(row?.tick ?? "");
++    const label = String(row?.label ?? "").toLowerCase();
++    const snapshotId = String(row?.snapshot_id ?? "").toLowerCase();
++    return tick.includes(q) || label.includes(q) || snapshotId.includes(q);
++  });
 +}
-2. Create src/static/rpg/rpgInspectorState.js
-diff --git a/src/static/rpg/rpgInspectorState.js b/src/static/rpg/rpgInspectorState.js
-new file mode 100644
---- /dev/null
-+++ b/src/static/rpg/rpgInspectorState.js
-@@ -0,0 +1,36 @@
-+export const rpgInspectorState = {
-+  timeline: null,
-+  latestDiff: null,
-+  selectedTick: null,
-+  selectedTickView: null,
-+  selectedNpcId: "",
-+  npcReasoning: null,
-+  isOpen: false,
-+};
 +
-+export function resetInspectorState() {
-+  rpgInspectorState.timeline = null;
-+  rpgInspectorState.latestDiff = null;
-+  rpgInspectorState.selectedTick = null;
-+  rpgInspectorState.selectedTickView = null;
-+  rpgInspectorState.selectedNpcId = "";
-+  rpgInspectorState.npcReasoning = null;
++export function filterWorldConsequences(items, typeFilter) {
++  const rows = Array.isArray(items) ? items : [];
++  const t = String(typeFilter || "").trim().toLowerCase();
++  if (!t || t === "all") return rows;
++  return rows.filter((item) => String(item?.type || "").toLowerCase() === t);
 +}
-3. Create src/static/rpg/rpgInspectorRenderer.js
-diff --git a/src/static/rpg/rpgInspectorRenderer.js b/src/static/rpg/rpgInspectorRenderer.js
++
++export function buildNpcOptions(simulationState) {
++  const npcIndex = ((simulationState || {}).npc_index || {});
++  return Object.keys(npcIndex)
++    .sort((a, b) => {
++      const na = String(npcIndex[a]?.name || a).toLowerCase();
++      const nb = String(npcIndex[b]?.name || b).toLowerCase();
++      if (na < nb) return -1;
++      if (na > nb) return 1;
++      return String(a).localeCompare(String(b));
++    })
++    .map((npcId) => ({
++      npc_id: npcId,
++      label: `${npcIndex[npcId]?.name || npcId} (${npcId})`,
++    }));
++}
+2. Create src/static/rpg/rpgInspectorDiffRenderer.js
+diff --git a/src/static/rpg/rpgInspectorDiffRenderer.js b/src/static/rpg/rpgInspectorDiffRenderer.js
 new file mode 100644
 --- /dev/null
-+++ b/src/static/rpg/rpgInspectorRenderer.js
-@@ -0,0 +1,232 @@
++++ b/src/static/rpg/rpgInspectorDiffRenderer.js
+@@ -0,0 +1,94 @@
 +function esc(str) {
 +  return String(str ?? "")
 +    .replaceAll("&", "&amp;")
@@ -126,453 +101,547 @@ new file mode 100644
 +  return v && typeof v === "object" ? v : {};
 +}
 +
-+export function renderInspectorShell(isOpen) {
-+  const root = document.getElementById("rpg-inspector-shell");
-+  if (!root) return;
-+  root.style.display = isOpen ? "grid" : "none";
-+}
-+
-+export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
-+  const root = document.getElementById("rpg-inspector-timeline");
++export function renderInspectorDiff(diff) {
++  const root = document.getElementById("rpg-inspector-diff-panel");
 +  if (!root) return;
 +
-+  const t = safeObj(timeline);
-+  const snaps = safeArray(t.snapshots);
-+  const recentConsequences = safeArray(t.recent_world_consequences);
-+  const diff = safeObj(latestDiff);
++  const data = safeObj(diff);
++  const summary = safeObj(data.summary);
++  const newEvents = safeArray(data.new_events);
++  const newConsequences = safeArray(data.new_consequences);
++  const changedNpcIds = safeArray(data.changed_npc_ids);
++  const socialKeys = safeArray(data.social_keys_changed);
++  const sandboxKeys = safeArray(data.sandbox_keys_changed);
 +
 +  root.innerHTML = `
-+    <div class="rpg-inspector-section">
-+      <div class="rpg-inspector-title">Timeline</div>
-+      <div class="rpg-inspector-meta">Current tick: ${esc(t.current_tick ?? "0")}</div>
-+      <div class="rpg-inspector-meta">Snapshots: ${esc(t.snapshot_count ?? "0")}</div>
++    <div class="rpg-inspector-title">Visual Diff</div>
++    <div class="rpg-inspector-meta">Tick ${esc(data.tick_before ?? "—")} → ${esc(data.tick_after ?? "—")}</div>
++    <div class="rpg-inspector-grid2">
++      <div class="rpg-inspector-chip">Events Δ ${esc(summary.event_delta ?? 0)}</div>
++      <div class="rpg-inspector-chip">Consequences Δ ${esc(summary.consequence_delta ?? 0)}</div>
++      <div class="rpg-inspector-chip">NPC changes ${esc(summary.npc_changes ?? 0)}</div>
 +    </div>
-+    <div class="rpg-inspector-section">
-+      <div class="rpg-inspector-title">Latest Diff</div>
-+      <div class="rpg-inspector-meta">Tick ${esc(diff.tick_before ?? "—")} → ${esc(diff.tick_after ?? "—")}</div>
-+      <div class="rpg-inspector-meta">Event Δ: ${esc(safeObj(diff.summary).event_delta ?? "0")}</div>
-+      <div class="rpg-inspector-meta">Consequence Δ: ${esc(safeObj(diff.summary).consequence_delta ?? "0")}</div>
-+      <div class="rpg-inspector-meta">NPC changes: ${esc(safeObj(diff.summary).npc_changes ?? "0")}</div>
-+    </div>
-+    <div class="rpg-inspector-section">
-+      <div class="rpg-inspector-title">Recent Ticks</div>
-+      <div id="rpg-inspector-timeline-list"></div>
-+    </div>
-+    <div class="rpg-inspector-section">
-+      <div class="rpg-inspector-title">Recent World Consequences</div>
-+      <div>
-+        ${recentConsequences.map(item => `
-+          <div class="rpg-inspector-row">
-+            <div><strong>${esc(item.type || "consequence")}</strong></div>
-+            <div>${esc(item.summary || "")}</div>
-+          </div>
-+        `).join("")}
-+      </div>
-+    </div>
-+  `;
 +
-+  const list = document.getElementById("rpg-inspector-timeline-list");
-+  if (!list) return;
++    <div class="rpg-inspector-subtitle">Changed NPCs</div>
++    <div>${changedNpcIds.map((id) => `<span class="rpg-inspector-tag">${esc(id)}</span>`).join("")}</div>
 +
-+  list.innerHTML = "";
-+  snaps.slice().reverse().forEach((snap) => {
-+    const btn = document.createElement("button");
-+    btn.className = "rpg-inspector-tick-btn";
-+    btn.textContent = `Tick ${snap.tick}`;
-+    btn.onclick = () => onSelectTick && onSelectTick(snap.tick);
-+    list.appendChild(btn);
-+  });
-+}
++    <div class="rpg-inspector-subtitle">Social Keys Changed</div>
++    <div>${socialKeys.map((id) => `<span class="rpg-inspector-tag">${esc(id)}</span>`).join("")}</div>
 +
-+export function renderTickView(tickView) {
-+  const root = document.getElementById("rpg-inspector-tick-view");
-+  if (!root) return;
++    <div class="rpg-inspector-subtitle">Sandbox Keys Changed</div>
++    <div>${sandboxKeys.map((id) => `<span class="rpg-inspector-tag">${esc(id)}</span>`).join("")}</div>
 +
-+  const tv = safeObj(tickView);
-+  const snapshot = safeObj(tv.snapshot);
-+
-+  root.innerHTML = `
-+    <div class="rpg-inspector-title">Tick View</div>
-+    <div class="rpg-inspector-meta">Requested tick: ${esc(tv.requested_tick ?? "0")}</div>
-+    <div class="rpg-inspector-meta">Found: ${esc(tv.found ? "yes" : "no")}</div>
-+    <pre class="rpg-inspector-pre">${esc(JSON.stringify(snapshot, null, 2))}</pre>
-+  `;
-+}
-+
-+export function renderNpcReasoning(npcReasoning) {
-+  const root = document.getElementById("rpg-inspector-npc-reasoning");
-+  if (!root) return;
-+  const data = safeObj(npcReasoning);
-+  const npc = safeObj(data.npc);
-+  const reasoning = safeObj(data.reasoning);
-+  const why = safeObj(data.why);
-+
-+  root.innerHTML = `
-+    <div class="rpg-inspector-title">NPC Reasoning</div>
-+    <div class="rpg-inspector-meta"><strong>${esc(npc.name || npc.npc_id || "NPC")}</strong></div>
-+    <div class="rpg-inspector-meta">Role: ${esc(npc.role || "")}</div>
-+    <div class="rpg-inspector-meta">Faction: ${esc(npc.faction_id || "")}</div>
-+    <div class="rpg-inspector-meta">Location: ${esc(npc.location_id || "")}</div>
-+    <div class="rpg-inspector-subtitle">Why</div>
-+    <pre class="rpg-inspector-pre">${esc(JSON.stringify(why, null, 2))}</pre>
-+    <div class="rpg-inspector-subtitle">Top Goals</div>
-+    <pre class="rpg-inspector-pre">${esc(JSON.stringify(reasoning.top_goals || [], null, 2))}</pre>
-+    <div class="rpg-inspector-subtitle">Recent Memories</div>
-+    <pre class="rpg-inspector-pre">${esc(JSON.stringify(reasoning.recent_memories || [], null, 2))}</pre>
-+    <div class="rpg-inspector-subtitle">Last Decision</div>
-+    <pre class="rpg-inspector-pre">${esc(JSON.stringify(reasoning.last_decision || {}, null, 2))}</pre>
-+  `;
-+}
-+
-+export function renderGmAudit(debugMeta) {
-+  const root = document.getElementById("rpg-inspector-gm-audit");
-+  if (!root) return;
-+  const audit = safeArray(safeObj(debugMeta).gm_audit);
-+  const notes = safeArray(safeObj(debugMeta).gm_notes);
-+
-+  root.innerHTML = `
-+    <div class="rpg-inspector-title">GM Audit</div>
-+    <div class="rpg-inspector-subtitle">Actions</div>
-+    ${audit.slice().reverse().map(item => `
++    <div class="rpg-inspector-subtitle">New Events</div>
++    ${newEvents.map((item) => `
 +      <div class="rpg-inspector-row">
-+        <div><strong>${esc(item.action || "action")}</strong></div>
-+        <div>${esc(JSON.stringify(item))}</div>
++        <div><strong>${esc(item.type || "event")}</strong></div>
++        <div>${esc(item.summary || "")}</div>
 +      </div>
-+    `).join("")}
-+    <div class="rpg-inspector-subtitle">Notes</div>
-+    ${notes.slice().reverse().map(item => `
-+      <div class="rpg-inspector-row">${esc(item.note || "")}</div>
-+    `).join("")}
++    `).join("") || '<div class="rpg-inspector-meta">No new events</div>'}
++
++    <div class="rpg-inspector-subtitle">New Consequences</div>
++    ${newConsequences.map((item) => `
++      <div class="rpg-inspector-row">
++        <div><strong>${esc(item.type || "consequence")}</strong></div>
++        <div>${esc(item.summary || "")}</div>
++      </div>
++    `).join("") || '<div class="rpg-inspector-meta">No new consequences</div>'}
 +  `;
 +}
-4. Create src/static/rpg/rpgInspectorUI.js
-diff --git a/src/static/rpg/rpgInspectorUI.js b/src/static/rpg/rpgInspectorUI.js
+3. Create src/static/rpg/rpgInspectorCausalTrace.js
+diff --git a/src/static/rpg/rpgInspectorCausalTrace.js b/src/static/rpg/rpgInspectorCausalTrace.js
 new file mode 100644
 --- /dev/null
-+++ b/src/static/rpg/rpgInspectorUI.js
-@@ -0,0 +1,162 @@
-+import { RPGInspectorClient } from "./rpgInspectorClient.js";
++++ b/src/static/rpg/rpgInspectorCausalTrace.js
+@@ -0,0 +1,104 @@
++function esc(str) {
++  return String(str ?? "")
++    .replaceAll("&", "&amp;")
++    .replaceAll("<", "&lt;")
++    .replaceAll(">", "&gt;")
++    .replaceAll('"', "&quot;")
++    .replaceAll("'", "&#39;");
++}
++
++function safeArray(v) {
++  return Array.isArray(v) ? v : [];
++}
++
++function safeObj(v) {
++  return v && typeof v === "object" ? v : {};
++}
++
++export function buildCausalTrace({ latestDiff, timeline, npcReasoning }) {
++  const diff = safeObj(latestDiff);
++  const t = safeObj(timeline);
++  const npc = safeObj(npcReasoning);
++
++  const chain = [];
++
++  safeArray(diff.new_events).forEach((event) => {
++    chain.push({
++      kind: "event",
++      label: event.type || "event",
++      text: event.summary || "",
++    });
++  });
++
++  safeArray(diff.new_consequences).forEach((item) => {
++    chain.push({
++      kind: "consequence",
++      label: item.type || "consequence",
++      text: item.summary || "",
++    });
++  });
++
++  safeArray(t.recent_world_consequences).forEach((item) => {
++    chain.push({
++      kind: "world",
++      label: item.type || "world_consequence",
++      text: item.summary || "",
++    });
++  });
++
++  const why = safeObj(npc.why);
++  if (Object.keys(why).length > 0) {
++    chain.push({
++      kind: "npc_reasoning",
++      label: "npc_reasoning",
++      text: why.decision_reason || JSON.stringify(why),
++    });
++  }
++
++  return chain.slice(0, 20);
++}
++
++export function renderCausalTrace(trace) {
++  const root = document.getElementById("rpg-inspector-causal-trace");
++  if (!root) return;
++  const rows = safeArray(trace);
++  root.innerHTML = `
++    <div class="rpg-inspector-title">Causal Trace</div>
++    ${rows.map((row, idx) => `
++      <div class="rpg-inspector-trace-row">
++        <div class="rpg-inspector-trace-index">${esc(idx + 1)}</div>
++        <div class="rpg-inspector-trace-body">
++          <div><strong>${esc(row.label || row.kind || "step")}</strong></div>
++          <div>${esc(row.text || "")}</div>
++        </div>
++      </div>
++    `).join("") || '<div class="rpg-inspector-meta">No causal trace yet</div>'}
++  `;
++}
+4. Patch src/static/rpg/rpgInspectorState.js
+diff --git a/src/static/rpg/rpgInspectorState.js b/src/static/rpg/rpgInspectorState.js
+index XXXXXXX..PHASE84701 100644
+--- a/src/static/rpg/rpgInspectorState.js
++++ b/src/static/rpg/rpgInspectorState.js
+@@ -1,10 +1,15 @@
+ export const rpgInspectorState = {
+   timeline: null,
+   latestDiff: null,
+   selectedTick: null,
+   selectedTickView: null,
+   selectedNpcId: "",
+   npcReasoning: null,
++  timelineQuery: "",
++  worldConsequenceFilter: "all",
++  causalTrace: [],
++  loading: false,
+   isOpen: false,
+ };
+ 
+ export function resetInspectorState() {
+@@ -6,5 +11,9 @@ export function resetInspectorState() {
+   rpgInspectorState.selectedTick = null;
+   rpgInspectorState.selectedTickView = null;
+   rpgInspectorState.selectedNpcId = "";
+   rpgInspectorState.npcReasoning = null;
++  rpgInspectorState.timelineQuery = "";
++  rpgInspectorState.worldConsequenceFilter = "all";
++  rpgInspectorState.causalTrace = [];
++  rpgInspectorState.loading = false;
+ }
+5. Patch src/static/rpg/rpgInspectorRenderer.js
+diff --git a/src/static/rpg/rpgInspectorRenderer.js b/src/static/rpg/rpgInspectorRenderer.js
+index XXXXXXX..PHASE84702 100644
+--- a/src/static/rpg/rpgInspectorRenderer.js
++++ b/src/static/rpg/rpgInspectorRenderer.js
+@@ -1,3 +1,4 @@
 +import { rpgInspectorState } from "./rpgInspectorState.js";
-+import {
-+  renderInspectorShell,
-+  renderTimelinePanel,
-+  renderTickView,
-+  renderNpcReasoning,
-+  renderGmAudit,
-+} from "./rpgInspectorRenderer.js";
+ function esc(str) {
+   return String(str ?? "")
+@@ -13,9 +14,18 @@ function safeObj(v) {
+   return v && typeof v === "object" ? v : {};
+ }
+ 
+ export function renderInspectorShell(isOpen) {
+   const root = document.getElementById("rpg-inspector-shell");
+   if (!root) return;
+   root.style.display = isOpen ? "grid" : "none";
++  root.dataset.loading = rpgInspectorState.loading ? "true" : "false";
+ }
 +
-+const inspectorClient = new RPGInspectorClient();
-+
-+function getEl(id) {
-+  return document.getElementById(id);
++export function setInspectorLoading(isLoading) {
++  rpgInspectorState.loading = !!isLoading;
++  const root = document.getElementById("rpg-inspector-shell");
++  if (!root) return;
++  root.dataset.loading = isLoading ? "true" : "false";
 +}
-+
-+export class RPGInspectorUI {
-+  constructor(getSetupPayload, getSimulationState) {
-+    this.getSetupPayload = getSetupPayload;
-+    this.getSimulationState = getSimulationState;
-+  }
-+
-+  toggleOpen() {
-+    rpgInspectorState.isOpen = !rpgInspectorState.isOpen;
-+    renderInspectorShell(rpgInspectorState.isOpen);
-+  }
-+
-+  async refreshTimeline() {
-+    const setupPayload = this.getSetupPayload();
-+    const res = await inspectorClient.getTimeline(setupPayload);
-+    rpgInspectorState.timeline = res.timeline;
-+    rpgInspectorState.latestDiff = res.latest_diff || {};
+ 
+ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
+   const root = document.getElementById("rpg-inspector-timeline");
+@@ -23,7 +33,8 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
+ 
+   const t = safeObj(timeline);
+   const snaps = safeArray(t.snapshots);
+-  const recentConsequences = safeArray(t.recent_world_consequences);
++  const recentConsequences = safeArray(t.recent_world_consequences);
+   const diff = safeObj(latestDiff);
+ 
+   root.innerHTML = `
+@@ -42,6 +53,12 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
+     </div>
+     <div class="rpg-inspector-section">
+       <div class="rpg-inspector-title">Recent Ticks</div>
++      <input
++        id="rpg-inspector-timeline-query"
++        type="text"
++        class="rpg-inspector-input"
++        placeholder="Filter ticks..."
++        value="${esc(rpgInspectorState.timelineQuery || "")}"
++      />
+       <div id="rpg-inspector-timeline-list"></div>
+     </div>
+     <div class="rpg-inspector-section">
+@@ -50,6 +67,12 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
+       <div>
+         ${recentConsequences.map(item => `
+           <div class="rpg-inspector-row">
++            <button
++              class="rpg-inspector-link-btn"
++              data-consequence-type="${esc(item.type || "")}"
++              type="button"
++            >
++              inspect
++            </button>
+             <div><strong>${esc(item.type || "consequence")}</strong></div>
+             <div>${esc(item.summary || "")}</div>
+           </div>
+@@ -63,9 +86,17 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
+   if (!list) return;
+ 
+   list.innerHTML = "";
+-  snaps.slice().reverse().forEach((snap) => {
++  snaps.slice().reverse().forEach((snap) => {
+     const btn = document.createElement("button");
+     btn.className = "rpg-inspector-tick-btn";
++    if (snap.tick === rpgInspectorState.selectedTick) {
++      btn.classList.add("active");
++    }
+     btn.textContent = `Tick ${snap.tick}`;
+     btn.onclick = () => onSelectTick && onSelectTick(snap.tick);
+     list.appendChild(btn);
+   });
+ }
+6. Patch src/static/rpg/rpgInspectorUI.js
+diff --git a/src/static/rpg/rpgInspectorUI.js b/src/static/rpg/rpgInspectorUI.js
+index XXXXXXX..PHASE84703 100644
+--- a/src/static/rpg/rpgInspectorUI.js
++++ b/src/static/rpg/rpgInspectorUI.js
+@@ -1,13 +1,18 @@
+ import { RPGInspectorClient } from "./rpgInspectorClient.js";
+ import { rpgInspectorState } from "./rpgInspectorState.js";
++import { filterTimelineSnapshots, filterWorldConsequences, buildNpcOptions } from "./rpgInspectorFilters.js";
+ import {
+   renderInspectorShell,
+   renderTimelinePanel,
+   renderTickView,
+   renderNpcReasoning,
+   renderGmAudit,
++  setInspectorLoading,
+ } from "./rpgInspectorRenderer.js";
++import { renderInspectorDiff } from "./rpgInspectorDiffRenderer.js";
++import { buildCausalTrace, renderCausalTrace } from "./rpgInspectorCausalTrace.js";
+ 
+ const inspectorClient = new RPGInspectorClient();
+@@ -18,9 +23,17 @@ export class RPGInspectorUI {
+     this.getSimulationState = getSimulationState;
+   }
+ 
+   toggleOpen() {
+     rpgInspectorState.isOpen = !rpgInspectorState.isOpen;
++    localStorage.setItem("rpg_inspector_open", rpgInspectorState.isOpen ? "1" : "0");
+     renderInspectorShell(rpgInspectorState.isOpen);
+   }
+ 
+   async refreshTimeline() {
++    setInspectorLoading(true);
+     const setupPayload = this.getSetupPayload();
+     const res = await inspectorClient.getTimeline(setupPayload);
+     rpgInspectorState.timeline = res.timeline;
+     rpgInspectorState.latestDiff = res.latest_diff || {};
+-    renderTimelinePanel(
+-      res.timeline,
++    const filteredTimeline = {
++      ...res.timeline,
++      snapshots: filterTimelineSnapshots((res.timeline || {}).snapshots || [], rpgInspectorState.timelineQuery),
++      recent_world_consequences: filterWorldConsequences(
++        (res.timeline || {}).recent_world_consequences || [],
++        rpgInspectorState.worldConsequenceFilter
++      ),
++    };
 +    renderTimelinePanel(
-+      res.timeline,
-+      res.latest_diff || {},
-+      async (tick) => {
-+        await this.selectTick(tick);
++      filteredTimeline,
+       res.latest_diff || {},
+       async (tick) => {
+         await this.selectTick(tick);
+       }
+     );
++    renderInspectorDiff(res.latest_diff || {});
++    rpgInspectorState.causalTrace = buildCausalTrace({
++      latestDiff: res.latest_diff || {},
++      timeline: res.timeline || {},
++      npcReasoning: rpgInspectorState.npcReasoning || {},
++    });
++    renderCausalTrace(rpgInspectorState.causalTrace);
++    this.populateNpcOptions();
++    setInspectorLoading(false);
+   }
+ 
+   async selectTick(tick) {
++    setInspectorLoading(true);
+     const setupPayload = this.getSetupPayload();
+     const res = await inspectorClient.getTimelineTick(setupPayload, tick);
+     rpgInspectorState.selectedTick = tick;
+     rpgInspectorState.selectedTickView = res.tick_view;
+     renderTickView(res.tick_view);
++    setInspectorLoading(false);
++    await this.refreshTimeline();
+   }
+ 
+   async inspectNpc(npcId) {
++    setInspectorLoading(true);
+     const setupPayload = this.getSetupPayload();
+     const res = await inspectorClient.getNpcReasoning(setupPayload, npcId);
+     rpgInspectorState.selectedNpcId = npcId;
+     rpgInspectorState.npcReasoning = res.npc_reasoning;
+     renderNpcReasoning(res.npc_reasoning);
++    rpgInspectorState.causalTrace = buildCausalTrace({
++      latestDiff: rpgInspectorState.latestDiff || {},
++      timeline: rpgInspectorState.timeline || {},
++      npcReasoning: res.npc_reasoning || {},
++    });
++    renderCausalTrace(rpgInspectorState.causalTrace);
++    setInspectorLoading(false);
+   }
++
++  populateNpcOptions() {
++    const root = getEl("rpg-inspector-npc-select");
++    if (!root) return;
++    const options = buildNpcOptions(this.getSimulationState());
++    root.innerHTML = `<option value="">Select NPC</option>` + options.map((opt) => `
++      <option value="${opt.npc_id}" ${opt.npc_id === rpgInspectorState.selectedNpcId ? "selected" : ""}>${opt.label}</option>
++    `).join("");
++  }
+@@ -58,6 +71,8 @@ export class RPGInspectorUI {
+     const note = (getEl("rpg-inspector-debug-note")?.value || "").trim();
+     if (!note) return;
+     const setupPayload = this.getSetupPayload();
++    setInspectorLoading(true);
+     await inspectorClient.addDebugNote(setupPayload, note);
+     const input = getEl("rpg-inspector-debug-note");
+     if (input) input.value = "";
+     await this.refreshAudit();
++    setInspectorLoading(false);
+   }
+@@ -67,6 +82,17 @@ export class RPGInspectorUI {
+     renderGmAudit((simulationState || {}).debug_meta || {});
+   }
+ 
+   bind() {
++    const saved = localStorage.getItem("rpg_inspector_open");
++    if (saved === "1") {
++      rpgInspectorState.isOpen = true;
++      renderInspectorShell(true);
++    }
++
+     getEl("rpg-inspector-toggle-btn")?.addEventListener("click", () => this.toggleOpen());
+     getEl("rpg-inspector-refresh-btn")?.addEventListener("click", async () => {
+       await this.refreshTimeline();
+       await this.refreshAudit();
+     });
++    getEl("rpg-inspector-npc-select")?.addEventListener("change", async (e) => {
++      const npcId = e.target.value || "";
++      if (npcId) {
++        getEl("rpg-inspector-npc-id").value = npcId;
++        await this.inspectNpc(npcId);
 +      }
-+    );
-+  }
-+
-+  async selectTick(tick) {
-+    const setupPayload = this.getSetupPayload();
-+    const res = await inspectorClient.getTimelineTick(setupPayload, tick);
-+    rpgInspectorState.selectedTick = tick;
-+    rpgInspectorState.selectedTickView = res.tick_view;
-+    renderTickView(res.tick_view);
-+  }
-+
-+  async inspectNpc(npcId) {
-+    const setupPayload = this.getSetupPayload();
-+    const res = await inspectorClient.getNpcReasoning(setupPayload, npcId);
-+    rpgInspectorState.selectedNpcId = npcId;
-+    rpgInspectorState.npcReasoning = res.npc_reasoning;
-+    renderNpcReasoning(res.npc_reasoning);
-+  }
-+
-+  async forceNpcGoal() {
-+    const npcId = (getEl("rpg-inspector-npc-id")?.value || "").trim();
-+    const goalId = (getEl("rpg-inspector-goal-id")?.value || "").trim();
-+    const goalType = (getEl("rpg-inspector-goal-type")?.value || "").trim();
-+    const priority = parseFloat((getEl("rpg-inspector-goal-priority")?.value || "1").trim());
-+    if (!npcId) return;
-+    const setupPayload = this.getSetupPayload();
-+    await inspectorClient.forceNpcGoal(setupPayload, npcId, {
-+      goal_id: goalId || "gm_forced",
-+      type: goalType || "gm_override",
-+      priority: isNaN(priority) ? 1.0 : priority,
 +    });
-+    await this.refreshAudit();
-+    await this.inspectNpc(npcId);
-+  }
-+
-+  async forceFactionTrend() {
-+    const factionId = (getEl("rpg-inspector-faction-id")?.value || "").trim();
-+    const aggression = parseFloat((getEl("rpg-inspector-faction-aggression")?.value || "").trim());
-+    const momentum = parseFloat((getEl("rpg-inspector-faction-momentum")?.value || "").trim());
-+    if (!factionId) return;
-+    const setupPayload = this.getSetupPayload();
-+    const patch = {};
-+    if (!isNaN(aggression)) patch.aggression = aggression;
-+    if (!isNaN(momentum)) patch.momentum = momentum;
-+    await inspectorClient.forceFactionTrend(setupPayload, factionId, patch);
-+    await this.refreshAudit();
-+  }
-+
-+  async addDebugNote() {
-+    const note = (getEl("rpg-inspector-debug-note")?.value || "").trim();
-+    if (!note) return;
-+    const setupPayload = this.getSetupPayload();
-+    await inspectorClient.addDebugNote(setupPayload, note);
-+    const input = getEl("rpg-inspector-debug-note");
-+    if (input) input.value = "";
-+    await this.refreshAudit();
-+  }
-+
-+  async refreshAudit() {
-+    const simulationState = this.getSimulationState();
-+    renderGmAudit((simulationState || {}).debug_meta || {});
-+  }
-+
-+  bind() {
-+    getEl("rpg-inspector-toggle-btn")?.addEventListener("click", () => this.toggleOpen());
-+    getEl("rpg-inspector-refresh-btn")?.addEventListener("click", async () => {
+     getEl("rpg-inspector-inspect-npc-btn")?.addEventListener("click", async () => {
+       const npcId = (getEl("rpg-inspector-npc-id")?.value || "").trim();
+       if (npcId) await this.inspectNpc(npcId);
+@@ -79,5 +105,20 @@ export class RPGInspectorUI {
+     getEl("rpg-inspector-add-note-btn")?.addEventListener("click", async () => {
+       await this.addDebugNote();
+     });
++    getEl("rpg-inspector-timeline-query")?.addEventListener("input", async (e) => {
++      rpgInspectorState.timelineQuery = e.target.value || "";
 +      await this.refreshTimeline();
-+      await this.refreshAudit();
 +    });
-+    getEl("rpg-inspector-inspect-npc-btn")?.addEventListener("click", async () => {
-+      const npcId = (getEl("rpg-inspector-npc-id")?.value || "").trim();
-+      if (npcId) await this.inspectNpc(npcId);
++    getEl("rpg-inspector-world-filter")?.addEventListener("change", async (e) => {
++      rpgInspectorState.worldConsequenceFilter = e.target.value || "all";
++      await this.refreshTimeline();
 +    });
-+    getEl("rpg-inspector-force-goal-btn")?.addEventListener("click", async () => {
-+      await this.forceNpcGoal();
-+    });
-+    getEl("rpg-inspector-force-faction-btn")?.addEventListener("click", async () => {
-+      await this.forceFactionTrend();
-+    });
-+    getEl("rpg-inspector-add-note-btn")?.addEventListener("click", async () => {
-+      await this.addDebugNote();
-+    });
-+  }
-+}
-5. Patch src/static/rpg/rpgPlayerIntegration.js
+   }
+ }
+7. Patch src/static/rpg/rpgPlayerIntegration.js
 
-Add inspector bootstrap hooks.
+Add refresh debounce.
 
 diff --git a/src/static/rpg/rpgPlayerIntegration.js b/src/static/rpg/rpgPlayerIntegration.js
-index XXXXXXX..PHASE84601 100644
+index XXXXXXX..PHASE84704 100644
 --- a/src/static/rpg/rpgPlayerIntegration.js
 +++ b/src/static/rpg/rpgPlayerIntegration.js
-@@ -1,5 +1,6 @@
- import { RPGPlayerClient } from "./rpgPlayerClient.js";
- ...
-+import { RPGInspectorUI } from "./rpgInspectorUI.js";
- ...
-@@ -14,6 +15,7 @@ export class RPGPlayerIntegration {
-     this.setupPayload = setupPayload;
-     this.playerClient = new RPGPlayerClient();
+@@ -16,6 +16,7 @@ export class RPGPlayerIntegration {
      this.dialogueClient = new RPGDialogueClient();
      this.encounterClient = new RPGEncounterClient();
-+    this.inspectorUI = null;
+     this.inspectorUI = null;
++    this._inspectorRefreshTimer = null;
      bindDialogueInput((text) => this.sendDialogueMessage(text));
    }
-@@ -18,6 +20,21 @@ export class RPGPlayerIntegration {
-   constructor(setupPayload = null) {
- ...
+@@ -34,9 +35,16 @@ export class RPGPlayerIntegration {
    }
-+
-+  ensureInspector() {
-+    if (this.inspectorUI) return this.inspectorUI;
-+    this.inspectorUI = new RPGInspectorUI(
-+      () => this.setupPayload || {},
-+      () => {
-+        const meta = (this.setupPayload || {}).metadata || {};
-+        return meta.simulation_state || {};
-+      }
-+    );
-+    this.inspectorUI.bind();
-+    return this.inspectorUI;
-+  }
-@@ -58,6 +75,10 @@ export class RPGPlayerIntegration {
-     if (result) {
-       this.setupPayload = result.setup_payload;
- ...
+ 
+   async _refreshInspector() {
+-    const inspector = this.ensureInspector();
+-    await inspector.refreshTimeline();
+-    await inspector.refreshAudit();
++    if (this._inspectorRefreshTimer) {
++      clearTimeout(this._inspectorRefreshTimer);
++    }
++    this._inspectorRefreshTimer = setTimeout(async () => {
 +      const inspector = this.ensureInspector();
 +      await inspector.refreshTimeline();
 +      await inspector.refreshAudit();
-     }
-     return result;
++    }, 50);
    }
+8. Patch src/templates/rpg.html
 
-Repeat that same inspector refresh block after:
-
-startDialogue()
-sendDialogueMessage()
-endDialogueSession()
-startEncounter()
-applyEncounterAction()
-runEncounterNpcTurn()
-endEncounter()
-
-Use the same snippet each time:
-
-const inspector = this.ensureInspector();
-await inspector.refreshTimeline();
-await inspector.refreshAudit();
-6. Patch src/static/rpg/rpgMode.js
-
-Boot inspector once on page load.
-
-diff --git a/src/static/rpg/rpgMode.js b/src/static/rpg/rpgMode.js
-index XXXXXXX..PHASE84602 100644
---- a/src/static/rpg/rpgMode.js
-+++ b/src/static/rpg/rpgMode.js
-@@ -1,5 +1,5 @@
- ...
- import { RPGPlayerIntegration } from "./rpgPlayerIntegration.js";
- ...
-@@ -24,6 +24,7 @@ function ensureRpgPlayerIntegration(setupPayload) {
-   if (!rpgPlayerIntegration) {
-     rpgPlayerIntegration = new RPGPlayerIntegration(setupPayload || null);
-+    rpgPlayerIntegration.ensureInspector();
-   }
-   if (setupPayload) {
-     rpgPlayerIntegration.setSetupPayload(setupPayload);
-7. Patch src/templates/rpg.html
-
-Add inspector shell and controls.
+Add filter controls, diff panel, causal trace, NPC select, save meta.
 
 diff --git a/src/templates/rpg.html b/src/templates/rpg.html
-index XXXXXXX..PHASE84603 100644
+index XXXXXXX..PHASE84705 100644
 --- a/src/templates/rpg.html
 +++ b/src/templates/rpg.html
-@@ -1,6 +1,92 @@
+@@ -1,6 +1,123 @@
  ...
-+<div class="rpg-inspector-toolbar">
-+  <button id="rpg-inspector-toggle-btn" type="button">Inspector</button>
-+  <button id="rpg-inspector-refresh-btn" type="button">Refresh Inspector</button>
-+</div>
-+
-+<div id="rpg-inspector-shell" class="rpg-inspector-shell" style="display:none;">
-+  <div class="rpg-inspector-column">
-+    <div id="rpg-inspector-timeline" class="rpg-inspector-panel"></div>
-+    <div id="rpg-inspector-tick-view" class="rpg-inspector-panel"></div>
-+  </div>
-+  <div class="rpg-inspector-column">
-+    <div class="rpg-inspector-panel">
-+      <div class="rpg-inspector-title">NPC Inspector</div>
-+      <input id="rpg-inspector-npc-id" type="text" placeholder="npc_id" />
-+      <button id="rpg-inspector-inspect-npc-btn" type="button">Inspect NPC</button>
-+      <div id="rpg-inspector-npc-reasoning"></div>
-+    </div>
-+    <div class="rpg-inspector-panel">
-+      <div class="rpg-inspector-title">Force NPC Goal</div>
-+      <input id="rpg-inspector-goal-id" type="text" placeholder="goal_id" />
-+      <input id="rpg-inspector-goal-type" type="text" placeholder="goal type" />
-+      <input id="rpg-inspector-goal-priority" type="number" step="0.1" placeholder="priority" />
-+      <button id="rpg-inspector-force-goal-btn" type="button">Force Goal</button>
-+    </div>
-+  </div>
-+  <div class="rpg-inspector-column">
-+    <div class="rpg-inspector-panel">
-+      <div class="rpg-inspector-title">Force Faction Trend</div>
-+      <input id="rpg-inspector-faction-id" type="text" placeholder="faction_id" />
-+      <input id="rpg-inspector-faction-aggression" type="number" step="0.1" placeholder="aggression" />
-+      <input id="rpg-inspector-faction-momentum" type="number" step="0.1" placeholder="momentum" />
-+      <button id="rpg-inspector-force-faction-btn" type="button">Apply Faction Trend</button>
-+    </div>
-+    <div class="rpg-inspector-panel">
-+      <div class="rpg-inspector-title">Debug Notes</div>
-+      <textarea id="rpg-inspector-debug-note" rows="4" placeholder="Enter GM/debug note"></textarea>
-+      <button id="rpg-inspector-add-note-btn" type="button">Add Note</button>
-+    </div>
-+    <div id="rpg-inspector-gm-audit" class="rpg-inspector-panel"></div>
-+  </div>
-+</div>
-+
-+<style>
-+  .rpg-inspector-toolbar {
-+    display: flex;
-+    gap: 8px;
-+    margin-top: 16px;
-+  }
-+  .rpg-inspector-shell {
-+    display: grid;
-+    grid-template-columns: 1fr 1fr 1fr;
-+    gap: 12px;
-+    margin-top: 12px;
-+  }
-+  .rpg-inspector-column {
-+    min-width: 0;
-+  }
-+  .rpg-inspector-panel {
-+    border: 1px solid #ddd;
-+    border-radius: 10px;
-+    padding: 12px;
-+    background: #fff;
-+    margin-bottom: 12px;
-+  }
-+  .rpg-inspector-title {
-+    font-weight: 700;
++<div id="rpg-save-meta" class="rpg-inspector-meta"></div>
+ <div class="rpg-inspector-toolbar">
+   <button id="rpg-inspector-toggle-btn" type="button">Inspector</button>
+   <button id="rpg-inspector-refresh-btn" type="button">Refresh Inspector</button>
+ </div>
+ 
+ <div id="rpg-inspector-shell" class="rpg-inspector-shell" style="display:none;">
+   <div class="rpg-inspector-column">
+     <div id="rpg-inspector-timeline" class="rpg-inspector-panel"></div>
+     <div id="rpg-inspector-tick-view" class="rpg-inspector-panel"></div>
++    <div id="rpg-inspector-diff-panel" class="rpg-inspector-panel"></div>
++    <div id="rpg-inspector-causal-trace" class="rpg-inspector-panel"></div>
+   </div>
+   <div class="rpg-inspector-column">
+     <div class="rpg-inspector-panel">
+       <div class="rpg-inspector-title">NPC Inspector</div>
++      <select id="rpg-inspector-npc-select" class="rpg-inspector-input"></select>
+       <input id="rpg-inspector-npc-id" type="text" placeholder="npc_id" />
+       <button id="rpg-inspector-inspect-npc-btn" type="button">Inspect NPC</button>
+       <div id="rpg-inspector-npc-reasoning"></div>
+     </div>
+@@ -18,6 +135,13 @@
+       <div class="rpg-inspector-title">Debug Notes</div>
++      <label class="rpg-inspector-meta">World consequence filter</label>
++      <select id="rpg-inspector-world-filter" class="rpg-inspector-input">
++        <option value="all">All</option>
++        <option value="location_shift">location_shift</option>
++        <option value="faction_shift">faction_shift</option>
++        <option value="thread_shift">thread_shift</option>
++        <option value="rumor_shift">rumor_shift</option>
++      </select>
+       <textarea id="rpg-inspector-debug-note" rows="4" placeholder="Enter GM/debug note"></textarea>
+       <button id="rpg-inspector-add-note-btn" type="button">Add Note</button>
+     </div>
+@@ -56,6 +180,27 @@
+   .rpg-inspector-pre {
+     white-space: pre-wrap;
+     word-break: break-word;
+@@ -63,6 +208,31 @@
+     border-radius: 6px;
+     font-size: 12px;
+   }
++  .rpg-inspector-input {
++    width: 100%;
 +    margin-bottom: 8px;
 +  }
-+  .rpg-inspector-subtitle {
-+    font-weight: 600;
-+    margin-top: 10px;
-+    margin-bottom: 6px;
++  .rpg-inspector-grid2 {
++    display: grid;
++    grid-template-columns: 1fr 1fr;
++    gap: 8px;
++    margin-bottom: 8px;
 +  }
-+  .rpg-inspector-meta {
++  .rpg-inspector-chip {
++    background: #f3f4f6;
++    border-radius: 999px;
++    padding: 6px 10px;
 +    font-size: 12px;
-+    opacity: 0.8;
-+    margin-bottom: 4px;
++    display: inline-block;
 +  }
-+  .rpg-inspector-row {
-+    padding: 6px 0;
++  .rpg-inspector-tag {
++    display: inline-block;
++    margin: 0 6px 6px 0;
++    padding: 4px 8px;
++    border-radius: 999px;
++    background: #eef2ff;
++    font-size: 12px;
++  }
+   .rpg-inspector-tick-btn {
+     display: block;
+     width: 100%;
+@@ -70,5 +240,27 @@
+     margin-bottom: 6px;
+   }
++  .rpg-inspector-tick-btn.active {
++    background: #eef;
++    font-weight: 700;
++  }
++  .rpg-inspector-link-btn {
++    margin-right: 8px;
++  }
++  .rpg-inspector-trace-row {
++    display: flex;
++    gap: 10px;
++    padding: 8px 0;
 +    border-bottom: 1px solid #eee;
 +  }
-+  .rpg-inspector-pre {
-+    white-space: pre-wrap;
-+    word-break: break-word;
-+    background: #fafafa;
-+    padding: 8px;
-+    border-radius: 6px;
++  .rpg-inspector-trace-index {
++    width: 24px;
++    min-width: 24px;
++    height: 24px;
++    border-radius: 999px;
++    background: #111827;
++    color: #fff;
++    display: flex;
++    align-items: center;
++    justify-content: center;
 +    font-size: 12px;
 +  }
-+  .rpg-inspector-tick-btn {
-+    display: block;
-+    width: 100%;
-+    text-align: left;
-+    margin-bottom: 6px;
-+  }
-+</style>
+ </style>
  ...
-8. Optional patch: render schema/save meta in player-facing debug area
-
-If you already expose debug meta somewhere else, add:
-
+9. Optional patch: render save meta in player renderer
 diff --git a/src/static/rpg/rpgPlayerRenderer.js b/src/static/rpg/rpgPlayerRenderer.js
-index XXXXXXX..PHASE84604 100644
+index XXXXXXX..PHASE84706 100644
 --- a/src/static/rpg/rpgPlayerRenderer.js
 +++ b/src/static/rpg/rpgPlayerRenderer.js
-@@ -1,5 +1,10 @@
+@@ -1,5 +1,11 @@
  ...
 +export function renderSaveMeta(simulationState) {
 +  const root = document.getElementById("rpg-save-meta");
@@ -581,65 +650,55 @@ index XXXXXXX..PHASE84604 100644
 +  root.textContent = `schema ${meta.schema_version || "?"} · engine ${meta.engine_version || "?"}`;
 +}
 
-And in template:
+Then call it anywhere you already re-render player/debug state.
 
-diff --git a/src/templates/rpg.html b/src/templates/rpg.html
-index PHASE84603..PHASE84605 100644
---- a/src/templates/rpg.html
-+++ b/src/templates/rpg.html
-@@ -1,6 +1,7 @@
- ...
-+<div id="rpg-save-meta" class="rpg-inspector-meta"></div>
-9. Tests
-Create src/tests/unit/rpg/test_phase846_frontend_inspector_files.py
-diff --git a/src/tests/unit/rpg/test_phase846_frontend_inspector_files.py b/src/tests/unit/rpg/test_phase846_frontend_inspector_files.py
+10. Tests
+Create src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py
+diff --git a/src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py b/src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py
 new file mode 100644
 --- /dev/null
-+++ b/src/tests/unit/rpg/test_phase846_frontend_inspector_files.py
-@@ -0,0 +1,34 @@
++++ b/src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py
+@@ -0,0 +1,39 @@
 +import os
 +
 +
-+def test_inspector_client_exists():
-+    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorClient.js")
++def test_inspector_filters_exists():
++    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorFilters.js")
 +    assert os.path.exists(path)
 +    with open(path, "r", encoding="utf-8") as f:
 +        content = f.read()
-+    assert "class RPGInspectorClient" in content
++    assert "filterTimelineSnapshots" in content
++    assert "buildNpcOptions" in content
 +
 +
-+def test_inspector_renderer_exists():
-+    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorRenderer.js")
++def test_inspector_diff_renderer_exists():
++    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorDiffRenderer.js")
 +    assert os.path.exists(path)
 +    with open(path, "r", encoding="utf-8") as f:
 +        content = f.read()
-+    assert "renderTimelinePanel" in content
-+    assert "renderNpcReasoning" in content
++    assert "renderInspectorDiff" in content
 +
 +
-+def test_inspector_ui_exists():
-+    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorUI.js")
++def test_inspector_causal_trace_exists():
++    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorCausalTrace.js")
 +    assert os.path.exists(path)
 +    with open(path, "r", encoding="utf-8") as f:
 +        content = f.read()
-+    assert "class RPGInspectorUI" in content
-Optional functional smoke test
-
-Create src/tests/functional/test_phase846_inspector_shell_smoke.py only if you already test rendered templates. Otherwise skip for now.
-
++    assert "buildCausalTrace" in content
++    assert "renderCausalTrace" in content
 Success criteria
 
 After this patch:
 
-inspector opens/closes in the UI
-timeline summary is visible
-latest diff is visible
-recent ticks are clickable
-tick detail view renders
-NPC reasoning can be queried from the UI
-GM can force NPC goals from the UI
-GM can force faction trend changes from the UI
-GM can add debug notes from the UI
-GM audit trail is visible
+inspector supports filtering recent ticks
+world consequence filtering works
+selected tick is highlighted
+latest diff is visually rendered, not just raw metadata
+causal trace is visible
+NPC selection is easier via dropdown
+inspector loading state exists
+inspector open state persists
+inspector refresh is debounced
+save/schema info can be surfaced in the UI
 
-This is the right frontend capstone for the 8.4 backend stack you already completed.
+This is the UX polish layer that makes the 8.4 inspection system feel fast and practical, rather than merely powerful.

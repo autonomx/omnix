@@ -22,6 +22,7 @@ export class RPGPlayerIntegration {
     this.dialogueClient = new RPGDialogueClient();
     this.inspectorUI = null; // Phase 8.4.6 — Inspector UI instance
     this._inspectorRefreshTimer = null; // Phase 8.4.6 fix — debounce refresh
+    this._inspectorRefreshPromise = null; // Phase 8.4.7 fix — return promise from debounce
     bindDialogueInput((text) => this.sendDialogueMessage(text));
   }
 
@@ -40,15 +41,23 @@ export class RPGPlayerIntegration {
   }
 
   // Phase 8.4.6 — Debounced helper to refresh inspector after state changes
+  // Phase 8.4.7 fix — return a promise so callers can await completion
   _refreshInspector() {
     if (this._inspectorRefreshTimer) {
       clearTimeout(this._inspectorRefreshTimer);
     }
-    this._inspectorRefreshTimer = setTimeout(async () => {
-      const inspector = this.ensureInspector();
-      await inspector.refreshTimeline();
-      await inspector.refreshAudit();
-    }, 50);
+    this._inspectorRefreshPromise = new Promise((resolve) => {
+      this._inspectorRefreshTimer = setTimeout(async () => {
+        try {
+          const inspector = this.ensureInspector();
+          await inspector.refreshTimeline();
+          await inspector.refreshAudit();
+        } finally {
+          resolve();
+        }
+      }, 50);
+    });
+    return this._inspectorRefreshPromise;
   }
 
   setSetupPayload(payload) {
