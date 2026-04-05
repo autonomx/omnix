@@ -31,6 +31,12 @@ from .player_inventory import (
     build_player_inventory_view,
 )
 
+# Phase 9.2 — Party system
+from .player_party import (
+    ensure_player_party,
+    build_player_party_view,
+)
+
 __all__ = [
     "AgencySystem",
     "PlayerChoice",
@@ -56,4 +62,7 @@ __all__ = [
     # Phase 9
     "ensure_player_inventory",
     "build_player_inventory_view",
+    # Phase 9.2
+    "ensure_player_party",
+    "build_player_party_view",
 ]
