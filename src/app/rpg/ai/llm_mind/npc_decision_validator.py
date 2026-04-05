@@ -36,9 +36,12 @@ class NPCDecisionValidator:
         action_type = str(data.get("action_type") or "wait")
 
         if intent not in _ALLOWED_INTENTS:
-            data["intent"] = "wait"
+            intent = "wait"
         if action_type not in _ALLOWED_ACTION_TYPES:
-            data["action_type"] = "wait"
+            action_type = "wait"
+
+        data["intent"] = intent
+        data["action_type"] = action_type
 
         data["npc_id"] = str(data.get("npc_id") or "")
         data["tick"] = int(data.get("tick", 0) or 0)

@@ -105,6 +105,7 @@ class NPCMind:
         self.goal_engine.merge_goals(generated)
 
     def decide(self, simulation_state: Dict[str, Any], npc_context: Dict[str, Any], tick: int) -> NPCDecision:
+        npc_context = npc_context or {}
         top_goal = self.goal_engine.top_goal()
         location_id = _safe_str(npc_context.get("location_id"))
 
