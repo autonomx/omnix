@@ -102,6 +102,10 @@ def _map_thread_crisis(inc: dict[str, Any]) -> dict[str, Any]:
         "stakes": ", ".join(stakes_parts),
         "severity": inc.get("severity", "neutral"),
         "source_incident_id": inc.get("incident_id") or inc.get("id"),
+        "action_hooks": [
+            {"type": "intervene_thread", "target_id": source},
+            {"type": "escalate_conflict", "target_id": source},
+        ],
     }
 
 
@@ -131,6 +135,10 @@ def _map_location_flashpoint(inc: dict[str, Any]) -> dict[str, Any]:
         "stakes": ", ".join(stakes_parts),
         "severity": inc.get("severity", "neutral"),
         "source_incident_id": inc.get("incident_id") or inc.get("id"),
+        "action_hooks": [
+            {"type": "intervene_thread", "target_id": source},
+            {"type": "escalate_conflict", "target_id": source},
+        ],
     }
 
 
@@ -160,6 +168,10 @@ def _map_faction_instability(inc: dict[str, Any]) -> dict[str, Any]:
         "stakes": ", ".join(stakes_parts),
         "severity": inc.get("severity", "neutral"),
         "source_incident_id": inc.get("incident_id") or inc.get("id"),
+        "action_hooks": [
+            {"type": "intervene_thread", "target_id": source},
+            {"type": "escalate_conflict", "target_id": source},
+        ],
     }
 
 
@@ -177,6 +189,10 @@ def _map_thread_investigation(inc: dict[str, Any]) -> dict[str, Any]:
         "stakes": "Hidden truths await discovery",
         "severity": inc.get("severity", "neutral"),
         "source_incident_id": inc.get("incident_id") or inc.get("id"),
+        "action_hooks": [
+            {"type": "observe_situation", "target_id": source},
+            {"type": "intervene_thread", "target_id": source},
+        ],
     }
 
 
@@ -194,6 +210,10 @@ def _map_thread_negotiation(inc: dict[str, Any]) -> dict[str, Any]:
         "stakes": "Peace hangs in the balance",
         "severity": inc.get("severity", "neutral"),
         "source_incident_id": inc.get("incident_id") or inc.get("id"),
+        "action_hooks": [
+            {"type": "intervene_thread", "target_id": source},
+            {"type": "escalate_conflict", "target_id": source},
+        ],
     }
 
 
@@ -255,6 +275,10 @@ def _thread_to_scene(thread: dict[str, Any]) -> dict[str, Any]:
         "stakes": "Escalation likely",
         "severity": "moderate" if pressure >= 5 else "low",
         "source_incident_id": None,
+        "action_hooks": [
+            {"type": "intervene_thread", "target_id": tid},
+            {"type": "escalate_conflict", "target_id": tid},
+        ],
     }
 
 
@@ -271,6 +295,10 @@ def _location_to_scene(location: dict[str, Any]) -> dict[str, Any]:
         "stakes": "Volatile environment",
         "severity": "moderate" if heat >= 5 else "low",
         "source_incident_id": None,
+        "action_hooks": [
+            {"type": "intervene_thread", "target_id": lid},
+            {"type": "escalate_conflict", "target_id": lid},
+        ],
     }
 
 

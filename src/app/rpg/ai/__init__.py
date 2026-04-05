@@ -24,6 +24,8 @@ from .world_scene_narrator import (
     parse_npc_reaction,
     parse_choices,
     play_scene,
+    # Phase 5.5
+    apply_hooks_to_choices,
 )
 
 __all__ = [
@@ -57,4 +59,6 @@ __all__ = [
     "parse_npc_reaction",
     "parse_choices",
     "play_scene",
+    # Phase 5.5
+    "apply_hooks_to_choices",
 ]
