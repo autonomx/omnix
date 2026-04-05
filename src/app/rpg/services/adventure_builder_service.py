@@ -34,6 +34,7 @@ from ..creator.regeneration import (
 )
 from ..creator.schema import AdventureSetup
 from ..creator.validation import validate_adventure_setup_payload
+from ..creator.world_player_actions import apply_player_action
 from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_start_result
 
 # ---------------------------------------------------------------------------
@@ -1048,6 +1049,7 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
         "simulation": ..., "inspector": ...}``
     """
     from ..creator.world_graph import inspect_world as _inspect
+    from ..creator.world_scene_generator import generate_scenes_from_simulation
     from ..creator.world_simulation import (
         compute_simulation_diff,
         step_simulation_state,
@@ -1075,6 +1077,9 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
     # Re-run world inspection on the updated setup
     inspection = _inspect(next_setup)
 
+    # Phase 4 — Generate playable scenes from incidents
+    scenes = generate_scenes_from_simulation(after_state)
+
     return {
         "success": True,
         "updated_setup": next_setup,
@@ -1089,6 +1094,7 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
         "effect_diff": effect_diff,
         "incident_diff": incident_diff,
         "reaction_diff": reaction_diff,
+        "scenes": scenes,
         "graph": inspection.get("graph"),
         "simulation": inspection.get("simulation"),
         "inspector": inspection.get("inspector"),
@@ -1111,3 +1117,83 @@ def get_simulation_state(payload: dict[str, Any]) -> dict[str, Any]:
         sim_state = build_initial_simulation_state(data)
 
     return {"success": True, "simulation_state": sim_state}
+
+
+# ---------------------------------------------------------------------------
+# Phase 4.5 — Player Action → Simulation Feedback
+# ---------------------------------------------------------------------------
+
+
+def apply_player_action_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
+    """Apply a player action to the simulation state and advance one tick.
+
+    Implements the gameplay loop:
+
+        Scene → Player Action → Simulation Mutation → New World State → New Scenes
+
+    Parameters
+    ----------
+    payload :
+        Expected keys:
+        - ``setup`` — the current adventure setup dict
+        - ``action`` — dict with ``type`` and ``target_id``
+
+    Returns
+    -------
+    dict
+        ``{"success": True, "updated_setup": ..., "simulation_state": ...,
+        "simulation_diff": ..., "summary": [...], "scenes": [...]}``
+    """
+    from ..creator.world_graph import inspect_world as _inspect
+    from ..creator.world_scene_generator import generate_scenes_from_simulation
+    from ..creator.world_simulation import (
+        compute_simulation_diff,
+        step_simulation_state,
+        summarize_simulation_step,
+    )
+
+    setup = _safe_dict(payload.get("setup"))
+    action = _safe_dict(payload.get("action"))
+
+    # Extract current simulation state
+    meta = _safe_dict(setup.get("metadata"))
+    sim_state = _safe_dict(meta.get("simulation_state"))
+
+    if not sim_state or "tick" not in sim_state:
+        # Initialize simulation state if not present
+        from ..creator.world_simulation import build_initial_simulation_state
+        data = apply_adventure_defaults(dict(setup))
+        sim_state = build_initial_simulation_state(data)
+
+    # Apply the player action to mutate the simulation state
+    updated_sim_state = apply_player_action(sim_state, action)
+
+    # Write mutated state back into setup
+    meta = _safe_dict(setup) if not setup.get("metadata") else _safe_dict(setup.get("metadata"))
+    meta["simulation_state"] = updated_sim_state
+    setup["metadata"] = meta
+
+    # Re-run simulation step with the mutated state
+    step_result = step_simulation_state(setup)
+    next_setup = step_result["next_setup"]
+    after_state = step_result["after_state"]
+
+    summary = step_result["summary"]
+    diff = step_result.get("simulation_diff", {})
+    scenes = generate_scenes_from_simulation(after_state)
+
+    # Re-run world inspection on the updated setup
+    inspection = _inspect(next_setup)
+
+    return {
+        "success": True,
+        **step_result,
+        "updated_setup": next_setup,
+        "simulation_state": after_state,
+        "simulation_diff": diff,
+        "summary": summary,
+        "scenes": scenes,
+        "graph": inspection.get("graph"),
+        "simulation": inspection.get("simulation"),
+        "inspector": inspection.get("inspector"),
+    }

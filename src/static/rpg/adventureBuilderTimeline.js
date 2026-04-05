@@ -547,6 +547,20 @@ var AdventureBuilderTimeline = (function () {
             html += '</div>';
         }
 
+        // Phase 4 — Generated scenes
+        var scenes = state.scenes || [];
+        if (scenes.length) {
+            html += '<div class="ab-sim-scenes"><h5>Generated Scenes</h5>';
+            scenes.forEach(function (sc) {
+                html += '<div class="ab-sim-event-card">' +
+                    '<div class="ab-sim-event-type">' + _esc(sc.type) + '</div>' +
+                    '<div class="ab-sim-event-summary"><strong>' + _esc(sc.title) + '</strong><br>' +
+                    _esc(sc.summary) + '</div>' +
+                '</div>';
+            });
+            html += '</div>';
+        }
+
         // Live incidents from current state
         var liveIncidents = state.incidents || [];
         if (liveIncidents.length) {

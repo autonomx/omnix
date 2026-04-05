@@ -101,7 +101,9 @@ var AdventureBuilderState = (function () {
                     lastEffectDiff: null,
                     /** Phase 3D — Incidents & Policy Reactions */
                     lastIncidentDiff: null,
-                    lastReactionDiff: null
+                    lastReactionDiff: null,
+                    /** Phase 4 — Scenes / Encounters */
+                    lastScenes: []
                 }
             }
         };

@@ -970,6 +970,7 @@ var AdventureBuilder = (function () {
                 wi.simulationRuntime.lastEffectDiff = res.effect_diff || null;
                 wi.simulationRuntime.lastIncidentDiff = res.incident_diff || null;
                 wi.simulationRuntime.lastReactionDiff = res.reaction_diff || null;
+                wi.simulationRuntime.lastScenes = res.scenes || [];
                 // Capture snapshot
                 var tick = (res.simulation_state && res.simulation_state.tick) || '?';
                 _captureWorldSnapshot('After Simulation Tick ' + tick);

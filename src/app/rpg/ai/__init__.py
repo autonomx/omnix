@@ -12,6 +12,20 @@ from .goap import GOAPPlanner
 # Phase 4.5 exports
 from .branch_ai_evaluator import AIBranchEvaluator, BranchEvaluation
 
+# Phase 5 exports
+from .world_scene_narrator import (
+    SceneNarrator,
+    NPCReaction,
+    NarrativeResult,
+    build_scene_prompt,
+    build_npc_reaction_prompt,
+    build_choice_prompt,
+    parse_scene_response,
+    parse_npc_reaction,
+    parse_choices,
+    play_scene,
+)
+
 __all__ = [
     "BehaviorDriver",
     "BehaviorContext",
@@ -32,4 +46,15 @@ __all__ = [
     # Phase 4.5
     "AIBranchEvaluator",
     "BranchEvaluation",
+    # Phase 5
+    "SceneNarrator",
+    "NPCReaction",
+    "NarrativeResult",
+    "build_scene_prompt",
+    "build_npc_reaction_prompt",
+    "build_choice_prompt",
+    "parse_scene_response",
+    "parse_npc_reaction",
+    "parse_choices",
+    "play_scene",
 ]

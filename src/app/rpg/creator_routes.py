@@ -14,6 +14,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from app.rpg.ai.world_scene_narrator import play_scene as narrate_scene
 from app.rpg.services import adventure_builder_service as builder
 
 logger = logging.getLogger(__name__)
@@ -349,3 +350,66 @@ def simulation_state():
     except Exception:
         logger.exception("Failed to get simulation state")
         return jsonify({"success": False, "error": "Failed to get simulation state"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 15. POST /api/rpg/adventure/simulation/action  (Phase 4.5)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/adventure/simulation/action", methods=["POST"])
+def simulation_action():
+    """Apply a player action to the simulation and advance one tick.
+
+    Request body:
+        setup (dict, required): Current adventure setup payload
+        action (dict, required): { "type": "...", "target_id": "..." }
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    setup = data.get("setup")
+    action = data.get("action")
+    if not setup or not action:
+        return jsonify({"success": False, "error": "Both 'setup' and 'action' are required"}), 400
+
+    try:
+        result = builder.apply_player_action_endpoint({"setup": setup, "action": action})
+        return jsonify(result)
+    except Exception:
+        logger.exception("Failed to apply player action")
+        return jsonify({"success": False, "error": "Failed to apply player action"}), 500
+
+
+# ---------------------------------------------------------------------------
+# 16. POST /api/rpg/scene/play  (Phase 5)
+# ---------------------------------------------------------------------------
+
+@creator_bp.route("/api/rpg/scene/play", methods=["POST"])
+def play_scene():
+    """Play a scene and return narrated result with NPC reactions.
+
+    Request body:
+        scene (dict, required): Scene to play
+        state (dict, optional): Current game state
+        tone (str, optional): Narrative tone (default: 'dramatic')
+
+    Returns narrated scene with choices, NPC dialogue, and reactions.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "Missing JSON body"}), 400
+
+    scene = data.get("scene")
+    if not scene:
+        return jsonify({"success": False, "error": "Missing 'scene' in request body"}), 400
+
+    state = data.get("state") or {}
+    tone = data.get("tone", "dramatic")
+
+    try:
+        result = narrate_scene(scene, state, tone=tone)
+        return jsonify({"success": True, **result})
+    except Exception:
+        logger.exception("Failed to play scene")
+        return jsonify({"success": False, "error": "Failed to play scene"}), 500
