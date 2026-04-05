@@ -48,6 +48,11 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
     after_player_state = _safe_dict(after_state.get("player_state"))
     before_inventory = _safe_dict(before_player_state.get("inventory_state"))
     after_inventory = _safe_dict(after_player_state.get("inventory_state"))
+    before_party = _safe_dict(before_player_state.get("party_state"))
+    after_party = _safe_dict(after_player_state.get("party_state"))
+
+    before_narrative = _safe_dict(before_party.get("narrative_state"))
+    after_narrative = _safe_dict(after_party.get("narrative_state"))
 
     changed_npcs = []
     for npc_id in sorted(set(before_npc_minds.keys()) | set(after_npc_minds.keys())):
@@ -101,6 +106,12 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
         "inventory_keys_changed": _keys_changed(before_inventory, after_inventory),
         "inventory_before": before_inventory,
         "inventory_after": after_inventory,
+        "party_keys_changed": _keys_changed(before_party, after_party),
+        "party_narrative_keys_changed": _keys_changed(before_narrative, after_narrative),
+        "party_narrative_before": before_narrative,
+        "party_narrative_after": after_narrative,
+        "party_before": before_party,
+        "party_after": after_party,
         "changed_npc_ids": changed_npcs[:20],
         "summary": {
             "event_delta": len(after_events) - len(before_events),
@@ -108,5 +119,9 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
             "npc_changes": len(changed_npcs),
             "inventory_item_kinds_before": len(_safe_list(before_inventory.get("items"))),
             "inventory_item_kinds_after": len(_safe_list(after_inventory.get("items"))),
+            "party_size_before": len(_safe_list(before_party.get("companions"))),
+            "party_size_after": len(_safe_list(after_party.get("companions"))),
+            "party_narrative_history_before": len(_safe_list(before_narrative.get("history"))),
+            "party_narrative_history_after": len(_safe_list(after_narrative.get("history"))),
         },
     }

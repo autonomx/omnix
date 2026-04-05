@@ -30,6 +30,10 @@ def build_timeline_row_diff(before_row: Dict[str, Any], after_row: Dict[str, Any
         "sandbox_after": _safe_dict(after_row.get("sandbox_summary")),
         "inventory_before": _safe_dict(before_row.get("inventory_summary")),
         "inventory_after": _safe_dict(after_row.get("inventory_summary")),
+        "party_before": _safe_dict(before_row.get("party_summary")),
+        "party_after": _safe_dict(after_row.get("party_summary")),
+        "party_narrative_before": _safe_dict(before_row.get("party_narrative_summary")),
+        "party_narrative_after": _safe_dict(after_row.get("party_narrative_summary")),
     }
 
 

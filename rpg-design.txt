@@ -1,84 +1,49 @@
-▶️ Next Phase
-
-After fixes:
-
-👉 Phase 9.3 — Companion Narrative Integration
-
-That’s where this becomes truly next-level:
-
-companions speak during scenes
-react to player choices
-influence outcomes
-interject into dialogue (LLM layer)
-
-If you want, next I can give:
-
-👉 Phase 9.2 Fix Patch (literal diff for all critical issues above)
-
-Pasted text.txt
-Document
-👉 Phase 9.3 — Companion Narrative Integration. literal apply-this-patch diff spec.
-
-Streaming interrupted. Waiting for the complete message...
-
-Below is the literal apply-this-patch diff spec for Phase 9.3 — Companion Narrative Integration, designed to build on your current 9.2 state, including the companion AI / party-state fixes reflected in your latest diff.
-
-This phase adds:
-
-companion scene interjections
-companion-aware dialogue context
-companion reaction logging from player choices
-loyalty/morale nudges from narrative events
-companion presence in narration payloads
-inspector/timeline visibility for companion narrative activity
-save migration v6 → v7
-1) Expand party exports for narrative helpers
-src/app/rpg/party/__init__.py
+Phase 10 — Literal apply-this-patch diff spec
+1) Create presentation package exports
+src/app/rpg/presentation/__init__.py
 *** Begin Patch
-*** Update File: src/app/rpg/party/__init__.py
-@@
- from .companion_effects import (
-     apply_party_item_to_companion,
- )
- 
-+from .companion_narrative import (
-+    build_companion_scene_context,
-+    build_companion_dialogue_context,
-+    choose_scene_interjections,
-+    apply_companion_choice_reactions,
-+    build_companion_presence_summary,
+*** Add File: src/app/rpg/presentation/__init__.py
++from .personality_state import (
++    ensure_personality_state,
++    get_actor_personality_profile,
++    build_personality_summary,
++)
++from .dialogue_prompt_builder import (
++    build_dialogue_llm_payload,
++    build_scene_llm_payload,
++)
++from .dialogue_fallbacks import (
++    build_deterministic_dialogue_fallback,
++    build_deterministic_scene_fallback,
++)
++from .speaker_cards import (
++    build_speaker_card,
++    build_party_speaker_cards,
 +)
 +
- __all__ = [
-@@
-     "choose_companion_action",
-     "apply_party_item_to_companion",
-+    "build_companion_scene_context",
-+    "build_companion_dialogue_context",
-+    "choose_scene_interjections",
-+    "apply_companion_choice_reactions",
-+    "build_companion_presence_summary",
- ]
++__all__ = [
++    "ensure_personality_state",
++    "get_actor_personality_profile",
++    "build_personality_summary",
++    "build_dialogue_llm_payload",
++    "build_scene_llm_payload",
++    "build_deterministic_dialogue_fallback",
++    "build_deterministic_scene_fallback",
++    "build_speaker_card",
++    "build_party_speaker_cards",
++]
 *** End Patch
-2) Add companion narrative module
-src/app/rpg/party/companion_narrative.py
+2) Add deterministic personality state helpers
+src/app/rpg/presentation/personality_state.py
 *** Begin Patch
-*** Add File: src/app/rpg/party/companion_narrative.py
+*** Add File: src/app/rpg/presentation/personality_state.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from .party_state import (
-+    ensure_party_state,
-+    get_active_companions,
-+    update_companion_loyalty,
-+    update_companion_morale,
-+    build_party_summary,
-+)
 +
-+
-+_MAX_INTERJECTIONS = 3
-+_MAX_DIALOGUE_COMPANIONS = 3
++_MAX_TRAITS = 8
++_MAX_STYLE_TAGS = 8
 +
 +
 +def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -93,6 +58,461 @@ src/app/rpg/party/companion_narrative.py
 +    return "" if v is None else str(v)
 +
 +
++def _normalize_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
++    profile = _safe_dict(profile)
++    return {
++        "actor_id": _safe_str(profile.get("actor_id")),
++        "display_name": _safe_str(profile.get("display_name")),
++        "tone": _safe_str(profile.get("tone") or "neutral"),
++        "voice_style": _safe_str(profile.get("voice_style") or "plain"),
++        "traits": [
++            _safe_str(v)
++            for v in _safe_list(profile.get("traits"))[:_MAX_TRAITS]
++            if _safe_str(v)
++        ],
++        "style_tags": [
++            _safe_str(v)
++            for v in _safe_list(profile.get("style_tags"))[:_MAX_STYLE_TAGS]
++            if _safe_str(v)
++        ],
++        "temperature_hint": _safe_str(profile.get("temperature_hint") or "low"),
++    }
++
++
++def ensure_personality_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    personality_state = _safe_dict(presentation_state.get("personality_state"))
++    profiles_in = _safe_dict(personality_state.get("profiles"))
++
++    profiles_out: Dict[str, Dict[str, Any]] = {}
++    for actor_id in sorted(profiles_in.keys()):
++        normalized = _normalize_profile(profiles_in.get(actor_id))
++        normalized["actor_id"] = _safe_str(actor_id or normalized.get("actor_id"))
++        profiles_out[str(actor_id)] = normalized
++
++    personality_state["profiles"] = profiles_out
++    presentation_state["personality_state"] = personality_state
++    simulation_state["presentation_state"] = presentation_state
++    return simulation_state
++
++
++def get_actor_personality_profile(simulation_state: Dict[str, Any], actor_id: str, default_name: str = "") -> Dict[str, Any]:
++    simulation_state = ensure_personality_state(simulation_state)
++    actor_id = _safe_str(actor_id)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    personality_state = _safe_dict(presentation_state.get("personality_state"))
++    profiles = _safe_dict(personality_state.get("profiles"))
++
++    profile = _normalize_profile(profiles.get(actor_id))
++    if not profile.get("actor_id"):
++        profile["actor_id"] = actor_id
++    if not profile.get("display_name"):
++        profile["display_name"] = _safe_str(default_name or actor_id)
++    return profile
++
++
++def build_personality_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = ensure_personality_state(simulation_state)
++    profiles = _safe_dict(
++        _safe_dict(_safe_dict(simulation_state.get("presentation_state")).get("personality_state")).get("profiles")
++    )
++    return {
++        "profile_count": len(profiles),
++        "actor_ids": sorted(profiles.keys())[:20],
++    }
+*** End Patch
+3) Add LLM payload builders
+src/app/rpg/presentation/dialogue_prompt_builder.py
+*** Begin Patch
+*** Add File: src/app/rpg/presentation/dialogue_prompt_builder.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from .personality_state import get_actor_personality_profile
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def _compact_history(messages: List[Dict[str, Any]], limit: int = 12) -> List[Dict[str, Any]]:
++    out = []
++    for msg in _safe_list(messages)[-limit:]:
++        if not isinstance(msg, dict):
++            continue
++        out.append({
++            "speaker": _safe_str(msg.get("speaker")),
++            "text": _safe_str(msg.get("text")),
++        })
++    return out
++
++
++def build_dialogue_llm_payload(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any], actor_id: str, actor_name: str = "") -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    dialogue_state = _safe_dict(dialogue_state)
++    profile = get_actor_personality_profile(simulation_state, actor_id, default_name=actor_name)
++
++    return {
++        "mode": "dialogue",
++        "actor_id": _safe_str(actor_id),
++        "actor_name": _safe_str(actor_name or profile.get("display_name")),
++        "personality": profile,
++        "dialogue_context": {
++            "scene_id": _safe_str(dialogue_state.get("scene_id")),
++            "location_id": _safe_str(dialogue_state.get("location_id")),
++            "topic": _safe_str(dialogue_state.get("topic")),
++            "history": _compact_history(_safe_list(dialogue_state.get("transcript"))),
++        },
++        "instructions": {
++            "stay_in_character": True,
++            "respect_simulation_authority": True,
++            "do_not_invent_world_facts": True,
++            "prefer_short_responses": True,
++        },
++    }
++
++
++def build_scene_llm_payload(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    scene_state = _safe_dict(scene_state)
++    return {
++        "mode": "scene_narration",
++        "scene_context": {
++            "scene_id": _safe_str(scene_state.get("scene_id")),
++            "location_id": _safe_str(scene_state.get("location_id")),
++            "tone": _safe_str(scene_state.get("tone")),
++            "summary": _safe_str(scene_state.get("summary")),
++        },
++        "instructions": {
++            "respect_simulation_authority": True,
++            "do_not_resolve_uncommitted_actions": True,
++            "prefer_grounded sensory detail": True,
++        },
++    }
+*** End Patch
+4) Add deterministic fallbacks
+src/app/rpg/presentation/dialogue_fallbacks.py
+*** Begin Patch
+*** Add File: src/app/rpg/presentation/dialogue_fallbacks.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def build_deterministic_dialogue_fallback(actor_profile: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
++    actor_profile = _safe_dict(actor_profile)
++    dialogue_state = _safe_dict(dialogue_state)
++    name = _safe_str(actor_profile.get("display_name") or actor_profile.get("actor_id") or "Speaker")
++    tone = _safe_str(actor_profile.get("tone") or "neutral")
++    topic = _safe_str(dialogue_state.get("topic") or "the situation")
++
++    if tone == "warm":
++        text = f"{name} responds calmly about {topic}."
++    elif tone == "stern":
++        text = f"{name} answers in a firm, restrained way about {topic}."
++    elif tone == "wary":
++        text = f"{name} responds cautiously, measuring every word about {topic}."
++    else:
++        text = f"{name} responds about {topic}."
++
++    return {
++        "ok": True,
++        "source": "deterministic_fallback",
++        "text": text,
++    }
++
++
++def build_deterministic_scene_fallback(scene_state: Dict[str, Any]) -> Dict[str, Any]:
++    scene_state = _safe_dict(scene_state)
++    tone = _safe_str(scene_state.get("tone") or "neutral")
++    location_id = _safe_str(scene_state.get("location_id") or "the area")
++
++    if tone == "tense":
++        text = f"Tension lingers over {location_id} as everyone measures the next move."
++    elif tone == "calm":
++        text = f"The scene at {location_id} settles into a quieter rhythm."
++    else:
++        text = f"The scene continues at {location_id}."
++
++    return {
++        "ok": True,
++        "source": "deterministic_fallback",
++        "text": text,
++    }
+*** End Patch
+5) Add speaker-card builders
+src/app/rpg/presentation/speaker_cards.py
+*** Begin Patch
+*** Add File: src/app/rpg/presentation/speaker_cards.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from .personality_state import get_actor_personality_profile
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def build_speaker_card(simulation_state: Dict[str, Any], actor_id: str, actor_name: str = "") -> Dict[str, Any]:
++    profile = get_actor_personality_profile(simulation_state, actor_id, default_name=actor_name)
++    return {
++        "actor_id": _safe_str(actor_id),
++        "display_name": _safe_str(profile.get("display_name") or actor_name or actor_id),
++        "tone": _safe_str(profile.get("tone")),
++        "voice_style": _safe_str(profile.get("voice_style")),
++        "traits": _safe_list(profile.get("traits"))[:5],
++        "style_tags": _safe_list(profile.get("style_tags"))[:5],
++    }
++
++
++def build_party_speaker_cards(simulation_state: Dict[str, Any], companions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    cards = []
++    for comp in _safe_list(companions):
++        if not isinstance(comp, dict):
++            continue
++        cards.append(
++            build_speaker_card(
++                simulation_state,
++                _safe_str(comp.get("npc_id")),
++                actor_name=_safe_str(comp.get("name")),
++            )
++        )
++    return cards[:6]
+*** End Patch
+6) Extend player party view with speaker cards
+src/app/rpg/player/player_party.py
+*** Begin Patch
+*** Update File: src/app/rpg/player/player_party.py
+@@
+ from app.rpg.party import (
+     ensure_party_state,
+     build_party_summary,
+     build_companion_presence_summary,
+ )
++from app.rpg.presentation import build_party_speaker_cards
+@@
+ def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Build the full party view for UI display, including narrative presence."""
+     simulation_state = ensure_player_party(simulation_state)
+     player_state = _safe_dict(simulation_state.get("player_state"))
+     party_state = _safe_dict(player_state.get("party_state"))
++    companions = list((party_state.get("companions") or []))
+     return {
+         "party_state": party_state,
+         "party_summary": build_party_summary(player_state),
+         "presence_summary": build_companion_presence_summary(player_state),
++        "speaker_cards": build_party_speaker_cards(simulation_state, companions),
+     }
+*** End Patch
+7) Ensure presentation/personality state exists during player-state setup
+src/app/rpg/player/player_scene_state.py
+*** Begin Patch
+*** Update File: src/app/rpg/player/player_scene_state.py
+@@
+ def ensure_player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+@@
+     player_state.setdefault("party_state", {
+         "companions": [],
+         "max_size": 3,
+     })
++
++    simulation_state.setdefault("presentation_state", {
++        "personality_state": {
++            "profiles": {},
++        },
++    })
+ 
+     return simulation_state
+*** End Patch
+
+8) Add presentation routes
+
+Create additive routes for:
+
+building a presentation-ready scene payload
+building a presentation-ready dialogue payload
+returning stable speaker card data
+returning personality/presentation metadata for the frontend
+
+These should remain read-only builders unless you intentionally call a recorder in a separate mutation path.
+
+File: src/app/rpg/api/rpg_presentation_routes.py
+*** Begin Patch
+*** Add File: src/app/rpg/api/rpg_presentation_routes.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from flask import Blueprint, jsonify, request
++
++from app.rpg.player import ensure_player_state, ensure_player_party
++from app.rpg.presentation import (
++    build_scene_presentation_payload,
++    build_dialogue_presentation_payload,
++    build_speaker_cards,
++)
++
++
++rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _get_simulation_state(setup_payload: Dict[str, Any]) -> Dict[str, Any]:
++    setup_payload = _safe_dict(setup_payload)
++    return _safe_dict(setup_payload.get("simulation_state"))
++
++
++def _write_simulation_state(setup_payload: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    setup_payload = dict(setup_payload or {})
++    setup_payload["simulation_state"] = dict(simulation_state or {})
++    return setup_payload
++
++
++@rpg_presentation_bp.post("/api/rpg/presentation/scene")
++def presentation_scene():
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    scene_state = _safe_dict(data.get("scene_state"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++
++    payload = build_scene_presentation_payload(simulation_state, scene_state)
++
++    return jsonify({
++        "ok": True,
++        "presentation": payload,
++        "setup_payload": _write_simulation_state(setup_payload, simulation_state),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/presentation/dialogue")
++def presentation_dialogue():
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    dialogue_state = _safe_dict(data.get("dialogue_state"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++
++    payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
++
++    return jsonify({
++        "ok": True,
++        "presentation": payload,
++        "setup_payload": _write_simulation_state(setup_payload, simulation_state),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/presentation/speakers")
++def presentation_speakers():
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    scene_state = _safe_dict(data.get("scene_state"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++
++    cards = build_speaker_cards(simulation_state, scene_state)
++
++    return jsonify({
++        "ok": True,
++        "speaker_cards": cards,
++    })
+*** End Patch
+9) Register presentation blueprint
+
+Patch the file where RPG blueprints are registered.
+
+File: <THE FILE THAT REGISTERS RPG API BLUEPRINTS>
+*** Begin Patch
+*** Update File: <THE FILE THAT REGISTERS RPG API BLUEPRINTS>
+@@
+ from app.rpg.api.rpg_player_routes import rpg_player_bp
+ from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
++from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+@@
+ app.register_blueprint(rpg_player_bp)
+ app.register_blueprint(rpg_encounter_bp)
++app.register_blueprint(rpg_presentation_bp)
+*** End Patch
+
+Use the real Flask app/bootstrap file that already registers the other RPG blueprints.
+
+10) Add presentation package exports
+File: src/app/rpg/presentation/__init__.py
+*** Begin Patch
+*** Add File: src/app/rpg/presentation/__init__.py
++from .scene_presentation import (
++    build_scene_presentation_payload,
++)
++from .dialogue_presentation import (
++    build_dialogue_presentation_payload,
++)
++from .speaker_cards import (
++    build_speaker_cards,
++)
++from .personality import (
++    build_personality_prompt_hints,
++    build_personality_style_tags,
++)
++
++__all__ = [
++    "build_scene_presentation_payload",
++    "build_dialogue_presentation_payload",
++    "build_speaker_cards",
++    "build_personality_prompt_hints",
++    "build_personality_style_tags",
++]
+*** End Patch
+11) Add personality style system
+File: src/app/rpg/presentation/personality.py
+*** Begin Patch
+*** Add File: src/app/rpg/presentation/personality.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
 +def _safe_float(v: Any, default: float = 0.0) -> float:
 +    try:
 +        return float(v)
@@ -100,1377 +520,485 @@ src/app/rpg/party/companion_narrative.py
 +        return default
 +
 +
-+def _pick_tone(comp: Dict[str, Any]) -> str:
-+    loyalty = _safe_float(comp.get("loyalty"), 0.0)
-+    morale = _safe_float(comp.get("morale"), 0.5)
++def build_personality_style_tags(actor: Dict[str, Any]) -> List[str]:
++    actor = _safe_dict(actor)
++    loyalty = _safe_float(actor.get("loyalty"), 0.0)
++    morale = _safe_float(actor.get("morale"), 0.5)
++    role = _safe_str(actor.get("role") or "ally")
++
++    tags: List[str] = []
++
 +    if loyalty < -0.3:
-+        return "resentful"
++        tags.append("cold")
++    elif loyalty > 0.6:
++        tags.append("supportive")
++    else:
++        tags.append("neutral")
++
 +    if morale < 0.3:
-+        return "fearful"
-+    if loyalty > 0.6 and morale > 0.6:
-+        return "supportive"
-+    return "guarded"
++        tags.append("shaken")
++    elif morale > 0.7:
++        tags.append("confident")
++
++    if role == "support":
++        tags.append("careful")
++    elif role == "guard":
++        tags.append("protective")
++    elif role == "scout":
++        tags.append("alert")
++
++    return tags[:6]
 +
 +
-+def build_companion_presence_summary(player_state: Dict[str, Any]) -> Dict[str, Any]:
-+    player_state = ensure_party_state(player_state)
-+    companions = sorted(
-+        get_active_companions(player_state),
-+        key=lambda c: str(c.get("npc_id")),
-+    )[:_MAX_DIALOGUE_COMPANIONS]
++def build_personality_prompt_hints(actor: Dict[str, Any]) -> Dict[str, Any]:
++    actor = _safe_dict(actor)
++    name = _safe_str(actor.get("name") or actor.get("npc_id") or "Unknown")
++    tags = build_personality_style_tags(actor)
 +
 +    return {
-+        "party_summary": build_party_summary(player_state),
-+        "present_companions": [
-+            {
-+                "npc_id": _safe_str(comp.get("npc_id")),
-+                "name": _safe_str(comp.get("name")),
-+                "role": _safe_str(comp.get("role")),
-+                "tone": _pick_tone(comp),
-+                "loyalty": _safe_float(comp.get("loyalty"), 0.0),
-+                "morale": _safe_float(comp.get("morale"), 0.5),
-+            }
-+            for comp in companions
-+        ],
++        "name": name,
++        "style_tags": tags,
++        "speech_guidance": "Use concise, character-consistent phrasing grounded in current scene context.",
 +    }
+*** End Patch
+12) Add speaker card builder
+File: src/app/rpg/presentation/speaker_cards.py
+*** Begin Patch
+*** Add File: src/app/rpg/presentation/speaker_cards.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.party import build_companion_presence_summary
++from .personality import build_personality_style_tags
 +
 +
-+def build_companion_scene_context(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def build_speaker_cards(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> List[Dict[str, Any]]:
 +    simulation_state = _safe_dict(simulation_state)
 +    player_state = _safe_dict(simulation_state.get("player_state"))
 +    scene_state = _safe_dict(scene_state)
++
++    cards: List[Dict[str, Any]] = []
++
++    cards.append({
++        "speaker_id": "player",
++        "name": "Player",
++        "kind": "player",
++        "portrait_key": "player",
++        "style_tags": ["player"],
++        "location_id": _safe_str(scene_state.get("location_id")),
++    })
 +
 +    presence = build_companion_presence_summary(player_state)
-+
-+    return {
-+        "scene_id": _safe_str(scene_state.get("scene_id")),
-+        "location_id": _safe_str(scene_state.get("location_id")),
-+        "present_companions": presence.get("present_companions", []),
-+        "party_summary": presence.get("party_summary", {}),
-+    }
-+
-+
-+def build_companion_dialogue_context(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    dialogue_state = _safe_dict(dialogue_state)
-+
-+    companions = sorted(
-+        get_active_companions(player_state),
-+        key=lambda c: str(c.get("npc_id")),
-+    )[:_MAX_DIALOGUE_COMPANIONS]
-+
-+    return {
-+        "dialogue_active": bool(dialogue_state),
-+        "dialogue_target_id": _safe_str(dialogue_state.get("target_id")),
-+        "companions": [
-+            {
-+                "npc_id": _safe_str(comp.get("npc_id")),
-+                "name": _safe_str(comp.get("name")),
-+                "role": _safe_str(comp.get("role")),
-+                "tone": _pick_tone(comp),
-+            }
-+            for comp in companions
-+        ],
-+    }
-+
-+
-+def choose_scene_interjections(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    simulation_state = _safe_dict(simulation_state)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    scene_state = _safe_dict(scene_state)
-+
-+    companions = sorted(
-+        get_active_companions(player_state),
-+        key=lambda c: str(c.get("npc_id")),
-+    )[:_MAX_INTERJECTIONS]
-+
-+    location_id = _safe_str(scene_state.get("location_id"))
-+    interjections: List[Dict[str, Any]] = []
-+
-+    for comp in companions:
-+        tone = _pick_tone(comp)
-+        name = _safe_str(comp.get("name") or comp.get("npc_id"))
-+        role = _safe_str(comp.get("role"))
-+
-+        if tone == "supportive":
-+            summary = f"{name} encourages the player to press on."
-+        elif tone == "fearful":
-+            summary = f"{name} warns the party to stay cautious."
-+        elif tone == "resentful":
-+            summary = f"{name} keeps their distance and sounds unconvinced."
-+        elif role == "support":
-+            summary = f"{name} quietly watches the group's condition."
-+        else:
-+            summary = f"{name} studies the surroundings at {location_id or 'the scene'}."
-+
-+        interjections.append({
-+            "type": "companion_interjection",
-+            "npc_id": _safe_str(comp.get("npc_id")),
-+            "name": name,
-+            "tone": tone,
-+            "summary": summary,
++    for comp in _safe_list(presence.get("present_companions")):
++        style_tags = build_personality_style_tags(comp)
++        cards.append({
++            "speaker_id": _safe_str(comp.get("npc_id")),
++            "name": _safe_str(comp.get("name")),
++            "kind": "companion",
++            "portrait_key": _safe_str(comp.get("npc_id")),
++            "style_tags": style_tags,
++            "location_id": _safe_str(scene_state.get("location_id")),
 +        })
 +
-+    return interjections
-+
-+
-+def apply_companion_choice_reactions(simulation_state: Dict[str, Any], choice_payload: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    player_state = ensure_party_state(_safe_dict(simulation_state.get("player_state")))
-+    choice_payload = _safe_dict(choice_payload)
-+
-+    choice_tags = {_safe_str(tag) for tag in _safe_list(choice_payload.get("tags"))}
-+    reaction_events: List[Dict[str, Any]] = []
-+
-+    companions = sorted(
-+        get_active_companions(player_state),
-+        key=lambda c: str(c.get("npc_id")),
-+    )
-+
-+    for comp in companions[:_MAX_DIALOGUE_COMPANIONS]:
-+        npc_id = _safe_str(comp.get("npc_id"))
-+        name = _safe_str(comp.get("name"))
-+        role = _safe_str(comp.get("role"))
-+
-+        loyalty_delta = 0.0
-+        morale_delta = 0.0
-+
-+        if "mercy" in choice_tags:
-+            loyalty_delta += 0.03 if role in {"support", "ally"} else 0.01
-+        if "cruelty" in choice_tags:
-+            loyalty_delta -= 0.04 if role in {"support", "ally"} else 0.02
-+        if "victory" in choice_tags:
-+            morale_delta += 0.03
-+        if "retreat" in choice_tags:
-+            morale_delta -= 0.03
-+        if "greed" in choice_tags:
-+            loyalty_delta -= 0.02
-+        if "generosity" in choice_tags:
-+            loyalty_delta += 0.02
-+
-+        if loyalty_delta:
-+            player_state = update_companion_loyalty(player_state, npc_id, loyalty_delta)
-+        if morale_delta:
-+            player_state = update_companion_morale(player_state, npc_id, morale_delta)
-+
-+        if loyalty_delta or morale_delta:
-+            reaction_events.append({
-+                "type": "companion_choice_reaction",
-+                "origin": "party",
-+                "npc_id": npc_id,
-+                "summary": f"{name} reacts to the player's choice.",
-+                "loyalty_delta": round(loyalty_delta, 3),
-+                "morale_delta": round(morale_delta, 3),
-+            })
-+
-+    simulation_state["player_state"] = player_state
-+    simulation_state["_companion_reaction_events"] = reaction_events[:10]
-+    return simulation_state
++    return sorted(cards, key=lambda c: (_safe_str(c.get("kind")), _safe_str(c.get("speaker_id"))))
 *** End Patch
-3) Add player-party view helpers for narrative payloads
-src/app/rpg/player/player_party.py
+13) Add scene presentation builder
+File: src/app/rpg/presentation/scene_presentation.py
 *** Begin Patch
-*** Add File: src/app/rpg/player/player_party.py
+*** Add File: src/app/rpg/presentation/scene_presentation.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
 +from app.rpg.party import (
-+    ensure_party_state,
-+    build_party_summary,
++    build_companion_scene_context,
++    choose_scene_interjections,
++    build_companion_scene_reactions,
 +    build_companion_presence_summary,
 +)
++from .speaker_cards import build_speaker_cards
 +
 +
 +def _safe_dict(v: Any) -> Dict[str, Any]:
 +    return dict(v) if isinstance(v, dict) else {}
 +
 +
-+def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def _safe_list(v: Any):
++    return list(v) if isinstance(v, list) else []
++
++
++def build_scene_presentation_payload(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:
 +    simulation_state = _safe_dict(simulation_state)
 +    player_state = _safe_dict(simulation_state.get("player_state"))
-+    player_state = ensure_party_state(player_state)
-+    simulation_state["player_state"] = player_state
-+    return simulation_state
++    scene_state = _safe_dict(scene_state)
 +
++    scene_context = build_companion_scene_context(simulation_state, scene_state)
++    interjections = choose_scene_interjections(simulation_state, scene_state)
++    reactions = build_companion_scene_reactions(player_state, scene_state)
++    presence_summary = build_companion_presence_summary(player_state)
++    speaker_cards = build_speaker_cards(simulation_state, scene_state)
 +
-+def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = ensure_player_party(simulation_state)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    party_state = _safe_dict(player_state.get("party_state"))
 +    return {
-+        "party_state": party_state,
-+        "party_summary": build_party_summary(player_state),
-+        "presence_summary": build_companion_presence_summary(player_state),
++        "scene_id": scene_state.get("scene_id"),
++        "tone": scene_state.get("tone"),
++        "location_id": scene_state.get("location_id"),
++        "scene_context": scene_context,
++        "speaker_cards": speaker_cards,
++        "companion_interjections": _safe_list(interjections)[:3],
++        "companion_reactions": _safe_list(reactions)[:4],
++        "presence_summary": presence_summary,
 +    }
 *** End Patch
-4) Export new player-party helpers
-src/app/rpg/player/__init__.py
+14) Add dialogue presentation builder
+File: src/app/rpg/presentation/dialogue_presentation.py
 *** Begin Patch
-*** Update File: src/app/rpg/player/__init__.py
-@@
- from .player_inventory import (
-     ensure_player_inventory,
-     build_player_inventory_view,
- )
-+from .player_party import (
-+    ensure_player_party,
-+    build_player_party_view,
-+)
-@@
-     "ensure_player_inventory",
-     "build_player_inventory_view",
-+    "ensure_player_party",
-+    "build_player_party_view",
- ]
-*** End Patch
-5) Add narrative-aware party data to player routes
-src/app/rpg/api/rpg_player_routes.py
-*** Begin Patch
-*** Update File: src/app/rpg/api/rpg_player_routes.py
-@@
- from app.rpg.player import (
-     ensure_player_state,
-     enter_dialogue_mode,
-     exit_dialogue_mode,
-     ensure_player_inventory,
-     build_player_inventory_view,
-+    ensure_player_party,
-+    build_player_party_view,
- )
-@@
- from app.rpg.party import (
-     ensure_party_state,
-     add_companion,
-     remove_companion,
-+    build_companion_dialogue_context,
-+    apply_companion_choice_reactions,
- )
-@@
- @rpg_player_bp.post("/api/rpg/player/party")
- def player_party():
-@@
--    player_state = ensure_party_state(state.get("player_state") or {})
-+    state = ensure_player_party(state)
-+    party_view = build_player_party_view(state)
- 
-     return jsonify({
-         "ok": True,
--        "party_state": player_state.get("party_state"),
-+        "party_state": party_view.get("party_state", {}),
-+        "party_summary": party_view.get("party_summary", {}),
-+        "presence_summary": party_view.get("presence_summary", {}),
-     })
-+
-+
-+@rpg_player_bp.post("/api/rpg/player/party/dialogue-context")
-+def player_party_dialogue_context():
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = dict(data.get("setup_payload") or {})
-+    dialogue_state = dict(data.get("dialogue_state") or {})
-+
-+    state = ensure_player_state(_get_simulation_state(setup_payload))
-+    state = ensure_player_party(state)
-+
-+    return jsonify({
-+        "ok": True,
-+        "dialogue_context": build_companion_dialogue_context(state, dialogue_state),
-+    })
-+
-+
-+@rpg_player_bp.post("/api/rpg/player/party/apply-choice-reaction")
-+def player_party_apply_choice_reaction():
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = dict(data.get("setup_payload") or {})
-+    choice_payload = dict(data.get("choice_payload") or {})
-+
-+    state = ensure_player_state(_get_simulation_state(setup_payload))
-+    state = ensure_player_party(state)
-+    state = apply_companion_choice_reactions(state, choice_payload)
-+    setup_payload = _write_simulation_state(setup_payload, state)
-+    party_view = build_player_party_view(state)
-+
-+    return jsonify({
-+        "ok": True,
-+        "setup_payload": setup_payload,
-+        "party_state": party_view.get("party_state", {}),
-+        "party_summary": party_view.get("party_summary", {}),
-+        "presence_summary": party_view.get("presence_summary", {}),
-+        "reaction_events": list(state.get("_companion_reaction_events") or [])[:10],
-+    })
-*** End Patch
-6) Add companion narrative hooks to scene payload builder
-
-Patch the real file that builds scene/player-facing scene payloads.
-
-<THE FILE THAT BUILDS SCENE VIEW / SCENE PAYLOADS>
-*** Begin Patch
-*** Update File: <THE FILE THAT BUILDS SCENE VIEW / SCENE PAYLOADS>
-@@
-+from app.rpg.party import build_companion_scene_context, choose_scene_interjections
-@@
-     scene_payload = {
-         "scene_id": scene_state.get("scene_id"),
-         "location_id": scene_state.get("location_id"),
-         "summary": scene_state.get("summary", ""),
-     }
-+
-+    companion_scene_context = build_companion_scene_context(simulation_state, scene_state)
-+    scene_payload["companion_context"] = companion_scene_context
-+    scene_payload["companion_interjections"] = choose_scene_interjections(simulation_state, scene_state)
-+
-     return scene_payload
-*** End Patch
-
-This should go in the actual scene payload/view builder, not in a route if that would duplicate scene composition logic.
-
-7) Add companion narrative context to dialogue loop payloads
-
-Patch the actual file or route that returns dialogue UI payloads.
-
-<THE FILE THAT BUILDS DIALOGUE RESPONSE PAYLOADS>
-*** Begin Patch
-*** Update File: <THE FILE THAT BUILDS DIALOGUE RESPONSE PAYLOADS>
-@@
-+from app.rpg.party import build_companion_dialogue_context
-@@
-     response_payload = {
-         "ok": True,
-         "dialogue_state": dialogue_state,
-         "transcript": transcript,
-     }
-+
-+    response_payload["companion_dialogue_context"] = build_companion_dialogue_context(
-+        simulation_state,
-+        dialogue_state,
-+    )
-+
-     return response_payload
-*** End Patch
-8) Add party narrative events into simulation events log
-
-Patch the code path that handles player choices, scene advancement, or dialogue actions.
-
-<THE FILE THAT APPLIES PLAYER CHOICES / DIALOGUE ACTIONS>
-*** Begin Patch
-*** Update File: <THE FILE THAT APPLIES PLAYER CHOICES / DIALOGUE ACTIONS>
-@@
-+from app.rpg.party import apply_companion_choice_reactions
-@@
-     simulation_state = apply_player_choice(simulation_state, choice_payload)
-+    simulation_state = apply_companion_choice_reactions(simulation_state, choice_payload)
-+
-+    for evt in list(simulation_state.get("_companion_reaction_events") or [])[:10]:
-+        simulation_state.setdefault("events", []).append(evt)
-+
-     return simulation_state
-*** End Patch
-
-This keeps companion narrative reactions visible to:
-
-inspector causal trace
-timeline
-replay tools
-9) Add party narrative summary to timeline tick rows
-
-Patch the actual file that appends timeline tick rows.
-
-<THE FILE THAT APPENDS TIMELINE TICK ROWS>
-*** Begin Patch
-*** Update File: <THE FILE THAT APPENDS TIMELINE TICK ROWS>
-@@
- from app.rpg.items.inventory_state import build_inventory_summary
-+from app.rpg.party.party_state import build_party_summary
-+from app.rpg.party.companion_narrative import build_companion_presence_summary
-@@
-+    party_summary = build_party_summary((simulation_state.get("player_state") or {}))
-+    companion_presence = build_companion_presence_summary((simulation_state.get("player_state") or {}))
-+
-     tick_row = {
-         "tick": current_tick,
-         "event_count": len(events),
-         "consequence_count": len(consequences),
-         "sandbox_summary": sandbox_summary,
-         "inventory_summary": build_inventory_summary(
-             ((simulation_state.get("player_state") or {}).get("inventory_state") or {})
-         ),
-+        "party_summary": party_summary,
-+        "party_size": party_summary.get("size", 0),
-+        "companion_presence": companion_presence,
-     }
-*** End Patch
-10) Add companion narrative visibility to tick diffs
-src/app/rpg/analytics/tick_diff.py
-*** Begin Patch
-*** Update File: src/app/rpg/analytics/tick_diff.py
-@@
-     before_player_state = _safe_dict(before_state.get("player_state"))
-     after_player_state = _safe_dict(after_state.get("player_state"))
-     before_inventory = _safe_dict(before_player_state.get("inventory_state"))
-     after_inventory = _safe_dict(after_player_state.get("inventory_state"))
-+    before_party = _safe_dict(before_player_state.get("party_state"))
-+    after_party = _safe_dict(after_player_state.get("party_state"))
-@@
-         "inventory_keys_changed": _keys_changed(before_inventory, after_inventory),
-         "inventory_before": before_inventory,
-         "inventory_after": after_inventory,
-+        "party_keys_changed": _keys_changed(before_party, after_party),
-+        "party_before": before_party,
-+        "party_after": after_party,
-         "changed_npc_ids": changed_npcs[:20],
-         "summary": {
-             "event_delta": len(after_events) - len(before_events),
-             "consequence_delta": len(after_consequences) - len(before_consequences),
-             "npc_changes": len(changed_npcs),
-             "inventory_item_kinds_before": len(_safe_list(before_inventory.get("items"))),
-             "inventory_item_kinds_after": len(_safe_list(after_inventory.get("items"))),
-+            "party_size_before": len(_safe_list(before_party.get("companions"))),
-+            "party_size_after": len(_safe_list(after_party.get("companions"))),
-         },
-     }
-*** End Patch
-11) Add party summary to row diff
-src/app/rpg/analytics/timeline.py
-*** Begin Patch
-*** Update File: src/app/rpg/analytics/timeline.py
-@@
- def build_timeline_row_diff(before_row: Dict[str, Any], after_row: Dict[str, Any]) -> Dict[str, Any]:
-     before_row = _safe_dict(before_row)
-     after_row = _safe_dict(after_row)
-     return {
-         "tick_before": _safe_int(before_row.get("tick"), 0),
-         "tick_after": _safe_int(after_row.get("tick"), 0),
-         "event_delta": _safe_int(after_row.get("event_count"), 0) - _safe_int(before_row.get("event_count"), 0),
-         "consequence_delta": _safe_int(after_row.get("consequence_count"), 0) - _safe_int(before_row.get("consequence_count"), 0),
-         "sandbox_before": _safe_dict(before_row.get("sandbox_summary")),
-         "sandbox_after": _safe_dict(after_row.get("sandbox_summary")),
-         "inventory_before": _safe_dict(before_row.get("inventory_summary")),
-         "inventory_after": _safe_dict(after_row.get("inventory_summary")),
-+        "party_before": _safe_dict(before_row.get("party_summary")),
-+        "party_after": _safe_dict(after_row.get("party_summary")),
-     }
-*** End Patch
-12) Add migration v6 → v7
-src/app/rpg/persistence/migrations/v6_to_v7.py
-*** Begin Patch
-*** Add File: src/app/rpg/persistence/migrations/v6_to_v7.py
+*** Add File: src/app/rpg/presentation/dialogue_presentation.py
 +from __future__ import annotations
 +
 +from typing import Any, Dict
 +
++from app.rpg.party import (
++    build_companion_dialogue_context,
++    build_companion_presence_summary,
++)
++from .speaker_cards import build_speaker_cards
++
 +
 +def _safe_dict(v: Any) -> Dict[str, Any]:
 +    return dict(v) if isinstance(v, dict) else {}
 +
 +
-+def migrate_v6_to_v7(package: Dict[str, Any]) -> Dict[str, Any]:
-+    package = dict(package or {})
-+    state = _safe_dict(package.get("state"))
-+    simulation_state = _safe_dict(state.get("simulation_state"))
++def build_dialogue_presentation_payload(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
 +    player_state = _safe_dict(simulation_state.get("player_state"))
-+    party_state = _safe_dict(player_state.get("party_state"))
++    dialogue_state = _safe_dict(dialogue_state)
 +
-+    companions = []
-+    for comp in party_state.get("companions") or []:
-+        if not isinstance(comp, dict):
-+            continue
-+        companions.append({
-+            "npc_id": str(comp.get("npc_id") or ""),
-+            "name": str(comp.get("name") or comp.get("npc_id") or "Companion"),
-+            "hp": int(comp.get("hp") or 100),
-+            "max_hp": int(comp.get("max_hp") or 100),
-+            "loyalty": float(comp.get("loyalty", 0.5)),
-+            "morale": float(comp.get("morale", 0.5)),
-+            "role": str(comp.get("role") or "ally"),
-+            "status": str(comp.get("status") or "active"),
-+            "equipment": dict(comp.get("equipment") or {}),
-+        })
++    dialogue_context = build_companion_dialogue_context(simulation_state, dialogue_state)
++    presence_summary = build_companion_presence_summary(player_state)
++    speaker_cards = build_speaker_cards(simulation_state, dialogue_state)
 +
-+    party_state["companions"] = companions[:6]
-+    party_state.setdefault("max_size", 3)
-+    player_state["party_state"] = party_state
-+    simulation_state["player_state"] = player_state
-+    state["simulation_state"] = simulation_state
-+    package["state"] = state
-+    package["schema_version"] = 7
-+    return package
++    return {
++        "dialogue_id": dialogue_state.get("dialogue_id"),
++        "speaker_id": dialogue_state.get("speaker_id"),
++        "speaker_cards": speaker_cards,
++        "dialogue_context": dialogue_context,
++        "presence_summary": presence_summary,
++    }
 *** End Patch
-13) Register migration
-src/app/rpg/persistence/migrations/__init__.py
+15) Extend player party view with presentation hints
+File: src/app/rpg/player/player_party.py
 *** Begin Patch
-*** Update File: src/app/rpg/persistence/migrations/__init__.py
+*** Update File: src/app/rpg/player/player_party.py
 @@
- from .v4_to_v5 import migrate_v4_to_v5
- from .v5_to_v6 import migrate_v5_to_v6
-+from .v6_to_v7 import migrate_v6_to_v7
+ from app.rpg.party import (
+     ensure_party_state,
+     build_party_summary,
+     build_companion_presence_summary,
+ )
++from app.rpg.presentation import build_speaker_cards
 @@
-     "migrate_v4_to_v5",
-     "migrate_v5_to_v6",
-+    "migrate_v6_to_v7",
- ]
+ def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+@@
+     return {
+         "party_state": party_state,
+         "party_summary": build_party_summary(player_state),
+         "presence_summary": build_companion_presence_summary(player_state),
++        "speaker_cards": build_speaker_cards(simulation_state, {}),
+     }
 *** End Patch
-14) Extend migration manager
-src/app/rpg/persistence/migration_manager.py
+16) Add frontend client for presentation routes
+File: src/static/rpg/rpgPresentationClient.js
 *** Begin Patch
-*** Update File: src/app/rpg/persistence/migration_manager.py
-@@
--from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6
-+from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6, migrate_v6_to_v7
-@@
-         elif version == 5:
-             package = migrate_v5_to_v6(package)
-+        elif version == 6:
-+            package = migrate_v6_to_v7(package)
-         else:
-             raise ValueError(f"Unsupported schema migration path from version {version}")
-*** End Patch
-15) Bump save schema
-src/app/rpg/persistence/save_schema.py
-*** Begin Patch
-*** Update File: src/app/rpg/persistence/save_schema.py
-@@
--CURRENT_RPG_SCHEMA_VERSION = 6
-+CURRENT_RPG_SCHEMA_VERSION = 7
- PACKAGE_TYPE = "rpg_save_package"
--ENGINE_VERSION = "phase_9_2"
-+ENGINE_VERSION = "phase_9_3"
-*** End Patch
-16) Add party client actions for narrative integration
-src/static/rpg/rpgPartyClient.js
-*** Begin Patch
-*** Update File: src/static/rpg/rpgPartyClient.js
-@@
-   async clearEquipment(setupPayload, npcId, slot) {
-     return this._post("/api/rpg/player/party/equipment/clear", {
-       setup_payload: setupPayload,
-       npc_id: npcId,
-       slot,
-     });
-   }
+*** Add File: src/static/rpg/rpgPresentationClient.js
++export class RPGPresentationClient {
++  constructor(baseUrl = "") {
++    this.baseUrl = baseUrl;
++  }
 +
-+  async getDialogueContext(setupPayload, dialogueState) {
-+    return this._post("/api/rpg/player/party/dialogue-context", {
++  async _post(path, payload) {
++    const res = await fetch(`${this.baseUrl}${path}`, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(payload || {}),
++    });
++    if (!res.ok) {
++      throw new Error(`Presentation API error: ${res.status} at ${path}`);
++    }
++    return res.json();
++  }
++
++  async getScenePresentation(setupPayload, sceneState) {
++    return this._post("/api/rpg/presentation/scene", {
 +      setup_payload: setupPayload,
-+      dialogue_state: dialogueState || {},
++      scene_state: sceneState,
 +    });
 +  }
 +
-+  async applyChoiceReaction(setupPayload, choicePayload) {
-+    return this._post("/api/rpg/player/party/apply-choice-reaction", {
++  async getDialoguePresentation(setupPayload, dialogueState) {
++    return this._post("/api/rpg/presentation/dialogue", {
 +      setup_payload: setupPayload,
-+      choice_payload: choicePayload || {},
++      dialogue_state: dialogueState,
 +    });
 +  }
- }
-*** End Patch
-17) Upgrade party renderer with narrative presence
-src/static/rpg/rpgPartyRenderer.js
-*** Begin Patch
-*** Update File: src/static/rpg/rpgPartyRenderer.js
-@@
- export function renderPartyPanel(partyState) {
-   const state = partyState || {};
-   const companions = Array.isArray(state.companions) ? state.companions : [];
-@@
-           ? companions.map((c) => `
-             <div class="codex-item rpg-party-member" data-npc-id="${escapeHtml(c.npc_id)}">
-               <strong>${escapeHtml(c.name || c.npc_id)}</strong><br/>
--              HP ${Number(c.hp || 0)}/${Number(c.max_hp || 0)} · Loyalty ${Number(c.loyalty || 0).toFixed(2)} · Morale ${Number(c.morale || 0).toFixed(2)} · ${escapeHtml(c.status || "active")}
-+              HP ${Number(c.hp || 0)}/${Number(c.max_hp || 0)} · Loyalty ${Number(c.loyalty || 0).toFixed(2)} · Morale ${Number(c.morale || 0).toFixed(2)} · ${escapeHtml(c.status || "active")}<br/>
-+              Role ${escapeHtml(c.role || "ally")}
-             </div>
-           `).join("")
-           : `<div class="codex-item">No companions</div>`
-       }
-     </div>
-   `;
- }
 +
-+export function renderCompanionInterjections(interjections) {
-+  const rows = Array.isArray(interjections) ? interjections : [];
-+  if (!rows.length) {
-+    return `<div class="codex-item">No companion interjections</div>`;
++  async getSpeakerCards(setupPayload, sceneState) {
++    return this._post("/api/rpg/presentation/speakers", {
++      setup_payload: setupPayload,
++      scene_state: sceneState,
++    });
 +  }
-+  return rows.map((row) => `
-+    <div class="codex-item">
-+      <strong>${escapeHtml(row.name || row.npc_id || "Companion")}</strong>: ${escapeHtml(row.summary || "")}
-+    </div>
-+  `).join("");
 +}
 *** End Patch
-18) Add companion narrative panel load to player UI
-src/static/rpg/rpgPlayerUI.js
+17) Add presentation renderer
+File: src/static/rpg/rpgPresentationRenderer.js
+*** Begin Patch
+*** Add File: src/static/rpg/rpgPresentationRenderer.js
++function escapeHtml(str) {
++  return String(str || "")
++    .replace(/&/g, "&amp;")
++    .replace(/</g, "&lt;")
++    .replace(/>/g, "&gt;")
++    .replace(/"/g, "&quot;")
++    .replace(/'/g, "&#039;");
++}
++
++function renderStyleTags(tags) {
++  const list = Array.isArray(tags) ? tags : [];
++  if (!list.length) return "";
++  return `
++    <div class="rpg-speaker-tags">
++      ${list.map((tag) => `<span class="rpg-speaker-tag">${escapeHtml(tag)}</span>`).join("")}
++    </div>
++  `;
++}
++
++export function renderSpeakerCards(cards) {
++  const list = Array.isArray(cards) ? cards : [];
++  return `
++    <div class="rpg-speaker-card-list">
++      ${list.map((card) => `
++        <div class="rpg-speaker-card" data-speaker-id="${escapeHtml(card.speaker_id)}">
++          <div class="rpg-speaker-card-name">${escapeHtml(card.name || card.speaker_id)}</div>
++          <div class="rpg-speaker-card-kind">${escapeHtml(card.kind || "")}</div>
++          ${renderStyleTags(card.style_tags)}
++        </div>
++      `).join("")}
++    </div>
++  `;
++}
++
++export function renderScenePresentation(presentation) {
++  const payload = presentation || {};
++  const interjections = Array.isArray(payload.companion_interjections) ? payload.companion_interjections : [];
++  const reactions = Array.isArray(payload.companion_reactions) ? payload.companion_reactions : [];
++
++  return `
++    <div class="rpg-presentation-block">
++      <div class="rpg-presentation-header">
++        <h3>Scene Presentation</h3>
++        <div class="rpg-presentation-meta">
++          <span>${escapeHtml(payload.scene_id || "")}</span>
++          <span>${escapeHtml(payload.tone || "")}</span>
++        </div>
++      </div>
++      ${renderSpeakerCards(payload.speaker_cards || [])}
++      <div class="rpg-presentation-section">
++        <h4>Companion Interjections</h4>
++        ${
++          interjections.length
++            ? interjections.map((it) => `<div class="codex-item">${escapeHtml(it.summary || "")}</div>`).join("")
++            : `<div class="codex-item">No interjections</div>`
++        }
++      </div>
++      <div class="rpg-presentation-section">
++        <h4>Companion Reactions</h4>
++        ${
++          reactions.length
++            ? reactions.map((it) => `<div class="codex-item">${escapeHtml(it.summary || "")}</div>`).join("")
++            : `<div class="codex-item">No reactions</div>`
++        }
++      </div>
++    </div>
++  `;
++}
++
++export function renderDialoguePresentation(presentation) {
++  const payload = presentation || {};
++  return `
++    <div class="rpg-presentation-block">
++      <div class="rpg-presentation-header">
++        <h3>Dialogue Presentation</h3>
++        <div class="rpg-presentation-meta">
++          <span>${escapeHtml(payload.dialogue_id || "")}</span>
++          <span>${escapeHtml(payload.speaker_id || "")}</span>
++        </div>
++      </div>
++      ${renderSpeakerCards(payload.speaker_cards || [])}
++    </div>
++  `;
++}
+*** End Patch
+18) Wire presentation into player UI
+File: src/static/rpg/rpgPlayerUI.js
 *** Begin Patch
 *** Update File: src/static/rpg/rpgPlayerUI.js
 @@
  import { RPGPartyClient } from "./rpgPartyClient.js";
--import { renderPartyPanel } from "./rpgPartyRenderer.js";
-+import { renderPartyPanel, renderCompanionInterjections } from "./rpgPartyRenderer.js";
+ import { renderPartyPanel } from "./rpgPartyRenderer.js";
++import { RPGPresentationClient } from "./rpgPresentationClient.js";
++import { renderScenePresentation, renderDialoguePresentation } from "./rpgPresentationRenderer.js";
+@@
+ const partyClient = new RPGPartyClient();
++const presentationClient = new RPGPresentationClient();
 @@
  export async function loadParty(setupPayload) {
 @@
  }
 +
-+export function renderSceneCompanionInterjections(scenePayload) {
-+  const el = document.getElementById("rpg-party-interjections");
-+  if (!el) return;
-+  el.innerHTML = renderCompanionInterjections(
-+    (scenePayload && scenePayload.companion_interjections) || []
-+  );
++export async function loadScenePresentation(setupPayload, sceneState) {
++  try {
++    const res = await presentationClient.getScenePresentation(setupPayload, sceneState || {});
++    const el = document.getElementById("rpg-presentation-scene");
++    if (!el) return {};
++    el.innerHTML = renderScenePresentation(res.presentation || {});
++    return res.presentation || {};
++  } catch (err) {
++    console.error("Failed to load scene presentation:", err);
++    return {};
++  }
++}
++
++export async function loadDialoguePresentation(setupPayload, dialogueState) {
++  try {
++    const res = await presentationClient.getDialoguePresentation(setupPayload, dialogueState || {});
++    const el = document.getElementById("rpg-presentation-dialogue");
++    if (!el) return {};
++    el.innerHTML = renderDialoguePresentation(res.presentation || {});
++    return res.presentation || {};
++  } catch (err) {
++    console.error("Failed to load dialogue presentation:", err);
++    return {};
++  }
 +}
 *** End Patch
-19) Add player integration hook for scene interjections
-src/static/rpg/rpgPlayerIntegration.js
-*** Begin Patch
-*** Update File: src/static/rpg/rpgPlayerIntegration.js
-@@
--import { loadJournal, loadCodex, loadObjectives, loadInventory, loadParty, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
-+import { loadJournal, loadCodex, loadObjectives, loadInventory, loadParty, renderSceneCompanionInterjections, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
-@@
-   async loadParty() {
-     if (!this.setupPayload) return {};
-     return loadParty(this.setupPayload);
-   }
-+
-+  applyScenePayload(scenePayload) {
-+    renderSceneCompanionInterjections(scenePayload || {});
-+  }
-*** End Patch
+19) Add presentation containers to shell
 
-If your integration layer already has a scene-payload apply method, merge the one-liner into that existing method rather than adding a duplicate.
+If your UI shell is in HTML:
 
-20) Add UI container for interjections
-
-If the side panel layout lives in HTML:
-
-src/templates/index.html
 *** Begin Patch
 *** Update File: src/templates/index.html
 @@
  <div id="rpg-inventory"></div>
  <div id="rpg-party"></div>
-+<div id="rpg-party-interjections"></div>
++<div id="rpg-presentation-scene"></div>
++<div id="rpg-presentation-dialogue"></div>
 *** End Patch
 
-If the UI shell is built in JavaScript, add an equivalent sibling container there.
+If your side panel DOM is built in JavaScript, add equivalent sibling containers there instead.
 
-21) Add party delta to inspector UI if not already present
-
-Your recent work already added party delta rendering in inspector-related work, so only apply this if your actual inspector file does not yet render party_before / party_after. The latest 9.2-related patch stream suggests this is already present or in progress.
-
-If needed, patch:
-
-src/static/rpg/rpgInspectorRenderer.js
+20) Add tests for presentation layer
+File: src/tests/unit/rpg/test_phase10_presentation.py
 *** Begin Patch
-*** Update File: src/static/rpg/rpgInspectorRenderer.js
-@@
-   var inventoryKeysChanged = Array.isArray(diff.inventory_keys_changed) ? diff.inventory_keys_changed : [];
-   var inventoryBefore = diff.inventory_before || {};
-   var inventoryAfter = diff.inventory_after || {};
-+  var partyKeysChanged = Array.isArray(diff.party_keys_changed) ? diff.party_keys_changed : [];
-+  var partyBefore = diff.party_before || {};
-+  var partyAfter = diff.party_after || {};
-@@
-     renderInventoryDeltaCard(inventoryBefore, inventoryAfter, inventoryKeysChanged) +
-+    renderPartyDeltaCard(partyBefore, partyAfter, partyKeysChanged) +
-   '</div>';
- }
-*** End Patch
-
-22) Add tests for 9.3 narrative integration
-
-Add focused unit tests for:
-
-deterministic interjection selection
-loyalty-based reaction summaries
-absent/downed companions not narrating
-scene reaction log creation
-bounded narrative history
-*** Begin Patch
-*** Add File: src/tests/unit/rpg/test_phase93_companion_narrative.py
-+from app.rpg.party.party_state import ensure_party_state, add_companion, update_companion_loyalty, set_companion_status
-+from app.rpg.party.companion_narrative import (
-+    build_companion_scene_reactions,
-+    choose_companion_interjection,
-+    record_companion_narrative_event,
+*** Add File: src/tests/unit/rpg/test_phase10_presentation.py
++from app.rpg.presentation import (
++    build_scene_presentation_payload,
++    build_dialogue_presentation_payload,
++    build_speaker_cards,
++    build_personality_style_tags,
 +)
 +
 +
-+def _base_player_state():
-+    player_state = ensure_party_state({})
-+    player_state = add_companion(player_state, "npc_borin", "Borin")
-+    player_state = add_companion(player_state, "npc_lyra", "Lyra")
-+    return player_state
-+
-+
-+def test_choose_companion_interjection_is_deterministic():
-+    player_state = _base_player_state()
-+    scene_state = {
-+        "scene_id": "scene_market",
-+        "tone": "tense",
-+        "location_id": "loc_market",
-+    }
-+    first = choose_companion_interjection(player_state, scene_state)
-+    second = choose_companion_interjection(player_state, scene_state)
-+    assert first == second
-+
-+
-+def test_downed_companions_do_not_interject():
-+    player_state = _base_player_state()
-+    player_state = set_companion_status(player_state, "npc_borin", "downed")
-+    scene_state = {
-+        "scene_id": "scene_market",
-+        "tone": "tense",
-+        "location_id": "loc_market",
-+    }
-+    interjection = choose_companion_interjection(player_state, scene_state)
-+    assert interjection.get("npc_id") != "npc_borin"
-+
-+
-+def test_low_loyalty_companion_reacts_negatively():
-+    player_state = _base_player_state()
-+    player_state = update_companion_loyalty(player_state, "npc_borin", -1.0)
-+    scene_state = {
-+        "scene_id": "scene_trial",
-+        "tone": "moral",
-+        "location_id": "loc_court",
-+    }
-+    reactions = build_companion_scene_reactions(player_state, scene_state)
-+    borin = [r for r in reactions if r.get("npc_id") == "npc_borin"][0]
-+    assert borin.get("stance") in {"negative", "hesitant", "cold"}
-+
-+
-+def test_record_companion_narrative_event_is_bounded():
-+    player_state = _base_player_state()
-+    for idx in range(40):
-+        player_state = record_companion_narrative_event(player_state, {
-+            "tick": idx,
-+            "scene_id": f"scene_{idx}",
-+            "npc_id": "npc_borin",
-+            "kind": "interjection",
-+            "summary": f"Event {idx}",
-+        })
-+    history = (((player_state.get("party_state") or {}).get("narrative_state") or {}).get("history") or [])
-+    assert len(history) <= 20
-+
-+
-+def test_build_companion_scene_reactions_skips_absent():
-+    player_state = _base_player_state()
-+    player_state = set_companion_status(player_state, "npc_lyra", "absent")
-+    scene_state = {
-+        "scene_id": "scene_camp",
-+        "tone": "calm",
-+        "location_id": "loc_camp",
-+    }
-+    reactions = build_companion_scene_reactions(player_state, scene_state)
-+    npc_ids = [r.get("npc_id") for r in reactions]
-+    assert "npc_lyra" not in npc_ids
-*** End Patch
-23) Add functional tests for scene/dialogue narrative hooks
-
-These verify the narrative layer is actually exposed through routes or scene payload builders.
-
-*** Begin Patch
-*** Add File: src/tests/functional/test_phase93_companion_narrative_routes.py
-+def test_scene_payload_includes_companion_reactions(client):
-+    res = client.post("/api/rpg/scene/start", json={
-+        "setup_payload": {
-+            "simulation_state": {
-+                "player_state": {
-+                    "party_state": {
-+                        "companions": [
-+                            {
-+                                "npc_id": "npc_borin",
-+                                "name": "Borin",
-+                                "hp": 100,
-+                                "max_hp": 100,
-+                                "loyalty": 0.8,
-+                                "morale": 0.7,
-+                                "role": "ally",
-+                                "status": "active",
-+                                "equipment": {},
-+                            }
-+                        ]
-+                    }
-+                }
-+            }
-+        }
-+    })
-+    assert res.status_code == 200
-+    data = res.get_json() or {}
-+    player_view = data.get("player_view") or {}
-+    assert "companion_reactions" in player_view or "party_narrative" in player_view
-+
-+
-+def test_dialogue_payload_can_include_companion_interjection(client):
-+    res = client.post("/api/rpg/player/dialogue/enter", json={
-+        "setup_payload": {
-+            "simulation_state": {
-+                "player_state": {
-+                    "party_state": {
-+                        "companions": [
-+                            {
-+                                "npc_id": "npc_lyra",
-+                                "name": "Lyra",
-+                                "hp": 100,
-+                                "max_hp": 100,
-+                                "loyalty": 0.9,
-+                                "morale": 0.8,
-+                                "role": "support",
-+                                "status": "active",
-+                                "equipment": {},
-+                            }
-+                        ]
-+                    }
-+                }
-+            }
-+        }
-+    })
-+    assert res.status_code == 200
-+    data = res.get_json() or {}
-+    assert "setup_payload" in data
-*** End Patch
-
-If your actual route names differ, target the real scene-start and dialogue-entry endpoints instead of the placeholders above.
-
-24) Add regression tests for determinism + save compatibility
-*** Begin Patch
-*** Add File: src/tests/regression/test_phase93_companion_narrative_regression.py
-+from app.rpg.party.companion_narrative import choose_companion_interjection
-+from app.rpg.persistence.migration_manager import migrate_package_to_current
-+
-+
-+def test_companion_interjection_is_stable_across_repeated_calls():
-+    player_state = {
-+        "party_state": {
-+            "companions": [
-+                {
-+                    "npc_id": "npc_a",
-+                    "name": "A",
-+                    "hp": 100,
-+                    "max_hp": 100,
-+                    "loyalty": 0.7,
-+                    "morale": 0.6,
-+                    "role": "ally",
-+                    "status": "active",
-+                    "equipment": {},
-+                },
-+                {
-+                    "npc_id": "npc_b",
-+                    "name": "B",
-+                    "hp": 100,
-+                    "max_hp": 100,
-+                    "loyalty": 0.7,
-+                    "morale": 0.6,
-+                    "role": "support",
-+                    "status": "active",
-+                    "equipment": {},
-+                },
-+            ]
-+        }
-+    }
-+    scene_state = {"scene_id": "scene_gate", "tone": "tense", "location_id": "loc_gate"}
-+    one = choose_companion_interjection(player_state, scene_state)
-+    two = choose_companion_interjection(player_state, scene_state)
++def test_build_personality_style_tags_returns_deterministic_tags():
++    actor = {"npc_id": "npc_a", "name": "A", "loyalty": 0.8, "morale": 0.9, "role": "support"}
++    one = build_personality_style_tags(actor)
++    two = build_personality_style_tags(actor)
 +    assert one == two
 +
 +
-+def test_v6_to_v7_migration_preserves_existing_companions():
-+    package = {
-+        "schema_version": 6,
-+        "state": {
-+            "simulation_state": {
-+                "player_state": {
-+                    "party_state": {
-+                        "companions": [
-+                            {
-+                                "npc_id": "npc_borin",
-+                                "name": "Borin",
-+                                "hp": 80,
-+                                "max_hp": 100,
-+                                "loyalty": 0.6,
-+                                "morale": 0.5,
-+                                "role": "ally",
-+                                "status": "active",
-+                                "equipment": {},
-+                            }
-+                        ]
-+                    }
-+                }
-+            }
-+        },
-+    }
-+    out = migrate_package_to_current(package)
-+    companions = ((((out.get("state") or {}).get("simulation_state") or {}).get("player_state") or {}).get("party_state") or {}).get("companions") or []
-+    assert len(companions) == 1
-+    assert companions[0]["npc_id"] == "npc_borin"
++def test_build_speaker_cards_includes_player():
++    simulation_state = {"player_state": {"party_state": {"companions": []}}}
++    cards = build_speaker_cards(simulation_state, {"scene_id": "scene_gate"})
++    assert any(card.get("speaker_id") == "player" for card in cards)
++
++
++def test_scene_presentation_payload_has_expected_keys():
++    simulation_state = {"player_state": {"party_state": {"companions": []}}}
++    payload = build_scene_presentation_payload(simulation_state, {"scene_id": "scene_1", "tone": "tense"})
++    assert "speaker_cards" in payload
++    assert "companion_interjections" in payload
++    assert "companion_reactions" in payload
++
++
++def test_dialogue_presentation_payload_has_expected_keys():
++    simulation_state = {"player_state": {"party_state": {"companions": []}}}
++    payload = build_dialogue_presentation_payload(simulation_state, {"dialogue_id": "dlg_1", "speaker_id": "npc_x"})
++    assert "speaker_cards" in payload
++    assert "dialogue_context" in payload
 *** End Patch
-25) Add save migration v6 → v7 for narrative state
-
-This migration should add bounded narrative history and current scene reaction markers without breaking existing party data.
-
+21) Add functional tests for routes
+File: src/tests/functional/test_phase10_presentation_routes.py
 *** Begin Patch
-*** Add File: src/app/rpg/persistence/migrations/v6_to_v7.py
-+from __future__ import annotations
+*** Add File: src/tests/functional/test_phase10_presentation_routes.py
++def test_presentation_scene_route(client):
++    res = client.post("/api/rpg/presentation/scene", json={
++        "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
++        "scene_state": {"scene_id": "scene_gate", "tone": "tense"},
++    })
++    assert res.status_code == 200
++    data = res.get_json() or {}
++    assert data.get("ok") is True
++    assert "presentation" in data
 +
-+from typing import Any, Dict
 +
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def migrate_v6_to_v7(package: Dict[str, Any]) -> Dict[str, Any]:
-+    package = dict(package or {})
-+    state = _safe_dict(package.get("state"))
-+    simulation_state = _safe_dict(state.get("simulation_state"))
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    party_state = _safe_dict(player_state.get("party_state"))
-+
-+    narrative_state = _safe_dict(party_state.get("narrative_state"))
-+    narrative_state.setdefault("history", [])
-+    narrative_state.setdefault("last_interjection", {})
-+    narrative_state.setdefault("last_scene_reactions", [])
-+
-+    party_state["narrative_state"] = narrative_state
-+    player_state["party_state"] = party_state
-+    simulation_state["player_state"] = player_state
-+    state["simulation_state"] = simulation_state
-+    package["state"] = state
-+    package["schema_version"] = 7
-+    return package
++def test_presentation_dialogue_route(client):
++    res = client.post("/api/rpg/presentation/dialogue", json={
++        "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
++        "dialogue_state": {"dialogue_id": "dlg_1", "speaker_id": "npc_1"},
++    })
++    assert res.status_code == 200
++    data = res.get_json() or {}
++    assert data.get("ok") is True
++    assert "presentation" in data
 *** End Patch
-26) Register the migration
-*** Begin Patch
-*** Update File: src/app/rpg/persistence/migrations/__init__.py
-@@
- from .v4_to_v5 import migrate_v4_to_v5
- from .v5_to_v6 import migrate_v5_to_v6
-+from .v6_to_v7 import migrate_v6_to_v7
- 
- __all__ = [
-     "migrate_v1_to_v2",
-     "migrate_v2_to_v3",
-     "migrate_v3_to_v4",
-     "migrate_v4_to_v5",
-     "migrate_v5_to_v6",
-+    "migrate_v6_to_v7",
- ]
-*** End Patch
-27) Extend migration manager
-*** Begin Patch
-*** Update File: src/app/rpg/persistence/migration_manager.py
-@@
--from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6
-+from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6, migrate_v6_to_v7
-@@
-         elif version == 5:
-             package = migrate_v5_to_v6(package)
-+        elif version == 6:
-+            package = migrate_v6_to_v7(package)
-         else:
-             raise ValueError(f"Unsupported schema migration path from version {version}")
-*** End Patch
-28) Bump save schema for 9.3
-*** Begin Patch
-*** Update File: src/app/rpg/persistence/save_schema.py
-@@
--CURRENT_RPG_SCHEMA_VERSION = 6
-+CURRENT_RPG_SCHEMA_VERSION = 7
- PACKAGE_TYPE = "rpg_save_package"
--ENGINE_VERSION = "phase_9_2"
-+ENGINE_VERSION = "phase_9_3"
-*** End Patch
-29) Add party narrative state to timeline summaries
-
-Patch the file that appends timeline tick rows.
-
-*** Begin Patch
-*** Update File: <THE FILE THAT APPENDS TIMELINE TICK ROWS>
-@@
- from app.rpg.items.inventory_state import build_inventory_summary
- from app.rpg.party.party_state import build_party_summary
-+from app.rpg.party.companion_narrative import build_party_narrative_summary
-@@
-+    party_narrative_summary = build_party_narrative_summary(
-+        ((simulation_state.get("player_state") or {}).get("party_state") or {})
-+    )
-+
-     tick_row = {
-         "tick": current_tick,
-         "event_count": len(events),
-         "consequence_count": len(consequences),
-         "sandbox_summary": sandbox_summary,
-@@
-         "party_summary": build_party_summary(
-             ((simulation_state.get("player_state") or {}))
-         ),
-         "party_size": build_party_summary(
-             ((simulation_state.get("player_state") or {}))
-         ).get("size", 0),
-+        "party_narrative_summary": party_narrative_summary,
-     }
-*** End Patch
-
-If you want to avoid duplicate helper calls, compute player_state, inventory_summary, party_summary, and party_narrative_summary once locally and reuse them.
-
-30) Add narrative deltas to tick diffs
-*** Begin Patch
-*** Update File: src/app/rpg/analytics/tick_diff.py
-@@
-     before_party = _safe_dict(before_player_state.get("party_state"))
-     after_party = _safe_dict(after_player_state.get("party_state"))
-+    before_party_narrative = _safe_dict(before_party.get("narrative_state"))
-+    after_party_narrative = _safe_dict(after_party.get("narrative_state"))
-@@
-         "party_keys_changed": _keys_changed(before_party, after_party),
-         "party_before": before_party,
-         "party_after": after_party,
-+        "party_narrative_keys_changed": _keys_changed(before_party_narrative, after_party_narrative),
-+        "party_narrative_before": before_party_narrative,
-+        "party_narrative_after": after_party_narrative,
-         "changed_npc_ids": changed_npcs[:20],
-         "summary": {
-             "event_delta": len(after_events) - len(before_events),
-             "consequence_delta": len(after_consequences) - len(before_consequences),
-             "npc_changes": len(changed_npcs),
-             "inventory_item_kinds_before": len(_safe_list(before_inventory.get("items"))),
-             "inventory_item_kinds_after": len(_safe_list(after_inventory.get("items"))),
-             "party_size_before": len(_safe_list(before_party.get("companions"))),
-             "party_size_after": len(_safe_list(after_party.get("companions"))),
-+            "party_narrative_history_before": len(_safe_list(before_party_narrative.get("history"))),
-+            "party_narrative_history_after": len(_safe_list(after_party_narrative.get("history"))),
-         },
-     }
-*** End Patch
-31) Add party narrative row-diff support
-*** Begin Patch
-*** Update File: src/app/rpg/analytics/timeline.py
-@@
-         "inventory_before": _safe_dict(before_row.get("inventory_summary")),
-         "inventory_after": _safe_dict(after_row.get("inventory_summary")),
-         "party_before": _safe_dict(before_row.get("party_summary")),
-         "party_after": _safe_dict(after_row.get("party_summary")),
-+        "party_narrative_before": _safe_dict(before_row.get("party_narrative_summary")),
-+        "party_narrative_after": _safe_dict(after_row.get("party_narrative_summary")),
-     }
-*** End Patch
-32) 9.3 completion checklist
-
-After applying sections 1–32, Phase 9.3 should provide:
-
-companion scene reactions
-deterministic companion dialogue interjections
-loyalty-aware narrative stance
-bounded party narrative history
-inspector/timeline visibility for narrative changes
-scene/dialogue integration hooks
-save migration v6 → v7
-unit, functional, and regression coverage
-33) Immediate review focus after implementation
-
-Check these first:
-
-choose_companion_interjection() does not select downed/absent companions
-narrative history remains bounded after repeated scenes
-route payloads do not mutate state on read-only requests unless explicitly intended
-migration shape uses the real package path: package["state"]["simulation_state"]
-inspector renderer additions do not duplicate or shadow existing party/inventory helpers
-34) Recommended next phase after 9.3
-
-After this, the clean next step is:
-
-Phase 10 — Presentation / Production Polish
-
-That is where you connect:
-
-richer speaker cards / portrait hooks
-stronger scene transitions
-more expressive companion interjection rendering
-accessibility cleanup
-final UX cohesion across dialogue, encounter, inventory, party, and inspector
-
-
-Here’s a focused 9.3 likely bug pass / review checklist for Companion Narrative Integration, tuned to the architecture you’ve been building on top of 9.2’s companion AI/state system. The main new risk area is that narrative hooks often look “read-only” but quietly mutate state, drift out of determinism, or duplicate events.
-
-Highest-risk bugs to check first
-1. Companion interjections firing multiple times for the same scene
-
-This is the biggest narrative-layer bug.
-
-Look for:
-
-scene start adds an interjection
-dialogue entry adds another for the same scene
-scene refresh/re-render adds a third
-inspector/timeline rebuild accidentally re-triggers it
-
-What to verify:
-
-one interjection per intended trigger
-repeated reads of the same payload do not append more history
-there is a deterministic guard such as scene id + tick + companion id
-
-Good pattern:
-
-last = narrative_state.get("last_interjection") or {}
-if last.get("scene_id") == scene_id and last.get("tick") == tick:
-    return player_state
-2. Narrative hooks mutating state during read-only view building
-
-This is a classic failure in narrative systems.
-
-Danger zones:
-
-scene payload builders
-dialogue payload builders
-timeline summary builders
-inspector render payload routes
-
-What to verify:
-
-build_companion_scene_reactions() can be pure if intended
-record_companion_narrative_event() is only called from explicit mutation flows
-“get scene” routes do not silently append history unless that is a deliberate state transition
-
-Rule:
-
-builders compute
-recorders mutate
-
-Never blur those.
-
-3. Nondeterministic interjection selection
-
-Narrative feels harmless, but replay consistency can break here fast.
-
-What to verify:
-
-companions are sorted before choosing among them
-scene tags / reaction candidates are sorted
-tie-breaks are explicit
-no unordered dict traversal affects selected interjection text
-
-Bad:
-
-for comp in companions:
-
-Good:
-
-for comp in sorted(companions, key=lambda c: str(c.get("npc_id"))):
-4. Downed or absent companions still narrating
-
-You already guarded action systems in 9.2, but narrative often forgets those same guards.
-
-What to verify:
-
-status == "downed" companions do not interject
-status == "absent" companions do not react to scenes
-low-hp but active companions may react differently, but still deterministically
-5. History growth unbounded
-
-Narrative history will bloat saves if you do not cap it.
-
-What to verify:
-
-history is trimmed every time a new event is recorded
-trimming is deterministic
-oldest entries are removed first
-nested event payloads are compact and serializable
-
-Recommended invariant:
-
-len(history) <= 20
-Medium-risk integration bugs
-6. Migration shape mismatch for v6 → v7
-
-You already saw how important real package shape is in prior phases.
-
-What to verify:
-
-migration uses package["state"]["simulation_state"], not a stale alternate path
-existing party_state is preserved
-narrative_state is added without wiping current companions
-old saves without party_state do not crash migration
-
-Also verify:
-
-migration manager imports migrate_v6_to_v7
-schema version ends at 7 exactly once
-engine version bump matches phase 9.3
-7. Narrative state not normalized on load
-
-Even if migration is correct, future dirty saves or hand-built tests can still create malformed state.
-
-What to verify:
-
-history is always a list
-last_interjection is always a dict
-last_scene_reactions is always a list
-entries in history are trimmed and sanitized
-8. Scene reaction summaries diverging from companion state
-
-You now have loyalty, morale, status, and role. Narrative stance must reflect current normalized companion state, not stale snapshots.
-
-What to verify:
-
-low loyalty produces colder/negative stance
-low morale affects reaction tone
-support/ally roles can differentiate narrative posture
-updated loyalty from previous encounter affects current scene reactions
-9. Narrative history storing too much payload
-
-Another common problem:
-
-full scene payload copied into history
-full dialogue transcript copied repeatedly
-large nested dicts balloon saves and diffs
-
-What to verify:
-
-history entries are compact
-only store ids and summary strings where possible
-no raw large scene blobs
-no duplicate embedded inventory/party snapshots inside narrative entries
-
-Preferred history shape:
-
-{
-  "tick": 12,
-  "scene_id": "scene_gate",
-  "npc_id": "npc_borin",
-  "kind": "interjection",
-  "summary": "Borin warns the player about the guards."
-}
-10. Timeline summaries becoming too expensive
-
-If build_party_narrative_summary() scans a large history every tick, timeline generation can get heavier over time.
-
-What to verify:
-
-summary reads bounded history only
-no repeated expensive recomputation inside the same tick-row builder
-local variables are reused instead of re-calling summary builders multiple times
-UI-specific likely bugs
-11. Companion interjection displayed but not persisted
-
-Sometimes the UI shows the interjection from a response, but the returned setup_payload does not include the updated narrative_state.
-
-What to verify:
-
-routes that intentionally record narrative events write back updated simulation state
-returned setup_payload is the new one
-next request sees the same last_interjection
-12. Party panel / dialogue panel using stale payload after interjection
-
-If a narrative response mutates state but the frontend keeps using old setup_payload, later calls will lose the new narrative history.
-
-What to verify:
-
-after scene/dialogue response, UI stores returned setup_payload
-later calls use the updated payload
-no closures keep referencing the old one
-13. Inspector showing narrative diffs inconsistently
-
-If you add party_narrative_before/after in tick diffs but not in row diffs, or vice versa, the inspector will feel partially broken.
-
-What to verify:
-
-tick diff payload includes party narrative changes
-row diff payload includes party narrative summary
-inspector renderer has a visible place for narrative delta
-timeline rows show at least one compact narrative signal if intended
-14. Duplicate helper names in inspector renderer
-
-You’ve already iterated that file several times across inventory and party inspector work. Another patch can easily shadow helpers or redefine exported functions.
-
-What to verify:
-
-no duplicate renderTimelineRow
-no duplicate renderTickDiffPanel
-narrative helpers do not reuse existing names accidentally
-module exports still point to the intended final versions
-Behavior design checks
-15. Companion always picks the same speaker regardless of scene
-
-If interjection selection only sorts by npc_id, the same companion may dominate every scene.
-
-That is deterministic, but too flat.
-
-What to verify:
-
-scene tone, location, loyalty, or role influence who speaks
-tie-breaking remains deterministic
-same scene always yields same result, but different scenes can choose different companions
-
-A good deterministic selector can sort by a tuple like:
-
-(score, npc_id)
-
-where score is derived from scene tone + role + loyalty.
-
-16. Negative-loyalty companions still produce supportive narrative
-
-Your 9.2 fixes introduced more explicit loyalty semantics in behavior logic. Narrative should mirror that.
-
-What to verify:
-
-hostile/negative loyalty produces skeptical, reluctant, or cold reactions
-highly loyal companions produce supportive or protective reactions
-neutral loyalty produces flat or observational responses
-17. Absent companions still appear in last_scene_reactions
-
-Even if they do not interject, a builder might still include them in reaction summaries.
-
-What to verify:
-
-absent/downed companions are filtered before reaction generation
-summaries only reference active, present companions
-narrative summary counts match visible reaction lists
-18. History records same event with slightly different summaries
-
-This can happen if the summary text is generated from slightly different payload orderings.
-
-What to verify:
-
-summary templates are deterministic
-same scene + same state produces same summary string
-dedupe keys use ids, not summary text only
-Best end-to-end scenarios to run
-Start a scene with two active companions, refresh the same scene payload twice, confirm only one narrative event is recorded.
-Set one companion to downed, start a scene, confirm that companion does not interject or appear in reactions.
-Lower one companion’s loyalty, start a moral/tense scene, confirm reaction stance shifts negatively and stays deterministic across repeated calls.
-Save a v6 package, migrate to v7, confirm companions remain intact and narrative_state is added without wiping party data.
-Trigger scene start, then dialogue entry for the same scene, verify you do not get duplicate interjections unless that is explicitly intended.
-Generate 30+ narrative events, confirm history trims to the bound and oldest events are dropped first.
-Open inspector/timeline after several narrative scenes, verify narrative deltas appear and no renderer crashes occur.
-Minimal invariants worth asserting
-
-These are worth adding as tests or debug assertions:
-
-assert isinstance(narrative_state.get("history"), list)
-assert isinstance(narrative_state.get("last_interjection"), dict)
-assert isinstance(narrative_state.get("last_scene_reactions"), list)
-assert len(narrative_state.get("history", [])) <= 20
-assert all("npc_id" in e or "scene_id" in e for e in narrative_state.get("history", []))
-
-And for behavior integrity:
-
-assert all(
-    r.get("npc_id") not in downed_or_absent_ids
-    for r in reactions
-)
-My priority review order
-
-Review in this order:
-
-mutation-vs-builder separation
-interjection duplication guards
-migration v6 → v7 shape
-determinism of selection and summaries
-history bounding
-inspector/timeline narrative visibility
-frontend payload refresh correctness
-
-That ordering catches the most expensive narrative regressions first.
+22) Phase 10 completion checklist
+
+After applying sections 8–22, Phase 10 should provide:
+
+presentation routes for scene/dialogue payloads
+stable speaker card system
+deterministic personality style tags
+frontend presentation rendering
+additive UI containers
+unit + functional coverage
+no mutation hidden inside presentation builders
+23) Immediate review focus
+
+When you implement this phase, review these hotspots first:
+
+presentation routes registered in the real Flask bootstrap file
+build_speaker_cards() does not include absent/downed companions unless intentionally desired
+scene/dialogue builders remain pure and do not record narrative events
+frontend does not assume presentation payload contains transcript text unless actually provided
+renderSpeakerCards() handles empty style tags and missing names safely
+24) Next recommended follow-up
+
+After this patch, the best next pass is not a new phase number but a Phase 10 polish/fix pass for:
+
+portrait asset mapping
+accessibility labels
+speaker card selection states
+richer interjection styling
+mobile layout cleanup

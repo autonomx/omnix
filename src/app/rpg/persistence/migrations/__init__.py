@@ -3,6 +3,7 @@ from .v2_to_v3 import migrate_v2_to_v3
 from .v3_to_v4 import migrate_v3_to_v4
 from .v4_to_v5 import migrate_v4_to_v5
 from .v5_to_v6 import migrate_v5_to_v6
+from .v6_to_v7 import migrate_v6_to_v7
 
 __all__ = [
     "migrate_v1_to_v2",
@@ -10,4 +11,5 @@ __all__ = [
     "migrate_v3_to_v4",
     "migrate_v4_to_v5",
     "migrate_v5_to_v6",
+    "migrate_v6_to_v7",
 ]
