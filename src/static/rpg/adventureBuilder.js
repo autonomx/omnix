@@ -908,7 +908,8 @@ var AdventureBuilder = (function () {
                 rt.lastDiff,
                 rt.lastSummary || [],
                 rt.lastEvents,
-                rt.lastConsequences
+                rt.lastConsequences,
+                rt.lastEffectDiff
             );
         }
 
@@ -953,6 +954,7 @@ var AdventureBuilder = (function () {
                 wi.simulationRuntime.lastSummary = res.summary || [];
                 wi.simulationRuntime.lastEvents = res.events || [];
                 wi.simulationRuntime.lastConsequences = res.consequences || [];
+                wi.simulationRuntime.lastEffectDiff = res.effect_diff || null;
                 // Capture snapshot
                 var tick = (res.simulation_state && res.simulation_state.tick) || '?';
                 _captureWorldSnapshot('After Simulation Tick ' + tick);

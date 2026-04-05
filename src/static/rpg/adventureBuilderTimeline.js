@@ -489,6 +489,24 @@ var AdventureBuilderTimeline = (function () {
             html += '</div>';
         }
 
+        // Active Effects
+        var effAdded = effectDiff.added || [];
+        var effRemoved = effectDiff.removed || [];
+        var effChanged = effectDiff.changed || [];
+        if (effAdded.length || effRemoved.length || effChanged.length) {
+            html += '<div class="ab-sim-effects"><h5>Active Effects</h5>';
+            if (effAdded.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Added</strong><pre>' + _esc(JSON.stringify(effAdded, null, 2)) + '</pre></div>';
+            }
+            if (effRemoved.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Expired</strong><pre>' + _esc(JSON.stringify(effRemoved, null, 2)) + '</pre></div>';
+            }
+            if (effChanged.length) {
+                html += '<div class="ab-sim-effects-block"><strong>Changed</strong><pre>' + _esc(JSON.stringify(effChanged, null, 2)) + '</pre></div>';
+            }
+            html += '</div>';
+        }
+
         // Threads changed
         var threads = diff.threads_changed || [];
         if (threads.length) {

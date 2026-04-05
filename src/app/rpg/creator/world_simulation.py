@@ -28,6 +28,13 @@ import json
 from typing import Any
 
 from .world_events import generate_world_events, generate_consequences
+from .world_effects import (
+    apply_effects_to_simulation_state,
+    build_effects_from_consequences,
+    compute_effect_diff,
+    decay_active_effects,
+    merge_active_effects,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +233,15 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
         "history": [],
         "events": [],
         "consequences": [],
+        "active_effects": [],
     }
-    after_state["step_hash"] = _step_hash(after_state)
+    after_state["step_hash"] = _step_hash({
+        "tick": 0,
+        "threads": thr_states,
+        "factions": fac_states,
+        "locations": loc_states,
+        "active_effects": [],
+    })
     return after_state
 
 
@@ -253,6 +267,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         current = build_initial_simulation_state(setup)
 
     before_state = copy.deepcopy(current)
+    before_effects = _safe_list(current.get("active_effects"))
     next_tick = current.get("tick", 0) + 1
 
     # Extract current setup data for condition evaluation
@@ -387,40 +402,76 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         "history": list(current.get("history", [])),
     }
 
-    # Build diff + summary and append to history with change counts
-    diff = compute_simulation_diff(before_state, after_state)
-    events = generate_world_events(diff)
+    # 1. Compute BASE diff (natural changes only, no effects)
+    base_diff = compute_simulation_diff(before_state, after_state)
+    events = generate_world_events(base_diff)
     consequences = generate_consequences(events)
-    summary = summarize_simulation_step(diff, events=events, consequences=consequences)
-    after_state["history"].append({
+
+    # 2. Build/merge/decay active effects.
+    new_effects = build_effects_from_consequences(consequences)
+    merged_effects = merge_active_effects(before_effects, new_effects)
+    after_effects = decay_active_effects(merged_effects)
+    after_state["active_effects"] = after_effects
+
+    # 3. Apply effects separately (clean layering)
+    after_state_with_effects = apply_effects_to_simulation_state(copy.deepcopy(after_state))
+
+    effect_applied_diff = compute_simulation_diff(after_state, after_state_with_effects)
+    final_diff = compute_simulation_diff(before_state, after_state_with_effects)
+    effect_diff = compute_effect_diff(before_effects, after_effects)
+
+    summary = summarize_simulation_step(
+        final_diff,
+        events=events,
+        consequences=consequences,
+        effect_diff=effect_diff,
+    )
+
+    # Use base_after state for history, but record final_diff for change counts
+    history_state = after_state_with_effects
+    history_state["history"] = list(current.get("history", []))
+    history_state["history"].append({
         "tick": next_tick,
         "summary": summary,
         "changes": {
-            "threads": len(diff.get("threads_changed", [])),
-            "factions": len(diff.get("factions_changed", [])),
-            "locations": len(diff.get("locations_changed", [])),
+            "threads": len(final_diff.get("threads_changed", [])),
+            "factions": len(final_diff.get("factions_changed", [])),
+            "locations": len(final_diff.get("locations_changed", [])),
             "events": len(events),
             "consequences": len(consequences),
+            "effects": len(_safe_list(effect_diff.get("added"))),
         },
     })
-    if len(after_state["history"]) > MAX_HISTORY:
-        after_state["history"] = after_state["history"][-MAX_HISTORY:]
+    if len(history_state["history"]) > MAX_HISTORY:
+        history_state["history"] = history_state["history"][-MAX_HISTORY:]
 
-    # Add step hash for traceability
-    after_state["step_hash"] = _step_hash(after_state)
-    after_state["events"] = events
-    after_state["consequences"] = consequences
+    # Add step hash for traceability (on final state with effects)
+    history_state["step_hash"] = _step_hash({
+        "tick": history_state["tick"],
+        "threads": history_state["threads"],
+        "factions": history_state["factions"],
+        "locations": history_state["locations"],
+        "active_effects": history_state.get("active_effects", []),
+    })
+    history_state["events"] = events
+    history_state["consequences"] = consequences
 
-    # Write back into setup copy
-    meta["simulation_state"] = after_state
+    # Write back into setup copy (final state with effects applied)
+    meta["simulation_state"] = history_state
     setup["metadata"] = meta
 
     return {
         "next_setup": setup,
         "before_state": before_state,
-        "after_state": after_state,
+        "after_state": history_state,
+        "after_state_base": after_state,
+        "simulation_diff": final_diff,
+        "base_diff": base_diff,
+        "effect_applied_diff": effect_applied_diff,
+        "summary": summary,
         "events": events,
         "consequences": consequences,
+        "effect_diff": effect_diff,
     }
 
 
@@ -496,6 +547,7 @@ def summarize_simulation_step(
     diff: dict[str, Any],
     events: list[dict[str, Any]] | None = None,
     consequences: list[dict[str, Any]] | None = None,
+    effect_diff: dict[str, Any] | None = None,
 ) -> list[str]:
     """Return human-readable summary lines for the diff."""
     diff = _safe_dict(diff)
@@ -546,4 +598,11 @@ def summarize_simulation_step(
     cnsq_count = len(_safe_list(consequences))
     if cnsq_count:
         lines.append(f"{cnsq_count} consequence{'s' if cnsq_count != 1 else ''} generated")
+
+    eff_added = len(_safe_list(_safe_dict(effect_diff).get("added")))
+    eff_removed = len(_safe_list(_safe_dict(effect_diff).get("removed")))
+    if eff_added:
+        lines.append(f"{eff_added} active effect{'s' if eff_added != 1 else ''} added")
+    if eff_removed:
+        lines.append(f"{eff_removed} active effect{'s' if eff_removed != 1 else ''} expired")
     return lines
