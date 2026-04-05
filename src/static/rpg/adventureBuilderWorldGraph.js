@@ -665,6 +665,17 @@ var AdventureBuilderWorldGraph = (function () {
         renderSimulation: renderSimulation,
         renderTabStrip: renderTabStrip,
         NODE_CONFIG: NODE_CONFIG,
-        EDGE_CONFIG: EDGE_CONFIG
+        EDGE_CONFIG: EDGE_CONFIG,
+        /** Phase 2.5 — delegate to AdventureBuilderTimeline */
+        computeAndStoreGraphDiff: function (prev, next) {
+            return typeof AdventureBuilderTimeline !== 'undefined'
+                ? AdventureBuilderTimeline.computeAndStoreGraphDiff(prev, next)
+                : _computeGraphDiff(prev, next);
+        },
+        renderGraphDiffSummary: function (container, diff) {
+            if (typeof AdventureBuilderTimeline !== 'undefined') {
+                AdventureBuilderTimeline.renderGraphDiffSummary(container, diff);
+            }
+        }
     };
 })();

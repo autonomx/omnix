@@ -687,6 +687,12 @@ var AdventureBuilder = (function () {
         _readCurrentStepIntoSetup();
         var undoDisabled = AdventureBuilderState.hasHistory(state) ? '' : ' disabled';
 
+        // Phase 2.5 — Auto-capture initial snapshot on first Step 5 entry
+        var wi = state.worldInspection || {};
+        if (!wi.snapshots || !wi.snapshots.length) {
+            _captureWorldSnapshot('Initial Draft');
+        }
+
         // Phase 2 — Top-level tab strip for Step 5 sub-views
         var step5Tab = state.worldInspection ? (state.worldInspection.activeTab || 'summary') : 'summary';
 
@@ -707,7 +713,9 @@ var AdventureBuilder = (function () {
             { id: 'preview', icon: '👁️', label: 'Preview' },
             { id: 'worldgraph', icon: '🕸️', label: 'World Graph' },
             { id: 'simulation', icon: '📊', label: 'Simulation' },
-            { id: 'inspector', icon: '🔍', label: 'Inspector' }
+            { id: 'inspector', icon: '🔍', label: 'Inspector' },
+            { id: 'timeline', icon: '🕰️', label: 'Timeline' },
+            { id: 'diff', icon: '🔀', label: 'Diff' }
         ];
         var html = '<div class="ab-wg-tabs">';
         tabs.forEach(function (t) {
@@ -749,6 +757,12 @@ var AdventureBuilder = (function () {
                 break;
             case 'inspector':
                 _renderStep5Inspector(contentEl);
+                break;
+            case 'timeline':
+                _renderStep5Timeline(contentEl);
+                break;
+            case 'diff':
+                _renderStep5Diff(contentEl);
                 break;
             default:
                 _renderStep5Summary(contentEl, undoDisabled);
@@ -896,6 +910,90 @@ var AdventureBuilder = (function () {
                 state.worldInspection.selectedNodeId = eid;
                 AdventureBuilderWorldGraph.renderInspector(container, eid, inspectorData);
             });
+        });
+    }
+
+    // ── Phase 2.5 — Timeline & Diff tab renderers ──
+
+    var MAX_SNAPSHOTS = 20;
+
+    function _captureWorldSnapshot(label) {
+        var wi = state.worldInspection;
+        if (!wi) return;
+        AdventureBuilderApi.inspectWorldSnapshot(state.setup, label || 'Snapshot').then(function (res) {
+            if (res.success && res.snapshot) {
+                // Attach the current setup so we can compare later
+                res.snapshot.setup = JSON.parse(JSON.stringify(state.setup));
+                if (!wi.snapshots) wi.snapshots = [];
+                wi.snapshots.push(res.snapshot);
+                if (wi.snapshots.length > MAX_SNAPSHOTS) {
+                    wi.snapshots = wi.snapshots.slice(-MAX_SNAPSHOTS);
+                }
+                wi.selectedSnapshotIndex = wi.snapshots.length - 1;
+            }
+        }).catch(function () { /* silent */ });
+    }
+
+    function _renderStep5Timeline(contentEl) {
+        var wi = state.worldInspection || {};
+        var html = '<div class="ab-section ab-wg-section"><div id="abTimelineContent"></div></div>';
+        contentEl.innerHTML = html;
+        var panel = contentEl.querySelector('#abTimelineContent');
+
+        AdventureBuilderTimeline.renderTimeline(panel, wi.snapshots || [], {
+            onCapture: function () {
+                _captureWorldSnapshot('Manual Snapshot');
+                // Re-render after a short delay for the API call
+                setTimeout(function () { _renderStep5Timeline(contentEl); }, 600);
+            },
+            onClear: function () {
+                wi.snapshots = [];
+                wi.selectedSnapshotIndex = null;
+                wi.compareMode = false;
+                wi.entityHistory = null;
+                _renderStep5Timeline(contentEl);
+            },
+            onView: function (index) {
+                wi.selectedSnapshotIndex = index;
+                wi.activeTab = 'inspector';
+                _renderStep5(overlayEl.querySelector('#abBody'));
+            },
+            onCompare: function (index) {
+                var snap = (wi.snapshots || [])[index];
+                if (!snap || !snap.setup) return;
+                wi.compareMode = true;
+                wi.selectedSnapshotIndex = index;
+                // Fetch server-side diff
+                AdventureBuilderApi.compareWorld(snap.setup, state.setup).then(function (res) {
+                    if (res.success) {
+                        wi.graphDiff = res.diff;
+                        wi.activeTab = 'diff';
+                        _renderStep5(overlayEl.querySelector('#abBody'));
+                    }
+                }).catch(function () { /* silent */ });
+            }
+        });
+    }
+
+    function _renderStep5Diff(contentEl) {
+        var wi = state.worldInspection || {};
+        var html = '<div class="ab-section ab-wg-section"><div id="abDiffContent"></div></div>';
+        contentEl.innerHTML = html;
+        var panel = contentEl.querySelector('#abDiffContent');
+
+        AdventureBuilderTimeline.renderDiffTab(panel, wi.graphDiff, function (entityId) {
+            // On entity click — fetch entity diff and show compare
+            var snap = (wi.snapshots || [])[wi.selectedSnapshotIndex];
+            if (!snap || !snap.setup) return;
+            AdventureBuilderApi.compareEntity(snap.setup, state.setup, entityId).then(function (res) {
+                if (res.success) {
+                    wi.entityHistory = res;
+                    var comparePanel = document.createElement('div');
+                    comparePanel.className = 'ab-entity-compare-container';
+                    panel.appendChild(comparePanel);
+                    AdventureBuilderTimeline.renderEntityCompare(comparePanel, res.diff, entityId);
+                }
+            }).catch(function () { /* silent */ });
         });
     }
 
@@ -1435,6 +1533,7 @@ var AdventureBuilder = (function () {
             state.regen.modalOpen = false;
 
             _saveDraft();
+            _captureWorldSnapshot('After Regeneration (' + target + ')');
             _renderStep();
             _runValidation();
         }).catch(function () {
@@ -1597,6 +1696,7 @@ var AdventureBuilder = (function () {
         state.regen.modalOpen = false;
 
         _saveDraft();
+        _captureWorldSnapshot('After Undo');
         _renderStep();
         _runValidation();
     }

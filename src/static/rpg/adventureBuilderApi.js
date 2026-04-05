@@ -7,6 +7,11 @@
  * Phase 1.4 additions:
  * - regenerateSection supports mode, apply_token, apply_strategy
  * - regenerateItem for single-entity regeneration
+ *
+ * Phase 2.5 additions:
+ * - inspectWorldSnapshot for snapshot wrapper
+ * - compareWorld for graph diff between setups
+ * - compareEntity for per-entity field diff
  */
 
 /* global */
@@ -137,6 +142,51 @@ var AdventureBuilderApi = (function () {
         }).then(_json);
     }
 
+    /**
+     * Build a full snapshot wrapper from a setup payload (Phase 2.5).
+     *
+     * @param {Object} setup - Current setup payload
+     * @param {string} [label] - Optional snapshot label
+     */
+    function inspectWorldSnapshot(setup, label) {
+        var body = { setup: setup };
+        if (label) body.label = label;
+        return fetch(BASE + '/inspect-world-snapshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        }).then(_json);
+    }
+
+    /**
+     * Compare two setup payloads and return a graph diff (Phase 2.5).
+     *
+     * @param {Object} beforeSetup - Previous setup payload
+     * @param {Object} afterSetup  - Current setup payload
+     */
+    function compareWorld(beforeSetup, afterSetup) {
+        return fetch(BASE + '/compare-world', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ before_setup: beforeSetup, after_setup: afterSetup }),
+        }).then(_json);
+    }
+
+    /**
+     * Compare a specific entity between two setup payloads (Phase 2.5).
+     *
+     * @param {Object} beforeSetup - Previous setup payload
+     * @param {Object} afterSetup  - Current setup payload
+     * @param {string} entityId    - Entity id to compare
+     */
+    function compareEntity(beforeSetup, afterSetup, entityId) {
+        return fetch(BASE + '/compare-entity', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ before_setup: beforeSetup, after_setup: afterSetup, entity_id: entityId }),
+        }).then(_json);
+    }
+
     return {
         getTemplates: getTemplates,
         buildTemplate: buildTemplate,
@@ -147,5 +197,8 @@ var AdventureBuilderApi = (function () {
         regenerateMultiple: regenerateMultiple,
         startAdventure: startAdventure,
         inspectWorld: inspectWorld,
+        inspectWorldSnapshot: inspectWorldSnapshot,
+        compareWorld: compareWorld,
+        compareEntity: compareEntity,
     };
 })();

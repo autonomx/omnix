@@ -1030,3 +1030,231 @@
     background: rgba(255, 255, 255, 0.06);
     font-size: 0.9rem;
 }
+
+/* ─── Phase 2.5 — Timeline ─────────────────────────────────────────────── */
+
+.ab-timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.ab-timeline-header h4 {
+    margin: 0;
+}
+
+.ab-timeline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ab-timeline-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    transition: background 0.15s;
+}
+
+.ab-timeline-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.ab-timeline-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.ab-timeline-label {
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+
+.ab-timeline-time {
+    font-size: 0.8rem;
+    opacity: 0.55;
+}
+
+.ab-timeline-card-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.82rem;
+    opacity: 0.7;
+    margin-bottom: 6px;
+}
+
+.ab-timeline-stat {
+    white-space: nowrap;
+}
+
+.ab-timeline-card-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.ab-btn-xs {
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+}
+
+/* ─── Phase 2.5 — Diff tab ─────────────────────────────────────────────── */
+
+.ab-diff-tab-summary {
+    margin-bottom: 16px;
+}
+
+.ab-diff-section {
+    margin-bottom: 16px;
+}
+
+.ab-diff-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+}
+
+.ab-diff-group {
+    margin-bottom: 10px;
+}
+
+.ab-diff-group h5 {
+    margin: 0 0 4px 0;
+    font-size: 0.88rem;
+}
+
+.ab-diff-item {
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-bottom: 3px;
+    font-size: 0.88rem;
+    font-family: monospace;
+}
+
+.ab-diff-added-item {
+    background: rgba(46, 204, 113, 0.08);
+    border-left: 3px solid rgba(46, 204, 113, 0.4);
+}
+
+.ab-diff-removed-item {
+    background: rgba(231, 76, 60, 0.08);
+    border-left: 3px solid rgba(231, 76, 60, 0.4);
+}
+
+.ab-diff-changed-item {
+    background: rgba(52, 152, 219, 0.08);
+    border-left: 3px solid rgba(52, 152, 219, 0.4);
+}
+
+.ab-diff-clickable {
+    cursor: pointer;
+}
+
+.ab-diff-clickable:hover {
+    background: rgba(52, 152, 219, 0.15);
+}
+
+.ab-diff-badge {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.ab-diff-badge-added { background: rgba(46, 204, 113, 0.25); color: #2ecc71; }
+.ab-diff-badge-removed { background: rgba(231, 76, 60, 0.25); color: #e74c3c; }
+.ab-diff-badge-changed { background: rgba(52, 152, 219, 0.25); color: #3498db; }
+
+.ab-diff-added { color: #2ecc71; }
+.ab-diff-removed { color: #e74c3c; }
+.ab-diff-changed { color: #3498db; }
+
+.ab-diff-fields {
+    font-size: 0.8rem;
+    opacity: 0.65;
+}
+
+.ab-diff-edge-type {
+    font-size: 0.8rem;
+    opacity: 0.65;
+}
+
+.ab-wg-diff-chip.ab-diff-added { background: rgba(46, 204, 113, 0.12); color: #2ecc71; }
+.ab-wg-diff-chip.ab-diff-removed { background: rgba(231, 76, 60, 0.12); color: #e74c3c; }
+.ab-wg-diff-chip.ab-diff-changed { background: rgba(52, 152, 219, 0.12); color: #3498db; }
+
+/* ─── Phase 2.5 — Entity compare ───────────────────────────────────────── */
+
+.ab-entity-compare-container {
+    margin-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 12px;
+}
+
+.ab-entity-compare h4 {
+    margin: 0 0 10px 0;
+}
+
+.ab-entity-changed-fields {
+    margin-bottom: 10px;
+}
+
+.ab-diff-field-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(52, 152, 219, 0.12);
+    color: #3498db;
+    font-size: 0.82rem;
+    margin: 0 4px 4px 0;
+}
+
+.ab-entity-related {
+    font-size: 0.88rem;
+    margin-bottom: 4px;
+}
+
+.ab-entity-compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.ab-entity-compare-col {
+    font-size: 0.85rem;
+    word-break: break-word;
+}
+
+.ab-entity-compare-col h5 {
+    margin: 0 0 4px 0;
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.ab-entity-col-before {
+    opacity: 0.7;
+}
+
+.ab-entity-compare-row {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ab-entity-row-changed {
+    background: rgba(52, 152, 219, 0.06);
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+.ab-entity-row-label {
+    font-weight: 600;
+    font-size: 0.82rem;
+    margin-bottom: 2px;
+}
