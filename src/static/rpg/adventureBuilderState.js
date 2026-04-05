@@ -98,7 +98,10 @@ var AdventureBuilderState = (function () {
                     stepping: false,
                     lastEvents: [],
                     lastConsequences: [],
-                    lastEffectDiff: null
+                    lastEffectDiff: null,
+                    /** Phase 3D — Incidents & Policy Reactions */
+                    lastIncidentDiff: null,
+                    lastReactionDiff: null
                 }
             }
         };

@@ -1067,6 +1067,8 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
     events = step_result.get("events", [])
     consequences = step_result.get("consequences", [])
     effect_diff = step_result.get("effect_diff", {})
+    incident_diff = step_result.get("incident_diff", {})
+    reaction_diff = step_result.get("reaction_diff", {})
     base_diff = step_result.get("base_diff", {})
     effect_applied_diff = step_result.get("effect_applied_diff", {})
 
@@ -1085,6 +1087,8 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
         "events": events,
         "consequences": consequences,
         "effect_diff": effect_diff,
+        "incident_diff": incident_diff,
+        "reaction_diff": reaction_diff,
         "graph": inspection.get("graph"),
         "simulation": inspection.get("simulation"),
         "inspector": inspection.get("inspector"),

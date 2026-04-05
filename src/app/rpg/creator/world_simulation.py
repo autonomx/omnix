@@ -35,6 +35,14 @@ from .world_effects import (
     decay_active_effects,
     merge_active_effects,
 )
+from .world_incidents import (
+    compute_incident_diff,
+    compute_policy_reaction_diff,
+    decay_incidents,
+    generate_policy_reactions,
+    merge_incidents,
+    spawn_incidents_from_state_diff,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +242,8 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
         "events": [],
         "consequences": [],
         "active_effects": [],
+        "incidents": [],
+        "policy_reactions": [],
     }
     after_state["step_hash"] = _step_hash({
         "tick": 0,
@@ -241,6 +251,7 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
         "factions": fac_states,
         "locations": loc_states,
         "active_effects": [],
+        "incidents": [],
     })
     return after_state
 
@@ -268,6 +279,8 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
 
     before_state = copy.deepcopy(current)
     before_effects = _safe_list(current.get("active_effects"))
+    before_incidents = _safe_list(current.get("incidents"))
+    before_reactions = _safe_list(current.get("policy_reactions"))
     next_tick = current.get("tick", 0) + 1
 
     # Extract current setup data for condition evaluation
@@ -420,11 +433,25 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
     final_diff = compute_simulation_diff(before_state, after_state_with_effects)
     effect_diff = compute_effect_diff(before_effects, after_effects)
 
+    # 4. Spawn incidents and policy reactions from the updated state diff.
+    new_incidents = spawn_incidents_from_state_diff(final_diff)
+    merged_incidents = merge_incidents(before_incidents, new_incidents)
+    after_incidents = decay_incidents(merged_incidents)
+    after_state_with_effects["incidents"] = after_incidents
+
+    after_reactions = generate_policy_reactions(final_diff)
+    after_state_with_effects["policy_reactions"] = after_reactions
+
+    incident_diff = compute_incident_diff(before_incidents, after_incidents)
+    reaction_diff = compute_policy_reaction_diff(before_reactions, after_reactions)
+
     summary = summarize_simulation_step(
         final_diff,
         events=events,
         consequences=consequences,
         effect_diff=effect_diff,
+        incident_diff=incident_diff,
+        reaction_diff=reaction_diff,
     )
 
     # Use base_after state for history, but record final_diff for change counts
@@ -440,6 +467,8 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
             "events": len(events),
             "consequences": len(consequences),
             "effects": len(_safe_list(effect_diff.get("added"))),
+            "incidents": len(_safe_list(incident_diff.get("added"))),
+            "reactions": len(_safe_list(reaction_diff.get("added"))),
         },
     })
     if len(history_state["history"]) > MAX_HISTORY:
@@ -452,6 +481,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         "factions": history_state["factions"],
         "locations": history_state["locations"],
         "active_effects": history_state.get("active_effects", []),
+        "incidents": history_state.get("incidents", []),
     })
     history_state["events"] = events
     history_state["consequences"] = consequences
@@ -472,6 +502,8 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         "events": events,
         "consequences": consequences,
         "effect_diff": effect_diff,
+        "incident_diff": incident_diff,
+        "reaction_diff": reaction_diff,
     }
 
 
@@ -548,6 +580,8 @@ def summarize_simulation_step(
     events: list[dict[str, Any]] | None = None,
     consequences: list[dict[str, Any]] | None = None,
     effect_diff: dict[str, Any] | None = None,
+    incident_diff: dict[str, Any] | None = None,
+    reaction_diff: dict[str, Any] | None = None,
 ) -> list[str]:
     """Return human-readable summary lines for the diff."""
     diff = _safe_dict(diff)
@@ -605,4 +639,15 @@ def summarize_simulation_step(
         lines.append(f"{eff_added} active effect{'s' if eff_added != 1 else ''} added")
     if eff_removed:
         lines.append(f"{eff_removed} active effect{'s' if eff_removed != 1 else ''} expired")
+
+    inc_added = len(_safe_list(_safe_dict(incident_diff).get("added")))
+    inc_removed = len(_safe_list(_safe_dict(incident_diff).get("removed")))
+    if inc_added:
+        lines.append(f"{inc_added} incident{'s' if inc_added != 1 else ''} spawned")
+    if inc_removed:
+        lines.append(f"{inc_removed} incident{'s' if inc_removed != 1 else ''} resolved")
+
+    rxn_added = len(_safe_list(_safe_dict(reaction_diff).get("added")))
+    if rxn_added:
+        lines.append(f"{rxn_added} policy reaction{'s' if rxn_added != 1 else ''} triggered")
     return lines
