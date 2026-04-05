@@ -59,16 +59,20 @@ export class RPGInspectorUI {
           await this.selectTick(tick);
         }
       );
-      // Phase 8.4.7 fix — bind click handlers for consequence inspect buttons
-      document.querySelectorAll(".rpg-inspector-link-btn[data-consequence-type]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
+      // Phase 8.4.7 fix — event delegation for consequence inspect buttons
+      const timelineEl = document.getElementById("rpg-inspector-timeline");
+      if (timelineEl && !timelineEl._consequenceDelegationBound) {
+        timelineEl._consequenceDelegationBound = true;
+        timelineEl.addEventListener("click", async (e) => {
+          const btn = e.target.closest("[data-consequence-type]");
+          if (!btn) return;
           const type = btn.getAttribute("data-consequence-type") || "all";
           rpgInspectorState.worldConsequenceFilter = type;
           const filterEl = document.getElementById("rpg-inspector-world-filter");
           if (filterEl) filterEl.value = type;
           await this.refreshTimeline();
         });
-      });
+      }
       renderInspectorDiff(res.latest_diff || {});
       rpgInspectorState.causalTrace = buildCausalTrace({
         latestDiff: res.latest_diff || {},

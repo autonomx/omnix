@@ -159,10 +159,11 @@ def test_select_tick_doesnt_toggle_loading_after_refresh():
 
 
 def test_consequence_button_click_handler_exists():
-    """Test that consequence inspect buttons have click handlers."""
+    """Test that consequence inspect buttons have delegated click handlers."""
     path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorUI.js")
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
-    assert "rpg-inspector-link-btn" in content
+    # Event delegation uses closest() on [data-consequence-type]
     assert "data-consequence-type" in content
+    assert "event delegation" in content or "closest" in content
     assert "worldConsequenceFilter" in content
