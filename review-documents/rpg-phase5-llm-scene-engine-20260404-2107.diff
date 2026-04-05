@@ -1,0 +1,1643 @@
+diff --git a/src/app/rpg/ai/__init__.py b/src/app/rpg/ai/__init__.py
+index 9048f0c..2a4f3c8 100644
+--- a/src/app/rpg/ai/__init__.py
++++ b/src/app/rpg/ai/__init__.py
+@@ -12,6 +12,20 @@ from .goap import GOAPPlanner
+ # Phase 4.5 exports
+ from .branch_ai_evaluator import AIBranchEvaluator, BranchEvaluation
+ 
++# Phase 5 exports
++from .world_scene_narrator import (
++    SceneNarrator,
++    NPCReaction,
++    NarrativeResult,
++    build_scene_prompt,
++    build_npc_reaction_prompt,
++    build_choice_prompt,
++    parse_scene_response,
++    parse_npc_reaction,
++    parse_choices,
++    play_scene,
++)
++
+ __all__ = [
+     "BehaviorDriver",
+     "BehaviorContext",
+@@ -32,4 +46,15 @@ __all__ = [
+     # Phase 4.5
+     "AIBranchEvaluator",
+     "BranchEvaluation",
++    # Phase 5
++    "SceneNarrator",
++    "NPCReaction",
++    "NarrativeResult",
++    "build_scene_prompt",
++    "build_npc_reaction_prompt",
++    "build_choice_prompt",
++    "parse_scene_response",
++    "parse_npc_reaction",
++    "parse_choices",
++    "play_scene",
+ ]
+diff --git a/src/app/rpg/creator_routes.py b/src/app/rpg/creator_routes.py
+index 5d21a62..7fafd99 100644
+--- a/src/app/rpg/creator_routes.py
++++ b/src/app/rpg/creator_routes.py
+@@ -14,6 +14,7 @@ import logging
+ 
+ from flask import Blueprint, jsonify, request
+ 
++from app.rpg.ai.world_scene_narrator import play_scene as narrate_scene
+ from app.rpg.services import adventure_builder_service as builder
+ 
+ logger = logging.getLogger(__name__)
+@@ -349,3 +350,66 @@ def simulation_state():
+     except Exception:
+         logger.exception("Failed to get simulation state")
+         return jsonify({"success": False, "error": "Failed to get simulation state"}), 500
++
++
++# ---------------------------------------------------------------------------
++# 15. POST /api/rpg/adventure/simulation/action  (Phase 4.5)
++# ---------------------------------------------------------------------------
++
++@creator_bp.route("/api/rpg/adventure/simulation/action", methods=["POST"])
++def simulation_action():
++    """Apply a player action to the simulation and advance one tick.
++
++    Request body:
++        setup (dict, required): Current adventure setup payload
++        action (dict, required): { "type": "...", "target_id": "..." }
++    """
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"success": False, "error": "Missing JSON body"}), 400
++
++    setup = data.get("setup")
++    action = data.get("action")
++    if not setup or not action:
++        return jsonify({"success": False, "error": "Both 'setup' and 'action' are required"}), 400
++
++    try:
++        result = builder.apply_player_action_endpoint({"setup": setup, "action": action})
++        return jsonify(result)
++    except Exception:
++        logger.exception("Failed to apply player action")
++        return jsonify({"success": False, "error": "Failed to apply player action"}), 500
++
++
++# ---------------------------------------------------------------------------
++# 16. POST /api/rpg/scene/play  (Phase 5)
++# ---------------------------------------------------------------------------
++
++@creator_bp.route("/api/rpg/scene/play", methods=["POST"])
++def play_scene():
++    """Play a scene and return narrated result with NPC reactions.
++
++    Request body:
++        scene (dict, required): Scene to play
++        state (dict, optional): Current game state
++        tone (str, optional): Narrative tone (default: 'dramatic')
++
++    Returns narrated scene with choices, NPC dialogue, and reactions.
++    """
++    data = request.get_json(silent=True)
++    if not data:
++        return jsonify({"success": False, "error": "Missing JSON body"}), 400
++
++    scene = data.get("scene")
++    if not scene:
++        return jsonify({"success": False, "error": "Missing 'scene' in request body"}), 400
++
++    state = data.get("state") or {}
++    tone = data.get("tone", "dramatic")
++
++    try:
++        result = narrate_scene(scene, state, tone=tone)
++        return jsonify({"success": True, **result})
++    except Exception:
++        logger.exception("Failed to play scene")
++        return jsonify({"success": False, "error": "Failed to play scene"}), 500
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+new file mode 100644
+index 0000000..9cf94e1
+--- /dev/null
++++ b/src/app/rpg/ai/world_scene_narrator.py
+@@ -0,0 +1,581 @@
++"""Phase 5 — LLM Scene Engine + NPC Behavior
++
++Turns structured scenes into narrative experiences:
++    Scene → Narrative → NPC reactions → Dialogue → Player response
++
++Provides prompt building, narrative generation, and response parsing
++for the scene narration pipeline.
++"""
++
++from __future__ import annotations
++
++import logging
++from dataclasses import dataclass, field
++from typing import Any, Dict, List, Optional
++
++logger = logging.getLogger(__name__)
++
++
++# ---------------------------------------------------------------------------
++# Data models
++# ---------------------------------------------------------------------------
++
++@dataclass
++class NPCReaction:
++    """An NPC's reaction to a scene event."""
++    npc_id: str = ""
++    npc_name: str = ""
++    reaction: str = ""
++    dialogue: str = ""
++    emotion: str = "neutral"
++    intent: str = ""
++
++
++@dataclass
++class NarrativeResult:
++    """Complete result from scene narration."""
++    narrative: str
++    choices: List[Dict[str, Any]] = field(default_factory=list)
++    npc_reactions: List[NPCReaction] = field(default_factory=list)
++    dialogue_blocks: List[Dict[str, Any]] = field(default_factory=list)
++    metadata: Dict[str, Any] = field(default_factory=dict)
++
++
++# ---------------------------------------------------------------------------
++# Prompt builders
++# ---------------------------------------------------------------------------
++
++def build_scene_prompt(
++    scene: Dict[str, Any],
++    state: Dict[str, Any],
++    *,
++    tone: str = "dramatic",
++    max_paragraphs: int = 3,
++) -> str:
++    """Build an LLM prompt to narrate a scene.
++
++    Args:
++        scene: Scene dict with at least title, summary, actors, stakes.
++        state: Current game state dict.
++        tone: Narrative tone (dramatic, tense, mysterious, etc.).
++        max_paragraphs: Maximum number of paragraphs to generate.
++
++    Returns:
++        Prompt string for the LLM.
++    """
++    title = scene.get("title", "Untitled Scene")
++    summary = scene.get("summary", "")
++    actors = scene.get("actors", [])
++    stakes = scene.get("stakes", "Unknown")
++    location = scene.get("location", "an unknown place")
++    tension = scene.get("tension", "moderate")
++
++    # Build contextual state summary
++    player_name = state.get("player_name", "You")
++    genre = state.get("genre", "fantasy")
++
++    actor_list = ""
++    if actors:
++        if isinstance(actors, list):
++            actor_list = "\n".join(f"  - {a}" for a in actors)
++        elif isinstance(actors, dict):
++            actor_list = "\n".join(f"  - {k}: {v}" for k, v in actors.items())
++        else:
++            actor_list = str(actors)
++
++    prompt = f"""You are a narrative engine for an RPG set in a {genre} world.
++
++=== SCENE: {title} ===
++Location: {location}
++Tone: {tone}
++Tension: {tension}
++
++Summary:
++{summary}
++
++Actors present:
++{actor_list}
++
++Stakes:
++{stakes}
++
++=== INSTRUCTIONS ===
++Describe what happens next in {max_paragraphs} paragraphs.
++Include sensory details, character reactions, and building tension.
++Write in second person, addressing the player as "{player_name}".
++Make the narrative immersive and vivid.
++Do NOT include player choices — those will be provided separately.
++End with a moment of decision or danger.
++"""
++    return prompt
++
++
++def build_npc_reaction_prompt(
++    npc: Dict[str, Any],
++    scene: Dict[str, Any],
++    narrative: str,
++    *,
++    state: Optional[Dict[str, Any]] = None,
++) -> str:
++    """Build a prompt to generate an individual NPC reaction.
++
++    Args:
++        npc: NPC dict with name, personality, goals, etc.
++        scene: Current scene dict.
++        narrative: The generated narrative text.
++        state: Optional game state dict.
++
++    Returns:
++        Prompt string for the LLM.
++    """
++    npc_name = npc.get("name", "Unknown NPC")
++    npc_personality = npc.get("personality", "")
++    npc_goals = npc.get("goals", "")
++    npc_relation = npc.get("relation_to_player", "neutral")
++    scene_title = scene.get("title", "Unknown Scene")
++
++    personality_info = f"Personality: {npc_personality}" if npc_personality else ""
++    goals_info = f"Goals: {npc_goals}" if npc_goals else ""
++    relation_info = f"Relation to player: {npc_relation}" if npc_relation else ""
++
++    prompt = f"""You are generating NPC reactions for an RPG.
++
++Character: {npc_name}
++{personality_info}
++{goals_info}
++{relation_info}
++
++Scene: {scene_title}
++
++Narrative:
++{narrative[:1000]}
++
++=== INSTRUCTIONS ===
++Describe {npc_name}'s internal reaction to what just happened.
++Then provide a short line of dialogue they might say.
++Specify their emotional state (one of: calm, tense, angry, fearful, curious, excited, neutral).
++Specify their immediate intent (one of: observe, act, confront, flee, negotiate, wait).
++
++Format your response as:
++REACTION: [description]
++DIALOGUE: "[line]"
++EMOTION: [emotion]
++INTENT: [intent]
++"""
++    return prompt
++
++
++def build_choice_prompt(
++    scene: Dict[str, Any],
++    narrative: str,
++    *,
++    num_choices: int = 3,
++) -> str:
++    """Build a prompt to generate player choices.
++
++    Args:
++        scene: Current scene dict.
++        narrative: The narrative text.
++        num_choices: Number of choices to generate.
++
++    Returns:
++        Prompt string for the LLM.
++    """
++    title = scene.get("title", "Scene")
++    stakes = scene.get("stakes", "")
++
++    prompt = f"""You are generating player choices for an RPG scene.
++
++Scene: {title}
++Stakes: {stakes}
++
++Narrative situation:
++{narrative[-500:]}
++
++=== INSTRUCTIONS ===
++Generate exactly {num_choices} meaningful choices for the player.
++Each choice should have:
++  - A short, action-oriented description (5-10 words)
++  - An implied risk or consequence
++  - A distinct approach (combat, stealth, diplomacy, observation, etc.)
++
++Format your response as:
++1. [choice description]
++2. [choice description]
++3. [choice description]
++"""
++    return prompt
++
++
++# ---------------------------------------------------------------------------
++# Response parsers
++# ---------------------------------------------------------------------------
++
++def parse_scene_response(text: str) -> Dict[str, Any]:
++    """Parse a raw LLM narrative response.
++
++    Args:
++        text: Raw LLM response text.
++
++    Returns:
++        Dict with 'narrative' and default 'choices'.
++    """
++    narrative = text.strip() if text else "The scene unfolds before you..."
++
++    return {
++        "narrative": narrative,
++        "choices": [
++            {"id": "choice_1", "text": "Take decisive action", "type": "action"},
++            {"id": "choice_2", "text": "Observe carefully", "type": "observe"},
++            {"id": "choice_3", "text": "Speak to those present", "type": "dialogue"},
++        ],
++    }
++
++
++def parse_npc_reaction(text: str, npc_id: str = "", npc_name: str = "") -> NPCReaction:
++    """Parse an NPC reaction response.
++
++    Args:
++        text: Raw LLM response for NPC reaction.
++        npc_id: NPC identifier.
++        npc_name: Fallback NPC name.
++
++    Returns:
++        NPCReaction dataclass instance.
++    """
++    reaction = ""
++    dialogue = ""
++    emotion = "neutral"
++    intent = ""
++
++    for line in text.split("\n"):
++        line = line.strip()
++        if line.startswith("REACTION:"):
++            reaction = line[len("REACTION:"):].strip()
++        elif line.startswith("DIALOGUE:"):
++            dialogue = line[len("DIALOGUE:"):].strip().strip('"')
++        elif line.startswith("EMOTION:"):
++            emotion = line[len("EMOTION:"):].strip().lower()
++        elif line.startswith("INTENT:"):
++            intent = line[len("INTENT:"):].strip().lower()
++
++    return NPCReaction(
++        npc_id=npc_id,
++        npc_name=npc_name,
++        reaction=reaction,
++        dialogue=dialogue,
++        emotion=emotion,
++        intent=intent,
++    )
++
++
++def parse_choices(text: str) -> List[Dict[str, Any]]:
++    """Parse LLM-generated player choices.
++
++    Args:
++        text: Raw LLM response with numbered choices.
++
++    Returns:
++        List of choice dicts with 'id', 'text', and 'type' keys.
++    """
++    choices = []
++    choice_types = ["action", "observe", "dialogue", "stealth", "combat", "diplomacy"]
++
++    for line in text.split("\n"):
++        line = line.strip()
++        if line and (line[0].isdigit() and line[1] in (".", ")")):
++            choice_text = line[2:].strip()
++            idx = len(choices) + 1
++            choice_type = choice_types[idx % len(choice_types)]
++            choices.append({
++                "id": f"choice_{idx}",
++                "text": choice_text,
++                "type": choice_type,
++            })
++
++    return choices if choices else [
++        {"id": "choice_1", "text": "Take action", "type": "action"},
++        {"id": "choice_2", "text": "Wait and observe", "type": "observe"},
++    ]
++
++
++# ---------------------------------------------------------------------------
++# Scene narration service
++# ---------------------------------------------------------------------------
++
++class SceneNarrator:
++    """Orchestrates scene narration with NPC reactions and player choices.
++
++    This is the main entry point for Phase 5. It coordinates:
++    1. Narrative generation from scene data
++    2. NPC reaction generation
++    3. Player choice generation
++    4. Assembly into a complete NarrativeResult
++    """
++
++    def __init__(
++        self,
++        llm_gateway: Optional[Any] = None,
++        *,
++        default_tone: str = "dramatic",
++        simulate_mode: bool = False,
++    ):
++        self.llm_gateway = llm_gateway
++        self.default_tone = default_tone
++        self.simulate_mode = simulate_mode
++
++    def narrate_scene(
++        self,
++        scene: Dict[str, Any],
++        state: Dict[str, Any],
++        *,
++        tone: Optional[str] = None,
++        include_npc_reactions: bool = True,
++        include_choices: bool = True,
++        max_npc_reactions: int = 3,
++    ) -> NarrativeResult:
++        """Generate a complete narrated scene.
++
++        Args:
++            scene: Scene dict to narrate.
++            state: Current game state dict.
++            tone: Override default tone.
++            include_npc_reactions: Whether to generate NPC reactions.
++            include_choices: Whether to generate player choices.
++            max_npc_reactions: Max NPC reactions to generate.
++
++        Returns:
++            NarrativeResult with narrative, choices, and NPC reactions.
++        """
++        tone = tone or self.default_tone
++
++        # Step 1: Generate narrative
++        narrative = self._generate_narrative(scene, state, tone=tone)
++
++        # Step 2: Generate NPC reactions
++        npc_reactions: List[NPCReaction] = []
++        if include_npc_reactions:
++            npc_reactions = self._generate_npc_reactions(
++                scene, narrative, state,
++                max_reactions=max_npc_reactions,
++            )
++
++        # Step 3: Generate choices
++        choices: List[Dict[str, Any]] = []
++        if include_choices:
++            choices = self._generate_choices(scene, narrative)
++
++        # Step 4: Build dialogue blocks from NPC reactions
++        dialogue_blocks = [
++            {
++                "speaker": r.npc_name,
++                "npc_id": r.npc_id,
++                "text": r.dialogue,
++                "emotion": r.emotion,
++            }
++            for r in npc_reactions
++            if r.dialogue
++        ]
++
++        return NarrativeResult(
++            narrative=narrative,
++            choices=choices,
++            npc_reactions=npc_reactions,
++            dialogue_blocks=dialogue_blocks,
++            metadata={
++                "tone": tone,
++                "scene_id": scene.get("id"),
++                "npc_count": len(npc_reactions),
++                "choice_count": len(choices),
++            },
++        )
++
++    def _generate_narrative(
++        self,
++        scene: Dict[str, Any],
++        state: Dict[str, Any],
++        tone: str,
++    ) -> str:
++        """Generate narrative text for a scene."""
++        if self.simulate_mode or self.llm_gateway is None:
++            return self._simulate_narrative(scene, tone)
++
++        try:
++            prompt = build_scene_prompt(scene, state, tone=tone)
++            response = self.llm_gateway.call("generate", prompt, context={"scene": scene})
++            parsed = parse_scene_response(response if isinstance(response, str) else str(response))
++            return parsed["narrative"]
++        except Exception:
++            logger.exception("Failed to generate narrative, falling back to simulation")
++            return self._simulate_narrative(scene, tone)
++
++    def _generate_npc_reactions(
++        self,
++        scene: Dict[str, Any],
++        narrative: str,
++        state: Dict[str, Any],
++        *,
++        max_reactions: int = 3,
++    ) -> List[NPCReaction]:
++        """Generate NPC reactions for actors in the scene."""
++        actors = scene.get("actors", [])
++        if isinstance(actors, dict):
++            actor_list = [{"id": k, "name": k, **v} for k, v in actors.items()]
++        elif isinstance(actors, list):
++            actor_list = [
++                a if isinstance(a, dict) else {"id": a, "name": str(a)}
++                for a in actors
++            ]
++        else:
++            actor_list = [{"id": "unknown", "name": str(actors)}]
++
++        reactions: List[NPCReaction] = []
++        for actor in actor_list[:max_reactions]:
++            npc_id = actor.get("id", "unknown")
++            npc_name = actor.get("name", "Unknown")
++
++            if self.simulate_mode or self.llm_gateway is None:
++                reaction = self._simulate_npc_reaction(npc_name)
++            else:
++                try:
++                    prompt = build_npc_reaction_prompt(actor, scene, narrative, state=state)
++                    response = self.llm_gateway.call("generate", prompt, context={"npc": npc_id})
++                    reaction = parse_npc_reaction(response if isinstance(response, str) else str(response),
++                                                  npc_id=npc_id, npc_name=npc_name)
++                except Exception:
++                    logger.exception("Failed to generate NPC reaction for %s", npc_name)
++                    reaction = self._simulate_npc_reaction(npc_name)
++
++            reactions.append(reaction)
++
++        return reactions
++
++    def _generate_choices(
++        self,
++        scene: Dict[str, Any],
++        narrative: str,
++    ) -> List[Dict[str, Any]]:
++        """Generate player choices."""
++        if self.simulate_mode or self.llm_gateway is None:
++            return self._simulate_choices(scene)
++
++        try:
++            prompt = build_choice_prompt(scene, narrative)
++            response = self.llm_gateway.call("generate", prompt, context={"scene": scene.get("id")})
++            parsed = parse_choices(response if isinstance(response, str) else str(response))
++            return parsed
++        except Exception:
++            logger.exception("Failed to generate choices, falling back to defaults")
++            return self._simulate_choices(scene)
++
++    # ------------------------------------------------------------------
++    # Simulation fallbacks (no LLM required)
++    # ------------------------------------------------------------------
++
++    @staticmethod
++    def _simulate_narrative(scene: Dict[str, Any], tone: str) -> str:
++        """Generate simulated narrative text without LLM."""
++        title = scene.get("title", "The Scene")
++        summary = scene.get("summary", "Events unfold around you.")
++        stakes = scene.get("stakes", "much is at stake")
++        actors = scene.get("actors", [])
++        actor_names = []
++        if isinstance(actors, list):
++            actor_names = [str(a) for a in actors[:3]]
++        elif isinstance(actors, dict):
++            actor_names = list(actors.keys())[:3]
++
++        actor_text = f"{' and '.join(actor_names)} stand before you" if actor_names else "You stand alone"
++        return (
++            f"{title}\n\n"
++            f"{summary}\n\n"
++            f"{actor_text}, the weight of the moment pressing down. "
++            f"The stakes are clear: {stakes}. "
++            f"The air is thick with {tone} tension as the scene unfolds."
++        )
++
++    @staticmethod
++    def _simulate_npc_reaction(npc_name: str) -> NPCReaction:
++        """Generate a simulated NPC reaction without LLM."""
++        emotions = ["tense", "curious", "determined", "cautious", "alert"]
++        intents = ["observe", "act", "confront", "wait", "negotiate"]
++        reactions = [
++            f"{npc_name} considers the situation carefully.",
++            f"{npc_name}'s expression grows serious.",
++            f"{npc_name} shifts uneasily, weighing options.",
++            f"{npc_name} meets your gaze with quiet resolve.",
++        ]
++        dialogues = [
++            "We should act quickly.",
++            "This changes everything.",
++            "I've seen this before.",
++            "What do you think we should do?",
++        ]
++        # Use hash of name for deterministic selection
++        idx = hash(npc_name)
++        return NPCReaction(
++            npc_id=npc_name.lower().replace(" ", "_"),
++            npc_name=npc_name,
++            reaction=reactions[idx % len(reactions)],
++            dialogue=dialogues[idx % len(dialogues)],
++            emotion=emotions[idx % len(emotions)],
++            intent=intents[idx % len(intents)],
++        )
++
++    @staticmethod
++    def _simulate_choices(scene: Dict[str, Any]) -> List[Dict[str, Any]]:
++        """Generate simulated choices without LLM."""
++        return [
++            {"id": "choice_1", "text": "Take decisive action", "type": "action"},
++            {"id": "choice_2", "text": "Observe the situation carefully", "type": "observe"},
++            {"id": "choice_3", "text": "Speak with those present", "type": "dialogue"},
++        ]
++
++
++# ---------------------------------------------------------------------------
++# Convenience functions (service layer)
++# ---------------------------------------------------------------------------
++
++def play_scene(
++    scene: Dict[str, Any],
++    state: Dict[str, Any],
++    *,
++    llm_gateway: Optional[Any] = None,
++    tone: str = "dramatic",
++) -> Dict[str, Any]:
++    """Play a scene and return narrated result as dict.
++
++    This is the main service function called by routes.
++
++    Args:
++        scene: Scene dict to play.
++        state: Game state dict.
++        llm_gateway: Optional LLM gateway for real narration.
++        tone: Narrative tone.
++
++    Returns:
++        Dict suitable for JSON response.
++    """
++    narrator = SceneNarrator(
++        llm_gateway=llm_gateway,
++        default_tone=tone,
++        simulate_mode=(llm_gateway is None),
++    )
++    result = narrator.narrate_scene(scene, state, tone=tone)
++
++    return {
++        "narrative": result.narrative,
++        "choices": result.choices,
++        "npc_reactions": [
++            {
++                "npc_id": r.npc_id,
++                "npc_name": r.npc_name,
++                "dialogue": r.dialogue,
++                "emotion": r.emotion,
++                "intent": r.intent,
++            }
++            for r in result.npc_reactions
++        ],
++        "dialogue_blocks": result.dialogue_blocks,
++        "metadata": result.metadata,
++    }
+\ No newline at end of file
+diff --git a/src/tests/functional/test_phase5_scene_narrator_functional.py b/src/tests/functional/test_phase5_scene_narrator_functional.py
+new file mode 100644
+index 0000000..85b7de8
+--- /dev/null
++++ b/src/tests/functional/test_phase5_scene_narrator_functional.py
+@@ -0,0 +1,272 @@
++"""Phase 5 — LLM Scene Engine + NPC Behavior: Functional Tests
++
++Tests end-to-end behavior of the scene narration pipeline:
++- SceneNarrator with various configurations
++- Integration with simulated LLM gateway
++- Full play_scene service function
++- Multi-scenario coverage
++"""
++
++import json
++import unittest
++
++from app.rpg.ai.world_scene_narrator import (
++    SceneNarrator,
++    NarrativeResult,
++    play_scene,
++)
++
++
++class TestSceneNarratorFunctional(unittest.TestCase):
++    """Functional tests for SceneNarrator."""
++
++    def test_full_scene_narration_with_all_options(self):
++        """Test narration with NPC reactions and choices enabled."""
++        scene = {
++            "id": "functional_001",
++            "title": "The King's Court",
++            "summary": "You stand before the throne, the weight of your quest upon your shoulders.",
++            "actors": ["King Aldric", "Queen Mara", "Advisor Vex"],
++            "stakes": "Convince the king to send aid before the village falls.",
++            "location": "The Grand Throne Room",
++            "tension": "critical",
++        }
++        state = {
++            "player_name": "Elara",
++            "genre": "high fantasy",
++            "quest_status": "urgent",
++        }
++
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(
++            scene, state,
++            tone="royal",
++            include_npc_reactions=True,
++            include_choices=True,
++            max_npc_reactions=3,
++        )
++
++        self.assertIsInstance(result, NarrativeResult)
++        self.assertIn("The King's Court", result.narrative)
++        self.assertIn("King's Court", result.narrative)
++        self.assertEqual(len(result.npc_reactions), 3)
++        self.assertEqual(len(result.choices), 3)
++        self.assertEqual(len(result.dialogue_blocks), 3)  # Each NPC has dialogue
++        self.assertEqual(result.metadata["scene_id"], "functional_001")
++        self.assertEqual(result.metadata["tone"], "royal")
++        self.assertEqual(result.metadata["npc_count"], 3)
++        self.assertEqual(result.metadata["choice_count"], 3)
++
++    def test_scene_with_actor_dict(self):
++        """Test narration with actors as a dict (NPC objects)."""
++        scene = {
++            "id": "functional_002",
++            "title": "The Tavern Meeting",
++            "summary": "A stranger approaches you in the dim tavern.",
++            "actors": {
++                "Raven": {"personality": "mysterious", "goals": "recruit allies"},
++                "Borin": {"personality": "gruff", "goals": "protect the tavern"},
++            },
++            "stakes": "Decide who to trust.",
++            "location": "The Rusty Flagon",
++            "tension": "moderate",
++        }
++        state = {"player_name": "You", "genre": "dark fantasy"}
++
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(scene, state)
++
++        self.assertEqual(len(result.npc_reactions), 2)
++        npc_names = [r.npc_name for r in result.npc_reactions]
++        self.assertIn("Raven", npc_names)
++        self.assertIn("Borin", npc_names)
++
++    def test_multiple_tones(self):
++        """Test different narrative tones produce different output."""
++        scene = {
++            "id": "tone_test",
++            "title": "Darkness Falls",
++            "summary": "Shadows lengthen as danger approaches.",
++            "actors": [],
++            "stakes": "Survival",
++            "location": "The Crypt",
++            "tension": "high",
++        }
++        state = {"player_name": "Hero", "genre": "horror"}
++
++        narrator = SceneNarrator(simulate_mode=True)
++        
++        result_dramatic = narrator.narrate_scene(scene, state, tone="dramatic")
++        result_mysterious = narrator.narrate_scene(scene, state, tone="mysterious")
++        result_tense = narrator.narrate_scene(scene, state, tone="tense")
++
++        # All should contain the title
++        self.assertIn("Darkness Falls", result_dramatic.narrative)
++        self.assertIn("Darkness Falls", result_mysterious.narrative)
++        self.assertIn("Darkness Falls", result_tense.narrative)
++
++        # Each should contain its own tone
++        self.assertIn("dramatic", result_dramatic.narrative)
++        self.assertIn("mysterious", result_mysterious.narrative)
++        self.assertIn("tense", result_tense.narrative)
++
++    def test_empty_actor_list(self):
++        """Test narration with no actors in scene."""
++        scene = {
++            "id": "solo_001",
++            "title": "Alone in the Dark",
++            "summary": "You are completely alone.",
++            "actors": [],
++            "stakes": "Find the exit.",
++            "location": "A cave",
++            "tension": "low",
++        }
++        state = {"player_name": "Solo", "genre": "adventure"}
++
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(scene, state, include_npc_reactions=True)
++
++        self.assertEqual(len(result.npc_reactions), 0)
++        self.assertNotIn("stand before you", result.narrative)
++
++    def test_max_npc_limited(self):
++        """Test max_npc_reactions limits output."""
++        scene = {
++            "id": "crowded_001",
++            "title": "The Council",
++            "summary": "Many voices fill the chamber.",
++            "actors": ["A", "B", "C", "D", "E", "F"],
++            "stakes": "Unity or division.",
++            "location": "Council Chamber",
++            "tension": "high",
++        }
++        state = {"player_name": "Player", "genre": "politics"}
++
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(scene, state, max_npc_reactions=2)
++
++        self.assertLessEqual(len(result.npc_reactions), 2)
++
++    def test_dialogue_blocks_from_npc_reactions(self):
++        """Test that dialogue blocks are derived from NPC reactions."""
++        scene = {
++            "id": "dialogue_001",
++            "title": "Negotiations",
++            "summary": "Words are weapons here.",
++            "actors": ["Diplomat", "General"],
++            "stakes": "Peace or war.",
++            "location": "Parley Tent",
++            "tension": "critical",
++        }
++        state = {"player_name": "Envoy", "genre": "war"}
++
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(scene, state)
++
++        # Each NPC simulation generates dialogue
++        for block in result.dialogue_blocks:
++            self.assertIn("speaker", block)
++            self.assertIn("text", block)
++            self.assertIn("emotion", block)
++            self.assertTrue(len(block["text"]) > 0)
++
++    def test_choices_have_required_fields(self):
++        """Test that choices have id, text, and type."""
++        scene = {
++            "id": "choice_001",
++            "title": "The Crossroads",
++            "summary": "Multiple paths lie ahead.",
++            "actors": [],
++            "stakes": "Choose wisely.",
++            "location": "Crossroads",
++            "tension": "moderate",
++        }
++        state = {"player_name": "Traveler", "genre": "adventure"}
++
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(scene, state, include_npc_reactions=False)
++
++        for choice in result.choices:
++            self.assertIn("id", choice)
++            self.assertIn("text", choice)
++            self.assertIn("type", choice)
++            self.assertTrue(choice["id"].startswith("choice_"))
++
++
++class TestPlaySceneFunctional(unittest.TestCase):
++    """Functional tests for play_scene service function."""
++
++    def test_full_response_structure(self):
++        """Test that play_scene returns complete response dict."""
++        scene = {
++            "id": "ps_001",
++            "title": "The Ambush",
++            "summary": "Bandits spring from the trees!",
++            "actors": ["Bandit Chief", "Archer"],
++            "stakes": "Your life and your companions.",
++            "location": "The Forest Road",
++            "tension": "extreme",
++        }
++        state = {
++            "player_name": "Warrior",
++            "genre": "action fantasy",
++        }
++
++        result = play_scene(scene, state, tone="violent")
++        
++        self.assertTrue(isinstance(result, dict))
++        self.assertIn("narrative", result)
++        self.assertIn("choices", result)
++        self.assertIn("npc_reactions", result)
++        self.assertIn("dialogue_blocks", result)
++        self.assertIn("metadata", result)
++
++        # Verify narrative contains scene info
++        self.assertIn("The Ambush", result["narrative"])
++
++        # Verify choices is a list
++        self.assertIsInstance(result["choices"], list)
++        self.assertGreater(len(result["choices"]), 0)
++
++        # Verify npc_reactions is a list of dicts
++        self.assertIsInstance(result["npc_reactions"], list)
++
++        # Verify dialogue_blocks is a list
++        self.assertIsInstance(result["dialogue_blocks"], list)
++
++    def test_state_is_reflected_in_output(self):
++        """Test that state values appear in narration."""
++        scene = {
++            "id": "ps_002",
++            "title": "The Prophecy",
++            "summary": "The oracle speaks your name.",
++            "actors": ["Oracle"],
++            "stakes": "Fate hangs in the balance.",
++            "location": "The Temple",
++            "tension": "divine",
++        }
++        state = {"player_name": "Chosen One", "genre": "epic fantasy"}
++
++        result = play_scene(scene, state)
++
++        self.assertIn("The Prophecy", result["narrative"])
++
++    def test_empty_state_handles_gracefully(self):
++        """Test that empty state doesn't cause errors."""
++        scene = {
++            "id": "ps_003",
++            "title": "Void Scene",
++            "summary": "Nothing exists here.",
++            "actors": [],
++            "stakes": "None",
++            "location": "The Void",
++            "tension": "null",
++        }
++
++        result = play_scene(scene, {})
++        self.assertIn("narrative", result)
++        self.assertIn("choices", result)
++
++
++if __name__ == "__main__":
++    unittest.main()
+\ No newline at end of file
+diff --git a/src/tests/regression/test_phase5_scene_narrator_regression.py b/src/tests/regression/test_phase5_scene_narrator_regression.py
+new file mode 100644
+index 0000000..5d02b96
+--- /dev/null
++++ b/src/tests/regression/test_phase5_scene_narrator_regression.py
+@@ -0,0 +1,316 @@
++"""Phase 5 — LLM Scene Engine + NPC Behavior: Regression Tests
++
++Ensures that changes to the scene narrator don't break existing behavior:
++- API compatibility with existing data formats
++- Backward compatibility with older scene formats
++- No breaking changes to response structure
++- Edge cases with unusual input
++"""
++
++import unittest
++
++from app.rpg.ai.world_scene_narrator import (
++    SceneNarrator,
++    NarrativeResult,
++    play_scene,
++    parse_scene_response,
++    parse_npc_reaction,
++    parse_choices,
++)
++
++
++class TestBackwardCompatibility(unittest.TestCase):
++    """Regression tests for backward compatibility."""
++
++    def test_legacy_scene_format_without_id(self):
++        """Test that scenes without 'id' field work."""
++        scene = {
++            "title": "Legacy Scene",
++            "summary": "An old-style scene.",
++            "actors": ["Hero"],
++            "stakes": "Everything.",
++        }
++        state = {"player_name": "Player", "genre": "classic"}
++        result = play_scene(scene, state)
++        self.assertIn("narrative", result)
++        self.assertIsNone(result["metadata"].get("scene_id"))
++
++    def test_legacy_scene_format_minimal(self):
++        """Test minimal scene format from early versions."""
++        scene = {"title": "Minimal"}
++        result = play_scene(scene, {})
++        self.assertIn("narrative", result)
++        self.assertIn("choices", result)
++        self.assertIsInstance(result["choices"], list)
++
++    def test_response_structure_unchanged(self):
++        """Test that response structure matches expected format."""
++        scene = {
++            "id": "reg_001",
++            "title": "Structure Test",
++            "summary": "Testing response structure.",
++            "actors": ["Tester"],
++            "stakes": "API stability.",
++            "location": "Test Chamber",
++            "tension": "high",
++        }
++        state = {"player_name": "QA", "genre": "testing"}
++        result = play_scene(scene, state)
++
++        # Required top-level keys
++        required_keys = {"narrative", "choices", "npc_reactions", "dialogue_blocks", "metadata"}
++        self.assertTrue(required_keys.issubset(set(result.keys())))
++
++        # Choices structure
++        for choice in result["choices"]:
++            self.assertIn("id", choice)
++            self.assertIn("text", choice)
++
++        # Dialogue blocks structure
++        for block in result["dialogue_blocks"]:
++            self.assertIn("speaker", block)
++            self.assertIn("text", block)
++            self.assertIn("emotion", block)
++
++    def test_npc_reactions_structure_unchanged(self):
++        """Test that NPC reaction structure is stable."""
++        scene = {
++            "id": "reg_002",
++            "title": "NPC Test",
++            "summary": "Testing NPC reaction structure.",
++            "actors": ["NPC One", "NPC Two"],
++            "stakes": "Stable structure.",
++            "location": "NPC Lab",
++            "tension": "moderate",
++        }
++        state = {"player_name": "Tester", "genre": "science"}
++        result = play_scene(scene, state)
++
++        for reaction in result["npc_reactions"]:
++            self.assertIn("npc_id", reaction)
++            self.assertIn("npc_name", reaction)
++            self.assertIn("dialogue", reaction)
++            self.assertIn("emotion", reaction)
++            self.assertIn("intent", reaction)
++
++
++class TestEdgeCases(unittest.TestCase):
++    """Regression tests for edge cases."""
++
++    def test_very_long_scene_title(self):
++        """Test scene with very long title."""
++        scene = {
++            "id": "edge_001",
++            "title": "A" * 1000,
++            "summary": "Testing long title.",
++            "actors": [],
++            "stakes": "Performance.",
++            "location": "Test",
++            "tension": "low",
++        }
++        result = play_scene(scene, {})
++        self.assertIn("A" * 100, result["narrative"])
++
++    def test_actors_as_string_not_list(self):
++        """Test when actors is a string instead of list."""
++        scene = {
++            "id": "edge_002",
++            "title": "String Actors",
++            "summary": "Testing string actors.",
++            "actors": "Single Actor",
++            "stakes": "Type safety.",
++            "location": "Test",
++            "tension": "low",
++        }
++        result = play_scene(scene, {})
++        self.assertIn("narrative", result)
++
++    def test_actors_as_non_string_object(self):
++        """Test when actors is something unexpected."""
++        scene = {
++            "id": "edge_003",
++            "title": "Weird Actors",
++            "summary": "Testing weird actor type.",
++            "actors": 42,
++            "stakes": "Type safety.",
++            "location": "Test",
++            "tension": "low",
++        }
++        result = play_scene(scene, {})
++        self.assertIn("narrative", result)
++
++    def test_missing_summary(self):
++        """Test scene without summary."""
++        scene = {
++            "id": "edge_004",
++            "title": "No Summary",
++            "actors": [],
++            "stakes": "Missing data.",
++            "location": "Test",
++            "tension": "low",
++        }
++        result = play_scene(scene, {})
++        self.assertIn("narrative", result)
++
++    def test_stakes_as_dict(self):
++        """Test when stakes is a dict instead of string."""
++        scene = {
++            "id": "edge_005",
++            "title": "Dict Stakes",
++            "summary": "Testing dict stakes.",
++            "actors": [],
++            "stakes": {"primary": "Survival", "secondary": "Loot"},
++            "location": "Test",
++            "tension": "low",
++        }
++        result = play_scene(scene, {})
++        self.assertIn("narrative", result)
++
++    def test_empty_scene(self):
++        """Test completely empty scene."""
++        scene = {}
++        result = play_scene(scene, {})
++        self.assertIn("narrative", result)
++        self.assertGreater(len(result["choices"]), 0)
++
++
++class TestParseFunctionsStability(unittest.TestCase):
++    """Regression tests for parser stability."""
++
++    def test_parse_scene_response_empty(self):
++        """Test parse_scene_response with empty input."""
++        result = parse_scene_response("")
++        self.assertIsNotNone(result["narrative"])
++        self.assertEqual(len(result["choices"]), 3)
++
++    def test_parse_scene_response_none_handling(self):
++        """Test parse_scene_response handles empty but non-None input."""
++        result = parse_scene_response("   ")
++        self.assertIsNotNone(result["narrative"])
++
++    def test_parse_npc_reaction_complex_format(self):
++        """Test parsing complex NPC reaction format."""
++        text = """REACTION: The guard considers the situation with great concern,
++looking around the room for other options before settling on a plan.
++DIALOGUE: "I suppose we have no choice. Let's do this quickly,
++before they realize what we're up to."
++EMOTION: tense
++INTENT: act
++"""
++        result = parse_npc_reaction(text, "guard_01", "Captain Guard")
++        self.assertIn("concern", result.reaction)
++        self.assertEqual(result.emotion, "tense")
++        self.assertEqual(result.intent, "act")
++
++    def test_parse_npc_reaction_lowercase_keys(self):
++        """Test that lowercase keys are not matched (case sensitivity)."""
++        text = """reaction: lowercase
++dialogue: "lowercase"
++emotion: sad
++intent: flee
++"""
++        result = parse_npc_reaction(text)
++        # Should not match lowercase keys
++        self.assertEqual(result.emotion, "neutral")
++        self.assertEqual(result.dialogue, "")
++
++    def test_parse_choices_with_various_formats(self):
++        """Test parsing choices in various number formats."""
++        text = """1. First action
++2. Second action
++3. Third action
++4. Fourth action
++"""
++        result = parse_choices(text)
++        self.assertEqual(len(result), 4)
++        self.assertEqual(result[0]["id"], "choice_1")
++        self.assertEqual(result[3]["id"], "choice_4")
++
++    def test_parse_choices_mixed_format(self):
++        """Test parsing choices with mixed number formats."""
++        text = """1) First option
++2) Second option
++"""
++        result = parse_choices(text)
++        self.assertEqual(len(result), 2)
++
++
++class TestSceneNarratorStability(unittest.TestCase):
++    """Regression tests for SceneNarrator class stability."""
++
++    def test_repeated_calls_same_result(self):
++        """Test that repeated calls with same input produce consistent results."""
++        scene = {
++            "id": "stability_001",
++            "title": "Stability Test",
++            "summary": "Testing stability.",
++            "actors": ["Stable Actor"],
++            "stakes": "Stability.",
++            "location": "Test",
++            "tension": "low",
++        }
++        state = {"player_name": "Tester", "genre": "testing"}
++
++        narrator = SceneNarrator(simulate_mode=True)
++        result1 = narrator.narrate_scene(scene, state)
++        result2 = narrator.narrate_scene(scene, state)
++
++        # Narrative should be identical
++        self.assertEqual(result1.narrative, result2.narrative)
++        self.assertEqual(len(result1.choices), len(result2.choices))
++
++    def test_simulate_mode_deterministic(self):
++        """Test that simulate mode is deterministic for core fields."""
++        narrator = SceneNarrator(simulate_mode=True)
++        scene = {
++            "id": "det_001",
++            "title": "Determinism Test",
++            "summary": "Testing deterministic behavior.",
++            "actors": ["A", "B"],
++            "stakes": "Determinism.",
++            "location": "Lab",
++            "tension": "moderate",
++        }
++        state = {"player_name": "Tester", "genre": "science"}
++
++        # Metadata should always have required keys
++        result = narrator.narrate_scene(scene, state)
++        self.assertIn("tone", result.metadata)
++        self.assertIn("choice_count", result.metadata)
++        self.assertIn("npc_count", result.metadata)
++
++    def test_narrator_default_tone_dramatic(self):
++        """Test that default tone is dramatic."""
++        narrator = SceneNarrator(simulate_mode=True)
++        scene = {
++            "id": "tone_001",
++            "title": "Tone Test",
++            "summary": "Testing default tone.",
++            "actors": [],
++            "stakes": "The tone.",
++            "location": "Lab",
++            "tension": "low",
++        }
++        state = {}
++        result = narrator.narrate_scene(scene, state)
++        self.assertIn("dramatic", result.narrative)
++        self.assertEqual(result.metadata["tone"], "dramatic")
++
++    def test_narrator_with_no_actors_no_reactions(self):
++        """Test that no actors result in no NPC reactions."""
++        scene = {
++            "id": "no_npc_001",
++            "title": "No NPCs",
++            "summary": "A scene without NPCs.",
++            "actors": [],
++            "stakes": "None.",
++            "location": "Empty",
++            "tension": "low",
++        }
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(scene, {}, include_npc_reactions=True)
++        self.assertEqual(len(result.npc_reactions), 0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+\ No newline at end of file
+diff --git a/src/tests/unit/rpg/test_phase5_scene_narrator.py b/src/tests/unit/rpg/test_phase5_scene_narrator.py
+new file mode 100644
+index 0000000..1c955a6
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase5_scene_narrator.py
+@@ -0,0 +1,326 @@
++"""Phase 5 — LLM Scene Engine + NPC Behavior: Unit Tests
++
++Tests for:
++- build_scene_prompt
++- build_npc_reaction_prompt
++- build_choice_prompt
++- parse_scene_response
++- parse_npc_reaction
++- parse_choices
++- SceneNarrator class
++- play_scene service function
++"""
++
++import unittest
++from unittest.mock import MagicMock, patch
++
++from app.rpg.ai.world_scene_narrator import (
++    SceneNarrator,
++    NPCReaction,
++    NarrativeResult,
++    build_scene_prompt,
++    build_npc_reaction_prompt,
++    build_choice_prompt,
++    parse_scene_response,
++    parse_npc_reaction,
++    parse_choices,
++    play_scene,
++)
++
++
++# ---------------------------------------------------------------------------
++# Test data
++# ---------------------------------------------------------------------------
++
++SAMPLE_SCENE = {
++    "id": "scene_001",
++    "title": "The Dark Forest",
++    "summary": "You enter a dense, mist-shrouded forest.",
++    "actors": ["Guard", "Merchant"],
++    "stakes": "Finding the hidden path before nightfall.",
++    "location": "The Whispering Woods",
++    "tension": "high",
++}
++
++SAMPLE_STATE = {
++    "player_name": "Aldric",
++    "genre": "dark fantasy",
++}
++
++
++class TestBuildScenePrompt(unittest.TestCase):
++    """Tests for build_scene_prompt."""
++
++    def test_returns_string_with_scene_info(self):
++        prompt = build_scene_prompt(SAMPLE_SCENE, SAMPLE_STATE)
++        self.assertIn("The Dark Forest", prompt)
++        self.assertIn("mist-shrouded", prompt)
++        self.assertIn("Whispering Woods", prompt)
++        self.assertIn("Guard", prompt)
++        self.assertIn("Aldric", prompt)
++        self.assertIn("dark fantasy", prompt)
++
++    def test_default_tone_is_dramatic(self):
++        prompt = build_scene_prompt(SAMPLE_SCENE, SAMPLE_STATE)
++        self.assertIn("Tone: dramatic", prompt)
++
++    def test_custom_tone(self):
++        prompt = build_scene_prompt(SAMPLE_SCENE, SAMPLE_STATE, tone="mysterious")
++        self.assertIn("Tone: mysterious", prompt)
++
++    def test_custom_max_paragraphs(self):
++        prompt = build_scene_prompt(SAMPLE_SCENE, SAMPLE_STATE, max_paragraphs=5)
++        self.assertIn("5 paragraphs", prompt)
++
++    def test_missing_fields_get_defaults(self):
++        minimal_scene = {}
++        prompt = build_scene_prompt(minimal_scene, {})
++        self.assertIn("Untitled Scene", prompt)
++        self.assertIn("Unknown", prompt)
++        self.assertIn("fantasy", prompt)
++
++    def test_actors_as_dict(self):
++        scene = {"title": "Test", "summary": "", "actors": {"Guard": "armed", "Mage": "wise"}}
++        prompt = build_scene_prompt(scene, {})
++        self.assertIn("Guard: armed", prompt)
++        self.assertIn("Mage: wise", prompt)
++
++
++class TestBuildNpcReactionPrompt(unittest.TestCase):
++    """Tests for build_npc_reaction_prompt."""
++
++    def test_returns_string_with_npc_info(self):
++        npc = {"name": "Theron", "personality": "cautious", "goals": "protect the village"}
++        prompt = build_npc_reaction_prompt(npc, SAMPLE_SCENE, "Narrative text")
++        self.assertIn("Theron", prompt)
++        self.assertIn("cautious", prompt)
++        self.assertIn("protect the village", prompt)
++
++    def test_truncates_long_narrative(self):
++        long_narrative = "x" * 2000
++        prompt = build_npc_reaction_prompt({}, SAMPLE_SCENE, long_narrative)
++        # Narrative in prompt should be truncated to 1000 chars
++        self.assertIn("x" * 100, prompt)
++        self.assertNotIn("x" * 1500, prompt)
++
++    def test_missing_npc_fields(self):
++        npc = {}
++        prompt = build_npc_reaction_prompt(npc, {}, "")
++        self.assertIn("Unknown NPC", prompt)
++
++
++class TestBuildChoicePrompt(unittest.TestCase):
++    """Tests for build_choice_prompt."""
++
++    def test_returns_string_with_scene_info(self):
++        prompt = build_choice_prompt(SAMPLE_SCENE, "Some narrative")
++        self.assertIn("The Dark Forest", prompt)
++        self.assertIn("hidden path", prompt)
++
++    def test_custom_num_choices(self):
++        prompt = build_choice_prompt(SAMPLE_SCENE, "narrative", num_choices=5)
++        self.assertIn("5 meaningful choices", prompt)
++
++
++# ---------------------------------------------------------------------------
++# Parser tests
++# ---------------------------------------------------------------------------
++
++class TestParseSceneResponse(unittest.TestCase):
++    """Tests for parse_scene_response."""
++
++    def test_returns_narrative_and_choices(self):
++        result = parse_scene_response("The forest grows dark.")
++        self.assertEqual(result["narrative"], "The forest grows dark.")
++        self.assertEqual(len(result["choices"]), 3)
++
++    def test_empty_text_fallback(self):
++        result = parse_scene_response("")
++        self.assertIn("unfolds", result["narrative"])
++
++    def test_strips_whitespace(self):
++        result = parse_scene_response("  Hello  ")
++        self.assertEqual(result["narrative"], "Hello")
++
++
++class TestParseNpcReaction(unittest.TestCase):
++    """Tests for parse_npc_reaction."""
++
++    def test_parses_all_fields(self):
++        text = """REACTION: The guard looks worried.
++DIALOGUE: "We need to move fast."
++EMOTION: tense
++INTENT: act
++"""
++        result = parse_npc_reaction(text, "npc_1", "Guard")
++        self.assertEqual(result.npc_id, "npc_1")
++        self.assertEqual(result.npc_name, "Guard")
++        self.assertIn("worried", result.reaction)
++        self.assertEqual(result.dialogue, "We need to move fast.")
++        self.assertEqual(result.emotion, "tense")
++        self.assertEqual(result.intent, "act")
++
++    def test_defaults_for_missing_fields(self):
++        text = "Nothing formatted here."
++        result = parse_npc_reaction(text)
++        self.assertEqual(result.emotion, "neutral")
++        self.assertEqual(result.intent, "")
++        self.assertEqual(result.reaction, "")
++        self.assertEqual(result.dialogue, "")
++
++    def test_strips_quotes_from_dialogue(self):
++        text = 'DIALOGUE: "Hello world"'
++        result = parse_npc_reaction(text)
++        self.assertEqual(result.dialogue, "Hello world")
++
++
++class TestParseChoices(unittest.TestCase):
++    """Tests for parse_choices."""
++
++    def test_parses_numbered_choices(self):
++        text = """1. Attack the enemy
++2. Run away
++3. Talk things over
++"""
++        result = parse_choices(text)
++        self.assertEqual(len(result), 3)
++        self.assertEqual(result[0]["text"], "Attack the enemy")
++        self.assertEqual(result[1]["type"], "dialogue")
++
++    def test_fallback_for_invalid(self):
++        text = "No valid choices here."
++        result = parse_choices(text)
++        self.assertEqual(len(result), 2)
++        self.assertEqual(result[0]["text"], "Take action")
++
++    def test_uses_parenthesis_format(self):
++        text = """1) Fight
++2) Flee
++"""
++        result = parse_choices(text)
++        self.assertEqual(len(result), 2)
++        self.assertEqual(result[0]["text"], "Fight")
++
++
++# ---------------------------------------------------------------------------
++# SceneNarrator tests
++# ---------------------------------------------------------------------------
++
++class TestSceneNarrator(unittest.TestCase):
++    """Tests for SceneNarrator class."""
++
++    def test_simulate_mode_returns_simulated(self):
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(SAMPLE_SCENE, SAMPLE_STATE)
++        self.assertIn("The Dark Forest", result.narrative)
++        self.assertIsInstance(result.choices, list)
++        self.assertIsInstance(result.npc_reactions, list)
++
++    def test_no_llm_gateway_falls_back_to_simulation(self):
++        narrator = SceneNarrator()
++        result = narrator.narrate_scene(SAMPLE_SCENE, SAMPLE_STATE)
++        self.assertIn("The Dark Forest", result.narrative)
++        self.assertEqual(len(result.choices), 3)
++
++    def test_include_npc_reactions_false(self):
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(SAMPLE_SCENE, SAMPLE_STATE, include_npc_reactions=False)
++        self.assertEqual(len(result.npc_reactions), 0)
++        self.assertEqual(len(result.dialogue_blocks), 0)
++
++    def test_include_choices_false(self):
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(SAMPLE_SCENE, SAMPLE_STATE, include_choices=False)
++        self.assertEqual(len(result.choices), 0)
++
++    def test_tone_override(self):
++        narrator = SceneNarrator(simulate_mode=True, default_tone="calm")
++        result = narrator.narrate_scene(SAMPLE_SCENE, SAMPLE_STATE, tone="tense")
++        self.assertIn("tense", result.narrative)
++
++    def test_metadata_includes_counts(self):
++        narrator = SceneNarrator(simulate_mode=True)
++        result = narrator.narrate_scene(SAMPLE_SCENE, SAMPLE_STATE)
++        self.assertEqual(result.metadata["tone"], "dramatic")
++        self.assertEqual(result.metadata["choice_count"], 3)
++
++    def test_llm_gateway_called_when_available(self):
++        mock_gateway = MagicMock()
++        mock_gateway.call.return_value = "LLM narrative response"
++        narrator = SceneNarrator(llm_gateway=mock_gateway)
++        result = narrator.narrate_scene(
++            {"title": "Test", "summary": "Summary", "actors": [], "stakes": "Stakes"},
++            SAMPLE_STATE,
++            include_npc_reactions=False,
++            include_choices=False,
++        )
++        mock_gateway.call.assert_called()
++        self.assertEqual(result.narrative, "LLM narrative response")
++
++    def test_llm_gateway_failure_falls_back(self):
++        mock_gateway = MagicMock()
++        mock_gateway.call.side_effect = RuntimeError("LLM error")
++        narrator = SceneNarrator(llm_gateway=mock_gateway)
++        result = narrator.narrate_scene(
++            {"title": "Test", "summary": "Summary", "actors": [], "stakes": "Stakes"},
++            SAMPLE_STATE,
++            include_npc_reactions=False,
++            include_choices=False,
++        )
++        self.assertIn("Test", result.narrative)
++
++
++# ---------------------------------------------------------------------------
++# play_scene service function tests
++# ---------------------------------------------------------------------------
++
++class TestPlayScene(unittest.TestCase):
++    """Tests for play_scene service function."""
++
++    def test_returns_dict_with_narrative(self):
++        result = play_scene(SAMPLE_SCENE, SAMPLE_STATE)
++        self.assertIn("narrative", result)
++        self.assertIn("choices", result)
++        self.assertIn("npc_reactions", result)
++        self.assertIn("dialogue_blocks", result)
++        self.assertIn("metadata", result)
++
++    def test_custom_tone(self):
++        result = play_scene(SAMPLE_SCENE, SAMPLE_STATE, tone="mysterious")
++        self.assertIn("The Dark Forest", result["narrative"])
++
++    def test_with_llm_gateway(self):
++        mock_gateway = MagicMock()
++        mock_gateway.call.return_value = "LLM response"
++        result = play_scene(
++            {"title": "Test", "summary": "Summary", "actors": [], "stakes": "Stakes"},
++            SAMPLE_STATE,
++            llm_gateway=mock_gateway,
++        )
++        mock_gateway.call.assert_called()
++
++
++# ---------------------------------------------------------------------------
++# Dataclass tests
++# ---------------------------------------------------------------------------
++
++class TestDataclasses(unittest.TestCase):
++    """Tests for dataclass models."""
++
++    def test_npc_reaction_defaults(self):
++        r = NPCReaction(npc_id="1", npc_name="Test")
++        self.assertEqual(r.dialogue, "")
++        self.assertEqual(r.emotion, "neutral")
++        self.assertEqual(r.intent, "")
++
++    def test_narrative_result_defaults(self):
++        r = NarrativeResult(narrative="Hello")
++        self.assertEqual(r.narrative, "Hello")
++        self.assertEqual(r.choices, [])
++        self.assertEqual(r.npc_reactions, [])
++        self.assertEqual(r.dialogue_blocks, [])
++        self.assertEqual(r.metadata, {})
++
++
++if __name__ == "__main__":
++    unittest.main()
+\ No newline at end of file

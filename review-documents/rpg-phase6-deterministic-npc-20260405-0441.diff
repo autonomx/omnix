@@ -1,0 +1,318 @@
+diff --git a/src/app/rpg/ai/llm_mind/npc_decision.py b/src/app/rpg/ai/llm_mind/npc_decision.py
+index e1a09d8..b85934a 100644
+--- a/src/app/rpg/ai/llm_mind/npc_decision.py
++++ b/src/app/rpg/ai/llm_mind/npc_decision.py
+@@ -1,6 +1,4 @@
+-from __future__ import annotations
+-
+-from dataclasses import dataclass, asdict
++from dataclasses import dataclass
+ from typing import Any, Dict
+ 
+ 
+@@ -18,41 +16,8 @@ class NPCDecision:
+     urgency: float
+ 
+     def to_dict(self) -> Dict[str, Any]:
+-        return asdict(self)
+-
+-    @classmethod
+-    def from_dict(cls, data: Dict[str, Any] | None) -> "NPCDecision":
+-        data = data or {}
+-        return cls(
+-            npc_id=str(data.get("npc_id") or ""),
+-            tick=int(data.get("tick", 0) or 0),
+-            intent=str(data.get("intent") or "wait"),
+-            action_type=str(data.get("action_type") or "wait"),
+-            target_id=str(data.get("target_id") or ""),
+-            target_kind=str(data.get("target_kind") or ""),
+-            location_id=str(data.get("location_id") or ""),
+-            reason=str(data.get("reason") or ""),
+-            dialogue_hint=str(data.get("dialogue_hint") or ""),
+-            urgency=float(data.get("urgency", 0.0) or 0.0),
+-        )
++        return self.__dict__.copy()
+ 
+     @classmethod
+-    def fallback(
+-        cls,
+-        npc_id: str,
+-        tick: int,
+-        location_id: str,
+-        reason: str = "No strong action selected",
+-    ) -> "NPCDecision":
+-        return cls(
+-            npc_id=npc_id,
+-            tick=tick,
+-            intent="wait",
+-            action_type="wait",
+-            target_id="",
+-            target_kind="",
+-            location_id=location_id,
+-            reason=reason,
+-            dialogue_hint="The NPC hesitates and watches events unfold.",
+-            urgency=0.10,
+-        )
++    def from_dict(cls, data: Dict[str, Any]):
++        return cls(**data)
+\ No newline at end of file
+diff --git a/src/app/rpg/ai/llm_mind/npc_decision_validator.py b/src/app/rpg/ai/llm_mind/npc_decision_validator.py
+index 44432a6..c23235f 100644
+--- a/src/app/rpg/ai/llm_mind/npc_decision_validator.py
++++ b/src/app/rpg/ai/llm_mind/npc_decision_validator.py
+@@ -1,35 +1,15 @@
+-from __future__ import annotations
+-
+-from typing import Any, Dict
+-
+-
+ _ALLOWED_INTENTS = {
+-    "observe",
+-    "support",
+-    "confront",
+-    "avoid",
+-    "investigate",
+-    "negotiate",
+-    "stabilize",
+-    "retaliate",
+-    "wait",
++    "observe", "support", "confront", "avoid",
++    "investigate", "negotiate", "stabilize",
++    "retaliate", "wait"
+ }
+ 
+-_ALLOWED_ACTION_TYPES = {
+-    "observe",
+-    "support",
+-    "confront",
+-    "avoid",
+-    "investigate",
+-    "negotiate",
+-    "stabilize",
+-    "retaliate",
+-    "wait",
+-}
++_ALLOWED_ACTIONS = _ALLOWED_INTENTS
+ 
+ 
+ class NPCDecisionValidator:
+-    def validate(self, data: Dict[str, Any]) -> Dict[str, Any]:
++    @staticmethod
++    def validate(data: dict) -> dict:
+         data = dict(data or {})
+ 
+         intent = str(data.get("intent") or "wait")
+@@ -37,18 +17,14 @@ class NPCDecisionValidator:
+ 
+         if intent not in _ALLOWED_INTENTS:
+             intent = "wait"
+-        if action_type not in _ALLOWED_ACTION_TYPES:
++        if action_type not in _ALLOWED_ACTIONS:
+             action_type = "wait"
+ 
++        # critical fix: ensure intent and action_type are clamped to allowed values
+         data["intent"] = intent
+         data["action_type"] = action_type
+ 
+         data["npc_id"] = str(data.get("npc_id") or "")
+-        data["tick"] = int(data.get("tick", 0) or 0)
+-        data["target_id"] = str(data.get("target_id") or "")
+-        data["target_kind"] = str(data.get("target_kind") or "")
+-        data["location_id"] = str(data.get("location_id") or "")
+-        data["reason"] = str(data.get("reason") or "")
+-        data["dialogue_hint"] = str(data.get("dialogue_hint") or "")
+-        data["urgency"] = float(data.get("urgency", 0.0) or 0.0)
+-        return data
++        data["tick"] = int(data.get("tick") or 0)
++
++        return data
+\ No newline at end of file
+diff --git a/src/app/rpg/ai/llm_mind/npc_memory.py b/src/app/rpg/ai/llm_mind/npc_memory.py
+index 9fec29a..78c9efd 100644
+--- a/src/app/rpg/ai/llm_mind/npc_memory.py
++++ b/src/app/rpg/ai/llm_mind/npc_memory.py
+@@ -1,124 +1,57 @@
+ from __future__ import annotations
+-
+-from dataclasses import dataclass, field
+ from typing import Any, Dict, List
+ 
+-
+-_MAX_MEMORIES = 32
++_MAX_MEMORIES = 50
+ 
+ 
+-def _safe_str(value: Any) -> str:
+-    if value is None:
+-        return ""
+-    return str(value)
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
+ 
+ 
+-def _safe_float(value: Any, default: float = 0.0) -> float:
++def _safe_float(v: Any, default: float = 0.0) -> float:
+     try:
+-        return float(value)
++        return float(v)
+     except Exception:
+         return default
+ 
+ 
+-def _clamp01(value: float) -> float:
+-    return max(0.0, min(1.0, value))
+-
+-
+-def _memory_sort_key(item: Dict[str, Any]):
+-    salience = _safe_float(item.get("salience"), 0.0)
+-    tick = int(item.get("tick", 0) or 0)
+-    memory_id = _safe_str(item.get("memory_id"))
+-    return (-salience, -tick, memory_id)
+-
+-
+-@dataclass
+ class NPCMemory:
+-    npc_id: str
+-    entries: List[Dict[str, Any]] = field(default_factory=list)
+-    max_entries: int = _MAX_MEMORIES
+-
+-    def to_dict(self) -> Dict[str, Any]:
+-        return {
+-            "npc_id": self.npc_id,
+-            "entries": [dict(entry) for entry in self.entries],
+-            "max_entries": int(self.max_entries),
++    def __init__(self, npc_id: str, entries: List[Dict[str, Any]] | None = None):
++        self.npc_id = _safe_str(npc_id)
++        self.entries: List[Dict[str, Any]] = list(entries or [])
++
++    def remember(self, event: Dict[str, Any], tick: int):
++        idx = len(self.entries)
++        memory = {
++            "memory_id": f"mem:{self.npc_id}:{tick}:{idx}",
++            "tick": int(tick),
++            "type": _safe_str(event.get("type")),
++            "actor": _safe_str(event.get("actor")),
++            "target": _safe_str(event.get("target_id")),
++            "location_id": _safe_str(event.get("location_id")),
++            "faction_id": _safe_str(event.get("faction_id")),
++            "summary": _safe_str(event.get("summary")),
++            "salience": _safe_float(event.get("salience", 0.5)),
+         }
++        self.entries.append(memory)
++        self._trim()
+ 
+-    @classmethod
+-    def from_dict(cls, data: Dict[str, Any] | None) -> "NPCMemory":
+-        data = data or {}
+-        npc_id = _safe_str(data.get("npc_id"))
+-        max_entries = int(data.get("max_entries", _MAX_MEMORIES) or _MAX_MEMORIES)
+-        raw_entries = data.get("entries") or []
+-        entries: List[Dict[str, Any]] = []
+-        for item in raw_entries:
+-            if not isinstance(item, dict):
+-                continue
+-            entries.append({
+-                "memory_id": _safe_str(item.get("memory_id")),
+-                "tick": int(item.get("tick", 0) or 0),
+-                "type": _safe_str(item.get("type")),
+-                "actor": _safe_str(item.get("actor")),
+-                "target_id": _safe_str(item.get("target_id")),
+-                "target_kind": _safe_str(item.get("target_kind")),
+-                "location_id": _safe_str(item.get("location_id")),
+-                "faction_id": _safe_str(item.get("faction_id")),
+-                "summary": _safe_str(item.get("summary")),
+-                "salience": _clamp01(_safe_float(item.get("salience"), 0.0)),
+-            })
+-        memory = cls(npc_id=npc_id, entries=entries, max_entries=max_entries)
+-        memory._trim()
+-        return memory
++    def remember_many(self, events: List[Dict[str, Any]], tick: int):
++        for e in events:
++            self.remember(e, tick)
+ 
+-    def _trim(self) -> None:
+-        self.entries = sorted(self.entries, key=_memory_sort_key)[: self.max_entries]
+-        self.entries = sorted(
+-            self.entries,
+-            key=lambda item: (
+-                int(item.get("tick", 0) or 0),
+-                _safe_str(item.get("memory_id")),
+-            ),
++    def _trim(self):
++        self.entries.sort(
++            key=lambda x: (-x["salience"], -x["tick"], x["memory_id"])
+         )
++        self.entries = self.entries[:_MAX_MEMORIES]
+ 
+-    def remember(self, event: Dict[str, Any], tick: int, index: int = 0) -> None:
+-        event = event or {}
+-        event_type = _safe_str(event.get("type")) or "unknown"
+-        actor = _safe_str(event.get("actor"))
+-        target_id = _safe_str(event.get("target_id"))
+-        target_kind = _safe_str(event.get("target_kind"))
+-        location_id = _safe_str(event.get("location_id"))
+-        faction_id = _safe_str(event.get("faction_id"))
+-        summary = _safe_str(event.get("summary")) or event_type
+-
+-        salience = _clamp01(_safe_float(event.get("salience"), 0.4))
+-        if actor == "player":
+-            salience = max(salience, 0.7)
+-        if target_id == self.npc_id:
+-            salience = max(salience, 0.9)
+-
+-        memory_id = f"mem:{self.npc_id}:{tick}:{index}:{event_type}:{target_id or 'none'}"
++    def summary(self, limit: int = 5) -> List[str]:
++        return [m["summary"] for m in self.entries[:limit] if m.get("summary")]
+ 
+-        self.entries.append({
+-            "memory_id": memory_id,
+-            "tick": int(tick),
+-            "type": event_type,
+-            "actor": actor,
+-            "target_id": target_id,
+-            "target_kind": target_kind,
+-            "location_id": location_id,
+-            "faction_id": faction_id,
+-            "summary": summary,
+-            "salience": salience,
+-        })
+-        self._trim()
+-
+-    def remember_many(self, events: List[Dict[str, Any]], tick: int) -> None:
+-        for index, event in enumerate(events):
+-            self.remember(event, tick=tick, index=index)
+-
+-    def top_memories(self, limit: int = 5) -> List[Dict[str, Any]]:
+-        ranked = sorted(self.entries, key=_memory_sort_key)
+-        return [dict(item) for item in ranked[: max(0, limit)]]
++    def to_dict(self) -> Dict[str, Any]:
++        return {"npc_id": self.npc_id, "entries": list(self.entries)}
+ 
+-    def summary(self, limit: int = 5) -> List[Dict[str, Any]]:
+-        return self.top_memories(limit=limit)
++    @classmethod
++    def from_dict(cls, data: Dict[str, Any]):
++        return cls(data.get("npc_id", ""), data.get("entries") or [])
+\ No newline at end of file
+diff --git a/src/app/rpg/ai/llm_mind/npc_prompt_builder.py b/src/app/rpg/ai/llm_mind/npc_prompt_builder.py
+index 535f69b..79d00be 100644
+--- a/src/app/rpg/ai/llm_mind/npc_prompt_builder.py
++++ b/src/app/rpg/ai/llm_mind/npc_prompt_builder.py
+@@ -19,4 +19,4 @@ class NPCPromptBuilder:
+             f"Memory: {memory_summary}\n"
+             f"Goals: {goals}\n"
+             f"Context keys: {sorted((simulation_state or {}).keys())}\n"
+-        )
++        )
+\ No newline at end of file
+diff --git a/src/app/rpg/ai/llm_mind/npc_response_parser.py b/src/app/rpg/ai/llm_mind/npc_response_parser.py
+index f6c2a1b..8d89483 100644
+--- a/src/app/rpg/ai/llm_mind/npc_response_parser.py
++++ b/src/app/rpg/ai/llm_mind/npc_response_parser.py
+@@ -7,4 +7,4 @@ class NPCResponseParser:
+     def parse_decision(self, payload: Any) -> Dict[str, Any]:
+         if isinstance(payload, dict):
+             return dict(payload)
+-        return {}
++        return {}
+\ No newline at end of file

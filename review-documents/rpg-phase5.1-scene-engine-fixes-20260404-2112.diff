@@ -1,0 +1,336 @@
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+index 9cf94e1..793ec5b 100644
+--- a/src/app/rpg/ai/world_scene_narrator.py
++++ b/src/app/rpg/ai/world_scene_narrator.py
+@@ -5,10 +5,17 @@ Turns structured scenes into narrative experiences:
+ 
+ Provides prompt building, narrative generation, and response parsing
+ for the scene narration pipeline.
++
++Phase 5.1 fixes:
++- JSON-structured LLM output enforcement
++- NPC state injection (memory, beliefs, relationships)
++- Choice → action binding
++- Scene action hooks
+ """
+ 
+ from __future__ import annotations
+ 
++import json
+ import logging
+ from dataclasses import dataclass, field
+ from typing import Any, Dict, List, Optional
+@@ -120,7 +127,7 @@ def build_npc_reaction_prompt(
+     """Build a prompt to generate an individual NPC reaction.
+ 
+     Args:
+-        npc: NPC dict with name, personality, goals, etc.
++        npc: NPC dict with name, personality, goals, memory, relationships, etc.
+         scene: Current scene dict.
+         narrative: The generated narrative text.
+         state: Optional game state dict.
+@@ -134,9 +141,17 @@ def build_npc_reaction_prompt(
+     npc_relation = npc.get("relation_to_player", "neutral")
+     scene_title = scene.get("title", "Unknown Scene")
+ 
++    # Phase 5.1: Inject NPC state (memory, beliefs, relationships)
++    npc_memory = npc.get("memory_summary", "")
++    npc_beliefs = npc.get("beliefs", {})
++    npc_relationships = npc.get("relationships", {})
++
+     personality_info = f"Personality: {npc_personality}" if npc_personality else ""
+     goals_info = f"Goals: {npc_goals}" if npc_goals else ""
+     relation_info = f"Relation to player: {npc_relation}" if npc_relation else ""
++    memory_info = f"Recent memory: {npc_memory}" if npc_memory else ""
++    beliefs_info = f"Current beliefs: {', '.join(str(v) for v in npc_beliefs.values())}" if npc_beliefs else ""
++    relationships_info = f"Relationships: {', '.join(f'{k}: {v}' for k, v in npc_relationships.items())}" if npc_relationships else ""
+ 
+     prompt = f"""You are generating NPC reactions for an RPG.
+ 
+@@ -144,6 +159,9 @@ Character: {npc_name}
+ {personality_info}
+ {goals_info}
+ {relation_info}
++{memory_info}
++{beliefs_info}
++{relationships_info}
+ 
+ Scene: {scene_title}
+ 
+@@ -152,15 +170,18 @@ Narrative:
+ 
+ === INSTRUCTIONS ===
+ Describe {npc_name}'s internal reaction to what just happened.
++Consider their memory, beliefs, and relationships when forming their reaction.
+ Then provide a short line of dialogue they might say.
+ Specify their emotional state (one of: calm, tense, angry, fearful, curious, excited, neutral).
+ Specify their immediate intent (one of: observe, act, confront, flee, negotiate, wait).
+ 
+-Format your response as:
+-REACTION: [description]
+-DIALOGUE: "[line]"
+-EMOTION: [emotion]
+-INTENT: [intent]
++Respond ONLY in JSON format:
++{{
++  "reaction": "...",
++  "dialogue": "...",
++  "emotion": "...",
++  "intent": "..."
++}}
+ """
+     return prompt
+ 
+@@ -170,6 +191,7 @@ def build_choice_prompt(
+     narrative: str,
+     *,
+     num_choices: int = 3,
++    action_hooks: Optional[List[Dict[str, Any]]] = None,
+ ) -> str:
+     """Build a prompt to generate player choices.
+ 
+@@ -177,18 +199,35 @@ def build_choice_prompt(
+         scene: Current scene dict.
+         narrative: The narrative text.
+         num_choices: Number of choices to generate.
++        action_hooks: Optional list of action hooks from the scene.
+ 
+     Returns:
+         Prompt string for the LLM.
+     """
+     title = scene.get("title", "Scene")
+     stakes = scene.get("stakes", "")
++    source = scene.get("id", scene.get("source", ""))
++
++    # Phase 5.1: Build action hooks for choice → action binding
++    hooks_text = ""
++    if action_hooks:
++        hooks_text = "\nAvailable action types:\n"
++        for hook in action_hooks:
++            hooks_text += f"  - {hook.get('type', 'unknown')}: target={hook.get('target_id', source)}\n"
++    else:
++        # Default action hooks
++        hooks_text = f"""
++Available action types:
++  - intervene_thread: target={source}
++  - escalate_conflict: target={source}
++  - observe_situation: target={source}
++"""
+ 
+     prompt = f"""You are generating player choices for an RPG scene.
+ 
+ Scene: {title}
+ Stakes: {stakes}
+-
++{hooks_text}
+ Narrative situation:
+ {narrative[-500:]}
+ 
+@@ -198,11 +237,21 @@ Each choice should have:
+   - A short, action-oriented description (5-10 words)
+   - An implied risk or consequence
+   - A distinct approach (combat, stealth, diplomacy, observation, etc.)
+-
+-Format your response as:
+-1. [choice description]
+-2. [choice description]
+-3. [choice description]
++  - A mapped action type from the available action types above
++
++Respond ONLY in JSON format:
++{{
++  "choices": [
++    {{
++      "text": "...",
++      "type": "action|observe|dialogue|stealth|combat|diplomacy",
++      "action": {{
++        "type": "intervene_thread|escalate_conflict|observe_situation|...",
++        "target_id": "..."
++      }}
++    }}
++  ]
++}}
+ """
+     return prompt
+ 
+@@ -214,12 +263,28 @@ Format your response as:
+ def parse_scene_response(text: str) -> Dict[str, Any]:
+     """Parse a raw LLM narrative response.
+ 
++    Phase 5.1: Attempts JSON parsing first, falls back to text extraction.
++
+     Args:
+         text: Raw LLM response text.
+ 
+     Returns:
+         Dict with 'narrative' and default 'choices'.
+     """
++    # Phase 5.1: Try JSON parsing first
++    try:
++        data = json.loads(text)
++        if isinstance(data, dict):
++            narrative = data.get("narrative", "").strip()
++            if narrative:
++                return {
++                    "narrative": narrative,
++                    "choices": data.get("choices", []),
++                }
++    except (json.JSONDecodeError, TypeError):
++        pass
++
++    # Fallback: text extraction
+     narrative = text.strip() if text else "The scene unfolds before you..."
+ 
+     return {
+@@ -235,6 +300,8 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
+ def parse_npc_reaction(text: str, npc_id: str = "", npc_name: str = "") -> NPCReaction:
+     """Parse an NPC reaction response.
+ 
++    Phase 5.1: Attempts JSON parsing first, falls back to text extraction.
++
+     Args:
+         text: Raw LLM response for NPC reaction.
+         npc_id: NPC identifier.
+@@ -243,6 +310,22 @@ def parse_npc_reaction(text: str, npc_id: str = "", npc_name: str = "") -> NPCRe
+     Returns:
+         NPCReaction dataclass instance.
+     """
++    # Phase 5.1: Try JSON parsing first
++    try:
++        data = json.loads(text)
++        if isinstance(data, dict):
++            return NPCReaction(
++                npc_id=npc_id,
++                npc_name=npc_name,
++                reaction=data.get("reaction", ""),
++                dialogue=data.get("dialogue", ""),
++                emotion=data.get("emotion", "neutral").lower(),
++                intent=data.get("intent", ""),
++            )
++    except (json.JSONDecodeError, TypeError):
++        pass
++
++    # Fallback: text extraction
+     reaction = ""
+     dialogue = ""
+     emotion = "neutral"
+@@ -269,17 +352,52 @@ def parse_npc_reaction(text: str, npc_id: str = "", npc_name: str = "") -> NPCRe
+     )
+ 
+ 
+-def parse_choices(text: str) -> List[Dict[str, Any]]:
++def parse_choices(text: str, source: str = "") -> List[Dict[str, Any]]:
+     """Parse LLM-generated player choices.
+ 
++    Phase 5.1: Attempts JSON parsing first, falls back to text extraction.
++    Choices now include action binding for integration with apply_player_action.
++
+     Args:
+         text: Raw LLM response with numbered choices.
++        source: Scene/source ID for action target binding.
+ 
+     Returns:
+-        List of choice dicts with 'id', 'text', and 'type' keys.
++        List of choice dicts with 'id', 'text', 'type', and 'action' keys.
+     """
++    # Phase 5.1: Try JSON parsing first
++    try:
++        data = json.loads(text)
++        if isinstance(data, dict) and "choices" in data:
++            choices_data = data["choices"]
++        elif isinstance(data, list):
++            choices_data = data
++        else:
++            choices_data = []
++
++        if choices_data:
++            choices = []
++            for i, c in enumerate(choices_data):
++                if isinstance(c, dict):
++                    action = c.get("action", {})
++                    choices.append({
++                        "id": f"choice_{i+1}",
++                        "text": c.get("text", ""),
++                        "type": c.get("type", "action"),
++                        "action": {
++                            "type": action.get("type", "intervene_thread"),
++                            "target_id": action.get("target_id", source),
++                        },
++                    })
++            if choices:
++                return choices
++    except (json.JSONDecodeError, TypeError):
++        pass
++
++    # Fallback: text extraction with default action binding
+     choices = []
+     choice_types = ["action", "observe", "dialogue", "stealth", "combat", "diplomacy"]
++    action_types = ["intervene_thread", "observe_situation", "escalate_conflict"]
+ 
+     for line in text.split("\n"):
+         line = line.strip()
+@@ -287,15 +405,20 @@ def parse_choices(text: str) -> List[Dict[str, Any]]:
+             choice_text = line[2:].strip()
+             idx = len(choices) + 1
+             choice_type = choice_types[idx % len(choice_types)]
++            action_type = action_types[idx % len(action_types)]
+             choices.append({
+                 "id": f"choice_{idx}",
+                 "text": choice_text,
+                 "type": choice_type,
++                "action": {
++                    "type": action_type,
++                    "target_id": source,
++                },
+             })
+ 
+     return choices if choices else [
+-        {"id": "choice_1", "text": "Take action", "type": "action"},
+-        {"id": "choice_2", "text": "Wait and observe", "type": "observe"},
++        {"id": "choice_1", "text": "Take action", "type": "action", "action": {"type": "intervene_thread", "target_id": source}},
++        {"id": "choice_2", "text": "Wait and observe", "type": "observe", "action": {"type": "observe_situation", "target_id": source}},
+     ]
+ 
+ 
+@@ -456,17 +579,20 @@ class SceneNarrator:
+         narrative: str,
+     ) -> List[Dict[str, Any]]:
+         """Generate player choices."""
++        source = scene.get("id", scene.get("source", ""))
++        action_hooks = scene.get("action_hooks", None)
++
+         if self.simulate_mode or self.llm_gateway is None:
+-            return self._simulate_choices(scene)
++            return self._simulate_choices(scene, source)
+ 
+         try:
+-            prompt = build_choice_prompt(scene, narrative)
++            prompt = build_choice_prompt(scene, narrative, action_hooks=action_hooks)
+             response = self.llm_gateway.call("generate", prompt, context={"scene": scene.get("id")})
+-            parsed = parse_choices(response if isinstance(response, str) else str(response))
++            parsed = parse_choices(response if isinstance(response, str) else str(response), source=source)
+             return parsed
+         except Exception:
+             logger.exception("Failed to generate choices, falling back to defaults")
+-            return self._simulate_choices(scene)
++            return self._simulate_choices(scene, source)
+ 
+     # ------------------------------------------------------------------
+     # Simulation fallbacks (no LLM required)
+@@ -523,12 +649,12 @@ class SceneNarrator:
+         )
+ 
+     @staticmethod
+-    def _simulate_choices(scene: Dict[str, Any]) -> List[Dict[str, Any]]:
++    def _simulate_choices(scene: Dict[str, Any], source: str = "") -> List[Dict[str, Any]]:
+         """Generate simulated choices without LLM."""
+         return [
+-            {"id": "choice_1", "text": "Take decisive action", "type": "action"},
+-            {"id": "choice_2", "text": "Observe the situation carefully", "type": "observe"},
+-            {"id": "choice_3", "text": "Speak with those present", "type": "dialogue"},
++            {"id": "choice_1", "text": "Take decisive action", "type": "action", "action": {"type": "intervene_thread", "target_id": source}},
++            {"id": "choice_2", "text": "Observe the situation carefully", "type": "observe", "action": {"type": "observe_situation", "target_id": source}},
++            {"id": "choice_3", "text": "Speak with those present", "type": "dialogue", "action": {"type": "escalate_conflict", "target_id": source}},
+         ]
+ 
+ 

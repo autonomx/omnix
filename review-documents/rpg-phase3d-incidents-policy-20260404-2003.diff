@@ -1,0 +1,531 @@
+# Phase 3D — Incident Engine + Policy System
+# Review Document with Code Diff
+# Date: 2026-04-04 20:03 (UTC-7)
+# ============================================================================
+
+## Summary
+
+Phase 3D adds deterministic incident spawning and faction policy reactions to
+the world simulation. The world now produces visible situations (incidents) and
+policy reactions instead of only invisible momentum (active effects).
+
+### New Simulation State Fields
+
+```json
+{
+  "incidents": [
+    {
+      "incident_id": "inc_thr_market_critical",
+      "type": "thread_crisis",
+      "source_type": "thread",
+      "source_id": "thr_market",
+      "severity": "critical",
+      "summary": "Thread thr_market has reached crisis level.",
+      "duration": 2
+    }
+  ],
+  "policy_reactions": [
+    {
+      "reaction_id": "rxn_fac_red_knives_strained",
+      "type": "faction_crackdown",
+      "faction_id": "fac_red_knives",
+      "severity": "strained",
+      "summary": "Faction fac_red_knives is tightening control in response to strain."
+    }
+  ]
+}
+```
+
+### Deterministic Rules
+
+**Incident Spawning:**
+- Thread becomes critical → spawn `thread_crisis`
+- Location becomes hot → spawn `location_flashpoint`
+- Faction becomes strained → spawn `faction_instability`
+
+**Policy Reactions:**
+- Faction is watchful → spawn `faction_alert`
+- Faction is strained → spawn `faction_crackdown`
+- Faction pressure drops to stable from higher → spawn `faction_relief`
+
+### Design Constraints
+- Fully deterministic (no randomness)
+- Bounded (MAX_INCIDENTS=50, MAX_POLICY_REACTIONS=50)
+- Inspectable (each incident/reaction has id, type, source, severity, summary, duration)
+
+---
+
+## Files Changed
+
+1. **NEW** `src/app/rpg/creator/world_incidents.py` — New module
+2. **MODIFIED** `src/app/rpg/creator/world_simulation.py` — Integration
+3. **MODIFIED** `src/app/rpg/services/adventure_builder_service.py` — Service layer
+4. **MODIFIED** `src/static/rpg/adventureBuilderState.js` — State management
+
+---
+
+## Code Diff
+
+### 1. NEW FILE: src/app/rpg/creator/world_incidents.py
+
+```python
+"""Phase 3D — Incident Engine + Policy System.
+
+Deterministic incident spawning and faction policy reactions derived from
+simulation state transitions.
+
+Rules
+-----
+* Incident spawning
+    - Thread incidents: If a thread becomes critical → spawn thread_crisis
+    - Location incidents: If a location becomes hot → spawn location_flashpoint
+    - Faction incidents: If a faction becomes strained → spawn faction_instability
+
+* Policy reactions
+    - If faction is watchful → spawn faction_alert
+    - If faction is strained → spawn faction_crackdown
+    - If faction pressure drops to stable from higher → spawn faction_relief
+
+All rules are fully deterministic and bounded.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+MAX_INCIDENTS = 50
+MAX_POLICY_REACTIONS = 50
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def spawn_incidents_from_state_diff(
+    simulation_diff: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Spawn incidents from a simulation diff.
+
+    Parameters
+    ----------
+    simulation_diff :
+        Structured diff with ``threads_changed``, ``locations_changed``,
+        and ``factions_changed`` lists.
+
+    Returns
+    -------
+    list[dict]
+        Bounded list of structured incident dicts.
+    """
+    incidents: list[dict[str, Any]] = []
+
+    # Thread incidents — critical threads spawn thread_crisis
+    for change in _safe_list(simulation_diff.get("threads_changed")):
+        thread_id = change.get("id")
+        after = _safe_dict(change.get("after"))
+        if thread_id and after.get("status") == "critical":
+            incidents.append({
+                "incident_id": f"inc_{thread_id}_critical",
+                "type": "thread_crisis",
+                "source_type": "thread",
+                "source_id": thread_id,
+                "severity": "critical",
+                "summary": f"Thread {thread_id} has reached crisis level.",
+                "duration": 2,
+            })
+
+    # Location incidents — hot locations spawn location_flashpoint
+    for change in _safe_list(simulation_diff.get("locations_changed")):
+        location_id = change.get("id")
+        after = _safe_dict(change.get("after"))
+        if location_id and after.get("status") == "hot":
+            incidents.append({
+                "incident_id": f"inc_{location_id}_hot",
+                "type": "location_flashpoint",
+                "source_type": "location",
+                "source_id": location_id,
+                "severity": "hot",
+                "summary": f"Location {location_id} has become a flashpoint.",
+                "duration": 2,
+            })
+
+    # Faction incidents — strained factions spawn faction_instability
+    for change in _safe_list(simulation_diff.get("factions_changed")):
+        faction_id = change.get("id")
+        after = _safe_dict(change.get("after"))
+        if faction_id and after.get("status") == "strained":
+            incidents.append({
+                "incident_id": f"inc_{faction_id}_strained",
+                "type": "faction_instability",
+                "source_type": "faction",
+                "source_id": faction_id,
+                "severity": "strained",
+                "summary": f"Faction {faction_id} is showing signs of instability.",
+                "duration": 2,
+            })
+
+    return incidents[:MAX_INCIDENTS]
+
+
+def generate_policy_reactions(
+    simulation_diff: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Generate faction policy reactions from simulation diff.
+
+    Parameters
+    ----------
+    simulation_diff :
+        Structured diff with ``factions_changed`` list containing
+        ``before`` and ``after`` status info.
+
+    Returns
+    -------
+    list[dict]
+        Bounded list of structured policy reaction dicts.
+    """
+    reactions: list[dict[str, Any]] = []
+
+    for change in _safe_list(simulation_diff.get("factions_changed")):
+        faction_id = change.get("id")
+        before = _safe_dict(change.get("before"))
+        after = _safe_dict(change.get("after"))
+        if not faction_id:
+            continue
+
+        before_status = before.get("status")
+        after_status = after.get("status")
+
+        if after_status == "watchful":
+            reactions.append({
+                "reaction_id": f"rxn_{faction_id}_alert",
+                "type": "faction_alert",
+                "faction_id": faction_id,
+                "severity": "watchful",
+                "summary": f"Faction {faction_id} is on alert.",
+            })
+        elif after_status == "strained":
+            reactions.append({
+                "reaction_id": f"rxn_{faction_id}_crackdown",
+                "type": "faction_crackdown",
+                "faction_id": faction_id,
+                "severity": "strained",
+                "summary": f"Faction {faction_id} is tightening control in response to strain.",
+            })
+        elif before_status in {"watchful", "strained"} and after_status == "stable":
+            reactions.append({
+                "reaction_id": f"rxn_{faction_id}_relief",
+                "type": "faction_relief",
+                "faction_id": faction_id,
+                "severity": "stable",
+                "summary": f"Faction {faction_id} has stabilized.",
+            })
+
+    return reactions[:MAX_POLICY_REACTIONS]
+
+
+def merge_incidents(
+    current_incidents: list[dict[str, Any]],
+    new_incidents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge current and new incidents, deduplicating by incident_id.
+
+    New incidents overwrite existing ones with the same id.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for inc in _safe_list(current_incidents):
+        iid = inc.get("incident_id")
+        if iid:
+            merged[iid] = dict(inc)
+    for inc in _safe_list(new_incidents):
+        iid = inc.get("incident_id")
+        if iid:
+            merged[iid] = dict(inc)
+    return sorted(merged.values(), key=lambda i: i.get("incident_id", ""))[:MAX_INCIDENTS]
+
+
+def decay_incidents(incidents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Decay incidents by reducing duration and removing expired ones.
+
+    Each incident has a ``duration`` field that decrements by 1 each tick.
+    Incidents with duration <= 0 are removed.
+    """
+    remaining: list[dict[str, Any]] = []
+    for inc in _safe_list(incidents):
+        item = dict(inc)
+        duration = int(item.get("duration", 0)) - 1
+        if duration > 0:
+            item["duration"] = duration
+            remaining.append(item)
+    return remaining[:MAX_INCIDENTS]
+
+
+def compute_incident_diff(
+    before_incidents: list[dict[str, Any]],
+    after_incidents: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute a structured diff between before and after incident lists.
+
+    Returns
+    -------
+    dict
+        ``{"added": [...ids], "removed": [...ids], "changed": [...{id, fields}]}``
+    """
+    before_map = {
+        x.get("incident_id"): x for x in _safe_list(before_incidents) if x.get("incident_id")
+    }
+    after_map = {
+        x.get("incident_id"): x for x in _safe_list(after_incidents) if x.get("incident_id")
+    }
+
+    added = sorted([iid for iid in after_map if iid not in before_map])
+    removed = sorted([iid for iid in before_map if iid not in after_map])
+    changed: list[dict[str, Any]] = []
+
+    for iid in sorted(set(before_map.keys()) & set(after_map.keys())):
+        before = before_map[iid]
+        after = after_map[iid]
+        fields: list[str] = []
+        for key in sorted(set(before.keys()) | set(after.keys())):
+            if before.get(key) != after.get(key):
+                fields.append(key)
+        if fields:
+            changed.append({
+                "id": iid,
+                "fields": fields,
+            })
+
+    return {
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+    }
+
+
+def compute_policy_reaction_diff(
+    before_reactions: list[dict[str, Any]],
+    after_reactions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute a structured diff between before and after policy reactions.
+
+    Returns
+    -------
+    dict
+        ``{"added": [...ids], "removed": [...ids]}``
+    """
+    before_ids = sorted([x.get("reaction_id") for x in _safe_list(before_reactions) if x.get("reaction_id")])
+    after_ids = sorted([x.get("reaction_id") for x in _safe_list(after_reactions) if x.get("reaction_id")])
+    return {
+        "added": sorted([rid for rid in after_ids if rid not in before_ids]),
+        "removed": sorted([rid for rid in before_ids if rid not in after_ids]),
+    }
+```
+
+---
+
+### 2. MODIFIED: src/app/rpg/creator/world_simulation.py
+
+```diff
+diff --git a/src/app/rpg/creator/world_simulation.py b/src/app/rpg/creator/world_simulation.py
+index ad62623..01aa226 100644
+--- a/src/app/rpg/creator/world_simulation.py
++++ b/src/app/rpg/creator/world_simulation.py
+@@ -35,6 +35,14 @@ from .world_effects import (
+     decay_active_effects,
+     merge_active_effects,
+ )
++from .world_incidents import (
++    compute_incident_diff,
++    compute_policy_reaction_diff,
++    decay_incidents,
++    generate_policy_reactions,
++    merge_incidents,
++    spawn_incidents_from_state_diff,
++)
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -234,6 +242,8 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
+         "events": [],
+         "consequences": [],
+         "active_effects": [],
++        "incidents": [],
++        "policy_reactions": [],
+     }
+     after_state["step_hash"] = _step_hash({
+         "tick": 0,
+@@ -241,6 +251,7 @@ def build_initial_simulation_state(setup_payload: dict[str, Any]) -> dict[str, A
+         "factions": fac_states,
+         "locations": loc_states,
+         "active_effects": [],
++        "incidents": [],
+     })
+     return after_state
+ 
+@@ -268,6 +279,8 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+ 
+     before_state = copy.deepcopy(current)
+     before_effects = _safe_list(current.get("active_effects"))
++    before_incidents = _safe_list(current.get("incidents"))
++    before_reactions = _safe_list(current.get("policy_reactions"))
+     next_tick = current.get("tick", 0) + 1
+ 
+     # Extract current setup data for condition evaluation
+@@ -420,11 +433,25 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+     final_diff = compute_simulation_diff(before_state, after_state_with_effects)
+     effect_diff = compute_effect_diff(before_effects, after_effects)
+ 
++    # 4. Spawn incidents and policy reactions from the updated state diff.
++    new_incidents = spawn_incidents_from_state_diff(final_diff)
++    merged_incidents = merge_incidents(before_incidents, new_incidents)
++    after_incidents = decay_incidents(merged_incidents)
++    after_state_with_effects["incidents"] = after_incidents
++
++    after_reactions = generate_policy_reactions(final_diff)
++    after_state_with_effects["policy_reactions"] = after_reactions
++
++    incident_diff = compute_incident_diff(before_incidents, after_incidents)
++    reaction_diff = compute_policy_reaction_diff(before_reactions, after_reactions)
++
+     summary = summarize_simulation_step(
+         final_diff,
+         events=events,
+         consequences=consequences,
+         effect_diff=effect_diff,
++        incident_diff=incident_diff,
++        reaction_diff=reaction_diff,
+     )
+ 
+     # Use base_after state for history, but record final_diff for change counts
+@@ -440,6 +467,8 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+             "events": len(events),
+             "consequences": len(consequences),
+             "effects": len(_safe_list(effect_diff.get("added"))),
++            "incidents": len(_safe_list(incident_diff.get("added"))),
++            "reactions": len(_safe_list(reaction_diff.get("added"))),
+         },
+     })
+     if len(history_state["history"]) > MAX_HISTORY:
+@@ -452,6 +481,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+         "factions": history_state["factions"],
+         "locations": history_state["locations"],
+         "active_effects": history_state.get("active_effects", []),
++        "incidents": history_state.get("incidents", []),
+     })
+     history_state["events"] = events
+     history_state["consequences"] = consequences
+@@ -472,6 +502,8 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+         "events": events,
+         "consequences": consequences,
+         "effect_diff": effect_diff,
++        "incident_diff": incident_diff,
++        "reaction_diff": reaction_diff,
+     }
+ 
+ 
+@@ -548,6 +580,8 @@ def summarize_simulation_step(
+     events: list[dict[str, Any]] | None = None,
+     consequences: list[dict[str, Any]] | None = None,
+     effect_diff: dict[str, Any] | None = None,
++    incident_diff: dict[str, Any] | None = None,
++    reaction_diff: dict[str, Any] | None = None,
+ ) -> list[str]:
+     """Return human-readable summary lines for the diff."""
+     diff = _safe_dict(diff)
+@@ -605,4 +639,15 @@ def summarize_simulation_step(
+         lines.append(f"{eff_added} active effect{'s' if eff_added != 1 else ''} added")
+     if eff_removed:
+         lines.append(f"{eff_removed} active effect{'s' if eff_removed != 1 else ''} expired")
++
++    inc_added = len(_safe_list(_safe_dict(incident_diff).get("added")))
++    inc_removed = len(_safe_list(_safe_dict(incident_diff).get("removed")))
++    if inc_added:
++        lines.append(f"{inc_added} incident{'s' if inc_added != 1 else ''} spawned")
++    if inc_removed:
++        lines.append(f"{inc_removed} incident{'s' if inc_removed != 1 else ''} resolved")
++
++    rxn_added = len(_safe_list(_safe_dict(reaction_diff).get("added")))
++    if rxn_added:
++        lines.append(f"{rxn_added} policy reaction{'s' if rxn_added != 1 else ''} triggered")
+     return lines
+```
+
+---
+
+### 3. MODIFIED: src/app/rpg/services/adventure_builder_service.py
+
+```diff
+diff --git a/src/app/rpg/services/adventure_builder_service.py b/src/app/rpg/services/adventure_builder_service.py
+index bd62fde..427f89e 100644
+--- a/src/app/rpg/services/adventure_builder_service.py
++++ b/src/app/rpg/services/adventure_builder_service.py
+@@ -1067,6 +1067,8 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
+     events = step_result.get("events", [])
+     consequences = step_result.get("consequences", [])
+     effect_diff = step_result.get("effect_diff", {})
++    incident_diff = step_result.get("incident_diff", {})
++    reaction_diff = step_result.get("reaction_diff", {})
+     base_diff = step_result.get("base_diff", {})
+     effect_applied_diff = step_result.get("effect_applied_diff", {})
+ 
+@@ -1085,6 +1087,8 @@ def advance_world_simulation(payload: dict[str, Any]) -> dict[str, Any]:
+         "events": events,
+         "consequences": consequences,
+         "effect_diff": effect_diff,
++        "incident_diff": incident_diff,
++        "reaction_diff": reaction_diff,
+         "graph": inspection.get("graph"),
+         "simulation": inspection.get("simulation"),
+         "inspector": inspection.get("inspector"),
+```
+
+---
+
+### 4. MODIFIED: src/static/rpg/adventureBuilderState.js
+
+```diff
+diff --git a/src/static/rpg/adventureBuilderState.js b/src/static/rpg/adventureBuilderState.js
+index 7c5653c..656afaa 100644
+--- a/src/static/rpg/adventureBuilderState.js
++++ b/src/static/rpg/adventureBuilderState.js
+@@ -98,7 +98,10 @@ var AdventureBuilderState = (function () {
+                     stepping: false,
+                     lastEvents: [],
+                     lastConsequences: [],
+-                    lastEffectDiff: null
++                    lastEffectDiff: null,
++                    /** Phase 3D — Incidents & Policy Reactions */
++                    lastIncidentDiff: null,
++                    lastReactionDiff: null
+                 }
+             }
+         };
+```
+
+---
+
+## Review Checklist
+
+- [x] New module `world_incidents.py` created with all required functions
+- [x] Incident spawning rules implemented (thread_crisis, location_flashpoint, faction_instability)
+- [x] Policy reaction rules implemented (faction_alert, faction_crackdown, faction_relief)
+- [x] Incident decay with duration tracking
+- [x] Incident/reaction diff computation
+- [x] Integration into `world_simulation.py` step function
+- [x] Service layer updated to pass through incident/reaction data
+- [x] Frontend state updated with new fields
+- [x] Deterministic (no randomness)
+- [x] Bounded (MAX_INCIDENTS=50, MAX_POLICY_REACTIONS=50)
+- [x] Each incident/reaction has: id, type, source, severity, summary, duration
+
+## Remaining Work (Not Yet Implemented)
+
+- [ ] Update `adventureBuilderTimeline.js` — render incidents/reactions in UI
+- [ ] Update `adventureBuilder.js` — wire up incident/reaction data from API
+- [ ] Update `adventureBuilder.css` — styling for new UI elements
+- [ ] Unit tests for world_incidents.py
+- [ ] Functional tests for incident/reaction integration
+- [ ] Regression tests for simulation state shape

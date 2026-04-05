@@ -1,0 +1,231 @@
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+index a6f127c..616b2fb 100644
+--- a/src/app/rpg/ai/world_scene_narrator.py
++++ b/src/app/rpg/ai/world_scene_narrator.py
+@@ -23,6 +23,30 @@ from typing import Any, Dict, List, Optional
+ logger = logging.getLogger(__name__)
+ 
+ 
++# ---------------------------------------------------------------------------
++# Phase 6.5 — social context helpers
++# ---------------------------------------------------------------------------
++def _attach_social_context(scene, simulation_state):
++    scene = dict(scene or {})
++    simulation_state = simulation_state or {}
++    social_state = simulation_state.get("social_state") or {}
++
++    scene["active_rumors"] = [
++        dict(item)
++        for item in (simulation_state.get("active_rumors") or [])[:3]
++    ]
++    scene["active_alliances"] = [
++        dict(item)
++        for item in (social_state.get("alliances") or [])
++        if item.get("status") == "active"
++    ][:3]
++    scene["faction_positions"] = {
++        key: dict(value)
++        for key, value in sorted((social_state.get("group_positions") or {}).items())
++    }
++    return scene
++
++
+ # ---------------------------------------------------------------------------
+ # Phase 6 — NPC mind context helpers
+ # ---------------------------------------------------------------------------
+@@ -182,7 +206,10 @@ def build_npc_reaction_prompt(
+     relation_info = f"Relation to player: {npc_relation}" if npc_relation else ""
+     memory_info = f"Recent memory: {npc_memory}" if npc_memory else ""
+     beliefs_info = f"Current beliefs: {', '.join(str(v) for v in npc_beliefs.values())}" if npc_beliefs else ""
+-    relationships_info = f"Relationships: {', '.join(f'{k}: {v}' for k, v in npc_relationships.items())}" if npc_relationships else ""
++    relationships_info = f"Relationships: {npc_relationships}" if npc_relationships else ""
++    rumor_info = f"Rumors in circulation: {scene.get('active_rumors', [])}" if scene.get("active_rumors") else ""
++    alliance_info = f"Active alliances: {scene.get('active_alliances', [])}" if scene.get("active_alliances") else ""
++    faction_position_info = f"Faction positions: {scene.get('faction_positions', {})}" if scene.get("faction_positions") else ""
+     goals_list_info = f"Active goals: {npc_active_goals}" if npc_active_goals else ""
+     last_decision_info = f"Last decision: {npc_last_decision}" if npc_last_decision else ""
+ 
+@@ -195,6 +222,9 @@ Character: {npc_name}
+ {memory_info}
+ {beliefs_info}
+ {relationships_info}
++{rumor_info}
++{alliance_info}
++{faction_position_info}
+ {goals_list_info}
+ {last_decision_info}
+ 
+diff --git a/src/app/rpg/creator/world_scene_generator.py b/src/app/rpg/creator/world_scene_generator.py
+index f5136a4..968d69d 100644
+--- a/src/app/rpg/creator/world_scene_generator.py
++++ b/src/app/rpg/creator/world_scene_generator.py
+@@ -77,6 +77,10 @@ def _collect_scene_actors(source_id, simulation_state, max_actors=4):
+                 actor["mind_context"] = {
+                     "last_decision": mind.get("last_decision") or {},
+                 }
++            # Phase 6.5: Add faction stance to actors
++            group_positions = (simulation_state.get("social_state") or {}).get("group_positions") or {}
++            if npc_faction_id and npc_faction_id in group_positions:
++                actor["faction_position"] = dict(group_positions[npc_faction_id])
+             actors.append(actor)
+ 
+     return actors[:max_actors]
+@@ -469,6 +473,22 @@ def generate_scenes_from_simulation(
+         if not source_id and scene.get("actors"):
+             source_id = _safe_str(scene["actors"][0]) if scene["actors"] else ""
+ 
++        # Phase 6.5: attach scene-level social context
++        social_state = state.get("social_state") or {}
++        scene["active_rumors"] = [
++            dict(item)
++            for item in (state.get("active_rumors") or [])[:3]
++        ]
++        scene["active_alliances"] = [
++            dict(item)
++            for item in (social_state.get("alliances") or [])
++            if item.get("status") == "active"
++        ][:3]
++        scene["faction_positions"] = {
++            key: dict(value)
++            for key, value in sorted((social_state.get("group_positions") or {}).items())
++        }
++
+         enriched_actors = list(scene.get("actors") or [])
+         enriched_actors.extend(_collect_scene_actors(
+             source_id=source_id,
+diff --git a/src/app/rpg/creator/world_simulation.py b/src/app/rpg/creator/world_simulation.py
+index 18095fa..ba62b49 100644
+--- a/src/app/rpg/creator/world_simulation.py
++++ b/src/app/rpg/creator/world_simulation.py
+@@ -44,6 +44,13 @@ from .world_incidents import (
+     spawn_incidents_from_state_diff,
+ )
+ from app.rpg.ai.llm_mind import NPCMind
++from app.rpg.social import (
++    ReputationGraph,
++    AllianceSystem,
++    BetrayalPropagation,
++    RumorSystem,
++    GroupDecisionEngine,
++)
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -149,6 +156,23 @@ def _decision_to_event(decision_dict, npc_context, tick):
+     }
+ 
+ 
++# ---------------------------------------------------------------------------
++# Phase 6.5 — Social Simulation helpers
++# ---------------------------------------------------------------------------
++
++
++def _load_social_state(current):
++    """Load social state from history state, initializing defaults."""
++    current = current or {}
++    social_state = current.get("social_state") or {}
++    return {
++        "reputation": ReputationGraph.from_dict(social_state.get("reputation")).to_dict(),
++        "alliances": AllianceSystem.from_dict(social_state.get("alliances")).to_dict(),
++        "rumors": RumorSystem.from_dict(social_state.get("rumors")).to_dict(),
++        "group_positions": GroupDecisionEngine.from_dict(social_state.get("group_positions")).to_dict(),
++    }
++
++
+ # ---------------------------------------------------------------------------
+ # Internal helpers
+ # ---------------------------------------------------------------------------
+@@ -637,6 +661,93 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
+     existing_events = history_state.get("events") or []
+     history_state["events"] = list(existing_events) + list(new_npc_events)
+ 
++    # --- Phase 6.5: Social Simulation ---
++    social_state = _load_social_state(history_state)
++
++    reputation = ReputationGraph.from_dict(social_state.get("reputation"))
++    alliances = AllianceSystem.from_dict(social_state.get("alliances"))
++    rumors = RumorSystem.from_dict(social_state.get("rumors"))
++    group_engine = GroupDecisionEngine.from_dict(social_state.get("group_positions"))
++
++    all_events = []
++    for bucket_name in ("events", "consequences"):
++        bucket = history_state.get(bucket_name) or []
++        if isinstance(bucket, list):
++            for item in bucket:
++                if isinstance(item, dict):
++                    all_events.append(item)
++
++    # 6.5.1 reputation updates from player-facing and betrayal events
++    for event in all_events:
++        typ = str(event.get("type") or "")
++        actor = str(event.get("actor") or "")
++        target_id = str(event.get("target_id") or "")
++        faction_id = str(event.get("faction_id") or "")
++
++        if actor == "player" and faction_id:
++            if typ == "player_support":
++                reputation.update(faction_id, "player", "trust", 0.20)
++                reputation.update(faction_id, "player", "respect", 0.10)
++            elif typ == "player_escalation":
++                reputation.update(faction_id, "player", "hostility", 0.20)
++                reputation.update(faction_id, "player", "fear", 0.10)
++
++        if typ == "betrayal":
++            source_id = str(event.get("source_id") or "")
++            if source_id and target_id:
++                reputation.update(source_id, target_id, "hostility", 0.40)
++                reputation.update(target_id, source_id, "trust", -0.40)
++                reputation.update(target_id, source_id, "hostility", 0.20)
++                reputation.update(target_id, source_id, "fear", 0.10)
++
++    # 6.5.2 alliances
++    faction_ids = sorted({
++        str(npc.get("faction_id") or "")
++        for npc in (history_state.get("npc_index") or {}).values()
++        if str(npc.get("faction_id") or "")
++    })
++    for faction_id in faction_ids:
++        faction_view = reputation.get(faction_id, "player")
++        if faction_view.get("hostility", 0.0) >= 0.30:
++            opposing = [other for other in faction_ids if other != faction_id and reputation.get(other, "player").get("hostility", 0.0) >= 0.30]
++            if opposing:
++                alliances.propose_or_strengthen([faction_id, opposing[0]], "Shared opposition to player", delta=0.10)
++
++    # 6.5.3 betrayal propagation
++    social_events = []
++    for event in all_events:
++        social_events.extend(BetrayalPropagation.apply(event, social_state))
++
++    if social_events:
++        history_state.setdefault("events", []).extend(social_events[:8])
++
++    # 6.5.4 rumors
++    new_rumors = rumors.spawn_from_events(all_events + social_events, tick=next_tick)
++    rumors.advance()
++
++    # 6.5.5 group positions from NPC minds
++    npc_index = history_state.get("npc_index") or {}
++    npc_minds = history_state.get("npc_minds") or {}
++    members_by_faction = {}
++    for npc_id, npc in sorted(npc_index.items()):
++        faction_id = str(npc.get("faction_id") or "")
++        if not faction_id:
++            continue
++        members_by_faction.setdefault(faction_id, {})
++        if npc_id in npc_minds and isinstance(npc_minds[npc_id], dict):
++            members_by_faction[faction_id][npc_id] = npc_minds[npc_id]
++
++    for faction_id, member_minds in sorted(members_by_faction.items()):
++        group_engine.evaluate_faction(faction_id, member_minds, tick=next_tick)
++
++    history_state["social_state"] = {
++        "reputation": reputation.to_dict(),
++        "alliances": alliances.to_dict(),
++        "rumors": rumors.to_dict(),
++        "group_positions": group_engine.to_dict(),
++    }
++    history_state["active_rumors"] = rumors.active(limit=8)
++
+     # Write back into setup copy (final state with effects applied)
+     meta["simulation_state"] = history_state
+     setup["metadata"] = meta

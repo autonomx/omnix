@@ -1,0 +1,71 @@
+# Phase 8.1 Dialogue System — Followup Fixes Diff
+# Date: 2026-04-05 00:30
+#
+# Summary: 3 fixes for scene lookup fallback, clear dialogue UI, and integration update
+
+================================================================================
+FIX 1: Scene lookup fallback in dialogue routes (Python)
+================================================================================
+
+--- a/src/app/rpg/api/rpg_dialogue_routes.py
++++ b/src/app/rpg/api/rpg_dialogue_routes.py
+@@ -28,6 +28,10 @@
+ def _get_scene(setup_payload, scene_id: str):
+     meta = dict((setup_payload or {}).get("metadata") or {})
+     scenes = list(meta.get("scenes") or [])
++    if not scenes:
++        current_scene = meta.get("current_scene")
++        if isinstance(current_scene, dict):
++            scenes = [current_scene]
+     for scene in scenes:
+         if isinstance(scene, dict) and str(scene.get("scene_id") or scene.get("id") or "") == str(scene_id):
+             return dict(scene)
+
+================================================================================
+FIX 2: Clear dialogue UI on session end (JavaScript)
+================================================================================
+
+--- a/src/static/rpg/rpgDialogueRenderer.js
++++ b/src/static/rpg/rpgDialogueRenderer.js
+@@ -41,3 +41,15 @@
+     <div class="rpg-dialogue-reply-meta">${esc(reply?.tone || "neutral")} &middot; ${esc(reply?.intent || "respond")}</div>
+   `;
+ }
++
++export function clearDialogueUI() {
++  const ids = [
++    "rpg-dialogue-history",
++    "rpg-dialogue-suggestions",
++    "rpg-dialogue-latest-reply",
++  ];
++  ids.forEach((id) => {
++    const el = document.getElementById(id);
++    if (el) el.innerHTML = "";
++  });
++}
+
+================================================================================
+FIX 3: Import and use clearDialogueUI in integration (JavaScript)
+================================================================================
+
+--- a/src/static/rpg/rpgPlayerIntegration.js
++++ b/src/static/rpg/rpgPlayerIntegration.js
+@@ -10,7 +10,7 @@
+ import { rpgPlayerState, updatePlayerViewFromResponse, updatePlayerStateFromResponse } from "./rpgPlayerState.js";
+ import { renderPlayerView } from "./rpgPlayerRenderer.js";
+ import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
+-import { renderDialogueState, renderSuggestedReplies, appendDialogueReply } from "./rpgDialogueRenderer.js";
++import { renderDialogueState, renderSuggestedReplies, appendDialogueReply, clearDialogueUI } from "./rpgDialogueRenderer.js";
+
+@@ -117,6 +117,7 @@
+   async endDialogueSession() {
+     if (!this.setupPayload) return null;
+     const result = await this.dialogueClient.end(this.setupPayload);
+     if (result) {
+       this.setupPayload = result.setup_payload;
+       rpgPlayerState.playerState = rpgPlayerState.playerState || {};
+       rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
++      clearDialogueUI();
+     }
+     return result;
+   }

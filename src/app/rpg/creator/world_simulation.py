@@ -52,6 +52,14 @@ from app.rpg.social import (
     RumorSystem,
     GroupDecisionEngine,
 )
+from app.rpg.sandbox import (
+    project_outcomes_from_state,
+    update_location_trends,
+    update_thread_trends,
+    update_faction_trends,
+    update_rumor_feedback,
+    build_world_consequences,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -752,6 +760,22 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         "group_positions": group_engine.to_dict(),
     }
     history_state["active_rumors"] = rumors.active(limit=8)
+
+    # --- Phase 8.3: sandbox/world simulation depth ---
+    projected_outcomes = project_outcomes_from_state(history_state)
+    history_state.setdefault("sandbox_state", {})
+    history_state["sandbox_state"]["projected_outcomes"] = projected_outcomes[:24]
+
+    history_state = update_location_trends(history_state, projected_outcomes)
+    history_state = update_thread_trends(history_state, projected_outcomes)
+    history_state = update_faction_trends(history_state, projected_outcomes)
+    history_state = update_rumor_feedback(history_state, projected_outcomes)
+    history_state = build_world_consequences(history_state, projected_outcomes)
+
+    history_state["sandbox_summary"] = {
+        "projected_outcome_count": len(projected_outcomes),
+        "world_consequence_count": len((history_state.get("sandbox_state") or {}).get("world_consequences") or []),
+    }
 
     # --- Phase 7: GM overrides ---
     gm_overrides = history_state.get("gm_overrides") or {}

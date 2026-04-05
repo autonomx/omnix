@@ -1,0 +1,65 @@
+"""Phase 8.2 — Encounter Routes Functional Tests."""
+
+from __future__ import annotations
+
+import json
+import pytest
+
+
+@pytest.fixture()
+def client(app):
+    with app.test_client() as c:
+        yield c
+
+
+class TestEncounterStart:
+    def test_start_combat_returns_ok(self, client):
+        scene = {"scene_id": "s1", "scene_type": "combat", "actors": [{"id": "player"}, {"id": "e1", "faction_position": {"stance": "oppose"}}]}
+        resp = client.post("/api/rpg/encounter/start", json={"setup_payload": {}, "scene": scene})
+        data = resp.get_json()
+        assert resp.status_code == 200
+        assert data["ok"] is True
+        assert data["encounter_state"]["encounter_type"] == "combat"
+        assert data["encounter_state"]["status"] == "active"
+        assert len(data["encounter_state"]["participants"]) > 0
+
+
+class TestEncounterAction:
+    def _start(self, client):
+        scene = {"scene_id": "s1", "scene_type": "combat", "actors": [
+            {"id": "player"}, {"id": "e1", "name": "e1", "faction_position": {"stance": "oppose"}}
+        ]}
+        r = client.post("/api/rpg/encounter/start", json={"setup_payload": {}, "scene": scene})
+        return r.get_json()
+
+    def test_attack_returns_ok(self, client):
+        first = self._start(client)
+        sp = first["setup_payload"]
+        resp = client.post("/api/rpg/encounter/action", json={"setup_payload": sp, "action_type": "attack", "target_id": "e1"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+
+
+class TestEncounterNpcTurn:
+    def _start(self, client):
+        scene = {"scene_id": "s1", "scene_type": "combat", "actors": [
+            {"id": "player"}, {"id": "e1", "name": "E1", "faction_position": {"stance": "oppose"}}
+        ]}
+        r = client.post("/api/rpg/encounter/start", json={"setup_payload": {}, "scene": scene})
+        return r.get_json()
+
+    def test_npc_turn_returns_ok(self, client):
+        first = self._start(client)
+        resp = client.post("/api/rpg/encounter/npc_turn", json={"setup_payload": first["setup_payload"]})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
+
+class TestEncounterEnd:
+    def test_end_returns_ok(self, client):
+        scene = {"scene_id": "s1", "scene_type": "combat", "actors": [{"id": "player"}]}
+        first = client.post("/api/rpg/encounter/start", json={"setup_payload": {}, "scene": scene}).get_json()
+        resp = client.post("/api/rpg/encounter/end", json={"setup_payload": first["setup_payload"]})
+        data = resp.get_json()
+        assert data["encounter_state"]["status"] == "aborted"

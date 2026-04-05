@@ -1,0 +1,254 @@
+# Phase 4.5 Fixpass — Critical Architecture Corrections
+## Review Document & Code Diff
+
+**Date:** 2026-04-04 20:57 UTC-7
+**Author:** AI Assistant
+**Status:** ✅ All 36 tests passing (15 unit + 8 functional + 13 regression)
+
+---
+
+## Critical Fixes Applied
+
+This fixpass addresses 5 critical architectural issues identified during review:
+
+### ❗ Fix 1: Actions now produce consequences, not direct mutations
+
+**Problem:** Player actions directly mutated pressure values, bypassing the effects system.
+
+**Solution:** Actions now append structured consequences to `state["consequences"]`. These are consumed by the effects system on the next tick, preserving the causality chain:
+
+```
+action → consequence → effect → next-tick mutation → diff
+```
+
+```diff
+- threads[target]["pressure"] -= 2
++ consequences.append({
++     "type": "player_intervention",
++     "origin": "player_action",
++     "target_id": target_id,
++     "magnitude": -2,
++     "summary": f"Player intervened..."
++ })
+```
+
+### ❗ Fix 2: Escalation scoped to related factions only
+
+**Problem:** Escalation affected ALL factions globally, breaking locality.
+
+**Solution:** Escalation now scopes to factions listed in thread metadata (`faction_ids`), with a fallback to factions with active pressure.
+
+```python
+related_factions = _safe_list(thread_data.get("faction_ids"))
+if not related_factions:
+    related_factions = [
+        fid for fid, fs in factions.items()
+        if _safe_dict(fs).get("pressure", 0) > 0
+    ]
+```
+
+### ❗ Fix 3: Idempotency protection via action_id
+
+**Problem:** Duplicate rapid-clicks would apply the same action twice.
+
+**Solution:** Actions carry an optional `action_id` dedup key. Duplicate submissions with the same ID are silently ignored.
+
+```python
+applied_ids = _safe_list(state.get("applied_actions"))
+if action_id and action_id in applied_ids:
+    return state  # idempotent no-op
+if action_id:
+    state["applied_actions"] = applied_ids + [action_id]
+```
+
+### ❗ Fix 4: Separate action_diff for causality tracking
+
+**Problem:** Player action changes were mixed into the simulation diff, losing causality.
+
+**Solution:** A dedicated `action_diff` key records the action metadata separately:
+
+```
+action_diff → simulation_diff → effect_diff → incident_diff
+```
+
+```python
+state["action_diff"] = {
+    "action_type": action_type,
+    "target_id": target_id,
+    "action_id": action_id,
+    "consequences_added": ["player_intervention"],
+}
+```
+
+### ❗ Fix 5: Scenes linked to player action origin
+
+**Problem:** Generated scenes had no connection to the originating player action.
+
+**Solution:** Every consequence and event now carries `origin: "player_action"` and `action_type` fields:
+
+```python
+consequences.append({
+    "origin": "player_action",
+    "action_type": action_type,
+    ...
+})
+```
+
+---
+
+## Files Modified
+
+| File | Status | Description |
+|------|--------|-------------|
+| `src/app/rpg/creator/world_player_actions.py` | 🔴 Rewritten | Consequence-based architecture, idempotency, scoped escalation |
+| `src/tests/unit/rpg/test_phase45_player_actions.py` | 🟢 Updated | 15 tests for consequence-based behavior |
+| `src/tests/functional/test_phase45_player_actions_functional.py` | 🟢 Updated | 8 functional tests |
+| `src/tests/regression/test_phase45_player_actions_regression.py` | 🟢 Updated | 13 regression tests |
+
+---
+
+## Code Diff
+
+```diff
+diff --git a/src/app/rpg/creator/world_player_actions.py b/src/app/rpg/creator/world_player_actions.py
+--- a/src/app/rpg/creator/world_player_actions.py
++++ b/src/app/rpg/creator/world_player_actions.py
+@@ -0,0 +1,219 @@
++"""Phase 4.5 — Player Action → Simulation Feedback (consequence-based)."""
++
++def apply_player_action(state, action):
++    """Process a player action and append consequences/events to state.
++
++    **Important:** This function does *not* directly mutate pressure values.
++    It appends structured consequences which are consumed by the effects
++    system on the next simulation tick.
++    """
++    state = copy.deepcopy(state)
++    action_type = action.get("type", "")
++    target_id = action.get("target_id") or action.get("target")
++    action_id = action.get("action_id")
++
++    # ── Idempotency guard ────────────────────────────────────────────
++    applied_ids = _safe_list(state.get("applied_actions"))
++    if action_id and action_id in applied_ids:
++        return state
++
++    # ── Rule: intervene_thread → consequence ─────────────────────────
++    if action_type == INTERVENE_THREAD and target_id in threads:
++        consequences.append({
++            "type": "player_intervention",
++            "origin": "player_action",
++            "action_type": action_type,
++            "target_id": target_id,
++            "magnitude": -2,
++            ...
++        })
++
++    # ── Rule: support_faction → consequence ──────────────────────────
++    if action_type == SUPPORT_FACTION and target_id in factions:
++        consequences.append({
++            "type": "player_faction_support",
++            "origin": "player_action",
++            "magnitude": -1,
++            ...
++        })
++
++    # ── Rule: escalate_conflict → scoped consequence ─────────────────
++    if action_type == ESCALATE_CONFLICT and target_id in threads:
++        related_factions = _safe_list(thread_data.get("faction_ids"))
++        consequences.append({
++            "type": "player_escalation",
++            "origin": "player_action",
++            "action_type": action_type,
++            "target_id": target_id,
++            "related_factions": related_factions,
++            "magnitude": +2,
++            ...
++        })
++
++    # ── Record action_id for dedup ───────────────────────────────────
++    if action_id:
++        state["applied_actions"] = applied_ids + [action_id]
++
++    state["action_diff"] = {
++        "action_type": action_type,
++        "target_id": target_id,
++        "action_id": action_id,
++        "consequences_added": [...],
++    }
++    return state
+```
+
+---
+
+## Test Results
+
+```
+============================= 36 passed in 0.18s ==============================
+
+Unit Tests (15):
+  test_intervene_thread_appends_consequence                    PASSED
+  test_intervene_thread_appends_event                          PASSED
+  test_support_faction_appends_consequence                     PASSED
+  test_escalate_conflict_appends_consequence_with_factions     PASSED
+  test_escalate_conflict_event_has_negative_severity           PASSED
+  test_does_not_mutate_pressure_directly                       PASSED
+  test_idempotency_with_action_id                              PASSED
+  test_action_id_recorded_in_state                             PASSED
+  test_action_diff_recorded                                    PASSED
+  test_unknown_target_produces_unknown_event                   PASSED
+  test_unknown_action_type_produces_event                      PASSED
+  test_does_not_mutate_original_state                          PASSED
+  test_empty_action_type_no_crash                              PASSED
+  test_missing_keys_handled                                    PASSED
+  test_consequences_have_origin_field                          PASSED
+
+Functional Tests (8):
+  test_intervene_thread_followed_by_simulation_step            PASSED
+  test_support_faction_followed_by_simulation_step             PASSED
+  test_escalate_conflict_queues_consequence                    PASSED
+  test_events_generated_from_player_action                     PASSED
+  test_consequences_generated_from_player_action               PASSED
+  test_full_pipeline_action_then_advance                       PASSED
+  test_action_diff_recorded_for_causality                      PASSED
+  test_idempotency_in_pipeline                                 PASSED
+
+Regression Tests (13):
+  test_intervene_thread_consequence_magnitude_is_stable        PASSED
+  test_support_faction_consequence_magnitude_is_stable         PASSED
+  test_escalate_conflict_consequence_magnitude_is_stable       PASSED
+  test_pressure_values_not_mutated_directly                    PASSED
+  test_events_structure_stable                                 PASSED
+  test_consequences_structure_stable                           PASSED
+  test_unknown_action_type_does_not_corrupt_state              PASSED
+  test_determinism_same_input_same_output                      PASSED
+  test_action_diff_recorded_for_causality                      PASSED
+  test_idempotency_protection_stable                           PASSED
+  test_escalate_scoped_to_related_factions                     PASSED
+  test_service_endpoint_importable                             PASSED
+  test_creator_routes_include_simulation_action                PASSED
+```
+
+---
+
+## Architecture Summary
+
+```
+Player clicks "Intervene" in UI
+    ↓
+POST /api/rpg/adventure/simulation/action
+    ↓
+apply_player_action_endpoint()
+    ↓
+apply_player_action(sim_state, action)
+    ├─ Idempotency check (action_id)
+    ├─ Append consequence (not mutation)
+    ├─ Append event
+    └─ Record action_diff
+    ↓
+step_simulation_state()
+    ├─ Builds effects from consequences
+    ├─ Effects apply to pressure/heat
+    └─ Generates incidents/scenes
+    ↓
+Return {updated_setup, simulation_state, scenes, ...}

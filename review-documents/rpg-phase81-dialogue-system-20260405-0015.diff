@@ -1,0 +1,514 @@
+diff --git a/src/app/__init__.py b/src/app/__init__.py
+index 952c96e..28d35a0 100644
+--- a/src/app/__init__.py
++++ b/src/app/__init__.py
+@@ -21,6 +21,9 @@ def create_app() -> Flask:
+     from app.podcast import podcast_bp
+     from app.rpg.routes import rpg_bp
+     from app.rpg.creator_routes import creator_bp
++    from app.rpg.api.rpg_debug_routes import rpg_debug_bp
++    from app.rpg.api.rpg_player_routes import rpg_player_bp
++    from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
+     from app.services import services_bp
+     from app.voice_studio import voice_studio_bp
+
+@@ -54,5 +57,8 @@ def create_app() -> Flask:
+     app.register_blueprint(voice_studio_bp)
+     app.register_blueprint(rpg_bp)
+     app.register_blueprint(creator_bp)
++    app.register_blueprint(rpg_debug_bp)
++    app.register_blueprint(rpg_player_bp)
++    app.register_blueprint(rpg_dialogue_bp)
+
+     return app
+
+diff --git a/src/app/rpg/ai/dialogue/__init__.py b/src/app/rpg/ai/dialogue/__init__.py
+new file mode 100644
+index 0000000..0a97ec9
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/__init__.py
+@@ -0,0 +1,9 @@
++from .dialogue_prompt_builder import build_dialogue_prompt
++from .dialogue_response_parser import parse_dialogue_response
++from .dialogue_manager import DialogueManager
++
++__all__ = [
++    "build_dialogue_prompt",
++    "parse_dialogue_response",
++    "DialogueManager",
++]
+
+diff --git a/src/app/rpg/ai/dialogue/dialogue_prompt_builder.py b/src/app/rpg/ai/dialogue/dialogue_prompt_builder.py
+new file mode 100644
+index 0000000..e73d5c7
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/dialogue_prompt_builder.py
+@@ -0,0 +1,74 @@
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++def build_dialogue_prompt(
++    npc: Dict[str, Any],
++    scene: Dict[str, Any],
++    player_state: Dict[str, Any],
++    npc_mind: Dict[str, Any],
++    player_message: str,
++) -> str:
++    npc = _safe_dict(npc)
++    scene = _safe_dict(scene)
++    player_state = _safe_dict(player_state)
++    npc_mind = _safe_dict(npc_mind)
++
++    beliefs = _safe_dict(npc_mind.get("beliefs")).get("player", {})
++    goals = _safe_list(npc_mind.get("goals"))[:3]
++    last_decision = _safe_dict(npc_mind.get("last_decision"))
++    dialogue_state = _safe_dict(player_state.get("dialogue_state"))
++    history = _safe_list(dialogue_state.get("history"))[-6:]
++
++    history_lines = []
++    for item in history:
++        if not isinstance(item, dict):
++            continue
++        speaker = _safe_str(item.get("speaker")) or "unknown"
++        text = _safe_str(item.get("text"))
++        if text:
++            history_lines.append(f"{speaker}: {text}")
++
++    return f"""
++You are generating an RPG NPC dialogue reply.
++
++NPC:
++- id: {_safe_str(npc.get("npc_id") or npc.get("id"))}
++- name: {_safe_str(npc.get("name"))}
++- role: {_safe_str(npc.get("role"))}
++- faction_id: {_safe_str(npc.get("faction_id"))}
++- location_id: {_safe_str(npc.get("location_id"))}
++
++Scene:
++- id: {_safe_str(scene.get("scene_id") or scene.get("id"))}
++- title: {_safe_str(scene.get("title"))}
++- type: {_safe_str(scene.get("scene_type") or scene.get("type"))}
++
++NPC mind:
++- beliefs about player: {beliefs}
++- active goals: {goals}
++- last decision: {last_decision}
++
++Recent dialogue:
++{chr(10).join(history_lines) if history_lines else "(none)"}
++
++Player message:
++{player_message}
++
++Return JSON only with keys:
++- reply_text: string
++- tone: string
++- suggested_replies: array of up to 4 short strings
++- intent: string
++""".strip()
+
+diff --git a/src/app/rpg/ai/dialogue/dialogue_response_parser.py b/src/app/rpg/ai/dialogue/dialogue_response_parser.py
+new file mode 100644
+index 0000000..62d23c7
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/dialogue_response_parser.py
+@@ -0,0 +1,30 @@
++def parse_dialogue_response(payload: Dict[str, Any] | None) -> Dict[str, Any]:
++    payload = dict(payload or {})
++
++    suggested = []
++    for item in _safe_list(payload.get("suggested_replies"))[:4]:
++        text = _safe_str(item).strip()
++        if text:
++            suggested.append(text)
++
++    reply_text = _safe_str(payload.get("reply_text")).strip()
++    if not reply_text:
++        reply_text = "The NPC studies you carefully before responding."
++
++    return {
++        "reply_text": reply_text,
++        "tone": _safe_str(payload.get("tone")) or "neutral",
++        "intent": _safe_str(payload.get("intent")) or "respond",
++        "suggested_replies": suggested[:4],
++    }
+
+diff --git a/src/app/rpg/ai/dialogue/dialogue_manager.py b/src/app/rpg/ai/dialogue/dialogue_manager.py
+new file mode 100644
+index 0000000..9a0ef4b
+--- /dev/null
++++ b/src/app/rpg/ai/dialogue/dialogue_manager.py
+@@ -0,0 +1,130 @@
++class DialogueManager:
++    def __init__(self, llm_client=None):
++        self.llm_client = llm_client
++
++    def _ensure_dialogue_state(self, simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++        simulation_state = ensure_player_state(simulation_state)
++        player_state = simulation_state["player_state"]
++        dialogue_state = player_state.setdefault("dialogue_state", {})
++        dialogue_state.setdefault("active", False)
++        dialogue_state.setdefault("npc_id", "")
++        dialogue_state.setdefault("scene_id", "")
++        dialogue_state.setdefault("turn_index", 0)
++        dialogue_state.setdefault("history", [])
++        dialogue_state.setdefault("suggested_replies", [])
++        return simulation_state
++
++    def start_dialogue(self, simulation_state: Dict[str, Any], npc_id: str, scene_id: str = "") -> Dict[str, Any]:
++        simulation_state = self._ensure_dialogue_state(simulation_state)
++        dialogue_state = simulation_state["player_state"]["dialogue_state"]
++        dialogue_state["active"] = True
++        dialogue_state["npc_id"] = _safe_str(npc_id)
++        dialogue_state["scene_id"] = _safe_str(scene_id)
++        dialogue_state["turn_index"] = 0
++        dialogue_state["history"] = []
++        dialogue_state["suggested_replies"] = []
++        simulation_state["player_state"]["current_mode"] = "dialogue"
++        simulation_state["player_state"]["active_npc_id"] = _safe_str(npc_id)
++        return simulation_state
++
++    def end_dialogue(self, simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++        simulation_state = self._ensure_dialogue_state(simulation_state)
++        dialogue_state = simulation_state["player_state"]["dialogue_state"]
++        dialogue_state["active"] = False
++        dialogue_state["npc_id"] = ""
++        dialogue_state["scene_id"] = ""
++        dialogue_state["suggested_replies"] = []
++        simulation_state["player_state"]["current_mode"] = "scene"
++        simulation_state["player_state"]["active_npc_id"] = ""
++        return simulation_state
++
++    def _fallback_reply(self, npc: Dict[str, Any], player_message: str) -> Dict[str, Any]:
++        npc_name = _safe_str(npc.get("name")) or "The NPC"
++        msg = _safe_str(player_message).lower()
++
++        if "help" in msg:
++            reply = f'{npc_name} nods cautiously. "I may be able to help, if your intentions are true."'
++            replies = ["What do you know?", "Can I trust you?", "What do you need?"]
++        elif "who" in msg or "what" in msg:
++            reply = f"{npc_name} considers your question before answering carefully."
++            replies = ["Tell me more.", "Why does that matter?", "Who else knows?"]
++        else:
++            reply = f"{npc_name} listens in silence, then answers in a measured tone."
++            replies = ["Go on.", "Why?", "What happens next?"]
++
++        return {
++            "reply_text": reply,
++            "tone": "measured",
++            "intent": "respond",
++            "suggested_replies": replies[:4],
++        }
++
++    def send_message(self, simulation_state, npc, scene, npc_mind, player_message):
++        simulation_state = self._ensure_dialogue_state(simulation_state)
++        dialogue_state = simulation_state["player_state"]["dialogue_state"]
++        turn_index = int(dialogue_state.get("turn_index", 0) or 0)
++        history = _safe_list(dialogue_state.get("history"))
++        history.append({
++            "speaker": "player",
++            "npc_id": _safe_str(dialogue_state.get("npc_id")),
++            "text": _safe_str(player_message),
++            "turn_index": turn_index,
++        })
++        parsed = None
++        if self.llm_client:
++            prompt = build_dialogue_prompt(npc=npc, scene=scene, player_state=simulation_state["player_state"], npc_mind=npc_mind, player_message=player_message)
++            try:
++                raw = self.llm_client.generate_json(prompt)
++                parsed = parse_dialogue_response(raw)
++            except Exception:
++                parsed = None
++        if not parsed:
++            parsed = self._fallback_reply(npc, player_message)
++        history.append({
++            "speaker": "npc",
++            "npc_id": _safe_str(dialogue_state.get("npc_id")),
++            "text": _safe_str(parsed.get("reply_text")),
++            "turn_index": turn_index,
++        })
++        dialogue_state["history"] = history[-_MAX_HISTORY:]
++        dialogue_state["turn_index"] = turn_index + 1
++        dialogue_state["suggested_replies"] = list(parsed.get("suggested_replies") or [])[:4]
++        return {
++            "simulation_state": simulation_state,
++            "reply": parsed,
++            "dialogue_state": dict(dialogue_state),
++        }
+
+diff --git a/src/app/rpg/api/rpg_dialogue_routes.py b/src/app/rpg/api/rpg_dialogue_routes.py
+new file mode 100644
+index 0000000..3f2e2c8
+--- /dev/null
++++ b/src/app/rpg/api/rpg_dialogue_routes.py
+@@ -0,0 +1,95 @@
++from flask import Blueprint, jsonify, request
++
++from app.rpg.ai.dialogue import DialogueManager
++from app.rpg.player import ensure_player_state
++
++rpg_dialogue_bp = Blueprint("rpg_dialogue_bp", __name__)
++dialogue_manager = DialogueManager()
++
++def _get_simulation_state(setup_payload):
++    meta = dict((setup_payload or {}).get("metadata") or {})
++    return dict(meta.get("simulation_state") or {})
++
++def _write_simulation_state(setup_payload, simulation_state):
++    setup_payload = dict(setup_payload or {})
++    meta = dict(setup_payload.get("metadata") or {})
++    meta["simulation_state"] = dict(simulation_state or {})
++    setup_payload["metadata"] = meta
++    return setup_payload
++
++def _get_scene(setup_payload, scene_id: str):
++    meta = dict((setup_payload or {}).get("metadata") or {})
++    scenes = list(meta.get("scenes") or [])
++    for scene in scenes:
++        if isinstance(scene, dict) and str(scene.get("scene_id") or scene.get("id") or "") == str(scene_id):
++            return dict(scene)
++    return {}
++
++def _get_npc_and_mind(simulation_state, npc_id: str):
++    npc_index = dict((simulation_state or {}).get("npc_index") or {})
++    npc_minds = dict((simulation_state or {}).get("npc_minds") or {})
++    return dict(npc_index.get(npc_id) or {}), dict(npc_minds.get(npc_id) or {})
++
++@rpg_dialogue_bp.post("/api/rpg/dialogue/start")
++def dialogue_start():
++    data = request.get_json(silent=True) or {}
++    setup_payload = dict(data.get("setup_payload") or {})
++    npc_id = str(data.get("npc_id") or "")
++    scene_id = str(data.get("scene_id") or "")
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    state = dialogue_manager.start_dialogue(state, npc_id=npc_id, scene_id=scene_id)
++    setup_payload = _write_simulation_state(setup_payload, state)
++    return jsonify({"ok": True, "setup_payload": setup_payload, "dialogue_state": state.get("player_state", {}).get("dialogue_state", {})})
++
++@rpg_dialogue_bp.post("/api/rpg/dialogue/message")
++def dialogue_message():
++    data = request.get_json(silent=True) or {}
++    setup_payload = dict(data.get("setup_payload") or {})
++    npc_id = str(data.get("npc_id") or "")
++    scene_id = str(data.get("scene_id") or "")
++    player_message = str(data.get("message") or "")
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    scene = _get_scene(setup_payload, scene_id)
++    npc, npc_mind = _get_npc_and_mind(state, npc_id)
++    result = dialogue_manager.send_message(simulation_state=state, npc=npc, scene=scene, npc_mind=npc_mind, player_message=player_message)
++    state = result["simulation_state"]
++    setup_payload = _write_simulation_state(setup_payload, state)
++    return jsonify({"ok": True, "setup_payload": setup_payload, "reply": result["reply"], "dialogue_state": result["dialogue_state"]})
++
++@rpg_dialogue_bp.post("/api/rpg/dialogue/end")
++def dialogue_end():
++    data = request.get_json(silent=True) or {}
++    setup_payload = dict(data.get("setup_payload") or {})
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    state = dialogue_manager.end_dialogue(state)
++    setup_payload = _write_simulation_state(setup_payload, state)
++    return jsonify({"ok": True, "setup_payload": setup_payload, "dialogue_state": state.get("player_state", {}).get("dialogue_state", {})})
+
+diff --git a/src/app/rpg/player/player_dialogue_state.py b/src/app/rpg/player/player_dialogue_state.py
+index e7c179b..d1d9c0b 100644
+--- a/src/app/rpg/player/player_dialogue_state.py
++++ b/src/app/rpg/player/player_dialogue_state.py
+@@ -26,9 +26,20 @@ def enter_dialogue_mode(
+     """
+     simulation_state = ensure_player_state(simulation_state)
+     player_state = simulation_state["player_state"]
++    dialogue_state = player_state.setdefault("dialogue_state", {})
++    dialogue_state.setdefault("active", False)
++    dialogue_state.setdefault("npc_id", "")
++    dialogue_state.setdefault("scene_id", "")
++    dialogue_state.setdefault("turn_index", 0)
++    dialogue_state.setdefault("history", [])
++    dialogue_state.setdefault("suggested_replies", [])
+     player_state["current_mode"] = "dialogue"
+     player_state["active_npc_id"] = _safe_str(npc_id)
+     if scene_id:
+         player_state["current_scene_id"] = _safe_str(scene_id)
++    dialogue_state["active"] = True
++    dialogue_state["npc_id"] = _safe_str(npc_id)
++    dialogue_state["scene_id"] = _safe_str(scene_id)
+     return simulation_state
+
+@@ -40,5 +51,10 @@ def exit_dialogue_mode(
+     """
+     simulation_state = ensure_player_state(simulation_state)
+     player_state = simulation_state["player_state"]
++    dialogue_state = player_state.setdefault("dialogue_state", {})
+     player_state["current_mode"] = _safe_str(fallback_mode) or "scene"
+     player_state["active_npc_id"] = ""
++    dialogue_state["active"] = False
++    dialogue_state["npc_id"] = ""
++    dialogue_state["scene_id"] = ""
++    dialogue_state["suggested_replies"] = []
+     return simulation_state
+
+diff --git a/src/static/rpg/rpgDialogueClient.js b/src/static/rpg/rpgDialogueClient.js
+new file mode 100644
+index 0000000..3c7e6b8
+--- /dev/null
++++ b/src/static/rpg/rpgDialogueClient.js
+@@ -0,0 +1,35 @@
++export class RPGDialogueClient {
++  async _post(path, payload) {
++    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload || {}) });
++    if (!res.ok) { throw new Error(`Dialogue request failed: ${res.status}`); }
++    return res.json();
++  }
++
++  async start(setupPayload, npcId, sceneId) {
++    return this._post("/api/rpg/dialogue/start", { setup_payload: setupPayload, npc_id: npcId, scene_id: sceneId });
++  }
++
++  async sendMessage(setupPayload, npcId, sceneId, message) {
++    return this._post("/api/rpg/dialogue/message", { setup_payload: setupPayload, npc_id: npcId, scene_id: sceneId, message });
++  }
++
++  async end(setupPayload) {
++    return this._post("/api/rpg/dialogue/end", { setup_payload: setupPayload });
++  }
++}
+
+diff --git a/src/static/rpg/rpgDialogueRenderer.js b/src/static/rpg/rpgDialogueRenderer.js
+new file mode 100644
+index 0000000..d8e8b5a
+--- /dev/null
++++ b/src/static/rpg/rpgDialogueRenderer.js
+@@ -0,0 +1,44 @@
++function safeArray(v) { return Array.isArray(v) ? v : []; }
++function esc(str) {
++  const s = String(str ?? "");
++  const map = { "&": "amp", "<": "lt", ">": "gt", '"': "quot", "'": "#39" };
++  return s.replace(/[&<>"']/g, (c) => "&" + map[c] + ";");
++}
++
++export function renderDialogueState(dialogueState) {
++  const root = document.getElementById("rpg-dialogue-history");
++  if (!root) return;
++  const history = safeArray(dialogueState?.history);
++  root.innerHTML = history.map(item => `<div class="rpg-dialogue-line rpg-dialogue-${esc(item.speaker)}"><div class="rpg-dialogue-speaker">${esc(item.speaker)}</div><div class="rpg-dialogue-text">${esc(item.text)}</div></div>`).join("");
++}
++
++export function renderSuggestedReplies(dialogueState, onSelect) {
++  const root = document.getElementById("rpg-dialogue-suggestions");
++  if (!root) return;
++  const replies = safeArray(dialogueState?.suggested_replies);
++  root.innerHTML = "";
++  replies.forEach((text) => {
++    const btn = document.createElement("button");
++    btn.className = "rpg-dialogue-suggestion";
++    btn.textContent = text;
++    btn.onclick = () => onSelect && onSelect(text);
++    root.appendChild(btn);
++  });
++}
++
++export function appendDialogueReply(reply) {
++  const root = document.getElementById("rpg-dialogue-latest-reply");
++  if (!root) return;
++  root.innerHTML = `<div class="rpg-dialogue-reply-text">${esc(reply?.reply_text || "")}</div><div class="rpg-dialogue-reply-meta">${esc(reply?.tone || "neutral")} &middot; ${esc(reply?.intent || "respond")}</div>`;
++}
+
+diff --git a/src/static/rpg/rpgPlayerIntegration.js b/src/static/rpg/rpgPlayerIntegration.js
+index 0d73a95..4aa9ff3 100644
+--- a/src/static/rpg/rpgPlayerIntegration.js
++++ b/src/static/rpg/rpgPlayerIntegration.js
+@@ -8,15 +8,19 @@
+ import { RPGPlayerClient } from "./rpgPlayerClient.js";
++import { RPGDialogueClient } from "./rpgDialogueClient.js";
+ import { rpgPlayerState, updatePlayerViewFromResponse, updatePlayerStateFromResponse } from "./rpgPlayerState.js";
+ import { renderPlayerView } from "./rpgPlayerRenderer.js";
+-import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels } from "./rpgPlayerUI.js";
++import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
++import { renderDialogueState, renderSuggestedReplies, appendDialogueReply } from "./rpgDialogueRenderer.js";
+
+ export class RPGPlayerIntegration {
+   constructor(setupPayload = null) {
+     this.setupPayload = setupPayload;
+     this.playerClient = new RPGPlayerClient();
++    this.dialogueClient = new RPGDialogueClient();
++    bindDialogueInput((text) => this.sendDialogueMessage(text));
+   }
+
+   ... (existing methods unchanged)
+
++  async startDialogue(npcId, sceneId) {
++    if (!this.setupPayload) return null;
++    const result = await this.dialogueClient.start(this.setupPayload, npcId, sceneId);
++    if (result) {
++      this.setupPayload = result.setup_payload;
++      rpgPlayerState.playerState = rpgPlayerState.playerState || {};
++      rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
++      renderDialogueState(result.dialogue_state);
++      renderSuggestedReplies(result.dialogue_state, (text) => this.sendDialogueMessage(text));
++    }
++    return result;
++  }
++
++  async sendDialogueMessage(message) {
++    if (!this.setupPayload) return null;
++    const playerState = rpgPlayerState.playerState || {};
++    const dialogueState = playerState.dialogue_state || {};
++    const npcId = dialogueState.npc_id || playerState.active_npc_id || "";
++    const sceneId = dialogueState.scene_id || playerState.current_scene_id || "";
++    if (!npcId) return null;
++    const result = await this.dialogueClient.sendMessage(this.setupPayload, npcId, sceneId, message);
++    if (result) {
++      this.setupPayload = result.setup_payload;
++      rpgPlayerState.playerState = rpgPlayerState.playerState || {};
++      rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
++      renderDialogueState(result.dialogue_state);
++      renderSuggestedReplies(result.dialogue_state, (text) => this.sendDialogueMessage(text));
++      appendDialogueReply(result.reply);
++    }
++    return result;
++  }
++
++  async endDialogueSession() {
++    if (!this.setupPayload) return null;
++    const result = await this.dialogueClient.end(this.setupPayload);
++    if (result) {
++      this.setupPayload = result.setup_payload;
++      rpgPlayerState.playerState = rpgPlayerState.playerState || {};
++      rpgPlayerState.playerState.dialogue_state = result.dialogue_state;
++    }
++    return result;
++  }
+
+diff --git a/src/static/rpg/rpgPlayerUI.js b/src/static/rpg/rpgPlayerUI.js
+index 1a7f5c1..a932f71 100644
+--- a/src/static/rpg/rpgPlayerUI.js
++++ b/src/static/rpg/rpgPlayerUI.js
+@@ -101,6 +101,25 @@ export async function handleExitDialogue(setupPayload) {
+     };
+   }
++
++export function bindDialogueInput(onSubmit) {
++  const input = document.getElementById("rpg-dialogue-input");
++  const btn = document.getElementById("rpg-dialogue-send");
++  if (!input || !btn) return;
++  const submit = () => {
++    const text = (input.value || "").trim();
++    if (!text) return;
++    input.value = "";
++    onSubmit && onSubmit(text);
++  };
++  btn.onclick = submit;
++  input.addEventListener("keydown", (e) => {
++    if (e.key === "Enter") { submit(); }
++  });
++}
++
+
+ export async function refreshSidePanels(setupPayload) {
+   await Promise.all([
+     loadJournal(setupPayload),

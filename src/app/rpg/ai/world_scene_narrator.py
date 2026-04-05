@@ -213,6 +213,9 @@ def build_npc_reaction_prompt(
     rumor_info = f"Rumors in circulation: {scene.get('active_rumors', [])}" if scene.get("active_rumors") else ""
     alliance_info = f"Active alliances: {scene.get('active_alliances', [])}" if scene.get("active_alliances") else ""
     faction_position_info = f"Faction positions: {scene.get('faction_positions', {})}" if scene.get("faction_positions") else ""
+    # Phase 8.3: Add sandbox context to scene prompt
+    sandbox_info = f"Sandbox summary: {scene.get('sandbox_summary', {})}" if scene.get("sandbox_summary") else ""
+    world_consequence_info = f"Recent world consequences: {scene.get('world_consequences', [])}" if scene.get("world_consequences") else ""
     goals_list_info = f"Active goals: {npc_active_goals}" if npc_active_goals else ""
     last_decision_info = f"Last decision: {npc_last_decision}" if npc_last_decision else ""
     # Phase 7: Add debug context info for explainability
@@ -229,10 +232,12 @@ Character: {npc_name}
 {relationships_info}
 {rumor_info}
 {alliance_info}
-{faction_position_info}
-{goals_list_info}
-{last_decision_info}
-{debug_context_info}
+    {faction_position_info}
+    {sandbox_info}
+    {world_consequence_info}
+    {goals_list_info}
+    {last_decision_info}
+    {debug_context_info}
 
 Scene: {scene_title}
 
@@ -652,9 +657,10 @@ class SceneNarrator:
             metadata={
                 "tone": tone,
                 "scene_id": scene.get("id"),
-                "npc_count": len(npc_reactions),
-                "choice_count": len(choices),
-                "player_view": player_view,
+        "npc_count": len(npc_reactions),
+        "choice_count": len(choices),
+        "player_view": player_view,
+        "sandbox_summary": scene.get("sandbox_summary", {}),
             },
         )
 

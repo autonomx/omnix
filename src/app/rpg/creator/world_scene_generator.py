@@ -588,6 +588,13 @@ def generate_scenes_from_simulation(
         if "player_state" in updated:
             state["player_state"] = updated["player_state"]
 
+    # Phase 8.3: Expose sandbox summary and world consequences into scenes
+    for scene in scenes:
+        scene["sandbox_summary"] = dict(state.get("sandbox_summary") or {})
+        scene["world_consequences"] = list(
+            ((state.get("sandbox_state") or {}).get("world_consequences") or [])[-3:]
+        )
+
     return scenes[:max_scenes]
 
 
