@@ -44,6 +44,11 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
     before_npc_minds = _safe_dict(before_state.get("npc_minds"))
     after_npc_minds = _safe_dict(after_state.get("npc_minds"))
 
+    before_player_state = _safe_dict(before_state.get("player_state"))
+    after_player_state = _safe_dict(after_state.get("player_state"))
+    before_inventory = _safe_dict(before_player_state.get("inventory_state"))
+    after_inventory = _safe_dict(after_player_state.get("inventory_state"))
+
     changed_npcs = []
     for npc_id in sorted(set(before_npc_minds.keys()) | set(after_npc_minds.keys())):
         if before_npc_minds.get(npc_id) != after_npc_minds.get(npc_id):
@@ -92,10 +97,16 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
         "new_consequences": new_consequences[:20],
         "social_keys_changed": _keys_changed(before_social, after_social),
         "sandbox_keys_changed": _keys_changed(before_sandbox, after_sandbox),
+        "player_keys_changed": _keys_changed(before_player_state, after_player_state),
+        "inventory_keys_changed": _keys_changed(before_inventory, after_inventory),
+        "inventory_before": before_inventory,
+        "inventory_after": after_inventory,
         "changed_npc_ids": changed_npcs[:20],
         "summary": {
             "event_delta": len(after_events) - len(before_events),
             "consequence_delta": len(after_consequences) - len(before_consequences),
             "npc_changes": len(changed_npcs),
+            "inventory_item_kinds_before": len(_safe_list(before_inventory.get("items"))),
+            "inventory_item_kinds_after": len(_safe_list(after_inventory.get("items"))),
         },
     }

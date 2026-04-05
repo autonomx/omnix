@@ -1,704 +1,958 @@
-Below is the Phase 8.4.7 — Inspector UX Polish full literal apply-this-patch diff spec.
+Below is a literal apply-this-patch diff spec for Phase 9.0 — Inventory / Item System, adapted to the actual uploaded repo structure. It assumes the current stable checkpoint described in your uploaded roadmap/context file
 
-This phase sits on top of your completed 8.4 / 8.4.5 / 8.4.6 stack and focuses on making the inspector genuinely ergonomic:
+A few repo-specific notes before the patch:
 
-filters
-visual diff rendering
-causal tracing
-better tick selection UX
-searchable NPC inspection
-cleaner GM/debug workflows
-
-It is the natural next step from the 8.4.6 frontend inspector work you just landed.
-
-Goal
-
-Turn the inspector from:
-
-raw but powerful
-
-Into:
-
-fast to use
-visually scannable
-causally informative
-useful during active iteration
-New frontend capabilities
-
-Add:
-
-timeline filter controls
-diff rendering panel
-causal trace panel
-quick NPC inspect dropdown/search
-selected tick highlighting
-persisted inspector open state
-loading state
-debounced inspector refresh
-
-No backend route changes are strictly required for this phase. It builds on the existing inspection APIs.
-
-1. Create src/static/rpg/rpgInspectorFilters.js
-diff --git a/src/static/rpg/rpgInspectorFilters.js b/src/static/rpg/rpgInspectorFilters.js
-new file mode 100644
---- /dev/null
-+++ b/src/static/rpg/rpgInspectorFilters.js
-@@ -0,0 +1,61 @@
-+export function filterTimelineSnapshots(snapshots, query) {
-+  const q = String(query || "").trim().toLowerCase();
-+  const rows = Array.isArray(snapshots) ? snapshots : [];
-+  if (!q) return rows;
-+  return rows.filter((row) => {
-+    const tick = String(row?.tick ?? "");
-+    const label = String(row?.label ?? "").toLowerCase();
-+    const snapshotId = String(row?.snapshot_id ?? "").toLowerCase();
-+    return tick.includes(q) || label.includes(q) || snapshotId.includes(q);
-+  });
+In this zip, player_state is owned by src/app/rpg/player/player_scene_state.py.
+Player APIs live in src/app/rpg/api/rpg_player_routes.py.
+Encounter completion currently happens in src/app/rpg/api/rpg_encounter_routes.py.
+Save schema is currently version 3, so this phase should become schema version 4.
+I did not patch src/templates/rpg.html because that file is not present in this zip; the current frontend is modular JS-driven.
+1) New package: src/app/rpg/items/__init__.py
+*** Begin Patch
+*** Add File: src/app/rpg/items/__init__.py
++from .item_registry import (
++    get_item_definition,
++    list_item_definitions,
++)
++from .inventory_state import (
++    ensure_inventory_state,
++    normalize_inventory_state,
++    add_inventory_items,
++    remove_inventory_item,
++    record_inventory_loot,
++    build_inventory_summary,
++)
++from .item_effects import (
++    apply_item_use,
++)
++from .loot_builder import (
++    build_loot_from_encounter_state,
++)
++
++__all__ = [
++    "get_item_definition",
++    "list_item_definitions",
++    "ensure_inventory_state",
++    "normalize_inventory_state",
++    "add_inventory_items",
++    "remove_inventory_item",
++    "record_inventory_loot",
++    "build_inventory_summary",
++    "apply_item_use",
++    "build_loot_from_encounter_state",
++]
+*** Add File: src/app/rpg/items/item_registry.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++# Deterministic static item registry.
++# No randomness, no generated fields, all serialisable.
++_ITEM_DEFINITIONS: Dict[str, Dict[str, Any]] = {
++    "gold_coin": {
++        "item_id": "gold_coin",
++        "name": "Gold Coin",
++        "category": "currency",
++        "stackable": True,
++        "max_stack": 9999,
++        "tags": ["currency"],
++    },
++    "healing_potion": {
++        "item_id": "healing_potion",
++        "name": "Healing Potion",
++        "category": "consumable",
++        "stackable": True,
++        "max_stack": 10,
++        "tags": ["consumable", "healing"],
++        "effect": {
++            "type": "restore_resource",
++            "resource": "health",
++            "amount": 10,
++        },
++    },
++    "bandit_token": {
++        "item_id": "bandit_token",
++        "name": "Bandit Token",
++        "category": "quest",
++        "stackable": True,
++        "max_stack": 20,
++        "tags": ["quest", "proof"],
++    },
 +}
 +
-+export function filterWorldConsequences(items, typeFilter) {
-+  const rows = Array.isArray(items) ? items : [];
-+  const t = String(typeFilter || "").trim().toLowerCase();
-+  if (!t || t === "all") return rows;
-+  return rows.filter((item) => String(item?.type || "").toLowerCase() === t);
-+}
 +
-+export function buildNpcOptions(simulationState) {
-+  const npcIndex = ((simulationState || {}).npc_index || {});
-+  return Object.keys(npcIndex)
-+    .sort((a, b) => {
-+      const na = String(npcIndex[a]?.name || a).toLowerCase();
-+      const nb = String(npcIndex[b]?.name || b).toLowerCase();
-+      if (na < nb) return -1;
-+      if (na > nb) return 1;
-+      return String(a).localeCompare(String(b));
++def get_item_definition(item_id: str) -> Dict[str, Any]:
++    item_id = str(item_id or "")
++    return _safe_dict(_ITEM_DEFINITIONS.get(item_id))
++
++
++def list_item_definitions() -> Dict[str, Dict[str, Any]]:
++    return {
++        str(item_id): _safe_dict(item_def)
++        for item_id, item_def in sorted(_ITEM_DEFINITIONS.items(), key=lambda kv: str(kv[0]))
++    }
+*** Add File: src/app/rpg/items/inventory_state.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from .item_registry import get_item_definition
++
++
++_MAX_INVENTORY_SLOTS = 50
++_MAX_LAST_LOOT = 10
++_MAX_EQUIPMENT_SLOTS = 12
++_MAX_CURRENCY_KEYS = 8
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
++
++
++def _normalize_stack(item: Dict[str, Any]) -> Dict[str, Any]:
++    item = _safe_dict(item)
++    item_id = _safe_str(item.get("item_id"))
++    qty = max(1, _safe_int(item.get("qty"), 1))
++    item_def = get_item_definition(item_id)
++
++    return {
++        "item_id": item_id,
++        "qty": qty,
++        "name": _safe_str(item.get("name") or item_def.get("name")),
++        "category": _safe_str(item.get("category") or item_def.get("category")),
++        "tags": [str(tag) for tag in _safe_list(item.get("tags") or item_def.get("tags"))[:8]],
++    }
++
++
++def normalize_inventory_state(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
++    inventory_state = _safe_dict(inventory_state)
++
++    items = []
++    for item in _safe_list(inventory_state.get("items"))[:_MAX_INVENTORY_SLOTS]:
++        if isinstance(item, dict) and item.get("item_id"):
++            items.append(_normalize_stack(item))
++
++    equipment_in = _safe_dict(inventory_state.get("equipment"))
++    equipment_out: Dict[str, Dict[str, Any]] = {}
++    for slot_name in sorted(equipment_in.keys())[:_MAX_EQUIPMENT_SLOTS]:
++        slot_value = equipment_in.get(slot_name)
++        if isinstance(slot_value, dict) and slot_value.get("item_id"):
++            equipment_out[str(slot_name)] = _normalize_stack(slot_value)
++
++    currency_in = _safe_dict(inventory_state.get("currency"))
++    currency_out: Dict[str, int] = {}
++    for key in sorted(currency_in.keys())[:_MAX_CURRENCY_KEYS]:
++        currency_out[str(key)] = max(0, _safe_int(currency_in.get(key), 0))
++
++    last_loot = []
++    for item in _safe_list(inventory_state.get("last_loot"))[:_MAX_LAST_LOOT]:
++        if isinstance(item, dict) and item.get("item_id"):
++            last_loot.append(_normalize_stack(item))
++
++    return {
++        "items": items,
++        "equipment": equipment_out,
++        "capacity": max(0, _safe_int(inventory_state.get("capacity"), _MAX_INVENTORY_SLOTS)),
++        "currency": currency_out,
++        "last_loot": last_loot,
++    }
++
++
++def ensure_inventory_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
++    player_state = _safe_dict(player_state)
++    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
++    if not inventory_state.get("capacity"):
++        inventory_state["capacity"] = _MAX_INVENTORY_SLOTS
++    player_state["inventory_state"] = inventory_state
++    return player_state
++
++
++def _merge_stack(items: List[Dict[str, Any]], incoming: Dict[str, Any], capacity: int) -> List[Dict[str, Any]]:
++    incoming = _normalize_stack(incoming)
++    if not incoming.get("item_id"):
++        return items
++
++    item_def = get_item_definition(incoming.get("item_id"))
++    if item_def.get("stackable"):
++        for idx, existing in enumerate(items):
++            if _safe_str(existing.get("item_id")) == incoming["item_id"]:
++                merged = dict(existing)
++                merged["qty"] = _safe_int(existing.get("qty"), 1) + _safe_int(incoming.get("qty"), 1)
++                items[idx] = _normalize_stack(merged)
++                return items
++
++    if len(items) >= capacity:
++        return items
++
++    items.append(incoming)
++    return items
++
++
++def add_inventory_items(inventory_state: Dict[str, Any], incoming_items: List[Dict[str, Any]]) -> Dict[str, Any]:
++    inventory_state = normalize_inventory_state(inventory_state)
++    capacity = max(0, _safe_int(inventory_state.get("capacity"), _MAX_INVENTORY_SLOTS))
++    items = list(inventory_state.get("items") or [])
++
++    for item in _safe_list(incoming_items):
++        if isinstance(item, dict):
++            items = _merge_stack(items, item, capacity)
++
++    inventory_state["items"] = items[:capacity]
++    return inventory_state
++
++
++def remove_inventory_item(inventory_state: Dict[str, Any], item_id: str, qty: int = 1) -> Dict[str, Any]:
++    inventory_state = normalize_inventory_state(inventory_state)
++    item_id = _safe_str(item_id)
++    qty = max(1, _safe_int(qty, 1))
++
++    items_out: List[Dict[str, Any]] = []
++    remaining_to_remove = qty
++
++    for item in _safe_list(inventory_state.get("items")):
++        current = _normalize_stack(item)
++        if current.get("item_id") != item_id or remaining_to_remove <= 0:
++            items_out.append(current)
++            continue
++
++        current_qty = _safe_int(current.get("qty"), 1)
++        if current_qty > remaining_to_remove:
++            current["qty"] = current_qty - remaining_to_remove
++            items_out.append(current)
++            remaining_to_remove = 0
++        else:
++            remaining_to_remove -= current_qty
++
++    inventory_state["items"] = items_out
++    return inventory_state
++
++
++def record_inventory_loot(inventory_state: Dict[str, Any], loot_items: List[Dict[str, Any]]) -> Dict[str, Any]:
++    inventory_state = add_inventory_items(inventory_state, loot_items)
++    inventory_state["last_loot"] = [
++        _normalize_stack(item)
++        for item in _safe_list(loot_items)[:_MAX_LAST_LOOT]
++        if isinstance(item, dict) and item.get("item_id")
++    ]
++    return inventory_state
++
++
++def build_inventory_summary(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
++    inventory_state = normalize_inventory_state(inventory_state)
++    items = _safe_list(inventory_state.get("items"))
++    total_item_kinds = len(items)
++    total_item_qty = sum(max(0, _safe_int(item.get("qty"), 0)) for item in items if isinstance(item, dict))
++    return {
++        "slots_used": total_item_kinds,
++        "capacity": max(0, _safe_int(inventory_state.get("capacity"), _MAX_INVENTORY_SLOTS)),
++        "total_item_qty": total_item_qty,
++        "last_loot_count": len(_safe_list(inventory_state.get("last_loot"))),
++    }
+*** Add File: src/app/rpg/items/item_effects.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from .inventory_state import normalize_inventory_state, remove_inventory_item
++from .item_registry import get_item_definition
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def apply_item_use(simulation_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
++    item_id = _safe_str(item_id)
++    item_def = get_item_definition(item_id)
++
++    if not item_def:
++        return {
++            "simulation_state": simulation_state,
++            "result": {
++                "ok": False,
++                "reason": "unknown_item",
++                "item_id": item_id,
++            },
++        }
++
++    effect = _safe_dict(item_def.get("effect"))
++    inventory_state = remove_inventory_item(inventory_state, item_id, qty=1)
++    player_state["inventory_state"] = inventory_state
++    simulation_state["player_state"] = player_state
++
++    return {
++        "simulation_state": simulation_state,
++        "result": {
++            "ok": True,
++            "item_id": item_id,
++            "effect": effect,
++        },
++    }
+*** Add File: src/app/rpg/items/loot_builder.py
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def build_loot_from_encounter_state(encounter_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    encounter_state = _safe_dict(encounter_state)
++    participants = _safe_list(encounter_state.get("participants"))
++    status = _safe_str(encounter_state.get("status"))
++
++    if status != "resolved":
++        return []
++
++    hostile_count = 0
++    for participant in participants:
++        if not isinstance(participant, dict):
++            continue
++        disposition = _safe_str(participant.get("disposition"))
++        role = _safe_str(participant.get("role"))
++        if disposition == "hostile" or role == "enemy":
++            hostile_count += 1
++
++    if hostile_count <= 0:
++        return []
++
++    loot: List[Dict[str, Any]] = [
++        {"item_id": "gold_coin", "qty": max(1, hostile_count * 3)},
++    ]
++
++    if hostile_count >= 2:
++        loot.append({"item_id": "bandit_token", "qty": 1})
++
++    if hostile_count >= 3:
++        loot.append({"item_id": "healing_potion", "qty": 1})
++
++    return loot[:5]
+*** End Patch
+2) Export inventory helpers through src/app/rpg/player/__init__.py
+*** Begin Patch
+*** Update File: src/app/rpg/player/__init__.py
+@@
+ from .player_scene_state import (
+     ensure_player_state,
+     set_current_scene,
+     push_scene_history,
+ )
++from .player_inventory import (
++    ensure_player_inventory,
++    build_player_inventory_view,
++)
+ from .player_dialogue_state import enter_dialogue_mode, exit_dialogue_mode
+ from .player_journal import update_journal_from_state
+ from .player_codex import update_codex_from_state
+ from .player_encounter import build_encounter_view
+@@
+     "ensure_player_state",
+     "set_current_scene",
+     "push_scene_history",
++    "ensure_player_inventory",
++    "build_player_inventory_view",
+     "enter_dialogue_mode",
+     "exit_dialogue_mode",
+     "update_journal_from_state",
+     "update_codex_from_state",
+     "build_encounter_view",
+ ]
+*** Add File: src/app/rpg/player/player_inventory.py
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from app.rpg.items import ensure_inventory_state, build_inventory_summary
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def ensure_player_inventory(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    player_state = ensure_inventory_state(player_state)
++    simulation_state["player_state"] = player_state
++    return simulation_state
++
++
++def build_player_inventory_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = ensure_player_inventory(simulation_state)
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    inventory_state = _safe_dict(player_state.get("inventory_state"))
++    return {
++        "inventory_state": inventory_state,
++        "inventory_summary": build_inventory_summary(inventory_state),
++    }
+*** End Patch
+3) Add inventory state into player_state owner file
+*** Begin Patch
+*** Update File: src/app/rpg/player/player_scene_state.py
+@@
+ def ensure_player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+@@
+     player_state.setdefault("journal_entries", [])
+     player_state.setdefault("codex", {
+         "npcs": {},
+         "factions": {},
+         "locations": {},
+         "threads": {},
+     })
+     player_state.setdefault("active_objectives", [])
+     player_state.setdefault("last_player_view", {})
++    player_state.setdefault("inventory_state", {
++        "items": [],
++        "equipment": {},
++        "capacity": 50,
++        "currency": {},
++        "last_loot": [],
 +    })
-+    .map((npcId) => ({
-+      npc_id: npcId,
-+      label: `${npcIndex[npcId]?.name || npcId} (${npcId})`,
-+    }));
-+}
-2. Create src/static/rpg/rpgInspectorDiffRenderer.js
-diff --git a/src/static/rpg/rpgInspectorDiffRenderer.js b/src/static/rpg/rpgInspectorDiffRenderer.js
-new file mode 100644
---- /dev/null
-+++ b/src/static/rpg/rpgInspectorDiffRenderer.js
-@@ -0,0 +1,94 @@
-+function esc(str) {
-+  return String(str ?? "")
-+    .replaceAll("&", "&amp;")
-+    .replaceAll("<", "&lt;")
-+    .replaceAll(">", "&gt;")
-+    .replaceAll('"', "&quot;")
-+    .replaceAll("'", "&#39;");
-+}
+     return simulation_state
+*** End Patch
+4) Add inventory routes to src/app/rpg/api/rpg_player_routes.py
+*** Begin Patch
+*** Update File: src/app/rpg/api/rpg_player_routes.py
+@@
+ from app.rpg.player import (
+     ensure_player_state,
+     enter_dialogue_mode,
+     exit_dialogue_mode,
++    ensure_player_inventory,
++    build_player_inventory_view,
+ )
+ from app.rpg.player.player_encounter import build_encounter_view
++from app.rpg.items import apply_item_use
+@@
+ def player_objectives():
+@@
+     return jsonify({
+         "ok": True,
+         "active_objectives": list((state.get("player_state") or {}).get("active_objectives") or [])[-20:],
+     })
 +
-+function safeArray(v) {
-+  return Array.isArray(v) ? v : [];
-+}
 +
-+function safeObj(v) {
-+  return v && typeof v === "object" ? v : {};
-+}
++@rpg_player_bp.post("/api/rpg/player/inventory")
++def player_inventory():
++    """Return the player inventory state and summary."""
++    setup_payload = _load_setup_payload()
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    state = ensure_player_inventory(state)
++    inventory_view = build_player_inventory_view(state)
++    return jsonify({
++        "ok": True,
++        "inventory_state": inventory_view.get("inventory_state", {}),
++        "inventory_summary": inventory_view.get("inventory_summary", {}),
++    })
 +
-+export function renderInspectorDiff(diff) {
-+  const root = document.getElementById("rpg-inspector-diff-panel");
-+  if (!root) return;
 +
-+  const data = safeObj(diff);
-+  const summary = safeObj(data.summary);
-+  const newEvents = safeArray(data.new_events);
-+  const newConsequences = safeArray(data.new_consequences);
-+  const changedNpcIds = safeArray(data.changed_npc_ids);
-+  const socialKeys = safeArray(data.social_keys_changed);
-+  const sandboxKeys = safeArray(data.sandbox_keys_changed);
++@rpg_player_bp.post("/api/rpg/player/inventory/use")
++def player_inventory_use():
++    """Use one inventory item via deterministic item effect hooks."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = dict(data.get("setup_payload") or {})
++    item_id = str(data.get("item_id") or "")
 +
-+  root.innerHTML = `
-+    <div class="rpg-inspector-title">Visual Diff</div>
-+    <div class="rpg-inspector-meta">Tick ${esc(data.tick_before ?? "—")} → ${esc(data.tick_after ?? "—")}</div>
-+    <div class="rpg-inspector-grid2">
-+      <div class="rpg-inspector-chip">Events Δ ${esc(summary.event_delta ?? 0)}</div>
-+      <div class="rpg-inspector-chip">Consequences Δ ${esc(summary.consequence_delta ?? 0)}</div>
-+      <div class="rpg-inspector-chip">NPC changes ${esc(summary.npc_changes ?? 0)}</div>
-+    </div>
++    state = ensure_player_state(_get_simulation_state(setup_payload))
++    state = ensure_player_inventory(state)
 +
-+    <div class="rpg-inspector-subtitle">Changed NPCs</div>
-+    <div>${changedNpcIds.map((id) => `<span class="rpg-inspector-tag">${esc(id)}</span>`).join("")}</div>
++    result = apply_item_use(state, item_id)
++    state = dict(result.get("simulation_state") or {})
++    setup_payload = _write_simulation_state(setup_payload, state)
 +
-+    <div class="rpg-inspector-subtitle">Social Keys Changed</div>
-+    <div>${socialKeys.map((id) => `<span class="rpg-inspector-tag">${esc(id)}</span>`).join("")}</div>
++    inventory_view = build_player_inventory_view(state)
++    return jsonify({
++        "ok": bool((result.get("result") or {}).get("ok")),
++        "setup_payload": setup_payload,
++        "result": dict(result.get("result") or {}),
++        "inventory_state": inventory_view.get("inventory_state", {}),
++        "inventory_summary": inventory_view.get("inventory_summary", {}),
++    })
+*** End Patch
+5) Hook encounter resolution loot into src/app/rpg/api/rpg_encounter_routes.py
+*** Begin Patch
+*** Update File: src/app/rpg/api/rpg_encounter_routes.py
+@@
+ from app.rpg.player import ensure_player_state
+ from app.rpg.encounter import (
+     ensure_encounter_state,
+     build_encounter_from_scene,
+     EncounterResolver,
+ )
++from app.rpg.items import (
++    ensure_inventory_state,
++    record_inventory_loot,
++    build_loot_from_encounter_state,
++)
+@@
+ def encounter_action():
+@@
+     encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
+     encounter_state = resolver.apply_player_action(encounter_state, action_type, target_id)
+     encounter_state = resolver.resolve_if_finished(encounter_state)
+ 
+     if encounter_state.get("status") == "resolved":
+         state.setdefault("events", []).append({
+             "type": "encounter_resolution",
+             "origin": "encounter",
+             "target_id": encounter_state.get("scene_id", ""),
+             "location_id": encounter_state.get("location_id", ""),
+             "summary": "Encounter outcome impacts world state.",
+         })
 +
-+    <div class="rpg-inspector-subtitle">Sandbox Keys Changed</div>
-+    <div>${sandboxKeys.map((id) => `<span class="rpg-inspector-tag">${esc(id)}</span>`).join("")}</div>
++        player_state = dict(state.get("player_state") or {})
++        player_state = ensure_inventory_state(player_state)
++        inventory_state = dict(player_state.get("inventory_state") or {})
++        loot_items = build_loot_from_encounter_state(encounter_state)
++        inventory_state = record_inventory_loot(inventory_state, loot_items)
++        player_state["inventory_state"] = inventory_state
++        state["player_state"] = player_state
 +
-+    <div class="rpg-inspector-subtitle">New Events</div>
-+    ${newEvents.map((item) => `
-+      <div class="rpg-inspector-row">
-+        <div><strong>${esc(item.type || "event")}</strong></div>
-+        <div>${esc(item.summary || "")}</div>
-+      </div>
-+    `).join("") || '<div class="rpg-inspector-meta">No new events</div>'}
++        if loot_items:
++            state.setdefault("events", []).append({
++                "type": "encounter_loot_awarded",
++                "origin": "inventory",
++                "target_id": encounter_state.get("scene_id", ""),
++                "location_id": encounter_state.get("location_id", ""),
++                "summary": "Player received encounter loot.",
++                "loot": loot_items[:10],
++            })
+ 
+     state["player_state"]["encounter_state"] = encounter_state
+     setup_payload = _write_simulation_state(setup_payload, state)
+ 
+     return jsonify({
+         "ok": True,
+         "setup_payload": setup_payload,
+         "encounter_state": encounter_state,
++        "inventory_state": dict((state.get("player_state") or {}).get("inventory_state") or {}),
+     })
+@@
+ def encounter_npc_turn():
+@@
+     encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
+     encounter_state = resolver.apply_npc_turn(encounter_state)
+     encounter_state = resolver.resolve_if_finished(encounter_state)
 +
-+    <div class="rpg-inspector-subtitle">New Consequences</div>
-+    ${newConsequences.map((item) => `
-+      <div class="rpg-inspector-row">
-+        <div><strong>${esc(item.type || "consequence")}</strong></div>
-+        <div>${esc(item.summary || "")}</div>
-+      </div>
-+    `).join("") || '<div class="rpg-inspector-meta">No new consequences</div>'}
-+  `;
-+}
-3. Create src/static/rpg/rpgInspectorCausalTrace.js
-diff --git a/src/static/rpg/rpgInspectorCausalTrace.js b/src/static/rpg/rpgInspectorCausalTrace.js
-new file mode 100644
---- /dev/null
-+++ b/src/static/rpg/rpgInspectorCausalTrace.js
-@@ -0,0 +1,104 @@
-+function esc(str) {
-+  return String(str ?? "")
-+    .replaceAll("&", "&amp;")
-+    .replaceAll("<", "&lt;")
-+    .replaceAll(">", "&gt;")
-+    .replaceAll('"', "&quot;")
-+    .replaceAll("'", "&#39;");
-+}
++    if encounter_state.get("status") == "resolved":
++        player_state = dict(state.get("player_state") or {})
++        player_state = ensure_inventory_state(player_state)
++        inventory_state = dict(player_state.get("inventory_state") or {})
++        loot_items = build_loot_from_encounter_state(encounter_state)
++        inventory_state = record_inventory_loot(inventory_state, loot_items)
++        player_state["inventory_state"] = inventory_state
++        state["player_state"] = player_state
 +
-+function safeArray(v) {
-+  return Array.isArray(v) ? v : [];
-+}
++        if loot_items:
++            state.setdefault("events", []).append({
++                "type": "encounter_loot_awarded",
++                "origin": "inventory",
++                "target_id": encounter_state.get("scene_id", ""),
++                "location_id": encounter_state.get("location_id", ""),
++                "summary": "Player received encounter loot.",
++                "loot": loot_items[:10],
++            })
+ 
+     state["player_state"]["encounter_state"] = encounter_state
+     setup_payload = _write_simulation_state(setup_payload, state)
+ 
+     return jsonify({
+         "ok": True,
+         "setup_payload": setup_payload,
+         "encounter_state": encounter_state,
++        "inventory_state": dict((state.get("player_state") or {}).get("inventory_state") or {}),
+     })
+*** End Patch
+6) Add inventory diff visibility to src/app/rpg/analytics/tick_diff.py
+*** Begin Patch
+*** Update File: src/app/rpg/analytics/tick_diff.py
+@@
+     before_npc_minds = _safe_dict(before_state.get("npc_minds"))
+     after_npc_minds = _safe_dict(after_state.get("npc_minds"))
++    before_player_state = _safe_dict(before_state.get("player_state"))
++    after_player_state = _safe_dict(after_state.get("player_state"))
++    before_inventory = _safe_dict(before_player_state.get("inventory_state"))
++    after_inventory = _safe_dict(after_player_state.get("inventory_state"))
+@@
+     return {
+         "tick_before": _safe_int(before_state.get("tick"), 0),
+         "tick_after": _safe_int(after_state.get("tick"), 0),
+         "new_events": new_events[:20],
+         "new_consequences": new_consequences[:20],
+         "social_keys_changed": _keys_changed(before_social, after_social),
+         "sandbox_keys_changed": _keys_changed(before_sandbox, after_sandbox),
++        "player_keys_changed": _keys_changed(before_player_state, after_player_state),
++        "inventory_keys_changed": _keys_changed(before_inventory, after_inventory),
++        "inventory_before": before_inventory,
++        "inventory_after": after_inventory,
+         "changed_npc_ids": changed_npcs[:20],
+         "summary": {
+             "event_delta": len(after_events) - len(before_events),
+             "consequence_delta": len(after_consequences) - len(before_consequences),
+             "npc_changes": len(changed_npcs),
++            "inventory_item_kinds_before": len(_safe_list(before_inventory.get("items"))),
++            "inventory_item_kinds_after": len(_safe_list(after_inventory.get("items"))),
+         },
+     }
+*** End Patch
+7) Extend timeline row diff in src/app/rpg/analytics/timeline.py
+*** Begin Patch
+*** Update File: src/app/rpg/analytics/timeline.py
+@@
+ def build_timeline_row_diff(before_row: Dict[str, Any], after_row: Dict[str, Any]) -> Dict[str, Any]:
+     before_row = _safe_dict(before_row)
+     after_row = _safe_dict(after_row)
+     return {
+         "tick_before": _safe_int(before_row.get("tick"), 0),
+         "tick_after": _safe_int(after_row.get("tick"), 0),
+         "event_delta": _safe_int(after_row.get("event_count"), 0) - _safe_int(before_row.get("event_count"), 0),
+         "consequence_delta": _safe_int(after_row.get("consequence_count"), 0) - _safe_int(before_row.get("consequence_count"), 0),
+         "sandbox_before": _safe_dict(before_row.get("sandbox_summary")),
+         "sandbox_after": _safe_dict(after_row.get("sandbox_summary")),
++        "inventory_before": _safe_dict(before_row.get("inventory_summary")),
++        "inventory_after": _safe_dict(after_row.get("inventory_summary")),
+     }
+*** End Patch
+8) Add inventory summary into whatever writes timeline ticks
+
+Your repo already has timeline APIs, but the writer of simulation_state["timeline"]["ticks"] is not in the snippets above. Wherever timeline snapshot rows are produced, add:
+
+*** Begin Patch
+*** Update File: <THE FILE THAT APPENDS TIMELINE TICK ROWS>
+@@
++from app.rpg.items.inventory_state import build_inventory_summary
+@@
+     tick_row = {
+         "tick": current_tick,
+         "event_count": len(events),
+         "consequence_count": len(consequences),
+         "sandbox_summary": sandbox_summary,
++        "inventory_summary": build_inventory_summary(
++            ((simulation_state.get("player_state") or {}).get("inventory_state") or {})
++        ),
+     }
+*** End Patch
+
+If your current timeline writer already computes player-facing summaries, merge it there rather than duplicating snapshot data.
+
+9) Add save migration v3_to_v4
+*** Begin Patch
+*** Add File: src/app/rpg/persistence/migrations/v3_to_v4.py
++from __future__ import annotations
 +
-+function safeObj(v) {
-+  return v && typeof v === "object" ? v : {};
-+}
++from typing import Any, Dict
 +
-+export function buildCausalTrace({ latestDiff, timeline, npcReasoning }) {
-+  const diff = safeObj(latestDiff);
-+  const t = safeObj(timeline);
-+  const npc = safeObj(npcReasoning);
 +
-+  const chain = [];
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
 +
-+  safeArray(diff.new_events).forEach((event) => {
-+    chain.push({
-+      kind: "event",
-+      label: event.type || "event",
-+      text: event.summary || "",
++
++def migrate_v3_to_v4(package: Dict[str, Any]) -> Dict[str, Any]:
++    package = dict(package or {})
++    state = _safe_dict(package.get("state"))
++    simulation_state = _safe_dict(state.get("simulation_state"))
++    player_state = _safe_dict(simulation_state.get("player_state"))
++
++    player_state.setdefault("inventory_state", {
++        "items": [],
++        "equipment": {},
++        "capacity": 50,
++        "currency": {},
++        "last_loot": [],
++    })
++
++    simulation_state["player_state"] = player_state
++    state["simulation_state"] = simulation_state
++    package["state"] = state
++    package["schema_version"] = 4
++    return package
+*** Update File: src/app/rpg/persistence/migrations/__init__.py
+@@
+ from .v1_to_v2 import migrate_v1_to_v2
+ from .v2_to_v3 import migrate_v2_to_v3
++from .v3_to_v4 import migrate_v3_to_v4
+ 
+ __all__ = [
+     "migrate_v1_to_v2",
+     "migrate_v2_to_v3",
++    "migrate_v3_to_v4",
+ ]
+*** Update File: src/app/rpg/persistence/migration_manager.py
+@@
+ from typing import Any, Dict
+ 
+ from .save_schema import CURRENT_RPG_SCHEMA_VERSION
+-from .migrations import migrate_v1_to_v2, migrate_v2_to_v3
++from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4
+@@
+         if version == 1:
+             package = migrate_v1_to_v2(package)
+         elif version == 2:
+             package = migrate_v2_to_v3(package)
++        elif version == 3:
++            package = migrate_v3_to_v4(package)
+         else:
+             raise ValueError(f"Unsupported schema migration path from version {version}")
+*** Update File: src/app/rpg/persistence/save_schema.py
+@@
+-CURRENT_RPG_SCHEMA_VERSION = 3
++CURRENT_RPG_SCHEMA_VERSION = 4
+ PACKAGE_TYPE = "rpg_save_package"
+-ENGINE_VERSION = "phase_8_5"
++ENGINE_VERSION = "phase_9_0"
+*** End Patch
+10) Add frontend client: src/static/rpg/rpgInventoryClient.js
+*** Begin Patch
+*** Add File: src/static/rpg/rpgInventoryClient.js
++export class RPGInventoryClient {
++  constructor(baseUrl = "") {
++    this.baseUrl = baseUrl;
++  }
++
++  async _post(path, payload) {
++    const res = await fetch(`${this.baseUrl}${path}`, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(payload || {}),
 +    });
-+  });
++    if (!res.ok) {
++      throw new Error(`Inventory API error: ${res.status} at ${path}`);
++    }
++    return res.json();
++  }
 +
-+  safeArray(diff.new_consequences).forEach((item) => {
-+    chain.push({
-+      kind: "consequence",
-+      label: item.type || "consequence",
-+      text: item.summary || "",
-+    });
-+  });
-+
-+  safeArray(t.recent_world_consequences).forEach((item) => {
-+    chain.push({
-+      kind: "world",
-+      label: item.type || "world_consequence",
-+      text: item.summary || "",
-+    });
-+  });
-+
-+  const why = safeObj(npc.why);
-+  if (Object.keys(why).length > 0) {
-+    chain.push({
-+      kind: "npc_reasoning",
-+      label: "npc_reasoning",
-+      text: why.decision_reason || JSON.stringify(why),
++  async getInventory(setupPayload) {
++    return this._post("/api/rpg/player/inventory", {
++      setup_payload: setupPayload,
 +    });
 +  }
 +
-+  return chain.slice(0, 20);
++  async useItem(setupPayload, itemId) {
++    return this._post("/api/rpg/player/inventory/use", {
++      setup_payload: setupPayload,
++      item_id: itemId,
++    });
++  }
++}
+*** Add File: src/static/rpg/rpgInventoryRenderer.js
++function escapeHtml(str) {
++  return String(str || "")
++    .replace(/&/g, "&amp;")
++    .replace(/</g, "&lt;")
++    .replace(/>/g, "&gt;")
++    .replace(/"/g, "&quot;")
++    .replace(/'/g, "&#039;");
 +}
 +
-+export function renderCausalTrace(trace) {
-+  const root = document.getElementById("rpg-inspector-causal-trace");
-+  if (!root) return;
-+  const rows = safeArray(trace);
-+  root.innerHTML = `
-+    <div class="rpg-inspector-title">Causal Trace</div>
-+    ${rows.map((row, idx) => `
-+      <div class="rpg-inspector-trace-row">
-+        <div class="rpg-inspector-trace-index">${esc(idx + 1)}</div>
-+        <div class="rpg-inspector-trace-body">
-+          <div><strong>${esc(row.label || row.kind || "step")}</strong></div>
-+          <div>${esc(row.text || "")}</div>
++export function renderInventoryPanel(inventoryState, inventorySummary) {
++  const state = inventoryState || {};
++  const summary = inventorySummary || {};
++  const items = Array.isArray(state.items) ? state.items : [];
++  const loot = Array.isArray(state.last_loot) ? state.last_loot : [];
++
++  return `
++    <div class="codex-section">
++      <h3>Inventory</h3>
++      <div class="codex-item">Slots: ${summary.slots_used || 0}/${summary.capacity || 0}</div>
++      <div class="codex-item">Total Items: ${summary.total_item_qty || 0}</div>
++      ${items.length ? items.map((item) => `
++        <div class="codex-item rpg-inventory-item" data-item-id="${escapeHtml(item.item_id)}">
++          <strong>${escapeHtml(item.name || item.item_id)}</strong> x${Number(item.qty || 1)}
++          <button class="rpg-use-item-btn" data-item-id="${escapeHtml(item.item_id)}">Use</button>
 +        </div>
-+      </div>
-+    `).join("") || '<div class="rpg-inspector-meta">No causal trace yet</div>'}
++      `).join("") : `<div class="codex-item">No items</div>`}
++      <h4>Last Loot</h4>
++      ${loot.length ? loot.map((item) => `
++        <div class="codex-item">${escapeHtml(item.name || item.item_id)} x${Number(item.qty || 1)}</div>
++      `).join("") : `<div class="codex-item">No recent loot</div>`}
++    </div>
 +  `;
 +}
-4. Patch src/static/rpg/rpgInspectorState.js
-diff --git a/src/static/rpg/rpgInspectorState.js b/src/static/rpg/rpgInspectorState.js
-index XXXXXXX..PHASE84701 100644
---- a/src/static/rpg/rpgInspectorState.js
-+++ b/src/static/rpg/rpgInspectorState.js
-@@ -1,10 +1,15 @@
- export const rpgInspectorState = {
-   timeline: null,
-   latestDiff: null,
-   selectedTick: null,
-   selectedTickView: null,
-   selectedNpcId: "",
-   npcReasoning: null,
-+  timelineQuery: "",
-+  worldConsequenceFilter: "all",
-+  causalTrace: [],
-+  loading: false,
-   isOpen: false,
- };
+*** End Patch
+11) Wire inventory into src/static/rpg/rpgPlayerUI.js
+*** Begin Patch
+*** Update File: src/static/rpg/rpgPlayerUI.js
+@@
+ import { RPGPlayerClient } from "./rpgPlayerClient.js";
++import { RPGInventoryClient } from "./rpgInventoryClient.js";
++import { renderInventoryPanel } from "./rpgInventoryRenderer.js";
  
- export function resetInspectorState() {
-@@ -6,5 +11,9 @@ export function resetInspectorState() {
-   rpgInspectorState.selectedTick = null;
-   rpgInspectorState.selectedTickView = null;
-   rpgInspectorState.selectedNpcId = "";
-   rpgInspectorState.npcReasoning = null;
-+  rpgInspectorState.timelineQuery = "";
-+  rpgInspectorState.worldConsequenceFilter = "all";
-+  rpgInspectorState.causalTrace = [];
-+  rpgInspectorState.loading = false;
- }
-5. Patch src/static/rpg/rpgInspectorRenderer.js
-diff --git a/src/static/rpg/rpgInspectorRenderer.js b/src/static/rpg/rpgInspectorRenderer.js
-index XXXXXXX..PHASE84702 100644
---- a/src/static/rpg/rpgInspectorRenderer.js
-+++ b/src/static/rpg/rpgInspectorRenderer.js
-@@ -1,3 +1,4 @@
-+import { rpgInspectorState } from "./rpgInspectorState.js";
- function esc(str) {
-   return String(str ?? "")
-@@ -13,9 +14,18 @@ function safeObj(v) {
-   return v && typeof v === "object" ? v : {};
- }
- 
- export function renderInspectorShell(isOpen) {
-   const root = document.getElementById("rpg-inspector-shell");
-   if (!root) return;
-   root.style.display = isOpen ? "grid" : "none";
-+  root.dataset.loading = rpgInspectorState.loading ? "true" : "false";
+ const playerClient = new RPGPlayerClient();
++const inventoryClient = new RPGInventoryClient();
+@@
+ export async function loadObjectives(setupPayload) {
+@@
  }
 +
-+export function setInspectorLoading(isLoading) {
-+  rpgInspectorState.loading = !!isLoading;
-+  const root = document.getElementById("rpg-inspector-shell");
-+  if (!root) return;
-+  root.dataset.loading = isLoading ? "true" : "false";
-+}
- 
- export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
-   const root = document.getElementById("rpg-inspector-timeline");
-@@ -23,7 +33,8 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
- 
-   const t = safeObj(timeline);
-   const snaps = safeArray(t.snapshots);
--  const recentConsequences = safeArray(t.recent_world_consequences);
-+  const recentConsequences = safeArray(t.recent_world_consequences);
-   const diff = safeObj(latestDiff);
- 
-   root.innerHTML = `
-@@ -42,6 +53,12 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
-     </div>
-     <div class="rpg-inspector-section">
-       <div class="rpg-inspector-title">Recent Ticks</div>
-+      <input
-+        id="rpg-inspector-timeline-query"
-+        type="text"
-+        class="rpg-inspector-input"
-+        placeholder="Filter ticks..."
-+        value="${esc(rpgInspectorState.timelineQuery || "")}"
-+      />
-       <div id="rpg-inspector-timeline-list"></div>
-     </div>
-     <div class="rpg-inspector-section">
-@@ -50,6 +67,12 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
-       <div>
-         ${recentConsequences.map(item => `
-           <div class="rpg-inspector-row">
-+            <button
-+              class="rpg-inspector-link-btn"
-+              data-consequence-type="${esc(item.type || "")}"
-+              type="button"
-+            >
-+              inspect
-+            </button>
-             <div><strong>${esc(item.type || "consequence")}</strong></div>
-             <div>${esc(item.summary || "")}</div>
-           </div>
-@@ -63,9 +86,17 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
-   if (!list) return;
- 
-   list.innerHTML = "";
--  snaps.slice().reverse().forEach((snap) => {
-+  snaps.slice().reverse().forEach((snap) => {
-     const btn = document.createElement("button");
-     btn.className = "rpg-inspector-tick-btn";
-+    if (snap.tick === rpgInspectorState.selectedTick) {
-+      btn.classList.add("active");
-+    }
-     btn.textContent = `Tick ${snap.tick}`;
-     btn.onclick = () => onSelectTick && onSelectTick(snap.tick);
-     list.appendChild(btn);
-   });
- }
-6. Patch src/static/rpg/rpgInspectorUI.js
-diff --git a/src/static/rpg/rpgInspectorUI.js b/src/static/rpg/rpgInspectorUI.js
-index XXXXXXX..PHASE84703 100644
---- a/src/static/rpg/rpgInspectorUI.js
-+++ b/src/static/rpg/rpgInspectorUI.js
-@@ -1,13 +1,18 @@
- import { RPGInspectorClient } from "./rpgInspectorClient.js";
- import { rpgInspectorState } from "./rpgInspectorState.js";
-+import { filterTimelineSnapshots, filterWorldConsequences, buildNpcOptions } from "./rpgInspectorFilters.js";
- import {
-   renderInspectorShell,
-   renderTimelinePanel,
-   renderTickView,
-   renderNpcReasoning,
-   renderGmAudit,
-+  setInspectorLoading,
- } from "./rpgInspectorRenderer.js";
-+import { renderInspectorDiff } from "./rpgInspectorDiffRenderer.js";
-+import { buildCausalTrace, renderCausalTrace } from "./rpgInspectorCausalTrace.js";
- 
- const inspectorClient = new RPGInspectorClient();
-@@ -18,9 +23,17 @@ export class RPGInspectorUI {
-     this.getSimulationState = getSimulationState;
-   }
- 
-   toggleOpen() {
-     rpgInspectorState.isOpen = !rpgInspectorState.isOpen;
-+    localStorage.setItem("rpg_inspector_open", rpgInspectorState.isOpen ? "1" : "0");
-     renderInspectorShell(rpgInspectorState.isOpen);
-   }
- 
-   async refreshTimeline() {
-+    setInspectorLoading(true);
-     const setupPayload = this.getSetupPayload();
-     const res = await inspectorClient.getTimeline(setupPayload);
-     rpgInspectorState.timeline = res.timeline;
-     rpgInspectorState.latestDiff = res.latest_diff || {};
--    renderTimelinePanel(
--      res.timeline,
-+    const filteredTimeline = {
-+      ...res.timeline,
-+      snapshots: filterTimelineSnapshots((res.timeline || {}).snapshots || [], rpgInspectorState.timelineQuery),
-+      recent_world_consequences: filterWorldConsequences(
-+        (res.timeline || {}).recent_world_consequences || [],
-+        rpgInspectorState.worldConsequenceFilter
-+      ),
-+    };
-+    renderTimelinePanel(
-+      filteredTimeline,
-       res.latest_diff || {},
-       async (tick) => {
-         await this.selectTick(tick);
-       }
-     );
-+    renderInspectorDiff(res.latest_diff || {});
-+    rpgInspectorState.causalTrace = buildCausalTrace({
-+      latestDiff: res.latest_diff || {},
-+      timeline: res.timeline || {},
-+      npcReasoning: rpgInspectorState.npcReasoning || {},
-+    });
-+    renderCausalTrace(rpgInspectorState.causalTrace);
-+    this.populateNpcOptions();
-+    setInspectorLoading(false);
-   }
- 
-   async selectTick(tick) {
-+    setInspectorLoading(true);
-     const setupPayload = this.getSetupPayload();
-     const res = await inspectorClient.getTimelineTick(setupPayload, tick);
-     rpgInspectorState.selectedTick = tick;
-     rpgInspectorState.selectedTickView = res.tick_view;
-     renderTickView(res.tick_view);
-+    setInspectorLoading(false);
-+    await this.refreshTimeline();
-   }
- 
-   async inspectNpc(npcId) {
-+    setInspectorLoading(true);
-     const setupPayload = this.getSetupPayload();
-     const res = await inspectorClient.getNpcReasoning(setupPayload, npcId);
-     rpgInspectorState.selectedNpcId = npcId;
-     rpgInspectorState.npcReasoning = res.npc_reasoning;
-     renderNpcReasoning(res.npc_reasoning);
-+    rpgInspectorState.causalTrace = buildCausalTrace({
-+      latestDiff: rpgInspectorState.latestDiff || {},
-+      timeline: rpgInspectorState.timeline || {},
-+      npcReasoning: res.npc_reasoning || {},
-+    });
-+    renderCausalTrace(rpgInspectorState.causalTrace);
-+    setInspectorLoading(false);
-   }
-+
-+  populateNpcOptions() {
-+    const root = getEl("rpg-inspector-npc-select");
-+    if (!root) return;
-+    const options = buildNpcOptions(this.getSimulationState());
-+    root.innerHTML = `<option value="">Select NPC</option>` + options.map((opt) => `
-+      <option value="${opt.npc_id}" ${opt.npc_id === rpgInspectorState.selectedNpcId ? "selected" : ""}>${opt.label}</option>
-+    `).join("");
++export async function loadInventory(setupPayload) {
++  try {
++    const res = await inventoryClient.getInventory(setupPayload);
++    const inventoryState = res.inventory_state || {};
++    const inventorySummary = res.inventory_summary || {};
++    const el = document.getElementById("rpg-inventory");
++    if (!el) return inventoryState;
++    el.innerHTML = renderInventoryPanel(inventoryState, inventorySummary);
++    bindInventoryUseButtons(setupPayload);
++    return inventoryState;
++  } catch (err) {
++    console.error("Failed to load inventory:", err);
++    return {};
 +  }
-@@ -58,6 +71,8 @@ export class RPGInspectorUI {
-     const note = (getEl("rpg-inspector-debug-note")?.value || "").trim();
-     if (!note) return;
-     const setupPayload = this.getSetupPayload();
-+    setInspectorLoading(true);
-     await inspectorClient.addDebugNote(setupPayload, note);
-     const input = getEl("rpg-inspector-debug-note");
-     if (input) input.value = "";
-     await this.refreshAudit();
-+    setInspectorLoading(false);
-   }
-@@ -67,6 +82,17 @@ export class RPGInspectorUI {
-     renderGmAudit((simulationState || {}).debug_meta || {});
-   }
- 
-   bind() {
-+    const saved = localStorage.getItem("rpg_inspector_open");
-+    if (saved === "1") {
-+      rpgInspectorState.isOpen = true;
-+      renderInspectorShell(true);
-+    }
++}
 +
-     getEl("rpg-inspector-toggle-btn")?.addEventListener("click", () => this.toggleOpen());
-     getEl("rpg-inspector-refresh-btn")?.addEventListener("click", async () => {
-       await this.refreshTimeline();
-       await this.refreshAudit();
-     });
-+    getEl("rpg-inspector-npc-select")?.addEventListener("change", async (e) => {
-+      const npcId = e.target.value || "";
-+      if (npcId) {
-+        getEl("rpg-inspector-npc-id").value = npcId;
-+        await this.inspectNpc(npcId);
++function bindInventoryUseButtons(setupPayload) {
++  document.querySelectorAll(".rpg-use-item-btn").forEach((btn) => {
++    btn.onclick = async () => {
++      const itemId = btn.getAttribute("data-item-id") || "";
++      try {
++        const res = await inventoryClient.useItem(setupPayload, itemId);
++        const el = document.getElementById("rpg-inventory");
++        if (el) {
++          el.innerHTML = renderInventoryPanel(
++            res.inventory_state || {},
++            res.inventory_summary || {}
++          );
++        }
++        bindInventoryUseButtons(res.setup_payload || setupPayload);
++      } catch (err) {
++        console.error("Failed to use inventory item:", err);
 +      }
-+    });
-     getEl("rpg-inspector-inspect-npc-btn")?.addEventListener("click", async () => {
-       const npcId = (getEl("rpg-inspector-npc-id")?.value || "").trim();
-       if (npcId) await this.inspectNpc(npcId);
-@@ -79,5 +105,20 @@ export class RPGInspectorUI {
-     getEl("rpg-inspector-add-note-btn")?.addEventListener("click", async () => {
-       await this.addDebugNote();
-     });
-+    getEl("rpg-inspector-timeline-query")?.addEventListener("input", async (e) => {
-+      rpgInspectorState.timelineQuery = e.target.value || "";
-+      await this.refreshTimeline();
-+    });
-+    getEl("rpg-inspector-world-filter")?.addEventListener("change", async (e) => {
-+      rpgInspectorState.worldConsequenceFilter = e.target.value || "all";
-+      await this.refreshTimeline();
-+    });
-   }
- }
-7. Patch src/static/rpg/rpgPlayerIntegration.js
-
-Add refresh debounce.
-
-diff --git a/src/static/rpg/rpgPlayerIntegration.js b/src/static/rpg/rpgPlayerIntegration.js
-index XXXXXXX..PHASE84704 100644
---- a/src/static/rpg/rpgPlayerIntegration.js
-+++ b/src/static/rpg/rpgPlayerIntegration.js
-@@ -16,6 +16,7 @@ export class RPGPlayerIntegration {
-     this.dialogueClient = new RPGDialogueClient();
-     this.encounterClient = new RPGEncounterClient();
-     this.inspectorUI = null;
-+    this._inspectorRefreshTimer = null;
-     bindDialogueInput((text) => this.sendDialogueMessage(text));
-   }
-@@ -34,9 +35,16 @@ export class RPGPlayerIntegration {
-   }
- 
-   async _refreshInspector() {
--    const inspector = this.ensureInspector();
--    await inspector.refreshTimeline();
--    await inspector.refreshAudit();
-+    if (this._inspectorRefreshTimer) {
-+      clearTimeout(this._inspectorRefreshTimer);
-+    }
-+    this._inspectorRefreshTimer = setTimeout(async () => {
-+      const inspector = this.ensureInspector();
-+      await inspector.refreshTimeline();
-+      await inspector.refreshAudit();
-+    }, 50);
-   }
-8. Patch src/templates/rpg.html
-
-Add filter controls, diff panel, causal trace, NPC select, save meta.
-
-diff --git a/src/templates/rpg.html b/src/templates/rpg.html
-index XXXXXXX..PHASE84705 100644
---- a/src/templates/rpg.html
-+++ b/src/templates/rpg.html
-@@ -1,6 +1,123 @@
- ...
-+<div id="rpg-save-meta" class="rpg-inspector-meta"></div>
- <div class="rpg-inspector-toolbar">
-   <button id="rpg-inspector-toggle-btn" type="button">Inspector</button>
-   <button id="rpg-inspector-refresh-btn" type="button">Refresh Inspector</button>
- </div>
- 
- <div id="rpg-inspector-shell" class="rpg-inspector-shell" style="display:none;">
-   <div class="rpg-inspector-column">
-     <div id="rpg-inspector-timeline" class="rpg-inspector-panel"></div>
-     <div id="rpg-inspector-tick-view" class="rpg-inspector-panel"></div>
-+    <div id="rpg-inspector-diff-panel" class="rpg-inspector-panel"></div>
-+    <div id="rpg-inspector-causal-trace" class="rpg-inspector-panel"></div>
-   </div>
-   <div class="rpg-inspector-column">
-     <div class="rpg-inspector-panel">
-       <div class="rpg-inspector-title">NPC Inspector</div>
-+      <select id="rpg-inspector-npc-select" class="rpg-inspector-input"></select>
-       <input id="rpg-inspector-npc-id" type="text" placeholder="npc_id" />
-       <button id="rpg-inspector-inspect-npc-btn" type="button">Inspect NPC</button>
-       <div id="rpg-inspector-npc-reasoning"></div>
-     </div>
-@@ -18,6 +135,13 @@
-       <div class="rpg-inspector-title">Debug Notes</div>
-+      <label class="rpg-inspector-meta">World consequence filter</label>
-+      <select id="rpg-inspector-world-filter" class="rpg-inspector-input">
-+        <option value="all">All</option>
-+        <option value="location_shift">location_shift</option>
-+        <option value="faction_shift">faction_shift</option>
-+        <option value="thread_shift">thread_shift</option>
-+        <option value="rumor_shift">rumor_shift</option>
-+      </select>
-       <textarea id="rpg-inspector-debug-note" rows="4" placeholder="Enter GM/debug note"></textarea>
-       <button id="rpg-inspector-add-note-btn" type="button">Add Note</button>
-     </div>
-@@ -56,6 +180,27 @@
-   .rpg-inspector-pre {
-     white-space: pre-wrap;
-     word-break: break-word;
-@@ -63,6 +208,31 @@
-     border-radius: 6px;
-     font-size: 12px;
-   }
-+  .rpg-inspector-input {
-+    width: 100%;
-+    margin-bottom: 8px;
-+  }
-+  .rpg-inspector-grid2 {
-+    display: grid;
-+    grid-template-columns: 1fr 1fr;
-+    gap: 8px;
-+    margin-bottom: 8px;
-+  }
-+  .rpg-inspector-chip {
-+    background: #f3f4f6;
-+    border-radius: 999px;
-+    padding: 6px 10px;
-+    font-size: 12px;
-+    display: inline-block;
-+  }
-+  .rpg-inspector-tag {
-+    display: inline-block;
-+    margin: 0 6px 6px 0;
-+    padding: 4px 8px;
-+    border-radius: 999px;
-+    background: #eef2ff;
-+    font-size: 12px;
-+  }
-   .rpg-inspector-tick-btn {
-     display: block;
-     width: 100%;
-@@ -70,5 +240,27 @@
-     margin-bottom: 6px;
-   }
-+  .rpg-inspector-tick-btn.active {
-+    background: #eef;
-+    font-weight: 700;
-+  }
-+  .rpg-inspector-link-btn {
-+    margin-right: 8px;
-+  }
-+  .rpg-inspector-trace-row {
-+    display: flex;
-+    gap: 10px;
-+    padding: 8px 0;
-+    border-bottom: 1px solid #eee;
-+  }
-+  .rpg-inspector-trace-index {
-+    width: 24px;
-+    min-width: 24px;
-+    height: 24px;
-+    border-radius: 999px;
-+    background: #111827;
-+    color: #fff;
-+    display: flex;
-+    align-items: center;
-+    justify-content: center;
-+    font-size: 12px;
-+  }
- </style>
- ...
-9. Optional patch: render save meta in player renderer
-diff --git a/src/static/rpg/rpgPlayerRenderer.js b/src/static/rpg/rpgPlayerRenderer.js
-index XXXXXXX..PHASE84706 100644
---- a/src/static/rpg/rpgPlayerRenderer.js
-+++ b/src/static/rpg/rpgPlayerRenderer.js
-@@ -1,5 +1,11 @@
- ...
-+export function renderSaveMeta(simulationState) {
-+  const root = document.getElementById("rpg-save-meta");
-+  if (!root) return;
-+  const meta = ((simulationState || {}).save_meta || {});
-+  root.textContent = `schema ${meta.schema_version || "?"} · engine ${meta.engine_version || "?"}`;
++    };
++  });
 +}
+@@
+ export async function refreshSidePanels(setupPayload) {
+   await Promise.all([
+     loadJournal(setupPayload),
+     loadCodex(setupPayload),
+     loadObjectives(setupPayload),
++    loadInventory(setupPayload),
+   ]);
+ }
+*** End Patch
+12) Wire inventory into src/static/rpg/rpgPlayerIntegration.js
+*** Begin Patch
+*** Update File: src/static/rpg/rpgPlayerIntegration.js
+@@
+-import { loadJournal, loadCodex, loadObjectives, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
++import { loadJournal, loadCodex, loadObjectives, loadInventory, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
+@@
+   async loadObjectives() {
+     if (!this.setupPayload) return [];
+     return loadObjectives(this.setupPayload);
+   }
++
++  async loadInventory() {
++    if (!this.setupPayload) return {};
++    return loadInventory(this.setupPayload);
++  }
+*** End Patch
+13) Add inventory container in the actual frontend shell
 
-Then call it anywhere you already re-render player/debug state.
+Because src/templates/rpg.html is not present in this zip, patch the HTML that actually owns the RPG side panels. If your UI is injected into src/templates/index.html, add:
 
-10. Tests
-Create src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py
-diff --git a/src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py b/src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py
-new file mode 100644
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py
-@@ -0,0 +1,39 @@
-+import os
-+
-+
-+def test_inspector_filters_exists():
-+    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorFilters.js")
-+    assert os.path.exists(path)
-+    with open(path, "r", encoding="utf-8") as f:
-+        content = f.read()
-+    assert "filterTimelineSnapshots" in content
-+    assert "buildNpcOptions" in content
-+
-+
-+def test_inspector_diff_renderer_exists():
-+    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorDiffRenderer.js")
-+    assert os.path.exists(path)
-+    with open(path, "r", encoding="utf-8") as f:
-+        content = f.read()
-+    assert "renderInspectorDiff" in content
-+
-+
-+def test_inspector_causal_trace_exists():
-+    path = os.path.join(os.path.dirname(__file__), "../../../static/rpg/rpgInspectorCausalTrace.js")
-+    assert os.path.exists(path)
-+    with open(path, "r", encoding="utf-8") as f:
-+        content = f.read()
-+    assert "buildCausalTrace" in content
-+    assert "renderCausalTrace" in content
-Success criteria
+*** Begin Patch
+*** Update File: src/templates/index.html
+@@
+-<div id="rpg-objectives"></div>
++<div id="rpg-objectives"></div>
++<div id="rpg-inventory"></div>
+*** End Patch
 
-After this patch:
+If the side panel markup is created dynamically in JS instead, add a sibling container with id rpg-inventory next to rpg-journal, rpg-codex, and rpg-objectives.
 
-inspector supports filtering recent ticks
-world consequence filtering works
-selected tick is highlighted
-latest diff is visually rendered, not just raw metadata
-causal trace is visible
-NPC selection is easier via dropdown
-inspector loading state exists
-inspector open state persists
-inspector refresh is debounced
-save/schema info can be surfaced in the UI
+14) Optional but recommended: expose registry for debug/GM tools
 
-This is the UX polish layer that makes the 8.4 inspection system feel fast and practical, rather than merely powerful.
+If you want inspector/debug parity immediately, add this endpoint to rpg_player_routes.py:
+
+*** Begin Patch
+*** Update File: src/app/rpg/api/rpg_player_routes.py
+@@
+ from app.rpg.items import apply_item_use
++from app.rpg.items import list_item_definitions
+@@
+ @rpg_player_bp.post("/api/rpg/player/inventory/use")
+ def player_inventory_use():
+@@
+     return jsonify({
+         "ok": bool((result.get("result") or {}).get("ok")),
+         "setup_payload": setup_payload,
+         "result": dict(result.get("result") or {}),
+         "inventory_state": inventory_view.get("inventory_state", {}),
+         "inventory_summary": inventory_view.get("inventory_summary", {}),
+     })
++
++
++@rpg_player_bp.post("/api/rpg/player/inventory/registry")
++def player_inventory_registry():
++    return jsonify({
++        "ok": True,
++        "items": list_item_definitions(),
++    })
+*** End Patch
+15) Behavior guarantees this patch preserves
+No randomness introduced
+All new state is serializable
+Inventory is bounded
+Loot is deterministic from resolved encounter state
+Save compatibility preserved through schema 4
+Existing APIs stay intact; only additive endpoints/fields are introduced
+16) One implementation caution
+
+In this repo, loot awarding is currently duplicated in both:
+
+/api/rpg/encounter/action
+/api/rpg/encounter/npc_turn
+
+That is okay only if you award loot strictly when transitioning into resolved state once. If you notice double-award risk, add a guard inside encounter_state, for example:
+
+encounter_state.setdefault("loot_awarded", False)
+
+and only award when:
+
+if encounter_state.get("status") == "resolved" and not encounter_state.get("loot_awarded"):
+
+then set:
+
+encounter_state["loot_awarded"] = True
+
+That guard is worth adding if your frontend can hit both endpoints after resolution.
+
+If you want, I can do the same for Phase 9.1 in the exact same literal diff format.

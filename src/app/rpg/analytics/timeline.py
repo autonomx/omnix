@@ -28,6 +28,8 @@ def build_timeline_row_diff(before_row: Dict[str, Any], after_row: Dict[str, Any
         "consequence_delta": _safe_int(after_row.get("consequence_count"), 0) - _safe_int(before_row.get("consequence_count"), 0),
         "sandbox_before": _safe_dict(before_row.get("sandbox_summary")),
         "sandbox_after": _safe_dict(after_row.get("sandbox_summary")),
+        "inventory_before": _safe_dict(before_row.get("inventory_summary")),
+        "inventory_after": _safe_dict(after_row.get("inventory_summary")),
     }
 
 

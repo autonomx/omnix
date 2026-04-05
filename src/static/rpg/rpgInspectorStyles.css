@@ -1,0 +1,175 @@
+/**
+ * Phase 9 — RPG Inspector Styles (Inventory)
+ *
+ * Styles for inventory-aware inspector panels.
+ */
+
+/* ─── Inventory diff grid ─── */
+
+.rpg-inspector-diff-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ─── Inventory subcard ─── */
+
+.rpg-inspector-subcard {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.rpg-inspector-subcard-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* ─── Key-value list ─── */
+
+.rpg-inspector-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rpg-inspector-kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rpg-inspector-kv-key {
+  opacity: 0.8;
+}
+
+.rpg-inspector-kv-value {
+  font-weight: 600;
+}
+
+/* ─── Section label ─── */
+
+.rpg-inspector-section-label {
+  margin-top: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+/* ─── Muted text ─── */
+
+.rpg-inspector-muted {
+  opacity: 0.65;
+}
+
+/* ─── Inventory event highlight ─── */
+
+.rpg-inspector-trace-event.inventory-event {
+  border-left: 3px solid rgba(255, 215, 0, 0.6);
+  padding-left: 10px;
+}
+
+/* ─── Trace loot chips ─── */
+
+.rpg-inspector-trace-loot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ─── Inventory card ─── */
+
+.rpg-inspector-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.rpg-inspector-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rpg-inspector-card-header h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.rpg-inspector-badge {
+  background: rgba(255, 215, 0, 0.15);
+  color: #ffd700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ─── Chip row ─── */
+
+.rpg-inspector-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rpg-inspector-chip {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* ─── Tick row ─── */
+
+.rpg-inspector-tick-row {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.rpg-inspector-tick-row.selected {
+  border-color: rgba(255, 215, 0, 0.4);
+  background: rgba(255, 215, 0, 0.05);
+}
+
+.rpg-inspector-tick-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rpg-inspector-tick-title {
+  font-weight: 600;
+}
+
+.rpg-inspector-tick-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* ─── Tooltip ─── */
+
+.rpg-inspector-tooltip {
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ─── Responsive ─── */
+
+@media (max-width: 900px) {
+  .rpg-inspector-diff-grid {
+    grid-template-columns: 1fr;
+  }
+}

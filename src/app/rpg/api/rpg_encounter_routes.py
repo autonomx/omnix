@@ -17,6 +17,11 @@ from app.rpg.encounter import (
     build_encounter_from_scene,
     EncounterResolver,
 )
+from app.rpg.items import (
+    ensure_inventory_state,
+    record_inventory_loot,
+    build_loot_from_encounter_state,
+)
 
 
 rpg_encounter_bp = Blueprint("rpg_encounter_bp", __name__)
@@ -73,6 +78,7 @@ def encounter_action():
     state = ensure_encounter_state(state)
 
     encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
+    encounter_state.setdefault("loot_awarded", False)
     encounter_state = resolver.apply_player_action(encounter_state, action_type, target_id)
     encounter_state = resolver.resolve_if_finished(encounter_state)
 
@@ -85,6 +91,27 @@ def encounter_action():
             "summary": "Encounter outcome impacts world state.",
         })
 
+        if not encounter_state.get("loot_awarded"):
+            player_state = dict(state.get("player_state") or {})
+            player_state = ensure_inventory_state(player_state)
+            inventory_state = dict(player_state.get("inventory_state") or {})
+            loot_items = build_loot_from_encounter_state(encounter_state)
+            inventory_state = record_inventory_loot(inventory_state, loot_items)
+            player_state["inventory_state"] = inventory_state
+            state["player_state"] = player_state
+
+            if loot_items:
+                state.setdefault("events", []).append({
+                    "type": "encounter_loot_awarded",
+                    "origin": "inventory",
+                    "target_id": encounter_state.get("scene_id", ""),
+                    "location_id": encounter_state.get("location_id", ""),
+                    "summary": "Player received encounter loot.",
+                    "loot": loot_items[:10],
+                })
+
+            encounter_state["loot_awarded"] = True
+
     state["player_state"]["encounter_state"] = encounter_state
     setup_payload = _write_simulation_state(setup_payload, state)
 
@@ -92,6 +119,7 @@ def encounter_action():
         "ok": True,
         "setup_payload": setup_payload,
         "encounter_state": encounter_state,
+        "inventory_state": dict((state.get("player_state") or {}).get("inventory_state") or {}),
     })
 
 
@@ -105,8 +133,30 @@ def encounter_npc_turn():
     state = ensure_encounter_state(state)
 
     encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
+    encounter_state.setdefault("loot_awarded", False)
     encounter_state = resolver.apply_npc_turn(encounter_state)
     encounter_state = resolver.resolve_if_finished(encounter_state)
+
+    if encounter_state.get("status") == "resolved" and not encounter_state.get("loot_awarded"):
+        player_state = dict(state.get("player_state") or {})
+        player_state = ensure_inventory_state(player_state)
+        inventory_state = dict(player_state.get("inventory_state") or {})
+        loot_items = build_loot_from_encounter_state(encounter_state)
+        inventory_state = record_inventory_loot(inventory_state, loot_items)
+        player_state["inventory_state"] = inventory_state
+        state["player_state"] = player_state
+
+        if loot_items:
+            state.setdefault("events", []).append({
+                "type": "encounter_loot_awarded",
+                "origin": "inventory",
+                "target_id": encounter_state.get("scene_id", ""),
+                "location_id": encounter_state.get("location_id", ""),
+                "summary": "Player received encounter loot.",
+                "loot": loot_items[:10],
+            })
+
+        encounter_state["loot_awarded"] = True
 
     state["player_state"]["encounter_state"] = encounter_state
     setup_payload = _write_simulation_state(setup_payload, state)
@@ -115,6 +165,7 @@ def encounter_npc_turn():
         "ok": True,
         "setup_payload": setup_payload,
         "encounter_state": encounter_state,
+        "inventory_state": dict((state.get("player_state") or {}).get("inventory_state") or {}),
     })
 
 

@@ -25,6 +25,12 @@ from .player_journal import update_journal_from_state
 from .player_codex import update_codex_from_state
 from .player_encounter import build_encounter_view
 
+# Phase 9 — Inventory system
+from .player_inventory import (
+    ensure_player_inventory,
+    build_player_inventory_view,
+)
+
 __all__ = [
     "AgencySystem",
     "PlayerChoice",
@@ -47,4 +53,7 @@ __all__ = [
     "update_journal_from_state",
     "update_codex_from_state",
     "build_encounter_view",
+    # Phase 9
+    "ensure_player_inventory",
+    "build_player_inventory_view",
 ]

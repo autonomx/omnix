@@ -56,6 +56,13 @@ def ensure_player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     })
     player_state.setdefault("active_objectives", [])
     player_state.setdefault("last_player_view", {})
+    player_state.setdefault("inventory_state", {
+        "items": [],
+        "equipment": {},
+        "capacity": 50,
+        "currency": {},
+        "last_loot": [],
+    })
     return simulation_state
 
 

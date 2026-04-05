@@ -244,3 +244,20 @@ export class RPGInspectorUI {
     });
   }
 }
+
+/* ─── Inventory filter helpers (Phase 9) ─── */
+
+function rowMatchesFilter(row, activeFilter) {
+  var timelineRow = row || {};
+  var inventorySummary = timelineRow.inventory_summary || {};
+  var hasInventory =
+    Number(inventorySummary.last_loot_count || 0) > 0 ||
+    Number(inventorySummary.total_item_qty || 0) > 0;
+
+  if (activeFilter === "all") return true;
+  if (activeFilter === "events") return Number(timelineRow.event_count || 0) > 0;
+  if (activeFilter === "npcs") return Array.isArray(timelineRow.changed_npc_ids) && timelineRow.changed_npc_ids.length > 0;
+  if (activeFilter === "gm") return Number(timelineRow.gm_action_count || 0) > 0;
+  if (activeFilter === "inventory") return hasInventory;
+  return true;
+}

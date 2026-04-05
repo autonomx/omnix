@@ -1,12 +1,15 @@
 /**
  * Phase 8 — Player UI Components
  *
- * Journal, Codex, Objectives, and Dialogue mode handling for the frontend.
+ * Journal, Codex, Objectives, Inventory, and Dialogue mode handling for the frontend.
  */
 
 import { RPGPlayerClient } from "./rpgPlayerClient.js";
+import { RPGInventoryClient } from "./rpgInventoryClient.js";
+import { renderInventoryPanel } from "./rpgInventoryRenderer.js";
 
 const playerClient = new RPGPlayerClient();
+const inventoryClient = new RPGInventoryClient();
 
 export async function loadJournal(setupPayload) {
   try {
@@ -103,10 +106,48 @@ export async function handleExitDialogue(setupPayload) {
   }
 }
 
+export async function loadInventory(setupPayload) {
+  try {
+    const res = await inventoryClient.getInventory(setupPayload);
+    const inventoryState = res.inventory_state || {};
+    const inventorySummary = res.inventory_summary || {};
+    const el = document.getElementById("rpg-inventory");
+    if (!el) return inventoryState;
+    el.innerHTML = renderInventoryPanel(inventoryState, inventorySummary);
+    bindInventoryUseButtons(setupPayload);
+    return inventoryState;
+  } catch (err) {
+    console.error("Failed to load inventory:", err);
+    return {};
+  }
+}
+
+function bindInventoryUseButtons(setupPayload) {
+  document.querySelectorAll(".rpg-use-item-btn").forEach((btn) => {
+    btn.onclick = async () => {
+      const itemId = btn.getAttribute("data-item-id") || "";
+      try {
+        const res = await inventoryClient.useItem(setupPayload, itemId);
+        const el = document.getElementById("rpg-inventory");
+        if (el) {
+          el.innerHTML = renderInventoryPanel(
+            res.inventory_state || {},
+            res.inventory_summary || {}
+          );
+        }
+        bindInventoryUseButtons(res.setup_payload || setupPayload);
+      } catch (err) {
+        console.error("Failed to use inventory item:", err);
+      }
+    };
+  });
+}
+
 export async function refreshSidePanels(setupPayload) {
   await Promise.all([
     loadJournal(setupPayload),
     loadCodex(setupPayload),
     loadObjectives(setupPayload),
+    loadInventory(setupPayload),
   ]);
 }

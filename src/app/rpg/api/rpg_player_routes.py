@@ -11,8 +11,11 @@ from app.rpg.player import (
     ensure_player_state,
     enter_dialogue_mode,
     exit_dialogue_mode,
+    ensure_player_inventory,
+    build_player_inventory_view,
 )
 from app.rpg.player.player_encounter import build_encounter_view
+from app.rpg.items import apply_item_use, list_item_definitions
 
 
 rpg_player_bp = Blueprint("rpg_player_bp", __name__)
@@ -127,4 +130,51 @@ def player_encounter():
     return jsonify({
         "ok": True,
         "encounter": build_encounter_view(scene, state),
+    })
+
+
+@rpg_player_bp.post("/api/rpg/player/inventory")
+def player_inventory():
+    """Return the player inventory state and summary."""
+    setup_payload = _load_setup_payload()
+    state = ensure_player_state(_get_simulation_state(setup_payload))
+    state = ensure_player_inventory(state)
+    inventory_view = build_player_inventory_view(state)
+    return jsonify({
+        "ok": True,
+        "inventory_state": inventory_view.get("inventory_state", {}),
+        "inventory_summary": inventory_view.get("inventory_summary", {}),
+    })
+
+
+@rpg_player_bp.post("/api/rpg/player/inventory/use")
+def player_inventory_use():
+    """Use one inventory item via deterministic item effect hooks."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = dict(data.get("setup_payload") or {})
+    item_id = str(data.get("item_id") or "")
+
+    state = ensure_player_state(_get_simulation_state(setup_payload))
+    state = ensure_player_inventory(state)
+
+    result = apply_item_use(state, item_id)
+    state = dict(result.get("simulation_state") or {})
+    setup_payload = _write_simulation_state(setup_payload, state)
+
+    inventory_view = build_player_inventory_view(state)
+    return jsonify({
+        "ok": bool((result.get("result") or {}).get("ok")),
+        "setup_payload": setup_payload,
+        "result": dict(result.get("result") or {}),
+        "inventory_state": inventory_view.get("inventory_state", {}),
+        "inventory_summary": inventory_view.get("inventory_summary", {}),
+    })
+
+
+@rpg_player_bp.post("/api/rpg/player/inventory/registry")
+def player_inventory_registry():
+    """Return the full item registry for debug/GM tools."""
+    return jsonify({
+        "ok": True,
+        "items": list_item_definitions(),
     })
