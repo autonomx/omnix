@@ -16,6 +16,11 @@ from app.rpg.player import (
 )
 from app.rpg.player.player_encounter import build_encounter_view
 from app.rpg.items import apply_item_use, list_item_definitions
+from app.rpg.party import (
+    ensure_party_state,
+    add_companion,
+    remove_companion,
+)
 
 
 rpg_player_bp = Blueprint("rpg_player_bp", __name__)
@@ -177,4 +182,73 @@ def player_inventory_registry():
     return jsonify({
         "ok": True,
         "items": list_item_definitions(),
+    })
+
+
+@rpg_player_bp.post("/api/rpg/player/party")
+def player_party():
+    """Return the current party state."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = dict(data.get("setup_payload") or {})
+
+    state = ensure_player_state(_get_simulation_state(setup_payload))
+    player_state = ensure_party_state(state.get("player_state") or {})
+
+    return jsonify({
+        "ok": True,
+        "party_state": player_state.get("party_state"),
+    })
+
+
+@rpg_player_bp.post("/api/rpg/player/party/recruit")
+def recruit_companion():
+    """Recruit a new companion to the party."""
+    data = request.get_json(silent=True) or {}
+    npc_id = str(data.get("npc_id") or "")
+    name = str(data.get("name") or "Companion")
+
+    setup_payload = dict(data.get("setup_payload") or {})
+    state = ensure_player_state(_get_simulation_state(setup_payload))
+
+    # Validate NPC exists in world state
+    npcs = state.get("npcs") or {}
+    if npc_id not in npcs:
+        return jsonify({
+            "ok": False,
+            "reason": "npc_not_found",
+            "npc_id": npc_id,
+        })
+
+    player_state = state.get("player_state") or {}
+    player_state = add_companion(player_state, npc_id, name)
+
+    state["player_state"] = player_state
+    setup_payload = _write_simulation_state(setup_payload, state)
+
+    return jsonify({
+        "ok": True,
+        "setup_payload": setup_payload,
+        "party_state": player_state.get("party_state"),
+    })
+
+
+@rpg_player_bp.post("/api/rpg/player/party/remove")
+def remove_companion_route():
+    """Remove a companion from the party."""
+    data = request.get_json(silent=True) or {}
+    npc_id = str(data.get("npc_id") or "")
+
+    setup_payload = dict(data.get("setup_payload") or {})
+    state = ensure_player_state(_get_simulation_state(setup_payload))
+
+    player_state = state.get("player_state") or {}
+    player_state = remove_companion(player_state, npc_id)
+
+    state["player_state"] = player_state
+    setup_payload = _write_simulation_state(setup_payload, state)
+
+    return jsonify({
+        "ok": True,
+        "setup_payload": setup_payload,
+        "party_state": player_state.get("party_state"),
     })

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .save_schema import CURRENT_RPG_SCHEMA_VERSION
-from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4
+from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5
 
 
 def _safe_int(v: Any, default: int = 1) -> int:
@@ -25,6 +25,8 @@ def migrate_package_to_current(package: Dict[str, Any]) -> Dict[str, Any]:
             package = migrate_v2_to_v3(package)
         elif version == 3:
             package = migrate_v3_to_v4(package)
+        elif version == 4:
+            package = migrate_v4_to_v5(package)
         else:
             raise ValueError(f"Unsupported schema migration path from version {version}")
         version = _safe_int(package.get("schema_version"), version + 1)

@@ -22,6 +22,7 @@ from app.rpg.items import (
     record_inventory_loot,
     build_loot_from_encounter_state,
 )
+from app.rpg.party import run_companion_turns
 
 
 rpg_encounter_bp = Blueprint("rpg_encounter_bp", __name__)
@@ -82,6 +83,8 @@ def encounter_action():
     encounter_state = resolver.apply_player_action(encounter_state, action_type, target_id)
     encounter_state = resolver.resolve_if_finished(encounter_state)
 
+    encounter_state = run_companion_turns(state, encounter_state)
+
     if encounter_state.get("status") == "resolved":
         state.setdefault("events", []).append({
             "type": "encounter_resolution",
@@ -135,6 +138,8 @@ def encounter_npc_turn():
     encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
     encounter_state.setdefault("loot_awarded", False)
     encounter_state = resolver.apply_npc_turn(encounter_state)
+
+    encounter_state = run_companion_turns(state, encounter_state)
     encounter_state = resolver.resolve_if_finished(encounter_state)
 
     if encounter_state.get("status") == "resolved" and not encounter_state.get("loot_awarded"):

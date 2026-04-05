@@ -249,6 +249,37 @@ function renderInventorySummaryCard(summary, title) {
     '</div></div>';
 }
 
+/* ─── Party helpers (Phase 9.1) ─── */
+
+function renderPartyDeltaCard(beforeParty, afterParty, changedKeys) {
+  var before = safeObj(beforeParty);
+  var after = safeObj(afterParty);
+
+  function list(p) {
+    var comps = safeArray(p.companions);
+    if (!comps.length) return '<div class="rpg-inspector-muted">None</div>';
+    return comps.map(function(c) {
+      return '<div class="rpg-inspector-kv-row">' +
+        '<span>' + esc(c.name || c.npc_id) + '</span>' +
+        '<span>HP ' + numOrZero(c.hp) + '</span>' +
+      '</div>';
+    }).join("");
+  }
+
+  return '<div class="rpg-inspector-card">' +
+    '<div class="rpg-inspector-card-header"><h4>Party Delta</h4></div>' +
+    '<div class="rpg-inspector-diff-grid">' +
+      '<div class="rpg-inspector-subcard">' +
+        '<div class="rpg-inspector-subcard-title">Before</div>' +
+        list(before) +
+      '</div>' +
+      '<div class="rpg-inspector-subcard">' +
+        '<div class="rpg-inspector-subcard-title">After</div>' +
+        list(after) +
+      '</div>' +
+    '</div></div>';
+}
+
 function renderInventoryDeltaCard(beforeInventory, afterInventory, changedKeys) {
   var beforeInv = safeObj(beforeInventory);
   var afterInv = safeObj(afterInventory);
@@ -300,6 +331,7 @@ function renderTimelineRow(row, isSelected) {
         '<span>Consequences: ' + Number(timelineRow.consequence_count || 0) + '</span>' +
         '<span>Inv: ' + Number(inventorySummary.slots_used || 0) + '/' + Number(inventorySummary.capacity || 0) + '</span>' +
         '<span>Qty: ' + Number(inventorySummary.total_item_qty || 0) + '</span>' +
+        '<span>Party: ' + Number(timelineRow.party_size || 0) + '</span>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -340,6 +372,7 @@ function renderTickDiffPanel(diffPayload) {
       '</div>' +
     '</div>' +
     renderInventoryDeltaCard(inventoryBefore, inventoryAfter, inventoryKeysChanged) +
+    renderPartyDeltaCard(diff.party_before, diff.party_after, diff.party_keys_changed) +
   '</div>';
 }
 

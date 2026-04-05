@@ -63,6 +63,11 @@ def ensure_player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
         "currency": {},
         "last_loot": [],
     })
+
+    player_state.setdefault("party_state", {
+        "companions": [],
+        "max_size": 3,
+    })
     return simulation_state
 
 
