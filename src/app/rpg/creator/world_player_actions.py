@@ -87,11 +87,13 @@ def _infer_affected_npc_ids(
 INTERVENE_THREAD = "intervene_thread"
 SUPPORT_FACTION = "support_faction"
 ESCALATE_CONFLICT = "escalate_conflict"
+BETRAY_FACTION = "betray_faction"
 
 VALID_ACTION_TYPES = {
     INTERVENE_THREAD,
     SUPPORT_FACTION,
     ESCALATE_CONFLICT,
+    BETRAY_FACTION,
 }
 
 
@@ -274,6 +276,30 @@ def apply_player_action(
             "severity": "negative",
             "salience": 0.9,
         })
+        action_applied = True
+
+    # ── Rule: betray_faction → emit betrayal event
+    if action_type == BETRAY_FACTION and target_id:
+        event = {
+            "type": "betrayal",
+            "origin": "player_action",
+            "action_type": action_type,
+            "actor": "player",
+            "source_id": "player",
+            "target_id": target_id,
+            "target_kind": "faction",
+            "faction_id": target_id,
+            "location_id": "",
+            "affected_npc_ids": _infer_affected_npc_ids(
+                simulation_state=state,
+                faction_id=target_id,
+            ),
+            "summary": f"Player betrayed faction '{target_id}'.",
+            "severity": "negative",
+            "salience": 0.9,
+        }
+        events.append(event)
+        action_diff["consequences_added"].append("betrayal")
         action_applied = True
 
     # ── Fallback: unknown action type ──────────────────────────────────

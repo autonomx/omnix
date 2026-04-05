@@ -44,6 +44,13 @@ from .world_incidents import (
     spawn_incidents_from_state_diff,
 )
 from app.rpg.ai.llm_mind import NPCMind
+from app.rpg.social import (
+    ReputationGraph,
+    AllianceSystem,
+    BetrayalPropagation,
+    RumorSystem,
+    GroupDecisionEngine,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +153,23 @@ def _decision_to_event(decision_dict, npc_context, tick):
         "summary": _safe_str_p6(decision_dict.get("reason")) or f"{npc_id} chooses to {action_type}",
         "salience": min(max(urgency, 0.2), 1.0),
         "source": "npc_mind",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 6.5 — Social Simulation helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_social_state(current):
+    """Load social state from history state, initializing defaults."""
+    current = current or {}
+    social_state = current.get("social_state") or {}
+    return {
+        "reputation": ReputationGraph.from_dict(social_state.get("reputation")).to_dict(),
+        "alliances": AllianceSystem.from_dict(social_state.get("alliances")).to_dict(),
+        "rumors": RumorSystem.from_dict(social_state.get("rumors")).to_dict(),
+        "group_positions": GroupDecisionEngine.from_dict(social_state.get("group_positions")).to_dict(),
     }
 
 
@@ -636,6 +660,97 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
 
     existing_events = history_state.get("events") or []
     history_state["events"] = list(existing_events) + list(new_npc_events)
+
+    # --- Phase 6.5: Social Simulation ---
+    social_state = _load_social_state(history_state)
+
+    reputation = ReputationGraph.from_dict(social_state.get("reputation"))
+    alliances = AllianceSystem.from_dict(social_state.get("alliances"))
+    rumors = RumorSystem.from_dict(social_state.get("rumors"))
+    group_engine = GroupDecisionEngine.from_dict(social_state.get("group_positions"))
+
+    all_events = []
+    for bucket_name in ("events", "consequences"):
+        bucket = history_state.get(bucket_name) or []
+        if isinstance(bucket, list):
+            for item in bucket:
+                if isinstance(item, dict):
+                    all_events.append(item)
+
+    # 6.5.1 reputation updates from player-facing and betrayal events
+    for event in all_events:
+        typ = str(event.get("type") or "")
+        actor = str(event.get("actor") or "")
+        target_id = str(event.get("target_id") or "")
+        faction_id = str(event.get("faction_id") or "")
+
+        if actor == "player" and faction_id:
+            if typ == "player_support":
+                reputation.update(faction_id, "player", "trust", 0.20)
+                reputation.update(faction_id, "player", "respect", 0.10)
+            elif typ == "player_escalation":
+                reputation.update(faction_id, "player", "hostility", 0.20)
+                reputation.update(faction_id, "player", "fear", 0.10)
+
+        if typ == "betrayal":
+            source_id = str(event.get("source_id") or "")
+            if source_id and target_id:
+                reputation.update(source_id, target_id, "hostility", 0.40)
+                reputation.update(target_id, source_id, "trust", -0.40)
+                reputation.update(target_id, source_id, "hostility", 0.20)
+                reputation.update(target_id, source_id, "fear", 0.10)
+
+    # 6.5.2 alliances
+    faction_ids = sorted({
+        str(npc.get("faction_id") or "")
+        for npc in (history_state.get("npc_index") or {}).values()
+        if str(npc.get("faction_id") or "")
+    })
+    for faction_id in faction_ids:
+        faction_view = reputation.get(faction_id, "player")
+        if faction_view.get("hostility", 0.0) >= 0.30:
+            opposing = [
+                other for other in faction_ids
+                if other != faction_id and reputation.get(other, "player").get("hostility", 0.0) >= 0.30
+            ]
+            if opposing:
+                best = sorted(opposing, key=lambda x: (reputation.get(x, "player").get("hostility", 0), x))[0]
+                alliances.propose_or_strengthen([faction_id, best], "Shared hostility toward player", delta=0.10)
+
+    # 6.5.3 betrayal propagation
+    social_events = []
+    for event in all_events:
+        social_events.extend(BetrayalPropagation.apply(event, social_state))
+
+    if social_events:
+        history_state.setdefault("events", []).extend(social_events[:8])
+
+    # 6.5.4 rumors
+    rumors.spawn_from_events(all_events + social_events, tick=next_tick)
+    rumors.advance()
+
+    # 6.5.5 group positions from NPC minds
+    npc_index = history_state.get("npc_index") or {}
+    npc_minds = history_state.get("npc_minds") or {}
+    members_by_faction = {}
+    for npc_id, npc in sorted(npc_index.items()):
+        faction_id = str(npc.get("faction_id") or "")
+        if not faction_id:
+            continue
+        members_by_faction.setdefault(faction_id, {})
+        if npc_id in npc_minds and isinstance(npc_minds[npc_id], dict):
+            members_by_faction[faction_id][npc_id] = npc_minds[npc_id]
+
+    for faction_id, member_minds in sorted(members_by_faction.items()):
+        group_engine.evaluate_faction(faction_id, member_minds, tick=next_tick)
+
+    history_state["social_state"] = {
+        "reputation": reputation.to_dict(),
+        "alliances": alliances.to_dict(),
+        "rumors": rumors.to_dict(),
+        "group_positions": group_engine.to_dict(),
+    }
+    history_state["active_rumors"] = rumors.active(limit=8)
 
     # Write back into setup copy (final state with effects applied)
     meta["simulation_state"] = history_state

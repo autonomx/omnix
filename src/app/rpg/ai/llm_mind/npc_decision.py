@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Any, Dict
 
 
@@ -18,10 +16,10 @@ class NPCDecision:
     urgency: float
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        return self.__dict__.copy()
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any] | None) -> "NPCDecision":
+    def from_dict(cls, data: Dict[str, Any] | None):
         data = data or {}
         return cls(
             npc_id=str(data.get("npc_id") or ""),
@@ -34,25 +32,4 @@ class NPCDecision:
             reason=str(data.get("reason") or ""),
             dialogue_hint=str(data.get("dialogue_hint") or ""),
             urgency=float(data.get("urgency", 0.0) or 0.0),
-        )
-
-    @classmethod
-    def fallback(
-        cls,
-        npc_id: str,
-        tick: int,
-        location_id: str,
-        reason: str = "No strong action selected",
-    ) -> "NPCDecision":
-        return cls(
-            npc_id=npc_id,
-            tick=tick,
-            intent="wait",
-            action_type="wait",
-            target_id="",
-            target_kind="",
-            location_id=location_id,
-            reason=reason,
-            dialogue_hint="The NPC hesitates and watches events unfold.",
-            urgency=0.10,
         )

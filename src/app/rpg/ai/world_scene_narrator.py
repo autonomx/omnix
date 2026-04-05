@@ -24,6 +24,30 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Phase 6.5 — social context helpers
+# ---------------------------------------------------------------------------
+def _attach_social_context(scene, simulation_state):
+    scene = dict(scene or {})
+    simulation_state = simulation_state or {}
+    social_state = simulation_state.get("social_state") or {}
+
+    scene["active_rumors"] = [
+        dict(item)
+        for item in (simulation_state.get("active_rumors") or [])[:3]
+    ]
+    scene["active_alliances"] = [
+        dict(item)
+        for item in (social_state.get("alliances") or [])
+        if item.get("status") == "active"
+    ][:3]
+    scene["faction_positions"] = {
+        key: dict(value)
+        for key, value in sorted((social_state.get("group_positions") or {}).items())
+    }
+    return scene
+
+
+# ---------------------------------------------------------------------------
 # Phase 6 — NPC mind context helpers
 # ---------------------------------------------------------------------------
 
@@ -182,7 +206,10 @@ def build_npc_reaction_prompt(
     relation_info = f"Relation to player: {npc_relation}" if npc_relation else ""
     memory_info = f"Recent memory: {npc_memory}" if npc_memory else ""
     beliefs_info = f"Current beliefs: {', '.join(str(v) for v in npc_beliefs.values())}" if npc_beliefs else ""
-    relationships_info = f"Relationships: {', '.join(f'{k}: {v}' for k, v in npc_relationships.items())}" if npc_relationships else ""
+    relationships_info = f"Relationships: {npc_relationships}" if npc_relationships else ""
+    rumor_info = f"Rumors in circulation: {scene.get('active_rumors', [])}" if scene.get("active_rumors") else ""
+    alliance_info = f"Active alliances: {scene.get('active_alliances', [])}" if scene.get("active_alliances") else ""
+    faction_position_info = f"Faction positions: {scene.get('faction_positions', {})}" if scene.get("faction_positions") else ""
     goals_list_info = f"Active goals: {npc_active_goals}" if npc_active_goals else ""
     last_decision_info = f"Last decision: {npc_last_decision}" if npc_last_decision else ""
 
@@ -195,6 +222,9 @@ Character: {npc_name}
 {memory_info}
 {beliefs_info}
 {relationships_info}
+{rumor_info}
+{alliance_info}
+{faction_position_info}
 {goals_list_info}
 {last_decision_info}
 

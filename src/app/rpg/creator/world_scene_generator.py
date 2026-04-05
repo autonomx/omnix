@@ -77,6 +77,10 @@ def _collect_scene_actors(source_id, simulation_state, max_actors=4):
                 actor["mind_context"] = {
                     "last_decision": mind.get("last_decision") or {},
                 }
+            # Phase 6.5: Add faction stance to actors
+            group_positions = (simulation_state.get("social_state") or {}).get("group_positions") or {}
+            if npc_faction_id and npc_faction_id in group_positions:
+                actor["faction_position"] = dict(group_positions[npc_faction_id])
             actors.append(actor)
 
     return actors[:max_actors]
@@ -468,6 +472,22 @@ def generate_scenes_from_simulation(
         # Also try to match by scene actors (which are often source_ids)
         if not source_id and scene.get("actors"):
             source_id = _safe_str(scene["actors"][0]) if scene["actors"] else ""
+
+        # Phase 6.5: attach scene-level social context
+        social_state = state.get("social_state") or {}
+        scene["active_rumors"] = [
+            dict(item)
+            for item in (state.get("active_rumors") or [])[:3]
+        ]
+        scene["active_alliances"] = [
+            dict(item)
+            for item in (social_state.get("alliances") or [])
+            if item.get("status") == "active"
+        ][:3]
+        scene["faction_positions"] = {
+            key: dict(value)
+            for key, value in sorted((social_state.get("group_positions") or {}).items())
+        }
 
         enriched_actors = list(scene.get("actors") or [])
         enriched_actors.extend(_collect_scene_actors(
