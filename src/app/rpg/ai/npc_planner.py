@@ -1,13 +1,13 @@
 import random
 
-from rpg.ai.goap import Action
-from rpg.ai.goap.planner import plan as goap_plan
-from rpg.ai.goap.actions import default_actions as goap_default_actions
-from rpg.ai.goap.state_builder import build_world_state, select_goal
-from rpg.ai.memory_context import build_memory_context, summarize_relationships
-from rpg.spatial import distance, astar
-from rpg.emotion import decay_emotions
-from rpg.simulation import find_npc
+from app.rpg.ai.goap import Action
+from app.rpg.ai.goap.planner import plan as goap_plan
+from app.rpg.ai.goap.actions import default_actions as goap_default_actions
+from app.rpg.ai.goap.state_builder import build_world_state, select_goal
+from app.rpg.ai.memory_context import build_memory_context, summarize_relationships
+from app.rpg.spatial import distance, astar
+from app.rpg.emotion import decay_emotions
+from app.rpg.simulation import find_npc
 
 
 def move_toward(npc, session):
@@ -155,7 +155,7 @@ def choose_target(npc, session):
     Returns:
         Best target entity ID string
     """
-    from rpg.memory.belief_system import pick_best_target
+    from app.rpg.memory.belief_system import pick_best_target
 
     anger_map = npc.emotional_state.get("anger_map", {})
 
@@ -208,7 +208,7 @@ def decide(npc, session):
     update_npc_emotions(npc)
 
     # 🔥 Initialize belief system if not present
-    from rpg.systems.memory_system import init_npc_belief_system
+    from app.rpg.systems.memory_system import init_npc_belief_system
     init_npc_belief_system(npc)
 
     # Build rich context for memory retrieval

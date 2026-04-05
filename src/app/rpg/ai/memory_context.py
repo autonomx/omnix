@@ -9,7 +9,7 @@ Provides:
 
 import math
 
-from rpg.memory.retrieval import retrieve_memories
+from app.rpg.memory.retrieval import retrieve_memories
 
 
 def build_memory_context(npc, current_event: dict, session) -> str:

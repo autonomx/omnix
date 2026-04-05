@@ -1,4 +1,5 @@
 from .game_state import SceneOutput
+from .npc import NPC
 import sys
 import os
 _models_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models.py")

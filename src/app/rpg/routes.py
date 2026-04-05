@@ -10,7 +10,7 @@ import logging
 from flask import Blueprint, Response, jsonify, request
 
 from app.rpg.models import GameSession
-from app.rpg.persistence import delete_game, list_games, load_game, save_game
+from app.rpg.pipeline import delete_game, list_games, load_game, save_game
 from app.rpg.pipeline import (
     build_game_context,
     create_new_game,

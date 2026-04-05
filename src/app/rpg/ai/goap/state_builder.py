@@ -11,7 +11,7 @@ Spatial awareness: Distance to targets is computed and injected
 into the world state for range-based decision making.
 """
 
-from rpg.spatial import euclidean_distance
+from app.rpg.spatial import euclidean_distance
 
 
 def inject_beliefs_into_state(npc, state):
@@ -262,7 +262,7 @@ def select_goal(npc, session=None):
         hostile = bs.get("hostile_targets", [])
         if hostile:
             # Use best target scoring instead of just first
-            from rpg.memory.belief_system import pick_best_target
+            from app.rpg.memory.belief_system import pick_best_target
             best_target = pick_best_target(npc, hostile)
             target = best_target if best_target else hostile[0]
             return {

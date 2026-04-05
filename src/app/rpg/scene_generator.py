@@ -6,10 +6,10 @@ Architecture:
 The simulation is truth. The LLM can only add atmosphere, never change facts.
 """
 
-from rpg.models import SceneOutput
-from rpg.scene.grounding import build_grounding_block
-from rpg.scene.renderer import render_scene_deterministic, render_with_llm_flavor
-from rpg.scene.validator import validate_scene
+from app.rpg.models import SceneOutput
+from app.rpg.scene.grounding import build_grounding_block
+from app.rpg.scene.renderer import render_scene_deterministic, render_with_llm_flavor
+from app.rpg.scene.validator import validate_scene
 
 
 def generate_scene(session, director, result, event, npc_actions):

@@ -76,6 +76,23 @@ from app.rpg.memory.campaign_memory_builder import CampaignMemoryBuilder
 from app.rpg.memory.presenters import MemoryPresenter
 from app.rpg.memory.core import CampaignMemoryCore
 
+
+def update_memory(session, events):
+    """Update session memory with new events.
+    
+    This is a compatibility function used by the pipeline.
+    It appends events to the session's recent_events list.
+    
+    Args:
+        session: The game session.
+        events: List of events to record.
+    """
+    if not hasattr(session, 'recent_events'):
+        session.recent_events = []
+    session.recent_events.extend(events or [])
+    session.recent_events = session.recent_events[-100:]
+
+
 __all__ = [
     # Episodic (Layer 3)
     "Episode",
@@ -127,4 +144,5 @@ __all__ = [
     "CampaignMemoryBuilder",
     "MemoryPresenter",
     "CampaignMemoryCore",
+    "update_memory",
 ]

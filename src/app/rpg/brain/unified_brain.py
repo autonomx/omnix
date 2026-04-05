@@ -1,5 +1,5 @@
-from rpg.ai.npc_planner import decide as npc_decide
-from rpg.memory.retrieval import retrieve
+from app.rpg.ai.npc_planner import decide as npc_decide
+from app.rpg.memory.retrieval import retrieve_memories
 
 
 def interpret_player_input(player_input: str) -> dict:
@@ -83,7 +83,8 @@ def unified_brain(session, player_input, context):
     """
     enriched_npcs = []
     for npc in session.npcs:
-        memory = retrieve(npc, {"type": "damage"})
+        current_time = session.world.time if hasattr(session, 'world') else 0
+        memory = retrieve_memories(npc, {"type": "damage"}, current_time, k=3)
         enriched_npcs.append({
             "id": npc.id,
             "memory": memory

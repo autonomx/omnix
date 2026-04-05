@@ -25,6 +25,7 @@ def create_app() -> Flask:
     from app.rpg.api.rpg_player_routes import rpg_player_bp
     from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
     from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
+    from app.rpg.api.rpg_package_routes import rpg_package_bp
     from app.services import services_bp
     from app.voice_studio import voice_studio_bp
 
@@ -62,5 +63,6 @@ def create_app() -> Flask:
     app.register_blueprint(rpg_player_bp)
     app.register_blueprint(rpg_dialogue_bp)
     app.register_blueprint(rpg_encounter_bp)
+    app.register_blueprint(rpg_package_bp)
 
     return app

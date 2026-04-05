@@ -1,504 +1,429 @@
-1. Create src/app/rpg/sandbox/__init__.py
-from .outcome_projection import project_outcomes_from_state
-from .location_dynamics import update_location_trends
-from .thread_evolution import update_thread_trends
-from .faction_dynamics import update_faction_trends
-from .rumor_feedback import update_rumor_feedback
-from .world_consequence_builder import build_world_consequences
-
-__all__ = [
-    "project_outcomes_from_state",
-    "update_location_trends",
-    "update_thread_trends",
-    "update_faction_trends",
-    "update_rumor_feedback",
-    "build_world_consequences",
-]
-2. Create src/app/rpg/sandbox/outcome_projection.py
-
-Purpose:
-
-derive structured world-impacting outcomes from recent events, consequences, and encounters
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_MAX_PROJECTED = 24
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def project_outcomes_from_state(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    simulation_state = dict(simulation_state or {})
-    tick = int(simulation_state.get("tick", 0) or 0)
-
-    events = _safe_list(simulation_state.get("events"))
-    consequences = _safe_list(simulation_state.get("consequences"))
-    active_rumors = _safe_list(simulation_state.get("active_rumors"))
-    encounter_state = dict((simulation_state.get("player_state") or {}).get("encounter_state") or {})
-
-    projected: List[Dict[str, Any]] = []
-
-    for item in events[-8:]:
-        if not isinstance(item, dict):
-            continue
-        typ = _safe_str(item.get("type"))
-        target_id = _safe_str(item.get("target_id"))
-        location_id = _safe_str(item.get("location_id"))
-        faction_id = _safe_str(item.get("faction_id"))
-
-        if typ in {"betrayal", "player_escalation", "trust_collapse"}:
-            projected.append({
-                "type": "faction_pressure",
-                "target_id": faction_id or target_id,
-                "location_id": location_id,
-                "summary": _safe_str(item.get("summary")) or typ,
-                "tick": tick,
-            })
-        elif typ in {"player_support", "support", "stabilize"}:
-            projected.append({
-                "type": "location_stabilization",
-                "target_id": location_id or target_id,
-                "location_id": location_id,
-                "summary": _safe_str(item.get("summary")) or typ,
-                "tick": tick,
-            })
-
-    for item in consequences[-8:]:
-        if not isinstance(item, dict):
-            continue
-        projected.append({
-            "type": "thread_shift",
-            "target_id": _safe_str(item.get("target_id")) or _safe_str(item.get("thread_id")),
-            "location_id": _safe_str(item.get("location_id")),
-            "summary": _safe_str(item.get("summary")) or _safe_str(item.get("type")),
-            "tick": tick,
-        })
-
-    if encounter_state.get("status") == "resolved":
-        projected.append({
-            "type": "encounter_resolution",
-            "target_id": _safe_str(encounter_state.get("scene_id")),
-            "location_id": "",
-            "summary": "Encounter resolution projected into world state.",
-            "tick": tick,
-        })
-
-    for rumor in active_rumors[:4]:
-        if not isinstance(rumor, dict):
-            continue
-        projected.append({
-            "type": "rumor_pressure",
-            "target_id": _safe_str(rumor.get("subject_id")) or _safe_str(rumor.get("faction_id")),
-            "location_id": _safe_str(rumor.get("location_id")),
-            "summary": _safe_str(rumor.get("text")) or _safe_str(rumor.get("type")),
-            "tick": tick,
-        })
-
-    projected.sort(key=lambda x: (x.get("type", ""), x.get("target_id", ""), x.get("location_id", ""), x.get("summary", "")))
-    return projected[:_MAX_PROJECTED]
-3. Create src/app/rpg/sandbox/location_dynamics.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def _clamp01(v: float) -> float:
-    return max(0.0, min(1.0, float(v)))
-
-
-def update_location_trends(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
-    simulation_state = dict(simulation_state or {})
-    sandbox_state = simulation_state.setdefault("sandbox_state", {})
-    trends = _safe_dict(sandbox_state.get("location_trends"))
-    tick = int(simulation_state.get("tick", 0) or 0)
-
-    for outcome in _safe_list(projected_outcomes):
-        if not isinstance(outcome, dict):
-            continue
-        location_id = _safe_str(outcome.get("location_id")) or _safe_str(outcome.get("target_id"))
-        if not location_id:
-            continue
-
-        rec = _safe_dict(trends.get(location_id))
-        rec.setdefault("stability", 0.5)
-        rec.setdefault("danger", 0.5)
-        rec.setdefault("control_faction_id", "")
-        rec["updated_tick"] = tick
-
-        typ = _safe_str(outcome.get("type"))
-        if typ == "location_stabilization":
-            rec["stability"] = _clamp01(float(rec["stability"]) + 0.1)
-            rec["danger"] = _clamp01(float(rec["danger"]) - 0.1)
-        elif typ in {"faction_pressure", "rumor_pressure", "encounter_resolution"}:
-            rec["danger"] = _clamp01(float(rec["danger"]) + 0.05)
-
-        trends[location_id] = rec
-
-    sandbox_state["location_trends"] = {
-        k: trends[k] for k in sorted(trends)[:100]
-    }
-    return simulation_state
-4. Create src/app/rpg/sandbox/thread_evolution.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def _clamp01(v: float) -> float:
-    return max(0.0, min(1.0, float(v)))
-
-
-def update_thread_trends(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
-    simulation_state = dict(simulation_state or {})
-    sandbox_state = simulation_state.setdefault("sandbox_state", {})
-    trends = _safe_dict(sandbox_state.get("thread_trends"))
-    tick = int(simulation_state.get("tick", 0) or 0)
-
-    for outcome in _safe_list(projected_outcomes):
-        if not isinstance(outcome, dict):
-            continue
-        if _safe_str(outcome.get("type")) != "thread_shift":
-            continue
-
-        thread_id = _safe_str(outcome.get("target_id"))
-        if not thread_id:
-            continue
-
-        rec = _safe_dict(trends.get(thread_id))
-        rec.setdefault("trajectory", "cooling")
-        rec.setdefault("intensity", 0.5)
-        rec["updated_tick"] = tick
-
-        summary = _safe_str(outcome.get("summary")).lower()
-        if "resolve" in summary:
-            rec["trajectory"] = "resolved"
-            rec["intensity"] = _clamp01(float(rec["intensity"]) - 0.3)
-        elif "branch" in summary:
-            rec["trajectory"] = "branching"
-            rec["intensity"] = _clamp01(float(rec["intensity"]) + 0.2)
-        else:
-            rec["trajectory"] = "escalating"
-            rec["intensity"] = _clamp01(float(rec["intensity"]) + 0.1)
-
-        trends[thread_id] = rec
-
-    sandbox_state["thread_trends"] = {
-        k: trends[k] for k in sorted(trends)[:100]
-    }
-    return simulation_state
-5. Create src/app/rpg/sandbox/faction_dynamics.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def _clamp01(v: float) -> float:
-    return max(0.0, min(1.0, float(v)))
-
-
-def update_faction_trends(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
-    simulation_state = dict(simulation_state or {})
-    sandbox_state = simulation_state.setdefault("sandbox_state", {})
-    trends = _safe_dict(sandbox_state.get("faction_trends"))
-    tick = int(simulation_state.get("tick", 0) or 0)
-
-    for outcome in _safe_list(projected_outcomes):
-        if not isinstance(outcome, dict):
-            continue
-        if _safe_str(outcome.get("type")) != "faction_pressure":
-            continue
-
-        faction_id = _safe_str(outcome.get("target_id"))
-        if not faction_id:
-            continue
-
-        rec = _safe_dict(trends.get(faction_id))
-        rec.setdefault("momentum", 0.5)
-        rec.setdefault("cohesion", 0.5)
-        rec.setdefault("aggression", 0.5)
-        rec["updated_tick"] = tick
-
-        rec["aggression"] = _clamp01(float(rec["aggression"]) + 0.1)
-        rec["momentum"] = _clamp01(float(rec["momentum"]) + 0.05)
-
-        trends[faction_id] = rec
-
-    sandbox_state["faction_trends"] = {
-        k: trends[k] for k in sorted(trends)[:100]
-    }
-    return simulation_state
-6. Create src/app/rpg/sandbox/rumor_feedback.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def update_rumor_feedback(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
-    simulation_state = dict(simulation_state or {})
-    social_state = dict(simulation_state.get("social_state") or {})
-    rumors = _safe_list(social_state.get("rumors"))
-
-    for rumor in rumors:
-        if not isinstance(rumor, dict):
-            continue
-        subject_id = _safe_str(rumor.get("subject_id"))
-        for outcome in _safe_list(projected_outcomes):
-            if not isinstance(outcome, dict):
-                continue
-            if _safe_str(outcome.get("target_id")) == subject_id:
-                rumor["heat"] = min(3, int(rumor.get("heat", 0) or 0) + 1)
-
-    social_state["rumors"] = rumors[:64]
-    simulation_state["social_state"] = social_state
-    return simulation_state
-7. Create src/app/rpg/sandbox/world_consequence_builder.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_MAX_WORLD_CONSEQUENCES = 100
-
-
-def _safe_dict(v: Any) -> Dict[str, Any]:
-    return dict(v) if isinstance(v, dict) else {}
-
-
-def _safe_list(v: Any) -> List[Any]:
-    return list(v) if isinstance(v, list) else []
-
-
-def _safe_str(v: Any) -> str:
-    return "" if v is None else str(v)
-
-
-def build_world_consequences(simulation_state: Dict[str, Any], projected_outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
-    simulation_state = dict(simulation_state or {})
-    sandbox_state = simulation_state.setdefault("sandbox_state", {})
-    tick = int(simulation_state.get("tick", 0) or 0)
-
-    consequences = _safe_list(sandbox_state.get("world_consequences"))
-    idx = len(consequences)
-
-    for outcome in _safe_list(projected_outcomes):
-        if not isinstance(outcome, dict):
-            continue
-        typ = _safe_str(outcome.get("type"))
-        target_id = _safe_str(outcome.get("target_id"))
-        if not typ or not target_id:
-            continue
-
-        if typ == "location_stabilization":
-            ctype = "location_shift"
-            severity = "positive"
-        elif typ == "faction_pressure":
-            ctype = "faction_shift"
-            severity = "negative"
-        elif typ == "thread_shift":
-            ctype = "thread_shift"
-            severity = "mixed"
-        else:
-            ctype = "rumor_shift"
-            severity = "mixed"
-
-        consequences.append({
-            "consequence_id": f"wc:{tick}:{idx}",
-            "type": ctype,
-            "target_id": target_id,
-            "summary": _safe_str(outcome.get("summary")) or typ,
-            "severity": severity,
-            "tick": tick,
-        })
-        idx += 1
-
-    sandbox_state["world_consequences"] = consequences[-_MAX_WORLD_CONSEQUENCES:]
-    return simulation_state
-Integration patches
-8. Patch src/app/rpg/creator/world_simulation.py
-
-Add imports:
-
-from app.rpg.sandbox import (
-    project_outcomes_from_state,
-    update_location_trends,
-    update_thread_trends,
-    update_faction_trends,
-    update_rumor_feedback,
-    build_world_consequences,
-)
-
-Then after your social-state updates and before final writeback, add:
-
-# --- Phase 8.3: sandbox/world simulation depth ---
-projected_outcomes = project_outcomes_from_state(history_state)
-history_state.setdefault("sandbox_state", {})
-history_state["sandbox_state"]["projected_outcomes"] = projected_outcomes[:24]
-
-history_state = update_location_trends(history_state, projected_outcomes)
-history_state = update_thread_trends(history_state, projected_outcomes)
-history_state = update_faction_trends(history_state, projected_outcomes)
-history_state = update_rumor_feedback(history_state, projected_outcomes)
-history_state = build_world_consequences(history_state, projected_outcomes)
-
-Also expose a compact summary for scenes / debug:
-
-history_state["sandbox_summary"] = {
-    "projected_outcome_count": len(projected_outcomes),
-    "world_consequence_count": len((history_state.get("sandbox_state") or {}).get("world_consequences") or []),
-}
-9. Patch src/app/rpg/encounter/encounter_resolver.py
-
-Add world-facing outcome markers into encounter log entries so later projection is more meaningful.
-
-Inside apply_player_action(...), extend the appended log item:
-
-"log_type": action_type,
-"target_id": target_id,
-
-So it becomes:
-
-log.append({
-    "round": int(encounter_state.get("round", 1) or 1),
-    "text": text,
-    "type": "player_action",
-    "log_type": action_type,
-    "target_id": target_id,
-})
-
-In apply_npc_turn(...), add:
-
-"log_type": "npc_turn",
-"target_id": "",
-10. Patch src/app/rpg/api/rpg_encounter_routes.py
-
-When an encounter resolves or aborts, append a structured simulation event so Phase 8.3 has concrete hooks.
-
-In /api/rpg/encounter/action after resolve_if_finished(...):
-
-if encounter_state.get("status") == "resolved":
-    state.setdefault("events", []).append({
-        "type": "encounter_resolved",
-        "origin": "encounter",
-        "target_id": encounter_state.get("scene_id", ""),
-        "summary": "Encounter resolved and fed back into the world.",
-    })
-
-In /api/rpg/encounter/end:
-
-state.setdefault("events", []).append({
-    "type": "encounter_aborted",
-    "origin": "encounter",
-    "target_id": encounter_state.get("scene_id", ""),
-    "summary": "Encounter was aborted.",
-})
-11. Patch src/app/rpg/creator/world_scene_generator.py
-
-Expose sandbox summary into scenes:
-
-scene["sandbox_summary"] = dict(state.get("sandbox_summary") or {})
-
-Also include recent world consequences:
-
-scene["world_consequences"] = list(
-    ((state.get("sandbox_state") or {}).get("world_consequences") or [])[-3:]
-)
-12. Patch src/app/rpg/ai/world_scene_narrator.py
-
-Add sandbox context to scene prompt.
-
-In prompt-building area, add:
-
-sandbox_info = f"Sandbox summary: {scene.get('sandbox_summary', {})}" if scene.get("sandbox_summary") else ""
-world_consequence_info = f"Recent world consequences: {scene.get('world_consequences', [])}" if scene.get("world_consequences") else ""
-
-Include them in prompt body near social/debug context.
-
-Also include in metadata result if you already return metadata:
-
-"sandbox_summary": scene.get("sandbox_summary", {}),
-13. Register the package if needed
-
-No blueprint is required for 8.3 unless you want a dedicated API, which I would skip for now.
-
-Minimal tests for Phase 8.3
+Phase 8.5 — Save Migration and Packaging Interoperability
+Goal
+
+Make saves durable across future phases.
+
+After 8.5, you should be able to:
+
+load older saves after schema changes
+export/import a complete RPG package safely
+version simulation/player/social/sandbox state
+migrate forward deterministically
+validate corrupted/incomplete save payloads
+keep replay/snapshot compatibility
+
+This phase is about state contract stability.
+
+Design rules
+every persisted package must carry a schema version
+migrations are forward-only and deterministic
+loading must normalize missing keys
+export/import format must be explicit and portable
+runtime state and package state should be clearly separated
+no silent destructive migration
+validation errors must be structured
+New modules
 
 Create:
 
-src/tests/unit/rpg/test_phase83_outcome_projection.py
-src/tests/unit/rpg/test_phase83_sandbox_dynamics.py
-src/tests/regression/test_phase83_world_depth_regression.py
+src/app/rpg/persistence/
+  __init__.py
+  save_schema.py
+  migration_manager.py
+  migrations/
+    __init__.py
+    v1_to_v2.py
+    v2_to_v3.py
+  package_builder.py
+  package_loader.py
+  package_validator.py
 
-Suggested coverage:
+src/app/rpg/api/
+  rpg_package_routes.py
+Canonical package shape
 
-projected outcomes are bounded and deterministic
-location trend updates clamp correctly
-thread trajectory changes correctly
-faction trend updates correctly
-rumor heat feedback increments correctly
-world consequences capped to 100
-resolved encounter emits feedback event
-scenes include sandbox summary and recent world consequences
-same input world state → same projected outcomes
+All exported/imported saves should normalize to this top-level shape:
+
+{
+    "package_type": "rpg_save_package",
+    "schema_version": 3,
+    "engine_version": "phase_8_5",
+    "created_at": "...",
+    "updated_at": "...",
+    "adventure": {
+        "setup_payload": {...},
+        "metadata": {...},
+    },
+    "state": {
+        "simulation_state": {...},
+    },
+    "artifacts": {
+        "snapshots": [],
+        "timeline": {},
+    },
+}
+
+Important:
+
+setup_payload remains the primary gameplay bundle
+simulation_state remains the canonical world state
+package metadata wraps them for migration/import/export
+Versioning policy
+
+Start with:
+
+CURRENT_RPG_SCHEMA_VERSION = 3
+
+Suggested meaning:
+
+v1: pre-player/social/sandbox stabilization
+v2: player/social/debug layers normalized
+v3: encounter + sandbox + package metadata normalized
+File-by-file apply-this-patch spec
+1. Create src/app/rpg/persistence/__init__.py
+from .save_schema import CURRENT_RPG_SCHEMA_VERSION
+from .migration_manager import migrate_package_to_current
+from .package_builder import build_save_package
+from .package_loader import load_save_package
+from .package_validator import validate_save_package
+
+__all__ = [
+    "CURRENT_RPG_SCHEMA_VERSION",
+    "migrate_package_to_current",
+    "build_save_package",
+    "load_save_package",
+    "validate_save_package",
+]
+2. Create src/app/rpg/persistence/save_schema.py
+from __future__ import annotations
+
+CURRENT_RPG_SCHEMA_VERSION = 3
+PACKAGE_TYPE = "rpg_save_package"
+ENGINE_VERSION = "phase_8_5"
+3. Create src/app/rpg/persistence/migrations/__init__.py
+from .v1_to_v2 import migrate_v1_to_v2
+from .v2_to_v3 import migrate_v2_to_v3
+
+__all__ = [
+    "migrate_v1_to_v2",
+    "migrate_v2_to_v3",
+]
+4. Create src/app/rpg/persistence/migrations/v1_to_v2.py
+
+Purpose:
+
+normalize missing player/debug/social scaffolding
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+def _safe_dict(v: Any) -> Dict[str, Any]:
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def migrate_v1_to_v2(package: Dict[str, Any]) -> Dict[str, Any]:
+    package = dict(package or {})
+    state = _safe_dict(package.get("state"))
+    simulation_state = _safe_dict(state.get("simulation_state"))
+
+    simulation_state.setdefault("player_state", {})
+    simulation_state.setdefault("social_state", {})
+    simulation_state.setdefault("debug_meta", {})
+    simulation_state.setdefault("gm_overrides", {})
+
+    state["simulation_state"] = simulation_state
+    package["state"] = state
+    package["schema_version"] = 2
+    return package
+5. Create src/app/rpg/persistence/migrations/v2_to_v3.py
+
+Purpose:
+
+normalize encounter/sandbox/package artifact structure
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+def _safe_dict(v: Any) -> Dict[str, Any]:
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def migrate_v2_to_v3(package: Dict[str, Any]) -> Dict[str, Any]:
+    package = dict(package or {})
+    state = _safe_dict(package.get("state"))
+    simulation_state = _safe_dict(state.get("simulation_state"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+
+    player_state.setdefault("encounter_state", {})
+    player_state.setdefault("dialogue_state", {})
+    simulation_state.setdefault("sandbox_state", {})
+    simulation_state["player_state"] = player_state
+    state["simulation_state"] = simulation_state
+    package["state"] = state
+
+    artifacts = _safe_dict(package.get("artifacts"))
+    artifacts.setdefault("snapshots", [])
+    artifacts.setdefault("timeline", {})
+    package["artifacts"] = artifacts
+
+    package["schema_version"] = 3
+    return package
+6. Create src/app/rpg/persistence/migration_manager.py
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from .save_schema import CURRENT_RPG_SCHEMA_VERSION
+from .migrations import migrate_v1_to_v2, migrate_v2_to_v3
+
+
+def _safe_int(v: Any, default: int = 1) -> int:
+    try:
+        return int(v)
+    except Exception:
+        return default
+
+
+def migrate_package_to_current(package: Dict[str, Any]) -> Dict[str, Any]:
+    package = dict(package or {})
+    version = _safe_int(package.get("schema_version"), 1)
+
+    while version < CURRENT_RPG_SCHEMA_VERSION:
+        if version == 1:
+            package = migrate_v1_to_v2(package)
+        elif version == 2:
+            package = migrate_v2_to_v3(package)
+        else:
+            raise ValueError(f"Unsupported schema migration path from version {version}")
+        version = _safe_int(package.get("schema_version"), version + 1)
+
+    return package
+7. Create src/app/rpg/persistence/package_validator.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from .save_schema import PACKAGE_TYPE
+
+
+def _safe_dict(v: Any) -> Dict[str, Any]:
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def validate_save_package(package: Dict[str, Any]) -> List[Dict[str, str]]:
+    package = dict(package or {})
+    errors: List[Dict[str, str]] = []
+
+    if package.get("package_type") != PACKAGE_TYPE:
+        errors.append({"field": "package_type", "error": "invalid package type"})
+
+    adventure = _safe_dict(package.get("adventure"))
+    state = _safe_dict(package.get("state"))
+
+    if not isinstance(adventure.get("setup_payload"), dict):
+        errors.append({"field": "adventure.setup_payload", "error": "missing or invalid setup_payload"})
+
+    if not isinstance(state.get("simulation_state"), dict):
+        errors.append({"field": "state.simulation_state", "error": "missing or invalid simulation_state"})
+
+    return errors
+8. Create src/app/rpg/persistence/package_builder.py
+from __future__ import annotations
+
+from typing import Any, Dict
+from datetime import datetime, timezone
+
+from .save_schema import (
+    CURRENT_RPG_SCHEMA_VERSION,
+    PACKAGE_TYPE,
+    ENGINE_VERSION,
+)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _safe_dict(v: Any) -> Dict[str, Any]:
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def build_save_package(setup_payload: Dict[str, Any]) -> Dict[str, Any]:
+    setup_payload = dict(setup_payload or {})
+    metadata = _safe_dict(setup_payload.get("metadata"))
+    simulation_state = _safe_dict(metadata.get("simulation_state"))
+
+    return {
+        "package_type": PACKAGE_TYPE,
+        "schema_version": CURRENT_RPG_SCHEMA_VERSION,
+        "engine_version": ENGINE_VERSION,
+        "created_at": _utc_now(),
+        "updated_at": _utc_now(),
+        "adventure": {
+            "setup_payload": setup_payload,
+            "metadata": metadata,
+        },
+        "state": {
+            "simulation_state": simulation_state,
+        },
+        "artifacts": {
+            "snapshots": list(simulation_state.get("snapshots") or []),
+            "timeline": dict(simulation_state.get("timeline") or {}),
+        },
+    }
+9. Create src/app/rpg/persistence/package_loader.py
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from .migration_manager import migrate_package_to_current
+from .package_validator import validate_save_package
+
+
+def _safe_dict(v: Any) -> Dict[str, Any]:
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def load_save_package(package: Dict[str, Any]) -> Dict[str, Any]:
+    package = migrate_package_to_current(dict(package or {}))
+    errors = validate_save_package(package)
+    if errors:
+        raise ValueError(f"Invalid RPG save package: {errors}")
+
+    adventure = _safe_dict(package.get("adventure"))
+    setup_payload = _safe_dict(adventure.get("setup_payload"))
+    state = _safe_dict(package.get("state"))
+    simulation_state = _safe_dict(state.get("simulation_state"))
+
+    metadata = _safe_dict(setup_payload.get("metadata"))
+    metadata["simulation_state"] = simulation_state
+    setup_payload["metadata"] = metadata
+    return setup_payload
+10. Create src/app/rpg/api/rpg_package_routes.py
+from __future__ import annotations
+
+from flask import Blueprint, jsonify, request
+
+from app.rpg.persistence import (
+    build_save_package,
+    load_save_package,
+    validate_save_package,
+    migrate_package_to_current,
+)
+
+
+rpg_package_bp = Blueprint("rpg_package_bp", __name__)
+
+
+@rpg_package_bp.post("/api/rpg/package/export")
+def export_package():
+    data = request.get_json(silent=True) or {}
+    setup_payload = dict(data.get("setup_payload") or {})
+    package = build_save_package(setup_payload)
+    return jsonify({
+        "ok": True,
+        "package": package,
+    })
+
+
+@rpg_package_bp.post("/api/rpg/package/validate")
+def validate_package():
+    data = request.get_json(silent=True) or {}
+    package = dict(data.get("package") or {})
+    migrated = migrate_package_to_current(package)
+    errors = validate_save_package(migrated)
+    return jsonify({
+        "ok": len(errors) == 0,
+        "errors": errors,
+        "package": migrated,
+    })
+
+
+@rpg_package_bp.post("/api/rpg/package/import")
+def import_package():
+    data = request.get_json(silent=True) or {}
+    package = dict(data.get("package") or {})
+    setup_payload = load_save_package(package)
+    return jsonify({
+        "ok": True,
+        "setup_payload": setup_payload,
+    })
+11. Register the package blueprint
+
+Patch src/app/__init__.py:
+
+diff --git a/src/app/__init__.py b/src/app/__init__.py
+index XXXXXXX..PHASE8501 100644
+--- a/src/app/__init__.py
++++ b/src/app/__init__.py
+@@ -24,6 +24,7 @@ def create_app() -> Flask:
+     from app.rpg.api.rpg_player_routes import rpg_player_bp
+     from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
+     from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
++    from app.rpg.api.rpg_package_routes import rpg_package_bp
+@@ -61,6 +62,7 @@ def create_app() -> Flask:
+     app.register_blueprint(rpg_player_bp)
+     app.register_blueprint(rpg_dialogue_bp)
+     app.register_blueprint(rpg_encounter_bp)
++    app.register_blueprint(rpg_package_bp)
+ 
+     return app
+12. Patch src/app/rpg/creator/world_debug.py
+
+Expose package/schema info for GM inspection.
+
+Add in summary payloads where appropriate:
+
+"package_schema_version": 3,
+
+Or better, import CURRENT_RPG_SCHEMA_VERSION and include it in the debug state endpoint response.
+
+13. Optional patch: add save metadata into simulation_state
+
+When stepping simulation, ensure:
+
+history_state.setdefault("save_meta", {})
+history_state["save_meta"]["schema_version"] = 3
+history_state["save_meta"]["engine_version"] = "phase_8_5"
+
+This is helpful for debugging and migration tracing, but package metadata remains the source of truth.
+
+Test plan
+
+Create:
+
+src/tests/unit/rpg/test_phase85_migration_manager.py
+src/tests/unit/rpg/test_phase85_package_builder.py
+src/tests/functional/test_phase85_package_routes.py
+src/tests/regression/test_phase85_save_compatibility_regression.py
+
+Cover:
+
+Unit
+v1 → v2 migration
+v2 → v3 migration
+migration manager reaches current schema
+validator rejects bad package type
+builder includes required top-level keys
+loader writes simulation_state back into setup_payload
+Functional
+/api/rpg/package/export
+/api/rpg/package/validate
+/api/rpg/package/import
+Regression
+old package fixtures still import
+export → import roundtrip preserves simulation_state
+package schema version is stable
+snapshots/timeline survive roundtrip
 Success criteria
 
-After this phase:
+After 8.5:
 
-encounter and event outcomes propagate deeper into the world
-locations gain longer-term trend state
-factions gain momentum/aggression trend state
-threads evolve more meaningfully
-rumors intensify or cool from actual world outcomes
-narration reflects broader world shifts
-the sandbox keeps moving even beyond immediate scene resolution
+you can safely export/import an RPG save package
+older package versions migrate forward deterministically
+schema versioning is explicit
+invalid packages fail validation clearly
+replay/snapshot-bearing saves survive roundtrips
+future phases can evolve state with migration hooks instead of brittle ad hoc fixes

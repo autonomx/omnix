@@ -17,8 +17,8 @@ Grounding includes:
     - Recent events
 """
 
-from rpg.spatial import euclidean_distance
-from rpg.memory.relationships import (
+from app.rpg.spatial import euclidean_distance
+from app.rpg.memory.relationships import (
     get_all_relationship_summaries,
 )
 
