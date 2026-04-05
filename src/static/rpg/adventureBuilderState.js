@@ -85,7 +85,11 @@ var AdventureBuilderState = (function () {
                 snapshots: [],
                 selectedSnapshotIndex: null,
                 compareMode: false,
-                entityHistory: null
+                entityHistory: null,
+                diffFilters: {
+                    nodeType: 'all',
+                    changeType: 'all'
+                }
             }
         };
     }

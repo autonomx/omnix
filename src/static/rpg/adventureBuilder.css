@@ -476,6 +476,67 @@
     color: #f2c94c;
 }
 
+/* Phase 2.5 — Diff chip colors for improved clarity */
+.ab-diff-added {
+    color: #6ee7b7;
+}
+
+.ab-diff-removed {
+    color: #f87171;
+}
+
+.ab-diff-changed {
+    color: #93c5fd;
+}
+
+/* Phase 2.5 — Timeline badges for CURRENT / SELECTED markers */
+.ab-timeline-badges {
+    display: flex;
+    gap: 6px;
+}
+
+.ab-timeline-badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.ab-timeline-badge-compare {
+    background: rgba(147, 197, 253, 0.18);
+}
+
+/* Phase 2.5 — Diff filter controls */
+.ab-diff-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.ab-diff-filters select {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #e0e0e0;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.ab-diff-filters select:focus {
+    outline: none;
+    border-color: rgba(100, 150, 255, 0.5);
+}
+
+.ab-diff-filters label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.65);
+}
+
 .ab-diff-detail {
     margin-bottom: 16px;
 }

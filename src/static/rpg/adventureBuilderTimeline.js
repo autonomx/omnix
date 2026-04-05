@@ -73,26 +73,70 @@ var AdventureBuilderTimeline = (function () {
     /**
      * Render a compact diff summary bar.
      * @param {HTMLElement} container
-     * @param {Object|null} diff  - { added, removed, changed }
+     * @param {Object|null} diff  - Server diff response (nodes, edges, summary)
      */
     function renderGraphDiffSummary(container, diff) {
         if (!container) return;
-        if (!diff || (!diff.added.length && !diff.removed.length && !(diff.changed && diff.changed.length))) {
+        diff = diff || {};
+        var added = (diff.nodes && diff.nodes.added || []).length;
+        var removed = (diff.nodes && diff.nodes.removed || []).length;
+        var changed = (diff.nodes && diff.nodes.changed || []).length;
+        var edgeAdded = (diff.edges && diff.edges.added || []).length;
+        var edgeRemoved = (diff.edges && diff.edges.removed || []).length;
+        if (!added && !removed && !changed && !edgeAdded && !edgeRemoved) {
             container.innerHTML = '';
             return;
         }
-        var html = '<div class="ab-wg-diff-summary">';
-        if (diff.added && diff.added.length) {
-            html += '<span class="ab-wg-diff-chip ab-diff-added">+ ' + diff.added.length + ' added</span>';
-        }
-        if (diff.removed && diff.removed.length) {
-            html += '<span class="ab-wg-diff-chip ab-diff-removed">\u2212 ' + diff.removed.length + ' removed</span>';
-        }
-        if (diff.changed && diff.changed.length) {
-            html += '<span class="ab-wg-diff-chip ab-diff-changed">\u0394 ' + diff.changed.length + ' changed</span>';
-        }
-        html += '</div>';
+        var html = '<div class="ab-wg-diff-summary">' +
+            '<span class="ab-wg-diff-chip ab-diff-added">+' + _esc(added) + ' added</span>' +
+            '<span class="ab-wg-diff-chip ab-diff-removed">-' + _esc(removed) + ' removed</span>' +
+            '<span class="ab-wg-diff-chip ab-diff-changed">~' + _esc(changed) + ' changed</span>' +
+            '<span class="ab-wg-diff-chip">+' + _esc(edgeAdded) + ' edges</span>' +
+            '<span class="ab-wg-diff-chip">-' + _esc(edgeRemoved) + ' edges</span>' +
+            '</div>';
         container.innerHTML = html;
+    }
+
+    /**
+     * Render diff filter controls.
+     * @param {HTMLElement} container
+     * @param {Object} filters - { nodeType, changeType }
+     * @param {Function} onChange - Callback with new filters
+     */
+    function renderDiffFilters(container, filters, onChange) {
+        if (!container) return;
+        filters = filters || { nodeType: 'all', changeType: 'all' };
+        container.innerHTML = '' +
+            '<div class="ab-diff-filters">' +
+                '<label>Node Type ' +
+                    '<select id="abDiffNodeType">' +
+                        '<option value="all">All</option>' +
+                        '<option value="npc">NPC</option>' +
+                        '<option value="faction">Faction</option>' +
+                        '<option value="location">Location</option>' +
+                        '<option value="thread">Thread</option>' +
+                        '<option value="opening">Opening</option>' +
+                    '</select>' +
+                '</label>' +
+                '<label>Change Type ' +
+                    '<select id="abDiffChangeType">' +
+                        '<option value="all">All</option>' +
+                        '<option value="added">Added</option>' +
+                        '<option value="removed">Removed</option>' +
+                        '<option value="changed">Changed</option>' +
+                    '</select>' +
+                '</label>' +
+            '</div>';
+        var nt = container.querySelector('#abDiffNodeType');
+        var ct = container.querySelector('#abDiffChangeType');
+        if (nt) nt.value = filters.nodeType || 'all';
+        if (ct) ct.value = filters.changeType || 'all';
+        if (nt) nt.addEventListener('change', function () {
+            onChange({ nodeType: nt.value, changeType: ct ? ct.value : 'all' });
+        });
+        if (ct) ct.addEventListener('change', function () {
+            onChange({ nodeType: nt ? nt.value : 'all', changeType: ct.value });
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -396,6 +440,7 @@ var AdventureBuilderTimeline = (function () {
         computeGraphDiff: computeGraphDiff,
         computeAndStoreGraphDiff: computeAndStoreGraphDiff,
         renderGraphDiffSummary: renderGraphDiffSummary,
+        renderDiffFilters: renderDiffFilters,
         renderTimeline: renderTimeline,
         renderDiffTab: renderDiffTab,
         renderEntityCompare: renderEntityCompare

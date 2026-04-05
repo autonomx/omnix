@@ -976,24 +976,65 @@ var AdventureBuilder = (function () {
 
     function _renderStep5Diff(contentEl) {
         var wi = state.worldInspection || {};
-        var html = '<div class="ab-section ab-wg-section"><div id="abDiffContent"></div></div>';
+        var html = '<div class="ab-section ab-wg-section">' +
+            '<div id="abDiffSummary"></div>' +
+            '<div id="abDiffFilters"></div>' +
+            '<div id="abDiffBody"></div>' +
+            '</div>';
         contentEl.innerHTML = html;
-        var panel = contentEl.querySelector('#abDiffContent');
+        var summaryEl = contentEl.querySelector('#abDiffSummary');
+        var filtersEl = contentEl.querySelector('#abDiffFilters');
+        var bodyEl = contentEl.querySelector('#abDiffBody');
 
-        AdventureBuilderTimeline.renderDiffTab(panel, wi.graphDiff, function (entityId) {
-            // On entity click — fetch entity diff and show compare
-            var snap = (wi.snapshots || [])[wi.selectedSnapshotIndex];
-            if (!snap || !snap.setup) return;
-            AdventureBuilderApi.compareEntity(snap.setup, state.setup, entityId).then(function (res) {
-                if (res.success) {
-                    wi.entityHistory = res;
-                    var comparePanel = document.createElement('div');
-                    comparePanel.className = 'ab-entity-compare-container';
-                    panel.appendChild(comparePanel);
-                    AdventureBuilderTimeline.renderEntityCompare(comparePanel, res.diff, entityId);
-                }
-            }).catch(function () { /* silent */ });
-        });
+        if (summaryEl) AdventureBuilderTimeline.renderGraphDiffSummary(summaryEl, wi.graphDiff);
+
+        if (filtersEl) {
+            AdventureBuilderTimeline.renderDiffFilters(filtersEl, wi.diffFilters || { nodeType: 'all', changeType: 'all' }, function (nextFilters) {
+                state.worldInspection.diffFilters = nextFilters;
+                _renderStep5(overlayEl.querySelector('#abBody'));
+            });
+        }
+
+        if (bodyEl) {
+            var diff = wi.graphDiff || { nodes: { added: [], removed: [], changed: [] }, edges: { added: [], removed: [] } };
+            var filters = wi.diffFilters || { nodeType: 'all', changeType: 'all' };
+
+            // Filter changed nodes by type
+            var changedNodes = (diff.nodes.changed || []).filter(function (item) {
+                if (filters.nodeType === 'all') return true;
+                return (wi.graph && wi.graph.nodes || []).some(function (n) {
+                    return n.id === item.id && n.type === filters.nodeType;
+                });
+            });
+
+            // Filter added nodes by type
+            var addedNodes = (diff.nodes.added || []).filter(function (id) {
+                if (filters.nodeType === 'all') return true;
+                return (wi.graph && wi.graph.nodes || []).some(function (n) {
+                    return n.id === id && n.type === filters.nodeType;
+                });
+            });
+
+            // Filter removed nodes by type (we may not have graph data for removed, so show all)
+            var removedNodes = (diff.nodes.removed || []).filter(function () {
+                return filters.nodeType === 'all';
+            });
+
+            var h = '';
+
+            if (filters.changeType === 'all' || filters.changeType === 'added') {
+                h += '<h5>Added Nodes</h5><pre>' + _esc(JSON.stringify(addedNodes, null, 2)) + '</pre>';
+            }
+            if (filters.changeType === 'all' || filters.changeType === 'removed') {
+                h += '<h5>Removed Nodes</h5><pre>' + _esc(JSON.stringify(removedNodes, null, 2)) + '</pre>';
+            }
+            if (filters.changeType === 'all' || filters.changeType === 'changed') {
+                h += '<h5>Changed Nodes</h5><pre>' + _esc(JSON.stringify(changedNodes, null, 2)) + '</pre>';
+            }
+            h += '<h5>Added Edges</h5><pre>' + _esc(JSON.stringify(diff.edges.added || [], null, 2)) + '</pre>';
+            h += '<h5>Removed Edges</h5><pre>' + _esc(JSON.stringify(diff.edges.removed || [], null, 2)) + '</pre>';
+            bodyEl.innerHTML = h;
+        }
     }
 
     // ── World graph fetch and render ──

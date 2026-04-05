@@ -187,10 +187,26 @@ class TestBuildWorldSnapshot:
         snap = build_world_snapshot(_base_setup())
         assert "entities" in snap["inspector"]
 
+    def test_snapshot_has_content_hash(self):
+        from app.rpg.creator.world_snapshot import build_world_snapshot
+        snap = build_world_snapshot(_base_setup())
+        assert "content_hash" in snap
+        assert isinstance(snap["content_hash"], str)
+
+    def test_snapshot_id_is_stable_for_identical_setup(self):
+        from app.rpg.creator.world_snapshot import build_world_snapshot
+        setup = _base_setup()
+        snap1 = build_world_snapshot(setup, label="A")
+        snap2 = build_world_snapshot(setup, label="B")
+        assert snap1["content_hash"] == snap2["content_hash"]
+        assert snap1["snapshot_id"] == snap2["snapshot_id"]
+
     def test_snapshot_ids_are_unique(self):
         from app.rpg.creator.world_snapshot import build_world_snapshot
         snap1 = build_world_snapshot(_base_setup())
-        snap2 = build_world_snapshot(_base_setup())
+        setup2 = _base_setup()
+        setup2["title"] = "Different Title"
+        snap2 = build_world_snapshot(setup2)
         assert snap1["snapshot_id"] != snap2["snapshot_id"]
 
     def test_empty_setup(self):
@@ -346,6 +362,29 @@ class TestComputeGraphDiffEdges:
         assert diff["edges"]["added"] == []
         assert diff["edges"]["removed"] == []
 
+    def test_compute_graph_diff_dedupes_and_normalizes_edges(self):
+        from app.rpg.creator.world_snapshot import compute_graph_diff
+
+        before = {
+            "nodes": [],
+            "edges": [
+                {"source": "a", "target": "b", "type": "member_of"},
+                {"source": "a", "target": "b", "type": "member_of"},
+            ],
+        }
+        after = {
+            "nodes": [],
+            "edges": [
+                {"source": "a", "target": "b", "type": "member_of"},
+                {"source": "b", "target": "c", "type": "connected_to"},
+            ],
+        }
+        diff = compute_graph_diff(before, after)
+        assert diff["edges"]["removed"] == []
+        assert len(diff["edges"]["added"]) == 1
+        assert diff["edges"]["added"][0]["source"] == "b"
+        assert diff["edges"]["added"][0]["target"] == "c"
+
 
 # ===========================================================================
 # compute_graph_diff — Summary
@@ -395,7 +434,7 @@ class TestComputeEntityHistoryDiff:
         )
         assert result["exists_before"] is False
         assert result["exists_after"] is False
-        assert result["diff"]["changed_fields"] == []
+        assert result["changed_fields"] == []
 
     def test_entity_added(self):
         from app.rpg.creator.world_snapshot import build_world_snapshot, compute_entity_history_diff
@@ -426,7 +465,7 @@ class TestComputeEntityHistoryDiff:
         )
         assert result["exists_before"] is True
         assert result["exists_after"] is True
-        assert "tags" in result["diff"]["changed_fields"]
+        assert "tags" in result["changed_fields"]
 
     def test_entity_unchanged(self):
         from app.rpg.creator.world_snapshot import build_world_snapshot, compute_entity_history_diff
@@ -436,7 +475,7 @@ class TestComputeEntityHistoryDiff:
         )
         assert result["exists_before"] is True
         assert result["exists_after"] is True
-        assert result["diff"]["changed_fields"] == []
+        assert result["changed_fields"] == []
 
     def test_entity_before_and_after_populated(self):
         from app.rpg.creator.world_snapshot import build_world_snapshot, compute_entity_history_diff
@@ -445,31 +484,55 @@ class TestComputeEntityHistoryDiff:
         result = compute_entity_history_diff(
             before["inspector"], after["inspector"], "loc_night_market"
         )
-        assert "before" in result["diff"]
-        assert "after" in result["diff"]
-        assert result["diff"]["before"]["type"] == "location"
+        assert "before" in result
+        assert "after" in result
+        assert result["before"]["type"] == "location"
 
     def test_changing_npc_role_marks_changed(self):
         """Changing NPC role should appear as a changed field."""
         from app.rpg.creator.world_snapshot import compute_entity_history_diff
-        before = {"entities": {"npc_a": {"type": "npc", "role": "Guard", "name": "A"}}}
-        after = {"entities": {"npc_a": {"type": "npc", "role": "Assassin", "name": "A"}}}
+        before = {"entities": {"npc_a": {"details": {"type": "npc", "role": "Guard", "name": "A"}}}}
+        after = {"entities": {"npc_a": {"details": {"type": "npc", "role": "Assassin", "name": "A"}}}}
         result = compute_entity_history_diff(before, after, "npc_a")
-        assert "role" in result["diff"]["changed_fields"]
+        assert "role" in result["changed_fields"]
 
     def test_related_added(self):
         from app.rpg.creator.world_snapshot import compute_entity_history_diff
-        before = {"entities": {"npc_a": {"type": "npc", "related_threads": []}}}
-        after = {"entities": {"npc_a": {"type": "npc", "related_threads": [{"thread_id": "t1", "title": "T1"}]}}}
+        before = {"entities": {"npc_a": {"details": {"type": "npc"}, "related_ids": []}}}
+        after = {"entities": {"npc_a": {"details": {"type": "npc"}, "related_ids": ["t1"]}}}
         result = compute_entity_history_diff(before, after, "npc_a")
-        assert "t1" in result["diff"]["related_added"]
+        assert "t1" in result["related_added"]
 
     def test_related_removed(self):
         from app.rpg.creator.world_snapshot import compute_entity_history_diff
-        before = {"entities": {"npc_a": {"type": "npc", "related_threads": [{"thread_id": "t1", "title": "T1"}]}}}
-        after = {"entities": {"npc_a": {"type": "npc", "related_threads": []}}}
+        before = {"entities": {"npc_a": {"details": {"type": "npc"}, "related_ids": ["t1"]}}}
+        after = {"entities": {"npc_a": {"details": {"type": "npc"}, "related_ids": []}}}
         result = compute_entity_history_diff(before, after, "npc_a")
-        assert "t1" in result["diff"]["related_removed"]
+        assert "t1" in result["related_removed"]
+
+    def test_compute_entity_history_diff_list_aware_field_diffs(self):
+        from app.rpg.creator.world_snapshot import compute_entity_history_diff
+
+        before_inspector = {
+            "entities": {
+                "npc_a": {
+                    "details": {"goals": ["control market"]},
+                    "related_ids": [],
+                }
+            }
+        }
+        after_inspector = {
+            "entities": {
+                "npc_a": {
+                    "details": {"goals": ["control market", "expand territory"]},
+                    "related_ids": [],
+                }
+            }
+        }
+        diff = compute_entity_history_diff(before_inspector, after_inspector, "npc_a")
+        assert "goals" in diff["changed_fields"]
+        assert diff["field_diffs"]["goals"]["added"] == ["expand territory"]
+        assert diff["field_diffs"]["goals"]["removed"] == []
 
     def test_none_inspectors(self):
         from app.rpg.creator.world_snapshot import compute_entity_history_diff
