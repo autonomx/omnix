@@ -43,6 +43,7 @@ from .world_incidents import (
     merge_incidents,
     spawn_incidents_from_state_diff,
 )
+from app.rpg.ai.llm_mind import NPCMind
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +52,101 @@ from .world_incidents import (
 
 MAX_HISTORY = 20
 PRESSURE_CAP = 5
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — NPC mind helpers
+# ---------------------------------------------------------------------------
+
+
+def _safe_str_p6(value):
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _iter_npc_definitions(setup_payload):
+    """Best-effort extractor for NPC definitions from creator setup."""
+    setup_payload = setup_payload or {}
+
+    direct = setup_payload.get("npcs")
+    if isinstance(direct, list):
+        for item in direct:
+            if isinstance(item, dict):
+                yield item
+
+    # Also check npc_seeds (the standard key in this codebase)
+    seeds = setup_payload.get("npc_seeds")
+    if isinstance(seeds, list):
+        for item in seeds:
+            if isinstance(item, dict):
+                yield item
+
+    for section_key in ("world", "actors", "entities", "cast"):
+        section = setup_payload.get(section_key)
+        if isinstance(section, dict):
+            npcs = section.get("npcs")
+            if isinstance(npcs, list):
+                for item in npcs:
+                    if isinstance(item, dict):
+                        yield item
+
+
+def _build_npc_index(setup_payload):
+    npc_index = {}
+    for item in _iter_npc_definitions(setup_payload):
+        npc_id = _safe_str_p6(item.get("id") or item.get("npc_id"))
+        if not npc_id:
+            continue
+        npc_index[npc_id] = {
+            "npc_id": npc_id,
+            "name": _safe_str_p6(item.get("name")) or npc_id,
+            "role": _safe_str_p6(item.get("role")),
+            "faction_id": _safe_str_p6(item.get("faction_id")),
+            "location_id": _safe_str_p6(item.get("location_id")),
+        }
+    return dict(sorted(npc_index.items()))
+
+
+def _load_npc_minds(simulation_state, npc_index):
+    simulation_state = simulation_state or {}
+    raw = simulation_state.get("npc_minds") or {}
+    minds = {}
+    for npc_id, npc_ctx in sorted(npc_index.items()):
+        if npc_id in raw and isinstance(raw[npc_id], dict):
+            minds[npc_id] = NPCMind.from_dict(raw[npc_id])
+        else:
+            minds[npc_id] = NPCMind(npc_id=npc_id)
+    return minds
+
+
+def _decision_to_event(decision_dict, npc_context, tick):
+    decision_dict = decision_dict or {}
+    npc_context = npc_context or {}
+
+    npc_id = _safe_str_p6(decision_dict.get("npc_id"))
+    action_type = _safe_str_p6(decision_dict.get("action_type"))
+    target_id = _safe_str_p6(decision_dict.get("target_id"))
+    target_kind = _safe_str_p6(decision_dict.get("target_kind"))
+    location_id = _safe_str_p6(decision_dict.get("location_id")) or _safe_str_p6(npc_context.get("location_id"))
+    urgency = float(decision_dict.get("urgency", 0.0) or 0.0)
+
+    if action_type in {"wait", ""}:
+        return None
+
+    return {
+        "event_id": f"npc_event:{tick}:{npc_id}:{action_type}:{target_id or 'none'}",
+        "tick": int(tick),
+        "type": action_type,
+        "actor": npc_id,
+        "target_id": target_id,
+        "target_kind": target_kind,
+        "location_id": location_id,
+        "faction_id": _safe_str_p6(npc_context.get("faction_id")),
+        "summary": _safe_str_p6(decision_dict.get("reason")) or f"{npc_id} chooses to {action_type}",
+        "salience": min(max(urgency, 0.2), 1.0),
+        "source": "npc_mind",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -485,6 +581,61 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
     })
     history_state["events"] = events
     history_state["consequences"] = consequences
+
+    # --- Phase 6: NPC Mind Integration ---
+    npc_index = _build_npc_index(setup)
+    npc_minds = _load_npc_minds(current, npc_index)
+
+    observed_events = []
+    for bucket_name in ("events", "consequences", "incidents"):
+        bucket = history_state.get(bucket_name) or []
+        if isinstance(bucket, list):
+            for item in bucket:
+                if isinstance(item, dict):
+                    observed_events.append(item)
+
+    new_npc_decisions = []
+    new_npc_events = []
+
+    for npc_id, mind in sorted(npc_minds.items()):
+        npc_context = dict(npc_index.get(npc_id) or {"npc_id": npc_id})
+        mind.observe_events(observed_events, tick=next_tick, npc_context=npc_context)
+        mind.refresh_goals(simulation_state=history_state, npc_context=npc_context)
+        decision = mind.decide(simulation_state=history_state, npc_context=npc_context, tick=next_tick)
+        decision_dict = decision.to_dict()
+        new_npc_decisions.append(decision_dict)
+
+        npc_event = _decision_to_event(decision_dict, npc_context=npc_context, tick=next_tick)
+        if npc_event is not None:
+            new_npc_events.append(npc_event)
+
+    new_npc_decisions = sorted(
+        new_npc_decisions,
+        key=lambda item: (
+            str(item.get("npc_id") or ""),
+            str(item.get("action_type") or ""),
+            str(item.get("target_id") or ""),
+        ),
+    )[:12]
+
+    new_npc_events = sorted(
+        new_npc_events,
+        key=lambda item: (
+            str(item.get("actor") or ""),
+            str(item.get("type") or ""),
+            str(item.get("target_id") or ""),
+        ),
+    )[:12]
+
+    history_state["npc_index"] = npc_index
+    history_state["npc_minds"] = {
+        npc_id: mind.to_dict()
+        for npc_id, mind in sorted(npc_minds.items())
+    }
+    history_state["npc_decisions"] = list(new_npc_decisions)
+
+    existing_events = history_state.get("events") or []
+    history_state["events"] = list(existing_events) + list(new_npc_events)
 
     # Write back into setup copy (final state with effects applied)
     meta["simulation_state"] = history_state

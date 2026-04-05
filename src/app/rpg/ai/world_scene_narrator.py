@@ -24,6 +24,34 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Phase 6 — NPC mind context helpers
+# ---------------------------------------------------------------------------
+
+def _safe_str_p6(value):
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _attach_npc_mind_context(actor, simulation_state):
+    """Attach Phase 6 NPC mind context to an actor dict."""
+    actor = dict(actor or {})
+    simulation_state = simulation_state or {}
+
+    npc_id = _safe_str_p6(actor.get("id"))
+    npc_minds = simulation_state.get("npc_minds") or {}
+    mind = npc_minds.get(npc_id) or {}
+
+    if isinstance(mind, dict):
+        actor["memory_summary"] = ((mind.get("memory") or {}).get("entries") or [])[:5]
+        actor["belief_summary"] = ((mind.get("beliefs") or {}).get("beliefs") or {})
+        actor["active_goals"] = ((mind.get("goals") or {}).get("goals") or [])[:5]
+        actor["last_decision"] = mind.get("last_decision") or {}
+
+    return actor
+
+
+# ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
 
@@ -142,9 +170,12 @@ def build_npc_reaction_prompt(
     scene_title = scene.get("title", "Unknown Scene")
 
     # Phase 5.1: Inject NPC state (memory, beliefs, relationships)
+    # Phase 6: Enhanced with deterministic mind context
     npc_memory = npc.get("memory_summary", "")
-    npc_beliefs = npc.get("beliefs", {})
+    npc_beliefs = npc.get("beliefs", npc.get("belief_summary", {}))
     npc_relationships = npc.get("relationships", {})
+    npc_active_goals = npc.get("active_goals", [])
+    npc_last_decision = npc.get("last_decision", {})
 
     personality_info = f"Personality: {npc_personality}" if npc_personality else ""
     goals_info = f"Goals: {npc_goals}" if npc_goals else ""
@@ -152,6 +183,8 @@ def build_npc_reaction_prompt(
     memory_info = f"Recent memory: {npc_memory}" if npc_memory else ""
     beliefs_info = f"Current beliefs: {', '.join(str(v) for v in npc_beliefs.values())}" if npc_beliefs else ""
     relationships_info = f"Relationships: {', '.join(f'{k}: {v}' for k, v in npc_relationships.items())}" if npc_relationships else ""
+    goals_list_info = f"Active goals: {npc_active_goals}" if npc_active_goals else ""
+    last_decision_info = f"Last decision: {npc_last_decision}" if npc_last_decision else ""
 
     prompt = f"""You are generating NPC reactions for an RPG.
 
@@ -162,6 +195,8 @@ Character: {npc_name}
 {memory_info}
 {beliefs_info}
 {relationships_info}
+{goals_list_info}
+{last_decision_info}
 
 Scene: {scene_title}
 
@@ -170,7 +205,11 @@ Narrative:
 
 === INSTRUCTIONS ===
 Describe {npc_name}'s internal reaction to what just happened.
-Consider their memory, beliefs, and relationships when forming their reaction.
+- Use the NPC's active goals to shape what they want right now.
+- Use belief_summary about the player to determine tone.
+- Use memory_summary to maintain continuity.
+- Use last_decision so reactions align with recent intent.
+- Do not contradict the provided structured state.
 Then provide a short line of dialogue they might say.
 Specify their emotional state (one of: calm, tense, angry, fearful, curious, excited, neutral).
 Specify their immediate intent (one of: observe, act, confront, flee, negotiate, wait).

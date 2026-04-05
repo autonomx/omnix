@@ -1,270 +1,217 @@
-"""Goal Engine with Lifecycle Management.
-
-Patch 2: Goal Lifecycle
-- Goals track completion state (active -> completed/failed)
-- Progress increments based on matching events
-- Completed goals are pruned from active list
-- Summary includes completed/failed counts
-"""
-
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 
-class ActiveGoal:
-    """Represents an active goal with progress tracking and lifecycle.
+_MAX_GOALS = 5
 
-    Attributes:
-        goal: The goal definition dict.
-        progress: Float from 0.0 to 1.0 indicating completion.
-        completed: Whether this goal has been completed.
-        failed: Whether this goal has been abandoned/failed.
-    """
 
-    def __init__(self, goal: Dict[str, Any]):
-        """Initialize an active goal.
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
-        Args:
-            goal: Goal dict with 'type', 'target', 'priority' keys.
-        """
-        self.goal = goal
-        self.progress = 0.0
-        self.completed = False
-        self.failed = False
 
-    @property
-    def goal_type(self) -> str:
-        """Return the goal type."""
-        return self.goal.get("type", "unknown")
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
 
-    @property
-    def target(self) -> Optional[str]:
-        """Return the goal target."""
-        return self.goal.get("target")
 
-    @property
-    def priority(self) -> float:
-        """Return the goal priority."""
-        return self.goal.get("priority", 0.5)
+def _goal_sort_key(goal: Dict[str, Any]):
+    priority = _safe_float(goal.get("priority"), 0.0)
+    goal_id = _safe_str(goal.get("goal_id"))
+    return (-priority, goal_id)
 
-    def advance(self, amount: float) -> None:
-        """Advance goal progress.
 
-        Args:
-            amount: Amount to add to progress.
-        """
-        self.progress = min(1.0, max(0.0, self.progress + amount))
-        if self.progress >= 1.0:
-            self.completed = True
-
-    def mark_failed(self) -> None:
-        """Mark this goal as failed."""
-        self.failed = True
+@dataclass
+class GoalEngine:
+    goals: List[Dict[str, Any]] = field(default_factory=list)
+    max_goals: int = _MAX_GOALS
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return dict representation.
-
-        Returns:
-            Dict with goal state fields.
-        """
         return {
-            "type": self.goal_type,
-            "target": self.target,
-            "priority": self.priority,
-            "progress": self.progress,
-            "completed": self.completed,
-            "failed": self.failed,
-            "raw_goal": self.goal,
+            "goals": [dict(goal) for goal in self.goals],
+            "max_goals": int(self.max_goals),
         }
 
-    def __repr__(self) -> str:
-        return (
-            f"ActiveGoal(type='{self.goal_type}', "
-            f"progress={self.progress:.2f}, "
-            f"completed={self.completed}, failed={self.failed})"
-        )
-
-
-class GoalEngine:
-    """Manages NPC goals with lifecycle tracking and progress.
-
-    Patch 2 additions:
-    - Goals have completed/failed state
-    - Events advance progress for matching goals
-    - Completed goals are automatically pruned
-    - Summary shows full lifecycle state
-    """
-
-    def __init__(self, npc_id: str = ""):
-        """Initialize goal engine.
-
-        Args:
-            npc_id: NPC identifier.
-        """
-        self.npc_id = npc_id
-        self.active_goals: List[ActiveGoal] = []
-        self.completed_goals: List[ActiveGoal] = []
-        self.failed_goals: List[ActiveGoal] = []
-
-    def add_goal(self, goal: Dict[str, Any]) -> ActiveGoal:
-        """Add a goal to the active pool.
-
-        Args:
-            goal: Goal dict with 'type', 'priority', etc.
-
-        Returns:
-            The created ActiveGoal wrapper.
-        """
-        ag = ActiveGoal(goal)
-        self.active_goals.append(ag)
-        return ag
-
-    def add_goals(self, goals: List[Dict[str, Any]]) -> List[ActiveGoal]:
-        """Add multiple goals at once.
-
-        Args:
-            goals: List of goal dicts.
-
-        Returns:
-            List of created ActiveGoal wrappers.
-        """
-        added = []
-        for g in goals:
-            added.append(self.add_goal(g))
-        return added
-
-    def update_progress(self, event: Dict[str, Any]) -> List[ActiveGoal]:
-        """Update goal progress based on an event.
-
-        Patch 2: Match events to goals and advance progress.
-       复仇 events match revenge goals, attack events match attack goals, etc.
-
-        Args:
-            event: Event dict with 'type', 'target', 'actor' keys.
-
-        Returns:
-            List of goals that were completed by this event.
-        """
-        event_type = event.get("type", "")
-        event_target = event.get("target", "")
-        completed: List[ActiveGoal] = []
-
-        for g in self.active_goals:
-            if g.completed or g.failed:
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "GoalEngine":
+        data = data or {}
+        raw_goals = data.get("goals") or []
+        max_goals = int(data.get("max_goals", _MAX_GOALS) or _MAX_GOALS)
+        goals: List[Dict[str, Any]] = []
+        for item in raw_goals:
+            if not isinstance(item, dict):
                 continue
+            goals.append({
+                "goal_id": _safe_str(item.get("goal_id")),
+                "type": _safe_str(item.get("type")),
+                "target_id": _safe_str(item.get("target_id")),
+                "priority": _safe_float(item.get("priority"), 0.0),
+                "reason": _safe_str(item.get("reason")),
+                "status": _safe_str(item.get("status")) or "active",
+                "progress": _safe_float(item.get("progress"), 0.0),
+            })
+        engine = cls(goals=goals, max_goals=max_goals)
+        engine.goals = sorted(engine.goals, key=_goal_sort_key)[: engine.max_goals]
+        return engine
 
-            g_type = g.goal_type
-
-            # Revenge goals advance on attack/damage to the target
-            if g_type == "revenge" and event_type in ("attack", "damage", "kill"):
-                if event_target == g.target:
-                    g.advance(0.5)
-
-            # Protect goals advance when threat is neutralized
-            if g_type == "protect" and event_type in ("attack", "kill"):
-                if event_target == g.target:
-                    g.advance(0.3)
-
-            # Generic: any goal with matching target type advances
-            if g.target and event_target == g.target:
-                g.advance(0.2)
-
-            # Check for completion
-            if g.progress >= 1.0 and not g.completed:
-                g.completed = True
-                completed.append(g)
-
-        # Move completed goals
-        for g in completed:
-            self.active_goals.remove(g)
-            self.completed_goals.append(g)
-
-        return completed
-
-    def prune(self) -> Dict[str, int]:
-        """Remove completed/failed goals from active list.
-
-        Returns:
-            Dict with counts of pruned goals.
-        """
-        stats: Dict[str, int] = {"completed": 0, "failed": 0, "pruned": 0}
-
-        still_active: List[ActiveGoal] = []
-        for g in self.active_goals:
-            if g.completed:
-                self.completed_goals.append(g)
-                stats["completed"] += 1
-                stats["pruned"] += 1
-            elif g.failed:
-                self.failed_goals.append(g)
-                stats["failed"] += 1
-                stats["pruned"] += 1
-            else:
-                still_active.append(g)
-
-        self.active_goals = still_active
-        return stats
-
-    def clear_resolved(self) -> None:
-        """Remove completed/failed goals from active list.
-
-        Patch 2: Lifecycle cleanup - only keep non-resolved goals.
-        """
-        self.active_goals = [g for g in self.active_goals if not g.completed and not g.failed]
-        for g in self.active_goals[:]:
-            if g.completed:
-                self.completed_goals.append(g)
-            elif g.failed:
-                self.failed_goals.append(g)
-        self.active_goals = [g for g in self.active_goals if not g.completed and not g.failed]
-
-    def summarize(self) -> Dict[str, Any]:
-        """Return a summary of goal state.
-
-        Returns:
-            Dict with active, completed, failed counts and details.
-        """
+    def _make_goal(
+        self,
+        npc_id: str,
+        goal_type: str,
+        target_id: str,
+        priority: float,
+        reason: str,
+    ) -> Dict[str, Any]:
+        goal_id = f"goal:{npc_id}:{goal_type}:{target_id or 'none'}"
         return {
-            "active_count": len(self.active_goals),
-            "completed_count": len(self.completed_goals),
-            "failed_count": len(self.failed_goals),
-            "active": [g.to_dict() for g in self.active_goals],
-            "completed": [g.to_dict() for g in self.completed_goals[:5]],
-            "failed": [g.to_dict() for g in self.failed_goals[:5]],
+            "goal_id": goal_id,
+            "type": goal_type,
+            "target_id": target_id,
+            "priority": float(priority),
+            "reason": reason,
+            "status": "active",
+            "progress": 0.0,
         }
 
-    def get_highest_priority(self) -> Optional[ActiveGoal]:
-        """Return the highest priority active goal.
+    def generate_goals(
+        self,
+        npc_context: Dict[str, Any],
+        simulation_state: Dict[str, Any],
+        belief_summary: Dict[str, Dict[str, float]],
+        memory_summary: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        npc_context = npc_context or {}
+        simulation_state = simulation_state or {}
+        belief_summary = belief_summary or {}
 
-        Returns:
-            ActiveGoal with highest priority, or None.
-        """
-        if not self.active_goals:
+        npc_id = _safe_str(npc_context.get("npc_id"))
+        npc_location_id = _safe_str(npc_context.get("location_id"))
+        npc_faction_id = _safe_str(npc_context.get("faction_id"))
+
+        player_beliefs = belief_summary.get("player", {})
+        trust = _safe_float(player_beliefs.get("trust"), 0.0)
+        fear = _safe_float(player_beliefs.get("fear"), 0.0)
+        hostility = _safe_float(player_beliefs.get("hostility"), 0.0)
+
+        locations = simulation_state.get("locations") or {}
+        location_state = locations.get(npc_location_id) or {}
+        location_pressure = _safe_float(location_state.get("pressure"), 0.0)
+
+        goals: List[Dict[str, Any]] = []
+
+        if location_pressure >= 2.0 and npc_location_id:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="stabilize_location",
+                target_id=npc_location_id,
+                priority=0.80 + min(location_pressure * 0.05, 0.15),
+                reason="Local pressure is elevated",
+            ))
+
+        if npc_faction_id:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="support_faction",
+                target_id=npc_faction_id,
+                priority=0.45,
+                reason="Faction loyalty baseline",
+            ))
+
+        if hostility >= 0.35:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="retaliate",
+                target_id="player",
+                priority=0.70 + min(hostility * 0.20, 0.20),
+                reason="Player is viewed as hostile",
+            ))
+        elif fear >= 0.35:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="avoid_player",
+                target_id="player",
+                priority=0.65 + min(fear * 0.20, 0.20),
+                reason="Player is viewed as threatening",
+            ))
+        elif trust >= 0.35:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="approach_player",
+                target_id="player",
+                priority=0.60 + min(trust * 0.20, 0.20),
+                reason="Player is viewed as trustworthy",
+            ))
+        else:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="observe",
+                target_id="player",
+                priority=0.35,
+                reason="Maintain awareness of player",
+            ))
+
+        if memory_summary:
+            top_memory = memory_summary[0]
+            top_target = _safe_str(top_memory.get("target_id"))
+            top_type = _safe_str(top_memory.get("type"))
+            if top_target and top_target != "player" and top_type in {"incident", "attack", "destabilize", "threaten"}:
+                goals.append(self._make_goal(
+                    npc_id=npc_id,
+                    goal_type="investigate",
+                    target_id=top_target,
+                    priority=0.55,
+                    reason=f"Recent salient memory: {top_type}",
+                ))
+
+        goals = sorted(goals, key=_goal_sort_key)
+
+        deduped: List[Dict[str, Any]] = []
+        seen = set()
+        for goal in goals:
+            goal_id = goal["goal_id"]
+            if goal_id in seen:
+                continue
+            seen.add(goal_id)
+            deduped.append(goal)
+
+        return deduped[: self.max_goals]
+
+    def merge_goals(self, generated: List[Dict[str, Any]]) -> None:
+        generated = generated or []
+        merged = {}
+        for goal in self.goals + generated:
+            goal_id = _safe_str(goal.get("goal_id"))
+            if not goal_id:
+                continue
+            existing = merged.get(goal_id)
+            if existing is None or _safe_float(goal.get("priority"), 0.0) > _safe_float(existing.get("priority"), 0.0):
+                merged[goal_id] = dict(goal)
+        self.goals = sorted(merged.values(), key=_goal_sort_key)[: self.max_goals]
+
+    def top_goal(self) -> Dict[str, Any] | None:
+        if not self.goals:
             return None
-        return max(self.active_goals, key=lambda g: g.priority)
+        return dict(sorted(self.goals, key=_goal_sort_key)[0])
 
-    def has_goal_type(self, goal_type: str) -> bool:
-        """Check if a goal type is active.
+    def advance_from_event(self, event: Dict[str, Any]) -> None:
+        event = event or {}
+        target_id = _safe_str(event.get("target_id"))
+        event_type = _safe_str(event.get("type"))
 
-        Args:
-            goal_type: Goal type to search for.
-
-        Returns:
-            True if an active goal of that type exists.
-        """
-        return any(g.goal_type == goal_type and not g.completed and not g.failed for g in self.active_goals)
-
-    def reset(self) -> None:
-        """Clear all goals."""
-        self.active_goals.clear()
-        self.completed_goals.clear()
-        self.failed_goals.clear()
-
-    def __repr__(self) -> str:
-        return (
-            f"GoalEngine(npc='{self.npc_id}', "
-            f"active={len(self.active_goals)}, "
-            f"completed={len(self.completed_goals)}, "
-            f"failed={len(self.failed_goals)})"
-        )
+        updated: List[Dict[str, Any]] = []
+        for goal in self.goals:
+            new_goal = dict(goal)
+            if target_id and target_id == _safe_str(goal.get("target_id")):
+                progress = _safe_float(goal.get("progress"), 0.0)
+                if event_type in {"help", "support", "stabilize", "investigate", "negotiate"}:
+                    progress += 0.25
+                elif event_type in {"attack", "sabotage", "retaliate"}:
+                    progress += 0.15
+                new_goal["progress"] = min(progress, 1.0)
+            updated.append(new_goal)
+        self.goals = sorted(updated, key=_goal_sort_key)[: self.max_goals]
