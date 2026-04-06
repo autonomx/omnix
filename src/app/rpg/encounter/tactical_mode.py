@@ -37,11 +37,74 @@ def _ss(v: Any, d: str = "") -> str:
 MAX_PARTICIPANTS = 12
 MAX_ROUNDS = 50
 MAX_EFFECTS = 20
+MAX_ACTION_LOG = 200
 ENCOUNTER_MODES = {"combat", "stealth", "investigation", "diplomacy", "chase"}
 ENCOUNTER_STATUSES = {"inactive", "active", "resolved", "aborted"}
 ACTION_TYPES = {"attack", "defend", "move", "use_item", "ability", "flee",
                 "negotiate", "investigate", "hide", "assist"}
 EFFECT_TYPES = {"damage", "heal", "buff", "debuff", "status", "move"}
+
+
+def _normalize_mode(v: Any) -> str:
+    value = _ss(v, "combat")
+    return value if value in ENCOUNTER_MODES else "combat"
+
+
+def _normalize_status(v: Any) -> str:
+    value = _ss(v, "inactive")
+    return value if value in ENCOUNTER_STATUSES else "inactive"
+
+
+def _normalize_action_type(v: Any) -> str:
+    value = _ss(v)
+    return value if value in ACTION_TYPES else "defend"
+
+
+def _normalize_effect_type(v: Any) -> str:
+    value = _ss(v)
+    return value if value in EFFECT_TYPES else "status"
+
+
+def _sort_key_effect(eff: "CombatEffect") -> tuple[str, str, int]:
+    return (
+        _ss(eff.target_id),
+        _ss(eff.effect_id),
+        _si(eff.remaining),
+    )
+
+
+def _normalize_action_log_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    item = dict(item) if isinstance(item, dict) else {}
+    effects = item.get("effects") or []
+    if not isinstance(effects, list):
+        effects = []
+    return {
+        "action_id": _ss(item.get("action_id")),
+        "actor_id": _ss(item.get("actor_id")),
+        "action_type": _normalize_action_type(item.get("action_type")),
+        "success": bool(item.get("success", False)),
+        "effects": [
+            {
+                "type": _normalize_effect_type(e.get("type")),
+                "target": _ss(e.get("target")),
+                "value": _sf(e.get("value")),
+            }
+            for e in effects
+            if isinstance(e, dict)
+        ],
+        "narrative": _ss(item.get("narrative")),
+    }
+
+
+def _derive_active_effects_from_participants(
+    participants: List["TacticalParticipant"],
+) -> List["CombatEffect"]:
+    out: List[CombatEffect] = []
+    for participant in participants:
+        for eff in participant.effects:
+            out.append(CombatEffect.from_dict(eff.to_dict()))
+    out = sorted(out, key=_sort_key_effect)
+    return out
 
 # ---------------------------------------------------------------------------
 # 15.0 — Encounter state foundations
@@ -69,7 +132,7 @@ class CombatEffect:
     def from_dict(cls, d: Dict[str, Any]) -> "CombatEffect":
         return cls(
             effect_id=_ss(d.get("effect_id")),
-            effect_type=_ss(d.get("effect_type")),
+            effect_type=_normalize_effect_type(d.get("effect_type")),
             target_id=_ss(d.get("target_id")),
             value=_sf(d.get("value")),
             duration=max(0, _si(d.get("duration"), 1)),
@@ -108,7 +171,7 @@ class TacticalParticipant:
             team=_ss(d.get("team"), "neutral"),
             hp=_sf(d.get("hp"), 100.0), max_hp=_sf(d.get("max_hp"), 100.0),
             initiative=_sf(d.get("initiative")),
-            status=_ss(d.get("status"), "active"),
+            status=_ss(d.get("status"), "active") if _ss(d.get("status"), "active") in {"active", "incapacitated", "fled", "defeated"} else "active",
             position=_si(d.get("position")),
             effects=[CombatEffect.from_dict(e) for e in (d.get("effects") or [])],
             metadata=dict(d.get("metadata") or {}),
@@ -136,7 +199,7 @@ class TacticalAction:
         return cls(
             action_id=_ss(d.get("action_id")),
             actor_id=_ss(d.get("actor_id")),
-            action_type=_ss(d.get("action_type")),
+            action_type=_normalize_action_type(d.get("action_type")),
             target_id=_ss(d.get("target_id")),
             value=_sf(d.get("value")),
             metadata=dict(d.get("metadata") or {}),
@@ -170,13 +233,13 @@ class EncounterTacticalState:
     def from_dict(cls, d: Dict[str, Any]) -> "EncounterTacticalState":
         return cls(
             encounter_id=_ss(d.get("encounter_id")),
-            mode=_ss(d.get("mode"), "combat"),
-            status=_ss(d.get("status"), "inactive"),
+            mode=_normalize_mode(d.get("mode")),
+            status=_normalize_status(d.get("status")),
             round_number=_si(d.get("round_number")),
             turn_index=_si(d.get("turn_index")),
             participants=[TacticalParticipant.from_dict(p) for p in (d.get("participants") or [])],
             turn_order=list(d.get("turn_order") or []),
-            action_log=list(d.get("action_log") or []),
+            action_log=[_normalize_action_log_item(v) for v in (d.get("action_log") or []) if isinstance(v, dict)],
             active_effects=[CombatEffect.from_dict(e) for e in (d.get("active_effects") or [])],
         )
 
@@ -279,7 +342,9 @@ class ActionResolver:
         else:
             result["narrative"] = f"{actor.name} performs {action.action_type}"
 
-        state.action_log.append(result)
+        state.action_log.append(_normalize_action_log_item(result))
+        if len(state.action_log) > MAX_ACTION_LOG:
+            state.action_log = state.action_log[-MAX_ACTION_LOG:]
         return result
 
 
@@ -510,11 +575,23 @@ class EncounterDeterminismValidator:
             violations.append(f"participants exceed max ({len(state.participants)} > {MAX_PARTICIPANTS})")
         if state.round_number > MAX_ROUNDS:
             violations.append(f"rounds exceed max ({state.round_number} > {MAX_ROUNDS})")
+        if len(state.action_log) > MAX_ACTION_LOG:
+            violations.append(f"action_log exceeds max ({len(state.action_log)} > {MAX_ACTION_LOG})")
+        if state.mode not in ENCOUNTER_MODES:
+            violations.append(f"invalid encounter mode: {state.mode}")
+        if state.status not in ENCOUNTER_STATUSES:
+            violations.append(f"invalid encounter status: {state.status}")
         for p in state.participants:
             if p.hp < 0:
                 violations.append(f"participant {p.entity_id} hp negative: {p.hp}")
             if len(p.effects) > MAX_EFFECTS:
                 violations.append(f"participant {p.entity_id} effects exceed max")
+        participant_ids = {p.entity_id for p in state.participants}
+        for actor_id in state.turn_order:
+            if actor_id not in participant_ids:
+                violations.append(f"turn_order references unknown participant: {actor_id}")
+        if state.turn_order and (state.turn_index < 0 or state.turn_index >= len(state.turn_order)):
+            violations.append(f"turn_index out of range: {state.turn_index}")
         return violations
 
     @staticmethod
@@ -524,13 +601,34 @@ class EncounterDeterminismValidator:
             participants = participants[:MAX_PARTICIPANTS]
         for p in participants:
             p.hp = max(0.0, p.hp)
+            p.max_hp = max(0.0, p.max_hp)
+            p.initiative = _sf(p.initiative)
+            if p.status not in {"active", "incapacitated", "fled", "defeated"}:
+                p.status = "active"
             if len(p.effects) > MAX_EFFECTS:
                 p.effects = p.effects[-MAX_EFFECTS:]
+            p.effects = sorted(
+                [CombatEffect.from_dict(e.to_dict()) for e in p.effects],
+                key=_sort_key_effect,
+            )
+
+        turn_order = InitiativeSystem.compute_turn_order(participants)
+        turn_index = min(max(0, state.turn_index), max(0, len(turn_order) - 1)) if turn_order else 0
+        action_log = [
+            _normalize_action_log_item(v)
+            for v in list(state.action_log)[-MAX_ACTION_LOG:]
+            if isinstance(v, dict)
+        ]
+        active_effects = _derive_active_effects_from_participants(participants)
+
         return EncounterTacticalState(
-            encounter_id=state.encounter_id, mode=state.mode,
-            status=state.status, round_number=min(state.round_number, MAX_ROUNDS),
-            turn_index=state.turn_index, participants=participants,
-            turn_order=list(state.turn_order),
-            action_log=list(state.action_log),
-            active_effects=list(state.active_effects),
+            encounter_id=state.encounter_id,
+            mode=_normalize_mode(state.mode),
+            status=_normalize_status(state.status),
+            round_number=min(max(0, state.round_number), MAX_ROUNDS),
+            turn_index=turn_index,
+            participants=participants,
+            turn_order=turn_order,
+            action_log=action_log,
+            active_effects=active_effects,
         )

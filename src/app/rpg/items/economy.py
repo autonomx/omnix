@@ -30,6 +30,31 @@ def _si(v: Any, d: int = 0) -> int:
 def _ss(v: Any, d: str = "") -> str:
     return str(v) if v is not None else d
 
+
+def _find_inventory_item(inventory: "InventoryState", item_id: str) -> Optional["InventoryItem"]:
+    for item in inventory.items:
+        if item.item_id == item_id:
+            return item
+    return None
+
+
+def _merge_inventory_items(items: List["InventoryItem"]) -> List["InventoryItem"]:
+    merged: Dict[str, InventoryItem] = {}
+    for item in items:
+        if item.item_id not in merged:
+            merged[item.item_id] = InventoryItem(
+                item_id=item.item_id,
+                quantity=max(0, _si(item.quantity, 0)),
+                metadata=dict(item.metadata),
+            )
+        else:
+            merged[item.item_id].quantity += max(0, _si(item.quantity, 0))
+    out = list(merged.values())
+    out.sort(key=lambda i: i.item_id)
+    for item in out:
+        item.quantity = min(item.quantity, MAX_STACK)
+    return out
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -147,9 +172,25 @@ class EquipmentManager:
     """Manage equipment slots."""
 
     @staticmethod
-    def equip(inventory: InventoryState, item_id: str, slot: str) -> Dict[str, Any]:
+    def equip(
+        inventory: InventoryState,
+        item_id: str,
+        slot: str,
+        item_definitions: Optional[Dict[str, ItemDefinition]] = None,
+    ) -> Dict[str, Any]:
         if slot not in EQUIPMENT_SLOT_NAMES:
             return {"success": False, "reason": f"invalid slot: {slot}"}
+        inv_item = _find_inventory_item(inventory, item_id)
+        if inv_item is None or inv_item.quantity <= 0:
+            return {"success": False, "reason": "item not present in inventory"}
+        if item_definitions is not None:
+            definition = item_definitions.get(item_id)
+            if definition is None:
+                return {"success": False, "reason": f"unknown item definition: {item_id}"}
+            if not definition.equippable:
+                return {"success": False, "reason": "item is not equippable"}
+            if _ss(definition.slot) != slot:
+                return {"success": False, "reason": f"item slot mismatch: expected {definition.slot}, got {slot}"}
         previous = inventory.equipment.get(slot)
         inventory.equipment[slot] = item_id
         return {"success": True, "previous_item": previous, "slot": slot}
@@ -286,7 +327,10 @@ class ShopManager:
 
     @staticmethod
     def buy_item(player_inv: InventoryState, shop: ShopState,
-                 item_id: str, base_value: int) -> Dict[str, Any]:
+                 item_id: str, base_value: int,
+                 item_definitions: Optional[Dict[str, ItemDefinition]] = None) -> Dict[str, Any]:
+        if item_definitions is not None and item_id not in item_definitions:
+            return {"success": False, "reason": f"unknown item definition: {item_id}"}
         cost = int(base_value * shop.buy_modifier)
         gold = player_inv.currency.get("gold", 0)
         if gold < cost:
@@ -301,7 +345,10 @@ class ShopManager:
 
     @staticmethod
     def sell_item(player_inv: InventoryState, shop: ShopState,
-                  item_id: str, base_value: int) -> Dict[str, Any]:
+                  item_id: str, base_value: int,
+                  item_definitions: Optional[Dict[str, ItemDefinition]] = None) -> Dict[str, Any]:
+        if item_definitions is not None and item_id not in item_definitions:
+            return {"success": False, "reason": f"unknown item definition: {item_id}"}
         result = ConsumableManager.remove_item(player_inv, item_id, 1)
         if not result.get("success"):
             return result
@@ -415,13 +462,29 @@ class InventoryDeterminismValidator:
         return s1.to_dict() == s2.to_dict()
 
     @staticmethod
-    def validate_bounds(inventory: InventoryState) -> List[str]:
+    def validate_bounds(
+        inventory: InventoryState,
+        item_definitions: Optional[Dict[str, ItemDefinition]] = None,
+    ) -> List[str]:
         violations: List[str] = []
         if len(inventory.items) > MAX_INVENTORY_SLOTS:
             violations.append(f"items exceed max ({len(inventory.items)} > {MAX_INVENTORY_SLOTS})")
         for slot in inventory.equipment:
             if slot not in EQUIPMENT_SLOT_NAMES:
                 violations.append(f"invalid equipment slot: {slot}")
+        item_ids = {item.item_id for item in inventory.items if item.quantity > 0}
+        for slot, item_id in inventory.equipment.items():
+            if item_id not in item_ids:
+                violations.append(f"equipped item missing from inventory: {slot} -> {item_id}")
+            if item_definitions is not None:
+                definition = item_definitions.get(item_id)
+                if definition is None:
+                    violations.append(f"equipped item missing definition: {item_id}")
+                else:
+                    if not definition.equippable:
+                        violations.append(f"equipped item not equippable: {item_id}")
+                    if _ss(definition.slot) != slot:
+                        violations.append(f"equipped item slot mismatch: {item_id} in {slot}")
         for item in inventory.items:
             if item.quantity > MAX_STACK:
                 violations.append(f"item {item.item_id} exceeds max stack ({item.quantity} > {MAX_STACK})")
@@ -430,14 +493,26 @@ class InventoryDeterminismValidator:
         return violations
 
     @staticmethod
-    def normalize_state(inventory: InventoryState) -> InventoryState:
-        items = [i for i in inventory.items if i.quantity > 0]
-        for i in items:
-            i.quantity = min(i.quantity, MAX_STACK)
+    def normalize_state(
+        inventory: InventoryState,
+        item_definitions: Optional[Dict[str, ItemDefinition]] = None,
+    ) -> InventoryState:
+        items = [InventoryItem.from_dict(i.to_dict()) for i in inventory.items if i.quantity > 0]
+        items = _merge_inventory_items(items)
         if len(items) > MAX_INVENTORY_SLOTS:
             items = items[:MAX_INVENTORY_SLOTS]
-        equipment = {k: v for k, v in inventory.equipment.items()
-                     if k in EQUIPMENT_SLOT_NAMES}
+        item_ids = {item.item_id for item in items}
+        equipment = {}
+        for k, v in sorted(inventory.equipment.items()):
+            if k not in EQUIPMENT_SLOT_NAMES:
+                continue
+            if v not in item_ids:
+                continue
+            if item_definitions is not None:
+                definition = item_definitions.get(v)
+                if definition is None or not definition.equippable or _ss(definition.slot) != k:
+                    continue
+            equipment[k] = v
         return InventoryState(
             owner_id=inventory.owner_id,
             items=items, equipment=equipment,

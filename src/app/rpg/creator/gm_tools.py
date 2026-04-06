@@ -26,10 +26,73 @@ def _si(v: Any, d: int = 0) -> int:
 def _ss(v: Any, d: str = "") -> str:
     return str(v) if v is not None else d
 
+
+def _safe_dict(v: Any) -> Dict[str, Any]:
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def _safe_list(v: Any) -> List[Any]:
+    return list(v) if isinstance(v, list) else []
+
+
+def _normalize_override(override: Dict[str, Any], tick: int = 0) -> Dict[str, Any]:
+    override = _safe_dict(override)
+    return {
+        "type": _ss(override.get("type")),
+        "target_id": _ss(override.get("target_id")),
+        "payload": _safe_dict(override.get("payload")),
+        "tick": _si(override.get("tick"), tick),
+    }
+
+
+def _override_key(override: Dict[str, Any]) -> str:
+    override = _safe_dict(override)
+    return f"{_ss(override.get('type'))}:{_ss(override.get('target_id'))}"
+
+
+def _is_valid_package(package: Dict[str, Any]) -> bool:
+    package = _safe_dict(package)
+    if _si(package.get("_format_version")) != SUPPORTED_PACKAGE_FORMAT_VERSION:
+        return False
+    if "gm_state" not in package or "world_data" not in package:
+        return False
+    if not isinstance(package.get("gm_state"), dict):
+        return False
+    if not isinstance(package.get("world_data"), dict):
+        return False
+    return True
+
+
+def _is_json_like(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list):
+        return all(_is_json_like(v) for v in value)
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and _is_json_like(v) for k, v in value.items())
+    return False
+
+
+def _validate_world_data(world_data: Dict[str, Any]) -> bool:
+    world_data = _safe_dict(world_data)
+    if not world_data:
+        return True
+    return _is_json_like(world_data)
+
 # Constants
 MAX_OVERRIDES = 50
 MAX_TEMPLATES = 20
 MAX_EDIT_HISTORY = 100
+VALID_OVERRIDE_TYPES = {
+    "set_flag",
+    "force_scene_bias",
+    "pause_actor",
+    "force_goal",
+    "inject_dialogue_directive",
+}
+SUPPORTED_PACKAGE_FORMAT_VERSION = 1
 
 # ---------------------------------------------------------------------------
 # 19.0 — GM state / permissions foundations
@@ -182,11 +245,20 @@ class RuntimeOverrideTools:
                      tick: int) -> Dict[str, Any]:
         if not gm_state.permissions.can_override_runtime:
             return {"success": False, "reason": "no permission"}
-        override["tick"] = tick
-        gm_state.active_overrides.append(override)
+        normalized = _normalize_override(override, tick=tick)
+        if normalized["type"] not in VALID_OVERRIDE_TYPES:
+            return {"success": False, "reason": f"invalid override type: {normalized['type']}"}
+        if not normalized["target_id"]:
+            return {"success": False, "reason": "missing target_id"}
+
+        existing = {_override_key(v): _normalize_override(v) for v in gm_state.active_overrides}
+        existing[_override_key(normalized)] = normalized
+        gm_state.active_overrides = [
+            existing[k] for k in sorted(existing.keys())
+        ]
         if len(gm_state.active_overrides) > MAX_OVERRIDES:
             gm_state.active_overrides = gm_state.active_overrides[-MAX_OVERRIDES:]
-        return {"success": True, "override": override}
+        return {"success": True, "override": normalized}
 
     @staticmethod
     def clear_overrides(gm_state: GMState) -> Dict[str, Any]:
@@ -261,24 +333,31 @@ class ContentPackager:
     def export_state(gm_state: GMState, world_data: Dict[str, Any]) -> Dict[str, Any]:
         if not gm_state.permissions.can_export:
             return {"success": False, "reason": "no permission"}
+        normalized_gm_state = GMDeterminismValidator.normalize_state(gm_state).to_dict()
+        normalized_world_data = _safe_dict(world_data)
         return {
             "success": True,
             "package": {
-                "gm_state": gm_state.to_dict(),
-                "world_data": dict(world_data),
+                "gm_state": normalized_gm_state,
+                "world_data": normalized_world_data,
                 "export_tick": gm_state.tick,
-                "_format_version": 1,
+                "_format_version": SUPPORTED_PACKAGE_FORMAT_VERSION,
             },
         }
 
     @staticmethod
     def import_state(package: Dict[str, Any]) -> Dict[str, Any]:
-        if "_format_version" not in package:
+        package = _safe_dict(package)
+        if not _is_valid_package(package):
             return {"success": False, "reason": "invalid package format"}
+        if not _validate_world_data(package.get("world_data") or {}):
+            return {"success": False, "reason": "invalid world_data payload"}
+        gm_state = GMState.from_dict(package.get("gm_state") or {})
+        gm_state = GMDeterminismValidator.normalize_state(gm_state)
         return {
             "success": True,
-            "gm_state": package.get("gm_state"),
-            "world_data": package.get("world_data"),
+            "gm_state": gm_state.to_dict(),
+            "world_data": _safe_dict(package.get("world_data")),
         }
 
 
@@ -298,14 +377,28 @@ class GMDeterminismValidator:
             violations.append(f"overrides exceed max ({len(gm_state.active_overrides)} > {MAX_OVERRIDES})")
         if len(gm_state.edit_history) > MAX_EDIT_HISTORY:
             violations.append(f"edit_history exceeds max ({len(gm_state.edit_history)} > {MAX_EDIT_HISTORY})")
+        for override in gm_state.active_overrides:
+            normalized = _normalize_override(override)
+            if normalized["type"] not in VALID_OVERRIDE_TYPES:
+                violations.append(f"invalid override type: {normalized['type']}")
+            if not normalized["target_id"]:
+                violations.append("override missing target_id")
         return violations
 
     @staticmethod
     def normalize_state(gm_state: GMState) -> GMState:
-        overrides = list(gm_state.active_overrides)
+        overrides_map = {}
+        for override in gm_state.active_overrides:
+            normalized = _normalize_override(override)
+            if normalized["type"] not in VALID_OVERRIDE_TYPES:
+                continue
+            if not normalized["target_id"]:
+                continue
+            overrides_map[_override_key(normalized)] = normalized
+        overrides = [overrides_map[k] for k in sorted(overrides_map.keys())]
         if len(overrides) > MAX_OVERRIDES:
             overrides = overrides[-MAX_OVERRIDES:]
-        history = list(gm_state.edit_history)
+        history = [dict(v) for v in gm_state.edit_history if isinstance(v, dict)]
         if len(history) > MAX_EDIT_HISTORY:
             history = history[-MAX_EDIT_HISTORY:]
         return GMState(
