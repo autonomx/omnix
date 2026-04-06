@@ -1,0 +1,62 @@
+diff --git a/src/app/rpg/analytics/timeline.py b/src/app/rpg/analytics/timeline.py
+--- a/src/app/rpg/analytics/timeline.py
++++ b/src/app/rpg/analytics/timeline.py
+@@ -27,6 +27,8 @@ def build_timeline_row_diff(before_row, after_row):
+         "consequence_delta": ...,
+         "sandbox_before": ...,
+         "sandbox_after": ...,
++        "inventory_before": ...,
++        "inventory_after": ...,
+     }
+ 
+diff --git a/src/app/rpg/api/rpg_encounter_routes.py b/src/app/rpg/api/rpg_encounter_routes.py
+--- a/src/app/rpg/api/rpg_encounter_routes.py
++++ b/src/app/rpg/api/rpg_encounter_routes.py
+@@ -73,6 +73,7 @@ def encounter_action():
+     state = ensure_encounter_state(state)
+ 
+     encounter_state = dict((state.get("player_state") or {}).get("encounter_state") or {})
++    encounter_state.setdefault("loot_awarded", False)
+     encounter_state = resolver.apply_player_action(encounter_state, action_type, target_id)
+     encounter_state = resolver.resolve_if_finished(encounter_state)
+ 
+@@ -83,6 +84,7 @@ def encounter_action():
+             "summary": "Encounter outcome impacts world state.",
+         })
+ 
++        if not encounter_state.get("loot_awarded"):
+             player_state = dict(state.get("player_state") or {})
+             player_state = ensure_inventory_state(player_state)
+             inventory_state = dict(player_state.get("inventory_state") or {})
+@@ -98,6 +100,8 @@ def encounter_action():
+                 })
+ 
++            encounter_state["loot_awarded"] = True
++
+     state["player_state"]["encounter_state"] = encounter_state
+ 
+diff --git a/src/static/rpg/rpgPlayerUI.js b/src/static/rpg/rpgPlayerUI.js
+--- a/src/static/rpg/rpgPlayerUI.js
++++ b/src/static/rpg/rpgPlayerUI.js
+@@ -4,8 +4,11 @@
+  * Journal, Codex, Objectives, Inventory, and Dialogue mode handling for the frontend.
+  */
+ 
+ import { RPGPlayerClient } from "./rpgPlayerClient.js";
++import { RPGInventoryClient } from "./rpgInventoryClient.js";
++import { renderInventoryPanel } from "./rpgInventoryRenderer.js";
+ 
+ const playerClient = new RPGPlayerClient();
++const inventoryClient = new RPGInventoryClient();
+ 
++export async function loadInventory(setupPayload) { ... }
++function bindInventoryUseButtons(setupPayload) { ... }
+ 
+ export async function refreshSidePanels(setupPayload) {
+   await Promise.all([
+     loadJournal(setupPayload),
+     loadCodex(setupPayload),
+     loadObjectives(setupPayload),
++    loadInventory(setupPayload),
+   ]);
+ }

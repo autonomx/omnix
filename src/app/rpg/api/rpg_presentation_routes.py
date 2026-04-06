@@ -54,6 +54,16 @@ from app.rpg.compat.character_cards import (
     export_canonical_character_card,
     import_external_character_card,
 )
+from app.rpg.packaging.package_io import (
+    export_session_package,
+    import_session_package,
+)
+from app.rpg.modding.content_packs import (
+    apply_content_pack,
+    build_pack_application_preview,
+    ensure_content_pack_state,
+    list_content_packs,
+)
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
@@ -1076,4 +1086,106 @@ def presentation_gm_trace():
             "visual_assets": visual_assets,
             "image_requests": image_requests,
         },
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 12.9 — Save / Export / Packaging Layer
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/package/export")
+def export_rpg_package():
+    """Export current RPG session to portable package format."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    title = _safe_str(data.get("title")).strip() or "RPG Session Export"
+    description = _safe_str(data.get("description")).strip()
+    created_by = _safe_str(data.get("created_by")).strip() or "unknown"
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = _ensure_character_ui_state(simulation_state)
+    simulation_state = _ensure_character_inspector_state(simulation_state)
+    simulation_state = _ensure_world_inspector_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+
+    package_data = export_session_package(
+        simulation_state,
+        title=title,
+        description=description,
+        created_by=created_by,
+    )
+
+    return jsonify({
+        "ok": True,
+        "package": package_data,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/package/import")
+def import_rpg_package():
+    """Import portable RPG package into canonical normalized state."""
+    data = request.get_json(silent=True) or {}
+    package_data = _safe_dict(data.get("package"))
+
+    imported = import_session_package(package_data)
+    return jsonify({
+        "ok": True,
+        "imported": imported,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 13.0 — Modding / Extension System / Content Pack Pipeline
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/packs/list")
+def list_rpg_packs():
+    """List installed RPG content packs."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+    simulation_state = ensure_content_pack_state(simulation_state)
+
+    return jsonify({
+        "ok": True,
+        "packs": list_content_packs(simulation_state),
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/packs/preview")
+def preview_rpg_pack():
+    """Preview a content pack before installation/application."""
+    data = request.get_json(silent=True) or {}
+    pack = _safe_dict(data.get("pack"))
+    preview = build_pack_application_preview(pack)
+    return jsonify({
+        "ok": True,
+        "preview": preview,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/packs/apply")
+def apply_rpg_pack():
+    """Apply a content pack to current simulation presentation/modding state."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    pack = _safe_dict(data.get("pack"))
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+    simulation_state = ensure_content_pack_state(simulation_state)
+    simulation_state = apply_content_pack(simulation_state, pack)
+
+    return jsonify({
+        "ok": True,
+        "packs": list_content_packs(simulation_state),
+        "visual_state": _extract_visual_state(simulation_state),
     })

@@ -1,0 +1,1188 @@
+diff --git a/src/app/rpg/presentation/__init__.py b/src/app/rpg/presentation/__init__.py
+--- /dev/null
++++ b/src/app/rpg/presentation/__init__.py
+@@ -0,0 +1,48 @@
++ """Phase 10 — RPG Presentation package.
++ 
++ Provides presentation builders for scene/dialogue payloads, speaker cards,
++ and personality style helpers used by both the API layer and frontend rendering.
++ """
++ from .personality import (
++     build_personality_prompt_hints,
++     build_personality_style_tags,
++ )
++ from .personality_state import (
++     ensure_personality_state,
++     get_actor_personality_profile,
++     build_personality_summary,
++ )
++ from .speaker_cards import (
++     build_speaker_cards,
++     build_party_speaker_cards,
++ )
++ from .scene_presentation import (
++     build_scene_presentation_payload,
++ )
++ from .dialogue_presentation import (
++     build_dialogue_presentation_payload,
++ )
++ from .dialogue_prompt_builder import (
++     build_dialogue_llm_payload,
++     build_scene_llm_payload,
++ )
++ from .dialogue_fallbacks import (
++     build_deterministic_dialogue_fallback,
++     build_deterministic_scene_fallback,
++ )
++ 
++ __all__ = [
++     "build_personality_prompt_hints",
++     "build_personality_style_tags",
++     "ensure_personality_state",
++     "get_actor_personality_profile",
++     "build_personality_summary",
++     "build_speaker_cards",
++     "build_party_speaker_cards",
++     "build_scene_presentation_payload",
++     "build_dialogue_presentation_payload",
++     "build_dialogue_llm_payload",
++     "build_scene_llm_payload",
++     "build_deterministic_dialogue_fallback",
++     "build_deterministic_scene_fallback",
++ ]
+
+diff --git a/src/app/rpg/presentation/personality.py b/src/app/rpg/presentation/personality.py
+--- /dev/null
++++ b/src/app/rpg/presentation/personality.py
+@@ -0,0 +1,70 @@
++ """Phase 10 — Personality style system.
++ 
++ Provides deterministic personality style tags and prompt hints
++ for NPCs and companions based on their current state.
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict, List
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _safe_str(v: Any) -> str:
++     return "" if v is None else str(v)
++ 
++ 
++ def _safe_float(v: Any, default: float = 0.0) -> float:
++     try:
++         return float(v)
++     except Exception:
++         return default
++ 
++ 
++ def build_personality_style_tags(actor: Dict[str, Any]) -> List[str]:
++     """Build deterministic style tags from actor state.
++ 
++     Uses loyalty, morale, and role to produce consistent tags.
++     """
++     actor = _safe_dict(actor)
++     loyalty = _safe_float(actor.get("loyalty"), 0.0)
++     morale = _safe_float(actor.get("morale"), 0.5)
++     role = _safe_str(actor.get("role") or "ally")
++ 
++     tags: List[str] = []
++ 
++     if loyalty < -0.3:
++         tags.append("cold")
++     elif loyalty > 0.6:
++         tags.append("supportive")
++     else:
++         tags.append("neutral")
++ 
++     if morale < 0.3:
++         tags.append("shaken")
++     elif morale > 0.7:
++         tags.append("confident")
++ 
++     if role == "support":
++         tags.append("careful")
++     elif role == "guard":
++         tags.append("protective")
++     elif role == "scout":
++         tags.append("alert")
++ 
++     return tags[:6]
++ 
++ 
++ def build_personality_prompt_hints(actor: Dict[str, Any]) -> Dict[str, Any]:
++     """Build personality prompt hints for LLM-guided dialogue."""
++     actor = _safe_dict(actor)
++     name = _safe_str(actor.get("name") or actor.get("npc_id") or "Unknown")
++     tags = build_personality_style_tags(actor)
++ 
++     return {
++         "name": name,
++         "style_tags": tags,
++         "speech_guidance": "Use concise, character-consistent phrasing grounded in current scene context.",
++     }
+
+diff --git a/src/app/rpg/presentation/personality_state.py b/src/app/rpg/presentation/personality_state.py
+--- /dev/null
++++ b/src/app/rpg/presentation/personality_state.py
+@@ -0,0 +1,99 @@
++ """Phase 10 — Deterministic personality state helpers.
++ 
++ Provides helpers to ensure and query personality state
++ within simulation state.
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict, List
++ 
++ 
++ _MAX_TRAITS = 8
++ _MAX_STYLE_TAGS = 8
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _safe_list(v: Any) -> List[Any]:
++     return list(v) if isinstance(v, list) else []
++ 
++ 
++ def _safe_str(v: Any) -> str:
++     return "" if v is None else str(v)
++ 
++ 
++ def _normalize_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
++     """Normalize a personality profile to a consistent shape."""
++     profile = _safe_dict(profile)
++     return {
++         "actor_id": _safe_str(profile.get("actor_id")),
++         "display_name": _safe_str(profile.get("display_name")),
++         "tone": _safe_str(profile.get("tone") or "neutral"),
++         "voice_style": _safe_str(profile.get("voice_style") or "plain"),
++         "traits": [
++             _safe_str(v)
++             for v in _safe_list(profile.get("traits"))[:_MAX_TRAITS]
++             if _safe_str(v)
++         ],
++         "style_tags": [
++             _safe_str(v)
++             for v in _safe_list(profile.get("style_tags"))[:_MAX_STYLE_TAGS]
++             if _safe_str(v)
++         ],
++         "temperature_hint": _safe_str(profile.get("temperature_hint") or "low"),
++     }
++ 
++ 
++ def ensure_personality_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Ensure simulation_state has normalized personality state.
++ 
++     Returns the mutated simulation_state with normalized profiles.
++     """
++     simulation_state = _safe_dict(simulation_state)
++     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++     personality_state = _safe_dict(presentation_state.get("personality_state"))
++     profiles_in = _safe_dict(personality_state.get("profiles"))
++ 
++     profiles_out: Dict[str, Dict[str, Any]] = {}
++     for actor_id in sorted(profiles_in.keys()):
++         normalized = _normalize_profile(profiles_in.get(actor_id))
++         normalized["actor_id"] = _safe_str(actor_id or normalized.get("actor_id"))
++         profiles_out[str(actor_id)] = normalized
++ 
++     personality_state["profiles"] = profiles_out
++     presentation_state["personality_state"] = personality_state
++     simulation_state["presentation_state"] = presentation_state
++     return simulation_state
++ 
++ 
++ def get_actor_personality_profile(simulation_state: Dict[str, Any], actor_id: str, default_name: str = "") -> Dict[str, Any]:
++     """Get a normalized personality profile for a given actor.
++ 
++     Ensures personality state exists and returns the profile.
++     """
++     simulation_state = ensure_personality_state(simulation_state)
++     actor_id = _safe_str(actor_id)
++     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++     personality_state = _safe_dict(presentation_state.get("personality_state"))
++     profiles = _safe_dict(personality_state.get("profiles"))
++ 
++     profile = _normalize_profile(profiles.get(actor_id))
++     if not profile.get("actor_id"):
++         profile["actor_id"] = actor_id
++     if not profile.get("display_name"):
++         profile["display_name"] = _safe_str(default_name or actor_id)
++     return profile
++ 
++ 
++ def build_personality_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Build a summary of all personality profiles."""
++     simulation_state = ensure_personality_state(simulation_state)
++     profiles = _safe_dict(
++         _safe_dict(_safe_dict(simulation_state.get("presentation_state")).get("personality_state")).get("profiles")
++     )
++     return {
++         "profile_count": len(profiles),
++         "actor_ids": sorted(profiles.keys())[:20],
++     }
+
+diff --git a/src/app/rpg/presentation/speaker_cards.py b/src/app/rpg/presentation/speaker_cards.py
+--- /dev/null
++++ b/src/app/rpg/presentation/speaker_cards.py
+@@ -0,0 +1,80 @@
++ """Phase 10 — Speaker card builders.
++ 
++ Provides deterministic speaker card building for scene and dialogue presentation.
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict, List
++ 
++ from app.rpg.party import build_companion_presence_summary
++ from .personality import build_personality_style_tags
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _safe_list(v: Any) -> List[Any]:
++     return list(v) if isinstance(v, list) else []
++ 
++ 
++ def _safe_str(v: Any) -> str:
++     return "" if v is None else str(v)
++ 
++ 
++ def build_speaker_cards(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++     """Build speaker cards for a scene, including player and present companions.
++ 
++     Returns a sorted list of cards by kind then speaker_id.
++     """
++     simulation_state = _safe_dict(simulation_state)
++     player_state = _safe_dict(simulation_state.get("player_state"))
++     scene_state = _safe_dict(scene_state)
++ 
++     cards: List[Dict[str, Any]] = []
++ 
++     # Always include the player card
++     cards.append({
++         "speaker_id": "player",
++         "name": "Player",
++         "kind": "player",
++         "portrait_key": "player",
++         "style_tags": ["player"],
++         "location_id": _safe_str(scene_state.get("location_id")),
++     })
++ 
++     # Build cards for present companions
++     presence = build_companion_presence_summary(player_state)
++     for comp in _safe_list(presence.get("present_companions")):
++         style_tags = build_personality_style_tags(comp)
++         cards.append({
++             "speaker_id": _safe_str(comp.get("npc_id")),
++             "name": _safe_str(comp.get("name")),
++             "kind": "companion",
++             "portrait_key": _safe_str(comp.get("npc_id")),
++             "style_tags": style_tags,
++             "location_id": _safe_str(scene_state.get("location_id")),
++         })
++ 
++     return sorted(cards, key=lambda c: (_safe_str(c.get("kind")), _safe_str(c.get("speaker_id"))))
++ 
++ 
++ def build_party_speaker_cards(simulation_state: Dict[str, Any], companions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++     """Build minimal speaker cards for a list of companion dicts.
++ 
++     Used when you need only companion cards, not the full speaker set.
++     """
++     cards: List[Dict[str, Any]] = []
++     for comp in _safe_list(companions):
++         if not isinstance(comp, dict):
++             continue
++         style_tags = build_personality_style_tags(comp)
++         cards.append({
++             "speaker_id": _safe_str(comp.get("npc_id")),
++             "name": _safe_str(comp.get("name")),
++             "kind": "companion",
++             "portrait_key": _safe_str(comp.get("npc_id")),
++             "style_tags": style_tags,
++             "location_id": _safe_str(comp.get("location_id")),
++         })
++     return cards[:6]
+
+diff --git a/src/app/rpg/presentation/scene_presentation.py b/src/app/rpg/presentation/scene_presentation.py
+--- /dev/null
++++ b/src/app/rpg/presentation/scene_presentation.py
+@@ -0,0 +1,51 @@
++ """Phase 10 — Scene presentation builder.
++ 
++ Builds a presentation-ready payload for a scene, including
++ speaker cards, companion interjections, and reactions.
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict, List
++ 
++ from app.rpg.party import (
++     build_companion_scene_context,
++     choose_scene_interjections,
++     build_companion_scene_reactions,
++     build_companion_presence_summary,
++ )
++ from .speaker_cards import build_speaker_cards
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _safe_list(v: Any) -> List[Any]:
++     return list(v) if isinstance(v, list) else []
++ 
++ 
++ def build_scene_presentation_payload(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Build a presentation-ready payload for a scene.
++ 
++     This is a pure builder: it does not mutate simulation_state.
++     """
++     simulation_state = _safe_dict(simulation_state)
++     player_state = _safe_dict(simulation_state.get("player_state"))
++     scene_state = _safe_dict(scene_state)
++ 
++     scene_context = build_companion_scene_context(simulation_state, scene_state)
++     interjections = choose_scene_interjections(simulation_state, scene_state)
++     reactions = build_companion_scene_reactions(player_state, scene_state)
++     presence_summary = build_companion_presence_summary(player_state)
++     speaker_cards = build_speaker_cards(simulation_state, scene_state)
++ 
++     return {
++         "scene_id": scene_state.get("scene_id"),
++         "tone": scene_state.get("tone"),
++         "location_id": scene_state.get("location_id"),
++         "scene_context": scene_context,
++         "speaker_cards": speaker_cards,
++         "companion_interjections": _safe_list(interjections)[:3],
++         "companion_reactions": _safe_list(reactions)[:4],
++         "presence_summary": presence_summary,
++     }
+
+diff --git a/src/app/rpg/presentation/dialogue_presentation.py b/src/app/rpg/presentation/dialogue_presentation.py
+--- /dev/null
++++ b/src/app/rpg/presentation/dialogue_presentation.py
+@@ -0,0 +1,40 @@
++ """Phase 10 — Dialogue presentation builder.
++ 
++ Builds a presentation-ready payload for dialogue, including
++ speaker cards, dialogue context, and presence summary.
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict
++ 
++ from app.rpg.party import (
++     build_companion_dialogue_context,
++     build_companion_presence_summary,
++ )
++ from .speaker_cards import build_speaker_cards
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def build_dialogue_presentation_payload(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Build a presentation-ready payload for a dialogue.
++ 
++     This is a pure builder: it does not mutate simulation_state.
++     """
++     simulation_state = _safe_dict(simulation_state)
++     player_state = _safe_dict(simulation_state.get("player_state"))
++     dialogue_state = _safe_dict(dialogue_state)
++ 
++     dialogue_context = build_companion_dialogue_context(simulation_state, dialogue_state)
++     presence_summary = build_companion_presence_summary(player_state)
++     speaker_cards = build_speaker_cards(simulation_state, dialogue_state)
++ 
++     return {
++         "dialogue_id": dialogue_state.get("dialogue_id"),
++         "speaker_id": dialogue_state.get("speaker_id"),
++         "speaker_cards": speaker_cards,
++         "dialogue_context": dialogue_context,
++         "presence_summary": presence_summary,
++     }
+
+diff --git a/src/app/rpg/presentation/dialogue_prompt_builder.py b/src/app/rpg/presentation/dialogue_prompt_builder.py
+--- /dev/null
++++ b/src/app/rpg/presentation/dialogue_prompt_builder.py
+@@ -0,0 +1,86 @@
++ """Phase 10 — LLM payload builders.
++ 
++ Provides deterministic LLM payload builders for dialogue and scene narration.
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict, List
++ 
++ from .personality_state import get_actor_personality_profile
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _safe_list(v: Any) -> List[Any]:
++     return list(v) if isinstance(v, list) else []
++ 
++ 
++ def _safe_str(v: Any) -> str:
++     return "" if v is None else str(v)
++ 
++ 
++ def _compact_history(messages: List[Dict[str, Any]], limit: int = 12) -> List[Dict[str, Any]]:
++     """Compact dialogue history to last N messages."""
++     out = []
++     for msg in _safe_list(messages)[-limit:]:
++         if not isinstance(msg, dict):
++             continue
++         out.append({
++             "speaker": _safe_str(msg.get("speaker")),
++             "text": _safe_str(msg.get("text")),
++         })
++     return out
++ 
++ 
++ def build_dialogue_llm_payload(simulation_state: Dict[str, Any], dialogue_state: Dict[str, Any], actor_id: str, actor_name: str = "") -> Dict[str, Any]:
++     """Build LLM payload for a dialogue turn.
++ 
++     Includes personality context, dialogue history, and instructions.
++     """
++     simulation_state = _safe_dict(simulation_state)
++     dialogue_state = _safe_dict(dialogue_state)
++     profile = get_actor_personality_profile(simulation_state, actor_id, default_name=actor_name)
++ 
++     return {
++         "mode": "dialogue",
++         "actor_id": _safe_str(actor_id),
++         "actor_name": _safe_str(actor_name or profile.get("display_name")),
++         "personality": profile,
++         "dialogue_context": {
++             "scene_id": _safe_str(dialogue_state.get("scene_id")),
++             "location_id": _safe_str(dialogue_state.get("location_id")),
++             "topic": _safe_str(dialogue_state.get("topic")),
++             "history": _compact_history(_safe_list(dialogue_state.get("transcript"))),
++         },
++         "instructions": {
++             "stay_in_character": True,
++             "respect_simulation_authority": True,
++             "do_not_invent_world_facts": True,
++             "prefer_short_responses": True,
++         },
++     }
++ 
++ 
++ def build_scene_llm_payload(simulation_state: Dict[str, Any], scene_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Build LLM payload for scene narration.
++ 
++     Includes scene context and grounded instructions.
++     """
++     simulation_state = _safe_dict(simulation_state)
++     scene_state = _safe_dict(scene_state)
++     return {
++         "mode": "scene_narration",
++         "scene_context": {
++             "scene_id": _safe_str(scene_state.get("scene_id")),
++             "location_id": _safe_str(scene_state.get("location_id")),
++             "tone": _safe_str(scene_state.get("tone")),
++             "summary": _safe_str(scene_state.get("summary")),
++         },
++         "instructions": {
++             "respect_simulation_authority": True,
++             "do_not_resolve_uncommitted_actions": True,
++             "prefer_grounded sensory detail": True,
++         },
++     }
+
+diff --git a/src/app/rpg/presentation/dialogue_fallbacks.py b/src/app/rpg/presentation/dialogue_fallbacks.py
+--- /dev/null
++++ b/src/app/rpg/presentation/dialogue_fallbacks.py
+@@ -0,0 +1,65 @@
++ """Phase 10 — Deterministic fallback builders.
++ 
++ Provides fallback dialogue/scene text when LLM is unavailable.
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _safe_str(v: Any) -> str:
++     return "" if v is None else str(v)
++ 
++ 
++ def build_deterministic_dialogue_fallback(actor_profile: Dict[str, Any], dialogue_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Build a deterministic dialogue fallback response.
++ 
++     Used when LLM is unavailable or fails.
++     """
++     actor_profile = _safe_dict(actor_profile)
++     dialogue_state = _safe_dict(dialogue_state)
++     name = _safe_str(actor_profile.get("display_name") or actor_profile.get("actor_id") or "Speaker")
++     tone = _safe_str(actor_profile.get("tone") or "neutral")
++     topic = _safe_str(dialogue_state.get("topic") or "the situation")
++ 
++     if tone == "warm":
++         text = f"{name} responds calmly about {topic}."
++     elif tone == "stern":
++         text = f"{name} answers in a firm, restrained way about {topic}."
++     elif tone == "wary":
++         text = f"{name} responds cautiously, measuring every word about {topic}."
++     else:
++         text = f"{name} responds about {topic}."
++ 
++     return {
++         "ok": True,
++         "source": "deterministic_fallback",
++         "text": text,
++     }
++ 
++ 
++ def build_deterministic_scene_fallback(scene_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Build a deterministic scene fallback response.
++ 
++     Used when LLM is unavailable or fails.
++     """
++     scene_state = _safe_dict(scene_state)
++     tone = _safe_str(scene_state.get("tone") or "neutral")
++     location_id = _safe_str(scene_state.get("location_id") or "the area")
++ 
++     if tone == "tense":
++         text = f"Tension lingers over {location_id} as everyone measures the next move."
++     elif tone == "calm":
++         text = f"The scene at {location_id} settles into a quieter rhythm."
++     else:
++         text = f"The scene continues at {location_id}."
++ 
++     return {
++         "ok": True,
++         "source": "deterministic_fallback",
++         "text": text,
++     }
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+--- /dev/null
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -0,0 +1,93 @@
++ """Phase 10 — Presentation API routes.
++ 
++ Provides read-only builders for presentation payloads:
++ - Scene presentation
++ - Dialogue presentation
++ - Speaker cards
++ """
++ from __future__ import annotations
++ 
++ from typing import Any, Dict
++ 
++ from flask import Blueprint, jsonify, request
++ 
++ from app.rpg.player import ensure_player_state, ensure_player_party
++ from app.rpg.presentation import (
++     build_scene_presentation_payload,
++     build_dialogue_presentation_payload,
++ )
++ from app.rpg.presentation.speaker_cards import build_speaker_cards
++ 
++ 
++ rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _get_simulation_state(setup_payload: Dict[str, Any]) -> Dict[str, Any]:
++     setup_payload = _safe_dict(setup_payload)
++     return _safe_dict(setup_payload.get("simulation_state"))
++ 
++ 
++ def _write_simulation_state(setup_payload: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++     setup_payload = dict(setup_payload or {})
++     setup_payload["simulation_state"] = dict(simulation_state or {})
++     return setup_payload
++ 
++ 
++ @rpg_presentation_bp.post("/api/rpg/presentation/scene")
++ def presentation_scene():
++     """Build a presentation-ready scene payload."""
++     data = request.get_json(silent=True) or {}
++     setup_payload = _safe_dict(data.get("setup_payload"))
++     scene_state = _safe_dict(data.get("scene_state"))
++ 
++     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++     simulation_state = ensure_player_party(simulation_state)
++ 
++     payload = build_scene_presentation_payload(simulation_state, scene_state)
++ 
++     return jsonify({
++         "ok": True,
++         "presentation": payload,
++         "setup_payload": _write_simulation_state(setup_payload, simulation_state),
++     })
++ 
++ 
++ @rpg_presentation_bp.post("/api/rpg/presentation/dialogue")
++ def presentation_dialogue():
++     """Build a presentation-ready dialogue payload."""
++     data = request.get_json(silent=True) or {}
++     setup_payload = _safe_dict(data.get("setup_payload"))
++     dialogue_state = _safe_dict(data.get("dialogue_state"))
++ 
++     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++     simulation_state = ensure_player_party(simulation_state)
++ 
++     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
++ 
++     return jsonify({
++         "ok": True,
++         "presentation": payload,
++         "setup_payload": _write_simulation_state(setup_payload, simulation_state),
++     })
++ 
++ 
++ @rpg_presentation_bp.post("/api/rpg/presentation/speakers")
++ def presentation_speakers():
++     """Return speaker card data for a scene."""
++     data = request.get_json(silent=True) or {}
++     setup_payload = _safe_dict(data.get("setup_payload"))
++     scene_state = _safe_dict(data.get("scene_state"))
++ 
++     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++     simulation_state = ensure_player_party(simulation_state)
++ 
++     cards = build_speaker_cards(simulation_state, scene_state)
++ 
++     return jsonify({
++         "ok": True,
++         "speaker_cards": cards,
++     })
+
+diff --git a/src/static/rpg/rpgPresentationClient.js b/src/static/rpg/rpgPresentationClient.js
+--- /dev/null
++++ b/src/static/rpg/rpgPresentationClient.js
+@@ -0,0 +1,43 @@
++ /**
++  * Phase 10 — RPG Presentation Client.
++  *
++  * Client-side helper for calling presentation API routes.
++  */
++ export class RPGPresentationClient {
++   constructor(baseUrl = "") {
++     this.baseUrl = baseUrl;
++   }
++ 
++   async _post(path, payload) {
++     const res = await fetch(`${this.baseUrl}${path}`, {
++       method: "POST",
++       headers: { "Content-Type": "application/json" },
++       body: JSON.stringify(payload || {}),
++     });
++     if (!res.ok) {
++       throw new Error(`Presentation API error: ${res.status} at ${path}`);
++     }
++     return res.json();
++   }
++ 
++   async getScenePresentation(setupPayload, sceneState) {
++     return this._post("/api/rpg/presentation/scene", {
++       setup_payload: setupPayload,
++       scene_state: sceneState,
++     });
++   }
++ 
++   async getDialoguePresentation(setupPayload, dialogueState) {
++     return this._post("/api/rpg/presentation/dialogue", {
++       setup_payload: setupPayload,
++       dialogue_state: dialogueState,
++     });
++   }
++ 
++   async getSpeakerCards(setupPayload, sceneState) {
++     return this._post("/api/rpg/presentation/speakers", {
++       setup_payload: setupPayload,
++       scene_state: sceneState,
++     });
++   }
++ }
+
+diff --git a/src/static/rpg/rpgPresentationRenderer.js b/src/static/rpg/rpgPresentationRenderer.js
+--- /dev/null
++++ b/src/static/rpg/rpgPresentationRenderer.js
+@@ -0,0 +1,89 @@
++ /**
++  * Phase 10 — RPG Presentation Renderer.
++  *
++  * Renders speaker cards and presentation payloads for the frontend.
++  */
++ function escapeHtml(str) {
++   return String(str || "")
++     .replace(/\u0026/g, "\u0026amp;")
++     .replace(/\u003c/g, "\u0026lt;")
++     .replace(/\u003e/g, "\u0026gt;")
++     .replace(/"/g, "\u0026quot;")
++     .replace(/'/g, "\u0026#039;");
++ }
++ 
++ function renderStyleTags(tags) {
++   const list = Array.isArray(tags) ? tags : [];
++   if (!list.length) return "";
++   return `
++     <div class="rpg-speaker-tags">
++       ${list.map((tag) => `\u003cspan class="rpg-speaker-tag">${escapeHtml(tag)}\u003c/span>`).join("")}
++     </div>
++   `;
++ }
++ 
++ export function renderSpeakerCards(cards) {
++   const list = Array.isArray(cards) ? cards : [];
++   return `
++     <div class="rpg-speaker-card-list">
++       ${list.map((card) => `
++         <div class="rpg-speaker-card" data-speaker-id="${escapeHtml(card.speaker_id)}">
++           <div class="rpg-speaker-card-name">${escapeHtml(card.name || card.speaker_id)}\u003c/div>
++           <div class="rpg-speaker-card-kind">${escapeHtml(card.kind || "")}\u003c/div>
++           ${renderStyleTags(card.style_tags)}
++         \u003c/div>
++       `).join("")}
++     \u003c/div>
++   `;
++ }
++ 
++ export function renderScenePresentation(presentation) {
++   const payload = presentation || {};
++   const interjections = Array.isArray(payload.companion_interjections) ? payload.companion_interjections : [];
++   const reactions = Array.isArray(payload.companion_reactions) ? payload.companion_reactions : [];
++ 
++   return `
++     <div class="rpg-presentation-block">
++       <div class="rpg-presentation-header">
++         <h3>Scene Presentation</h3>
++         <div class="rpg-presentation-meta">
++           <span>${escapeHtml(payload.scene_id || "")}\u003c/span>
++           <span>${escapeHtml(payload.tone || "")}\u003c/span>
++         \u003c/div>
++       \u003c/div>
++       ${renderSpeakerCards(payload.speaker_cards || [])}
++       <div class="rpg-presentation-section">
++         <h4>Companion Interjections</h4>
++         ${
++           interjections.length
++             ? interjections.map((it) => `\u003cdiv class="codex-item">${escapeHtml(it.summary || "")}\u003c/div>`).join("")
++             : `\u003cdiv class="codex-item">No interjections\u003c/div>`
++         }
++       \u003c/div>
++       <div class="rpg-presentation-section">
++         <h4>Companion Reactions</h4>
++         ${
++           reactions.length
++             ? reactions.map((it) => `\u003cdiv class="codex-item">${escapeHtml(it.summary || "")}\u003c/div>`).join("")
++             : `\u003cdiv class="codex-item">No reactions\u003c/div>`
++         }
++       \u003c/div>
++     \u003c/div>
++   `;
++ }
++ 
++ export function renderDialoguePresentation(presentation) {
++   const payload = presentation || {};
++   return `
++     <div class="rpg-presentation-block">
++       <div class="rpg-presentation-header">
++         <h3>Dialogue Presentation</h3>
++         <div class="rpg-presentation-meta">
++           <span>${escapeHtml(payload.dialogue_id || "")}\u003c/span>
++           <span>${escapeHtml(payload.speaker_id || "")}\u003c/span>
++         \u003c/div>
++       \u003c/div>
++       ${renderSpeakerCards(payload.speaker_cards || [])}
++     \u003c/div>
++   `;
++ }
+
+diff --git a/src/app/rpg/player/player_party.py b/src/app/rpg/player/player_party.py
+--- /dev/null
++++ b/src/app/rpg/player/player_party.py
+@@ -0,0 +1,46 @@
++ """Phase 9.2/9.3/10 — Player party view helpers.
++ 
++ Provides helpers to build party views for the player-facing UI,
++ including Phase 9.3 companion narrative presence summaries
++ and Phase 10 presentation speaker cards.
++ """
++ from typing import Any, Dict, List
++ 
++ from app.rpg.party import (
++     ensure_party_state,
++     build_party_summary,
++     build_companion_presence_summary,
++ )
++ from app.rpg.presentation import build_party_speaker_cards
++ 
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return dict(v) if isinstance(v, dict) else {}
++ 
++ 
++ def _safe_list(v: Any) -> List[Any]:
++     return list(v) if isinstance(v, list) else []
++ 
++ 
++ def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Ensure simulation_state has normalized party state."""
++     simulation_state = _safe_dict(simulation_state)
++     player_state = _safe_dict(simulation_state.get("player_state"))
++     player_state = ensure_party_state(player_state)
++     simulation_state["player_state"] = player_state
++     return simulation_state
++ 
++ 
++ def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++     """Build the full party view for UI display, including narrative presence and speaker cards."""
++     simulation_state = ensure_player_party(simulation_state)
++     player_state = _safe_dict(simulation_state.get("player_state"))
++     party_state = _safe_dict(player_state.get("party_state"))
++     companions = list(_safe_list(party_state.get("companions") or []))
++     return {
++         "party_state": party_state,
++         "party_summary": build_party_summary(player_state),
++         "presence_summary": build_companion_presence_summary(player_state),
++         "speaker_cards": build_party_speaker_cards(simulation_state, companions),
++     }
++ 
+
+diff --git a/src/app/__init__.py b/src/app/__init__.py
+--- /dev/null
++++ b/src/app/__init__.py
+@@ -0,0 +1,73 @@
++ """
++ Omnix application package.
++ 
++ Provides ``create_app`` so that other code (tests, WSGI servers) can build a
++ fully-configured Flask application without reaching for the root ``app.py``.
++ """
++ 
++ from pathlib import Path
++ 
++ from flask import Flask
++ 
++ 
++ def create_app() -> Flask:
++     """Create and configure the Flask application with all blueprints."""
++     from app.audio import audio_bp
++     from app.audiobook import audiobook_bp
++     from app.chat import chat_bp
++     from app.core import core_bp
++     from app.llamacpp import llamacpp_bp
++     from app.llm import llm_bp
++     from app.podcast import podcast_bp
++     from app.rpg.routes import rpg_bp
++     from app.rpg.creator_routes import creator_bp
++     from app.rpg.api.rpg_debug_routes import rpg_debug_bp
++     from app.rpg.api.rpg_player_routes import rpg_player_bp
++     from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
++     from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
++     from app.rpg.api.rpg_package_routes import rpg_package_bp
++     from app.rpg.api.rpg_inspection_routes import rpg_inspection_bp
++     from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
++     from app.services import services_bp
++     from app.voice_studio import voice_studio_bp
++ 
++     pkg_dir = Path(__file__).resolve().parent
++     app = Flask(
++         __name__,
++         template_folder=str(pkg_dir.parent / "templates"),
++         static_folder=str(pkg_dir.parent / "static"),
++     )
++ 
++     # Pre-load TTS provider on app startup for immediate availability
++     with app.app_context():
++         try:
++             import app.shared as shared
++             tts_provider = shared.get_tts_provider()
++             if tts_provider:
++                 print(f"[APP-STARTUP] TTS provider '{tts_provider.provider_name}' initialized successfully")
++             else:
++                 print("[APP-STARTUP] No TTS provider configured or available")
++         except Exception as e:
++             print(f"[APP-STARTUP] Failed to initialize TTS provider: {e}")
++ 
++     app.register_blueprint(core_bp)
++     app.register_blueprint(chat_bp)
++     app.register_blueprint(services_bp)
++     app.register_blueprint(audio_bp)
++     app.register_blueprint(audiobook_bp)
++     app.register_blueprint(podcast_bp)
++     app.register_blueprint(llm_bp)
++     app.register_blueprint(llamacpp_bp)
++     app.register_blueprint(voice_studio_bp)
++     app.register_blueprint(rpg_bp)
++     app.register_blueprint(creator_bp)
++     app.register_blueprint(rpg_debug_bp)
++     app.register_blueprint(rpg_player_bp)
++     app.register_blueprint(rpg_dialogue_bp)
++     app.register_blueprint(rpg_encounter_bp)
++     app.register_blueprint(rpg_package_bp)
++     app.register_blueprint(rpg_inspection_bp)
++     app.register_blueprint(rpg_presentation_bp)
++ 
++     return app
++ 
+
+diff --git a/src/tests/unit/rpg/test_phase10_presentation.py b/src/tests/unit/rpg/test_phase10_presentation.py
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase10_presentation.py
+@@ -0,0 +1,105 @@
++ """Phase 10 — Presentation layer unit tests."""
++ from app.rpg.presentation import (
++     build_scene_presentation_payload,
++     build_dialogue_presentation_payload,
++     build_personality_style_tags,
++     build_personality_prompt_hints,
++     ensure_personality_state,
++     get_actor_personality_profile,
++     build_personality_summary,
++     build_deterministic_dialogue_fallback,
++     build_deterministic_scene_fallback,
++ )
++ from app.rpg.presentation.speaker_cards import build_speaker_cards
++ 
++ 
++ def test_build_personality_style_tags_returns_deterministic_tags():
++     actor = {"npc_id": "npc_a", "name": "A", "loyalty": 0.8, "morale": 0.9, "role": "support"}
++     one = build_personality_style_tags(actor)
++     two = build_personality_style_tags(actor)
++     assert one == two
++ 
++ 
++ def test_build_personality_style_tags_loyalty_cold():
++     actor = {"npc_id": "npc_a", "loyalty": -0.5, "morale": 0.5, "role": "ally"}
++     tags = build_personality_style_tags(actor)
++     assert "cold" in tags
++ 
++ 
++ def test_build_personality_style_tags_role_guard():
++     actor = {"npc_id": "npc_a", "loyalty": 0.0, "morale": 0.5, "role": "guard"}
++     tags = build_personality_style_tags(actor)
++     assert "protective" in tags
++ 
++ 
++ def test_build_personality_prompt_hints():
++     actor = {"npc_id": "npc_b", "name": "Bob", "loyalty": 0.0, "morale": 0.5, "role": "ally"}
++     hints = build_personality_prompt_hints(actor)
++     assert hints["name"] == "Bob"
++     assert "speech_guidance" in hints
++ 
++ 
++ def test_ensure_personality_state():
++     sim = {"presentation_state": {"personality_state": {"profiles": {"npc_1": {"actor_id": "npc_1", "display_name": "NPC One"}}}}}
++     result = ensure_personality_state(sim)
++     assert "presentation_state" in result
++     profiles = result["presentation_state"]["personality_state"]["profiles"]
++     assert "npc_1" in profiles
++ 
++ 
++ def test_get_actor_personality_profile():
++     sim = {"presentation_state": {"personality_state": {"profiles": {}}}}
++     profile = get_actor_personality_profile(sim, "new_actor", default_name="New Actor")
++     assert profile["actor_id"] == "new_actor"
++     assert profile["display_name"] == "New Actor"
++ 
++ 
++ def test_build_personality_summary():
++     sim = {"presentation_state": {"personality_state": {"profiles": {"a": {}, "b": {}}}}}
++     summary = build_personality_summary(sim)
++     assert summary["profile_count"] == 2
++ 
++ 
++ def test_build_speaker_cards_includes_player():
++     simulation_state = {"player_state": {"party_state": {"companions": []}}}
++     cards = build_speaker_cards(simulation_state, {"scene_id": "scene_gate"})
++     assert any(card.get("speaker_id") == "player" for card in cards)
++ 
++ 
++ def test_scene_presentation_payload_has_expected_keys():
++     simulation_state = {"player_state": {"party_state": {"companions": []}}}
++     payload = build_scene_presentation_payload(simulation_state, {"scene_id": "scene_1", "tone": "tense"})
++     assert "speaker_cards" in payload
++     assert "companion_interjections" in payload
++     assert "companion_reactions" in payload
++ 
++ 
++ def test_dialogue_presentation_payload_has_expected_keys():
++     simulation_state = {"player_state": {"party_state": {"companions": []}}}
++     payload = build_dialogue_presentation_payload(simulation_state, {"dialogue_id": "dlg_1", "speaker_id": "npc_x"})
++     assert "speaker_cards" in payload
++     assert "dialogue_context" in payload
++ 
++ 
++ def test_deterministic_dialogue_fallback_warm():
++     result = build_deterministic_dialogue_fallback({"display_name": "Alice", "tone": "warm"}, {"topic": "peace"})
++     assert "Alice" in result["text"]
++     assert result["source"] == "deterministic_fallback"
++ 
++ 
++ def test_deterministic_dialogue_fallback_stern():
++     result = build_deterministic_dialogue_fallback({"display_name": "Bob", "tone": "stern"}, {"topic": "war"})
++     assert "Bob" in result["text"]
++     assert "stern" not in result["text"].lower() or "firm" in result["text"].lower()
++ 
++ 
++ def test_deterministic_scene_fallback_tense():
++     result = build_deterministic_scene_fallback({"tone": "tense", "location_id": "castle"})
++     assert "castle" in result["text"]
++     assert "Tension" in result["text"]
++ 
++ 
++ def test_deterministic_scene_fallback_calm():
++     result = build_deterministic_scene_fallback({"tone": "calm", "location_id": "garden"})
++     assert "garden" in result["text"]
++     assert "quieter" in result["text"]
+
+diff --git a/src/tests/functional/test_phase10_presentation_routes.py b/src/tests/functional/test_phase10_presentation_routes.py
+--- /dev/null
++++ b/src/tests/functional/test_phase10_presentation_routes.py
+@@ -0,0 +1,52 @@
++ """Phase 10 — Presentation routes functional tests."""
++ from app import create_app
++ 
++ 
++ class TestPresentationRoutes:
++     """Functional tests for presentation API routes."""
++ 
++     def setup_method(self):
++         self.app = create_app()
++         self.client = self.app.test_client()
++ 
++     def test_presentation_scene_route(self):
++         res = self.client.post("/api/rpg/presentation/scene", json={
++             "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
++             "scene_state": {"scene_id": "scene_gate", "tone": "tense"},
++         })
++         assert res.status_code == 200
++         data = res.get_json() or {}
++         assert data.get("ok") is True
++         assert "presentation" in data
++ 
++     def test_presentation_dialogue_route(self):
++         res = self.client.post("/api/rpg/presentation/dialogue", json={
++             "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
++             "dialogue_state": {"dialogue_id": "dlg_1", "speaker_id": "npc_1"},
++         })
++         assert res.status_code == 200
++         data = res.get_json() or {}
++         assert data.get("ok") is True
++         assert "presentation" in data
++ 
++     def test_presentation_speakers_route(self):
++         res = self.client.post("/api/rpg/presentation/speakers", json={
++             "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
++             "scene_state": {"scene_id": "scene_1"},
++         })
++         assert res.status_code == 200
++         data = res.get_json() or {}
++         assert data.get("ok") is True
++         assert "speaker_cards" in data
++ 
++     def test_presentation_scene_no_payload(self):
++         res = self.client.post("/api/rpg/presentation/scene", json={})
++         assert res.status_code == 200
++         data = res.get_json() or {}
++         assert data.get("ok") is True
++ 
++     def test_presentation_dialogue_no_payload(self):
++         res = self.client.post("/api/rpg/presentation/dialogue", json={})
++         assert res.status_code == 200
++         data = res.get_json() or {}
++         assert data.get("ok") is True
+
+diff --git a/src/tests/regression/test_phase10_presentation_regression.py b/src/tests/regression/test_phase10_presentation_regression.py
+--- /dev/null
++++ b/src/tests/regression/test_phase10_presentation_regression.py
+@@ -0,0 +1,69 @@
++ """Phase 10 — Presentation layer regression tests.
++ 
++ Ensures that presentation changes don't break existing behavior.
++ """
++ from app import create_app
++ from app.rpg.presentation import (
++     build_scene_presentation_payload,
++     build_dialogue_presentation_payload,
++     build_speaker_cards,
++     build_personality_style_tags,
++ )
++ 
++ 
++ class TestPresentationRegression:
++     """Regression tests for presentation layer."""
++ 
++     def setup_method(self):
++         self.app = create_app()
++         self.client = self.app.test_client()
++ 
++     def test_scene_presentation_stable_keys(self):
++         """Ensure scene presentation payload keys don't change unexpectedly."""
++         simulation_state = {"player_state": {"party_state": {"companions": []}}}
++         payload = build_scene_presentation_payload(simulation_state, {"scene_id": "scene_1", "tone": "tense"})
++         expected_keys = {"scene_id", "tone", "location_id", "scene_context", "speaker_cards", "companion_interjections", "companion_reactions", "presence_summary"}
++         assert expected_keys.issubset(set(payload.keys()))
++ 
++     def test_dialogue_presentation_stable_keys(self):
++         """Ensure dialogue presentation payload keys don't change unexpectedly."""
++         simulation_state = {"player_state": {"party_state": {"companions": []}}}
++         payload = build_dialogue_presentation_payload(simulation_state, {"dialogue_id": "dlg_1", "speaker_id": "npc_x"})
++         expected_keys = {"dialogue_id", "speaker_id", "speaker_cards", "dialogue_context", "presence_summary"}
++         assert expected_keys.issubset(set(payload.keys()))
++ 
++     def test_speaker_cards_stable_keys(self):
++         """Ensure speaker card keys don't change unexpectedly."""
++         simulation_state = {"player_state": {"party_state": {"companions": []}}}
++         cards = build_speaker_cards(simulation_state, {"scene_id": "scene_1"})
++         assert len(cards) >= 1
++         player_card = cards[0]
++         expected_keys = {"speaker_id", "name", "kind", "portrait_key", "style_tags"}
++         assert expected_keys.issubset(set(player_card.keys()))
++ 
++     def test_personality_style_tags_deterministic(self):
++         """Ensure personality style tags are deterministic."""
++         actor = {"npc_id": "npc_a", "name": "A", "loyalty": 0.8, "morale": 0.9, "role": "support"}
++         results = [build_personality_style_tags(actor) for _ in range(10)]
++         assert all(r == results[0] for r in results)
++ 
++     def test_presentation_routes_return_ok(self):
++         """Ensure all presentation routes return ok=True."""
++         base_payload = {
++             "setup_payload": {"simulation_state": {"player_state": {"party_state": {"companions": []}}}},
++         }
++ 
++         res_scene = self.client.post("/api/rpg/presentation/scene", json={**base_payload, "scene_state": {"scene_id": "s1"}})
++         res_dialogue = self.client.post("/api/rpg/presentation/dialogue", json={**base_payload, "dialogue_state": {"dialogue_id": "d1"}})
++         res_speakers = self.client.post("/api/rpg/presentation/speakers", json={**base_payload, "scene_state": {"scene_id": "s1"}})
++ 
++         assert res_scene.get_json()["ok"] is True
++         assert res_dialogue.get_json()["ok"] is True
++         assert res_speakers.get_json()["ok"] is True
++ 
++     def test_build_party_speaker_cards_limits_to_six(self):
++         """Ensure party speaker cards are limited to 6."""
++         from app.rpg.presentation import build_party_speaker_cards
++         companions = [{"npc_id": f"npc_{i}", "name": f"NPC {i}", "loyalty": 0.5, "morale": 0.5, "role": "ally"} for i in range(10)]
++         cards = build_party_speaker_cards({}, companions)
++         assert len(cards) <= 6

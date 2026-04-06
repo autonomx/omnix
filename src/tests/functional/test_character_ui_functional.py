@@ -453,3 +453,103 @@ def test_character_portrait_request_blocked_on_empty_prompt():
         assert response.status_code == 200
         payload = response.get_json()
         assert payload["moderation"]["status"] in {"approved", "blocked"}
+
+
+# ---- Phase 12.9 — Package Export/Import functional tests ----
+
+
+def test_package_export_route_returns_package():
+    """Package export route returns ok=True with package payload."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/package/export",
+            json={
+                "setup_payload": {},
+                "title": "Export Test",
+                "created_by": "tester",
+            },
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "package" in payload
+
+
+def test_package_import_route_returns_imported():
+    """Package import route returns ok=True with imported payload."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/package/import",
+            json={
+                "package": {
+                    "manifest": {"package_version": "1.0", "title": "Pkg"},
+                    "simulation_state": {"presentation_state": {}},
+                }
+            },
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "imported" in payload
+
+
+# ---- Phase 13.0 — Content Pack functional tests ----
+
+
+def test_packs_preview_route_returns_preview():
+    """Pack preview route returns ok=True with preview payload."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/packs/preview",
+            json={
+                "pack": {
+                    "manifest": {"id": "pack:test", "title": "Test Pack"},
+                    "characters": [{"name": "Captain Elira"}],
+                }
+            },
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "preview" in payload
+
+
+def test_packs_list_route_returns_packs():
+    """Pack list route returns ok=True with packs payload."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/packs/list",
+            json={"setup_payload": {}},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "packs" in payload

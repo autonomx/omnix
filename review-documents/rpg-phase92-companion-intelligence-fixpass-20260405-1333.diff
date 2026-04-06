@@ -1,0 +1,467 @@
+diff --git a/src/app/rpg/party/companion_ai.py b/src/app/rpg/party/companion_ai.py
+index 70971c6..adf67ce 100644
+--- a/src/app/rpg/party/companion_ai.py
++++ b/src/app/rpg/party/companion_ai.py
+@@ -1,16 +1,112 @@
+-"""Phase 9.1 — Companion AI for encounters.
++"""Phase 9.2 — Companion AI for encounters.
+ 
+-Provides simple AI-driven companion actions during tactical encounters.
++Provides deterministic companion AI with role-based action selection.
++
++Fixes applied:
++- Fix #2: Execution duplication guard (_companions_ran marker + phase tracking)
++- Fix #5: Loyalty uses explicit bands (-1..-0.3 hostile, -0.3..0.3 hesitant, 0.3..1 cooperative)
++- Fix #7: Target selection is deterministic (sorted by id)
++- Fix #9: Phase tracking for companion phase
++- Fix #11: Morale is integrated into AI decision logic
+ """
+-from typing import Dict, Any
++from typing import Dict, Any, List
++
++from .party_state import get_active_companions, _normalize_companion, _is_companion_downed
++
++
++def _safe_dict(v):
++    return v if isinstance(v, dict) else {}
++
++
++def _safe_list(v):
++    return v if isinstance(v, list) else []
++
++
++def _safe_str(v):
++    return "" if v is None else str(v)
++
++
++def _get_hostile_targets(encounter_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    """Get hostile targets from encounter state, sorted deterministically by id."""
++    participants = _safe_list(encounter_state.get("participants"))
++    hostiles = [
++        p for p in participants
++        if isinstance(p, dict)
++        and (_safe_str(p.get("role")) == "enemy" or _safe_str(p.get("disposition")) == "hostile")
++    ]
++    # Fix #7: Sort by id for deterministic target selection
++    return sorted(hostiles, key=lambda p: str(p.get("id") or p.get("npc_id") or ""))
++
++
++def choose_companion_action(companion: Dict[str, Any], encounter_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Choose deterministic action for a companion based on state and role.
++
++    Priority:
++    - Hostile loyalty (< -0.3): hesitate (refuse to fight)
++    - Low HP (<= 25%): defend
++    - Low morale (< 0.3): hesitate (fear)
++    - Support role with low HP: heal_self/support
++    - Has hostile targets: attack
++    - Default: defend
++    """
++    companion = _safe_dict(companion)
++    encounter_state = _safe_dict(encounter_state)
++
++    loyalty = float(companion.get("loyalty", 0.0))
++    hp = int(companion.get("hp", 0))
++    max_hp = max(1, int(companion.get("max_hp", 100)))
++    morale = float(companion.get("morale", 0.5))
++    role = _safe_str(companion.get("role") or "ally")
++    health_ratio = float(hp) / float(max_hp)
++
++    # Fix #5: Loyalty bands with explicit thresholds
++    # < -0.3: hostile companion behavior
++    # -0.3 to 0.3: hesitant/indifferent
++    # > 0.3: cooperative
+ 
+-from .party_state import get_active_companions
++    # Fix #11: Morale integration
++    # < 0.3: scared companion, unlikely to act
++
++    # Find hostile targets (sorted)
++    hostiles = _get_hostile_targets(encounter_state)
++
++    # Fix #1: Check for healing potion by item_id pointer only
++    equipment = _safe_dict(companion.get("equipment"))
++    has_healing_potion = _safe_str(equipment.get("consumable")) == "healing_potion"
++
++    # Decision tree with explicit loyalty bands
++    if loyalty < -0.3:
++        # Fix #5: Hostile companion refuses to act
++        return {"action_type": "hesitate", "target_id": "", "summary": f"{companion.get('name')} refuses to cooperate."}
++
++    if health_ratio <= 0.25:
++        return {"action_type": "defend", "target_id": "player", "summary": f"{companion.get('name')} falls back to protect the party."}
++
++    # Fix #11: Morale-based hesitation
++    if morale < 0.3:
++        return {"action_type": "hesitate", "target_id": "", "summary": f"{companion.get('name')} is too frightened to act."}
++
++    if role == "support" and has_healing_potion and health_ratio < 0.6:
++        return {"action_type": "heal_self", "target_id": companion.get("npc_id"), "summary": f"{companion.get('name')} uses a healing potion."}
++
++    if role == "support" and health_ratio < 0.6:
++        return {"action_type": "support", "target_id": "player", "summary": f"{companion.get('name')} supports the player."}
++
++    # Fix #7: Use first target from sorted list
++    if hostiles:
++        target = hostiles[0]
++        target_id = str(target.get("id") or target.get("npc_id") or "")
++        return {"action_type": "attack", "target_id": target_id, "summary": f"{companion.get('name')} attacks {target_id}."}
++
++    return {"action_type": "defend", "target_id": "player", "summary": f"{companion.get('name')} watches for danger."}
+ 
+ 
+ def run_companion_turns(simulation_state: Dict[str, Any], encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Execute companion actions for the current encounter tick.
+ 
+-    Each active companion contributes a simple assist action to the encounter log.
++    Only runs if encounter is still active and companions haven't already run this tick.
++    Fix #2: Execution duplication guard.
++    Fix #9: Phase tracking.
+     """
+     player_state = simulation_state.get("player_state") or {}
+     companions = get_active_companions(player_state)
+@@ -18,13 +114,33 @@ def run_companion_turns(simulation_state: Dict[str, Any], encounter_state: Dict[
+     if not companions:
+         return encounter_state
+ 
++    encounter_state = _safe_dict(encounter_state)
++
++    # Fix #2: Guard against resolved encounters
++    if str(encounter_state.get("status") or "") == "resolved":
++        return encounter_state
++
++    # Fix #2: Guard against double execution
++    if encounter_state.get("_companions_ran"):
++        return encounter_state
++
+     encounter_state.setdefault("log", [])
+ 
++    # Fix #9: Mark companion phase
++    encounter_state["phase"] = "companion"
++
++    # Limit to max 3 companions, sorted deterministically
+     for comp in sorted(companions, key=lambda c: str(c.get("npc_id")))[:3]:
++        action = choose_companion_action(comp, encounter_state)
+         encounter_state["log"].append({
+             "type": "companion_action",
+             "npc_id": comp.get("npc_id"),
+-            "summary": f"{comp.get('name')} assists in combat.",
++            "action_type": action.get("action_type"),
++            "target_id": action.get("target_id"),
++            "summary": action.get("summary"),
+         })
+ 
++    # Fix #2: Mark companions as having run this tick
++    encounter_state["_companions_ran"] = True
++
+     return encounter_state
+\ No newline at end of file
+diff --git a/src/app/rpg/party/party_state.py b/src/app/rpg/party/party_state.py
+index 6831ca1..8c12125 100644
+--- a/src/app/rpg/party/party_state.py
++++ b/src/app/rpg/party/party_state.py
+@@ -1,4 +1,4 @@
+-"""Phase 9.1 — Party state management.
++"""Phase 9.2 — Party state management.
+ 
+ Provides deterministic, serialisable party/companion state that sits on top
+ of the player state.
+@@ -8,8 +8,14 @@ Key guarantees:
+     - companions list is bounded to max_size (default 3)
+     - all values are safe (str / dict / list) even if upstream data is dirty
+     - state updates are pure functions returning a new player_state dict
++    - equipment is a pointer (item_id only), inventory owns quantity
++    - VALID_SLOTS enforced for equipment
+ """
+-from typing import Dict, Any, List
++from typing import Dict, Any, List, Optional
++
++
++# Valid equipment slots — centralised for UI/balance parity
++VALID_SLOTS = {"weapon", "armor", "consumable"}
+ 
+ 
+ def _safe_dict(v: Any) -> Dict[str, Any]:
+@@ -20,16 +26,84 @@ def _safe_list(v: Any) -> List[Any]:
+     return v if isinstance(v, list) else []
+ 
+ 
+-def ensure_party_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def _safe_float(v: Any, default: float = 0.0) -> float:
++    try:
++        return float(v)
++    except Exception:
++        return default
++
++
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
++
++
++def _clamp(value: float, low: float, high: float) -> float:
++    return max(low, min(high, value))
++
++
++def _normalize_companion(companion: Dict[str, Any]) -> Dict[str, Any]:
++    """Normalize a companion dict to ensure all fields are present and valid."""
++    companion = _safe_dict(companion)
++    max_hp = max(1, _safe_int(companion.get("max_hp"), 100))
++    hp = _clamp(_safe_int(companion.get("hp"), max_hp), 0, max_hp)
++    loyalty = _clamp(_safe_float(companion.get("loyalty"), 0.5), -1.0, 1.0)
++    morale = _clamp(_safe_float(companion.get("morale"), 0.5), 0.0, 1.0)
++    status = _safe_str(companion.get("status") or "active")
++    role = _safe_str(companion.get("role") or "ally")
++    equipment = _safe_dict(companion.get("equipment"))
++
++    # Fix #1: Equipment stores only item_id (pointer), not qty. Inventory owns quantity.
++    clean_equipment = {}
++    for slot in VALID_SLOTS:
++        entry = equipment.get(slot)
++        if isinstance(entry, dict) and entry.get("item_id"):
++            clean_equipment[slot] = _safe_str(entry.get("item_id"))
++    return {
++        "npc_id": _safe_str(companion.get("npc_id")),
++        "name": _safe_str(companion.get("name") or companion.get("npc_id") or "Companion"),
++        "hp": int(hp),
++        "max_hp": max_hp,
++        "loyalty": loyalty,
++        "morale": morale,
++        "role": role,
++        "status": status,
++        "equipment": clean_equipment,
++    }
++
++
++def _is_companion_downed(companion: Dict[str, Any]) -> bool:
++    """Check if a companion is downed and cannot act."""
++    status = _safe_str(companion.get("status"))
++    hp = _safe_int(companion.get("hp"), 0)
++    return status == "downed" or hp <= 0
++
++
++def ensure_party_state(player_state: Dict[str, Any]) -> Dict[str, Any]:  # noqa: D401
+     """Ensure *player_state* has a well-formed ``party_state`` subtree.
+ 
+-    Idempotent — safe to call multiple times.
++    Idempotent — safe to call multiple times. Deduplicates companions by npc_id.
+     """
+     player_state = _safe_dict(player_state)
+ 
+     party = _safe_dict(player_state.get("party_state"))
+ 
+-    party.setdefault("companions", [])
++    # Deduplicate companions by npc_id, keeping last occurrence
++    seen_ids = set()
++    companions = []
++    for comp in _safe_list(party.get("companions"))[:6]:
++        if isinstance(comp, dict) and comp.get("npc_id"):
++            npc_id = comp.get("npc_id")
++            if npc_id not in seen_ids:
++                seen_ids.add(npc_id)
++                companions.append(_normalize_companion(comp))
++    party["companions"] = companions
+     party.setdefault("max_size", 3)
+ 
+     player_state["party_state"] = party
+@@ -51,13 +125,18 @@ def add_companion(player_state: Dict[str, Any], npc_id: str, name: str) -> Dict[
+     if len(companions) >= int(party.get("max_size", 3)):
+         return player_state
+ 
+-    companions.append({
++    companions.append(_normalize_companion({
+         "npc_id": npc_id,
+         "name": name,
+         "hp": 100,
++        "max_hp": 100,
+         "loyalty": 0.5,
++        "morale": 0.5,
+         "role": "ally",
+-    })
++        "status": "active",
++        "equipment": {},
++    }))
++    companions = sorted(companions, key=lambda c: str(c.get("npc_id")))
+ 
+     party["companions"] = companions
+     player_state["party_state"] = party
+@@ -80,6 +159,169 @@ def remove_companion(player_state: Dict[str, Any], npc_id: str) -> Dict[str, Any
+ 
+ 
+ def get_active_companions(player_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+-    """Return the list of active companions."""
++    """Return the list of active companions (not downed, hp > 0)."""
++    player_state = ensure_party_state(player_state)
++    companions = _safe_list(player_state["party_state"].get("companions"))
++    return [
++        _normalize_companion(comp)
++        for comp in companions
++        if not _is_companion_downed(comp)
++    ]
++
++
++def update_companion_hp(player_state: Dict[str, Any], npc_id: str, delta: int) -> Dict[str, Any]:
++    """Update companion HP by delta, clamping to [0, max_hp] and setting status to 'downed' if HP <= 0."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            comp["hp"] = int(_clamp(comp.get("hp", 0) + _safe_int(delta, 0), 0, comp.get("max_hp", 100)))
++            if comp["hp"] <= 0:
++                comp["status"] = "downed"
++            elif comp["status"] == "downed" and comp["hp"] > 0:
++                comp["status"] = "active"
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def update_companion_loyalty(player_state: Dict[str, Any], npc_id: str, delta: float) -> Dict[str, Any]:
++    """Update companion loyalty by delta, clamping to [-1.0, 1.0]."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        # Fix #6: Allow loyalty changes even for downed companions
++        if comp.get("npc_id") == npc_id:
++            comp["loyalty"] = _clamp(comp.get("loyalty", 0.5) + _safe_float(delta, 0.0), -1.0, 1.0)
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def update_companion_morale(player_state: Dict[str, Any], npc_id: str, delta: float) -> Dict[str, Any]:
++    """Update companion morale by delta, clamping to [0.0, 1.0]."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        # Fix #6: Allow morale changes even for downed companions
++        if comp.get("npc_id") == npc_id:
++            comp["morale"] = _clamp(comp.get("morale", 0.5) + _safe_float(delta, 0.0), 0.0, 1.0)
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def set_companion_status(player_state: Dict[str, Any], npc_id: str, status: str) -> Dict[str, Any]:
++    """Set companion status (active, downed, absent)."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            comp["status"] = _safe_str(status or "active")
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def set_companion_equipment(player_state: Dict[str, Any], npc_id: str, slot: str, item_id: str) -> Dict[str, Any]:
++    """Set equipment for a companion in a given slot.
++
++    Fix #1: Equipment stores item_id only (pointer), inventory owns quantity.
++    Fix #6: Cannot equip if companion is downed.
++    Fix #10: Validates slot name against VALID_SLOTS.
++    """
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    slot = _safe_str(slot)
++
++    # Fix #10: Validate slot name
++    if slot not in VALID_SLOTS:
++        return player_state  # Reject invalid slot silently
++
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        # Fix #6: Cannot equip while downed
++        if comp.get("npc_id") == npc_id and not _is_companion_downed(comp):
++            equipment = dict(comp.get("equipment"))
++            # Fix #1: Store item_id only, no qty
++            equipment[slot] = _safe_str(item_id)
++            comp["equipment"] = equipment
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def clear_companion_equipment(player_state: Dict[str, Any], npc_id: str, slot: str) -> Dict[str, Any]:
++    """Clear equipment for a companion in a given slot.
++
++    Fix #6: Cannot unequip if companion is downed.
++    Fix #10: Validates slot name.
++    """
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    slot = _safe_str(slot)
++
++    # Fix #10: Validate slot name
++    if slot not in VALID_SLOTS:
++        return player_state
++
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        # Fix #6: Cannot unequip while downed (equipment persists in downed state)
++        if comp.get("npc_id") == npc_id and not _is_companion_downed(comp):
++            equipment = dict(comp.get("equipment"))
++            equipment.pop(slot, None)
++            comp["equipment"] = equipment
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def get_companion_by_id(player_state: Dict[str, Any], npc_id: str) -> Optional[Dict[str, Any]]:
++    """Look up a companion by npc_id, or None if not found."""
+     player_state = ensure_party_state(player_state)
+-    return _safe_list(player_state["party_state"].get("companions"))
+\ No newline at end of file
++    party = _safe_dict(player_state.get("party_state"))
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            return comp
++    return None
++
++
++def build_party_summary(player_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Build a summary of the party state for UI/timeline display.
++
++    Always recomputed from normalized state — never cached.
++    """
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    companions = [_normalize_companion(c) for c in _safe_list(party.get("companions"))]
++    return {
++        "size": len(companions),
++        "active_count": len([c for c in companions if not _is_companion_downed(c)]),
++        "downed_count": len([c for c in companions if _is_companion_downed(c)]),
++        "avg_loyalty": round(
++            sum(float(c.get("loyalty", 0.0)) for c in companions) / max(1, len(companions)),
++            3,
++        ),
++        "avg_morale": round(
++            sum(float(c.get("morale", 0.0)) for c in companions) / max(1, len(companions)),
++            3,
++        ),
++    }
+\ No newline at end of file

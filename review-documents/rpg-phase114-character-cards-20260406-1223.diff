@@ -1,0 +1,344 @@
+diff --git a/src/app/rpg/ui/character_builder.py b/src/app/rpg/ui/character_builder.py
+index 0ac1805..017d5b4 100644
+--- a/src/app/rpg/ui/character_builder.py
++++ b/src/app/rpg/ui/character_builder.py
+@@ -183,6 +183,24 @@ def _normalize_current_intent(
+     )
+ 
+ 
++def _normalize_card_meta(entry: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
++    return {
++        "subtitle": _first_non_empty(
++            entry.get("title"),
++            entry.get("role"),
++            profile.get("archetype"),
++        ),
++        "summary": _first_non_empty(
++            entry.get("description"),
++            profile.get("summary"),
++        ),
++        "badge": _first_non_empty(
++            entry.get("faction"),
++            entry.get("group"),
++        ),
++    }
++
++
+ def _normalize_visual_identity(entry: Dict[str, Any]) -> Dict[str, Any]:
+     visual_identity = _safe_dict(entry.get("visual_identity"))
+     seed = visual_identity.get("seed")
+@@ -219,6 +237,8 @@ def build_character_ui_entry(
+     if not isinstance(speaker_order, int):
+         speaker_order = fallback_index
+ 
++    card_meta = _normalize_card_meta(presentation_entry, profile)
++
+     return {
+         "id": actor_id,
+         "name": _derive_display_name(presentation_entry),
+@@ -231,6 +251,7 @@ def build_character_ui_entry(
+         "relationships": _normalize_relationships(simulation_state, actor_id),
+         "personality": profile,
+         "visual_identity": _normalize_visual_identity(presentation_entry),
++        "card": card_meta,
+         "meta": {
+             "present": bool(presentation_entry.get("present", True)),
+             "speaker_order": speaker_order,
+diff --git a/src/static/rpg/rpgInspectorStyles.css b/src/static/rpg/rpgInspectorStyles.css
+index 24b6aa6..e0a6c93 100644
+--- a/src/static/rpg/rpgInspectorStyles.css
++++ b/src/static/rpg/rpgInspectorStyles.css
+@@ -333,3 +333,71 @@
+ .inspector-rel-negative {
+   color: var(--rpg-negative, #f44336);
+ }
++
++/* ---- Phase 11.3 — World Inspector styles ---- */
++.inspector-world-button {
++  width: 100%;
++  display: block;
++  text-align: left;
++  background: var(--rpg-surface-dark, #1a1a2e);
++  color: inherit;
++  border: 1px solid var(--rpg-border-color, #555);
++  border-radius: 4px;
++  padding: 10px;
++  margin: 0 0 8px 0;
++  cursor: pointer;
++}
++
++.inspector-world-button.is-selected {
++  border-color: var(--rpg-accent, #7eb8da);
++  background: rgba(126, 184, 218, 0.12);
++}
++
++.inspector-world-name {
++  font-weight: bold;
++}
++
++.inspector-world-kind {
++  font-size: 0.85em;
++  opacity: 0.8;
++  text-transform: capitalize;
++}
++
++.inspector-tag {
++  display: inline-block;
++  padding: 2px 8px;
++  border-radius: 999px;
++  margin: 0 6px 6px 0;
++  background: rgba(255,255,255,0.08);
++  font-size: 0.85em;
++}
++
++/* ---- Phase 11.4 — Character Cards + Portraits ---- */
++.inspector-character-portrait {
++  width: 64px;
++  height: 64px;
++  border-radius: 8px;
++  object-fit: cover;
++  margin-bottom: 8px;
++  display: block;
++}
++
++.inspector-character-portrait--placeholder {
++  background: rgba(255,255,255,0.08);
++}
++
++.inspector-character-badge {
++  display: inline-block;
++  margin-top: 4px;
++  margin-bottom: 4px;
++  padding: 2px 8px;
++  border-radius: 999px;
++  background: rgba(126, 184, 218, 0.14);
++  font-size: 0.8em;
++}
++
++.inspector-character-summary {
++  margin-top: 4px;
++  font-size: 0.85em;
++  color: var(--rpg-text-secondary, #aaa);
++}
+diff --git a/src/static/rpg/rpgPresentationRenderer.js b/src/static/rpg/rpgPresentationRenderer.js
+index 019965c..1584410 100644
+--- a/src/static/rpg/rpgPresentationRenderer.js
++++ b/src/static/rpg/rpgPresentationRenderer.js
+@@ -137,6 +137,16 @@ export function renderCharacterList(inspectorState) {
+     const name = escapeHtml(c.name || c.id || "Unknown");
+     const role = escapeHtml(c.role || "character");
+     const currentIntent = escapeHtml(c.current_intent || "");
++    // ---- Phase 11.4 — Character Cards + Portraits ----
++    const subtitle = escapeHtml(c.card?.subtitle || role);
++    const summary = escapeHtml(c.card?.summary || "");
++    const badge = escapeHtml(c.card?.badge || "");
++    const portraitUrl = escapeHtml(c.visual_identity?.portrait_url || "");
++
++    const portrait = portraitUrl
++      ? `<img class="inspector-character-portrait" src="${portraitUrl}" alt="${name}">`
++      : `<div class="inspector-character-portrait inspector-character-portrait--placeholder"></div>`;
++
+     const selected = selectedCharacterId && selectedCharacterId === (c.id || "") ? " is-selected" : "";
+     return `
+       <button
+@@ -144,8 +154,11 @@ export function renderCharacterList(inspectorState) {
+         class="inspector-character-button${selected}"
+         data-character-id="${id}"
+       >
++        ${portrait}
+         <div class="inspector-character-name">${name}</div>
+-        <div class="inspector-character-role">${role}</div>
++        <div class="inspector-character-role">${subtitle}</div>
++        ${badge ? `<div class="inspector-character-badge">${badge}</div>` : ""}
++        ${summary ? `<div class="inspector-character-summary">${summary}</div>` : ""}
+         ${currentIntent ? `<div class="inspector-character-intent">${currentIntent}</div>` : ""}
+       </button>
+     `;
+@@ -246,6 +259,126 @@ export function renderDialoguePresentation(presentation) {
+   `;
+ }
+ 
++// ---- Phase 11.3 — World Inspector ----
++
++let selectedWorldItemId = "";
++let selectedWorldItemKind = "location";
++
++function getWorldInspectorContainer() {
++  return document.getElementById("rpg-world-inspector");
++}
++
++function getWorldListContainer() {
++  return document.getElementById("rpg-world-panel");
++}
++
++export function renderWorldList(worldInspectorState) {
++  const container = getWorldListContainer();
++  if (!container) return;
++
++  const factions = Array.isArray(worldInspectorState?.factions?.factions) ? worldInspectorState.factions.factions : [];
++  const locations = Array.isArray(worldInspectorState?.locations?.locations) ? worldInspectorState.locations.locations : [];
++
++  const items = [
++    ...locations.map((item) => ({ ...item, _kind: "location" })),
++    ...factions.map((item) => ({ ...item, _kind: "faction" })),
++  ];
++
++  if (!items.length) {
++    container.innerHTML = `<div class="inspector-empty">No world items available.</div>`;
++    return;
++  }
++
++  container.innerHTML = items.map((item) => {
++    const id = escapeHtml(item.id || "");
++    const name = escapeHtml(item.name || item.id || "Unknown");
++    const kind = escapeHtml(item._kind || item.kind || "world");
++    const selected =
++      selectedWorldItemId === (item.id || "") && selectedWorldItemKind === (item._kind || "")
++        ? " is-selected"
++        : "";
++
++    return `
++      <button
++        type="button"
++        class="inspector-world-button${selected}"
++        data-world-id="${id}"
++        data-world-kind="${kind}"
++      >
++        <div class="inspector-world-name">${name}</div>
++        <div class="inspector-world-kind">${kind}</div>
++      </button>
++    `;
++  }).join("");
++}
++
++export function renderWorldInspector(worldInspectorState) {
++  const container = getWorldInspectorContainer();
++  if (!container) return;
++
++  const factions = Array.isArray(worldInspectorState?.factions?.factions) ? worldInspectorState.factions.factions : [];
++  const locations = Array.isArray(worldInspectorState?.locations?.locations) ? worldInspectorState.locations.locations : [];
++
++  const items = [
++    ...locations.map((item) => ({ ...item, _kind: "location" })),
++    ...factions.map((item) => ({ ...item, _kind: "faction" })),
++  ];
++
++  const selected =
++    items.find((item) => String(item.id || "") === selectedWorldItemId && String(item._kind || "") === selectedWorldItemKind) ||
++    items[0] ||
++    null;
++
++  if (!selected) {
++    container.innerHTML = `<div class="inspector-empty">Select a world item.</div>`;
++    return;
++  }
++
++  if (selected._kind === "location") {
++    const tags = Array.isArray(selected.tags) ? selected.tags.map((t) => `<span class="inspector-tag">${escapeHtml(t)}</span>`).join("") : "";
++    const actors = Array.isArray(selected.actors) ? selected.actors.map((a) => `<li>${escapeHtml(a)}</li>`).join("") : "";
++    container.innerHTML = `
++      <div class="inspector-panel">
++        <div class="inspector-header">${escapeHtml(selected.name || selected.id)}</div>
++        <div class="inspector-section"><h5>Description</h5><div>${escapeHtml(selected.description || "—")}</div></div>
++        <div class="inspector-section"><h5>Tags</h5><div>${tags || '<div class="inspector-empty">None</div>'}</div></div>
++        <div class="inspector-section"><h5>Actors</h5>${actors ? `<ul class="inspector-list">${actors}</ul>` : '<div class="inspector-empty">None</div>'}</div>
++      </div>
++    `;
++    return;
++  }
++
++  const rels = Array.isArray(selected.relationships)
++    ? selected.relationships.map((r) => `<li>${escapeHtml(r.target_id)} — ${escapeHtml(r.kind || "neutral")}</li>`).join("")
++    : "";
++  const members = Array.isArray(selected.members)
++    ? selected.members.map((m) => `<li>${escapeHtml(m)}</li>`).join("")
++    : "";
++
++  container.innerHTML = `
++    <div class="inspector-panel">
++      <div class="inspector-header">${escapeHtml(selected.name || selected.id)}</div>
++      <div class="inspector-section"><h5>Description</h5><div>${escapeHtml(selected.description || "—")}</div></div>
++      <div class="inspector-section"><h5>Members</h5>${members ? `<ul class="inspector-list">${members}</ul>` : '<div class="inspector-empty">None</div>'}</div>
++      <div class="inspector-section"><h5>Relationships</h5>${rels ? `<ul class="inspector-list">${rels}</ul>` : '<div class="inspector-empty">None</div>'}</div>
++    </div>
++  `;
++}
++
++export function bindWorldInspectorEvents(worldInspectorState) {
++  const container = getWorldListContainer();
++  if (!container) return;
++
++  container.onclick = (e) => {
++    const node = e.target.closest("[data-world-id]");
++    if (!node) return;
++    selectedWorldItemId = String(node.getAttribute("data-world-id") || "");
++    selectedWorldItemKind = String(node.getAttribute("data-world-kind") || "location");
++    renderWorldList(worldInspectorState);
++    renderWorldInspector(worldInspectorState);
++  };
++}
++
+ export function renderPresentation(payload) {
+   const presentation = payload && typeof payload === "object" ? payload.presentation : null;
+   // existing presentation rendering continues here
+@@ -282,5 +415,22 @@ export function renderPresentation(payload) {
+   renderCharacterInspector(selected);
+   bindCharacterInspectorEvents(normalizedInspectorState);
+ 
++  // ---- Phase 11.3 — World Inspector ----
++  const worldInspectorState = payload?.world_inspector_state || null;
++  if (worldInspectorState && typeof worldInspectorState === "object") {
++    const locations = Array.isArray(worldInspectorState?.locations?.locations) ? worldInspectorState.locations.locations : [];
++    const factions = Array.isArray(worldInspectorState?.factions?.factions) ? worldInspectorState.factions.factions : [];
++    if (!selectedWorldItemId) {
++      const first = locations[0] || factions[0] || null;
++      if (first) {
++        selectedWorldItemId = String(first.id || "");
++        selectedWorldItemKind = locations[0] ? "location" : "faction";
++      }
++    }
++    renderWorldList(worldInspectorState);
++    renderWorldInspector(worldInspectorState);
++    bindWorldInspectorEvents(worldInspectorState);
++  }
++
+   return presentation;
+-}
+\ No newline at end of file
++}
+diff --git a/src/tests/unit/rpg/test_character_builder.py b/src/tests/unit/rpg/test_character_builder.py
+index d49d06e..b3c2297 100644
+--- a/src/tests/unit/rpg/test_character_builder.py
++++ b/src/tests/unit/rpg/test_character_builder.py
+@@ -528,3 +528,31 @@ def test_build_character_inspector_empty_inventory_and_quests():
+     assert result["inspector"]["inventory"] == []
+     assert result["inspector"]["active_quests"] == []
+     assert result["inspector"]["beliefs"] == []
++
++
++def test_build_character_ui_entry_includes_card_meta():
++    """Character entry includes card metadata from profile and entry."""
++    simulation_state = {
++        "presentation_state": {
++            "personality_state": {
++                "profiles": {
++                    "npc:guard": {
++                        "archetype": "authority",
++                        "summary": "Veteran commander",
++                    }
++                }
++            }
++        }
++    }
++    entry = {
++        "entity_id": "npc:guard",
++        "speaker_name": "Captain Elira",
++        "role": "guard_captain",
++        "description": "Commands the city gate.",
++        "faction": "City Guard",
++    }
++    result = build_character_ui_entry(simulation_state, entry, 0)
++    assert "card" in result
++    assert result["card"]["subtitle"] == "guard_captain"
++    assert result["card"]["summary"] == "Commands the city gate."
++    assert result["card"]["badge"] == "City Guard"

@@ -1,0 +1,106 @@
+# Phase 9.1 — Party System Fix Pass (2026-04-05 13:05)
+
+## Summary
+Fixed 5 critical issues identified in the initial Phase 9.1 implementation:
+
+## Fixes Applied
+
+### 1. Companion AI runs on both player and NPC turns (combat pacing symmetry)
+**File:** `src/app/rpg/api/rpg_encounter_routes.py`
+
+**Problem:** Companions only acted after NPC turn, breaking combat pacing.
+
+**Fix:** Added `run_companion_turns()` call after `apply_player_action()` in `encounter_action` endpoint.
+
+```python
+encounter_state = resolver.apply_player_action(encounter_state, action_type, target_id)
+encounter_state = resolver.resolve_if_finished(encounter_state)
+
+# NEW: Companions act after player turn
+encounter_state = run_companion_turns(state, encounter_state)
+```
+
+**Result:** Player → Companion → NPC combat order achieved.
+
+### 2. Deterministic companion ordering (replay determinism)
+**File:** `src/app/rpg/party/companion_ai.py`
+
+**Problem:** Companion iteration used insertion order, not sorted → broke replay determinism.
+
+**Fix:** Sort companions by `npc_id` before iterating.
+
+```python
+- for comp in companions[:3]:
++ for comp in sorted(companions, key=lambda c: str(c.get("npc_id")))[:3]:
+```
+
+### 3. NPC validation on recruitment (logic hole)
+**File:** `src/app/rpg/api/rpg_player_routes.py`
+
+**Problem:** Could recruit nonexistent NPCs, enemies, or duplicates.
+
+**Fix:** Validate `npc_id` exists in `state.get("npcs")` before allowing recruitment.
+
+```python
+npcs = state.get("npcs") or {}
+if npc_id not in npcs:
+    return jsonify({
+        "ok": False,
+        "reason": "npc_not_found",
+        "npc_id": npc_id,
+    })
+```
+
+### 4. Inspector party delta visibility (UI gap)
+**File:** `src/static/rpg/rpgInspectorRenderer.js`
+
+**Problem:** `party_before`/`party_after` in tick diff was not rendered.
+
+**Fix:** Added `renderPartyDeltaCard()` function and integrated into `renderTickDiffPanel()`.
+
+```javascript
+function renderPartyDeltaCard(beforeParty, afterParty, changedKeys) {
+  var before = safeObj(beforeParty);
+  var after = safeObj(afterParty);
+
+  function list(p) {
+    var comps = safeArray(p.companions);
+    if (!comps.length) return '<div class="rpg-inspector-muted">None</div>';
+    return comps.map(function(c) {
+      return '<div class="rpg-inspector-kv-row">' +
+        '<span>' + esc(c.name || c.npc_id) + '</span>' +
+        '<span>HP ' + numOrZero(c.hp) + '</span>' +
+      '</div>';
+    }).join("");
+  }
+
+  return '<div class="rpg-inspector-card">' +
+    '<div class="rpg-inspector-card-header"><h4>Party Delta</h4></div>' +
+    '<div class="rpg-inspector-diff-grid">' +
+      '<div class="rpg-inspector-subcard"><div class="rpg-inspector-subcard-title">Before</div>' + list(before) + '</div>' +
+      '<div class="rpg-inspector-subcard"><div class="rpg-inspector-subcard-title">After</div>' + list(after) + '</div>' +
+    '</div></div>';
+}
+```
+
+### 5. Timeline party size visibility (UX gap)
+**File:** `src/static/rpg/rpgInspectorRenderer.js`
+
+**Problem:** `party_size` from timeline was not rendered in tick rows.
+
+**Fix:** Added party size to `renderTimelineRow()` meta display.
+
+```javascript
+'<span>Party: ' + Number(timelineRow.party_size || 0) + '</span>' +
+```
+
+## Status After Fixes
+
+| Area | Status Before | Status After |
+|------|--------------|--------------|
+| Core system | ✅ Good | ✅ Good |
+| Determinism | ⚠️ Needs fix | ✅ Fixed |
+| Encounter integration | ⚠️ Partial | ✅ Fixed |
+| Validation | ❌ Missing | ✅ Fixed |
+| Inspector integration | ❌ Missing | ✅ Fixed |
+| UX completeness | ⚠️ Partial | ✅ Complete |

@@ -687,3 +687,79 @@ export function renderGMInspector(payload) {
 }
 
 // ---- End Phase 12.8 additions ----
+
+// ---- Phase 12.9 — Package Inspector renderer ----
+
+function getPackageInspectorContainer() {
+  return document.getElementById("rpg-package-inspector");
+}
+
+export function renderPackageInspector(payload) {
+  const container = getPackageInspectorContainer();
+  if (!container) return;
+
+  const manifest = payload?.package_manifest || payload?.manifest || null;
+  if (!manifest || typeof manifest !== "object") {
+    container.innerHTML = `<div class="inspector-empty">No package loaded.</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="inspector-panel">
+      <div class="inspector-header">Package</div>
+      <div class="inspector-section"><h5>Title</h5><div>${escapeHtml(manifest.title || "—")}</div></div>
+      <div class="inspector-section"><h5>Description</h5><div>${escapeHtml(manifest.description || "—")}</div></div>
+      <div class="inspector-section"><h5>Version</h5><div>${escapeHtml(manifest.package_version || "—")}</div></div>
+      <div class="inspector-section"><h5>Created By</h5><div>${escapeHtml(manifest.created_by || "—")}</div></div>
+    </div>
+  `;
+}
+
+// ---- Phase 13.0 — Content Packs renderer ----
+
+function getContentPackContainer() {
+  return document.getElementById("rpg-content-packs");
+}
+
+export function renderContentPacks(payload) {
+  const container = getContentPackContainer();
+  if (!container) return;
+
+  const packs = Array.isArray(payload?.content_packs) ? payload.content_packs : [];
+  if (!packs.length) {
+    container.innerHTML = `<div class="inspector-empty">No content packs.</div>`;
+    return;
+  }
+
+  container.innerHTML = packs.map((pack) => {
+    const manifest = pack?.manifest || {};
+    return `
+      <div class="content-pack-card">
+        <div class="content-pack-title">${escapeHtml(manifest.title || manifest.id || "Pack")}</div>
+        <div class="pack-meta">${escapeHtml(manifest.description || "")}</div>
+        <div class="pack-meta">${escapeHtml(manifest.author || "")} · ${escapeHtml(manifest.version || "")}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+// ---- Extend renderPresentation to include package/packs ----
+
+const _originalRenderPresentation = renderPresentation;
+
+export function renderPresentationWithPackages(payload) {
+  const presentation = _originalRenderPresentation(payload);
+
+  const packageManifest = payload?.package_manifest || payload?.manifest || null;
+  if (packageManifest && typeof packageManifest === "object") {
+    renderPackageInspector(payload);
+  }
+
+  if (Array.isArray(payload?.content_packs)) {
+    renderContentPacks(payload);
+  }
+
+  return presentation;
+}
+
+// ---- End Phase 12.9 / 13.0 additions ----

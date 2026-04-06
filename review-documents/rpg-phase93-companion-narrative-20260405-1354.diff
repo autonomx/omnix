@@ -1,0 +1,168 @@
+diff --git a/src/app/rpg/analytics/tick_diff.py b/src/app/rpg/analytics/tick_diff.py
+index dd1d471..2c9cb97 100644
+--- a/src/app/rpg/analytics/tick_diff.py
++++ b/src/app/rpg/analytics/tick_diff.py
+@@ -48,6 +48,8 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
+     after_player_state = _safe_dict(after_state.get("player_state"))
+     before_inventory = _safe_dict(before_player_state.get("inventory_state"))
+     after_inventory = _safe_dict(after_player_state.get("inventory_state"))
++    before_party = _safe_dict(before_player_state.get("party_state"))
++    after_party = _safe_dict(after_player_state.get("party_state"))
+ 
+     changed_npcs = []
+     for npc_id in sorted(set(before_npc_minds.keys()) | set(after_npc_minds.keys())):
+@@ -101,6 +103,9 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
+         "inventory_keys_changed": _keys_changed(before_inventory, after_inventory),
+         "inventory_before": before_inventory,
+         "inventory_after": after_inventory,
++        "party_keys_changed": _keys_changed(before_party, after_party),
++        "party_before": before_party,
++        "party_after": after_party,
+         "changed_npc_ids": changed_npcs[:20],
+         "summary": {
+             "event_delta": len(after_events) - len(before_events),
+@@ -108,5 +113,7 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
+             "npc_changes": len(changed_npcs),
+             "inventory_item_kinds_before": len(_safe_list(before_inventory.get("items"))),
+             "inventory_item_kinds_after": len(_safe_list(after_inventory.get("items"))),
++            "party_size_before": len(_safe_list(before_party.get("companions"))),
++            "party_size_after": len(_safe_list(after_party.get("companions"))),
+         },
+     }
+diff --git a/src/app/rpg/party/__init__.py b/src/app/rpg/party/__init__.py
+index 804a822..e23dc05 100644
+--- a/src/app/rpg/party/__init__.py
++++ b/src/app/rpg/party/__init__.py
+@@ -21,6 +21,17 @@ from .companion_effects import (
+     apply_party_item_to_companion,
+ )
+ 
++from .companion_narrative import (
++    build_companion_scene_context,
++    build_companion_dialogue_context,
++    choose_scene_interjections,
++    apply_companion_choice_reactions,
++    build_companion_presence_summary,
++    build_companion_scene_reactions,
++    record_companion_narrative_event,
++    build_party_narrative_summary,
++)
++
+ __all__ = [
+     "ensure_party_state",
+     "add_companion",
+@@ -36,4 +47,13 @@ __all__ = [
+     "run_companion_turns",
+     "choose_companion_action",
+     "apply_party_item_to_companion",
+-]
+\ No newline at end of file
++    # Phase 9.3 - Companion Narrative
++    "build_companion_scene_context",
++    "build_companion_dialogue_context",
++    "choose_scene_interjections",
++    "apply_companion_choice_reactions",
++    "build_companion_presence_summary",
++    "build_companion_scene_reactions",
++    "record_companion_narrative_event",
++    "build_party_narrative_summary",
++]
+diff --git a/src/app/rpg/persistence/migration_manager.py b/src/app/rpg/persistence/migration_manager.py
+index 472669b..2b86441 100644
+--- a/src/app/rpg/persistence/migration_manager.py
++++ b/src/app/rpg/persistence/migration_manager.py
+@@ -3,7 +3,7 @@ from __future__ import annotations
+ from typing import Any, Dict
+ 
+ from .save_schema import CURRENT_RPG_SCHEMA_VERSION
+-from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6
++from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6, migrate_v6_to_v7
+ 
+ 
+ def _safe_int(v: Any, default: int = 1) -> int:
+@@ -29,6 +29,8 @@ def migrate_package_to_current(package: Dict[str, Any]) -> Dict[str, Any]:
+             package = migrate_v4_to_v5(package)
+         elif version == 5:
+             package = migrate_v5_to_v6(package)
++        elif version == 6:
++            package = migrate_v6_to_v7(package)
+         else:
+             raise ValueError(f"Unsupported schema migration path from version {version}")
+         version = _safe_int(package.get("schema_version"), version + 1)
+diff --git a/src/app/rpg/persistence/migrations/__init__.py b/src/app/rpg/persistence/migrations/__init__.py
+index 74df9c3..8f7d8bd 100644
+--- a/src/app/rpg/persistence/migrations/__init__.py
++++ b/src/app/rpg/persistence/migrations/__init__.py
+@@ -3,6 +3,7 @@ from .v2_to_v3 import migrate_v2_to_v3
+ from .v3_to_v4 import migrate_v3_to_v4
+ from .v4_to_v5 import migrate_v4_to_v5
+ from .v5_to_v6 import migrate_v5_to_v6
++from .v6_to_v7 import migrate_v6_to_v7
+ 
+ __all__ = [
+     "migrate_v1_to_v2",
+@@ -10,4 +11,5 @@ __all__ = [
+     "migrate_v3_to_v4",
+     "migrate_v4_to_v5",
+     "migrate_v5_to_v6",
+-]
+\ No newline at end of file
++    "migrate_v6_to_v7",
++]
+diff --git a/src/app/rpg/persistence/save_schema.py b/src/app/rpg/persistence/save_schema.py
+index 9a9f2cf..5779f48 100644
+--- a/src/app/rpg/persistence/save_schema.py
++++ b/src/app/rpg/persistence/save_schema.py
+@@ -1,5 +1,5 @@
+ from __future__ import annotations
+ 
+-CURRENT_RPG_SCHEMA_VERSION = 6
++CURRENT_RPG_SCHEMA_VERSION = 7
+ PACKAGE_TYPE = "rpg_save_package"
+-ENGINE_VERSION = "phase_9_2"
++ENGINE_VERSION = "phase_9_3"
+diff --git a/src/app/rpg/player/player_party.py b/src/app/rpg/player/player_party.py
+index 9a4ffaf..32cbd7f 100644
+--- a/src/app/rpg/player/player_party.py
++++ b/src/app/rpg/player/player_party.py
+@@ -1,14 +1,19 @@
+-"""Phase 9.2 — Player party view helpers.
++"""Phase 9.2/9.3 — Player party view helpers.
+ 
+-Provides helpers to build party views for the player-facing UI.
++Provides helpers to build party views for the player-facing UI,
++including Phase 9.3 companion narrative presence summaries.
+ """
+ from typing import Dict, Any
+ 
+-from app.rpg.party import ensure_party_state, build_party_summary
++from app.rpg.party import (
++    ensure_party_state,
++    build_party_summary,
++    build_companion_presence_summary,
++)
+ 
+ 
+-def _safe_dict(v):
+-    return v if isinstance(v, dict) else {}
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
+ 
+ 
+ def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+@@ -21,11 +26,12 @@ def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+ 
+ 
+ def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+-    """Build the full party view for UI display."""
++    """Build the full party view for UI display, including narrative presence."""
+     simulation_state = ensure_player_party(simulation_state)
+     player_state = _safe_dict(simulation_state.get("player_state"))
+     party_state = _safe_dict(player_state.get("party_state"))
+     return {
+         "party_state": party_state,
+         "party_summary": build_party_summary(player_state),
+-    }
+\ No newline at end of file
++        "presence_summary": build_companion_presence_summary(player_state),
++    }

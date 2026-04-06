@@ -1,0 +1,156 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from app.rpg.compat.character_cards import import_external_character_card
+from app.rpg.presentation.visual_state import ensure_visual_state
+
+
+_MAX_PACKS = 32
+_MAX_PACK_CHARACTERS = 64
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _first_non_empty(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _normalize_pack_manifest(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    return {
+        "id": _safe_str(data.get("id")).strip(),
+        "title": _safe_str(data.get("title")).strip(),
+        "description": _safe_str(data.get("description")).strip(),
+        "author": _safe_str(data.get("author")).strip(),
+        "version": _first_non_empty(data.get("version"), "1.0"),
+        "pack_type": _first_non_empty(data.get("pack_type"), "mixed"),
+    }
+
+
+def _normalize_content_pack(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    return {
+        "manifest": _normalize_pack_manifest(data.get("manifest")),
+        "characters": [
+            _safe_dict(item) for item in _safe_list(data.get("characters")) if isinstance(item, dict)
+        ][:_MAX_PACK_CHARACTERS],
+        "scenario": _safe_dict(data.get("scenario")),
+        "world_seed": _safe_dict(data.get("world_seed")),
+        "visual_defaults": _safe_dict(data.get("visual_defaults")),
+    }
+
+
+def ensure_content_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = ensure_visual_state(_safe_dict(simulation_state))
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    modding_state = presentation_state.get("modding_state")
+    if not isinstance(modding_state, dict):
+        modding_state = {}
+        presentation_state["modding_state"] = modding_state
+
+    packs_in = _safe_list(modding_state.get("installed_packs"))
+    packs_out = [
+        _normalize_content_pack(item)
+        for item in packs_in
+        if isinstance(item, dict)
+    ]
+    packs_out = sorted(
+        packs_out,
+        key=lambda item: (
+            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
+            _safe_str(_safe_dict(item.get("manifest")).get("id")),
+        ),
+    )[:_MAX_PACKS]
+    modding_state["installed_packs"] = packs_out
+    return simulation_state
+
+
+def install_content_pack(
+    simulation_state: Dict[str, Any],
+    pack: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = ensure_content_pack_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    modding_state = _safe_dict(presentation_state.get("modding_state"))
+
+    packs = _safe_list(modding_state.get("installed_packs"))
+    packs.append(_normalize_content_pack(pack))
+    packs = sorted(
+        [item for item in packs if isinstance(item, dict)],
+        key=lambda item: (
+            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
+            _safe_str(_safe_dict(item.get("manifest")).get("id")),
+        ),
+    )[:_MAX_PACKS]
+    modding_state["installed_packs"] = packs
+    return simulation_state
+
+
+def list_content_packs(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    simulation_state = ensure_content_pack_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    modding_state = _safe_dict(presentation_state.get("modding_state"))
+    return _safe_list(modding_state.get("installed_packs"))
+
+
+def build_pack_application_preview(pack: Dict[str, Any]) -> Dict[str, Any]:
+    pack = _normalize_content_pack(pack)
+
+    imported_characters = [
+        import_external_character_card(card)
+        for card in _safe_list(pack.get("characters"))
+        if isinstance(card, dict)
+    ][: _MAX_PACK_CHARACTERS]
+
+    return {
+        "manifest": _safe_dict(pack.get("manifest")),
+        "character_count": len(imported_characters),
+        "characters": imported_characters,
+        "scenario": _safe_dict(pack.get("scenario")),
+        "world_seed": _safe_dict(pack.get("world_seed")),
+        "visual_defaults": _safe_dict(pack.get("visual_defaults")),
+    }
+
+
+def apply_content_pack(
+    simulation_state: Dict[str, Any],
+    pack: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = ensure_content_pack_state(simulation_state)
+    pack = _normalize_content_pack(pack)
+
+    simulation_state = install_content_pack(simulation_state, pack)
+
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    defaults = _safe_dict(visual_state.get("defaults"))
+
+    pack_visual_defaults = _safe_dict(pack.get("visual_defaults"))
+    if pack_visual_defaults:
+        defaults.update({
+            key: value
+            for key, value in pack_visual_defaults.items()
+            if _safe_str(key).strip()
+        })
+        visual_state["defaults"] = defaults
+
+    return simulation_state

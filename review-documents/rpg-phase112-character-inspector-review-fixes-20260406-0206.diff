@@ -1,0 +1,480 @@
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 5719194..a82377e 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -4,6 +4,7 @@ Provides read-only builders for presentation payloads:
+ - Scene presentation
+ - Dialogue presentation
+ - Speaker cards
++- Character UI state (canonical)
+ - Setup flow (product layer A1)
+ - Intro scene (product layer A2)
+ - Save/load UX (product layer A5)
+@@ -15,22 +16,23 @@ from typing import Any, Dict
+ 
+ from flask import Blueprint, jsonify, request
+ 
+-from app.rpg.player import ensure_player_state, ensure_player_party
++from app.rpg.player import ensure_player_party, ensure_player_state
+ from app.rpg.presentation import (
+-    build_scene_presentation_payload,
+     build_dialogue_presentation_payload,
+-    build_runtime_presentation_payload,
+-    build_orchestration_presentation_payload,
+-    build_live_provider_presentation_payload,
+-    build_setup_flow_payload,
+-    build_intro_scene_payload,
+     build_dialogue_ux_payload,
++    build_intro_scene_payload,
++    build_live_provider_presentation_payload,
++    build_narrative_recap_payload,
++    build_orchestration_presentation_payload,
+     build_player_inspector_overlay_payload,
++    build_runtime_presentation_payload,
+     build_save_load_ux_payload,
+-    build_narrative_recap_payload,
++    build_scene_presentation_payload,
++    build_setup_flow_payload,
+ )
++from app.rpg.presentation.personality_state import ensure_personality_state
+ from app.rpg.presentation.speaker_cards import build_speaker_cards
+-
++from app.rpg.ui.character_builder import build_character_inspector_state, build_character_ui_state
+ 
+ rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
+ 
+@@ -39,11 +41,91 @@ def _safe_dict(v: Any) -> Dict[str, Any]:
+     return dict(v) if isinstance(v, dict) else {}
+ 
+ 
++def _safe_character_ui_state(v: Any) -> Dict[str, Any]:
++    if not isinstance(v, dict):
++        return {"characters": [], "count": 0}
++    raw_characters = v.get("characters")
++    if not isinstance(raw_characters, list):
++        raw_characters = []
++
++    characters = [item for item in raw_characters if isinstance(item, dict)]
++
++    raw_count = v.get("count", len(characters))
++    count = raw_count if isinstance(raw_count, int) else len(characters)
++
++    return {
++        "characters": characters,
++        "count": count,
++    }
++
++
+ def _get_simulation_state(setup_payload: Dict[str, Any]) -> Dict[str, Any]:
+     setup_payload = _safe_dict(setup_payload)
+     return _safe_dict(setup_payload.get("simulation_state"))
+ 
+ 
++def _ensure_character_ui_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Attach fresh canonical character_ui_state at presentation boundary."""
++    simulation_state = _safe_dict(simulation_state)
++    presentation_state = simulation_state.get("presentation_state")
++    if not isinstance(presentation_state, dict):
++        presentation_state = {}
++        simulation_state["presentation_state"] = presentation_state
++
++    presentation_state["character_ui_state"] = build_character_ui_state(simulation_state)
++    return simulation_state
++
++
++def _extract_character_ui_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Extract character_ui_state from simulation state."""
++    simulation_state = _safe_dict(simulation_state)
++    presentation_state = simulation_state.get("presentation_state") or {}
++    if not isinstance(presentation_state, dict):
++        presentation_state = {}
++    character_ui_state = presentation_state.get("character_ui_state") or {"characters": [], "count": 0}
++    return _safe_character_ui_state(character_ui_state)
++
++
++def _safe_character_inspector_state(v: Any) -> Dict[str, Any]:
++    if not isinstance(v, dict):
++        return {"characters": [], "count": 0}
++    raw_characters = v.get("characters")
++    if not isinstance(raw_characters, list):
++        raw_characters = []
++
++    characters = [item for item in raw_characters if isinstance(item, dict)]
++
++    raw_count = v.get("count", len(characters))
++    count = raw_count if isinstance(raw_count, int) else len(characters)
++
++    return {
++        "characters": characters,
++        "count": count,
++    }
++
++
++def _ensure_character_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Attach fresh canonical character_inspector_state at presentation boundary."""
++    simulation_state = _safe_dict(simulation_state)
++    presentation_state = simulation_state.get("presentation_state")
++    if not isinstance(presentation_state, dict):
++        presentation_state = {}
++        simulation_state["presentation_state"] = presentation_state
++
++    presentation_state["character_inspector_state"] = build_character_inspector_state(simulation_state)
++    return simulation_state
++
++
++def _extract_character_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Extract character_inspector_state from simulation state."""
++    simulation_state = _safe_dict(simulation_state)
++    presentation_state = simulation_state.get("presentation_state") or {}
++    if not isinstance(presentation_state, dict):
++        presentation_state = {}
++    inspector_state = presentation_state.get("character_inspector_state") or {"characters": [], "count": 0}
++    return _safe_character_inspector_state(inspector_state)
++
++
+ @rpg_presentation_bp.post("/api/rpg/presentation/scene")
+ def presentation_scene():
+     """Build a presentation-ready scene payload."""
+@@ -53,6 +135,9 @@ def presentation_scene():
+ 
+     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+     simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = _ensure_character_inspector_state(simulation_state)
+ 
+     payload = build_scene_presentation_payload(simulation_state, scene_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+@@ -82,6 +167,8 @@ def presentation_scene():
+     return jsonify({
+         "ok": True,
+         "presentation": payload,
++        "character_ui_state": _extract_character_ui_state(simulation_state),
++        "character_inspector_state": _extract_character_inspector_state(simulation_state),
+     })
+ 
+ 
+@@ -94,6 +181,9 @@ def presentation_dialogue():
+ 
+     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+     simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = _ensure_character_inspector_state(simulation_state)
+ 
+     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+@@ -130,6 +220,8 @@ def presentation_dialogue():
+     return jsonify({
+         "ok": True,
+         "presentation": payload,
++        "character_ui_state": _extract_character_ui_state(simulation_state),
++        "character_inspector_state": _extract_character_inspector_state(simulation_state),
+     })
+ 
+ 
+@@ -234,9 +326,81 @@ def presentation_narrative_recap():
+     setup_payload = body.get("setup_payload") or {}
+     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+     simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = _ensure_character_inspector_state(simulation_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+     payload = build_narrative_recap_payload(simulation_state, runtime_payload)
+     return jsonify({
+         "ok": True,
+         "presentation": payload,
+-    })
+\ No newline at end of file
++        "character_ui_state": _extract_character_ui_state(simulation_state),
++        "character_inspector_state": _extract_character_inspector_state(simulation_state),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/character_ui")
++def presentation_character_ui():
++    """Return canonical character UI state for current simulation."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++
++    character_ui_state = _extract_character_ui_state(simulation_state)
++
++    return jsonify({
++        "ok": True,
++        "character_ui_state": character_ui_state,
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/character_inspector")
++def presentation_character_inspector():
++    """Return canonical character inspector state for current simulation."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = _ensure_character_inspector_state(simulation_state)
++
++    return jsonify({
++        "ok": True,
++        "character_inspector_state": _extract_character_inspector_state(simulation_state),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/character_inspector/detail")
++def presentation_character_inspector_detail():
++    """Return inspector detail for one character."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    actor_id = str(data.get("actor_id") or "").strip()
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = _ensure_character_inspector_state(simulation_state)
++
++    inspector_state = _extract_character_inspector_state(simulation_state)
++    characters = inspector_state.get("characters") if isinstance(inspector_state, dict) else []
++    if not isinstance(characters, list):
++        characters = []
++
++    for character in characters:
++        if isinstance(character, dict) and str(character.get("id") or "").strip() == actor_id:
++            return jsonify({
++                "ok": True,
++                "character": character,
++            })
++
++    return jsonify({
++        "ok": False,
++        "error": "character_not_found",
++        "character": None,
++    }), 404
+diff --git a/src/static/rpg/rpgPresentationRenderer.js b/src/static/rpg/rpgPresentationRenderer.js
+index 1182b13..019965c 100644
+--- a/src/static/rpg/rpgPresentationRenderer.js
++++ b/src/static/rpg/rpgPresentationRenderer.js
+@@ -2,6 +2,8 @@
+  * Phase 10 — RPG Presentation Renderer.
+  *
+  * Renders speaker cards and presentation payloads for the frontend.
++ *
++ * Phase 11.2 — Character Inspector frontend additions.
+  */
+ function escapeHtml(str) {
+   return String(str || "")
+@@ -12,6 +14,162 @@ function escapeHtml(str) {
+     .replace(/'/g, "\u0026#039;");
+ }
+ 
++let selectedCharacterId = "";
++
++function getCharacterInspectorContainer() {
++  return document.getElementById("rpg-character-inspector");
++}
++
++function getCharacterListContainer() {
++  return document.getElementById("rpg-character-panel");
++}
++
++function toCharacterInspectorModel(entry) {
++  return entry && typeof entry === "object" ? entry : null;
++}
++
++// ---- Phase 11.2 — Character Inspector renderers ----
++
++export function renderInventoryItems(items) {
++  const list = Array.isArray(items) ? items : [];
++  if (!list.length) return `<div class="inspector-empty">None</div>`;
++  return list.map((item) => `
++    <div class="inspector-inventory-item">
++      <span class="inspector-item-name">${escapeHtml(item.name || item.id)}</span>
++      ${typeof item.quantity === "number" && item.quantity > 1 ? `<span class="inspector-item-qty">x${item.quantity}</span>` : ""}
++    </div>
++  `).join("");
++}
++
++export function renderGoals(goals) {
++  const list = Array.isArray(goals) ? goals : [];
++  if (!list.length) return `<div class="inspector-empty">None</div>`;
++  return `<ul class="inspector-list">${list.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>`;
++}
++
++export function renderBeliefs(beliefs) {
++  const list = Array.isArray(beliefs) ? beliefs : [];
++  if (!list.length) return `<div class="inspector-empty">None</div>`;
++  return list.map((b) => `
++    <div class="inspector-belief">
++      <span class="inspector-belief-target">${escapeHtml(b.target_id)}:</span>
++      <span class="inspector-belief-summary">${escapeHtml(b.summary || "")}</span>
++    </div>
++  `).join("");
++}
++
++export function renderActiveQuests(quests) {
++  const list = Array.isArray(quests) ? quests : [];
++  if (!list.length) return `<div class="inspector-empty">None</div>`;
++  return list.map((q) => `
++    <div class="inspector-quest">
++      <span class="inspector-quest-title">${escapeHtml(q.title || q.id)}</span>
++      <span class="inspector-quest-status">${escapeHtml(q.status || "active")}</span>
++    </div>
++  `).join("");
++}
++
++export function renderRelationshipSummary(summary) {
++  const s = summary || {};
++  return `
++    <div class="inspector-relationships">
++      <span class="inspector-rel-positive">+${s.positive || 0}</span>
++      <span class="inspector-rel-neutral">=${s.neutral || 0}</span>
++      <span class="inspector-rel-negative">-${s.negative || 0}</span>
++    </div>
++  `;
++}
++
++export function renderInspectorPanel(character) {
++  if (!character || typeof character !== "object") return "";
++  const inspector = character.inspector || {};
++  return `
++    <div class="inspector-panel" data-character-id="${escapeHtml(character.id)}">
++      <div class="inspector-header">${escapeHtml(character.name || character.id)}</div>
++      <div class="inspector-section">
++        <h5>Inventory</h5>
++        ${renderInventoryItems(inspector.inventory)}
++      </div>
++      <div class="inspector-section">
++        <h5>Goals</h5>
++        ${renderGoals(inspector.goals)}
++      </div>
++      <div class="inspector-section">
++        <h5>Beliefs</h5>
++        ${renderBeliefs(inspector.beliefs)}
++      </div>
++      <div class="inspector-section">
++        <h5>Active Quests</h5>
++        ${renderActiveQuests(inspector.active_quests)}
++      </div>
++      <div class="inspector-section">
++        <h5>Relationships</h5>
++        ${renderRelationshipSummary(inspector.relationship_summary)}
++      </div>
++    </div>
++  `;
++}
++
++export function renderCharacterInspector(character) {
++  const container = getCharacterInspectorContainer();
++  if (!container) return;
++
++  if (!character || typeof character !== "object") {
++    container.innerHTML = `<div class="inspector-empty">Select a character.</div>`;
++    return;
++  }
++
++  container.innerHTML = renderInspectorPanel(character);
++}
++
++export function renderCharacterList(inspectorState) {
++  const container = getCharacterListContainer();
++  if (!container) return;
++
++  const characters = Array.isArray(inspectorState?.characters) ? inspectorState.characters : [];
++  if (!characters.length) {
++    container.innerHTML = `<div class="inspector-empty">No characters in inspector state.</div>`;
++    return;
++  }
++
++  container.innerHTML = characters.map((c) => {
++    const id = escapeHtml(c.id || "");
++    const name = escapeHtml(c.name || c.id || "Unknown");
++    const role = escapeHtml(c.role || "character");
++    const currentIntent = escapeHtml(c.current_intent || "");
++    const selected = selectedCharacterId && selectedCharacterId === (c.id || "") ? " is-selected" : "";
++    return `
++      <button
++        type="button"
++        class="inspector-character-button${selected}"
++        data-character-id="${id}"
++      >
++        <div class="inspector-character-name">${name}</div>
++        <div class="inspector-character-role">${role}</div>
++        ${currentIntent ? `<div class="inspector-character-intent">${currentIntent}</div>` : ""}
++      </button>
++    `;
++  }).join("");
++}
++
++export function bindCharacterInspectorEvents(inspectorState) {
++  const container = getCharacterListContainer();
++  if (!container) return;
++
++  const characters = Array.isArray(inspectorState.characters) ? inspectorState.characters : [];
++
++  container.onclick = (e) => {
++    const node = e.target.closest("[data-character-id]");
++    if (!node) return;
++
++    selectedCharacterId = String(node.getAttribute("data-character-id") || "");
++    const selected = characters.find((c) => String(c?.id || "") === selectedCharacterId) || null;
++
++    renderCharacterList(inspectorState);
++    renderCharacterInspector(selected);
++  };
++}
++
+ function renderStyleTags(tags) {
+   const list = Array.isArray(tags) ? tags : [];
+   if (!list.length) return "";
+@@ -86,4 +244,43 @@ export function renderDialoguePresentation(presentation) {
+       ${renderSpeakerCards(payload.speaker_cards || [])}
+     \u003c/div>
+   `;
++}
++
++export function renderPresentation(payload) {
++  const presentation = payload && typeof payload === "object" ? payload.presentation : null;
++  // existing presentation rendering continues here
++  // ...
++
++  const inspectorState = payload?.character_inspector_state || null;
++
++  if (!inspectorState || !Array.isArray(inspectorState.characters)) {
++    return presentation;
++  }
++
++  const characters = inspectorState.characters.map(toCharacterInspectorModel).filter(Boolean);
++  const normalizedInspectorState = {
++    characters,
++    count: typeof inspectorState.count === "number" ? inspectorState.count : characters.length,
++  };
++
++  if (!characters.length) {
++    renderCharacterList(normalizedInspectorState);
++    renderCharacterInspector(null);
++    return presentation;
++  }
++
++  if (!selectedCharacterId) {
++    selectedCharacterId = String(characters[0].id || "");
++  }
++
++  const selected =
++    characters.find((c) => String(c?.id || "") === selectedCharacterId) ||
++    characters[0] ||
++    null;
++
++  renderCharacterList(normalizedInspectorState);
++  renderCharacterInspector(selected);
++  bindCharacterInspectorEvents(normalizedInspectorState);
++
++  return presentation;
+ }
+\ No newline at end of file

@@ -1,0 +1,86 @@
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 812d82e..1c6ee3e 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -15,6 +15,8 @@ from app.rpg.player import ensure_player_state, ensure_player_party
+ from app.rpg.presentation import (
+     build_scene_presentation_payload,
+     build_dialogue_presentation_payload,
++    build_runtime_presentation_payload,
++    build_orchestration_presentation_payload,
+ )
+ from app.rpg.presentation.speaker_cards import build_speaker_cards
+ 
+@@ -42,6 +44,18 @@ def presentation_scene():
+     simulation_state = ensure_player_party(simulation_state)
+ 
+     payload = build_scene_presentation_payload(simulation_state, scene_state)
++    runtime_payload = build_runtime_presentation_payload(simulation_state)
++    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
++    if isinstance(payload, dict):
++        payload = dict(payload)
++        payload["runtime"] = runtime_payload
++        payload["orchestration"] = orchestration_payload
++    else:
++        payload = {
++            "content": payload,
++            "runtime": runtime_payload,
++            "orchestration": orchestration_payload,
++        }
+ 
+     return jsonify({
+         "ok": True,
+@@ -60,6 +74,18 @@ def presentation_dialogue():
+     simulation_state = ensure_player_party(simulation_state)
+ 
+     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
++    runtime_payload = build_runtime_presentation_payload(simulation_state)
++    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
++    if isinstance(payload, dict):
++        payload = dict(payload)
++        payload["runtime"] = runtime_payload
++        payload["orchestration"] = orchestration_payload
++    else:
++        payload = {
++            "content": payload,
++            "runtime": runtime_payload,
++            "orchestration": orchestration_payload,
++        }
+ 
+     return jsonify({
+         "ok": True,
+@@ -78,8 +104,12 @@ def presentation_speakers():
+     simulation_state = ensure_player_party(simulation_state)
+ 
+     cards = build_speaker_cards(simulation_state, scene_state)
++    runtime_payload = build_runtime_presentation_payload(simulation_state)
++    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
+ 
+     return jsonify({
+         "ok": True,
+         "speaker_cards": cards,
+-    })
+\ No newline at end of file
++        "runtime": runtime_payload,
++        "orchestration": orchestration_payload,
++    })
+diff --git a/src/app/rpg/presentation/__init__.py b/src/app/rpg/presentation/__init__.py
+index 238fcbb..c2c29a1 100644
+--- a/src/app/rpg/presentation/__init__.py
++++ b/src/app/rpg/presentation/__init__.py
+@@ -33,6 +33,9 @@ from .dialogue_fallbacks import (
+ from .runtime_bridge import (
+     build_runtime_presentation_payload,
+ )
++from .orchestration_bridge import (
++    build_orchestration_presentation_payload,
++)
+ 
+ __all__ = [
+     "build_personality_prompt_hints",
+@@ -49,4 +52,5 @@ __all__ = [
+     "build_deterministic_dialogue_fallback",
+     "build_deterministic_scene_fallback",
+     "build_runtime_presentation_payload",
++    "build_orchestration_presentation_payload",
+ ]

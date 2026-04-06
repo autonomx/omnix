@@ -594,3 +594,32 @@
 .gm-request-status.failed {
   color: #dc3545;
 }
+
+/* ---- Phase 12.9 — Package Inspector styles ---- */
+.package-card {
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--rpg-surface-dark, #1a1a2e);
+}
+
+/* ---- Phase 13.0 — Content Pack styles ---- */
+.content-pack-card {
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--rpg-surface-dark, #1a1a2e);
+}
+
+.content-pack-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.pack-meta {
+  font-size: 0.85em;
+  color: var(--rpg-text-secondary, #aaa);
+  margin-bottom: 4px;
+}

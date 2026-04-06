@@ -1,0 +1,2160 @@
+diff --git a/rpg-design.txt b/rpg-design.txt
+index ff2d3ce..f21447a 100644
+--- a/rpg-design.txt
++++ b/rpg-design.txt
+@@ -1,332 +1,1008 @@
+-🧠 Phase 9.1 — Design Scope (what this patch implements)
++Quick review of the 9.1 fix pass
+ 
+-New capabilities:
++Your fixes address the important weaknesses from the first pass:
+ 
+-persistent party_state in player_state
+-recruit / remove companions
+-companion stats + relationship
+-simple AI-driven companion actions in encounters
+-inventory sharing (light integration)
+-inspector visibility
+-save migration v4 → v5
+-🔧 1) New Party Module
++companion turns now run after player turns as well, which fixes the pacing asymmetry in encounters
++companion iteration is now deterministic via npc_id sort
++recruit flow now validates the NPC exists before joining
++inspector diff now shows party deltas
++timeline rows now expose party size
++
++That moves 9.1 from “good scaffold” to “solid integrated phase.”
++
++Two small cautions before 9.2:
++
++the recruit validation you described checks existence, but not hostile/disallowed recruitment yet; that is fine to defer into 9.2 as a rules-layer upgrade
++if run_companion_turns() can be called after resolution, keep a guard so companions do not act on already-resolved encounters
++
++With that, here is the next step.
++
++Phase 9.2 — Companion Intelligence Layer
++Literal apply-this-patch diff spec
++
++This phase adds:
++
++companion stat management
++loyalty updates
++shared inventory consumption hooks
++more sophisticated deterministic companion AI
++inspector/timeline visibility for companion state changes
++save migration v5 → v6
++1) Expand party module exports
+ src/app/rpg/party/__init__.py
+ *** Begin Patch
+-*** Add File: src/app/rpg/party/__init__.py
+-+from .party_state import (
+-+    ensure_party_state,
+-+    add_companion,
+-+    remove_companion,
+-+    get_active_companions,
+-+)
++*** Update File: src/app/rpg/party/__init__.py
++@@
++ from .party_state import (
++     ensure_party_state,
++     add_companion,
++     remove_companion,
++     get_active_companions,
+++    update_companion_hp,
+++    update_companion_loyalty,
+++    set_companion_status,
+++    build_party_summary,
++ )
++ 
++ from .companion_ai import (
++     run_companion_turns,
+++    choose_companion_action,
++ )
+ +
+-+from .companion_ai import (
+-+    run_companion_turns,
+++from .companion_effects import (
+++    apply_party_item_to_companion,
+ +)
+-+
+-+__all__ = [
+-+    "ensure_party_state",
+-+    "add_companion",
+-+    "remove_companion",
+-+    "get_active_companions",
+-+    "run_companion_turns",
+-+]
++ 
++ __all__ = [
++     "ensure_party_state",
++     "add_companion",
++     "remove_companion",
++     "get_active_companions",
+++    "update_companion_hp",
+++    "update_companion_loyalty",
+++    "set_companion_status",
+++    "build_party_summary",
++     "run_companion_turns",
+++    "choose_companion_action",
+++    "apply_party_item_to_companion",
++ ]
+ *** End Patch
+-party_state.py
++2) Add richer companion state helpers
++src/app/rpg/party/party_state.py
+ *** Begin Patch
+-*** Add File: src/app/rpg/party/party_state.py
+-+from typing import Dict, Any, List
++*** Update File: src/app/rpg/party/party_state.py
++@@
++ from typing import Dict, Any, List
++ 
++ def _safe_dict(v: Any) -> Dict[str, Any]:
++     return v if isinstance(v, dict) else {}
++ 
++ def _safe_list(v: Any) -> List[Any]:
++     return v if isinstance(v, list) else []
+ +
+++def _safe_str(v: Any) -> str:
+++    return "" if v is None else str(v)
+ +
+-+def _safe_dict(v):
+-+    return v if isinstance(v, dict) else {}
+++def _safe_float(v: Any, default: float = 0.0) -> float:
+++    try:
+++        return float(v)
+++    except Exception:
+++        return default
+ +
+++def _safe_int(v: Any, default: int = 0) -> int:
+++    try:
+++        return int(v)
+++    except Exception:
+++        return default
+ +
+-+def _safe_list(v):
+-+    return v if isinstance(v, list) else []
+++def _clamp(value: float, low: float, high: float) -> float:
+++    return max(low, min(high, value))
+ +
+++def _normalize_companion(companion: Dict[str, Any]) -> Dict[str, Any]:
+++    companion = _safe_dict(companion)
+++    max_hp = max(1, _safe_int(companion.get("max_hp"), 100))
+++    hp = _clamp(_safe_int(companion.get("hp"), max_hp), 0, max_hp)
+++    loyalty = _clamp(_safe_float(companion.get("loyalty"), 0.5), -1.0, 1.0)
+++    status = _safe_str(companion.get("status") or "active")
+++    role = _safe_str(companion.get("role") or "ally")
+++    equipment = _safe_dict(companion.get("equipment"))
+++    return {
+++        "npc_id": _safe_str(companion.get("npc_id")),
+++        "name": _safe_str(companion.get("name") or companion.get("npc_id") or "Companion"),
+++        "hp": int(hp),
+++        "max_hp": max_hp,
+++        "loyalty": loyalty,
+++        "role": role,
+++        "status": status,
+++        "equipment": {
+++            str(k): v for k, v in sorted(equipment.items(), key=lambda kv: str(kv[0]))[:8]
+++            if isinstance(v, dict)
+++        },
+++    }
++ 
++ def ensure_party_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
++     player_state = _safe_dict(player_state)
++     party = _safe_dict(player_state.get("party_state"))
++-    party.setdefault("companions", [])
+++    companions = []
+++    for comp in _safe_list(party.get("companions"))[:6]:
+++        if isinstance(comp, dict) and comp.get("npc_id"):
+++            companions.append(_normalize_companion(comp))
+++    party["companions"] = companions
++     party.setdefault("max_size", 3)
++     player_state["party_state"] = party
++     return player_state
++ 
++ def add_companion(player_state: Dict[str, Any], npc_id: str, name: str) -> Dict[str, Any]:
++@@
++     if len(companions) >= int(party.get("max_size", 3)):
++         return player_state
++-    companions.append({
+++    companions.append(_normalize_companion({
++         "npc_id": npc_id,
++         "name": name,
++         "hp": 100,
+++        "max_hp": 100,
++         "loyalty": 0.5,
++         "role": "ally",
++-    })
+++        "status": "active",
+++        "equipment": {},
+++    }))
+++    companions = sorted(companions, key=lambda c: str(c.get("npc_id")))
++ 
++     party["companions"] = companions
++     player_state["party_state"] = party
++     return player_state
++@@
++ def get_active_companions(player_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++     player_state = ensure_party_state(player_state)
++-    return _safe_list(player_state["party_state"].get("companions"))
+++    companions = _safe_list(player_state["party_state"].get("companions"))
+++    return [
+++        _normalize_companion(comp)
+++        for comp in companions
+++        if _safe_str(comp.get("status")) == "active" and _safe_int(comp.get("hp"), 0) > 0
+++    ]
+ +
+-+def ensure_party_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
+-+    player_state = _safe_dict(player_state)
+-+
+++def update_companion_hp(player_state: Dict[str, Any], npc_id: str, delta: int) -> Dict[str, Any]:
+++    player_state = ensure_party_state(player_state)
+ +    party = _safe_dict(player_state.get("party_state"))
+++    out = []
+++    for comp in _safe_list(party.get("companions")):
+++        comp = _normalize_companion(comp)
+++        if comp.get("npc_id") == npc_id:
+++            comp["hp"] = int(_clamp(comp.get("hp", 0) + _safe_int(delta, 0), 0, comp.get("max_hp", 100)))
+++            if comp["hp"] <= 0:
+++                comp["status"] = "downed"
+++        out.append(comp)
+++    party["companions"] = out
+++    player_state["party_state"] = party
+++    return player_state
+ +
+-+    party.setdefault("companions", [])
+-+    party.setdefault("max_size", 3)
+-+
+++def update_companion_loyalty(player_state: Dict[str, Any], npc_id: str, delta: float) -> Dict[str, Any]:
+++    player_state = ensure_party_state(player_state)
+++    party = _safe_dict(player_state.get("party_state"))
+++    out = []
+++    for comp in _safe_list(party.get("companions")):
+++        comp = _normalize_companion(comp)
+++        if comp.get("npc_id") == npc_id:
+++            comp["loyalty"] = _clamp(comp.get("loyalty", 0.5) + _safe_float(delta, 0.0), -1.0, 1.0)
+++        out.append(comp)
+++    party["companions"] = out
+ +    player_state["party_state"] = party
+ +    return player_state
+ +
+++def set_companion_status(player_state: Dict[str, Any], npc_id: str, status: str) -> Dict[str, Any]:
+++    player_state = ensure_party_state(player_state)
+++    party = _safe_dict(player_state.get("party_state"))
+++    out = []
+++    for comp in _safe_list(party.get("companions")):
+++        comp = _normalize_companion(comp)
+++        if comp.get("npc_id") == npc_id:
+++            comp["status"] = _safe_str(status or "active")
+++        out.append(comp)
+++    party["companions"] = out
+++    player_state["party_state"] = party
+++    return player_state
+ +
+-+def add_companion(player_state: Dict[str, Any], npc_id: str, name: str) -> Dict[str, Any]:
+++def build_party_summary(player_state: Dict[str, Any]) -> Dict[str, Any]:
+ +    player_state = ensure_party_state(player_state)
+-+    party = player_state["party_state"]
+++    party = _safe_dict(player_state.get("party_state"))
+++    companions = [_normalize_companion(c) for c in _safe_list(party.get("companions"))]
+++    return {
+++        "size": len(companions),
+++        "active_count": len([c for c in companions if c.get("status") == "active" and c.get("hp", 0) > 0]),
+++        "downed_count": len([c for c in companions if c.get("status") == "downed" or c.get("hp", 0) <= 0]),
+++        "avg_loyalty": round(
+++            sum(float(c.get("loyalty", 0.0)) for c in companions) / max(1, len(companions)),
+++            3,
+++        ),
+++    }
++*** End Patch
++3) Add companion item/effect hooks
++src/app/rpg/party/companion_effects.py
++*** Begin Patch
++*** Add File: src/app/rpg/party/companion_effects.py
+++from typing import Dict, Any
+ +
+-+    companions = _safe_list(party.get("companions"))
+++from app.rpg.items import get_item_definition, remove_inventory_item, normalize_inventory_state
+++from .party_state import ensure_party_state, update_companion_hp
+ +
+-+    if any(c.get("npc_id") == npc_id for c in companions):
+-+        return player_state
+ +
+-+    if len(companions) >= int(party.get("max_size", 3)):
+-+        return player_state
+++def _safe_dict(v):
+++    return v if isinstance(v, dict) else {}
+ +
+-+    companions.append({
+-+        "npc_id": npc_id,
+-+        "name": name,
+-+        "hp": 100,
+-+        "loyalty": 0.5,
+-+        "role": "ally",
+-+    })
+ +
+-+    party["companions"] = companions
+-+    player_state["party_state"] = party
+-+    return player_state
+++def _safe_str(v):
+++    return "" if v is None else str(v)
+ +
+ +
+-+def remove_companion(player_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+-+    player_state = ensure_party_state(player_state)
+-+    party = player_state["party_state"]
+++def apply_party_item_to_companion(simulation_state: Dict[str, Any], npc_id: str, item_id: str) -> Dict[str, Any]:
+++    simulation_state = _safe_dict(simulation_state)
+++    player_state = ensure_party_state(_safe_dict(simulation_state.get("player_state")))
+++    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
+++    item_def = get_item_definition(_safe_str(item_id))
+ +
+-+    companions = [
+-+        c for c in _safe_list(party.get("companions"))
+-+        if c.get("npc_id") != npc_id
+-+    ]
+++    if not item_def:
+++        return {
+++            "simulation_state": simulation_state,
+++            "result": {"ok": False, "reason": "unknown_item", "npc_id": npc_id, "item_id": item_id},
+++        }
+ +
+-+    party["companions"] = companions
+-+    player_state["party_state"] = party
+-+    return player_state
+++    items = inventory_state.get("items") or []
+++    has_item = any(
+++        isinstance(item, dict)
+++        and _safe_str(item.get("item_id")) == _safe_str(item_id)
+++        and int(item.get("qty", 0)) > 0
+++        for item in items
+++    )
+++    if not has_item:
+++        return {
+++            "simulation_state": simulation_state,
+++            "result": {"ok": False, "reason": "item_not_owned", "npc_id": npc_id, "item_id": item_id},
+++        }
+ +
+++    effect = _safe_dict(item_def.get("effect"))
+++    effect_type = _safe_str(effect.get("type"))
+++    if effect_type == "restore_resource" and _safe_str(effect.get("resource")) == "health":
+++        amount = int(effect.get("amount") or 0)
+++        player_state = update_companion_hp(player_state, npc_id, amount)
+ +
+-+def get_active_companions(player_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+-+    player_state = ensure_party_state(player_state)
+-+    return _safe_list(player_state["party_state"].get("companions"))
+++    inventory_state = remove_inventory_item(inventory_state, item_id, qty=1)
+++    player_state["inventory_state"] = inventory_state
+++    simulation_state["player_state"] = player_state
+++
+++    return {
+++        "simulation_state": simulation_state,
+++        "result": {
+++            "ok": True,
+++            "npc_id": npc_id,
+++            "item_id": item_id,
+++            "effect": effect,
+++        },
+++    }
+ *** End Patch
+-companion_ai.py
++4) Replace placeholder companion AI with deterministic behavior selection
++src/app/rpg/party/companion_ai.py
+ *** Begin Patch
+-*** Add File: src/app/rpg/party/companion_ai.py
+-+from typing import Dict, Any
+-+
++*** Update File: src/app/rpg/party/companion_ai.py
++@@
++-"""Phase 9.1 — Companion AI for encounters."""
++ from typing import Dict, Any
++-from .party_state import get_active_companions
+ +from .party_state import get_active_companions
+ +
+ +
+-+def run_companion_turns(simulation_state: Dict[str, Any], encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+-+    player_state = simulation_state.get("player_state") or {}
+-+    companions = get_active_companions(player_state)
+++def _safe_dict(v):
+++    return v if isinstance(v, dict) else {}
+ +
+-+    if not companions:
+-+        return encounter_state
+ +
+-+    encounter_state.setdefault("log", [])
+++def _safe_list(v):
+++    return v if isinstance(v, list) else []
+ +
+-+    for comp in companions[:3]:
+++
+++def _safe_str(v):
+++    return "" if v is None else str(v)
+++
+++
+++def choose_companion_action(companion: Dict[str, Any], encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+++    companion = _safe_dict(companion)
+++    encounter_state = _safe_dict(encounter_state)
+++    participants = _safe_list(encounter_state.get("participants"))
+++
+++    loyalty = float(companion.get("loyalty", 0.0))
+++    hp = int(companion.get("hp", 0))
+++    max_hp = max(1, int(companion.get("max_hp", 100)))
+++    role = _safe_str(companion.get("role") or "ally")
+++    health_ratio = float(hp) / float(max_hp)
+++
+++    hostiles = sorted(
+++        [
+++            p for p in participants
+++            if isinstance(p, dict)
+++            and (_safe_str(p.get("role")) == "enemy" or _safe_str(p.get("disposition")) == "hostile")
+++        ],
+++        key=lambda p: str(p.get("id") or p.get("npc_id") or ""),
+++    )
+++
+++    if loyalty < -0.5:
+++        return {"action_type": "hesitate", "target_id": "", "summary": f"{companion.get('name')} hesitates and does not commit."}
+++    if health_ratio <= 0.25:
+++        return {"action_type": "defend", "target_id": "player", "summary": f"{companion.get('name')} falls back to protect the party."}
+++    if role == "support" and health_ratio < 0.6:
+++        return {"action_type": "support", "target_id": "player", "summary": f"{companion.get('name')} supports the player."}
+++    if hostiles:
+++        target = hostiles[0]
+++        target_id = str(target.get("id") or target.get("npc_id") or "")
+++        return {"action_type": "attack", "target_id": target_id, "summary": f"{companion.get('name')} attacks {target_id}."}
+++    return {"action_type": "defend", "target_id": "player", "summary": f"{companion.get('name')} watches for danger."}
++ 
++ def run_companion_turns(simulation_state: Dict[str, Any], encounter_state: Dict[str, Any]) -> Dict[str, Any]:
++     player_state = simulation_state.get("player_state") or {}
++     companions = get_active_companions(player_state)
+++    encounter_state = _safe_dict(encounter_state)
++ 
++     if not companions:
++         return encounter_state
+++    if str(encounter_state.get("status") or "") == "resolved":
+++        return encounter_state
+++
++     encounter_state.setdefault("log", [])
++-
++-    for comp in sorted(companions, key=lambda c: str(c.get("npc_id")))[:3]:
++-        encounter_state["log"].append({
++-            "type": "companion_action",
++-            "npc_id": comp.get("npc_id"),
++-            "summary": f"{comp.get('name')} assists in combat.",
++-        })
+++    for comp in sorted(companions, key=lambda c: str(c.get("npc_id")))[:3]:
+++        action = choose_companion_action(comp, encounter_state)
+ +        encounter_state["log"].append({
+ +            "type": "companion_action",
+ +            "npc_id": comp.get("npc_id"),
+-+            "summary": f"{comp.get('name')} assists in combat.",
+++            "action_type": action.get("action_type"),
+++            "target_id": action.get("target_id"),
+++            "summary": action.get("summary"),
+ +        })
+-+
+-+    return encounter_state
+-*** End Patch
+-🔧 2) Extend Player State
+-*** Begin Patch
+-*** Update File: src/app/rpg/player/player_scene_state.py
+-@@
+-     player_state.setdefault("inventory_state", {
+-         "items": [],
+-         "equipment": {},
+-         "capacity": 50,
+-         "currency": {},
+-         "last_loot": [],
+-     })
+-+
+-+    player_state.setdefault("party_state", {
+-+        "companions": [],
+-+        "max_size": 3,
+-+    })
+  
+-     return simulation_state
++     return encounter_state
+ *** End Patch
+-🔧 3) API Routes
+-rpg_player_routes.py
++5) Add party view helpers
++src/app/rpg/player/player_inventory.py
++
++No change needed.
++
++New src/app/rpg/player/player_party.py
+ *** Begin Patch
+-*** Update File: src/app/rpg/api/rpg_player_routes.py
+-@@
+-+from app.rpg.party import (
+-+    ensure_party_state,
+-+    add_companion,
+-+    remove_companion,
+-+)
+-@@
+-+@rpg_player_bp.post("/api/rpg/player/party")
+-+def player_party():
+-+    data = request.get_json(silent=True) or {}
+-+    setup_payload = dict(data.get("setup_payload") or {})
+-+
+-+    state = ensure_player_state(_get_simulation_state(setup_payload))
+-+    player_state = ensure_party_state(state.get("player_state") or {})
++*** Add File: src/app/rpg/player/player_party.py
+++from typing import Dict, Any
+ +
+-+    return jsonify({
+-+        "ok": True,
+-+        "party_state": player_state.get("party_state"),
+-+    })
+++from app.rpg.party import ensure_party_state, build_party_summary
+ +
+ +
+-+@rpg_player_bp.post("/api/rpg/player/party/recruit")
+-+def recruit_companion():
+-+    data = request.get_json(silent=True) or {}
+-+    npc_id = str(data.get("npc_id") or "")
+-+    name = str(data.get("name") or "Companion")
+++def _safe_dict(v):
+++    return v if isinstance(v, dict) else {}
+ +
+-+    setup_payload = dict(data.get("setup_payload") or {})
+-+    state = ensure_player_state(_get_simulation_state(setup_payload))
+ +
+-+    player_state = state.get("player_state") or {}
+-+    player_state = add_companion(player_state, npc_id, name)
+++def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+++    simulation_state = _safe_dict(simulation_state)
+++    player_state = _safe_dict(simulation_state.get("player_state"))
+++    player_state = ensure_party_state(player_state)
+++    simulation_state["player_state"] = player_state
+++    return simulation_state
+ +
+-+    state["player_state"] = player_state
+-+    setup_payload = _write_simulation_state(setup_payload, state)
+ +
+-+    return jsonify({
+-+        "ok": True,
+-+        "setup_payload": setup_payload,
+-+        "party_state": player_state.get("party_state"),
+-+    })
+++def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+++    simulation_state = ensure_player_party(simulation_state)
+++    player_state = _safe_dict(simulation_state.get("player_state"))
+++    party_state = _safe_dict(player_state.get("party_state"))
+++    return {
+++        "party_state": party_state,
+++        "party_summary": build_party_summary(player_state),
+++    }
++*** End Patch
++6) Export party helpers from player package
++src/app/rpg/player/__init__.py
++*** Begin Patch
++*** Update File: src/app/rpg/player/__init__.py
++@@
++ from .player_inventory import (
++     ensure_player_inventory,
++     build_player_inventory_view,
++ )
+++from .player_party import (
+++    ensure_player_party,
+++    build_player_party_view,
+++)
++@@
++     "ensure_player_inventory",
++     "build_player_inventory_view",
+++    "ensure_player_party",
+++    "build_player_party_view",
++     "enter_dialogue_mode",
++*** End Patch
++7) Add party item-use + richer party route responses
++src/app/rpg/api/rpg_player_routes.py
++*** Begin Patch
++*** Update File: src/app/rpg/api/rpg_player_routes.py
++@@
++ from app.rpg.player import (
++     ensure_player_state,
++     enter_dialogue_mode,
++     exit_dialogue_mode,
++     ensure_player_inventory,
++     build_player_inventory_view,
+++    ensure_player_party,
+++    build_player_party_view,
++ )
++@@
++ from app.rpg.party import (
++     ensure_party_state,
++     add_companion,
++     remove_companion,
+++    update_companion_loyalty,
++ )
+++from app.rpg.party import apply_party_item_to_companion
++@@
++ @rpg_player_bp.post("/api/rpg/player/party")
++ def player_party():
++@@
++     state = ensure_player_state(_get_simulation_state(setup_payload))
++-    player_state = ensure_party_state(state.get("player_state") or {})
+++    state = ensure_player_party(state)
+++    party_view = build_player_party_view(state)
++ 
++     return jsonify({
++         "ok": True,
++-        "party_state": player_state.get("party_state"),
+++        "party_state": party_view.get("party_state", {}),
+++        "party_summary": party_view.get("party_summary", {}),
++     })
++@@
++     player_state = state.get("player_state") or {}
++     player_state = add_companion(player_state, npc_id, name)
+++    player_state = update_companion_loyalty(player_state, npc_id, 0.05)
++ 
++     state["player_state"] = player_state
++     setup_payload = _write_simulation_state(setup_payload, state)
+++    party_view = build_player_party_view(state)
++ 
++     return jsonify({
++         "ok": True,
++         "setup_payload": setup_payload,
++-        "party_state": player_state.get("party_state"),
+++        "party_state": party_view.get("party_state", {}),
+++        "party_summary": party_view.get("party_summary", {}),
++     })
++@@
++     player_state = state.get("player_state") or {}
++     player_state = remove_companion(player_state, npc_id)
++ 
++     state["player_state"] = player_state
++     setup_payload = _write_simulation_state(setup_payload, state)
+++    party_view = build_player_party_view(state)
++ 
++     return jsonify({
++         "ok": True,
++         "setup_payload": setup_payload,
++-        "party_state": player_state.get("party_state"),
+++        "party_state": party_view.get("party_state", {}),
+++        "party_summary": party_view.get("party_summary", {}),
++     })
+ +
+ +
+-+@rpg_player_bp.post("/api/rpg/player/party/remove")
+-+def remove_companion_route():
+++@rpg_player_bp.post("/api/rpg/player/party/use-item")
+++def party_use_item():
+ +    data = request.get_json(silent=True) or {}
+++    setup_payload = dict(data.get("setup_payload") or {})
+ +    npc_id = str(data.get("npc_id") or "")
+++    item_id = str(data.get("item_id") or "")
+ +
+-+    setup_payload = dict(data.get("setup_payload") or {})
+ +    state = ensure_player_state(_get_simulation_state(setup_payload))
+++    state = ensure_player_inventory(state)
+++    state = ensure_player_party(state)
+ +
+-+    player_state = state.get("player_state") or {}
+-+    player_state = remove_companion(player_state, npc_id)
+-+
+-+    state["player_state"] = player_state
+++    result = apply_party_item_to_companion(state, npc_id, item_id)
+++    state = dict(result.get("simulation_state") or {})
+ +    setup_payload = _write_simulation_state(setup_payload, state)
+++    party_view = build_player_party_view(state)
+++    inventory_view = build_player_inventory_view(state)
+ +
+ +    return jsonify({
+-+        "ok": True,
+++        "ok": bool((result.get("result") or {}).get("ok")),
+ +        "setup_payload": setup_payload,
+-+        "party_state": player_state.get("party_state"),
+++        "result": dict(result.get("result") or {}),
+++        "party_state": party_view.get("party_state", {}),
+++        "party_summary": party_view.get("party_summary", {}),
+++        "inventory_state": inventory_view.get("inventory_state", {}),
+++        "inventory_summary": inventory_view.get("inventory_summary", {}),
+ +    })
+ *** End Patch
+-🔧 4) Hook Into Encounter System
++8) Add companion stat changes during encounter outcomes
++src/app/rpg/api/rpg_encounter_routes.py
+ *** Begin Patch
+ *** Update File: src/app/rpg/api/rpg_encounter_routes.py
+ @@
+-+from app.rpg.party import run_companion_turns
++ from app.rpg.party import run_companion_turns
+++from app.rpg.party import update_companion_hp, update_companion_loyalty, get_active_companions
++@@
++     encounter_state = resolver.apply_player_action(encounter_state, action_type, target_id)
++     encounter_state = resolver.resolve_if_finished(encounter_state)
++ 
++     encounter_state = run_companion_turns(state, encounter_state)
+++
+++    if encounter_state.get("status") == "resolved":
+++        player_state = dict(state.get("player_state") or {})
+++        for comp in get_active_companions(player_state):
+++            player_state = update_companion_loyalty(player_state, comp.get("npc_id"), 0.02)
+++        state["player_state"] = player_state
+ @@
+      encounter_state = resolver.apply_npc_turn(encounter_state)
++     encounter_state = resolver.resolve_if_finished(encounter_state)
++ 
++     encounter_state = run_companion_turns(state, encounter_state)
+ +
+-+    encounter_state = run_companion_turns(state, encounter_state)
+++    if encounter_state.get("status") != "resolved":
+++        player_state = dict(state.get("player_state") or {})
+++        companions = get_active_companions(player_state)
+++        for comp in companions[:1]:
+++            player_state = update_companion_hp(player_state, comp.get("npc_id"), -5)
+++        state["player_state"] = player_state
+++    else:
+++        player_state = dict(state.get("player_state") or {})
+++        for comp in get_active_companions(player_state):
+++            player_state = update_companion_loyalty(player_state, comp.get("npc_id"), 0.01)
+++        state["player_state"] = player_state
+ *** End Patch
+-🔧 5) Migration v4 → v5
+-v4_to_v5.py
++
++This keeps the effects bounded and deterministic:
++
++one companion can take small damage during unresolved NPC turns
++companions gain small loyalty on encounter resolution
++9) Add party summary into timeline ticks
++
++Patch the file that builds timeline rows.
++
+ *** Begin Patch
+-*** Add File: src/app/rpg/persistence/migrations/v4_to_v5.py
+-+def migrate_v4_to_v5(package):
+-+    state = package.get("simulation_state") or {}
+-+    player = state.get("player_state") or {}
+-+
+-+    if "party_state" not in player:
+-+        player["party_state"] = {
+-+            "companions": [],
+-+            "max_size": 3,
+-+        }
++*** Update File: <THE FILE THAT APPENDS TIMELINE TICK ROWS>
++@@
++ from app.rpg.items.inventory_state import build_inventory_summary
+++from app.rpg.party.party_state import build_party_summary
++@@
++     tick_row = {
++         "tick": current_tick,
++         "event_count": len(events),
++         "consequence_count": len(consequences),
++         "sandbox_summary": sandbox_summary,
++         "inventory_summary": build_inventory_summary(
++             ((simulation_state.get("player_state") or {}).get("inventory_state") or {})
++         ),
+++        "party_summary": build_party_summary(
+++            ((simulation_state.get("player_state") or {}))
+++        ),
+++        "party_size": build_party_summary(
+++            ((simulation_state.get("player_state") or {}))
+++        ).get("size", 0),
++     }
++*** End Patch
++
++If you want to avoid duplicate calls, compute party_summary once in a local variable and reference it.
++
++10) Add party diffs to analytics
++src/app/rpg/analytics/tick_diff.py
++*** Begin Patch
++*** Update File: src/app/rpg/analytics/tick_diff.py
++@@
++     before_player_state = _safe_dict(before_state.get("player_state"))
++     after_player_state = _safe_dict(after_state.get("player_state"))
++     before_inventory = _safe_dict(before_player_state.get("inventory_state"))
++     after_inventory = _safe_dict(after_player_state.get("inventory_state"))
+++    before_party = _safe_dict(before_player_state.get("party_state"))
+++    after_party = _safe_dict(after_player_state.get("party_state"))
++@@
++         "inventory_keys_changed": _keys_changed(before_inventory, after_inventory),
++         "inventory_before": before_inventory,
++         "inventory_after": after_inventory,
+++        "party_keys_changed": _keys_changed(before_party, after_party),
+++        "party_before": before_party,
+++        "party_after": after_party,
++         "changed_npc_ids": changed_npcs[:20],
++         "summary": {
++             "event_delta": len(after_events) - len(before_events),
++             "consequence_delta": len(after_consequences) - len(before_consequences),
++             "npc_changes": len(changed_npcs),
++             "inventory_item_kinds_before": len(_safe_list(before_inventory.get("items"))),
++             "inventory_item_kinds_after": len(_safe_list(after_inventory.get("items"))),
+++            "party_size_before": len(_safe_list(before_party.get("companions"))),
+++            "party_size_after": len(_safe_list(after_party.get("companions"))),
++         },
++     }
++*** End Patch
++src/app/rpg/analytics/timeline.py
++*** Begin Patch
++*** Update File: src/app/rpg/analytics/timeline.py
++@@
++ def build_timeline_row_diff(before_row: Dict[str, Any], after_row: Dict[str, Any]) -> Dict[str, Any]:
++     before_row = _safe_dict(before_row)
++     after_row = _safe_dict(after_row)
++     return {
++         "tick_before": _safe_int(before_row.get("tick"), 0),
++         "tick_after": _safe_int(after_row.get("tick"), 0),
++         "event_delta": _safe_int(after_row.get("event_count"), 0) - _safe_int(before_row.get("event_count"), 0),
++         "consequence_delta": _safe_int(after_row.get("consequence_count"), 0) - _safe_int(before_row.get("consequence_count"), 0),
++         "sandbox_before": _safe_dict(before_row.get("sandbox_summary")),
++         "sandbox_after": _safe_dict(after_row.get("sandbox_summary")),
++         "inventory_before": _safe_dict(before_row.get("inventory_summary")),
++         "inventory_after": _safe_dict(after_row.get("inventory_summary")),
+++        "party_before": _safe_dict(before_row.get("party_summary")),
+++        "party_after": _safe_dict(after_row.get("party_summary")),
++     }
++*** End Patch
++11) Add save migration v5 → v6
++src/app/rpg/persistence/migrations/v5_to_v6.py
++*** Begin Patch
++*** Add File: src/app/rpg/persistence/migrations/v5_to_v6.py
+++from typing import Dict, Any
+++
+++
+++def _safe_dict(v):
+++    return v if isinstance(v, dict) else {}
+ +
+-+    state["player_state"] = player
+-+    package["simulation_state"] = state
+-+    package["schema_version"] = 5
+ +
+++def migrate_v5_to_v6(package: Dict[str, Any]) -> Dict[str, Any]:
+++    package = dict(package or {})
+++    state = _safe_dict(package.get("state"))
+++    simulation_state = _safe_dict(state.get("simulation_state"))
+++    player_state = _safe_dict(simulation_state.get("player_state"))
+++    party_state = _safe_dict(player_state.get("party_state"))
+++
+++    companions = []
+++    for comp in party_state.get("companions") or []:
+++        if not isinstance(comp, dict):
+++            continue
+++        companions.append({
+++            "npc_id": str(comp.get("npc_id") or ""),
+++            "name": str(comp.get("name") or comp.get("npc_id") or "Companion"),
+++            "hp": int(comp.get("hp") or 100),
+++            "max_hp": int(comp.get("max_hp") or 100),
+++            "loyalty": float(comp.get("loyalty", 0.5)),
+++            "role": str(comp.get("role") or "ally"),
+++            "status": str(comp.get("status") or "active"),
+++            "equipment": dict(comp.get("equipment") or {}),
+++        })
+++
+++    party_state["companions"] = companions[:6]
+++    party_state.setdefault("max_size", 3)
+++    player_state["party_state"] = party_state
+++    simulation_state["player_state"] = player_state
+++    state["simulation_state"] = simulation_state
+++    package["state"] = state
+++    package["schema_version"] = 6
+ +    return package
+ *** End Patch
+ Register migration
+ *** Begin Patch
+ *** Update File: src/app/rpg/persistence/migrations/__init__.py
+ @@
+-+from .v4_to_v5 import migrate_v4_to_v5
++ from .v4_to_v5 import migrate_v4_to_v5
+++from .v5_to_v6 import migrate_v5_to_v6
+ @@
+-     "migrate_v3_to_v4",
+-+    "migrate_v4_to_v5",
++     "migrate_v4_to_v5",
+++    "migrate_v5_to_v6",
+  ]
+ *** End Patch
+-Migration manager
++src/app/rpg/persistence/migration_manager.py
+ *** Begin Patch
+ *** Update File: src/app/rpg/persistence/migration_manager.py
+ @@
+-+        elif version == 4:
+-+            package = migrate_v4_to_v5(package)
++-from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5
+++from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6
++@@
++         elif version == 4:
++             package = migrate_v4_to_v5(package)
+++        elif version == 5:
+++            package = migrate_v5_to_v6(package)
++         else:
++             raise ValueError(f"Unsupported schema migration path from version {version}")
+ *** End Patch
+-Schema bump
++src/app/rpg/persistence/save_schema.py
+ *** Begin Patch
+ *** Update File: src/app/rpg/persistence/save_schema.py
+ @@
+--CURRENT_RPG_SCHEMA_VERSION = 4
+-+CURRENT_RPG_SCHEMA_VERSION = 5
+--ENGINE_VERSION = "phase_9_0"
+-+ENGINE_VERSION = "phase_9_1"
++-CURRENT_RPG_SCHEMA_VERSION = 5
+++CURRENT_RPG_SCHEMA_VERSION = 6
++ PACKAGE_TYPE = "rpg_save_package"
++-ENGINE_VERSION = "phase_9_1"
+++ENGINE_VERSION = "phase_9_2"
+ *** End Patch
+-🔧 6) Analytics / Inspector Integration
+-tick_diff.py
++12) Add party client actions
++src/static/rpg/rpgPartyClient.js
+ *** Begin Patch
+-*** Update File: src/app/rpg/analytics/tick_diff.py
++*** Update File: src/static/rpg/rpgPartyClient.js
+ @@
+-+    before_party = _safe_dict(before_player_state.get("party_state"))
+-+    after_party = _safe_dict(after_player_state.get("party_state"))
++ export class RPGPartyClient {
++   async getParty(setupPayload) {
+ @@
+-+        "party_before": before_party,
+-+        "party_after": after_party,
+-+        "party_keys_changed": _keys_changed(before_party, after_party),
++   async recruit(setupPayload, npcId, name) {
++@@
++     return res.json();
++   }
+++
+++  async remove(setupPayload, npcId) {
+++    const res = await fetch("/api/rpg/player/party/remove", {
+++      method: "POST",
+++      headers: { "Content-Type": "application/json" },
+++      body: JSON.stringify({ setup_payload: setupPayload, npc_id: npcId }),
+++    });
+++    return res.json();
+++  }
+++
+++  async useItem(setupPayload, npcId, itemId) {
+++    const res = await fetch("/api/rpg/player/party/use-item", {
+++      method: "POST",
+++      headers: { "Content-Type": "application/json" },
+++      body: JSON.stringify({ setup_payload: setupPayload, npc_id: npcId, item_id: itemId }),
+++    });
+++    return res.json();
+++  }
++ }
+ *** End Patch
+-Timeline
++13) Upgrade party renderer
++src/static/rpg/rpgPartyRenderer.js
+ *** Begin Patch
+-*** Update File: src/app/rpg/analytics/timeline.py
++*** Update File: src/static/rpg/rpgPartyRenderer.js
+ @@
+-+from app.rpg.party.party_state import get_active_companions
++ export function renderPartyPanel(partyState) {
++   const companions = (partyState && partyState.companions) || [];
++ 
++   return `
++     <div class="codex-section">
++       <h3>Party</h3>
++       ${
++         companions.length
++           ? companions.map(c => `
++             <div class="codex-item">
++-              <strong>${c.name}</strong> (HP ${c.hp})
+++              <strong>${c.name}</strong>
+++              <div>HP ${c.hp}/${c.max_hp || 100}</div>
+++              <div>Loyalty ${Number(c.loyalty || 0).toFixed(2)}</div>
+++              <div>Status ${c.status || "active"}</div>
++             </div>
++           `).join("")
++           : `<div class="codex-item">No companions</div>`
++       }
++     </div>
++   `;
++ }
++*** End Patch
++14) Add party summary loading to UI
++src/static/rpg/rpgPlayerUI.js
++*** Begin Patch
++*** Update File: src/static/rpg/rpgPlayerUI.js
+ @@
+-+        "party_size": len(get_active_companions(player_state)),
++ export async function loadParty(setupPayload) {
++   const res = await partyClient.getParty(setupPayload);
++   const el = document.getElementById("rpg-party");
++   if (el) {
++     el.innerHTML = renderPartyPanel(res.party_state || {});
++   }
+++  return res.party_state || {};
++ }
+ *** End Patch
+-🔧 7) Frontend — Party UI
+-rpgPartyClient.js
++
++
++15) Add party state to inspector UI
++
++Patch the existing 8.4.7 / 9.0 inspector renderer so companion state changes are visible alongside inventory and world deltas.
++
++*** Begin Patch
++*** Update File: src/static/rpg/rpgInspectorRenderer.js
++@@
++ function renderInventoryDeltaCard(beforeInventory, afterInventory, changedKeys) {
++@@
++ }
++ 
+++function renderPartyMemberList(partyState, emptyLabel) {
+++  emptyLabel = emptyLabel || "No companions";
+++  var state = safeObj(partyState);
+++  var companions = safeArray(state.companions);
+++  if (!companions.length) {
+++    return '<div class="rpg-inspector-muted">' + esc(emptyLabel) + '</div>';
+++  }
+++  return '<div class="rpg-inspector-kv-list">' +
+++    companions.map(function(comp) {
+++      var equipment = safeObj(comp.equipment);
+++      var equipmentKeys = Object.keys(equipment).sort();
+++      return '<div class="rpg-inspector-subcard">' +
+++        '<div class="rpg-inspector-subcard-title">' + esc(comp.name || comp.npc_id || "companion") + '</div>' +
+++        '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">NPC ID</span><span class="rpg-inspector-kv-value">' + esc(comp.npc_id || "") + '</span></div>' +
+++        '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Role</span><span class="rpg-inspector-kv-value">' + esc(comp.role || "") + '</span></div>' +
+++        '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">HP</span><span class="rpg-inspector-kv-value">' + numOrZero(comp.hp) + '/' + numOrZero(comp.max_hp) + '</span></div>' +
+++        '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Loyalty</span><span class="rpg-inspector-kv-value">' + Number(comp.loyalty || 0).toFixed(2) + '</span></div>' +
+++        '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Morale</span><span class="rpg-inspector-kv-value">' + Number(comp.morale || 0).toFixed(2) + '</span></div>' +
+++        '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Status</span><span class="rpg-inspector-kv-value">' + esc(comp.status || "active") + '</span></div>' +
+++        '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Equipment</span><span class="rpg-inspector-kv-value">' + esc(equipmentKeys.join(", ") || "none") + '</span></div>' +
+++      '</div>';
+++    }).join("") +
+++  '</div>';
+++}
+++
+++function renderPartyDeltaCard(beforeParty, afterParty, changedKeys) {
+++  var before = safeObj(beforeParty);
+++  var after = safeObj(afterParty);
+++  var keys = safeArray(changedKeys);
+++  var changedLabel = keys.length ? keys.join(", ") : "none";
+++
+++  return '<div class="rpg-inspector-card">' +
+++    '<div class="rpg-inspector-card-header">' +
+++      '<h4>Party Delta</h4>' +
+++      '<span class="rpg-inspector-badge">' + esc(changedLabel) + '</span>' +
+++    '</div>' +
+++    '<div class="rpg-inspector-diff-grid">' +
+++      '<div class="rpg-inspector-subcard">' +
+++        '<div class="rpg-inspector-subcard-title">Before</div>' +
+++        renderPartyMemberList(before, "No companions") +
+++      '</div>' +
+++      '<div class="rpg-inspector-subcard">' +
+++        '<div class="rpg-inspector-subcard-title">After</div>' +
+++        renderPartyMemberList(after, "No companions") +
+++      '</div>' +
+++    '</div>' +
+++  '</div>';
+++}
+++
++ function renderTimelineRow(row, isSelected) {
++@@
++   var sandboxSummary = timelineRow.sandbox_summary || {};
++   var inventorySummary = timelineRow.inventory_summary || {};
+++  var partySummary = timelineRow.party_summary || {};
++ 
++   return '<div class="rpg-inspector-tick-row' + (isSelected ? " selected" : "") + '" data-tick="' + Number(timelineRow.tick || 0) + '">' +
++     '<div class="rpg-inspector-tick-main">' +
++       '<div class="rpg-inspector-tick-title">Tick ' + Number(timelineRow.tick || 0) + '</div>' +
++       '<div class="rpg-inspector-tick-meta">' +
++         '<span>Events: ' + Number(timelineRow.event_count || 0) + '</span>' +
++         '<span>Consequences: ' + Number(timelineRow.consequence_count || 0) + '</span>' +
++         '<span>Inv: ' + Number(inventorySummary.slots_used || 0) + '/' + Number(inventorySummary.capacity || 0) + '</span>' +
++         '<span>Qty: ' + Number(inventorySummary.total_item_qty || 0) + '</span>' +
+++        '<span>Party: ' + Number(partySummary.party_size || 0) + '</span>' +
+++        '<span>Downed: ' + Number(partySummary.downed_count || 0) + '</span>' +
++       '</div>' +
++     '</div>' +
++   '</div>';
++ }
++@@
++ function renderTickDiffPanel(diffPayload) {
++@@
++   var playerKeysChanged = Array.isArray(diff.player_keys_changed) ? diff.player_keys_changed : [];
++   var inventoryKeysChanged = Array.isArray(diff.inventory_keys_changed) ? diff.inventory_keys_changed : [];
++   var inventoryBefore = diff.inventory_before || {};
++   var inventoryAfter = diff.inventory_after || {};
+++  var partyKeysChanged = Array.isArray(diff.party_keys_changed) ? diff.party_keys_changed : [];
+++  var partyBefore = diff.party_before || {};
+++  var partyAfter = diff.party_after || {};
++ 
++   return '<div class="rpg-inspector-diff-panel">' +
++@@
++         '<span class="rpg-inspector-chip">NPC Changes ' + Number(summary.npc_changes || 0) + '</span>' +
++         '<span class="rpg-inspector-chip">Inventory Before ' + Number(summary.inventory_item_kinds_before || 0) + '</span>' +
++         '<span class="rpg-inspector-chip">Inventory After ' + Number(summary.inventory_item_kinds_after || 0) + '</span>' +
+++        '<span class="rpg-inspector-chip">Party Before ' + Number(summary.party_size_before || 0) + '</span>' +
+++        '<span class="rpg-inspector-chip">Party After ' + Number(summary.party_size_after || 0) + '</span>' +
++       '</div>' +
++     '</div>' +
++@@
++         socialKeysChanged.map(function(key) { return '<span class="rpg-inspector-chip">' + esc(key) + '</span>'; }).join("") +
++         sandboxKeysChanged.map(function(key) { return '<span class="rpg-inspector-chip">' + esc(key) + '</span>'; }).join("") +
++         playerKeysChanged.map(function(key) { return '<span class="rpg-inspector-chip">' + esc(key) + '</span>'; }).join("") +
++       '</div>' +
++     '</div>' +
++     renderInventoryDeltaCard(inventoryBefore, inventoryAfter, inventoryKeysChanged) +
+++    renderPartyDeltaCard(partyBefore, partyAfter, partyKeysChanged) +
++   '</div>';
++ }
++*** End Patch
++16) Add party styling to inspector stylesheet
++*** Begin Patch
++*** Update File: src/static/rpg/rpgInspectorStyles.css
++@@
++ .rpg-inspector-trace-loot {
++   display: flex;
++   flex-wrap: wrap;
++   gap: 6px;
++   margin-top: 8px;
++ }
+++
+++.rpg-inspector-subcard .rpg-inspector-subcard {
+++  margin-top: 8px;
+++}
++*** End Patch
++17) Add party client for UI operations
+ *** Begin Patch
+ *** Add File: src/static/rpg/rpgPartyClient.js
+ +export class RPGPartyClient {
+-+  async getParty(setupPayload) {
+-+    const res = await fetch("/api/rpg/player/party", {
+++  constructor(baseUrl = "") {
+++    this.baseUrl = baseUrl;
+++  }
+++
+++  async _post(path, payload) {
+++    const res = await fetch(`${this.baseUrl}${path}`, {
+ +      method: "POST",
+ +      headers: { "Content-Type": "application/json" },
+-+      body: JSON.stringify({ setup_payload: setupPayload }),
+++      body: JSON.stringify(payload || {}),
+ +    });
+++    if (!res.ok) {
+++      throw new Error(`Party API error: ${res.status} at ${path}`);
+++    }
+ +    return res.json();
+ +  }
+ +
+++  async getParty(setupPayload) {
+++    return this._post("/api/rpg/player/party", {
+++      setup_payload: setupPayload,
+++    });
+++  }
+++
+ +  async recruit(setupPayload, npcId, name) {
+-+    const res = await fetch("/api/rpg/player/party/recruit", {
+-+      method: "POST",
+-+      headers: { "Content-Type": "application/json" },
+-+      body: JSON.stringify({ setup_payload: setupPayload, npc_id: npcId, name }),
+++    return this._post("/api/rpg/player/party/recruit", {
+++      setup_payload: setupPayload,
+++      npc_id: npcId,
+++      name,
+++    });
+++  }
+++
+++  async remove(setupPayload, npcId) {
+++    return this._post("/api/rpg/player/party/remove", {
+++      setup_payload: setupPayload,
+++      npc_id: npcId,
+++    });
+++  }
+++
+++  async setEquipment(setupPayload, npcId, slot, itemId) {
+++    return this._post("/api/rpg/player/party/equipment/set", {
+++      setup_payload: setupPayload,
+++      npc_id: npcId,
+++      slot,
+++      item_id: itemId,
+++    });
+++  }
+++
+++  async clearEquipment(setupPayload, npcId, slot) {
+++    return this._post("/api/rpg/player/party/equipment/clear", {
+++      setup_payload: setupPayload,
+++      npc_id: npcId,
+++      slot,
+ +    });
+-+    return res.json();
+ +  }
+ +}
+ *** End Patch
+-Renderer
++18) Add party renderer
+ *** Begin Patch
+ *** Add File: src/static/rpg/rpgPartyRenderer.js
+++function escapeHtml(str) {
+++  return String(str || "")
+++    .replace(/&/g, "&amp;")
+++    .replace(/</g, "&lt;")
+++    .replace(/>/g, "&gt;")
+++    .replace(/"/g, "&quot;")
+++    .replace(/'/g, "&#039;");
+++}
+++
+ +export function renderPartyPanel(partyState) {
+-+  const companions = (partyState && partyState.companions) || [];
+++  const state = partyState || {};
+++  const companions = Array.isArray(state.companions) ? state.companions : [];
+ +
+ +  return `
+ +    <div class="codex-section">
+ +      <h3>Party</h3>
+++      <div class="codex-item">Size: ${companions.length}/${Number(state.max_size || 0)}</div>
+ +      ${
+ +        companions.length
+-+          ? companions.map(c => `
+-+            <div class="codex-item">
+-+              <strong>${c.name}</strong> (HP ${c.hp})
+++          ? companions.map((c) => `
+++            <div class="codex-item rpg-party-member" data-npc-id="${escapeHtml(c.npc_id)}">
+++              <strong>${escapeHtml(c.name || c.npc_id)}</strong><br/>
+++              HP ${Number(c.hp || 0)}/${Number(c.max_hp || 0)} · Loyalty ${Number(c.loyalty || 0).toFixed(2)} · Morale ${Number(c.morale || 0).toFixed(2)} · ${escapeHtml(c.status || "active")}
+ +            </div>
+ +          `).join("")
+ +          : `<div class="codex-item">No companions</div>`
+@@ -335,23 +1011,37 @@ Renderer
+ +  `;
+ +}
+ *** End Patch
+-UI wiring
++19) Wire party into player UI
+ *** Begin Patch
+ *** Update File: src/static/rpg/rpgPlayerUI.js
+ @@
++ import { RPGInventoryClient } from "./rpgInventoryClient.js";
++ import { renderInventoryPanel } from "./rpgInventoryRenderer.js";
+ +import { RPGPartyClient } from "./rpgPartyClient.js";
+ +import { renderPartyPanel } from "./rpgPartyRenderer.js";
+-+
++ 
++ const playerClient = new RPGPlayerClient();
++ const inventoryClient = new RPGInventoryClient();
+ +const partyClient = new RPGPartyClient();
+ @@
++ export async function loadInventory(setupPayload) {
++@@
++ }
+++
+ +export async function loadParty(setupPayload) {
+-+  const res = await partyClient.getParty(setupPayload);
+-+  const el = document.getElementById("rpg-party");
+-+  if (el) {
+++  try {
+++    const res = await partyClient.getParty(setupPayload);
+++    const el = document.getElementById("rpg-party");
+++    if (!el) return {};
+ +    el.innerHTML = renderPartyPanel(res.party_state || {});
+++    return res.party_state || {};
+++  } catch (err) {
+++    console.error("Failed to load party:", err);
+++    return {};
+ +  }
+ +}
+ @@
++ export async function refreshSidePanels(setupPayload) {
+    await Promise.all([
+      loadJournal(setupPayload),
+      loadCodex(setupPayload),
+@@ -359,21 +1049,410 @@ UI wiring
+      loadInventory(setupPayload),
+ +    loadParty(setupPayload),
+    ]);
++ }
+ *** End Patch
+-Add container
++20) Wire party into player integration
++*** Begin Patch
++*** Update File: src/static/rpg/rpgPlayerIntegration.js
++@@
++-import { loadJournal, loadCodex, loadObjectives, loadInventory, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
+++import { loadJournal, loadCodex, loadObjectives, loadInventory, loadParty, handleEnterDialogue, handleExitDialogue, refreshSidePanels, bindDialogueInput } from "./rpgPlayerUI.js";
++@@
++   async loadInventory() {
++     if (!this.setupPayload) return {};
++     return loadInventory(this.setupPayload);
++   }
+++
+++  async loadParty() {
+++    if (!this.setupPayload) return {};
+++    return loadParty(this.setupPayload);
+++  }
++*** End Patch
++21) Add party container to actual UI shell
++
++If your side panels are in HTML:
++
+ *** Begin Patch
+ *** Update File: src/templates/index.html
+ @@
++ <div id="rpg-objectives"></div>
+  <div id="rpg-inventory"></div>
+ +<div id="rpg-party"></div>
+ *** End Patch
+-✅ Result
+ 
+-After this patch:
++If the side panel DOM is built in JavaScript, add an equivalent sibling container with id rpg-party next to the other player side-panel nodes.
++
++22) Add tests for 9.2 stat management and inventory sharing
++*** Begin Patch
++*** Add File: src/tests/unit/rpg/test_phase92_companion_intelligence.py
+++from app.rpg.party.party_state import (
+++    ensure_party_state,
+++    add_companion,
+++    update_companion_hp,
+++    update_companion_loyalty,
+++    set_companion_equipment,
+++    clear_companion_equipment,
+++)
+++from app.rpg.party.companion_ai import choose_companion_action
+++
+++
+++def test_update_companion_hp_clamps_and_sets_downed():
+++    player_state = {"party_state": {"companions": [
+++        {
+++            "npc_id": "npc_1",
+++            "name": "A",
+++            "role": "guard",
+++            "hp": 10,
+++            "max_hp": 20,
+++            "loyalty": 0.5,
+++            "morale": 0.5,
+++            "status": "active",
+++            "equipment": {},
+++        }
+++    ], "max_size": 3}}
+++    out = update_companion_hp(player_state, "npc_1", -15)
+++    comp = out["party_state"]["companions"][0]
+++    assert comp["hp"] == 0
+++    assert comp["status"] == "downed"
+++
+++
+++def test_update_companion_loyalty_clamps():
+++    player_state = {"party_state": {"companions": [
+++        {
+++            "npc_id": "npc_1",
+++            "name": "A",
+++            "role": "guard",
+++            "hp": 10,
+++            "max_hp": 20,
+++            "loyalty": 0.5,
+++            "morale": 0.5,
+++            "status": "active",
+++            "equipment": {},
+++        }
+++    ], "max_size": 3}}
+++    out = update_companion_loyalty(player_state, "npc_1", 1.0)
+++    comp = out["party_state"]["companions"][0]
+++    assert comp["loyalty"] == 1.0
+++
+++
+++def test_set_and_clear_companion_equipment():
+++    player_state = ensure_party_state({})
+++    player_state = add_companion(player_state, "npc_1", "A")
+++    player_state = set_companion_equipment(player_state, "npc_1", "weapon", "healing_potion")
+++    comp = player_state["party_state"]["companions"][0]
+++    assert comp["equipment"]["weapon"]["item_id"] == "healing_potion"
+++    player_state = clear_companion_equipment(player_state, "npc_1", "weapon")
+++    comp = player_state["party_state"]["companions"][0]
+++    assert comp["equipment"] == {}
+++
+++
+++def test_choose_companion_action_prefers_heal_when_support_and_potion():
+++    companion = {
+++        "npc_id": "npc_1",
+++        "name": "A",
+++        "role": "support",
+++        "hp": 10,
+++        "max_hp": 20,
+++        "loyalty": 0.8,
+++        "morale": 0.8,
+++        "status": "active",
+++        "equipment": {"consumable": {"item_id": "healing_potion", "qty": 1}},
+++    }
+++    encounter_state = {
+++        "status": "active",
+++        "participants": [{"id": "enemy_1", "role": "enemy", "disposition": "hostile"}],
+++    }
+++    action = choose_companion_action(companion, encounter_state)
+++    assert action["action_type"] == "heal_self"
++*** End Patch
++23) Add functional route tests for party equipment
++*** Begin Patch
++*** Add File: src/tests/functional/test_phase92_party_equipment_routes.py
+++def test_party_equipment_routes_exist(client):
+++    payload = {"setup_payload": {}}
+++    res = client.post("/api/rpg/player/party/equipment/set", json={
+++        **payload,
+++        "npc_id": "npc_1",
+++        "slot": "weapon",
+++        "item_id": "healing_potion",
+++    })
+++    assert res.status_code in (200, 400)
+++
+++    res = client.post("/api/rpg/player/party/equipment/clear", json={
+++        **payload,
+++        "npc_id": "npc_1",
+++        "slot": "weapon",
+++    })
+++    assert res.status_code in (200, 400)
++*** End Patch
++24) Phase 9.2 completion checklist
++
++After applying sections 1–24, 9.2 should provide:
++
++dynamic companion stats
++loyalty and morale mutation
++deterministic role-based companion AI
++shared consumable use
++companion equipment hooks
++encounter integration
++dialogue/event integration hooks
++inspector visibility
++UI party rendering
++schema migration v5 → v6
++unit + functional coverage
++25) Recommended immediate review focus
++
++When you implement this, review these hotspots first:
++
++migrate_v5_to_v6() path shape matches your actual save package structure
++rpg_encounter_routes.py does not double-run companion turns after resolution
++companion item use correctly updates both party_state and inventory_state
++timeline snapshot writer actually includes party_summary
++inspector renderer additions do not shadow existing exported function names
++26) Next recommended phase
++
++After 9.2, the clean next step is:
++
++Phase 9.3 — Quest / Objective Deepening with companion-aware quest logic
++
++That is where you connect:
++
++companion loyalty to quest branches
++companion presence to scene narration
++companion-specific objectives and fail states
++
++Here’s a focused 9.2 review checklist / likely bug pass for the companion intelligence phase, aimed at catching the failures most likely to slip through after implementation.
++
++Highest-risk bugs to check first
++1. Companion turns firing twice
++
++Look for companion actions being triggered:
++
++after player turn
++after NPC turn
++again during encounter resolution or refresh
++
++What to verify:
++
++each companion acts at most once per phase you intended
++resolved encounters do not still run companion AI
++frontend refreshes do not re-trigger server-side turn logic
++
++Good guard:
++
++if encounter_state.get("status") != "active":
++    return encounter_state
++2. Shared inventory desync
++
++If companions can consume shared items, this is the biggest state-integrity risk.
++
++What to verify:
++
++using a potion removes it from player_state.inventory_state
++companion equipment assignment does not duplicate the item
++clearing equipment returns or preserves item ownership according to your intended rule
++no path lets an item exist in both shared inventory and companion equipment at once
++
++Test explicitly:
++
++equip item to companion
++save/load
++use item
++clear equipment
++confirm counts stay correct
++3. Companion stats mutating without normalization
++
++Your 9.1 party records started simple and deterministic, but 9.2 adds mutable fields, which increases drift risk.
++
++What to verify:
++
++hp is clamped between 0 and max_hp
++loyalty and morale are clamped to a fixed range, usually 0.0–1.0
++status updates consistently when hp reaches zero
++missing fields are backfilled by normalization every time
++
++Recommended invariant:
++
++0 <= hp <= max_hp
++0.0 <= loyalty <= 1.0
++0.0 <= morale <= 1.0
++status in {"active", "downed", "absent"}
++4. Nondeterministic companion AI selection
++
++This is where replay consistency usually breaks.
++
++What to verify:
++
++companions are sorted before decision execution
++hostile targets are selected deterministically
++tie-breaks are explicit
++no unordered dict iteration drives action choice
++
++Bad:
++
++for target in hostile_targets:
++
++Good:
++
++for target in sorted(hostile_targets, key=lambda t: str(t.get("id"))):
++5. Equipment hooks accepting invalid items
++
++A companion equipment endpoint can silently poison state if it allows:
++
++unknown item ids
++wrong slot types
++items not currently owned
++assigning one item to multiple companions
++
++What to verify:
++
++item exists in registry
++slot is allowed
++quantity exists before assignment
++reassigning cleans prior ownership correctly
++Medium-risk integration bugs
++6. Migration shape mismatch
++
++This is a classic one.
++
++Check that migrate_v5_to_v6() uses the real package structure. In earlier phases, your save package structure mattered a lot, and small mismatches can create dead migrations.
++
++Verify:
++
++whether package uses package["state"]["simulation_state"] or package["simulation_state"]
++migration manager imports the new migration
++schema version bumps exactly once
++existing party members gain new fields on load
++7. Inspector diff missing new party fields
++
++Once you add morale, equipment, and status, the inspector can silently underreport changes unless diff and renderer both understand them.
++
++Verify:
++
++party_before and party_after include all new fields
++party_keys_changed updates when equipment or morale changes
++timeline summary includes enough signal to notice party changes
++UI doesn’t collapse nested companion data incorrectly
++8. Companion AI using stale state
++
++A subtle but common bug:
++
++AI chooses action from old companion stats
++then action mutates newer state
++logs become inconsistent
++
++Verify:
++
++action selection reads the latest normalized companion snapshot
++post-action state is written back before next companion acts
++if multiple companions act, later companions see the updated encounter state
++9. Loyalty updates happening on read-only views
++
++Sometimes loyalty/morale drift gets accidentally attached to render or view builders.
++
++Verify mutation only occurs in:
++
++encounter resolution
++dialogue outcome reducers
++explicit party mutation helpers
++
++It should not occur in:
++
++renderers
++serializers
++summary builders
++inspector code
++UI-specific likely bugs
++10. Party panel not refreshing after state-changing routes
++
++After recruit, remove, equip, unequip, item use, or encounter resolution, the party panel can lag behind.
++
++Verify:
++
++refreshSidePanels() or equivalent runs after every party mutation
++inventory and party refresh together when shared items change
++stale setup_payload is not reused after mutation response
++11. Equipment buttons bound to old payload
++
++Classic frontend issue:
++
++click button
++response returns updated setup_payload
++next click still uses old payload captured in closure
++
++Verify that rebinding uses the returned payload, not the original one.
++
++12. Inspector renderer shadowing old functions
++
++You already touched inspector files in 9.0/9.1. Another pass can accidentally redefine functions or break exports.
++
++Verify:
++
++no duplicate renderTimelineRow, renderTickDiffPanel, or helper names
++added helpers are in the same style as the existing module
++file still exports the expected functions
++Behavior design checks
++13. Support role never actually supports
++
++A lot of “support AI” ends up always attacking because heal conditions never trigger.
++
++Test cases:
++
++support companion with potion and low HP
++support companion with ally low HP
++no potion available
++no hostile targets
++low morale support companion
++
++Make sure each branch is reachable.
++
++14. Downed companions still acting
++
++Very common.
++
++Verify:
++
++status == "downed" companions never act
++absent companions never act
++companions at hp == 0 cannot be equipped or consume items unless you explicitly allow revival flows
++15. Party size enforcement bypassed on migration or load
++
++Even if routes enforce max size, migration or manual state normalization may not.
++
++Verify:
++
++normalization trims or rejects overflow deterministically
++duplicate npc_ids are deduped deterministically
++party ordering stays stable
++Best test matrix to run
++
++Run these end-to-end scenarios:
++
++Recruit two companions, save/load, confirm persistence.
++Equip one companion with a shared consumable, save/load, use it, confirm inventory count drops once.
++Run encounter with one support and one guard companion; verify deterministic action order and log output.
++Knock a companion to zero HP; verify status becomes downed and they stop acting.
++Change loyalty and morale through a dialogue/event hook; verify inspector diff shows it.
++Resolve encounter, then hit refresh/UI polling paths; verify no extra companion actions or item consumption.
++Load a v5 save into v6 migration; verify all companions gain new fields and no data is lost.
++Minimal invariants worth asserting in code
++
++These are worth putting into tests and maybe helper assertions:
++
++assert len({c["npc_id"] for c in companions}) == len(companions)
++assert all(0 <= c["hp"] <= c["max_hp"] for c in companions)
++assert all(0.0 <= c["loyalty"] <= 1.0 for c in companions)
++assert all(0.0 <= c["morale"] <= 1.0 for c in companions)
++assert all(c["status"] in {"active", "downed", "absent"} for c in companions)
++My priority order for review
++
++Review in this order:
++
++migration path
++inventory/equipment ownership
++companion AI determinism
++downed/inactive action guards
++UI payload refresh correctness
++inspector diff completeness
+ 
+-companions persist in state
+-can recruit/remove companions
+-companions act during encounters
+-saved games migrate correctly
+-inspector can track party changes
+-UI displays companions
+\ No newline at end of file
++That ordering catches the most expensive regressions first.
+\ No newline at end of file
+diff --git a/src/app/rpg/party/__init__.py b/src/app/rpg/party/__init__.py
+index 7086604..804a822 100644
+--- a/src/app/rpg/party/__init__.py
++++ b/src/app/rpg/party/__init__.py
+@@ -3,10 +3,22 @@ from .party_state import (
+     add_companion,
+     remove_companion,
+     get_active_companions,
++    update_companion_hp,
++    update_companion_loyalty,
++    update_companion_morale,
++    set_companion_status,
++    set_companion_equipment,
++    clear_companion_equipment,
++    build_party_summary,
+ )
+ 
+ from .companion_ai import (
+     run_companion_turns,
++    choose_companion_action,
++)
++
++from .companion_effects import (
++    apply_party_item_to_companion,
+ )
+ 
+ __all__ = [
+@@ -14,5 +26,14 @@ __all__ = [
+     "add_companion",
+     "remove_companion",
+     "get_active_companions",
++    "update_companion_hp",
++    "update_companion_loyalty",
++    "update_companion_morale",
++    "set_companion_status",
++    "set_companion_equipment",
++    "clear_companion_equipment",
++    "build_party_summary",
+     "run_companion_turns",
++    "choose_companion_action",
++    "apply_party_item_to_companion",
+ ]
+\ No newline at end of file
+diff --git a/src/app/rpg/party/companion_ai.py b/src/app/rpg/party/companion_ai.py
+index 70971c6..8992b40 100644
+--- a/src/app/rpg/party/companion_ai.py
++++ b/src/app/rpg/party/companion_ai.py
+@@ -1,30 +1,105 @@
+-"""Phase 9.1 — Companion AI for encounters.
++"""Phase 9.2 — Companion AI for encounters.
+ 
+-Provides simple AI-driven companion actions during tactical encounters.
++Provides deterministic companion AI with role-based action selection.
+ """
+ from typing import Dict, Any
+ 
+ from .party_state import get_active_companions
+ 
+ 
++def _safe_dict(v):
++    return v if isinstance(v, dict) else {}
++
++
++def _safe_list(v):
++    return v if isinstance(v, list) else []
++
++
++def _safe_str(v):
++    return "" if v is None else str(v)
++
++
++def choose_companion_action(companion: Dict[str, Any], encounter_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Choose deterministic action for a companion based on state and role.
++    
++    Priority:
++    - Low loyalty (< -0.5): hesitate
++    - Low HP (<= 25%): defend
++    - Support role with low HP ally: heal_self/support
++    - Has hostile targets: attack
++    - Default: defend
++    """
++    companion = _safe_dict(companion)
++    encounter_state = _safe_dict(encounter_state)
++    participants = _safe_list(encounter_state.get("participants"))
++
++    loyalty = float(companion.get("loyalty", 0.0))
++    hp = int(companion.get("hp", 0))
++    max_hp = max(1, int(companion.get("max_hp", 100)))
++    role = _safe_str(companion.get("role") or "ally")
++    health_ratio = float(hp) / float(max_hp)
++
++    # Find hostile targets
++    hostiles = sorted(
++        [
++            p for p in participants
++            if isinstance(p, dict)
++            and (_safe_str(p.get("role")) == "enemy" or _safe_str(p.get("disposition")) == "hostile")
++        ],
++        key=lambda p: str(p.get("id") or p.get("npc_id") or ""),
++    )
++
++    # Check if companion has healing potion in equipment
++    equipment = _safe_dict(companion.get("equipment"))
++    has_healing_potion = (
++        isinstance(equipment.get("consumable"), dict)
++        and _safe_str(equipment.get("consumable", {}).get("item_id")) == "healing_potion"
++    )
++
++    # Decision tree
++    if loyalty < -0.5:
++        return {"action_type": "hesitate", "target_id": "", "summary": f"{companion.get('name')} hesitates and does not commit."}
++    if health_ratio <= 0.25:
++        return {"action_type": "defend", "target_id": "player", "summary": f"{companion.get('name')} falls back to protect the party."}
++    if role == "support" and has_healing_potion and health_ratio < 0.6:
++        return {"action_type": "heal_self", "target_id": companion.get("npc_id"), "summary": f"{companion.get('name')} uses a healing potion."}
++    if role == "support" and health_ratio < 0.6:
++        return {"action_type": "support", "target_id": "player", "summary": f"{companion.get('name')} supports the player."}
++    if hostiles:
++        target = hostiles[0]
++        target_id = str(target.get("id") or target.get("npc_id") or "")
++        return {"action_type": "attack", "target_id": target_id, "summary": f"{companion.get('name')} attacks {target_id}."}
++    return {"action_type": "defend", "target_id": "player", "summary": f"{companion.get('name')} watches for danger."}
++
++
+ def run_companion_turns(simulation_state: Dict[str, Any], encounter_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Execute companion actions for the current encounter tick.
+-
+-    Each active companion contributes a simple assist action to the encounter log.
++    
++    Only runs if encounter is still active.
+     """
+     player_state = simulation_state.get("player_state") or {}
+     companions = get_active_companions(player_state)
+ 
+     if not companions:
+         return encounter_state
++    
++    encounter_state = _safe_dict(encounter_state)
++    
++    # Guard: do not run companion turns on resolved encounters
++    if str(encounter_state.get("status") or "") == "resolved":
++        return encounter_state
+ 
+     encounter_state.setdefault("log", [])
+ 
++    # Limit to max 3 companions, sorted deterministically
+     for comp in sorted(companions, key=lambda c: str(c.get("npc_id")))[:3]:
++        action = choose_companion_action(comp, encounter_state)
+         encounter_state["log"].append({
+             "type": "companion_action",
+             "npc_id": comp.get("npc_id"),
+-            "summary": f"{comp.get('name')} assists in combat.",
++            "action_type": action.get("action_type"),
++            "target_id": action.get("target_id"),
++            "summary": action.get("summary"),
+         })
+ 
+     return encounter_state
+\ No newline at end of file
+diff --git a/src/app/rpg/party/party_state.py b/src/app/rpg/party/party_state.py
+index 6831ca1..7bdd2f4 100644
+--- a/src/app/rpg/party/party_state.py
++++ b/src/app/rpg/party/party_state.py
+@@ -1,4 +1,4 @@
+-"""Phase 9.1 — Party state management.
++"""Phase 9.2 — Party state management.
+ 
+ Provides deterministic, serialisable party/companion state that sits on top
+ of the player state.
+@@ -20,16 +20,73 @@ def _safe_list(v: Any) -> List[Any]:
+     return v if isinstance(v, list) else []
+ 
+ 
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def _safe_float(v: Any, default: float = 0.0) -> float:
++    try:
++        return float(v)
++    except Exception:
++        return default
++
++
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
++
++
++def _clamp(value: float, low: float, high: float) -> float:
++    return max(low, min(high, value))
++
++
++def _normalize_companion(companion: Dict[str, Any]) -> Dict[str, Any]:
++    """Normalize a companion dict to ensure all fields are present and valid."""
++    companion = _safe_dict(companion)
++    max_hp = max(1, _safe_int(companion.get("max_hp"), 100))
++    hp = _clamp(_safe_int(companion.get("hp"), max_hp), 0, max_hp)
++    loyalty = _clamp(_safe_float(companion.get("loyalty"), 0.5), -1.0, 1.0)
++    morale = _clamp(_safe_float(companion.get("morale"), 0.5), 0.0, 1.0)
++    status = _safe_str(companion.get("status") or "active")
++    role = _safe_str(companion.get("role") or "ally")
++    equipment = _safe_dict(companion.get("equipment"))
++    return {
++        "npc_id": _safe_str(companion.get("npc_id")),
++        "name": _safe_str(companion.get("name") or companion.get("npc_id") or "Companion"),
++        "hp": int(hp),
++        "max_hp": max_hp,
++        "loyalty": loyalty,
++        "morale": morale,
++        "role": role,
++        "status": status,
++        "equipment": {
++            str(k): v for k, v in sorted(equipment.items(), key=lambda kv: str(kv[0]))[:8]
++            if isinstance(v, dict)
++        },
++    }
++
++
+ def ensure_party_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Ensure *player_state* has a well-formed ``party_state`` subtree.
+ 
+-    Idempotent — safe to call multiple times.
++    Idempotent — safe to call multiple times. Deduplicates companions by npc_id.
+     """
+     player_state = _safe_dict(player_state)
+ 
+     party = _safe_dict(player_state.get("party_state"))
+ 
+-    party.setdefault("companions", [])
++    # Deduplicate companions by npc_id, keeping last occurrence
++    seen_ids = set()
++    companions = []
++    for comp in _safe_list(party.get("companions"))[:6]:
++        if isinstance(comp, dict) and comp.get("npc_id"):
++            npc_id = comp.get("npc_id")
++            if npc_id not in seen_ids:
++                seen_ids.add(npc_id)
++                companions.append(_normalize_companion(comp))
++    party["companions"] = companions
+     party.setdefault("max_size", 3)
+ 
+     player_state["party_state"] = party
+@@ -51,13 +108,18 @@ def add_companion(player_state: Dict[str, Any], npc_id: str, name: str) -> Dict[
+     if len(companions) >= int(party.get("max_size", 3)):
+         return player_state
+ 
+-    companions.append({
++    companions.append(_normalize_companion({
+         "npc_id": npc_id,
+         "name": name,
+         "hp": 100,
++        "max_hp": 100,
+         "loyalty": 0.5,
++        "morale": 0.5,
+         "role": "ally",
+-    })
++        "status": "active",
++        "equipment": {},
++    }))
++    companions = sorted(companions, key=lambda c: str(c.get("npc_id")))
+ 
+     party["companions"] = companions
+     player_state["party_state"] = party
+@@ -82,4 +144,128 @@ def remove_companion(player_state: Dict[str, Any], npc_id: str) -> Dict[str, Any
+ def get_active_companions(player_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+     """Return the list of active companions."""
+     player_state = ensure_party_state(player_state)
+-    return _safe_list(player_state["party_state"].get("companions"))
+\ No newline at end of file
++    companions = _safe_list(player_state["party_state"].get("companions"))
++    return [
++        _normalize_companion(comp)
++        for comp in companions
++        if _safe_str(comp.get("status")) == "active" and _safe_int(comp.get("hp"), 0) > 0
++    ]
++
++
++def update_companion_hp(player_state: Dict[str, Any], npc_id: str, delta: int) -> Dict[str, Any]:
++    """Update companion HP by delta, clamping to [0, max_hp] and setting status to 'downed' if HP <= 0."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            comp["hp"] = int(_clamp(comp.get("hp", 0) + _safe_int(delta, 0), 0, comp.get("max_hp", 100)))
++            if comp["hp"] <= 0:
++                comp["status"] = "downed"
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def update_companion_loyalty(player_state: Dict[str, Any], npc_id: str, delta: float) -> Dict[str, Any]:
++    """Update companion loyalty by delta, clamping to [-1.0, 1.0]."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            comp["loyalty"] = _clamp(comp.get("loyalty", 0.5) + _safe_float(delta, 0.0), -1.0, 1.0)
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def update_companion_morale(player_state: Dict[str, Any], npc_id: str, delta: float) -> Dict[str, Any]:
++    """Update companion morale by delta, clamping to [0.0, 1.0]."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            comp["morale"] = _clamp(comp.get("morale", 0.5) + _safe_float(delta, 0.0), 0.0, 1.0)
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def set_companion_status(player_state: Dict[str, Any], npc_id: str, status: str) -> Dict[str, Any]:
++    """Set companion status (active, downed, absent)."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            comp["status"] = _safe_str(status or "active")
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def set_companion_equipment(player_state: Dict[str, Any], npc_id: str, slot: str, item_id: str) -> Dict[str, Any]:
++    """Set equipment for a companion in a given slot."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    slot = _safe_str(slot)
++    item_id = _safe_str(item_id)
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            equipment = dict(comp.get("equipment"))
++            equipment[slot] = {"item_id": item_id, "qty": 1}
++            comp["equipment"] = equipment
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def clear_companion_equipment(player_state: Dict[str, Any], npc_id: str, slot: str) -> Dict[str, Any]:
++    """Clear equipment for a companion in a given slot."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    slot = _safe_str(slot)
++    out = []
++    for comp in _safe_list(party.get("companions")):
++        comp = _normalize_companion(comp)
++        if comp.get("npc_id") == npc_id:
++            equipment = dict(comp.get("equipment"))
++            equipment.pop(slot, None)
++            comp["equipment"] = equipment
++        out.append(comp)
++    party["companions"] = out
++    player_state["party_state"] = party
++    return player_state
++
++
++def build_party_summary(player_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Build a summary of the party state for UI/timeline display."""
++    player_state = ensure_party_state(player_state)
++    party = _safe_dict(player_state.get("party_state"))
++    companions = [_normalize_companion(c) for c in _safe_list(party.get("companions"))]
++    return {
++        "size": len(companions),
++        "active_count": len([c for c in companions if c.get("status") == "active" and c.get("hp", 0) > 0]),
++        "downed_count": len([c for c in companions if c.get("status") == "downed" or c.get("hp", 0) <= 0]),
++        "avg_loyalty": round(
++            sum(float(c.get("loyalty", 0.0)) for c in companions) / max(1, len(companions)),
++            3,
++        ),
++        "avg_morale": round(
++            sum(float(c.get("morale", 0.0)) for c in companions) / max(1, len(companions)),
++            3,
++        ),
++    }
+\ No newline at end of file
+diff --git a/src/app/rpg/persistence/migration_manager.py b/src/app/rpg/persistence/migration_manager.py
+index f1efac1..472669b 100644
+--- a/src/app/rpg/persistence/migration_manager.py
++++ b/src/app/rpg/persistence/migration_manager.py
+@@ -3,7 +3,7 @@ from __future__ import annotations
+ from typing import Any, Dict
+ 
+ from .save_schema import CURRENT_RPG_SCHEMA_VERSION
+-from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5
++from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6
+ 
+ 
+ def _safe_int(v: Any, default: int = 1) -> int:
+@@ -27,6 +27,8 @@ def migrate_package_to_current(package: Dict[str, Any]) -> Dict[str, Any]:
+             package = migrate_v3_to_v4(package)
+         elif version == 4:
+             package = migrate_v4_to_v5(package)
++        elif version == 5:
++            package = migrate_v5_to_v6(package)
+         else:
+             raise ValueError(f"Unsupported schema migration path from version {version}")
+         version = _safe_int(package.get("schema_version"), version + 1)
+diff --git a/src/app/rpg/persistence/migrations/__init__.py b/src/app/rpg/persistence/migrations/__init__.py
+index ebb1988..74df9c3 100644
+--- a/src/app/rpg/persistence/migrations/__init__.py
++++ b/src/app/rpg/persistence/migrations/__init__.py
+@@ -2,10 +2,12 @@ from .v1_to_v2 import migrate_v1_to_v2
+ from .v2_to_v3 import migrate_v2_to_v3
+ from .v3_to_v4 import migrate_v3_to_v4
+ from .v4_to_v5 import migrate_v4_to_v5
++from .v5_to_v6 import migrate_v5_to_v6
+ 
+ __all__ = [
+     "migrate_v1_to_v2",
+     "migrate_v2_to_v3",
+     "migrate_v3_to_v4",
+     "migrate_v4_to_v5",
+-]
++    "migrate_v5_to_v6",
++]
+\ No newline at end of file
+diff --git a/src/app/rpg/persistence/save_schema.py b/src/app/rpg/persistence/save_schema.py
+index 9bc154d..9a9f2cf 100644
+--- a/src/app/rpg/persistence/save_schema.py
++++ b/src/app/rpg/persistence/save_schema.py
+@@ -1,5 +1,5 @@
+ from __future__ import annotations
+ 
+-CURRENT_RPG_SCHEMA_VERSION = 5
++CURRENT_RPG_SCHEMA_VERSION = 6
+ PACKAGE_TYPE = "rpg_save_package"
+-ENGINE_VERSION = "phase_9_1"
++ENGINE_VERSION = "phase_9_2"
+diff --git a/src/app/rpg/player/__init__.py b/src/app/rpg/player/__init__.py
+index d8cbf4a..ce02c5a 100644
+--- a/src/app/rpg/player/__init__.py
++++ b/src/app/rpg/player/__init__.py
+@@ -31,6 +31,12 @@ from .player_inventory import (
+     build_player_inventory_view,
+ )
+ 
++# Phase 9.2 — Party system
++from .player_party import (
++    ensure_player_party,
++    build_player_party_view,
++)
++
+ __all__ = [
+     "AgencySystem",
+     "PlayerChoice",
+@@ -56,4 +62,7 @@ __all__ = [
+     # Phase 9
+     "ensure_player_inventory",
+     "build_player_inventory_view",
+-]
+\ No newline at end of file
++    # Phase 9.2
++    "ensure_player_party",
++    "build_player_party_view",
++]

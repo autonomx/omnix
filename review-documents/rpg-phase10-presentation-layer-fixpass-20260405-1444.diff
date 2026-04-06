@@ -1,0 +1,88 @@
+diff --git a/src/app/rpg/presentation/personality_state.py b/src/app/rpg/presentation/personality_state.py
+--- a/src/app/rpg/presentation/personality_state.py
++++ b/src/app/rpg/presentation/personality_state.py
+@@ -46,30 +46,32 @@ def _normalize_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
+ 
+ def ensure_personality_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Ensure simulation_state has normalized personality state.
+ 
+     Returns the mutated simulation_state with normalized profiles.
+     """
+-    simulation_state = _safe_dict(simulation_state)
+-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+-    personality_state = _safe_dict(presentation_state.get("personality_state"))
+-    profiles_in = _safe_dict(personality_state.get("profiles"))
++    if not isinstance(simulation_state, dict):
++        simulation_state = {}
++    presentation_state = simulation_state.setdefault("presentation_state", {})
++    if not isinstance(presentation_state, dict):
++        presentation_state = simulation_state["presentation_state"] = {}
++    personality_state = presentation_state.setdefault("personality_state", {})
++    if not isinstance(personality_state, dict):
++        personality_state = presentation_state["personality_state"] = {}
++    profiles_in = personality_state.get("profiles", {})
++    if not isinstance(profiles_in, dict):
++        profiles_in = {}
+ 
+     profiles_out: Dict[str, Dict[str, Any]] = {}
+     for actor_id in sorted(profiles_in.keys()):
+         normalized = _normalize_profile(profiles_in.get(actor_id))
+         normalized["actor_id"] = _safe_str(actor_id or normalized.get("actor_id"))
+         profiles_out[str(actor_id)] = normalized
+ 
+     personality_state["profiles"] = profiles_out
+     return simulation_state
+ 
+ 
+ def get_actor_personality_profile(simulation_state: Dict[str, Any], actor_id: str, default_name: str = "") -> Dict[str, Any]:
+     """Get a normalized personality profile for a given actor.
+ 
+     Ensures personality state exists and returns the profile.
+     """
+     simulation_state = ensure_personality_state(simulation_state)
+     actor_id = _safe_str(actor_id)
+-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+-    personality_state = _safe_dict(presentation_state.get("personality_state"))
+-    profiles = _safe_dict(personality_state.get("profiles"))
+-
+-    profile = _normalize_profile(profiles.get(actor_id)) if actor_id in profiles else {}
+-    if not profile.get("actor_id"):
+-        profile["actor_id"] = actor_id
+-    if not profile.get("display_name"):
+-        profile["display_name"] = _safe_str(default_name or actor_id)
+-
+-    if actor_id and actor_id not in profiles:
+-        profiles[actor_id] = dict(profile)
+-        personality_state["profiles"] = profiles
+-        presentation_state["personality_state"] = personality_state
+-        simulation_state["presentation_state"] = presentation_state
+-
+-    return profile
++    presentation_state = simulation_state.setdefault("presentation_state", {})
++    if not isinstance(presentation_state, dict):
++        presentation_state = simulation_state["presentation_state"] = {}
++
++    personality_state = presentation_state.setdefault("personality_state", {})
++    if not isinstance(personality_state, dict):
++        personality_state = presentation_state["personality_state"] = {}
++
++    profiles = personality_state.setdefault("profiles", {})
++    if not isinstance(profiles, dict):
++        profiles = personality_state["profiles"] = {}
++
++    if actor_id and actor_id not in profiles:
++        profile = {
++            "actor_id": actor_id,
++            "display_name": _safe_str(default_name or actor_id),
++            "tone": "neutral",
++            "voice_style": "plain",
++            "traits": [],
++            "style_tags": [],
++            "temperature_hint": "low",
++        }
++        profiles[actor_id] = profile
++        personality_state["profiles"] = profiles
++        presentation_state["personality_state"] = personality_state
++        simulation_state["presentation_state"] = presentation_state
++
++    return _normalize_profile(profiles.get(actor_id, {}))

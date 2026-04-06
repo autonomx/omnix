@@ -1,0 +1,56 @@
+# Phase 12.9 + 13.0 — Save/Export/Packaging + Modding/Content Pack System
+
+## Summary
+
+This implementation adds two major layers to the RPG system:
+
+### Phase 12.9 — Save / Export / Packaging Layer
+- **Package I/O module** (`src/app/rpg/packaging/`) for exporting/importing RPG sessions
+- **Package manifest** with version, title, description, creator metadata
+- **Package contains**: simulation state, presentation state, character cards, world summary, visual registry
+- **Bounded payloads** with character/asset limits to prevent abuse
+- **Normalization** on import to ensure consistent state
+
+### Phase 13.0 — Modding / Extension System / Content Pack Pipeline
+- **Content pack module** (`src/app/rpg/modding/`) for deterministic, data-only content packs
+- **Pack types**: character packs, scenario packs, world packs, visual style packs
+- **Pack operations**: list, preview, apply
+- **Explicit application only** — no hidden pack execution
+- **Visual defaults** can be applied from packs
+
+## Files Created
+
+### Backend Modules
+- `src/app/rpg/packaging/__init__.py`
+- `src/app/rpg/packaging/package_io.py`
+- `src/app/rpg/modding/__init__.py`
+- `src/app/rpg/modding/content_packs.py`
+
+### Tests
+- `src/tests/unit/rpg/test_package_io.py`
+- `src/tests/unit/rpg/test_content_packs.py`
+
+### Frontend
+- Updated `src/static/rpg/rpgPresentationRenderer.js` with pack/package inspectors
+- Updated `src/static/rpg/rpgInspectorStyles.css` with pack/package styles
+
+### API Routes
+- Updated `src/app/rpg/api/rpg_presentation_routes.py` with:
+  - `POST /api/rpg/package/export`
+  - `POST /api/rpg/package/import`
+  - `POST /api/rpg/packs/list`
+  - `POST /api/rpg/packs/preview`
+  - `POST /api/rpg/packs/apply`
+
+## Acceptance Criteria Met
+
+### Phase 12.9 ✅
+- [x] Export/import package routes exist
+- [x] Package manifest exists
+- [x] Packages include simulation/presentation/visual/character card data in bounded format
+
+### Phase 13.0 ✅
+- [x] Content pack module exists
+- [x] List/preview/apply pack routes exist
+- [x] Packs are data-only and deterministic
+- [x] Visual defaults can be applied from packs

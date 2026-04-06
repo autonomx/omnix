@@ -1,0 +1,73 @@
+diff --git a/src/app/__init__.py b/src/app/__init__.py
+index bf874e6..5d8b44c 100644
+--- a/src/app/__init__.py
++++ b/src/app/__init__.py
+@@ -27,6 +27,7 @@ def create_app() -> Flask:
+     from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
+     from app.rpg.api.rpg_package_routes import rpg_package_bp
+     from app.rpg.api.rpg_inspection_routes import rpg_inspection_bp
++    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+     from app.services import services_bp
+     from app.voice_studio import voice_studio_bp
+ 
+@@ -66,5 +67,6 @@ def create_app() -> Flask:
+     app.register_blueprint(rpg_encounter_bp)
+     app.register_blueprint(rpg_package_bp)
+     app.register_blueprint(rpg_inspection_bp)
++    app.register_blueprint(rpg_presentation_bp)
+ 
+     return app
+diff --git a/src/app/rpg/player/player_party.py b/src/app/rpg/player/player_party.py
+index 9a4ffaf..84c4c78 100644
+--- a/src/app/rpg/player/player_party.py
++++ b/src/app/rpg/player/player_party.py
+@@ -1,14 +1,25 @@
+-"""Phase 9.2 — Player party view helpers.
++"""Phase 9.2/9.3/10 — Player party view helpers.
+ 
+-Provides helpers to build party views for the player-facing UI.
++Provides helpers to build party views for the player-facing UI,
++including Phase 9.3 companion narrative presence summaries
++and Phase 10 presentation speaker cards.
+ """
+-from typing import Dict, Any
++from typing import Any, Dict, List
+ 
+-from app.rpg.party import ensure_party_state, build_party_summary
++from app.rpg.party import (
++    ensure_party_state,
++    build_party_summary,
++    build_companion_presence_summary,
++)
++from app.rpg.presentation import build_party_speaker_cards
+ 
+ 
+-def _safe_dict(v):
+-    return v if isinstance(v, dict) else {}
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
+ 
+ 
+ def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+@@ -21,11 +32,14 @@ def ensure_player_party(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+ 
+ 
+ def build_player_party_view(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+-    """Build the full party view for UI display."""
++    """Build the full party view for UI display, including narrative presence and speaker cards."""
+     simulation_state = ensure_player_party(simulation_state)
+     player_state = _safe_dict(simulation_state.get("player_state"))
+     party_state = _safe_dict(player_state.get("party_state"))
++    companions = list(_safe_list(party_state.get("companions") or []))
+     return {
+         "party_state": party_state,
+         "party_summary": build_party_summary(player_state),
+-    }
+\ No newline at end of file
++        "presence_summary": build_companion_presence_summary(player_state),
++        "speaker_cards": build_party_speaker_cards(simulation_state, companions),
++    }
