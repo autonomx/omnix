@@ -15,6 +15,8 @@ from app.rpg.player import ensure_player_state, ensure_player_party
 from app.rpg.presentation import (
     build_scene_presentation_payload,
     build_dialogue_presentation_payload,
+    build_runtime_presentation_payload,
+    build_orchestration_presentation_payload,
 )
 from app.rpg.presentation.speaker_cards import build_speaker_cards
 
@@ -42,6 +44,18 @@ def presentation_scene():
     simulation_state = ensure_player_party(simulation_state)
 
     payload = build_scene_presentation_payload(simulation_state, scene_state)
+    runtime_payload = build_runtime_presentation_payload(simulation_state)
+    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
+    if isinstance(payload, dict):
+        payload = dict(payload)
+        payload["runtime"] = runtime_payload
+        payload["orchestration"] = orchestration_payload
+    else:
+        payload = {
+            "content": payload,
+            "runtime": runtime_payload,
+            "orchestration": orchestration_payload,
+        }
 
     return jsonify({
         "ok": True,
@@ -60,6 +74,18 @@ def presentation_dialogue():
     simulation_state = ensure_player_party(simulation_state)
 
     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
+    runtime_payload = build_runtime_presentation_payload(simulation_state)
+    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
+    if isinstance(payload, dict):
+        payload = dict(payload)
+        payload["runtime"] = runtime_payload
+        payload["orchestration"] = orchestration_payload
+    else:
+        payload = {
+            "content": payload,
+            "runtime": runtime_payload,
+            "orchestration": orchestration_payload,
+        }
 
     return jsonify({
         "ok": True,
@@ -78,8 +104,12 @@ def presentation_speakers():
     simulation_state = ensure_player_party(simulation_state)
 
     cards = build_speaker_cards(simulation_state, scene_state)
+    runtime_payload = build_runtime_presentation_payload(simulation_state)
+    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
 
     return jsonify({
         "ok": True,
         "speaker_cards": cards,
+        "runtime": runtime_payload,
+        "orchestration": orchestration_payload,
     })
