@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.presentation.visual_state import ensure_visual_state
+
 _MAX_TRAITS = 8
 _MAX_STYLE_TAGS = 8
 
@@ -70,6 +72,7 @@ def ensure_personality_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
 
     personality_state["profiles"] = profiles_out
 
+    simulation_state = ensure_visual_state(simulation_state)
     return simulation_state
 
 

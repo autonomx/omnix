@@ -4,6 +4,7 @@
  * Renders speaker cards and presentation payloads for the frontend.
  *
  * Phase 11.2 — Character Inspector frontend additions.
+ * Phase 12 — Visual Identity System (scene illustrations + portrait status).
  */
 function escapeHtml(str) {
   return String(str || "")
@@ -15,6 +16,47 @@ function escapeHtml(str) {
 }
 
 let selectedCharacterId = "";
+
+// ---- Phase 12 — Scene Illustrations ----
+
+function getSceneIllustrationContainer() {
+  return document.getElementById("rpg-scene-illustrations");
+}
+
+export function renderSceneIllustrations(visualState) {
+  const container = getSceneIllustrationContainer();
+  if (!container) return;
+
+  const illustrations = Array.isArray(visualState?.scene_illustrations)
+    ? visualState.scene_illustrations
+    : [];
+
+  if (!illustrations.length) {
+    container.innerHTML = `<div class="inspector-empty">No scene illustrations.</div>`;
+    return;
+  }
+
+  container.innerHTML = illustrations.map((item) => {
+    const title = escapeHtml(item.title || item.scene_id || item.event_id || "Scene");
+    const imageUrl = escapeHtml(item.image_url || "");
+    const style = escapeHtml(item.style || "");
+    const prompt = escapeHtml(item.prompt || "");
+    const image = imageUrl
+      ? `<img class="scene-illustration-image" src="${imageUrl}" alt="${title}">`
+      : `<div class="scene-illustration-image scene-illustration-image--placeholder"></div>`;
+
+    return `
+      <div class="scene-illustration-card">
+        ${image}
+        <div class="scene-illustration-title">${title}</div>
+        ${style ? `<div class="scene-illustration-meta">${style}</div>` : ""}
+        ${prompt ? `<div class="scene-illustration-prompt">${prompt}</div>` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+// ---- End Phase 12 additions ----
 
 function getCharacterInspectorContainer() {
   return document.getElementById("rpg-character-inspector");
@@ -138,10 +180,12 @@ export function renderCharacterList(inspectorState) {
     const role = escapeHtml(c.role || "character");
     const currentIntent = escapeHtml(c.current_intent || "");
     // ---- Phase 11.4 — Character Cards + Portraits ----
+    // ---- Phase 12 — Portrait Status Indicators ----
     const subtitle = escapeHtml(c.card?.subtitle || role);
     const summary = escapeHtml(c.card?.summary || "");
     const badge = escapeHtml(c.card?.badge || "");
     const portraitUrl = escapeHtml(c.visual_identity?.portrait_url || "");
+    const portraitStatus = escapeHtml(c.visual_identity?.status || "idle");
 
     const portrait = portraitUrl
       ? `<img class="inspector-character-portrait" src="${portraitUrl}" alt="${name}">`
@@ -159,6 +203,7 @@ export function renderCharacterList(inspectorState) {
         <div class="inspector-character-role">${subtitle}</div>
         ${badge ? `<div class="inspector-character-badge">${badge}</div>` : ""}
         ${summary ? `<div class="inspector-character-summary">${summary}</div>` : ""}
+        ${portraitStatus && portraitStatus !== "idle" ? `<div class="inspector-character-portrait-status portrait-status-${portraitStatus}">portrait: ${portraitStatus}</div>` : ""}
         ${currentIntent ? `<div class="inspector-character-intent">${currentIntent}</div>` : ""}
       </button>
     `;
@@ -430,6 +475,12 @@ export function renderPresentation(payload) {
     renderWorldList(worldInspectorState);
     renderWorldInspector(worldInspectorState);
     bindWorldInspectorEvents(worldInspectorState);
+  }
+
+  // ---- Phase 12 — Render scene illustrations in presentation payload ----
+  const visualState = payload?.visual_state || null;
+  if (visualState && typeof visualState === "object") {
+    renderSceneIllustrations(visualState);
   }
 
   return presentation;

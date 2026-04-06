@@ -201,15 +201,52 @@ def _normalize_card_meta(entry: Dict[str, Any], profile: Dict[str, Any]) -> Dict
     }
 
 
-def _normalize_visual_identity(entry: Dict[str, Any]) -> Dict[str, Any]:
-    visual_identity = _safe_dict(entry.get("visual_identity"))
-    seed = visual_identity.get("seed")
+def _normalize_visual_identity(
+    simulation_state: Dict[str, Any],
+    actor_id: str,
+    entry: Dict[str, Any],
+    profile: Dict[str, Any],
+) -> Dict[str, Any]:
+    from app.rpg.presentation.visual_state import (
+        build_default_character_visual_identity,
+        ensure_visual_state,
+    )
+
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    identities = _safe_dict(visual_state.get("character_visual_identities"))
+
+    actor_identity = _safe_dict(identities.get(actor_id))
+    entry_visual = _safe_dict(entry.get("visual_identity"))
+
+    defaults = _safe_dict(visual_state.get("defaults"))
+    merged = {
+        **build_default_character_visual_identity(
+            actor_id=actor_id,
+            name=_derive_display_name(entry),
+            role=_derive_role(entry),
+            description=_safe_str(entry.get("description")).strip(),
+            personality_summary=_safe_str(profile.get("summary")).strip(),
+            style=_safe_str(defaults.get("portrait_style")).strip(),
+            model=_safe_str(defaults.get("model")).strip(),
+        ),
+        **actor_identity,
+        **entry_visual,
+    }
+
+    seed = merged.get("seed")
+    version = merged.get("version")
 
     return {
-        "portrait_url": _safe_str(visual_identity.get("portrait_url")).strip(),
-        "portrait_asset_id": _safe_str(visual_identity.get("portrait_asset_id")).strip(),
+        "portrait_url": _safe_str(merged.get("portrait_url")).strip(),
+        "portrait_asset_id": _safe_str(merged.get("portrait_asset_id")).strip(),
         "seed": seed if isinstance(seed, int) else None,
-        "style": _safe_str(visual_identity.get("style")).strip(),
+        "style": _safe_str(merged.get("style")).strip(),
+        "base_prompt": _safe_str(merged.get("base_prompt")).strip(),
+        "model": _safe_str(merged.get("model")).strip(),
+        "version": version if isinstance(version, int) and version > 0 else 1,
+        "status": _first_non_empty(merged.get("status"), "idle"),
     }
 
 
@@ -250,7 +287,7 @@ def build_character_ui_entry(
         "recent_actions": _normalize_recent_actions(presentation_entry),
         "relationships": _normalize_relationships(simulation_state, actor_id),
         "personality": profile,
-        "visual_identity": _normalize_visual_identity(presentation_entry),
+        "visual_identity": _normalize_visual_identity(simulation_state, actor_id, presentation_entry, profile),
         "card": card_meta,
         "meta": {
             "present": bool(presentation_entry.get("present", True)),

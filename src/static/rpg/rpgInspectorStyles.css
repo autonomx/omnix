@@ -401,3 +401,69 @@
   font-size: 0.85em;
   color: var(--rpg-text-secondary, #aaa);
 }
+
+/* ---- Phase 12 — Scene Illustrations ---- */
+
+.rpg-scene-illustrations {
+  margin-top: 16px;
+}
+
+.scene-illustration-card {
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 0 0 12px 0;
+  background: var(--rpg-surface-dark, #1a1a2e);
+}
+
+.scene-illustration-image {
+  width: 100%;
+  max-width: 320px;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.scene-illustration-image--placeholder {
+  background: rgba(255,255,255,0.08);
+}
+
+.scene-illustration-title {
+  font-weight: bold;
+}
+
+.scene-illustration-meta {
+  margin-top: 4px;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.scene-illustration-prompt {
+  margin-top: 6px;
+  font-size: 0.8em;
+  color: var(--rpg-text-secondary, #aaa);
+}
+
+/* ---- Phase 12 — Portrait Status Indicators ---- */
+
+.inspector-character-portrait-status {
+  margin-top: 4px;
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.portrait-status-pending {
+  color: #ffc107;
+}
+
+.portrait-status-complete {
+  color: #28a745;
+}
+
+.portrait-status-failed {
+  color: #dc3545;
+}
