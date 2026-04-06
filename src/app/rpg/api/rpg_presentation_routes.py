@@ -35,12 +35,20 @@ from app.rpg.presentation.speaker_cards import build_speaker_cards
 from app.rpg.ui.character_builder import build_character_inspector_state, build_character_ui_state
 from app.rpg.ui.world_builder import build_world_inspector_state
 from app.rpg.presentation.visual_state import (
+    append_appearance_event,
     append_image_request,
     append_scene_illustration,
+    append_visual_asset,
+    apply_visual_fallback,
+    build_default_appearance_profile,
     build_default_character_visual_identity,
+    build_visual_asset_record,
     ensure_visual_state,
+    normalize_visual_status,
     stable_visual_seed_from_text,
+    upsert_appearance_profile,
     upsert_character_visual_identity,
+    validate_visual_prompt,
 )
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
@@ -48,6 +56,22 @@ rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
     return dict(v) if isinstance(v, dict) else {}
+
+
+def _safe_str(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    return str(v)
+
+
+def _first_non_empty(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
 
 
 def _safe_character_ui_state(v: Any) -> Dict[str, Any]:
@@ -201,6 +225,9 @@ def _safe_visual_state(v: Any) -> Dict[str, Any]:
             "character_visual_identities": {},
             "scene_illustrations": [],
             "image_requests": [],
+            "visual_assets": [],
+            "appearance_profiles": {},
+            "appearance_events": {},
             "defaults": {},
         }
 
@@ -218,6 +245,19 @@ def _safe_visual_state(v: Any) -> Dict[str, Any]:
         requests = []
     requests = [item for item in requests if isinstance(item, dict)]
 
+    assets = v.get("visual_assets")
+    if not isinstance(assets, list):
+        assets = []
+    assets = [item for item in assets if isinstance(item, dict)]
+
+    appearance_profiles = v.get("appearance_profiles")
+    if not isinstance(appearance_profiles, dict):
+        appearance_profiles = {}
+
+    appearance_events = v.get("appearance_events")
+    if not isinstance(appearance_events, dict):
+        appearance_events = {}
+
     defaults = v.get("defaults")
     if not isinstance(defaults, dict):
         defaults = {}
@@ -226,6 +266,9 @@ def _safe_visual_state(v: Any) -> Dict[str, Any]:
         "character_visual_identities": identities,
         "scene_illustrations": illustrations,
         "image_requests": requests,
+        "visual_assets": assets,
+        "appearance_profiles": appearance_profiles,
+        "appearance_events": appearance_events,
         "defaults": defaults,
     }
 
@@ -601,15 +644,42 @@ def request_character_portrait():
         identity["base_prompt"] = prompt_override
     identity["style"] = portrait_style
     identity["model"] = portrait_model
-    identity["status"] = "pending"
+
+    prompt_check = validate_visual_prompt(identity.get("base_prompt", ""))
+    identity["status"] = "pending" if prompt_check.get("ok") else "blocked"
 
     current_version = identity.get("version")
     identity["version"] = current_version + 1 if isinstance(current_version, int) and current_version > 0 else 1
+
+    # Phase 12.4 — initialize appearance profile
+    profile_payload = build_default_appearance_profile(
+        actor_id=actor_id,
+        name=_safe_str(target.get("name")).strip(),
+        role=_safe_str(target.get("role")).strip(),
+        description=_safe_str(target.get("description")).strip(),
+    )
+    simulation_state = upsert_appearance_profile(
+        simulation_state,
+        actor_id=actor_id,
+        profile=profile_payload,
+    )
 
     simulation_state = upsert_character_visual_identity(
         simulation_state,
         actor_id=actor_id,
         identity=identity,
+    )
+
+    # Phase 12.4 — record appearance event
+    simulation_state = append_appearance_event(
+        simulation_state,
+        actor_id=actor_id,
+        event={
+            "event_id": f"appearance:{actor_id}:{identity['version']}",
+            "reason": "manual_refresh" if prompt_override else "initial",
+            "summary": "Portrait refresh requested",
+            "tick": 0,
+        },
     )
 
     request_id = f"portrait:{actor_id}:{identity['version']}"
@@ -623,13 +693,17 @@ def request_character_portrait():
             "seed": identity.get("seed"),
             "style": identity.get("style", ""),
             "model": identity.get("model", ""),
-            "status": "pending",
+            "status": "pending" if prompt_check.get("ok") else "blocked",
         },
     )
 
     return jsonify({
         "ok": True,
         "request_id": request_id,
+        "moderation": {
+            "status": "approved" if prompt_check.get("ok") else "blocked",
+            "reason": _safe_str(prompt_check.get("reason")).strip(),
+        },
         "visual_state": _extract_visual_state(simulation_state),
         "character_ui_state": _extract_character_ui_state(simulation_state),
     })
@@ -643,7 +717,11 @@ def complete_character_portrait():
     actor_id = _safe_str(data.get("actor_id")).strip()
     image_url = _safe_str(data.get("image_url")).strip()
     asset_id = _safe_str(data.get("asset_id")).strip()
-    status = _first_non_empty(data.get("status"), "complete")
+    status = normalize_visual_status(data.get("status"), default="complete")
+    request_id = _safe_str(data.get("request_id")).strip()
+    local_path = _safe_str(data.get("local_path")).strip()
+    moderation_status = _first_non_empty(data.get("moderation_status"), "approved")
+    moderation_reason = _safe_str(data.get("moderation_reason")).strip()
 
     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
     simulation_state = ensure_player_party(simulation_state)
@@ -660,9 +738,20 @@ def complete_character_portrait():
             "error": "character_not_found",
         }), 404
 
-    identity["portrait_url"] = image_url
+    # Apply returned fields first, then fallback if needed.
+    # This avoids fallback being overwritten by an empty image_url.
+    if image_url:
+        identity["portrait_url"] = image_url
     identity["portrait_asset_id"] = asset_id
     identity["status"] = status
+
+    # Phase 12.5 — apply fallback for failed/blocked results
+    visual_state_defaults = _safe_dict(_extract_visual_state(simulation_state).get("defaults"))
+    if status in {"failed", "blocked"}:
+        identity = apply_visual_fallback(
+            identity,
+            visual_state_defaults.get("fallback_portrait_url"),
+        )
 
     simulation_state = upsert_character_visual_identity(
         simulation_state,
@@ -670,6 +759,42 @@ def complete_character_portrait():
         identity=identity,
     )
     simulation_state = _ensure_character_ui_state(simulation_state)
+
+    # Phase 12.3 — register asset in visual asset registry
+    version = identity.get("version")
+    if not isinstance(version, int) or version < 1:
+        version = 1
+
+    simulation_state = append_visual_asset(
+        simulation_state,
+        build_visual_asset_record(
+            kind="character_portrait",
+            target_id=actor_id,
+            version=version,
+            seed=identity.get("seed") if isinstance(identity.get("seed"), int) else None,
+            style=_safe_str(identity.get("style")).strip(),
+            model=_safe_str(identity.get("model")).strip(),
+            prompt=_safe_str(identity.get("base_prompt")).strip(),
+            url=_safe_str(identity.get("portrait_url")).strip(),
+            local_path=local_path,
+            status=status,
+            created_from_request_id=request_id,
+            moderation_status=moderation_status,
+            moderation_reason=moderation_reason,
+        ),
+    )
+
+    # Phase 12.4 — record appearance event
+    simulation_state = append_appearance_event(
+        simulation_state,
+        actor_id=actor_id,
+        event={
+            "event_id": f"appearance-result:{actor_id}:{version}",
+            "reason": "manual_refresh",
+            "summary": f"Portrait result recorded ({status})",
+            "tick": 0,
+        },
+    )
 
     return jsonify({
         "ok": True,
@@ -707,6 +832,9 @@ def request_scene_illustration():
             f"{scene_id}|{event_id}|{title}|{scene_style}|{scene_model}"
         )
 
+    # Phase 12.5 — validate prompt
+    prompt_check = validate_visual_prompt(prompt)
+
     request_id = f"scene:{resolved_target}:{seed}"
     simulation_state = append_image_request(
         simulation_state,
@@ -718,13 +846,17 @@ def request_scene_illustration():
             "seed": seed,
             "style": scene_style,
             "model": scene_model,
-            "status": "pending",
+            "status": "pending" if prompt_check.get("ok") else "blocked",
         },
     )
 
     return jsonify({
         "ok": True,
         "request_id": request_id,
+        "moderation": {
+            "status": "approved" if prompt_check.get("ok") else "blocked",
+            "reason": _safe_str(prompt_check.get("reason")).strip(),
+        },
         "visual_state": _extract_visual_state(simulation_state),
     })
 
@@ -734,29 +866,90 @@ def complete_scene_illustration():
     """Record completed scene illustration asset metadata."""
     data = request.get_json(silent=True) or {}
     setup_payload = _safe_dict(data.get("setup_payload"))
+    request_id = _safe_str(data.get("request_id")).strip()
+    status = normalize_visual_status(data.get("status"), default="complete")
+    local_path = _safe_str(data.get("local_path")).strip()
+    moderation_status = _first_non_empty(data.get("moderation_status"), "approved")
+    moderation_reason = _safe_str(data.get("moderation_reason")).strip()
 
     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
     simulation_state = ensure_player_party(simulation_state)
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
 
+    scene_id = _safe_str(data.get("scene_id")).strip()
+    event_id = _safe_str(data.get("event_id")).strip()
+    title = _safe_str(data.get("title")).strip()
+    image_url = _safe_str(data.get("image_url")).strip()
+    asset_id = _safe_str(data.get("asset_id")).strip()
+    seed = data.get("seed") if isinstance(data.get("seed"), int) else None
+    style = _safe_str(data.get("style")).strip()
+    prompt = _safe_str(data.get("prompt")).strip()
+    model = _safe_str(data.get("model")).strip()
+
+    visual_defaults = _safe_dict(_extract_visual_state(simulation_state).get("defaults"))
+    illustration_payload = {
+        "scene_id": scene_id,
+        "event_id": event_id,
+        "title": title,
+        "image_url": image_url,
+        "asset_id": asset_id,
+        "seed": seed,
+        "style": style,
+        "prompt": prompt,
+        "model": model,
+        "status": status,
+    }
+    # Phase 12.5 — apply fallback for failed/blocked
+    if status in {"failed", "blocked"}:
+        illustration_payload = apply_visual_fallback(illustration_payload, visual_defaults.get("fallback_scene_url"))
+
     simulation_state = append_scene_illustration(
         simulation_state,
-        {
-            "scene_id": _safe_str(data.get("scene_id")).strip(),
-            "event_id": _safe_str(data.get("event_id")).strip(),
-            "title": _safe_str(data.get("title")).strip(),
-            "image_url": _safe_str(data.get("image_url")).strip(),
-            "asset_id": _safe_str(data.get("asset_id")).strip(),
-            "seed": data.get("seed") if isinstance(data.get("seed"), int) else None,
-            "style": _safe_str(data.get("style")).strip(),
-            "prompt": _safe_str(data.get("prompt")).strip(),
-            "model": _safe_str(data.get("model")).strip(),
-            "status": _first_non_empty(data.get("status"), "complete"),
-        },
+        illustration_payload,
+    )
+
+    # Phase 12.3 — register asset in visual asset registry
+    simulation_state = append_visual_asset(
+        simulation_state,
+        build_visual_asset_record(
+            kind="scene_illustration",
+            target_id=_first_non_empty(event_id, scene_id, title, "scene"),
+            version=1,
+            seed=seed,
+            style=style,
+            model=model,
+            prompt=prompt,
+            url=_safe_str(illustration_payload.get("image_url")).strip(),
+            local_path=local_path,
+            status=status,
+            created_from_request_id=request_id,
+            moderation_status=moderation_status,
+            moderation_reason=moderation_reason,
+        ),
     )
 
     return jsonify({
         "ok": True,
         "visual_state": _extract_visual_state(simulation_state),
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/visual_assets")
+def presentation_visual_assets():
+    """Return replay-safe visual asset registry."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+
+    visual_state = _extract_visual_state(simulation_state)
+    return jsonify({
+        "ok": True,
+        "visual_assets": visual_state.get("visual_assets", []),
+        "appearance_profiles": visual_state.get("appearance_profiles", {}),
+        "appearance_events": visual_state.get("appearance_events", {}),
     })

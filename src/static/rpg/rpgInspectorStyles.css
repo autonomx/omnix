@@ -467,3 +467,34 @@
 .portrait-status-failed {
   color: #dc3545;
 }
+
+/* ---- Phase 12.3 — Visual asset meta ---- */
+.visual-asset-meta {
+  margin-top: 4px;
+  font-size: 0.8em;
+  color: var(--rpg-text-secondary, #aaa);
+}
+
+/* ---- Phase 12.4 — Appearance events ---- */
+.inspector-appearance-event {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px dotted var(--rpg-border-color, #333);
+  font-size: 0.85em;
+}
+
+.inspector-event-reason {
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--rpg-accent, #7eb8da);
+}
+
+.inspector-event-summary {
+  color: var(--rpg-text-secondary, #aaa);
+}
+
+/* ---- Phase 12.4 — Portrait status indicator ---- */
+.portrait-status-blocked {
+  color: #ff9800;
+}

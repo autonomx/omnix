@@ -1,552 +1,538 @@
-👉 Phase 12.0 + 12.1 + 12.2 — literal apply-this-patch diff spec
+👉 Phase 12.3 + 12.4 + 12.5 — literal apply-this-patch diff spec
+
 This combines:
 
-12.0 — Visual identity foundations
-12.1 — Character portrait generation / persistence / refresh rules
-12.2 — Scene illustration generation / event-triggered renders
-
-The design stays aligned with your current architecture:
-
-deterministic simulation remains authoritative
-UI/image state is projection-friendly and bounded
-generation requests are explicit artifacts, not hidden side effects
-no generated image is required for gameplay truth
-image metadata is persisted in bounded presentation state only after explicit generation/update flow
-
-This phase creates the foundation and routes/contracts for portraits and scene art, but keeps actual provider integration pluggable.
-
-High-level design
-Core rule
-
-Images are presentation assets, not simulation truth.
-
-So:
-
-simulation decides who exists / what happened
-visual system decides how to represent that
-generated assets are stored as bounded visual metadata
-no image output may affect deterministic gameplay logic
-New data model overview
-Character visual identity
-
-Stored under canonical presentation-facing visual identity:
-
-{
-  "portrait_url": str,
-  "portrait_asset_id": str,
-  "seed": int | None,
-  "style": str,
-  "base_prompt": str,
-  "model": str,
-  "version": int,
-  "status": str,
-}
-Scene illustration entries
-
-Stored in bounded presentation state:
-
-{
-  "scene_id": str,
-  "event_id": str,
-  "title": str,
-  "image_url": str,
-  "asset_id": str,
-  "seed": int | None,
-  "style": str,
-  "prompt": str,
-  "status": str,
-}
-Image request queue entries
-
-Stored under presentation state as bounded pending requests:
-
-{
-  "request_id": str,
-  "kind": "character_portrait" | "scene_illustration",
-  "target_id": str,
-  "prompt": str,
-  "seed": int | None,
-  "style": str,
-  "model": str,
-  "status": "pending" | "complete" | "failed",
-}
-Part 1/10 — create visual identity builder/state module
-Create file: src/app/rpg/presentation/visual_state.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_MAX_SCENE_ILLUSTRATIONS = 24
-_MAX_IMAGE_REQUESTS = 24
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _first_non_empty(*values: Any) -> str:
-    for value in values:
-        text = _safe_str(value).strip()
-        if text:
-            return text
-    return ""
-
-
-def _safe_int(value: Any, default: int | None = None) -> int | None:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _stable_seed_from_text(text: str) -> int:
-    text = _safe_str(text)
-    total = 0
-    for idx, ch in enumerate(text):
-        total = (total + ((idx + 1) * ord(ch))) % 2147483647
-    return total or 1
-
-
-def _normalize_visual_identity_entry(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    seed = _safe_int(data.get("seed"), None)
-    version = _safe_int(data.get("version"), 1)
-    if version is None or version < 1:
-        version = 1
-
-    return {
-        "portrait_url": _safe_str(data.get("portrait_url")).strip(),
-        "portrait_asset_id": _safe_str(data.get("portrait_asset_id")).strip(),
-        "seed": seed,
-        "style": _safe_str(data.get("style")).strip(),
-        "base_prompt": _safe_str(data.get("base_prompt")).strip(),
-        "model": _safe_str(data.get("model")).strip(),
-        "version": version,
-        "status": _first_non_empty(data.get("status"), "idle"),
-    }
-
-
-def _normalize_scene_illustration(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    return {
-        "scene_id": _safe_str(data.get("scene_id")).strip(),
-        "event_id": _safe_str(data.get("event_id")).strip(),
-        "title": _safe_str(data.get("title")).strip(),
-        "image_url": _safe_str(data.get("image_url")).strip(),
-        "asset_id": _safe_str(data.get("asset_id")).strip(),
-        "seed": _safe_int(data.get("seed"), None),
-        "style": _safe_str(data.get("style")).strip(),
-        "prompt": _safe_str(data.get("prompt")).strip(),
-        "model": _safe_str(data.get("model")).strip(),
-        "status": _first_non_empty(data.get("status"), "idle"),
-    }
-
-
-def _normalize_image_request(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    kind = _first_non_empty(data.get("kind"), "character_portrait")
-    if kind not in {"character_portrait", "scene_illustration"}:
-        kind = "character_portrait"
-
-    status = _first_non_empty(data.get("status"), "pending")
-    if status not in {"pending", "complete", "failed"}:
-        status = "pending"
-
-    return {
-        "request_id": _safe_str(data.get("request_id")).strip(),
-        "kind": kind,
-        "target_id": _safe_str(data.get("target_id")).strip(),
-        "prompt": _safe_str(data.get("prompt")).strip(),
-        "seed": _safe_int(data.get("seed"), None),
-        "style": _safe_str(data.get("style")).strip(),
-        "model": _safe_str(data.get("model")).strip(),
-        "status": status,
-    }
-
-
-def ensure_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(simulation_state, dict):
-        simulation_state = {}
-
-    presentation_state = simulation_state.setdefault("presentation_state", {})
-    if not isinstance(presentation_state, dict):
-        presentation_state = {}
-        simulation_state["presentation_state"] = presentation_state
-
-    visual_state = presentation_state.setdefault("visual_state", {})
-    if not isinstance(visual_state, dict):
-        visual_state = {}
-        presentation_state["visual_state"] = visual_state
-
-    identities_in = _safe_dict(visual_state.get("character_visual_identities"))
-    identities_out: Dict[str, Any] = {}
-    for actor_id in sorted(identities_in.keys(), key=lambda v: _safe_str(v)):
-        identities_out[_safe_str(actor_id)] = _normalize_visual_identity_entry(identities_in.get(actor_id))
-    visual_state["character_visual_identities"] = identities_out
-
-    illustrations_in = _safe_list(visual_state.get("scene_illustrations"))
-    illustrations_out = [
-        _normalize_scene_illustration(item)
-        for item in illustrations_in
-        if isinstance(item, dict)
-    ]
-    illustrations_out = sorted(
-        illustrations_out,
-        key=lambda item: (
-            _safe_str(item.get("scene_id")),
-            _safe_str(item.get("event_id")),
-            _safe_str(item.get("title")).lower(),
-        ),
-    )[:_MAX_SCENE_ILLUSTRATIONS]
-    visual_state["scene_illustrations"] = illustrations_out
-
-    requests_in = _safe_list(visual_state.get("image_requests"))
-    requests_out = [
-        _normalize_image_request(item)
-        for item in requests_in
-        if isinstance(item, dict)
-    ]
-    requests_out = sorted(
-        requests_out,
-        key=lambda item: (
-            _safe_str(item.get("kind")),
-            _safe_str(item.get("target_id")),
-            _safe_str(item.get("request_id")),
-        ),
-    )[:_MAX_IMAGE_REQUESTS]
-    visual_state["image_requests"] = requests_out
-
-    defaults = _safe_dict(visual_state.get("defaults"))
-    visual_state["defaults"] = {
-        "portrait_style": _first_non_empty(defaults.get("portrait_style"), "rpg-portrait"),
-        "scene_style": _first_non_empty(defaults.get("scene_style"), "rpg-scene"),
-        "model": _first_non_empty(defaults.get("model"), "default"),
-    }
-
-    return simulation_state
-
-
-def build_default_character_visual_identity(
-    *,
-    actor_id: str,
-    name: str,
-    role: str,
-    description: str,
-    personality_summary: str,
-    style: str,
-    model: str,
-) -> Dict[str, Any]:
-    actor_id = _safe_str(actor_id).strip()
-    name = _safe_str(name).strip()
-    role = _safe_str(role).strip()
-    description = _safe_str(description).strip()
-    personality_summary = _safe_str(personality_summary).strip()
-    style = _first_non_empty(style, "rpg-portrait")
-    model = _first_non_empty(model, "default")
-
-    prompt_parts = [part for part in [name, role, description, personality_summary] if part]
-    base_prompt = ", ".join(prompt_parts)
-    seed = _stable_seed_from_text(f"{actor_id}|{name}|{role}|{style}|{model}")
-
-    return {
-        "portrait_url": "",
-        "portrait_asset_id": "",
-        "seed": seed,
-        "style": style,
-        "base_prompt": base_prompt,
-        "model": model,
-        "version": 1,
-        "status": "idle",
-    }
-
-
-def upsert_character_visual_identity(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    identity: Dict[str, Any],
-) -> Dict[str, Any]:
-    simulation_state = ensure_visual_state(simulation_state)
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    visual_state = _safe_dict(presentation_state.get("visual_state"))
-    identities = _safe_dict(visual_state.get("character_visual_identities"))
-
-    identities[_safe_str(actor_id)] = _normalize_visual_identity_entry(identity)
-    visual_state["character_visual_identities"] = dict(sorted(identities.items(), key=lambda item: _safe_str(item[0])))
-
-    return simulation_state
-
-
-def append_scene_illustration(
-    simulation_state: Dict[str, Any],
-    illustration: Dict[str, Any],
-) -> Dict[str, Any]:
-    simulation_state = ensure_visual_state(simulation_state)
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    visual_state = _safe_dict(presentation_state.get("visual_state"))
-    illustrations = _safe_list(visual_state.get("scene_illustrations"))
-
-    illustrations.append(_normalize_scene_illustration(illustration))
-    illustrations = sorted(
-        [item for item in illustrations if isinstance(item, dict)],
-        key=lambda item: (
-            _safe_str(item.get("scene_id")),
-            _safe_str(item.get("event_id")),
-            _safe_str(item.get("title")).lower(),
-        ),
-    )[-_MAX_SCENE_ILLUSTRATIONS:]
-
-    visual_state["scene_illustrations"] = illustrations
-    return simulation_state
-
-
-def append_image_request(
-    simulation_state: Dict[str, Any],
-    request: Dict[str, Any],
-) -> Dict[str, Any]:
-    simulation_state = ensure_visual_state(simulation_state)
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    visual_state = _safe_dict(presentation_state.get("visual_state"))
-    requests = _safe_list(visual_state.get("image_requests"))
-
-    requests.append(_normalize_image_request(request))
-    requests = sorted(
-        [item for item in requests if isinstance(item, dict)],
-        key=lambda item: (
-            _safe_str(item.get("kind")),
-            _safe_str(item.get("target_id")),
-            _safe_str(item.get("request_id")),
-        ),
-    )[-_MAX_IMAGE_REQUESTS:]
-
-    visual_state["image_requests"] = requests
-    return simulation_state
-Part 2/10 — merge visual identity defaults into canonical character UI
-Edit file: src/app/rpg/ui/character_builder.py
-
-Add import near the top:
-
-+from app.rpg.presentation.visual_state import (
-+    build_default_character_visual_identity,
-+    ensure_visual_state,
-+)
-
-Replace _normalize_visual_identity(...) with this version:
-
--def _normalize_visual_identity(entry: Dict[str, Any]) -> Dict[str, Any]:
--    visual_identity = _safe_dict(entry.get("visual_identity"))
--    seed = visual_identity.get("seed")
--
--    return {
--        "portrait_url": _safe_str(visual_identity.get("portrait_url")).strip(),
--        "portrait_asset_id": _safe_str(visual_identity.get("portrait_asset_id")).strip(),
--        "seed": seed if isinstance(seed, int) else None,
--        "style": _safe_str(visual_identity.get("style")).strip(),
--    }
-+def _normalize_visual_identity(
+12.3 — Image cache / storage / replay-safe asset references
+12.4 — Visual continuity system / appearance evolution tracking
+12.5 — Image generation controls / moderation / fallback handling
+
+It builds directly on your current Phase 12 backend, which already has visual_state, portrait request/result routes, and scene illustration request/result routes.
+
+This phase keeps the same rules:
+
+images remain presentation assets, not simulation truth
+deterministic gameplay must not depend on asset generation output
+asset references must be stable, bounded, and replay-safe
+visual continuity changes must be explicit and inspectable
+moderation/fallback must be explicit and provider-agnostic
+High-level outcome
+
+After this patch, your visual system will support:
+
+stable asset registry entries instead of only loose URLs
+cache keys / asset IDs for replay-safe references
+appearance profile + evolution log for continuity
+visual refresh reasons like injury, faction change, corruption, disguise, promotion
+moderation / validation / fallback state for portrait and scene requests
+request lifecycle with retryable failure states and blocked status
+Part 1/12 — extend visual state model for assets, continuity, moderation
+Edit file: src/app/rpg/presentation/visual_state.py
+
+Add new constants near the top:
+
+ _MAX_SCENE_ILLUSTRATIONS = 24
+ _MAX_IMAGE_REQUESTS = 24
++_MAX_VISUAL_ASSETS = 64
++_MAX_APPEARANCE_EVENTS = 32
+Add helpers below _safe_int(...)
++def _safe_bool(value: Any, default: bool = False) -> bool:
++    if isinstance(value, bool):
++        return value
++    if isinstance(value, (int, float)):
++        return bool(value)
++    if isinstance(value, str):
++        text = value.strip().lower()
++        if text in {"1", "true", "yes", "y", "on"}:
++            return True
++        if text in {"0", "false", "no", "n", "off"}:
++            return False
++    return default
+Add helper below _stable_seed_from_text(...)
++def _stable_asset_id(kind: str, target_id: str, version: int, seed: int | None) -> str:
++    seed_text = str(seed) if isinstance(seed, int) else "none"
++    return f"{_safe_str(kind).strip()}:{_safe_str(target_id).strip()}:{max(1, int(version))}:{seed_text}"
+Add normalization helpers below _normalize_image_request(...)
++def _normalize_visual_asset(value: Any) -> Dict[str, Any]:
++    data = _safe_dict(value)
++    version = _safe_int(data.get("version"), 1)
++    if version is None or version < 1:
++        version = 1
++
++    kind = _first_non_empty(data.get("kind"), "character_portrait")
++    if kind not in {"character_portrait", "scene_illustration"}:
++        kind = "character_portrait"
++
++    status = _first_non_empty(data.get("status"), "complete")
++    if status not in {"pending", "complete", "failed", "blocked"}:
++        status = "complete"
++
++    moderation = _safe_dict(data.get("moderation"))
++    moderation_status = _first_non_empty(moderation.get("status"), "unchecked")
++    if moderation_status not in {"unchecked", "approved", "blocked", "flagged"}:
++        moderation_status = "unchecked"
++
++    return {
++        "asset_id": _safe_str(data.get("asset_id")).strip(),
++        "kind": kind,
++        "target_id": _safe_str(data.get("target_id")).strip(),
++        "url": _safe_str(data.get("url")).strip(),
++        "local_path": _safe_str(data.get("local_path")).strip(),
++        "cache_key": _safe_str(data.get("cache_key")).strip(),
++        "seed": _safe_int(data.get("seed"), None),
++        "style": _safe_str(data.get("style")).strip(),
++        "model": _safe_str(data.get("model")).strip(),
++        "prompt": _safe_str(data.get("prompt")).strip(),
++        "version": version,
++        "status": status,
++        "created_from_request_id": _safe_str(data.get("created_from_request_id")).strip(),
++        "moderation": {
++            "status": moderation_status,
++            "reason": _safe_str(moderation.get("reason")).strip(),
++        },
++    }
++
++
++def _normalize_appearance_profile(value: Any) -> Dict[str, Any]:
++    data = _safe_dict(value)
++
++    features = _safe_dict(data.get("features"))
++    normalized_features = {}
++    for key in sorted(features.keys(), key=lambda v: _safe_str(v)):
++        if not _safe_str(key).strip():
++            continue
++        normalized_features[_safe_str(key)] = _normalize_scalar(features.get(key))
++
++    return {
++        "base_description": _safe_str(data.get("base_description")).strip(),
++        "current_summary": _safe_str(data.get("current_summary")).strip(),
++        "features": normalized_features,
++        "last_reason": _safe_str(data.get("last_reason")).strip(),
++        "version": max(1, _safe_int(data.get("version"), 1) or 1),
++    }
++
++
++def _normalize_appearance_event(value: Any) -> Dict[str, Any]:
++    data = _safe_dict(value)
++    reason = _first_non_empty(data.get("reason"), "update")
++    if reason not in {
++        "initial",
++        "injury",
++        "promotion",
++        "faction_change",
++        "equipment_change",
++        "corruption",
++        "disguise",
++        "aging",
++        "manual_refresh",
++        "update",
++    }:
++        reason = "update"
++
++    return {
++        "event_id": _safe_str(data.get("event_id")).strip(),
++        "reason": reason,
++        "summary": _safe_str(data.get("summary")).strip(),
++        "tick": max(0, _safe_int(data.get("tick"), 0) or 0),
++    }
++```
+
+---
+
+### Extend `ensure_visual_state(...)`
+
+Inside `ensure_visual_state(...)`, after `image_requests` normalization and before defaults, add:
+
+```diff
++    assets_in = _safe_list(visual_state.get("visual_assets"))
++    assets_out = [
++        _normalize_visual_asset(item)
++        for item in assets_in
++        if isinstance(item, dict)
++    ]
++    assets_out = sorted(
++        assets_out,
++        key=lambda item: (
++            _safe_str(item.get("kind")),
++            _safe_str(item.get("target_id")),
++            _safe_str(item.get("asset_id")),
++        ),
++    )[-_MAX_VISUAL_ASSETS:]
++    visual_state["visual_assets"] = assets_out
++
++    profiles_in = _safe_dict(visual_state.get("appearance_profiles"))
++    profiles_out: Dict[str, Any] = {}
++    for actor_id in sorted(profiles_in.keys(), key=lambda v: _safe_str(v)):
++        profiles_out[_safe_str(actor_id)] = _normalize_appearance_profile(profiles_in.get(actor_id))
++    visual_state["appearance_profiles"] = profiles_out
++
++    events_in = _safe_dict(visual_state.get("appearance_events"))
++    events_out: Dict[str, Any] = {}
++    for actor_id in sorted(events_in.keys(), key=lambda v: _safe_str(v)):
++        raw_events = _safe_list(events_in.get(actor_id))
++        normalized_events = [
++            _normalize_appearance_event(item)
++            for item in raw_events
++            if isinstance(item, dict)
++        ]
++        normalized_events = sorted(
++            normalized_events,
++            key=lambda item: (
++                item.get("tick", 0),
++                _safe_str(item.get("reason")),
++                _safe_str(item.get("event_id")),
++            ),
++        )[-_MAX_APPEARANCE_EVENTS:]
++        events_out[_safe_str(actor_id)] = normalized_events
++    visual_state["appearance_events"] = events_out
++
+     defaults = _safe_dict(visual_state.get("defaults"))
+     visual_state["defaults"] = {
+         "portrait_style": _first_non_empty(defaults.get("portrait_style"), "rpg-portrait"),
+         "scene_style": _first_non_empty(defaults.get("scene_style"), "rpg-scene"),
+         "model": _first_non_empty(defaults.get("model"), "default"),
++        "fallback_portrait_url": _safe_str(defaults.get("fallback_portrait_url")).strip(),
++        "fallback_scene_url": _safe_str(defaults.get("fallback_scene_url")).strip(),
+     }
+Part 2/12 — add asset registry + continuity mutators
+Edit file: src/app/rpg/presentation/visual_state.py
+
+Add these functions below append_image_request(...):
+
++def append_visual_asset(
 +    simulation_state: Dict[str, Any],
++    asset: Dict[str, Any],
++) -> Dict[str, Any]:
++    simulation_state = ensure_visual_state(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++    assets = _safe_list(visual_state.get("visual_assets"))
++
++    assets.append(_normalize_visual_asset(asset))
++    assets = sorted(
++        [item for item in assets if isinstance(item, dict)],
++        key=lambda item: (
++            _safe_str(item.get("kind")),
++            _safe_str(item.get("target_id")),
++            _safe_str(item.get("asset_id")),
++        ),
++    )[-_MAX_VISUAL_ASSETS:]
++    visual_state["visual_assets"] = assets
++    return simulation_state
++
++
++def upsert_appearance_profile(
++    simulation_state: Dict[str, Any],
++    *,
 +    actor_id: str,
-+    entry: Dict[str, Any],
 +    profile: Dict[str, Any],
 +) -> Dict[str, Any]:
 +    simulation_state = ensure_visual_state(simulation_state)
 +    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
 +    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    identities = _safe_dict(visual_state.get("character_visual_identities"))
++    profiles = _safe_dict(visual_state.get("appearance_profiles"))
 +
-+    actor_identity = _safe_dict(identities.get(actor_id))
-+    entry_visual = _safe_dict(entry.get("visual_identity"))
++    profiles[_safe_str(actor_id)] = _normalize_appearance_profile(profile)
++    visual_state["appearance_profiles"] = dict(sorted(profiles.items(), key=lambda item: _safe_str(item[0])))
++    return simulation_state
 +
-+    merged = {
-+        **build_default_character_visual_identity(
++
++def append_appearance_event(
++    simulation_state: Dict[str, Any],
++    *,
++    actor_id: str,
++    event: Dict[str, Any],
++) -> Dict[str, Any]:
++    simulation_state = ensure_visual_state(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++    events = _safe_dict(visual_state.get("appearance_events"))
++
++    actor_events = _safe_list(events.get(actor_id))
++    actor_events.append(_normalize_appearance_event(event))
++    actor_events = sorted(
++        [item for item in actor_events if isinstance(item, dict)],
++        key=lambda item: (
++            item.get("tick", 0),
++            _safe_str(item.get("reason")),
++            _safe_str(item.get("event_id")),
++        ),
++    )[-_MAX_APPEARANCE_EVENTS:]
++
++    events[_safe_str(actor_id)] = actor_events
++    visual_state["appearance_events"] = dict(sorted(events.items(), key=lambda item: _safe_str(item[0])))
++    return simulation_state
++
++
++def build_default_appearance_profile(
++    *,
++    actor_id: str,
++    name: str,
++    role: str,
++    description: str,
++) -> Dict[str, Any]:
++    base_description = ", ".join([part for part in [_safe_str(name).strip(), _safe_str(role).strip(), _safe_str(description).strip()] if part])
++    return {
++        "base_description": base_description,
++        "current_summary": base_description,
++        "features": {},
++        "last_reason": "initial",
++        "version": 1,
++    }
++
++
++def build_visual_asset_record(
++    *,
++    kind: str,
++    target_id: str,
++    version: int,
++    seed: int | None,
++    style: str,
++    model: str,
++    prompt: str,
++    url: str,
++    local_path: str,
++    status: str,
++    created_from_request_id: str,
++    moderation_status: str = "unchecked",
++    moderation_reason: str = "",
++) -> Dict[str, Any]:
++    asset_id = _stable_asset_id(kind, target_id, version, seed)
++    cache_key = f"{kind}|{target_id}|{version}|{seed if isinstance(seed, int) else 'none'}|{style}|{model}"
++    return {
++        "asset_id": asset_id,
++        "kind": kind,
++        "target_id": target_id,
++        "url": _safe_str(url).strip(),
++        "local_path": _safe_str(local_path).strip(),
++        "cache_key": cache_key,
++        "seed": seed,
++        "style": _safe_str(style).strip(),
++        "model": _safe_str(model).strip(),
++        "prompt": _safe_str(prompt).strip(),
++        "version": max(1, int(version)),
++        "status": _first_non_empty(status, "complete"),
++        "created_from_request_id": _safe_str(created_from_request_id).strip(),
++        "moderation": {
++            "status": _first_non_empty(moderation_status, "unchecked"),
++            "reason": _safe_str(moderation_reason).strip(),
++        },
++    }
+Part 3/12 — add request validation / moderation / fallback helpers
+Edit file: src/app/rpg/presentation/visual_state.py
+
+Add below build_visual_asset_record(...):
+
++def validate_visual_prompt(prompt: str) -> Dict[str, Any]:
++    prompt = _safe_str(prompt).strip()
++    if not prompt:
++        return {"ok": False, "status": "blocked", "reason": "empty_prompt"}
++    if len(prompt) > 2000:
++        return {"ok": False, "status": "blocked", "reason": "prompt_too_long"}
++    return {"ok": True, "status": "approved", "reason": ""}
++
++
++def normalize_visual_status(value: Any, *, default: str = "pending") -> str:
++    status = _first_non_empty(value, default)
++    if status not in {"idle", "pending", "complete", "failed", "blocked"}:
++        status = default
++    return status
++
++
++def apply_visual_fallback(identity_or_illustration: Dict[str, Any], fallback_url: str) -> Dict[str, Any]:
++    payload = dict(_safe_dict(identity_or_illustration))
++    if not _safe_str(payload.get("portrait_url")).strip() and not _safe_str(payload.get("image_url")).strip():
++        if "portrait_url" in payload:
++            payload["portrait_url"] = _safe_str(fallback_url).strip()
++        if "image_url" in payload:
++            payload["image_url"] = _safe_str(fallback_url).strip()
++    return payload
+Part 4/12 — surface appearance profile in canonical character UI
+Edit file: src/app/rpg/ui/character_builder.py
+
+Add import near top:
+
+ from app.rpg.presentation.visual_state import (
+     build_default_character_visual_identity,
++    build_default_appearance_profile,
+     ensure_visual_state,
+ )
+
+Add helper below _normalize_visual_identity(...):
+
++def _normalize_appearance(
++    simulation_state: Dict[str, Any],
++    actor_id: str,
++    entry: Dict[str, Any],
++) -> Dict[str, Any]:
++    simulation_state = ensure_visual_state(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++    profiles = _safe_dict(visual_state.get("appearance_profiles"))
++    events = _safe_dict(visual_state.get("appearance_events"))
++
++    profile = _safe_dict(profiles.get(actor_id))
++    if not profile:
++        profile = build_default_appearance_profile(
 +            actor_id=actor_id,
 +            name=_derive_display_name(entry),
 +            role=_derive_role(entry),
 +            description=_safe_str(entry.get("description")).strip(),
-+            personality_summary=_safe_str(profile.get("summary")).strip(),
-+            style=_safe_str(_safe_dict(visual_state.get("defaults")).get("portrait_style")).strip(),
-+            model=_safe_str(_safe_dict(visual_state.get("defaults")).get("model")).strip(),
-+        ),
-+        **actor_identity,
-+        **entry_visual,
-+    }
++        )
 +
-+    seed = merged.get("seed")
-+    version = merged.get("version")
++    appearance_events = _safe_list(events.get(actor_id))
++    appearance_events = [item for item in appearance_events if isinstance(item, dict)][-_MAX_RECENT_ACTIONS:]
 +
 +    return {
-+        "portrait_url": _safe_str(merged.get("portrait_url")).strip(),
-+        "portrait_asset_id": _safe_str(merged.get("portrait_asset_id")).strip(),
-+        "seed": seed if isinstance(seed, int) else None,
-+        "style": _safe_str(merged.get("style")).strip(),
-+        "base_prompt": _safe_str(merged.get("base_prompt")).strip(),
-+        "model": _safe_str(merged.get("model")).strip(),
-+        "version": version if isinstance(version, int) and version > 0 else 1,
-+        "status": _first_non_empty(merged.get("status"), "idle"),
++        "profile": profile,
++        "recent_events": appearance_events,
 +    }
 
-In build_character_ui_entry(...), change:
+Inside build_character_ui_entry(...), add:
 
--        "visual_identity": _normalize_visual_identity(presentation_entry),
-+        "visual_identity": _normalize_visual_identity(simulation_state, actor_id, presentation_entry, profile),
-Part 3/10 — ensure visual state in presentation normalization
-Edit file: src/app/rpg/presentation/personality_state.py
+-    card_meta = _normalize_card_meta(presentation_entry, profile)
++    card_meta = _normalize_card_meta(presentation_entry, profile)
++    appearance = _normalize_appearance(simulation_state, actor_id, presentation_entry)
 
-Add import:
+And in returned object add:
 
-+from app.rpg.presentation.visual_state import ensure_visual_state
-
-At the end of ensure_personality_state(...), before return, add:
-
-+    simulation_state = ensure_visual_state(simulation_state)
-     return simulation_state
-Part 4/10 — add visual and scene-art routes
+         "personality": profile,
+         "visual_identity": _normalize_visual_identity(simulation_state, actor_id, presentation_entry, profile),
++        "appearance": appearance,
+         "card": card_meta,
+Part 5/12 — extend visual extraction in routes
 Edit file: src/app/rpg/api/rpg_presentation_routes.py
 
 Add imports:
 
-+from app.rpg.presentation.visual_state import (
-+    append_image_request,
-+    append_scene_illustration,
-+    build_default_character_visual_identity,
-+    ensure_visual_state,
-+    upsert_character_visual_identity,
-+)
+ from app.rpg.presentation.visual_state import (
+     append_image_request,
++    append_appearance_event,
++    append_visual_asset,
++    apply_visual_fallback,
+     append_scene_illustration,
++    build_default_appearance_profile,
+     build_default_character_visual_identity,
++    build_visual_asset_record,
+     ensure_visual_state,
+     stable_visual_seed_from_text,
++    normalize_visual_status,
+     upsert_character_visual_identity,
++    upsert_appearance_profile,
++    validate_visual_prompt,
+ )
 
-Add helpers below _extract_world_inspector_state(...):
+Update _safe_visual_state(...) to include new fields:
 
-+def _safe_visual_state(v: Any) -> Dict[str, Any]:
-+    if not isinstance(v, dict):
-+        return {
-+            "character_visual_identities": {},
-+            "scene_illustrations": [],
-+            "image_requests": [],
-+            "defaults": {},
-+        }
+     if not isinstance(v, dict):
+         return {
+             "character_visual_identities": {},
+             "scene_illustrations": [],
+             "image_requests": [],
++            "visual_assets": [],
++            "appearance_profiles": {},
++            "appearance_events": {},
+             "defaults": {},
+         }
+@@
+     requests = v.get("image_requests")
+     if not isinstance(requests, list):
+         requests = []
+     requests = [item for item in requests if isinstance(item, dict)]
 +
-+    identities = v.get("character_visual_identities")
-+    if not isinstance(identities, dict):
-+        identities = {}
++    assets = v.get("visual_assets")
++    if not isinstance(assets, list):
++        assets = []
++    assets = [item for item in assets if isinstance(item, dict)]
 +
-+    illustrations = v.get("scene_illustrations")
-+    if not isinstance(illustrations, list):
-+        illustrations = []
-+    illustrations = [item for item in illustrations if isinstance(item, dict)]
++    appearance_profiles = v.get("appearance_profiles")
++    if not isinstance(appearance_profiles, dict):
++        appearance_profiles = {}
 +
-+    requests = v.get("image_requests")
-+    if not isinstance(requests, list):
-+        requests = []
-+    requests = [item for item in requests if isinstance(item, dict)]
-+
-+    defaults = v.get("defaults")
-+    if not isinstance(defaults, dict):
-+        defaults = {}
-+
-+    return {
-+        "character_visual_identities": identities,
-+        "scene_illustrations": illustrations,
-+        "image_requests": requests,
-+        "defaults": defaults,
-+    }
-+
-+
-+def _extract_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = ensure_visual_state(_safe_dict(simulation_state))
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    return _safe_visual_state(visual_state)
++    appearance_events = v.get("appearance_events")
++    if not isinstance(appearance_events, dict):
++        appearance_events = {}
+@@
+     return {
+         "character_visual_identities": identities,
+         "scene_illustrations": illustrations,
+         "image_requests": requests,
++        "visual_assets": assets,
++        "appearance_profiles": appearance_profiles,
++        "appearance_events": appearance_events,
+         "defaults": defaults,
+     }
+Part 6/12 — harden portrait request route
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
 
-In presentation_scene(), presentation_dialogue(), and presentation_narrative_recap(), after all other ensure calls, add:
+Inside request_character_portrait(), after portrait_style/portrait_model are resolved, add prompt validation and appearance profile init.
 
-+    simulation_state = ensure_visual_state(simulation_state)
+Replace:
 
-And add to each response:
-
-+        "visual_state": _extract_visual_state(simulation_state),
-Add portrait request route
-+@rpg_presentation_bp.post("/api/rpg/character_portrait/request")
-+def request_character_portrait():
-+    """Create/update a portrait generation request for a character."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    actor_id = _safe_str(data.get("actor_id")).strip()
-+    style = _safe_str(data.get("style")).strip()
-+    model = _safe_str(data.get("model")).strip()
-+    prompt_override = _safe_str(data.get("prompt")).strip()
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = _ensure_character_ui_state(simulation_state)
-+    simulation_state = _ensure_character_inspector_state(simulation_state)
-+    simulation_state = _ensure_world_inspector_state(simulation_state)
-+    simulation_state = ensure_visual_state(simulation_state)
-+
-+    character_ui_state = _extract_character_ui_state(simulation_state)
-+    characters = character_ui_state.get("characters") if isinstance(character_ui_state, dict) else []
-+    if not isinstance(characters, list):
-+        characters = []
-+
-+    target = None
-+    for character in characters:
-+        if isinstance(character, dict) and _safe_str(character.get("id")).strip() == actor_id:
-+            target = character
-+            break
-+
-+    if not target:
-+        return jsonify({
-+            "ok": False,
-+            "error": "character_not_found",
-+        }), 404
-+
-+    existing_visual = _safe_dict(target.get("visual_identity"))
-+    portrait_style = _first_non_empty(style, existing_visual.get("style"), "rpg-portrait")
-+    portrait_model = _first_non_empty(model, existing_visual.get("model"), "default")
-+
+-    identity = build_default_character_visual_identity(
 +    identity = build_default_character_visual_identity(
+         actor_id=actor_id,
+         name=_safe_str(target.get("name")).strip(),
+         role=_safe_str(target.get("role")).strip(),
+         description=_safe_str(target.get("description")).strip(),
+         personality_summary=_safe_str(_safe_dict(target.get("personality")).get("summary")).strip(),
+         style=portrait_style,
+         model=portrait_model,
+     )
+
+with the same block plus following additions below it:
+
++    profile_payload = build_default_appearance_profile(
 +        actor_id=actor_id,
 +        name=_safe_str(target.get("name")).strip(),
 +        role=_safe_str(target.get("role")).strip(),
 +        description=_safe_str(target.get("description")).strip(),
-+        personality_summary=_safe_str(_safe_dict(target.get("personality")).get("summary")).strip(),
-+        style=portrait_style,
-+        model=portrait_model,
 +    )
-+
-+    identity.update(existing_visual)
-+    if prompt_override:
-+        identity["base_prompt"] = prompt_override
-+    identity["style"] = portrait_style
-+    identity["model"] = portrait_model
-+    identity["status"] = "pending"
-+
-+    current_version = identity.get("version")
-+    identity["version"] = current_version + 1 if isinstance(current_version, int) and current_version > 0 else 1
-+
-+    simulation_state = upsert_character_visual_identity(
++    simulation_state = upsert_appearance_profile(
 +        simulation_state,
 +        actor_id=actor_id,
-+        identity=identity,
++        profile=profile_payload,
 +    )
-+
-+    request_id = f"portrait:{actor_id}:{identity['version']}"
+
+Then replace the prompt override handling with:
+
+-    if prompt_override:
+-        identity["base_prompt"] = prompt_override
++    if prompt_override:
++        identity["base_prompt"] = prompt_override
+     identity["style"] = portrait_style
+     identity["model"] = portrait_model
+-    identity["status"] = "pending"
++    prompt_check = validate_visual_prompt(identity.get("base_prompt", ""))
++    identity["status"] = "pending" if prompt_check.get("ok") else "blocked"
+
+After version increment, add:
+
++    simulation_state = append_appearance_event(
++        simulation_state,
++        actor_id=actor_id,
++        event={
++            "event_id": f"appearance:{actor_id}:{identity['version']}",
++            "reason": "manual_refresh" if prompt_override else "initial",
++            "summary": "Portrait refresh requested",
++            "tick": 0,
++        },
++    )
+
+Then replace request append with:
+
+-    simulation_state = append_image_request(
+-        simulation_state,
+-        {
+-            "request_id": request_id,
+-            "kind": "character_portrait",
+-            "target_id": actor_id,
+-            "prompt": identity.get("base_prompt", ""),
+-            "seed": identity.get("seed"),
+-            "style": identity.get("style", ""),
+-            "model": identity.get("model", ""),
+-            "status": "pending",
+-        },
+-    )
 +    simulation_state = append_image_request(
 +        simulation_state,
 +        {
@@ -557,331 +543,356 @@ Add portrait request route
 +            "seed": identity.get("seed"),
 +            "style": identity.get("style", ""),
 +            "model": identity.get("model", ""),
-+            "status": "pending",
++            "status": "pending" if prompt_check.get("ok") else "blocked",
 +        },
 +    )
+
+Add blocked response metadata:
+
+     return jsonify({
+         "ok": True,
+         "request_id": request_id,
++        "moderation": {
++            "status": "approved" if prompt_check.get("ok") else "blocked",
++            "reason": _safe_str(prompt_check.get("reason")).strip(),
++        },
+         "visual_state": _extract_visual_state(simulation_state),
+         "character_ui_state": _extract_character_ui_state(simulation_state),
+     })
+Part 7/12 — harden portrait result route and asset registry
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+Inside complete_character_portrait(), replace:
+
+-    status = _first_non_empty(data.get("status"), "complete")
++    status = normalize_visual_status(data.get("status"), default="complete")
++    request_id = _safe_str(data.get("request_id")).strip()
++    local_path = _safe_str(data.get("local_path")).strip()
++    moderation_status = _first_non_empty(data.get("moderation_status"), "approved")
++    moderation_reason = _safe_str(data.get("moderation_reason")).strip()
+
+After identity lookup and before upsert, add fallback logic:
+
++    visual_state_defaults = _safe_dict(_extract_visual_state(simulation_state).get("defaults"))
++    if status in {"failed", "blocked"}:
++        identity = apply_visual_fallback(identity, visual_state_defaults.get("fallback_portrait_url"))
+
+Keep setting portrait fields, but make status normalized:
+
+     identity["portrait_url"] = image_url
+     identity["portrait_asset_id"] = asset_id
+     identity["status"] = status
+
+After upsert_character_visual_identity(...), add:
+
++    version = identity.get("version")
++    if not isinstance(version, int) or version < 1:
++        version = 1
 +
-+    return jsonify({
-+        "ok": True,
-+        "request_id": request_id,
-+        "visual_state": _extract_visual_state(simulation_state),
-+        "character_ui_state": _extract_character_ui_state(simulation_state),
-+    })
-Add portrait result route
-+@rpg_presentation_bp.post("/api/rpg/character_portrait/result")
-+def complete_character_portrait():
-+    """Record completed portrait asset metadata for a character."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    actor_id = _safe_str(data.get("actor_id")).strip()
-+    image_url = _safe_str(data.get("image_url")).strip()
-+    asset_id = _safe_str(data.get("asset_id")).strip()
-+    status = _first_non_empty(data.get("status"), "complete")
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_visual_state(simulation_state)
-+
-+    visual_state = _extract_visual_state(simulation_state)
-+    identities = _safe_dict(visual_state.get("character_visual_identities"))
-+    identity = _safe_dict(identities.get(actor_id))
-+
-+    if not identity:
-+        return jsonify({
-+            "ok": False,
-+            "error": "character_not_found",
-+        }), 404
-+
-+    identity["portrait_url"] = image_url
-+    identity["portrait_asset_id"] = asset_id
-+    identity["status"] = status
-+
-+    simulation_state = upsert_character_visual_identity(
++    simulation_state = append_visual_asset(
++        simulation_state,
++        build_visual_asset_record(
++            kind="character_portrait",
++            target_id=actor_id,
++            version=version,
++            seed=identity.get("seed") if isinstance(identity.get("seed"), int) else None,
++            style=_safe_str(identity.get("style")).strip(),
++            model=_safe_str(identity.get("model")).strip(),
++            prompt=_safe_str(identity.get("base_prompt")).strip(),
++            url=_safe_str(identity.get("portrait_url")).strip(),
++            local_path=local_path,
++            status=status,
++            created_from_request_id=request_id,
++            moderation_status=moderation_status,
++            moderation_reason=moderation_reason,
++        ),
++    )
+
+And append appearance event:
+
++    simulation_state = append_appearance_event(
 +        simulation_state,
 +        actor_id=actor_id,
-+        identity=identity,
++        event={
++            "event_id": f"appearance-result:{actor_id}:{version}",
++            "reason": "manual_refresh",
++            "summary": f"Portrait result recorded ({status})",
++            "tick": 0,
++        },
 +    )
-+    simulation_state = _ensure_character_ui_state(simulation_state)
-+
-+    return jsonify({
-+        "ok": True,
-+        "visual_state": _extract_visual_state(simulation_state),
-+        "character_ui_state": _extract_character_ui_state(simulation_state),
-+    })
-Add scene illustration request route
-+@rpg_presentation_bp.post("/api/rpg/scene_illustration/request")
-+def request_scene_illustration():
-+    """Create a scene illustration generation request."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
+Part 8/12 — harden scene illustration request/result routes
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+In request_scene_illustration()
+
+After prompt/style/model resolution, add validation:
+
++    prompt_check = validate_visual_prompt(prompt)
+
+Then replace request append with:
+
+     simulation_state = append_image_request(
+         simulation_state,
+         {
+             "request_id": request_id,
+             "kind": "scene_illustration",
+             "target_id": resolved_target,
+             "prompt": prompt,
+             "seed": seed,
+             "style": scene_style,
+             "model": scene_model,
+-            "status": "pending",
++            "status": "pending" if prompt_check.get("ok") else "blocked",
+         },
+     )
+
+And return moderation payload:
+
+     return jsonify({
+         "ok": True,
+         "request_id": request_id,
++        "moderation": {
++            "status": "approved" if prompt_check.get("ok") else "blocked",
++            "reason": _safe_str(prompt_check.get("reason")).strip(),
++        },
+         "visual_state": _extract_visual_state(simulation_state),
+     })
+In complete_scene_illustration()
+
+Replace beginning of function variable extraction with:
+
++    request_id = _safe_str(data.get("request_id")).strip()
++    status = normalize_visual_status(data.get("status"), default="complete")
++    local_path = _safe_str(data.get("local_path")).strip()
++    moderation_status = _first_non_empty(data.get("moderation_status"), "approved")
++    moderation_reason = _safe_str(data.get("moderation_reason")).strip()
+
+Replace illustration append payload with:
+
+-    simulation_state = append_scene_illustration(
+-        simulation_state,
+-        {
+-            "scene_id": _safe_str(data.get("scene_id")).strip(),
+-            "event_id": _safe_str(data.get("event_id")).strip(),
+-            "title": _safe_str(data.get("title")).strip(),
+-            "image_url": _safe_str(data.get("image_url")).strip(),
+-            "asset_id": _safe_str(data.get("asset_id")).strip(),
+-            "seed": data.get("seed") if isinstance(data.get("seed"), int) else None,
+-            "style": _safe_str(data.get("style")).strip(),
+-            "prompt": _safe_str(data.get("prompt")).strip(),
+-            "model": _safe_str(data.get("model")).strip(),
+-            "status": _first_non_empty(data.get("status"), "complete"),
+-        },
+-    )
 +    scene_id = _safe_str(data.get("scene_id")).strip()
 +    event_id = _safe_str(data.get("event_id")).strip()
 +    title = _safe_str(data.get("title")).strip()
-+    prompt = _safe_str(data.get("prompt")).strip()
++    image_url = _safe_str(data.get("image_url")).strip()
++    asset_id = _safe_str(data.get("asset_id")).strip()
++    seed = data.get("seed") if isinstance(data.get("seed"), int) else None
 +    style = _safe_str(data.get("style")).strip()
++    prompt = _safe_str(data.get("prompt")).strip()
 +    model = _safe_str(data.get("model")).strip()
 +
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_visual_state(simulation_state)
-+
-+    visual_state = _extract_visual_state(simulation_state)
-+    defaults = _safe_dict(visual_state.get("defaults"))
-+    scene_style = _first_non_empty(style, defaults.get("scene_style"), "rpg-scene")
-+    scene_model = _first_non_empty(model, defaults.get("model"), "default")
-+
-+    resolved_target = _first_non_empty(event_id, scene_id, title, "scene")
-+    seed = _safe_int(data.get("seed"), None)
-+    if seed is None:
-+        seed = abs(hash(f"{scene_id}|{event_id}|{title}|{scene_style}|{scene_model}")) % 2147483647 or 1
-+
-+    request_id = f"scene:{resolved_target}:{seed}"
-+    simulation_state = append_image_request(
-+        simulation_state,
-+        {
-+            "request_id": request_id,
-+            "kind": "scene_illustration",
-+            "target_id": resolved_target,
-+            "prompt": prompt,
-+            "seed": seed,
-+            "style": scene_style,
-+            "model": scene_model,
-+            "status": "pending",
-+        },
-+    )
-+
-+    return jsonify({
-+        "ok": True,
-+        "request_id": request_id,
-+        "visual_state": _extract_visual_state(simulation_state),
-+    })
-Add scene illustration result route
-+@rpg_presentation_bp.post("/api/rpg/scene_illustration/result")
-+def complete_scene_illustration():
-+    """Record completed scene illustration asset metadata."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_visual_state(simulation_state)
++    visual_defaults = _safe_dict(_extract_visual_state(simulation_state).get("defaults"))
++    illustration_payload = {
++        "scene_id": scene_id,
++        "event_id": event_id,
++        "title": title,
++        "image_url": image_url,
++        "asset_id": asset_id,
++        "seed": seed,
++        "style": style,
++        "prompt": prompt,
++        "model": model,
++        "status": status,
++    }
++    if status in {"failed", "blocked"}:
++        illustration_payload = apply_visual_fallback(illustration_payload, visual_defaults.get("fallback_scene_url"))
 +
 +    simulation_state = append_scene_illustration(
 +        simulation_state,
-+        {
-+            "scene_id": _safe_str(data.get("scene_id")).strip(),
-+            "event_id": _safe_str(data.get("event_id")).strip(),
-+            "title": _safe_str(data.get("title")).strip(),
-+            "image_url": _safe_str(data.get("image_url")).strip(),
-+            "asset_id": _safe_str(data.get("asset_id")).strip(),
-+            "seed": _safe_int(data.get("seed"), None),
-+            "style": _safe_str(data.get("style")).strip(),
-+            "prompt": _safe_str(data.get("prompt")).strip(),
-+            "model": _safe_str(data.get("model")).strip(),
-+            "status": _first_non_empty(data.get("status"), "complete"),
-+        },
++        illustration_payload,
 +    )
 +
-+    return jsonify({
-+        "ok": True,
-+        "visual_state": _extract_visual_state(simulation_state),
-+    })
-Part 5/10 — portrait and scene UI state renderers
++    simulation_state = append_visual_asset(
++        simulation_state,
++        build_visual_asset_record(
++            kind="scene_illustration",
++            target_id=_first_non_empty(event_id, scene_id, title, "scene"),
++            version=1,
++            seed=seed,
++            style=style,
++            model=model,
++            prompt=prompt,
++            url=_safe_str(illustration_payload.get("image_url")).strip(),
++            local_path=local_path,
++            status=status,
++            created_from_request_id=request_id,
++            moderation_status=moderation_status,
++            moderation_reason=moderation_reason,
++        ),
++    )
+Part 9/12 — expose visual assets and appearance in UI/frontend
 Edit file: src/static/rpg/rpgPresentationRenderer.js
 
-Add helpers near the top-level utility section:
+In renderCharacterList(inspectorState), after existing portrait status line, add appearance summary:
 
-+function getSceneIllustrationContainer() {
-+  return document.getElementById("rpg-scene-illustrations");
-+}
-+
-+export function renderSceneIllustrations(visualState) {
-+  const container = getSceneIllustrationContainer();
-+  if (!container) return;
-+
-+  const illustrations = Array.isArray(visualState?.scene_illustrations)
-+    ? visualState.scene_illustrations
-+    : [];
-+
-+  if (!illustrations.length) {
-+    container.innerHTML = `<div class="inspector-empty">No scene illustrations.</div>`;
-+    return;
-+  }
-+
-+  container.innerHTML = illustrations.map((item) => {
-+    const title = escapeHtml(item.title || item.scene_id || item.event_id || "Scene");
-+    const imageUrl = escapeHtml(item.image_url || "");
-+    const style = escapeHtml(item.style || "");
-+    const prompt = escapeHtml(item.prompt || "");
-+    const image = imageUrl
-+      ? `<img class="scene-illustration-image" src="${imageUrl}" alt="${title}">`
-+      : `<div class="scene-illustration-image scene-illustration-image--placeholder"></div>`;
-+
-+    return `
-+      <div class="scene-illustration-card">
-+        ${image}
-+        <div class="scene-illustration-title">${title}</div>
-+        ${style ? `<div class="scene-illustration-meta">${style}</div>` : ""}
-+        ${prompt ? `<div class="scene-illustration-prompt">${prompt}</div>` : ""}
++        ${c.appearance?.profile?.last_reason ? `<div class="inspector-character-summary">appearance: ${escapeHtml(c.appearance.profile.last_reason)}</div>` : ""}
+
+In renderCharacterInspector(character), after rendering existing inspector panel, append recent appearance events if available by modifying renderInspectorPanel(character).
+
+Inside renderInspectorPanel(character), after relationships section add:
+
++      <div class="inspector-section">
++        <h5>Appearance</h5>
++        <div>${escapeHtml(character.appearance?.profile?.current_summary || "—")}</div>
 +      </div>
-+    `;
-+  }).join("");
-+}
-
-In renderPresentation(payload), after world inspector rendering, add:
-
-+  const visualState = payload?.visual_state || null;
-+  if (visualState && typeof visualState === "object") {
-+    renderSceneIllustrations(visualState);
-+  }
-Part 6/10 — add portrait/scene styles and containers
 Edit file: src/static/rpg/rpgInspectorStyles.css
 
 Append:
 
-+.scene-illustration-card {
-+  border: 1px solid var(--rpg-border-color, #555);
-+  border-radius: 8px;
-+  padding: 12px;
-+  margin: 0 0 12px 0;
-+  background: var(--rpg-surface-dark, #1a1a2e);
-+}
-+
-+.scene-illustration-image {
-+  width: 100%;
-+  max-width: 320px;
-+  height: 180px;
-+  object-fit: cover;
-+  border-radius: 8px;
-+  display: block;
-+  margin-bottom: 8px;
-+}
-+
-+.scene-illustration-image--placeholder {
-+  background: rgba(255,255,255,0.08);
-+}
-+
-+.scene-illustration-title {
-+  font-weight: bold;
-+}
-+
-+.scene-illustration-meta {
++.visual-asset-meta {
 +  margin-top: 4px;
-+  font-size: 0.85em;
-+  opacity: 0.8;
-+}
-+
-+.scene-illustration-prompt {
-+  margin-top: 6px;
 +  font-size: 0.8em;
 +  color: var(--rpg-text-secondary, #aaa);
 +}
-Edit the RPG template file
+Part 10/12 — add replay-safe asset reference route
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
 
-Add scene illustrations container:
+Add route:
 
-+<div id="rpg-scene-illustrations" class="rpg-scene-illustrations"></div>
++@rpg_presentation_bp.post("/api/rpg/visual_assets")
++def presentation_visual_assets():
++    """Return replay-safe visual asset registry."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_visual_state(simulation_state)
++
++    visual_state = _extract_visual_state(simulation_state)
++    return jsonify({
++        "ok": True,
++        "visual_assets": visual_state.get("visual_assets", []),
++        "appearance_profiles": visual_state.get("appearance_profiles", {}),
++        "appearance_events": visual_state.get("appearance_events", {}),
++    })
+Part 11/12 — tests
+Edit file: src/tests/unit/rpg/test_phase12_visual_identity.py
 
-Place it below the world inspector block.
+Add imports:
 
-Part 7/10 — add portrait/scene tests
-Create file: src/tests/unit/rpg/test_visual_state.py
-from app.rpg.presentation.visual_state import (
-    append_image_request,
-    append_scene_illustration,
-    build_default_character_visual_identity,
-    ensure_visual_state,
-    upsert_character_visual_identity,
-)
+ from app.rpg.presentation.visual_state import (
++    append_appearance_event,
+     append_image_request,
++    append_visual_asset,
++    apply_visual_fallback,
+     append_scene_illustration,
++    build_default_appearance_profile,
+     build_default_character_visual_identity,
++    build_visual_asset_record,
+     ensure_visual_state,
++    normalize_visual_status,
+     stable_visual_seed_from_text,
+     upsert_character_visual_identity,
++    upsert_appearance_profile,
++    validate_visual_prompt,
+ )
 
+Append tests:
 
-def test_ensure_visual_state_empty():
-    result = ensure_visual_state({})
-    visual_state = result["presentation_state"]["visual_state"]
-    assert visual_state["character_visual_identities"] == {}
-    assert visual_state["scene_illustrations"] == []
-    assert visual_state["image_requests"] == []
-    assert "defaults" in visual_state
-
-
-def test_build_default_character_visual_identity_stable():
-    one = build_default_character_visual_identity(
-        actor_id="npc:guard",
-        name="Captain Elira",
-        role="guard_captain",
-        description="Veteran commander",
-        personality_summary="Dry and practical",
-        style="rpg-portrait",
-        model="default",
-    )
-    two = build_default_character_visual_identity(
-        actor_id="npc:guard",
-        name="Captain Elira",
-        role="guard_captain",
-        description="Veteran commander",
-        personality_summary="Dry and practical",
-        style="rpg-portrait",
-        model="default",
-    )
-    assert one == two
-    assert one["seed"] is not None
-
-
-def test_upsert_character_visual_identity():
-    simulation_state = {}
-    simulation_state = upsert_character_visual_identity(
-        simulation_state,
-        actor_id="npc:test",
-        identity={
-            "seed": 123,
-            "style": "rpg-portrait",
-            "base_prompt": "test prompt",
-            "model": "default",
-            "version": 1,
-            "status": "pending",
-        },
-    )
-    identities = simulation_state["presentation_state"]["visual_state"]["character_visual_identities"]
-    assert "npc:test" in identities
-    assert identities["npc:test"]["seed"] == 123
-
-
-def test_append_scene_illustration_bounded_and_sorted():
-    simulation_state = {}
-    for i in range(30):
-        simulation_state = append_scene_illustration(
-            simulation_state,
-            {
-                "scene_id": f"scene:{i}",
-                "event_id": f"event:{i}",
-                "title": f"Scene {i}",
-            },
-        )
-    illustrations = simulation_state["presentation_state"]["visual_state"]["scene_illustrations"]
-    assert len(illustrations) == 24
-
-
-def test_append_image_request_bounded():
-    simulation_state = {}
-    for i in range(30):
-        simulation_state = append_image_request(
-            simulation_state,
-            {
-                "request_id": f"req:{i}",
-                "kind": "character_portrait",
-                "target_id": f"npc:{i}",
-            },
-        )
-    requests = simulation_state["presentation_state"]["visual_state"]["image_requests"]
-    assert len(requests) == 24
++def test_build_default_appearance_profile():
++    profile = build_default_appearance_profile(
++        actor_id="npc:guard",
++        name="Captain Elira",
++        role="guard_captain",
++        description="Veteran commander",
++    )
++    assert profile["version"] == 1
++    assert profile["last_reason"] == "initial"
++
++
++def test_append_visual_asset_bounded():
++    simulation_state = {}
++    for i in range(80):
++        simulation_state = append_visual_asset(
++            simulation_state,
++            {
++                "asset_id": f"asset:{i}",
++                "kind": "character_portrait",
++                "target_id": f"npc:{i}",
++                "version": 1,
++            },
++        )
++    assets = simulation_state["presentation_state"]["visual_state"]["visual_assets"]
++    assert len(assets) == 64
++
++
++def test_upsert_appearance_profile_and_events():
++    simulation_state = {}
++    simulation_state = upsert_appearance_profile(
++        simulation_state,
++        actor_id="npc:test",
++        profile={"current_summary": "scarred veteran", "version": 2},
++    )
++    simulation_state = append_appearance_event(
++        simulation_state,
++        actor_id="npc:test",
++        event={"event_id": "e1", "reason": "injury", "summary": "Scar gained", "tick": 3},
++    )
++    visual_state = simulation_state["presentation_state"]["visual_state"]
++    assert visual_state["appearance_profiles"]["npc:test"]["version"] == 2
++    assert len(visual_state["appearance_events"]["npc:test"]) == 1
++
++
++def test_validate_visual_prompt():
++    assert validate_visual_prompt("portrait of a stern guard")["ok"] is True
++    assert validate_visual_prompt("")["ok"] is False
++
++
++def test_apply_visual_fallback():
++    payload = {"portrait_url": "", "status": "failed"}
++    out = apply_visual_fallback(payload, "/fallback.png")
++    assert out["portrait_url"] == "/fallback.png"
++
++
++def test_normalize_visual_status():
++    assert normalize_visual_status("complete") == "complete"
++    assert normalize_visual_status("weird") == "pending"
++
++
++def test_build_visual_asset_record():
++    asset = build_visual_asset_record(
++        kind="character_portrait",
++        target_id="npc:guard",
++        version=2,
++        seed=123,
++        style="rpg-portrait",
++        model="default",
++        prompt="guard portrait",
++        url="/img.png",
++        local_path="/tmp/img.png",
++        status="complete",
++        created_from_request_id="req:1",
++    )
++    assert asset["asset_id"].startswith("character_portrait:npc:guard:2:")
 Edit file: src/tests/functional/test_character_ui_functional.py
 
 Append:
 
-+def test_character_portrait_request_returns_ok(client):
++def test_visual_assets_endpoint_returns_ok(client):
++    response = client.post("/api/rpg/visual_assets", json={"setup_payload": {}})
++    assert response.status_code == 200
++    payload = response.get_json()
++    assert payload["ok"] is True
++    assert "visual_assets" in payload
++    assert "appearance_profiles" in payload
++    assert "appearance_events" in payload
++
++
++def test_character_portrait_request_blocked_on_empty_prompt(client):
 +    response = client.post(
 +        "/api/rpg/character_portrait/request",
 +        json={
@@ -893,87 +904,33 @@ Append:
 +                                "entity_id": "npc:guard",
 +                                "speaker_name": "Captain Elira",
 +                                "role": "guard_captain",
-+                                "description": "Veteran commander",
 +                            }
 +                        ]
 +                    }
 +                }
 +            },
 +            "actor_id": "npc:guard",
++            "prompt": "",
 +        },
 +    )
 +    assert response.status_code == 200
 +    payload = response.get_json()
-+    assert payload["ok"] is True
-+    assert "visual_state" in payload
-+
-+
-+def test_scene_illustration_request_returns_ok(client):
-+    response = client.post(
-+        "/api/rpg/scene_illustration/request",
-+        json={
-+            "setup_payload": {},
-+            "scene_id": "scene:test",
-+            "event_id": "event:test",
-+            "title": "Test Scene",
-+            "prompt": "A tense confrontation in the market square",
-+        },
-+    )
-+    assert response.status_code == 200
-+    payload = response.get_json()
-+    assert payload["ok"] is True
-+    assert "visual_state" in payload
-Part 8/10 — keep character cards portrait-ready
-Edit file: src/static/rpg/rpgPresentationRenderer.js
++    assert payload["moderation"]["status"] in {"approved", "blocked"}
+Part 12/12 — acceptance criteria
 
-In renderCharacterList(inspectorState), keep the current Phase 11.4 portrait block, but change:
+Phase 12.3 is complete when:
 
--    const portraitUrl = escapeHtml(c.visual_identity?.portrait_url || "");
-+    const portraitUrl = escapeHtml(c.visual_identity?.portrait_url || "");
-+    const portraitStatus = escapeHtml(c.visual_identity?.status || "idle");
+visual assets are registered with stable asset IDs and cache keys
+asset references are replay-safe and returned through /api/rpg/visual_assets
 
-And extend the summary area with status:
+Phase 12.4 is complete when:
 
--        ${summary ? `<div class="inspector-character-summary">${summary}</div>` : ""}
-+        ${summary ? `<div class="inspector-character-summary">${summary}</div>` : ""}
-+        ${portraitStatus && portraitStatus !== "idle" ? `<div class="inspector-character-summary">portrait: ${portraitStatus}</div>` : ""}
+characters expose appearance profile + recent appearance events
+portrait refreshes can be tied to explicit appearance events/reasons
 
-This gives visible feedback for pending/complete/failed portrait state.
+Phase 12.5 is complete when:
 
-Part 9/10 — deterministic scene trigger guidance
-
-This phase should not auto-generate images in reducers.
-But it should support explicit event-triggered request creation later.
-
-Add a helper comment in routes or visual_state module.
-
-Edit file: src/app/rpg/presentation/visual_state.py
-
-Append comment block at end:
-
-# NOTE:
-# Scene illustrations are presentation artifacts. They may be requested in response
-# to important events, but generation itself must remain explicit and external to
-# authoritative simulation reducers. Reducers may suggest event IDs/titles, but must
-# never depend on image output.
-Part 10/10 — acceptance criteria
-
-Phase 12.0 is complete when:
-
-visual_state.py exists
-visual_state normalization is bounded and deterministic
-character visual identities, scene illustrations, and image requests are all normalized
-
-Phase 12.1 is complete when:
-
-portrait request/result routes exist
-canonical character UI consumes persisted/default visual identity
-portrait metadata shows in character cards
-no actual provider integration is required yet
-
-Phase 12.2 is complete when:
-
-scene illustration request/result routes exist
-scene illustrations are stored in bounded visual state
-frontend renders scene illustration cards
-no generated image affects simulation truth
+prompt validation exists
+blocked/failed statuses are normalized
+fallback URLs can be applied for failed/blocked results
+moderation/fallback metadata is returned in request/result routes

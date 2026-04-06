@@ -6,14 +6,24 @@ Tests for visual_state.py module covering:
 - upsert character portraits
 - append scene illustrations with bounds
 - append image requests with bounds
+- visual assets, appearance profiles, appearance events (Phase 12.3/12.4)
+- prompt validation, moderation, fallback (Phase 12.5)
 """
 from app.rpg.presentation.visual_state import (
+    append_appearance_event,
     append_image_request,
     append_scene_illustration,
+    append_visual_asset,
+    apply_visual_fallback,
+    build_default_appearance_profile,
     build_default_character_visual_identity,
+    build_visual_asset_record,
     ensure_visual_state,
+    normalize_visual_status,
     stable_visual_seed_from_text,
+    upsert_appearance_profile,
     upsert_character_visual_identity,
+    validate_visual_prompt,
     _stable_seed_from_text,
     _normalize_visual_identity_entry,
     _normalize_scene_illustration,
@@ -29,6 +39,9 @@ def test_ensure_visual_state_empty():
     assert visual_state["character_visual_identities"] == {}
     assert visual_state["scene_illustrations"] == []
     assert visual_state["image_requests"] == []
+    assert visual_state["visual_assets"] == []
+    assert visual_state["appearance_profiles"] == {}
+    assert visual_state["appearance_events"] == {}
     assert "defaults" in visual_state
     assert visual_state["defaults"]["portrait_style"] == "rpg-portrait"
     assert visual_state["defaults"]["scene_style"] == "rpg-scene"
@@ -210,3 +223,101 @@ def test_safe_int_handles_invalid():
     assert _safe_int("not_a_number") is None
     assert _safe_int(42) == 42
     assert _safe_int(True) == 1
+
+
+# ---- Phase 12.3 — Visual assets ----
+
+
+def test_build_default_appearance_profile():
+    profile = build_default_appearance_profile(
+        actor_id="npc:guard",
+        name="Captain Elira",
+        role="guard_captain",
+        description="Veteran commander",
+    )
+    assert profile["version"] == 1
+    assert profile["last_reason"] == "initial"
+    assert "Captain Elira" in profile["base_description"]
+
+
+def test_append_visual_asset_bounded():
+    simulation_state = {}
+    for i in range(80):
+        simulation_state = append_visual_asset(
+            simulation_state,
+            {
+                "asset_id": f"asset:{i}",
+                "kind": "character_portrait",
+                "target_id": f"npc:{i}",
+                "version": 1,
+            },
+        )
+    assets = simulation_state["presentation_state"]["visual_state"]["visual_assets"]
+    assert len(assets) == 64
+
+
+def test_upsert_appearance_profile_and_events():
+    simulation_state = {}
+    simulation_state = upsert_appearance_profile(
+        simulation_state,
+        actor_id="npc:test",
+        profile={"current_summary": "scarred veteran", "version": 2},
+    )
+    simulation_state = append_appearance_event(
+        simulation_state,
+        actor_id="npc:test",
+        event={"event_id": "e1", "reason": "injury", "summary": "Scar gained", "tick": 3},
+    )
+    visual_state = simulation_state["presentation_state"]["visual_state"]
+    assert visual_state["appearance_profiles"]["npc:test"]["version"] == 2
+    assert len(visual_state["appearance_events"]["npc:test"]) == 1
+
+
+# ---- Phase 12.5 — Validation, moderation, fallback ----
+
+
+def test_validate_visual_prompt():
+    assert validate_visual_prompt("portrait of a stern guard")["ok"] is True
+    assert validate_visual_prompt("")["ok"] is False
+    assert validate_visual_prompt("x" * 2001)["ok"] is False
+
+
+def test_apply_visual_fallback():
+    payload = {"portrait_url": "", "status": "failed"}
+    out = apply_visual_fallback(payload, "/fallback.png")
+    assert out["portrait_url"] == "/fallback.png"
+
+
+def test_normalize_visual_status():
+    assert normalize_visual_status("complete") == "complete"
+    assert normalize_visual_status("weird") == "pending"
+    assert normalize_visual_status(None) == "pending"
+
+
+def test_build_visual_asset_record():
+    asset = build_visual_asset_record(
+        kind="character_portrait",
+        target_id="npc:guard",
+        version=2,
+        seed=123,
+        style="rpg-portrait",
+        model="default",
+        prompt="guard portrait",
+        url="/img.png",
+        local_path="/tmp/img.png",
+        status="complete",
+        created_from_request_id="req:1",
+    )
+    assert asset["asset_id"].startswith("character_portrait:npc:guard:2:")
+    assert asset["cache_key"].startswith("character_portrait|npc:guard|2|")
+    assert asset["moderation"]["status"] == "unchecked"
+
+
+def test_apply_visual_fallback_preserves_fallback_when_result_url_empty():
+    identity = {
+        "portrait_url": "",
+        "portrait_asset_id": "",
+        "status": "failed",
+    }
+    out = apply_visual_fallback(identity, "/fallback.png")
+    assert out["portrait_url"] == "/fallback.png"

@@ -15,6 +15,8 @@ from typing import Any, Dict, List
 
 _MAX_SCENE_ILLUSTRATIONS = 24
 _MAX_IMAGE_REQUESTS = 24
+_MAX_VISUAL_ASSETS = 64
+_MAX_APPEARANCE_EVENTS = 32
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -61,9 +63,23 @@ def _stable_seed_from_text(text: str) -> int:
     return total or 1
 
 
+def _stable_asset_id(kind: str, target_id: str, version: int, seed: int | None) -> str:
+    seed_text = str(seed) if isinstance(seed, int) else "none"
+    return f"{_safe_str(kind).strip()}:{_safe_str(target_id).strip()}:{max(1, int(version))}:{seed_text}"
+
+
 def stable_visual_seed_from_text(text: str) -> int:
     """Public deterministic seed helper for portrait/scene visual requests."""
     return _stable_seed_from_text(text)
+
+
+def _normalize_scalar(value: Any) -> Any:
+    """Normalize a scalar value for appearance features."""
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return _safe_str(value)
 
 
 def _normalize_visual_identity_entry(value: Any) -> Dict[str, Any]:
@@ -126,6 +142,93 @@ def _normalize_image_request(value: Any) -> Dict[str, Any]:
     }
 
 
+def _normalize_visual_asset(value: Any) -> Dict[str, Any]:
+    """Normalize a visual asset entry to a consistent shape."""
+    data = _safe_dict(value)
+    version = _safe_int(data.get("version"), 1)
+    if version is None or version < 1:
+        version = 1
+
+    kind = _first_non_empty(data.get("kind"), "character_portrait")
+    if kind not in {"character_portrait", "scene_illustration"}:
+        kind = "character_portrait"
+
+    status = _first_non_empty(data.get("status"), "complete")
+    if status not in {"pending", "complete", "failed", "blocked"}:
+        status = "complete"
+
+    moderation = _safe_dict(data.get("moderation"))
+    moderation_status = _first_non_empty(moderation.get("status"), "unchecked")
+    if moderation_status not in {"unchecked", "approved", "blocked", "flagged"}:
+        moderation_status = "unchecked"
+
+    return {
+        "asset_id": _safe_str(data.get("asset_id")).strip(),
+        "kind": kind,
+        "target_id": _safe_str(data.get("target_id")).strip(),
+        "url": _safe_str(data.get("url")).strip(),
+        "local_path": _safe_str(data.get("local_path")).strip(),
+        "cache_key": _safe_str(data.get("cache_key")).strip(),
+        "seed": _safe_int(data.get("seed"), None),
+        "style": _safe_str(data.get("style")).strip(),
+        "model": _safe_str(data.get("model")).strip(),
+        "prompt": _safe_str(data.get("prompt")).strip(),
+        "version": version,
+        "status": status,
+        "created_from_request_id": _safe_str(data.get("created_from_request_id")).strip(),
+        "moderation": {
+            "status": moderation_status,
+            "reason": _safe_str(moderation.get("reason")).strip(),
+        },
+    }
+
+
+def _normalize_appearance_profile(value: Any) -> Dict[str, Any]:
+    """Normalize an appearance profile entry to a consistent shape."""
+    data = _safe_dict(value)
+
+    features = _safe_dict(data.get("features"))
+    normalized_features = {}
+    for key in sorted(features.keys(), key=lambda v: _safe_str(v)):
+        if not _safe_str(key).strip():
+            continue
+        normalized_features[_safe_str(key)] = _normalize_scalar(features.get(key))
+
+    return {
+        "base_description": _safe_str(data.get("base_description")).strip(),
+        "current_summary": _safe_str(data.get("current_summary")).strip(),
+        "features": normalized_features,
+        "last_reason": _safe_str(data.get("last_reason")).strip(),
+        "version": max(1, _safe_int(data.get("version"), 1) or 1),
+    }
+
+
+def _normalize_appearance_event(value: Any) -> Dict[str, Any]:
+    """Normalize an appearance event entry to a consistent shape."""
+    data = _safe_dict(value)
+    reason = _first_non_empty(data.get("reason"), "update")
+    if reason not in {
+        "initial",
+        "injury",
+        "promotion",
+        "faction_change",
+        "equipment_change",
+        "corruption",
+        "disguise",
+        "aging",
+        "manual_refresh",
+        "update",
+    }:
+        reason = "update"
+
+    return {
+        "event_id": _safe_str(data.get("event_id")).strip(),
+        "reason": reason,
+        "summary": _safe_str(data.get("summary")).strip(),
+        "tick": max(0, _safe_int(data.get("tick"), 0) or 0),
+    }
+
+
 def ensure_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     """Ensure simulation_state has normalized visual state.
 
@@ -182,11 +285,58 @@ def ensure_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     )[:_MAX_IMAGE_REQUESTS]
     visual_state["image_requests"] = requests_out
 
+    # Phase 12.3 — visual assets
+    assets_in = _safe_list(visual_state.get("visual_assets"))
+    assets_out = [
+        _normalize_visual_asset(item)
+        for item in assets_in
+        if isinstance(item, dict)
+    ]
+    assets_out = sorted(
+        assets_out,
+        key=lambda item: (
+            _safe_str(item.get("kind")),
+            _safe_str(item.get("target_id")),
+            _safe_str(item.get("asset_id")),
+        ),
+    )[-_MAX_VISUAL_ASSETS:]
+    visual_state["visual_assets"] = assets_out
+
+    # Phase 12.4 — appearance profiles
+    profiles_in = _safe_dict(visual_state.get("appearance_profiles"))
+    profiles_out: Dict[str, Any] = {}
+    for actor_id in sorted(profiles_in.keys(), key=lambda v: _safe_str(v)):
+        profiles_out[_safe_str(actor_id)] = _normalize_appearance_profile(profiles_in.get(actor_id))
+    visual_state["appearance_profiles"] = profiles_out
+
+    # Phase 12.4 — appearance events
+    events_in = _safe_dict(visual_state.get("appearance_events"))
+    events_out: Dict[str, Any] = {}
+    for actor_id in sorted(events_in.keys(), key=lambda v: _safe_str(v)):
+        raw_events = _safe_list(events_in.get(actor_id))
+        normalized_events = [
+            _normalize_appearance_event(item)
+            for item in raw_events
+            if isinstance(item, dict)
+        ]
+        normalized_events = sorted(
+            normalized_events,
+            key=lambda item: (
+                item.get("tick", 0),
+                _safe_str(item.get("reason")),
+                _safe_str(item.get("event_id")),
+            ),
+        )[-_MAX_APPEARANCE_EVENTS:]
+        events_out[_safe_str(actor_id)] = normalized_events
+    visual_state["appearance_events"] = events_out
+
     defaults = _safe_dict(visual_state.get("defaults"))
     visual_state["defaults"] = {
         "portrait_style": _first_non_empty(defaults.get("portrait_style"), "rpg-portrait"),
         "scene_style": _first_non_empty(defaults.get("scene_style"), "rpg-scene"),
         "model": _first_non_empty(defaults.get("model"), "default"),
+        "fallback_portrait_url": _safe_str(defaults.get("fallback_portrait_url")).strip(),
+        "fallback_scene_url": _safe_str(defaults.get("fallback_scene_url")).strip(),
     }
 
     return simulation_state
@@ -291,6 +441,167 @@ def append_image_request(
 
     visual_state["image_requests"] = requests
     return simulation_state
+
+
+# ---- Phase 12.3 — Asset registry + continuity mutators ----
+
+
+def append_visual_asset(
+    simulation_state: Dict[str, Any],
+    asset: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Append a visual asset to visual state, maintaining bounds."""
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    assets = _safe_list(visual_state.get("visual_assets"))
+
+    assets.append(_normalize_visual_asset(asset))
+    assets = sorted(
+        [item for item in assets if isinstance(item, dict)],
+        key=lambda item: (
+            _safe_str(item.get("kind")),
+            _safe_str(item.get("target_id")),
+            _safe_str(item.get("asset_id")),
+        ),
+    )[-_MAX_VISUAL_ASSETS:]
+    visual_state["visual_assets"] = assets
+    return simulation_state
+
+
+def upsert_appearance_profile(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str,
+    profile: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Upsert an appearance profile for an actor."""
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    profiles = _safe_dict(visual_state.get("appearance_profiles"))
+
+    profiles[_safe_str(actor_id)] = _normalize_appearance_profile(profile)
+    visual_state["appearance_profiles"] = dict(sorted(profiles.items(), key=lambda item: _safe_str(item[0])))
+    return simulation_state
+
+
+def append_appearance_event(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str,
+    event: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Append an appearance event for an actor."""
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    events = _safe_dict(visual_state.get("appearance_events"))
+
+    actor_events = _safe_list(events.get(actor_id))
+    actor_events.append(_normalize_appearance_event(event))
+    actor_events = sorted(
+        [item for item in actor_events if isinstance(item, dict)],
+        key=lambda item: (
+            item.get("tick", 0),
+            _safe_str(item.get("reason")),
+            _safe_str(item.get("event_id")),
+        ),
+    )[-_MAX_APPEARANCE_EVENTS:]
+
+    events[_safe_str(actor_id)] = actor_events
+    visual_state["appearance_events"] = dict(sorted(events.items(), key=lambda item: _safe_str(item[0])))
+    return simulation_state
+
+
+def build_default_appearance_profile(
+    *,
+    actor_id: str,
+    name: str,
+    role: str,
+    description: str,
+) -> Dict[str, Any]:
+    """Build a default appearance profile for an actor."""
+    base_description = ", ".join([part for part in [_safe_str(name).strip(), _safe_str(role).strip(), _safe_str(description).strip()] if part])
+    return {
+        "base_description": base_description,
+        "current_summary": base_description,
+        "features": {},
+        "last_reason": "initial",
+        "version": 1,
+    }
+
+
+def build_visual_asset_record(
+    *,
+    kind: str,
+    target_id: str,
+    version: int,
+    seed: int | None,
+    style: str,
+    model: str,
+    prompt: str,
+    url: str,
+    local_path: str,
+    status: str,
+    created_from_request_id: str,
+    moderation_status: str = "unchecked",
+    moderation_reason: str = "",
+) -> Dict[str, Any]:
+    """Build a visual asset record with stable asset ID and cache key."""
+    asset_id = _stable_asset_id(kind, target_id, version, seed)
+    cache_key = f"{kind}|{target_id}|{version}|{seed if isinstance(seed, int) else 'none'}|{style}|{model}"
+    return {
+        "asset_id": asset_id,
+        "kind": kind,
+        "target_id": target_id,
+        "url": _safe_str(url).strip(),
+        "local_path": _safe_str(local_path).strip(),
+        "cache_key": cache_key,
+        "seed": seed,
+        "style": _safe_str(style).strip(),
+        "model": _safe_str(model).strip(),
+        "prompt": _safe_str(prompt).strip(),
+        "version": max(1, int(version)),
+        "status": _first_non_empty(status, "complete"),
+        "created_from_request_id": _safe_str(created_from_request_id).strip(),
+        "moderation": {
+            "status": _first_non_empty(moderation_status, "unchecked"),
+            "reason": _safe_str(moderation_reason).strip(),
+        },
+    }
+
+
+# ---- Phase 12.5 — Request validation / moderation / fallback helpers ----
+
+
+def validate_visual_prompt(prompt: str) -> Dict[str, Any]:
+    """Validate a visual prompt for content and length."""
+    prompt = _safe_str(prompt).strip()
+    if not prompt:
+        return {"ok": False, "status": "blocked", "reason": "empty_prompt"}
+    if len(prompt) > 2000:
+        return {"ok": False, "status": "blocked", "reason": "prompt_too_long"}
+    return {"ok": True, "status": "approved", "reason": ""}
+
+
+def normalize_visual_status(value: Any, *, default: str = "pending") -> str:
+    """Normalize a visual status value to a known set of values."""
+    status = _first_non_empty(value, default)
+    if status not in {"idle", "pending", "complete", "failed", "blocked"}:
+        status = default
+    return status
+
+
+def apply_visual_fallback(identity_or_illustration: Dict[str, Any], fallback_url: str) -> Dict[str, Any]:
+    """Apply fallback URL when portrait/image_url is empty."""
+    payload = dict(_safe_dict(identity_or_illustration))
+    if not _safe_str(payload.get("portrait_url")).strip() and not _safe_str(payload.get("image_url")).strip():
+        if "portrait_url" in payload:
+            payload["portrait_url"] = _safe_str(fallback_url).strip()
+        if "image_url" in payload:
+            payload["image_url"] = _safe_str(fallback_url).strip()
+    return payload
 
 
 # NOTE:

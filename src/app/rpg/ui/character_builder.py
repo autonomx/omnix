@@ -22,6 +22,7 @@ _MAX_INVENTORY_ITEMS = 12
 _MAX_ACTIVE_QUESTS = 8
 _MAX_GOALS = 5
 _MAX_BELIEFS = 8
+_MAX_APPEARANCE_EVENTS = 32
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -201,6 +202,41 @@ def _normalize_card_meta(entry: Dict[str, Any], profile: Dict[str, Any]) -> Dict
     }
 
 
+def _normalize_appearance(
+    simulation_state: Dict[str, Any],
+    actor_id: str,
+    entry: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Extract appearance profile and recent appearance events for a character."""
+    from app.rpg.presentation.visual_state import (
+        build_default_appearance_profile,
+        ensure_visual_state,
+    )
+
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    profiles = _safe_dict(visual_state.get("appearance_profiles"))
+    events = _safe_dict(visual_state.get("appearance_events"))
+
+    profile = _safe_dict(profiles.get(actor_id))
+    if not profile:
+        profile = build_default_appearance_profile(
+            actor_id=actor_id,
+            name=_derive_display_name(entry),
+            role=_derive_role(entry),
+            description=_safe_str(entry.get("description")).strip(),
+        )
+
+    appearance_events = _safe_list(events.get(actor_id))
+    appearance_events = [item for item in appearance_events if isinstance(item, dict)][-_MAX_APPEARANCE_EVENTS:]
+
+    return {
+        "profile": profile,
+        "recent_events": appearance_events,
+    }
+
+
 def _normalize_visual_identity(
     simulation_state: Dict[str, Any],
     actor_id: str,
@@ -275,6 +311,7 @@ def build_character_ui_entry(
         speaker_order = fallback_index
 
     card_meta = _normalize_card_meta(presentation_entry, profile)
+    appearance = _normalize_appearance(simulation_state, actor_id, presentation_entry)
 
     return {
         "id": actor_id,
@@ -288,6 +325,7 @@ def build_character_ui_entry(
         "relationships": _normalize_relationships(simulation_state, actor_id),
         "personality": profile,
         "visual_identity": _normalize_visual_identity(simulation_state, actor_id, presentation_entry, profile),
+        "appearance": appearance,
         "card": card_meta,
         "meta": {
             "present": bool(presentation_entry.get("present", True)),

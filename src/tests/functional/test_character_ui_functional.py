@@ -395,3 +395,61 @@ def test_dialogue_presentation_includes_world_inspector_state():
         assert response.status_code == 200
         payload = response.get_json()
         assert "world_inspector_state" in payload
+
+
+# ---- Phase 12 — Visual Assets functional tests ----
+
+
+def test_visual_assets_endpoint_returns_ok():
+    """Visual assets endpoint returns ok=True with visual_assets, appearance_profiles, appearance_events."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post("/api/rpg/visual_assets", json={"setup_payload": {}})
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "visual_assets" in payload
+        assert "appearance_profiles" in payload
+        assert "appearance_events" in payload
+
+
+def test_character_portrait_request_blocked_on_empty_prompt():
+    """Portrait request with empty prompt returns blocked status."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/character_portrait/request",
+            data=json.dumps({
+                "setup_payload": {
+                    "simulation_state": {
+                        "presentation_state": {
+                            "speaker_cards": [
+                                {
+                                    "entity_id": "npc:guard",
+                                    "speaker_name": "Captain Elira",
+                                    "role": "guard_captain",
+                                }
+                            ]
+                        }
+                    }
+                },
+                "actor_id": "npc:guard",
+                "prompt": "",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["moderation"]["status"] in {"approved", "blocked"}

@@ -5,6 +5,7 @@
  *
  * Phase 11.2 — Character Inspector frontend additions.
  * Phase 12 — Visual Identity System (scene illustrations + portrait status).
+ * Phase 12.4 — Appearance profile + events rendering.
  */
 function escapeHtml(str) {
   return String(str || "")
@@ -122,12 +123,40 @@ export function renderRelationshipSummary(summary) {
   `;
 }
 
+// ---- Phase 12.4 — Appearance rendering ----
+
+export function renderAppearanceEvents(events) {
+  const list = Array.isArray(events) ? events : [];
+  if (!list.length) return `<div class="inspector-empty">No appearance events.</div>`;
+  return list.map((e) => `
+    <div class="inspector-appearance-event">
+      <span class="inspector-event-reason">${escapeHtml(e.reason)}</span>
+      <span class="inspector-event-summary">${escapeHtml(e.summary || "")}</span>
+    </div>
+  `).join("");
+}
+
 export function renderInspectorPanel(character) {
   if (!character || typeof character !== "object") return "";
   const inspector = character.inspector || {};
+
+  // Phase 12.4 — Appearance profile and events
+  const appearance = character.appearance || {};
+  const appearanceProfile = appearance.profile || {};
+  const appearanceSummary = escapeHtml(appearanceProfile.current_summary || "—");
+  const recentEvents = Array.isArray(appearance.recent_events) ? appearance.recent_events : [];
+
   return `
     <div class="inspector-panel" data-character-id="${escapeHtml(character.id)}">
       <div class="inspector-header">${escapeHtml(character.name || character.id)}</div>
+      <div class="inspector-section">
+        <h5>Appearance</h5>
+        <div>${appearanceSummary}</div>
+      </div>
+      <div class="inspector-section">
+        <h5>Recent Appearance Events</h5>
+        ${renderAppearanceEvents(recentEvents)}
+      </div>
       <div class="inspector-section">
         <h5>Inventory</h5>
         ${renderInventoryItems(inspector.inventory)}
@@ -187,6 +216,9 @@ export function renderCharacterList(inspectorState) {
     const portraitUrl = escapeHtml(c.visual_identity?.portrait_url || "");
     const portraitStatus = escapeHtml(c.visual_identity?.status || "idle");
 
+    // Phase 12.4 — Appearance summary
+    const appearanceReason = escapeHtml(c.appearance?.profile?.last_reason || "");
+
     const portrait = portraitUrl
       ? `<img class="inspector-character-portrait" src="${portraitUrl}" alt="${name}">`
       : `<div class="inspector-character-portrait inspector-character-portrait--placeholder"></div>`;
@@ -203,6 +235,7 @@ export function renderCharacterList(inspectorState) {
         <div class="inspector-character-role">${subtitle}</div>
         ${badge ? `<div class="inspector-character-badge">${badge}</div>` : ""}
         ${summary ? `<div class="inspector-character-summary">${summary}</div>` : ""}
+        ${appearanceReason ? `<div class="inspector-character-summary">appearance: ${appearanceReason}</div>` : ""}
         ${portraitStatus && portraitStatus !== "idle" ? `<div class="inspector-character-portrait-status portrait-status-${portraitStatus}">portrait: ${portraitStatus}</div>` : ""}
         ${currentIntent ? `<div class="inspector-character-intent">${currentIntent}</div>` : ""}
       </button>
