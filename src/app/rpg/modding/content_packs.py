@@ -145,6 +145,47 @@ def build_pack_application_preview(pack: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def build_pack_bootstrap_payload(pack: Dict[str, Any]) -> Dict[str, Any]:
+    """Build deterministic new-session bootstrap payload from a content pack."""
+    preview = build_pack_application_preview(pack)
+    manifest = _safe_dict(preview.get("manifest"))
+    scenario = _safe_dict(preview.get("scenario"))
+    world_seed = _safe_dict(preview.get("world_seed"))
+    visual_defaults = _safe_dict(preview.get("visual_defaults"))
+    characters = _safe_list(preview.get("characters"))
+    # Normalize: sort by canonical name then format, cap at max
+    characters = sorted(
+        [item for item in characters if isinstance(item, dict)],
+        key=lambda item: (
+            _safe_str(_safe_dict(item.get("canonical_seed")).get("name")).lower(),
+            _safe_str(_safe_dict(item.get("source_meta")).get("format")),
+        ),
+    )[:_MAX_PACK_CHARACTERS]
+
+    setup = {
+        "title": _first_non_empty(
+            scenario.get("title"),
+            manifest.get("title"),
+            "New Adventure",
+        ),
+        "summary": _first_non_empty(
+            scenario.get("summary"),
+            manifest.get("description"),
+        ),
+        "opening": _safe_str(scenario.get("opening")).strip(),
+        "world_seed": world_seed,
+        "character_seeds": characters,
+        "visual_defaults": visual_defaults,
+        "source_pack": {
+            "id": _safe_str(manifest.get("id")).strip(),
+            "title": _safe_str(manifest.get("title")).strip(),
+            "version": _safe_str(manifest.get("version")).strip(),
+        },
+    }
+
+    return setup
+
+
 def apply_content_pack(
     simulation_state: Dict[str, Any],
     pack: Dict[str, Any],

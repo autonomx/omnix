@@ -1,3 +1,7 @@
+"""Phase 13 — Creator system exports (pack authoring + existing creator API)."""
+from __future__ import annotations
+
+# Existing creator system exports (restore these)
 from .schema import (
     AdventureSetup,
     LoreConstraint,
@@ -49,7 +53,20 @@ from .validation import (
 )
 from .presenters import CreatorStatePresenter
 
+# Phase 13.2 additions
+from .pack_authoring import (
+    build_pack_draft_export,
+    build_pack_draft_preview,
+    validate_pack_draft,
+)
+
 __all__ = [
+    # Phase 13.2
+    "build_pack_draft_export",
+    "build_pack_draft_preview",
+    "validate_pack_draft",
+
+    # Existing creator API
     "AdventureSetup",
     "LoreConstraint",
     "FactionSeed",

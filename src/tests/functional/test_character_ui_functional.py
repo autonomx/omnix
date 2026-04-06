@@ -553,3 +553,74 @@ def test_packs_list_route_returns_packs():
         payload = response.get_json()
         assert payload["ok"] is True
         assert "packs" in payload
+
+
+def test_templates_start_route_returns_normalized_simulation_state():
+    """Template start route returns normalized simulation_state with all ensure chains applied."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/templates/start",
+            json={
+                "template": {
+                    "manifest": {"id": "template:test", "title": "Starter"},
+                    "bootstrap": {
+                        "title": "Intro",
+                        "summary": "Start",
+                        "visual_defaults": {},
+                    },
+                }
+            },
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "simulation_state" in payload["start"]["setup_payload"]
+
+
+def test_scene_presentation_includes_content_packs_and_package_manifest():
+    """Scene presentation includes content_packs and package_manifest from _add_content_pack_data."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/presentation/scene",
+            json={"setup_payload": {}, "scene_state": {}},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert "content_packs" in payload
+        assert "package_manifest" in payload
+
+
+def test_dialogue_presentation_includes_content_packs_and_package_manifest():
+    """Dialogue presentation includes content_packs and package_manifest from _add_content_pack_data."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/presentation/dialogue",
+            json={"setup_payload": {}, "dialogue_state": {}},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert "content_packs" in payload
+        assert "package_manifest" in payload
+
+

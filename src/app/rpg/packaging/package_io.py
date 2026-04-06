@@ -91,7 +91,13 @@ def export_session_package(
     description: str,
     created_by: str,
 ) -> Dict[str, Any]:
-    simulation_state = ensure_personality_state(_safe_dict(simulation_state))
+    simulation_state = _safe_dict(simulation_state)
+    # Preserve installed_packs before ensure calls may replace presentation_state
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    modding_state = _safe_dict(presentation_state.get("modding_state"))
+    installed_packs = list(_safe_list(modding_state.get("installed_packs")))
+
+    simulation_state = ensure_personality_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
 
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
@@ -140,7 +146,11 @@ def export_session_package(
         "character_cards": character_cards,
         "world_summary": world_inspector_state,
         "visual_registry": visual_registry,
-        "content_packs": [],
+        "content_packs": [
+            _safe_dict(item)
+            for item in installed_packs
+            if isinstance(item, dict)
+        ],
     }
 
 

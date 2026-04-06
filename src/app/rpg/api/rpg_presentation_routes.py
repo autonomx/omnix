@@ -61,8 +61,19 @@ from app.rpg.packaging.package_io import (
 from app.rpg.modding.content_packs import (
     apply_content_pack,
     build_pack_application_preview,
+    build_pack_bootstrap_payload,
     ensure_content_pack_state,
     list_content_packs,
+)
+from app.rpg.creator.pack_authoring import (
+    build_pack_draft_export,
+    build_pack_draft_preview,
+    validate_pack_draft,
+)
+from app.rpg.templates.campaign_templates import (
+    build_campaign_template,
+    build_template_start_payload,
+    list_campaign_templates,
 )
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
@@ -312,6 +323,7 @@ def presentation_scene():
     simulation_state = _ensure_character_inspector_state(simulation_state)
     simulation_state = _ensure_world_inspector_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
+    simulation_state = ensure_content_pack_state(simulation_state)
 
     payload = build_scene_presentation_payload(simulation_state, scene_state)
     runtime_payload = build_runtime_presentation_payload(simulation_state)
@@ -338,14 +350,15 @@ def presentation_scene():
             "player_overlay": inspector_overlay_payload.get("player_overlay", {}),
         }
 
-    return jsonify({
+    response = {
         "ok": True,
         "presentation": payload,
         "character_ui_state": _extract_character_ui_state(simulation_state),
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
         "world_inspector_state": _extract_world_inspector_state(simulation_state),
         "visual_state": _extract_visual_state(simulation_state),
-    })
+    }
+    return jsonify(_add_content_pack_data(response, simulation_state))
 
 
 @rpg_presentation_bp.post("/api/rpg/presentation/dialogue")
@@ -362,6 +375,7 @@ def presentation_dialogue():
     simulation_state = _ensure_character_inspector_state(simulation_state)
     simulation_state = _ensure_world_inspector_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
+    simulation_state = ensure_content_pack_state(simulation_state)
 
     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
     runtime_payload = build_runtime_presentation_payload(simulation_state)
@@ -395,14 +409,15 @@ def presentation_dialogue():
             "player_overlay": inspector_overlay_payload.get("player_overlay", {}),
         }
 
-    return jsonify({
+    response = {
         "ok": True,
         "presentation": payload,
         "character_ui_state": _extract_character_ui_state(simulation_state),
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
         "world_inspector_state": _extract_world_inspector_state(simulation_state),
         "visual_state": _extract_visual_state(simulation_state),
-    })
+    }
+    return jsonify(_add_content_pack_data(response, simulation_state))
 
 
 @rpg_presentation_bp.post("/api/rpg/presentation/speakers")
@@ -511,16 +526,18 @@ def presentation_narrative_recap():
     simulation_state = _ensure_character_inspector_state(simulation_state)
     simulation_state = _ensure_world_inspector_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
+    simulation_state = ensure_content_pack_state(simulation_state)
     runtime_payload = build_runtime_presentation_payload(simulation_state)
     payload = build_narrative_recap_payload(simulation_state, runtime_payload)
-    return jsonify({
+    response = {
         "ok": True,
         "presentation": payload,
         "character_ui_state": _extract_character_ui_state(simulation_state),
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
         "world_inspector_state": _extract_world_inspector_state(simulation_state),
         "visual_state": _extract_visual_state(simulation_state),
-    })
+    }
+    return jsonify(_add_content_pack_data(response, simulation_state))
 
 
 @rpg_presentation_bp.post("/api/rpg/character_ui")
@@ -1189,3 +1206,168 @@ def apply_rpg_pack():
         "packs": list_content_packs(simulation_state),
         "visual_state": _extract_visual_state(simulation_state),
     })
+
+
+# ---------------------------------------------------------------------------
+# Phase 13.1 — Scenario Packs + Start-from-Pack flow
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/packs/bootstrap")
+def bootstrap_rpg_pack():
+    """Build deterministic new-session bootstrap payload from a content pack."""
+    data = request.get_json(silent=True) or {}
+    pack = _safe_dict(data.get("pack"))
+    bootstrap = build_pack_bootstrap_payload(pack)
+    return jsonify({
+        "ok": True,
+        "bootstrap": bootstrap,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/packs/start")
+def start_rpg_from_pack():
+    """Return normalized new-session setup payload from a scenario/content pack."""
+    data = request.get_json(silent=True) or {}
+    pack = _safe_dict(data.get("pack"))
+    bootstrap = build_pack_bootstrap_payload(pack)
+
+    simulation_state = {
+        "presentation_state": {
+            "visual_state": {
+                "defaults": _safe_dict(bootstrap.get("visual_defaults")),
+            }
+        },
+        "world_state": {
+            "scenario_title": _safe_str(bootstrap.get("title")).strip(),
+            "scenario_summary": _safe_str(bootstrap.get("summary")).strip(),
+            "opening": _safe_str(bootstrap.get("opening")).strip(),
+            "world_seed": _safe_dict(bootstrap.get("world_seed")),
+        },
+    }
+
+    simulation_state = ensure_player_state(simulation_state)
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+
+    return jsonify({
+        "ok": True,
+        "setup_payload": {
+            "simulation_state": simulation_state,
+            "bootstrap": bootstrap,
+        },
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 13.2 — Creator Pack Authoring / Validation / Preview
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/creator/pack/validate")
+def validate_rpg_pack_draft():
+    """Validate creator pack draft without mutating live state."""
+    data = request.get_json(silent=True) or {}
+    draft = _safe_dict(data.get("draft"))
+    validation = validate_pack_draft(draft)
+    return jsonify({
+        "ok": True,
+        "validation": validation,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/creator/pack/preview")
+def preview_rpg_pack_draft():
+    """Preview creator pack draft application/export."""
+    data = request.get_json(silent=True) or {}
+    draft = _safe_dict(data.get("draft"))
+    preview = build_pack_draft_preview(draft)
+    return jsonify({
+        "ok": True,
+        "preview": preview,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/creator/pack/export")
+def export_rpg_pack_draft():
+    """Export validated pack draft as data-only content pack payload."""
+    data = request.get_json(silent=True) or {}
+    draft = _safe_dict(data.get("draft"))
+    exported = build_pack_draft_export(draft)
+    return jsonify({
+        "ok": True,
+        "pack": exported,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 13.3 — Campaign Template / Adventure Bootstrap
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/templates/build")
+def build_rpg_template():
+    """Build reusable campaign template from bootstrap payload."""
+    data = request.get_json(silent=True) or {}
+    template_id = _safe_str(data.get("template_id")).strip() or "template:default"
+    title = _safe_str(data.get("title")).strip() or "Campaign Template"
+    description = _safe_str(data.get("description")).strip()
+    bootstrap = _safe_dict(data.get("bootstrap"))
+
+    template = build_campaign_template(
+        template_id=template_id,
+        title=title,
+        description=description,
+        bootstrap=bootstrap,
+    )
+    return jsonify({
+        "ok": True,
+        "template": template,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/templates/start")
+def start_rpg_template():
+    """Build start-session payload from campaign template."""
+    data = request.get_json(silent=True) or {}
+    template = _safe_dict(data.get("template"))
+    start_payload = build_template_start_payload(template)
+
+    setup_payload = _safe_dict(start_payload.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+    simulation_state = ensure_player_state(simulation_state)
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+    setup_payload["simulation_state"] = simulation_state
+    start_payload["setup_payload"] = setup_payload
+
+    return jsonify({
+        "ok": True,
+        "start": start_payload,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/templates/list")
+def list_rpg_templates():
+    """Normalize/list provided campaign templates."""
+    data = request.get_json(silent=True) or {}
+    templates = _safe_list(data.get("templates"))
+    return jsonify({
+        "ok": True,
+        "templates": list_campaign_templates(templates),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Part 1/16 — content-pack state in main presentation routes
+# ---------------------------------------------------------------------------
+
+def _add_content_pack_data(response_dict: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Add content_packs and package_manifest to a response dict."""
+    response_dict["content_packs"] = list_content_packs(simulation_state)
+    response_dict["package_manifest"] = {
+        "package_version": "1.0",
+        "title": "",
+        "description": "",
+        "created_by": "",
+    }
+    return response_dict

@@ -63,3 +63,47 @@ def test_export_includes_visual_registry():
     assert "scene_illustrations" in result["visual_registry"]
     assert "image_requests" in result["visual_registry"]
     assert "defaults" in result["visual_registry"]
+
+
+def test_export_session_package_includes_installed_content_packs():
+    """Export includes installed content packs from simulation_state presentation_state.modding_state.installed_packs."""
+    result = export_session_package(
+        {
+            "presentation_state": {
+                "modding_state": {
+                    "installed_packs": [
+                        {"manifest": {"id": "pack:test", "title": "Test Pack"}}
+                    ]
+                }
+            }
+        },
+        title="Export",
+        description="",
+        created_by="tester",
+    )
+    assert "content_packs" in result
+    assert len(result["content_packs"]) == 1
+
+
+def test_export_session_package_empty_content_packs_when_no_modding_state():
+    """Export returns empty content_packs when no modding state exists."""
+    result = export_session_package(
+        {"presentation_state": {}},
+        title="Export",
+        description="",
+        created_by="tester",
+    )
+    assert "content_packs" in result
+    assert result["content_packs"] == []
+
+
+def test_export_session_package_empty_content_packs_when_no_installed_packs():
+    """Export returns empty content_packs when modding_state has no installed_packs."""
+    result = export_session_package(
+        {"presentation_state": {"modding_state": {}}},
+        title="Export",
+        description="",
+        created_by="tester",
+    )
+    assert "content_packs" in result
+    assert result["content_packs"] == []
