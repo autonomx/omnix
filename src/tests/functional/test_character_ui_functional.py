@@ -624,3 +624,136 @@ def test_dialogue_presentation_includes_content_packs_and_package_manifest():
         assert "package_manifest" in payload
 
 
+# ---- Phase 13.4 — Wizard functional tests ----
+
+
+def test_wizard_build_route_returns_setup_payload():
+    """Wizard build endpoint returns ok=True with setup_payload."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/wizard/build",
+            json={"wizard_state": {"title": "Adventure"}},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "setup_payload" in payload
+
+
+def test_wizard_preview_route_returns_preview():
+    """Wizard preview endpoint returns ok=True with preview payload."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/wizard/preview",
+            json={"wizard_state": {"title": "Preview Test"}},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "preview" in payload
+
+
+# ---- Phase 13.5 — Session functional tests ----
+
+
+def test_session_save_and_list_routes():
+    """Session save and list routes work correctly."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        save_resp = client.post(
+            "/api/rpg/session/save",
+            json={"session": {"manifest": {"id": "s1", "title": "Session 1"}, "state": {}}},
+        )
+        assert save_resp.status_code == 200
+
+        list_resp = client.post("/api/rpg/session/list", json={})
+        assert list_resp.status_code == 200
+        payload = list_resp.get_json()
+        assert payload["ok"] is True
+        assert "sessions" in payload
+
+
+def test_session_load_not_found():
+    """Session load returns 404 for missing session."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/session/load",
+            json={"session_id": "nonexistent"},
+        )
+        assert response.status_code == 404
+
+
+# ---- Phase 14.0 — Memory functional tests ----
+
+
+def test_memory_add_route_returns_memory_state():
+    """Memory add endpoint returns ok=True with memory_state."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/memory/add",
+            json={
+                "setup_payload": {},
+                "lane": "short_term",
+                "entry": {"id": "m1", "summary": "player met captain"},
+            },
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "memory_state" in payload
+
+
+def test_memory_get_route_returns_memory_state():
+    """Memory get endpoint returns ok=True with memory_state."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/memory/get",
+            json={"setup_payload": {}},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "memory_state" in payload
+
+

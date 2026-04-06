@@ -1,0 +1,336 @@
+diff --git a/src/static/rpg/rpgInspectorStyles.css b/src/static/rpg/rpgInspectorStyles.css
+index 0b069f3..9936528 100644
+--- a/src/static/rpg/rpgInspectorStyles.css
++++ b/src/static/rpg/rpgInspectorStyles.css
+@@ -623,3 +623,158 @@
+   color: var(--rpg-text-secondary, #aaa);
+   margin-bottom: 4px;
+ }
++
++/* ---- Phase 13.4 — Wizard UI styles ---- */
++#wizard {
++  padding: 12px;
++}
++
++.wizard-step {
++  border: 1px solid var(--rpg-border-color, #555);
++  border-radius: 8px;
++  padding: 12px;
++  margin-bottom: 10px;
++  background: var(--rpg-surface-dark, #1a1a2e);
++}
++
++.wizard-step-title {
++  font-size: 0.9rem;
++  font-weight: 600;
++  color: var(--rpg-text-primary, #e0e0e0);
++  margin-bottom: 4px;
++}
++
++.wizard-step-body {
++  font-size: 0.8rem;
++  color: var(--rpg-text-secondary, #aaa);
++}
++
++.wizard-actions {
++  display: flex;
++  gap: 8px;
++  margin-top: 12px;
++}
++
++.wizard-btn {
++  padding: 6px 12px;
++  border-radius: 6px;
++  border: 1px solid var(--rpg-border-color, #555);
++  background: var(--rpg-button-bg, #2a2a4e);
++  color: var(--rpg-text-primary, #e0e0e0);
++  cursor: pointer;
++  font-size: 0.8rem;
++}
++
++.wizard-btn:hover {
++  background: var(--rpg-button-bg-hover, #3a3a5e);
++}
++
++.wizard-btn--primary {
++  background: var(--rpg-accent, #6366f1);
++  border-color: var(--rpg-accent, #6366f1);
++}
++
++.wizard-btn--primary:hover {
++  background: var(--rpg-accent-hover, #4f46e5);
++}
++
++/* ---- Phase 13.5 — Session UI styles ---- */
++#rpg-sessions {
++  padding: 12px;
++}
++
++.session-card {
++  border: 1px solid var(--rpg-border-color, #555);
++  border-radius: 8px;
++  padding: 10px;
++  margin-bottom: 8px;
++  background: var(--rpg-surface-dark, #1a1a2e);
++  cursor: pointer;
++}
++
++.session-card:hover {
++  border-color: var(--rpg-accent, #6366f1);
++}
++
++.session-title {
++  font-size: 0.85rem;
++  font-weight: 600;
++  color: var(--rpg-text-primary, #e0e0e0);
++}
++
++.session-meta {
++  font-size: 0.75rem;
++  color: var(--rpg-text-secondary, #aaa);
++  margin-top: 4px;
++}
++
++.session-status {
++  display: inline-block;
++  padding: 2px 6px;
++  border-radius: 4px;
++  font-size: 0.7rem;
++  background: var(--rpg-status-bg, #1e40af);
++  color: var(--rpg-text-primary, #e0e0e0);
++}
++
++.session-status--archived {
++  background: var(--rpg-status-archived, #4b5563);
++}
++
++.session-actions {
++  display: flex;
++  gap: 6px;
++  margin-top: 6px;
++}
++
++.session-action-btn {
++  padding: 3px 8px;
++  border-radius: 4px;
++  border: 1px solid var(--rpg-border-color, #555);
++  background: var(--rpg-button-bg, #2a2a4e);
++  color: var(--rpg-text-secondary, #aaa);
++  cursor: pointer;
++  font-size: 0.7rem;
++}
++
++.session-action-btn:hover {
++  background: var(--rpg-button-bg-hover, #3a3a5e);
++  color: var(--rpg-text-primary, #e0e0e0);
++}
++
++/* ---- Phase 14.0 — Memory UI styles ---- */
++#rpg-memory {
++  padding: 12px;
++}
++
++.memory-lane {
++  margin-bottom: 12px;
++}
++
++.memory-lane-title {
++  font-size: 0.85rem;
++  font-weight: 600;
++  color: var(--rpg-text-primary, #e0e0e0);
++  margin-bottom: 4px;
++  padding-bottom: 4px;
++  border-bottom: 1px solid var(--rpg-border-color, #555);
++}
++
++.memory-entry {
++  padding: 6px 8px;
++  margin-bottom: 4px;
++  border-radius: 4px;
++  background: var(--rpg-surface-darker, #111128);
++  font-size: 0.8rem;
++  color: var(--rpg-text-secondary, #aaa);
++}
++
++.memory-entry-summary {
++  color: var(--rpg-text-primary, #e0e0e0);
++}
++
++.memory-entry-kind {
++  font-size: 0.7rem;
++  color: var(--rpg-accent, #6366f1);
++  margin-left: 6px;
++}
+diff --git a/src/static/rpg/rpgPresentationRenderer.js b/src/static/rpg/rpgPresentationRenderer.js
+index e9403d6..207fd36 100644
+--- a/src/static/rpg/rpgPresentationRenderer.js
++++ b/src/static/rpg/rpgPresentationRenderer.js
+@@ -754,3 +754,142 @@ export function renderContentPacks(payload) {
+   }).join("");
+ }
+ 
++// ---- Phase 13.4 — Wizard UI renderer ----
++
++function getWizardContainer() {
++  return document.getElementById("rpg-wizard");
++}
++
++export function renderAdventureWizard(payload) {
++  const container = getWizardContainer();
++  if (!container) return;
++
++  const wizardState = payload?.wizard_state || null;
++  if (!wizardState || typeof wizardState !== "object") {
++    container.innerHTML = `<div class="inspector-empty">No wizard active.</div>`;
++    return;
++  }
++
++  const preview = payload?.wizard_preview || {};
++  const step = escapeHtml(wizardState.step || "mode");
++  const mode = escapeHtml(wizardState.mode || "blank");
++  const title = escapeHtml(preview.title || wizardState.title || "—");
++  const summary = escapeHtml(preview.summary || wizardState.summary || "—");
++  const characterCount = preview.character_count ?? 0;
++  const visualDefaults = preview.visual_defaults || wizardState.visual_defaults || {};
++
++  let detailsHtml = "";
++  if (Object.keys(visualDefaults).length > 0) {
++    detailsHtml = Object.entries(visualDefaults).map(([k, v]) => `
++      <div class="wizard-step body">
++        <span class="wizard-step-title">${escapeHtml(k)}:</span>
++        <span class="wizard-step-body">${escapeHtml(v)}</span>
++      </div>
++    `).join("");
++  }
++
++  container.innerHTML = `
++    <div class="wizard-card">
++      <div class="wizard-step-title">New Adventure Wizard</div>
++      <div class="wizard-step">
++        <span class="wizard-step-title">Step:</span>
++        <span class="wizard-step-body">${step}</span>
++      </div>
++      <div class="wizard-step">
++        <span class="wizard-step-title">Mode:</span>
++        <span class="wizard-step-body">${mode}</span>
++      </div>
++      <div class="wizard-step">
++        <span class="wizard-step-title">Title:</span>
++        <span class="wizard-step-body">${title}</span>
++      </div>
++      <div class="wizard-step">
++        <span class="wizard-step-title">Summary:</span>
++        <span class="wizard-step-body">${summary}</span>
++      </div>
++      <div class="wizard-step">
++        <span class="wizard-step-title">Characters:</span>
++        <span class="wizard-step-body">${characterCount}</span>
++      </div>
++      ${detailsHtml}
++    </div>
++  `;
++}
++
++// ---- Phase 13.5 — Session UI renderer ----
++
++function getSessionContainer() {
++  return document.getElementById("rpg-sessions");
++}
++
++export function renderSessions(payload) {
++  const container = getSessionContainer();
++  if (!container) return;
++
++  const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
++  if (!sessions.length) {
++    container.innerHTML = `<div class="inspector-empty">No sessions.</div>`;
++    return;
++  }
++
++  container.innerHTML = sessions.map((session) => {
++    const manifest = session?.manifest || {};
++    const status = escapeHtml(manifest.status || "active");
++    const statusClass = status === "archived" ? "session-status--archived" : "session-status";
++    const sessionId = escapeHtml(manifest.id || "");
++    const title = escapeHtml(manifest.title || manifest.id || "Session");
++    const createdAt = escapeHtml(manifest.created_at || "");
++    const updatedAt = escapeHtml(manifest.updated_at || "");
++
++    return `
++      <div class="session-card" data-session-id="${sessionId}">
++        <div class="session-title">${title}</div>
++        <div class="session-meta">
++          <span class="session-status ${statusClass}">${status}</span>
++          ${createdAt ? ` · Created: ${createdAt}` : ""}
++          ${updatedAt ? ` · Updated: ${updatedAt}` : ""}
++        </div>
++      </div>
++    `;
++  }).join("");
++}
++
++// ---- Phase 14.0 — Memory UI renderer ----
++
++function getMemoryContainer() {
++  return document.getElementById("rpg-memory");
++}
++
++export function renderMemory(payload) {
++  const container = getMemoryContainer();
++  if (!container) return;
++
++  const memoryState = payload?.memory_state || null;
++  if (!memoryState || typeof memoryState !== "object") {
++    container.innerHTML = `<div class="inspector-empty">No memory data.</div>`;
++    return;
++  }
++
++  const shortTerm = Array.isArray(memoryState.short_term) ? memoryState.short_term : [];
++  const longTerm = Array.isArray(memoryState.long_term) ? memoryState.long_term : [];
++  const worldMemory = Array.isArray(memoryState.world_memory) ? memoryState.world_memory : [];
++
++  if (!shortTerm.length && !longTerm.length && !worldMemory.length) {
++    container.innerHTML = `<div class="inspector-empty">No memories stored.</div>`;
++    return;
++  }
++
++  const renderEntries = (entries) => entries.map((e) => {
++    const summary = escapeHtml(e.summary || "");
++    const kind = escapeHtml(e.kind || "fact");
++    const tick = typeof e.tick === "number" ? ` (tick ${e.tick})` : "";
++    return `<div class="memory-entry"><span class="memory-entry-summary">${summary}</span><span class="memory-entry-kind">${kind}${tick}</span></div>`;
++  }).join("");
++
++  container.innerHTML = `
++    ${shortTerm.length ? `<div class="memory-lane"><div class="memory-lane-title">Short-term Memory (${shortTerm.length})</div>${renderEntries(shortTerm)}</div>` : ""}
++    ${longTerm.length ? `<div class="memory-lane"><div class="memory-lane-title">Long-term Memory (${longTerm.length})</div>${renderEntries(longTerm)}</div>` : ""}
++    ${worldMemory.length ? `<div class="memory-lane"><div class="memory-lane-title">World Memory (${worldMemory.length})</div>${renderEntries(worldMemory)}</div>` : ""}
++  `;
++}
++
+diff --git a/src/templates/index.html b/src/templates/index.html
+index 24c788a..1da0efe 100644
+--- a/src/templates/index.html
++++ b/src/templates/index.html
+@@ -442,6 +442,21 @@
+                     <div id="rpg-content-pack-section" style="display:none;">
+                         <div id="rpg-content-packs"></div>
+                     </div>
++
++                    <!-- Phase 13.4 — Wizard container -->
++                    <div id="rpg-wizard-section" style="display:none;">
++                        <div id="rpg-wizard"></div>
++                    </div>
++
++                    <!-- Phase 13.5 — Session container -->
++                    <div id="rpg-session-section" style="display:none;">
++                        <div id="rpg-sessions"></div>
++                    </div>
++
++                    <!-- Phase 14.0 — Memory container -->
++                    <div id="rpg-memory-section" style="display:none;">
++                        <div id="rpg-memory"></div>
++                    </div>
+                 </div>
+ 
+                 <!-- Player Stats / Inventory overlay modal -->

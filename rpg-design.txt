@@ -1,821 +1,891 @@
-👉 Phase 13.1 + 13.2 + 13.3 — full apply-this-patch spec (plus the remaining 12.9/13.0 fixes)
+👉 Phase 13.4 + 13.5 + 14.0 — full apply-this-patch spec (same style)
 
-This builds on your current state:
+This combines:
 
-12.9 packaging
-13.0 content packs
-12.7/12.8 tabbed inspector + GM panel
-authoritative content-pack state writes and package/pack renderer integration already landed
-but two follow-up fixes still matter:
-package/pack sections are mounted but hidden
-normal presentation payloads still need to expose content_packs / package_manifest if you want those UI sections to populate without separate fetches
+13.4 — New Adventure Wizard UI
+13.5 — Session lifecycle + persistence
+14.0 — Memory system (short-term → long-term → world memory)
 
-This combined patch does four things:
+It builds on your current state:
 
-finishes the remaining 12.9/13.0 UI integration
-13.1 — Scenario Packs + Start-from-Pack flow
-13.2 — Creator Pack Authoring / Validation / Preview
-13.3 — Campaign Template / Adventure Bootstrap flow
+content packs
+templates
+package import/export
+creator draft tooling
+tabbed inspector + GM view
+deterministic presentation/visual layer
+start-from-pack and template bootstrap flows
+
+This phase turns the system into an actual playable product flow:
+
+users can start a new adventure through a guided wizard
+sessions can be created, saved, loaded, listed, archived
+memory becomes a first-class engine layer instead of ad hoc history
 High-level outcome
 
 After this patch, the project will support:
 
-Remaining 12.9/13.0 fixes
-package and content-pack sections become visible through the existing inspector tab system
-main presentation payloads expose installed packs + package manifest stub
-package/packs UI is no longer “technically wired but empty/hidden”
-13.1
-scenario packs as a first-class pack type
-start a new RPG session from a selected scenario/content pack
-deterministic bootstrap payload derived from pack content
-13.2
-creator-facing pack draft / validation / preview flow
-author a data-only pack without directly mutating live simulation state
-validate pack manifest, characters, world seed, scenario, visual defaults
-13.3
-campaign template bootstrap
-reusable “adventure templates” built from pack + scenario + world seed
-start-session payload generation for new adventures
-Design rules
-Start-from-pack rule
-
-A pack does not mutate live truth until explicitly applied or used to bootstrap a new session.
-
-Creator-tooling rule
-
-Drafts are not installed packs.
-Drafts are validation/preview objects only.
-
-Template rule
-
-Templates are session bootstrap presets, not running sessions.
-
-Part 1/16 — finish the remaining 12.9/13.0 integration
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-1A. Ensure content-pack state in main presentation routes
-
-In:
-
-presentation_scene()
-presentation_dialogue()
-presentation_narrative_recap()
-
-after:
-
-simulation_state = ensure_visual_state(simulation_state)
-
-add:
-
-+    simulation_state = ensure_content_pack_state(simulation_state)
-1B. Add content_packs and package_manifest to normal presentation responses
-
-In each of those three routes, add these response fields:
-
-+        "content_packs": list_content_packs(simulation_state),
-+        "package_manifest": {
-+            "package_version": "1.0",
-+            "title": "",
-+            "description": "",
-+            "created_by": "",
-+        },
-Example target response shape
-     return jsonify({
-         "ok": True,
-         "presentation": payload,
-         "character_ui_state": _extract_character_ui_state(simulation_state),
-         "character_inspector_state": _extract_character_inspector_state(simulation_state),
-         "world_inspector_state": _extract_world_inspector_state(simulation_state),
-         "visual_state": _extract_visual_state(simulation_state),
-+        "content_packs": list_content_packs(simulation_state),
-+        "package_manifest": {
-+            "package_version": "1.0",
-+            "title": "",
-+            "description": "",
-+            "created_by": "",
-+        },
-     })
-
-This resolves the remaining “package/packs renderer runs but receives no data” gap.
-
-Phase 13.1 — Scenario Packs + Start-from-Pack flow
-Goal
-
-Let users preview and start a new deterministic adventure from a scenario/content pack.
-
-A scenario pack may contain:
-
-pack manifest
-characters
-scenario seed
-world seed
+13.4
+a real New Adventure Wizard UI
+wizard steps for:
+mode
+scenario/template/pack
+world/lore summary
+character seeds
 visual defaults
+final bootstrap preview
+deterministic setup payload creation from wizard state
+13.5
+session registry
+create/list/load/save/archive session routes
+bounded session metadata state
+package export hooked to a session
+session lifecycle separated from live transient UI state
+14.0
+short-term conversational memory
+long-term actor memory
+shared world memory / rumor memory
+deterministic bounded memory state
+memory surfaced in character/world inspectors and GM trace
+Design rules
+Wizard rule
 
-Starting from a pack should produce a clean normalized bootstrap payload, not mutate an existing campaign in-place.
+The wizard is a setup composer, not the simulation itself.
 
-Part 2/16 — extend content pack preview with scenario bootstrap
-Edit file: src/app/rpg/modding/content_packs.py
+Session rule
 
-Add below build_pack_application_preview(...):
+A session record stores:
 
-+def build_pack_bootstrap_payload(pack: Dict[str, Any]) -> Dict[str, Any]:
-+    """Build deterministic new-session bootstrap payload from a content pack."""
-+    preview = build_pack_application_preview(pack)
-+    manifest = _safe_dict(preview.get("manifest"))
-+    scenario = _safe_dict(preview.get("scenario"))
-+    world_seed = _safe_dict(preview.get("world_seed"))
-+    visual_defaults = _safe_dict(preview.get("visual_defaults"))
-+    characters = _safe_list(preview.get("characters"))
-+
-+    setup = {
-+        "title": _first_non_empty(
-+            scenario.get("title"),
-+            manifest.get("title"),
-+            "New Adventure",
-+        ),
-+        "summary": _first_non_empty(
-+            scenario.get("summary"),
-+            manifest.get("description"),
-+        ),
-+        "opening": _safe_str(scenario.get("opening")).strip(),
-+        "world_seed": world_seed,
-+        "character_seeds": characters,
-+        "visual_defaults": visual_defaults,
-+        "source_pack": {
-+            "id": _safe_str(manifest.get("id")).strip(),
-+            "title": _safe_str(manifest.get("title")).strip(),
-+            "version": _safe_str(manifest.get("version")).strip(),
-+        },
-+    }
-+
-+    return setup
-Edit file: src/app/rpg/modding/__init__.py
+metadata
+normalized state snapshot
+lifecycle timestamps/status
+optional source pack/template references
 
-Add export:
+No hidden background mutation.
 
- from .content_packs import (
-     apply_content_pack,
-+    build_pack_bootstrap_payload,
-     build_pack_application_preview,
-     ensure_content_pack_state,
-     install_content_pack,
-     list_content_packs,
- )
- 
- __all__ = [
-     "apply_content_pack",
-+    "build_pack_bootstrap_payload",
-     "build_pack_application_preview",
-     "ensure_content_pack_state",
-     "install_content_pack",
-     "list_content_packs",
- ]
-Part 3/16 — add start-from-pack routes
+Memory rule
+
+Memory is stateful but bounded:
+
+short-term memory is recent/contextual
+long-term memory is distilled/important
+world memory is shared public/rumor style memory
+
+Memory must never grow unbounded.
+
+Phase 13.4 — New Adventure Wizard UI
+Part 1/18 — wizard state module
+Create file: src/app/rpg/setup/wizard_state.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+_MAX_WIZARD_CHARACTERS = 16
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _first_non_empty(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _normalize_character_seed(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    canonical_seed = _safe_dict(data.get("canonical_seed"))
+    personality_seed = _safe_dict(data.get("personality_seed"))
+    appearance_seed = _safe_dict(data.get("appearance_seed"))
+    visual_seed = _safe_dict(data.get("visual_seed"))
+
+    return {
+        "canonical_seed": canonical_seed,
+        "personality_seed": personality_seed,
+        "appearance_seed": appearance_seed,
+        "visual_seed": visual_seed,
+    }
+
+
+def normalize_wizard_state(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    return {
+        "step": _first_non_empty(data.get("step"), "mode"),
+        "mode": _first_non_empty(data.get("mode"), "blank"),
+        "selected_pack": _safe_dict(data.get("selected_pack")),
+        "selected_template": _safe_dict(data.get("selected_template")),
+        "title": _safe_str(data.get("title")).strip(),
+        "summary": _safe_str(data.get("summary")).strip(),
+        "opening": _safe_str(data.get("opening")).strip(),
+        "world_seed": _safe_dict(data.get("world_seed")),
+        "character_seeds": [
+            _normalize_character_seed(item)
+            for item in _safe_list(data.get("character_seeds"))
+            if isinstance(item, dict)
+        ][:_MAX_WIZARD_CHARACTERS],
+        "visual_defaults": _safe_dict(data.get("visual_defaults")),
+    }
+
+
+def build_wizard_preview_payload(wizard_state: Dict[str, Any]) -> Dict[str, Any]:
+    wizard_state = normalize_wizard_state(wizard_state)
+    return {
+        "title": wizard_state.get("title", ""),
+        "summary": wizard_state.get("summary", ""),
+        "opening": wizard_state.get("opening", ""),
+        "character_count": len(wizard_state.get("character_seeds", [])),
+        "world_seed": wizard_state.get("world_seed", {}),
+        "visual_defaults": wizard_state.get("visual_defaults", {}),
+        "mode": wizard_state.get("mode", "blank"),
+    }
+
+
+def build_wizard_setup_payload(wizard_state: Dict[str, Any]) -> Dict[str, Any]:
+    wizard_state = normalize_wizard_state(wizard_state)
+
+    simulation_state = {
+        "presentation_state": {
+            "visual_state": {
+                "defaults": _safe_dict(wizard_state.get("visual_defaults")),
+            }
+        },
+        "world_state": {
+            "scenario_title": _safe_str(wizard_state.get("title")).strip(),
+            "scenario_summary": _safe_str(wizard_state.get("summary")).strip(),
+            "opening": _safe_str(wizard_state.get("opening")).strip(),
+            "world_seed": _safe_dict(wizard_state.get("world_seed")),
+        },
+        "setup_state": {
+            "character_seeds": _safe_list(wizard_state.get("character_seeds")),
+            "selected_pack": _safe_dict(wizard_state.get("selected_pack")),
+            "selected_template": _safe_dict(wizard_state.get("selected_template")),
+            "mode": _safe_str(wizard_state.get("mode")).strip(),
+        },
+    }
+
+    return {
+        "simulation_state": simulation_state,
+        "wizard_state": wizard_state,
+    }
+Part 2/18 — export wizard module
+Create file: src/app/rpg/setup/__init__.py
+from .wizard_state import (
+    build_wizard_preview_payload,
+    build_wizard_setup_payload,
+    normalize_wizard_state,
+)
+
+__all__ = [
+    "build_wizard_preview_payload",
+    "build_wizard_setup_payload",
+    "normalize_wizard_state",
+]
+Part 3/18 — wizard routes
 Edit file: src/app/rpg/api/rpg_presentation_routes.py
 
-Add import:
+Add imports:
 
- from app.rpg.modding.content_packs import (
-     apply_content_pack,
-+    build_pack_bootstrap_payload,
-     build_pack_application_preview,
-     ensure_content_pack_state,
-     list_content_packs,
- )
++from app.rpg.setup.wizard_state import (
++    build_wizard_preview_payload,
++    build_wizard_setup_payload,
++    normalize_wizard_state,
++)
 
 Add routes:
 
-+@rpg_presentation_bp.post("/api/rpg/packs/bootstrap")
-+def bootstrap_rpg_pack():
-+    """Build deterministic new-session bootstrap payload from a content pack."""
++@rpg_presentation_bp.post("/api/rpg/wizard/preview")
++def preview_rpg_wizard():
++    """Preview wizard-composed adventure bootstrap."""
 +    data = request.get_json(silent=True) or {}
-+    pack = _safe_dict(data.get("pack"))
-+    bootstrap = build_pack_bootstrap_payload(pack)
++    wizard_state = normalize_wizard_state(data.get("wizard_state"))
 +    return jsonify({
 +        "ok": True,
-+        "bootstrap": bootstrap,
++        "preview": build_wizard_preview_payload(wizard_state),
 +    })
 +
 +
-+@rpg_presentation_bp.post("/api/rpg/packs/start")
-+def start_rpg_from_pack():
-+    """Return normalized new-session setup payload from a scenario/content pack."""
++@rpg_presentation_bp.post("/api/rpg/wizard/build")
++def build_rpg_wizard_setup():
++    """Build normalized setup payload from wizard state."""
 +    data = request.get_json(silent=True) or {}
-+    pack = _safe_dict(data.get("pack"))
-+    bootstrap = build_pack_bootstrap_payload(pack)
++    wizard_state = normalize_wizard_state(data.get("wizard_state"))
++    setup_payload = build_wizard_setup_payload(wizard_state)
 +
-+    simulation_state = {
-+        "presentation_state": {
-+            "visual_state": {
-+                "defaults": _safe_dict(bootstrap.get("visual_defaults")),
-+            }
-+        },
-+        "world_state": {
-+            "scenario_title": _safe_str(bootstrap.get("title")).strip(),
-+            "scenario_summary": _safe_str(bootstrap.get("summary")).strip(),
-+            "opening": _safe_str(bootstrap.get("opening")).strip(),
-+            "world_seed": _safe_dict(bootstrap.get("world_seed")),
-+        },
-+    }
-+
++    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
 +    simulation_state = ensure_player_state(simulation_state)
 +    simulation_state = ensure_player_party(simulation_state)
 +    simulation_state = ensure_personality_state(simulation_state)
 +    simulation_state = ensure_visual_state(simulation_state)
++    setup_payload["simulation_state"] = simulation_state
 +
 +    return jsonify({
 +        "ok": True,
-+        "setup_payload": {
-+            "simulation_state": simulation_state,
-+            "bootstrap": bootstrap,
-+        },
++        "setup_payload": setup_payload,
 +    })
-Phase 13.2 — Creator Pack Authoring / Validation / Preview
-Goal
-
-Add a data-only pack draft workflow:
-
-validate draft shape
-preview draft application
-export draft as pack payload
-
-No live-state mutation required.
-
-Part 4/16 — create creator tooling module
-Create file: src/app/rpg/creator/pack_authoring.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-from app.rpg.modding.content_packs import build_pack_application_preview
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _first_non_empty(*values: Any) -> str:
-    for value in values:
-        text = _safe_str(value).strip()
-        if text:
-            return text
-    return ""
-
-
-def validate_pack_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
-    draft = _safe_dict(draft)
-    manifest = _safe_dict(draft.get("manifest"))
-    characters = _safe_list(draft.get("characters"))
-    scenario = _safe_dict(draft.get("scenario"))
-    world_seed = _safe_dict(draft.get("world_seed"))
-    visual_defaults = _safe_dict(draft.get("visual_defaults"))
-
-    errors: List[str] = []
-    warnings: List[str] = []
-
-    if not _safe_str(manifest.get("id")).strip():
-        errors.append("manifest.id_required")
-    if not _safe_str(manifest.get("title")).strip():
-        errors.append("manifest.title_required")
-    if len(characters) > 64:
-        errors.append("characters.too_many")
-    if not scenario and not world_seed and not characters:
-        warnings.append("pack.empty_content")
-    if visual_defaults and not isinstance(visual_defaults, dict):
-        errors.append("visual_defaults.invalid")
-
-    return {
-        "ok": not errors,
-        "errors": errors,
-        "warnings": warnings,
-    }
-
-
-def build_pack_draft_export(draft: Dict[str, Any]) -> Dict[str, Any]:
-    draft = _safe_dict(draft)
-    validation = validate_pack_draft(draft)
-    return {
-        "manifest": _safe_dict(draft.get("manifest")),
-        "characters": [item for item in _safe_list(draft.get("characters")) if isinstance(item, dict)],
-        "scenario": _safe_dict(draft.get("scenario")),
-        "world_seed": _safe_dict(draft.get("world_seed")),
-        "visual_defaults": _safe_dict(draft.get("visual_defaults")),
-        "validation": validation,
-    }
-
-
-def build_pack_draft_preview(draft: Dict[str, Any]) -> Dict[str, Any]:
-    draft = build_pack_draft_export(draft)
-    preview = build_pack_application_preview(draft)
-    return {
-        "validation": _safe_dict(draft.get("validation")),
-        "preview": preview,
-    }
-Create file: src/app/rpg/creator/__init__.py
-from .pack_authoring import (
-    build_pack_draft_export,
-    build_pack_draft_preview,
-    validate_pack_draft,
-)
-
-__all__ = [
-    "build_pack_draft_export",
-    "build_pack_draft_preview",
-    "validate_pack_draft",
-]
-Part 5/16 — add creator routes
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add import:
-
-+from app.rpg.creator.pack_authoring import (
-+    build_pack_draft_export,
-+    build_pack_draft_preview,
-+    validate_pack_draft,
-+)
-
-Add routes:
-
-+@rpg_presentation_bp.post("/api/rpg/creator/pack/validate")
-+def validate_rpg_pack_draft():
-+    """Validate creator pack draft without mutating live state."""
-+    data = request.get_json(silent=True) or {}
-+    draft = _safe_dict(data.get("draft"))
-+    validation = validate_pack_draft(draft)
-+    return jsonify({
-+        "ok": True,
-+        "validation": validation,
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/creator/pack/preview")
-+def preview_rpg_pack_draft():
-+    """Preview creator pack draft application/export."""
-+    data = request.get_json(silent=True) or {}
-+    draft = _safe_dict(data.get("draft"))
-+    preview = build_pack_draft_preview(draft)
-+    return jsonify({
-+        "ok": True,
-+        "preview": preview,
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/creator/pack/export")
-+def export_rpg_pack_draft():
-+    """Export validated pack draft as data-only content pack payload."""
-+    data = request.get_json(silent=True) or {}
-+    draft = _safe_dict(data.get("draft"))
-+    exported = build_pack_draft_export(draft)
-+    return jsonify({
-+        "ok": True,
-+        "pack": exported,
-+    })
-Phase 13.3 — Campaign Template / Adventure Bootstrap
-Goal
-
-Add reusable template payloads that can start new adventures.
-
-Templates are not running sessions.
-They are “scenario + world + visual + pack reference” presets.
-
-Part 6/16 — create template module
-Create file: src/app/rpg/templates/campaign_templates.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_MAX_TEMPLATES = 32
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _first_non_empty(*values: Any) -> str:
-    for value in values:
-        text = _safe_str(value).strip()
-        if text:
-            return text
-    return ""
-
-
-def _normalize_template(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    manifest = _safe_dict(data.get("manifest"))
-    bootstrap = _safe_dict(data.get("bootstrap"))
-    return {
-        "manifest": {
-            "id": _safe_str(manifest.get("id")).strip(),
-            "title": _safe_str(manifest.get("title")).strip(),
-            "description": _safe_str(manifest.get("description")).strip(),
-            "version": _first_non_empty(manifest.get("version"), "1.0"),
-        },
-        "bootstrap": bootstrap,
-    }
-
-
-def build_campaign_template(
-    *,
-    template_id: str,
-    title: str,
-    description: str,
-    bootstrap: Dict[str, Any],
-) -> Dict[str, Any]:
-    return _normalize_template({
-        "manifest": {
-            "id": template_id,
-            "title": title,
-            "description": description,
-            "version": "1.0",
-        },
-        "bootstrap": bootstrap,
-    })
-
-
-def build_template_start_payload(template: Dict[str, Any]) -> Dict[str, Any]:
-    template = _normalize_template(template)
-    manifest = _safe_dict(template.get("manifest"))
-    bootstrap = _safe_dict(template.get("bootstrap"))
-
-    return {
-        "template_manifest": manifest,
-        "setup_payload": {
-            "simulation_state": {
-                "presentation_state": {
-                    "visual_state": {
-                        "defaults": _safe_dict(bootstrap.get("visual_defaults")),
-                    }
-                },
-                "world_state": {
-                    "scenario_title": _safe_str(bootstrap.get("title")).strip(),
-                    "scenario_summary": _safe_str(bootstrap.get("summary")).strip(),
-                    "world_seed": _safe_dict(bootstrap.get("world_seed")),
-                },
-            },
-            "bootstrap": bootstrap,
-        },
-    }
-
-
-def list_campaign_templates(templates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    normalized = [
-        _normalize_template(item)
-        for item in _safe_list(templates)
-        if isinstance(item, dict)
-    ]
-    normalized = sorted(
-        normalized,
-        key=lambda item: (
-            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
-            _safe_str(_safe_dict(item.get("manifest")).get("id")),
-        ),
-    )[:_MAX_TEMPLATES]
-    return normalized
-Create file: src/app/rpg/templates/__init__.py
-from .campaign_templates import (
-    build_campaign_template,
-    build_template_start_payload,
-    list_campaign_templates,
-)
-
-__all__ = [
-    "build_campaign_template",
-    "build_template_start_payload",
-    "list_campaign_templates",
-]
-Part 7/16 — add template routes
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add import:
-
-+from app.rpg.templates.campaign_templates import (
-+    build_campaign_template,
-+    build_template_start_payload,
-+    list_campaign_templates,
-+)
-
-Add routes:
-
-+@rpg_presentation_bp.post("/api/rpg/templates/build")
-+def build_rpg_template():
-+    """Build reusable campaign template from bootstrap payload."""
-+    data = request.get_json(silent=True) or {}
-+    template_id = _safe_str(data.get("template_id")).strip() or "template:default"
-+    title = _safe_str(data.get("title")).strip() or "Campaign Template"
-+    description = _safe_str(data.get("description")).strip()
-+    bootstrap = _safe_dict(data.get("bootstrap"))
-+
-+    template = build_campaign_template(
-+        template_id=template_id,
-+        title=title,
-+        description=description,
-+        bootstrap=bootstrap,
-+    )
-+    return jsonify({
-+        "ok": True,
-+        "template": template,
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/templates/start")
-+def start_rpg_template():
-+    """Build start-session payload from campaign template."""
-+    data = request.get_json(silent=True) or {}
-+    template = _safe_dict(data.get("template"))
-+    start_payload = build_template_start_payload(template)
-+    return jsonify({
-+        "ok": True,
-+        "start": start_payload,
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/templates/list")
-+def list_rpg_templates():
-+    """Normalize/list provided campaign templates."""
-+    data = request.get_json(silent=True) or {}
-+    templates = _safe_list(data.get("templates"))
-+    return jsonify({
-+        "ok": True,
-+        "templates": list_campaign_templates(templates),
-+    })
-Part 8/16 — extend inspector tabs for package/packs
+Part 4/18 — wizard UI renderer
 Edit file: src/static/rpg/rpgPresentationRenderer.js
 
-Change renderInspectorTabs() tabs from:
+Add helpers:
 
-[
-  { id: "characters", label: "Characters" },
-  { id: "world", label: "World" },
-  { id: "visuals", label: "Visuals" },
-  { id: "gm", label: "GM" },
-]
-
-to:
-
-   const tabs = [
-     { id: "characters", label: "Characters" },
-     { id: "world", label: "World" },
-     { id: "visuals", label: "Visuals" },
-     { id: "gm", label: "GM" },
-+    { id: "package", label: "Package" },
-+    { id: "packs", label: "Packs" },
-   ];
-
-Update section getters by adding:
-
-+function getPackageSectionContainer() {
-+  return document.getElementById("rpg-package-section");
++function getWizardContainer() {
++  return document.getElementById("rpg-wizard");
 +}
 +
-+function getContentPackSectionContainer() {
-+  return document.getElementById("rpg-content-pack-section");
++export function renderAdventureWizard(payload) {
++  const container = getWizardContainer();
++  if (!container) return;
++
++  const wizardState = payload?.wizard_state || null;
++  if (!wizardState || typeof wizardState !== "object") {
++    container.innerHTML = `<div class="inspector-empty">No wizard active.</div>`;
++    return;
++  }
++
++  const preview = payload?.wizard_preview || {};
++
++  container.innerHTML = `
++    <div class="inspector-panel">
++      <div class="inspector-header">New Adventure Wizard</div>
++      <div class="inspector-section"><h5>Step</h5><div>${escapeHtml(wizardState.step || "mode")}</div></div>
++      <div class="inspector-section"><h5>Mode</h5><div>${escapeHtml(wizardState.mode || "blank")}</div></div>
++      <div class="inspector-section"><h5>Title</h5><div>${escapeHtml(preview.title || wizardState.title || "—")}</div></div>
++      <div class="inspector-section"><h5>Summary</h5><div>${escapeHtml(preview.summary || wizardState.summary || "—")}</div></div>
++      <div class="inspector-section"><h5>Characters</h5><div>${escapeHtml(preview.character_count ?? 0)}</div></div>
++    </div>
++  `;
 +}
 
-Update updateInspectorVisibility():
+Then in renderPresentation(payload), add:
 
-   const charactersSection = getCharactersSectionContainer();
-   const worldSection = getWorldSectionContainer();
-   const visualsSection = getVisualsSectionContainer();
-   const gmSection = getGMSectionContainer();
-+  const packageSection = getPackageSectionContainer();
-+  const packsSection = getContentPackSectionContainer();
- 
-   if (charactersSection) charactersSection.style.display = activeInspectorTab === "characters" ? "" : "none";
-   if (worldSection) worldSection.style.display = activeInspectorTab === "world" ? "" : "none";
-   if (visualsSection) visualsSection.style.display = activeInspectorTab === "visuals" ? "" : "none";
-   if (gmSection) gmSection.style.display = activeInspectorTab === "gm" ? "" : "none";
-+  if (packageSection) packageSection.style.display = activeInspectorTab === "package" ? "" : "none";
-+  if (packsSection) packsSection.style.display = activeInspectorTab === "packs" ? "" : "none";
-
-This resolves the “package/packs mounted but hidden forever” issue cleanly.
-
-Part 9/16 — improve template/container structure
++  if (payload?.wizard_state && typeof payload.wizard_state === "object") {
++    renderAdventureWizard(payload);
++  }
+Part 5/18 — wizard template container
 Edit file: src/templates/index.html
 
-Ensure these sections are present under the inspector area:
+Add:
 
-+<div id="rpg-package-section" style="display:none;">
-+  <div id="rpg-package-inspector"></div>
++<div id="rpg-wizard-section" style="display:none;">
++    <div id="rpg-wizard"></div>
 +</div>
-+
-+<div id="rpg-content-pack-section" style="display:none;">
-+  <div id="rpg-content-packs"></div>
-+</div>
-
-If they already exist, keep them and do not duplicate.
-
-Part 10/16 — styles for template/creator sections
+Part 6/18 — wizard styles
 Edit file: src/static/rpg/rpgInspectorStyles.css
 
 Append:
 
-+.template-card,
-+.creator-pack-card {
++.wizard-card {
 +  border: 1px solid var(--rpg-border-color, #555);
 +  border-radius: 8px;
 +  padding: 12px;
 +  margin-bottom: 10px;
 +  background: var(--rpg-surface-dark, #1a1a2e);
 +}
-Part 11/16 — unit tests for creator tooling
-Create file: src/tests/unit/rpg/test_pack_authoring.py
-from app.rpg.creator.pack_authoring import (
-    build_pack_draft_export,
-    build_pack_draft_preview,
-    validate_pack_draft,
+Phase 13.5 — Session lifecycle + persistence
+Part 7/18 — session state module
+Create file: src/app/rpg/session/session_store.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+_MAX_SESSIONS = 64
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _first_non_empty(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _normalize_session(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    manifest = _safe_dict(data.get("manifest"))
+    state = _safe_dict(data.get("state"))
+    return {
+        "manifest": {
+            "id": _safe_str(manifest.get("id")).strip(),
+            "title": _safe_str(manifest.get("title")).strip(),
+            "status": _first_non_empty(manifest.get("status"), "active"),
+            "created_at": _safe_str(manifest.get("created_at")).strip(),
+            "updated_at": _safe_str(manifest.get("updated_at")).strip(),
+            "source_pack_id": _safe_str(manifest.get("source_pack_id")).strip(),
+            "source_template_id": _safe_str(manifest.get("source_template_id")).strip(),
+        },
+        "state": state,
+    }
+
+
+def ensure_session_registry(root_state: Dict[str, Any]) -> Dict[str, Any]:
+    root_state = _safe_dict(root_state)
+    sessions = [
+        _normalize_session(item)
+        for item in _safe_list(root_state.get("sessions"))
+        if isinstance(item, dict)
+    ]
+    sessions = sorted(
+        sessions,
+        key=lambda item: (
+            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
+            _safe_str(_safe_dict(item.get("manifest")).get("id")),
+        ),
+    )[:_MAX_SESSIONS]
+    root_state["sessions"] = sessions
+    return root_state
+
+
+def list_sessions(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    root_state = ensure_session_registry(root_state)
+    return _safe_list(root_state.get("sessions"))
+
+
+def save_session(root_state: Dict[str, Any], session: Dict[str, Any]) -> Dict[str, Any]:
+    root_state = ensure_session_registry(root_state)
+    sessions = _safe_list(root_state.get("sessions"))
+    normalized = _normalize_session(session)
+
+    session_id = _safe_str(_safe_dict(normalized.get("manifest")).get("id"))
+    sessions = [
+        item for item in sessions
+        if _safe_str(_safe_dict(item.get("manifest")).get("id")) != session_id
+    ]
+    sessions.append(normalized)
+    root_state["sessions"] = sorted(
+        sessions,
+        key=lambda item: (
+            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
+            _safe_str(_safe_dict(item.get("manifest")).get("id")),
+        ),
+    )[:_MAX_SESSIONS]
+    return root_state
+
+
+def get_session(root_state: Dict[str, Any], session_id: str) -> Dict[str, Any] | None:
+    for session in list_sessions(root_state):
+        if _safe_str(_safe_dict(session.get("manifest")).get("id")) == _safe_str(session_id):
+            return session
+    return None
+
+
+def archive_session(root_state: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    root_state = ensure_session_registry(root_state)
+    sessions = []
+    for session in _safe_list(root_state.get("sessions")):
+        session = _normalize_session(session)
+        manifest = _safe_dict(session.get("manifest"))
+        if _safe_str(manifest.get("id")) == _safe_str(session_id):
+            manifest["status"] = "archived"
+            session["manifest"] = manifest
+        sessions.append(session)
+    root_state["sessions"] = sessions[:_MAX_SESSIONS]
+    return root_state
+Part 8/18 — export session module
+Create file: src/app/rpg/session/__init__.py
+from .session_store import (
+    archive_session,
+    ensure_session_registry,
+    get_session,
+    list_sessions,
+    save_session,
+)
+
+__all__ = [
+    "archive_session",
+    "ensure_session_registry",
+    "get_session",
+    "list_sessions",
+    "save_session",
+]
+Part 9/18 — session routes
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+Add imports:
+
++from app.rpg.session.session_store import (
++    archive_session,
++    ensure_session_registry,
++    get_session,
++    list_sessions,
++    save_session,
++)
+
+Add routes:
+
++_RPG_SESSION_ROOT_STATE: Dict[str, Any] = {"sessions": []}
++
++
++@rpg_presentation_bp.post("/api/rpg/session/save")
++def save_rpg_session():
++    """Save normalized RPG session snapshot into in-memory registry."""
++    global _RPG_SESSION_ROOT_STATE
++    data = request.get_json(silent=True) or {}
++    session = _safe_dict(data.get("session"))
++    _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
++    return jsonify({
++        "ok": True,
++        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/session/list")
++def list_rpg_sessions():
++    """List saved RPG sessions."""
++    global _RPG_SESSION_ROOT_STATE
++    _RPG_SESSION_ROOT_STATE = ensure_session_registry(_RPG_SESSION_ROOT_STATE)
++    return jsonify({
++        "ok": True,
++        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/session/load")
++def load_rpg_session():
++    """Load a saved RPG session by id."""
++    global _RPG_SESSION_ROOT_STATE
++    data = request.get_json(silent=True) or {}
++    session_id = _safe_str(data.get("session_id")).strip()
++    session = get_session(_RPG_SESSION_ROOT_STATE, session_id)
++    if not session:
++        return jsonify({"ok": False, "error": "session_not_found"}), 404
++    return jsonify({
++        "ok": True,
++        "session": session,
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/session/archive")
++def archive_rpg_session():
++    """Archive a saved RPG session."""
++    global _RPG_SESSION_ROOT_STATE
++    data = request.get_json(silent=True) or {}
++    session_id = _safe_str(data.get("session_id")).strip()
++    _RPG_SESSION_ROOT_STATE = archive_session(_RPG_SESSION_ROOT_STATE, session_id)
++    return jsonify({
++        "ok": True,
++        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
++    })
+Part 10/18 — session UI renderer
+Edit file: src/static/rpg/rpgPresentationRenderer.js
+
+Add:
+
++function getSessionContainer() {
++  return document.getElementById("rpg-sessions");
++}
++
++export function renderSessions(payload) {
++  const container = getSessionContainer();
++  if (!container) return;
++
++  const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
++  if (!sessions.length) {
++    container.innerHTML = `<div class="inspector-empty">No sessions.</div>`;
++    return;
++  }
++
++  container.innerHTML = sessions.map((session) => {
++    const manifest = session?.manifest || {};
++    return `
++      <div class="content-pack-card">
++        <div class="content-pack-title">${escapeHtml(manifest.title || manifest.id || "Session")}</div>
++        <div class="pack-meta">${escapeHtml(manifest.status || "active")}</div>
++      </div>
++    `;
++  }).join("");
++}
+
+In renderPresentation(payload), add:
+
++  if (Array.isArray(payload?.sessions)) {
++    renderSessions(payload);
++  }
+Part 11/18 — session template container
+Edit file: src/templates/index.html
+
+Add:
+
++<div id="rpg-session-section" style="display:none;">
++    <div id="rpg-sessions"></div>
++</div>
+Phase 14.0 — Memory system
+Part 12/18 — memory module
+Create file: src/app/rpg/memory/memory_state.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+_MAX_SHORT_TERM = 12
+_MAX_LONG_TERM = 24
+_MAX_WORLD_MEMORY = 32
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _normalize_memory_entry(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    return {
+        "id": _safe_str(data.get("id")).strip(),
+        "summary": _safe_str(data.get("summary")).strip(),
+        "kind": _safe_str(data.get("kind")).strip() or "fact",
+        "tick": int(data.get("tick")) if isinstance(data.get("tick"), int) else 0,
+    }
+
+
+def ensure_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    memory_state = simulation_state.get("memory_state")
+    if not isinstance(memory_state, dict):
+        memory_state = {}
+        simulation_state["memory_state"] = memory_state
+
+    short_term = [
+        _normalize_memory_entry(item)
+        for item in _safe_list(memory_state.get("short_term"))
+        if isinstance(item, dict)
+    ][-_MAX_SHORT_TERM:]
+
+    long_term = [
+        _normalize_memory_entry(item)
+        for item in _safe_list(memory_state.get("long_term"))
+        if isinstance(item, dict)
+    ][-_MAX_LONG_TERM:]
+
+    world_memory = [
+        _normalize_memory_entry(item)
+        for item in _safe_list(memory_state.get("world_memory"))
+        if isinstance(item, dict)
+    ][-_MAX_WORLD_MEMORY:]
+
+    memory_state["short_term"] = short_term
+    memory_state["long_term"] = long_term
+    memory_state["world_memory"] = world_memory
+    return simulation_state
+
+
+def append_short_term_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = ensure_memory_state(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    items = _safe_list(memory_state.get("short_term"))
+    items.append(_normalize_memory_entry(entry))
+    memory_state["short_term"] = items[-_MAX_SHORT_TERM:]
+    return simulation_state
+
+
+def append_long_term_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = ensure_memory_state(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    items = _safe_list(memory_state.get("long_term"))
+    items.append(_normalize_memory_entry(entry))
+    memory_state["long_term"] = items[-_MAX_LONG_TERM:]
+    return simulation_state
+
+
+def append_world_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = ensure_memory_state(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    items = _safe_list(memory_state.get("world_memory"))
+    items.append(_normalize_memory_entry(entry))
+    memory_state["world_memory"] = items[-_MAX_WORLD_MEMORY:]
+    return simulation_state
+Part 13/18 — export memory module
+Create file: src/app/rpg/memory/__init__.py
+from .memory_state import (
+    append_long_term_memory,
+    append_short_term_memory,
+    append_world_memory,
+    ensure_memory_state,
+)
+
+__all__ = [
+    "append_long_term_memory",
+    "append_short_term_memory",
+    "append_world_memory",
+    "ensure_memory_state",
+]
+Part 14/18 — memory routes
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+Add imports:
+
++from app.rpg.memory.memory_state import (
++    append_long_term_memory,
++    append_short_term_memory,
++    append_world_memory,
++    ensure_memory_state,
++)
+
+Add routes:
+
++@rpg_presentation_bp.post("/api/rpg/memory/get")
++def get_rpg_memory():
++    """Return normalized memory state for current simulation."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_memory_state(simulation_state)
++    return jsonify({
++        "ok": True,
++        "memory_state": _safe_dict(simulation_state.get("memory_state")),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/memory/add")
++def add_rpg_memory():
++    """Append memory entry to selected memory lane."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    lane = _safe_str(data.get("lane")).strip() or "short_term"
++    entry = _safe_dict(data.get("entry"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_memory_state(simulation_state)
++
++    if lane == "long_term":
++        simulation_state = append_long_term_memory(simulation_state, entry)
++    elif lane == "world_memory":
++        simulation_state = append_world_memory(simulation_state, entry)
++    else:
++        simulation_state = append_short_term_memory(simulation_state, entry)
++
++    return jsonify({
++        "ok": True,
++        "memory_state": _safe_dict(simulation_state.get("memory_state")),
++    })
+Part 15/18 — memory UI renderer
+Edit file: src/static/rpg/rpgPresentationRenderer.js
+
+Add:
+
++function getMemoryContainer() {
++  return document.getElementById("rpg-memory");
++}
++
++export function renderMemory(payload) {
++  const container = getMemoryContainer();
++  if (!container) return;
++
++  const memoryState = payload?.memory_state || null;
++  if (!memoryState || typeof memoryState !== "object") {
++    container.innerHTML = `<div class="inspector-empty">No memory.</div>`;
++    return;
++  }
++
++  const renderLane = (title, items) => `
++    <div class="inspector-section">
++      <h5>${escapeHtml(title)}</h5>
++      ${
++        Array.isArray(items) && items.length
++          ? items.map((item) => `<div class="pack-meta">${escapeHtml(item.summary || "")}</div>`).join("")
++          : '<div class="inspector-empty">None</div>'
++      }
++    </div>
++  `;
++
++  container.innerHTML = `
++    <div class="inspector-panel">
++      <div class="inspector-header">Memory</div>
++      ${renderLane("Short Term", memoryState.short_term)}
++      ${renderLane("Long Term", memoryState.long_term)}
++      ${renderLane("World Memory", memoryState.world_memory)}
++    </div>
++  `;
++}
+
+In renderPresentation(payload), add:
+
++  if (payload?.memory_state && typeof payload.memory_state === "object") {
++    renderMemory(payload);
++  }
+Part 16/18 — memory container
+Edit file: src/templates/index.html
+
+Add:
+
++<div id="rpg-memory-section" style="display:none;">
++    <div id="rpg-memory"></div>
++</div>
+Part 17/18 — tests
+Create file: src/tests/unit/rpg/test_wizard_state.py
+from app.rpg.setup.wizard_state import (
+    build_wizard_preview_payload,
+    build_wizard_setup_payload,
+    normalize_wizard_state,
 )
 
 
-def test_validate_pack_draft_requires_manifest_id_and_title():
-    result = validate_pack_draft({"manifest": {}})
-    assert result["ok"] is False
-    assert "manifest.id_required" in result["errors"]
-    assert "manifest.title_required" in result["errors"]
+def test_normalize_wizard_state_basic():
+    result = normalize_wizard_state({"title": "Adventure"})
+    assert result["title"] == "Adventure"
 
 
-def test_build_pack_draft_export_includes_validation():
-    result = build_pack_draft_export({
-        "manifest": {"id": "pack:test", "title": "Test Pack"},
-        "characters": [],
-    })
-    assert "validation" in result
-    assert result["manifest"]["id"] == "pack:test"
+def test_build_wizard_preview_payload():
+    result = build_wizard_preview_payload({"title": "Adventure", "character_seeds": []})
+    assert result["title"] == "Adventure"
 
 
-def test_build_pack_draft_preview_contains_preview():
-    result = build_pack_draft_preview({
-        "manifest": {"id": "pack:test", "title": "Test Pack"},
-        "characters": [{"name": "Captain Elira"}],
-    })
-    assert "validation" in result
-    assert "preview" in result
-Part 12/16 — unit tests for campaign templates
-Create file: src/tests/unit/rpg/test_campaign_templates.py
-from app.rpg.templates.campaign_templates import (
-    build_campaign_template,
-    build_template_start_payload,
-    list_campaign_templates,
+def test_build_wizard_setup_payload():
+    result = build_wizard_setup_payload({"title": "Adventure"})
+    assert "simulation_state" in result
+Create file: src/tests/unit/rpg/test_session_store.py
+from app.rpg.session.session_store import (
+    archive_session,
+    ensure_session_registry,
+    get_session,
+    list_sessions,
+    save_session,
 )
 
 
-def test_build_campaign_template_basic():
-    template = build_campaign_template(
-        template_id="template:test",
-        title="Starter Adventure",
-        description="A small intro",
-        bootstrap={"title": "Starter"},
-    )
-    assert template["manifest"]["id"] == "template:test"
+def test_save_and_list_session():
+    root = {"sessions": []}
+    root = save_session(root, {"manifest": {"id": "s1", "title": "Session 1"}, "state": {}})
+    sessions = list_sessions(root)
+    assert len(sessions) == 1
 
 
-def test_build_template_start_payload_basic():
-    result = build_template_start_payload({
-        "manifest": {"id": "template:test", "title": "Starter"},
-        "bootstrap": {"title": "Starter", "summary": "Intro", "visual_defaults": {}},
-    })
-    assert "setup_payload" in result
-    assert result["template_manifest"]["id"] == "template:test"
+def test_get_session():
+    root = {"sessions": [{"manifest": {"id": "s1", "title": "Session 1"}, "state": {}}]}
+    session = get_session(root, "s1")
+    assert session is not None
 
 
-def test_list_campaign_templates_sorted():
-    templates = list_campaign_templates([
-        {"manifest": {"id": "b", "title": "Beta"}, "bootstrap": {}},
-        {"manifest": {"id": "a", "title": "Alpha"}, "bootstrap": {}},
-    ])
-    assert templates[0]["manifest"]["title"] == "Alpha"
-Part 13/16 — functional tests for 13.1–13.3
+def test_archive_session():
+    root = {"sessions": [{"manifest": {"id": "s1", "title": "Session 1"}, "state": {}}]}
+    root = archive_session(root, "s1")
+    assert root["sessions"][0]["manifest"]["status"] == "archived"
+Create file: src/tests/unit/rpg/test_memory_state.py
+from app.rpg.memory.memory_state import (
+    append_long_term_memory,
+    append_short_term_memory,
+    append_world_memory,
+    ensure_memory_state,
+)
+
+
+def test_ensure_memory_state():
+    result = ensure_memory_state({})
+    assert "memory_state" in result
+
+
+def test_append_short_term_memory():
+    result = append_short_term_memory({}, {"id": "m1", "summary": "hello"})
+    assert len(result["memory_state"]["short_term"]) == 1
+
+
+def test_append_long_term_memory():
+    result = append_long_term_memory({}, {"id": "m1", "summary": "hello"})
+    assert len(result["memory_state"]["long_term"]) == 1
+
+
+def test_append_world_memory():
+    result = append_world_memory({}, {"id": "m1", "summary": "rumor"})
+    assert len(result["memory_state"]["world_memory"]) == 1
 Edit file: src/tests/functional/test_character_ui_functional.py
 
 Append:
 
-+def test_packs_bootstrap_route_returns_bootstrap(client):
++def test_wizard_build_route_returns_setup_payload(client):
 +    response = client.post(
-+        "/api/rpg/packs/bootstrap",
++        "/api/rpg/wizard/build",
++        json={"wizard_state": {"title": "Adventure"}},
++    )
++    assert response.status_code == 200
++    payload = response.get_json()
++    assert payload["ok"] is True
++    assert "setup_payload" in payload
++
++
++def test_session_save_and_list_routes(client):
++    save_resp = client.post(
++        "/api/rpg/session/save",
++        json={"session": {"manifest": {"id": "s1", "title": "Session 1"}, "state": {}}},
++    )
++    assert save_resp.status_code == 200
++
++    list_resp = client.post("/api/rpg/session/list", json={})
++    assert list_resp.status_code == 200
++    payload = list_resp.get_json()
++    assert payload["ok"] is True
++    assert "sessions" in payload
++
++
++def test_memory_add_route_returns_memory_state(client):
++    response = client.post(
++        "/api/rpg/memory/add",
 +        json={
-+            "pack": {
-+                "manifest": {"id": "pack:test", "title": "Starter Pack"},
-+                "scenario": {"title": "Opening", "summary": "Intro"},
-+            }
++            "setup_payload": {},
++            "lane": "short_term",
++            "entry": {"id": "m1", "summary": "player met captain"},
 +        },
 +    )
 +    assert response.status_code == 200
 +    payload = response.get_json()
 +    assert payload["ok"] is True
-+    assert "bootstrap" in payload
-+
-+
-+def test_creator_pack_validate_route_returns_validation(client):
-+    response = client.post(
-+        "/api/rpg/creator/pack/validate",
-+        json={
-+            "draft": {"manifest": {"id": "pack:test", "title": "Test Pack"}}
-+        },
-+    )
-+    assert response.status_code == 200
-+    payload = response.get_json()
-+    assert payload["ok"] is True
-+    assert "validation" in payload
-+
-+
-+def test_templates_build_route_returns_template(client):
-+    response = client.post(
-+        "/api/rpg/templates/build",
-+        json={
-+            "template_id": "template:test",
-+            "title": "Starter Template",
-+            "bootstrap": {"title": "Intro"},
-+        },
-+    )
-+    assert response.status_code == 200
-+    payload = response.get_json()
-+    assert payload["ok"] is True
-+    assert "template" in payload
-+
-+
-+def test_templates_start_route_returns_start_payload(client):
-+    response = client.post(
-+        "/api/rpg/templates/start",
-+        json={
-+            "template": {
-+                "manifest": {"id": "template:test", "title": "Starter"},
-+                "bootstrap": {"title": "Intro", "summary": "Start"},
-+            }
-+        },
-+    )
-+    assert response.status_code == 200
-+    payload = response.get_json()
-+    assert payload["ok"] is True
-+    assert "start" in payload
-Part 14/16 — optional: expose template/packs in normal payloads
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-If you want the main inspector to surface these without extra fetches, keep:
-
-+        "content_packs": list_content_packs(simulation_state),
-+        "package_manifest": {
-+            "package_version": "1.0",
-+            "title": "",
-+            "description": "",
-+            "created_by": "",
-+        },
-
-No extra change needed if you already added them in Part 1.
-
-Part 15/16 — optional: package export should include installed content packs
-Edit file: src/app/rpg/packaging/package_io.py
-
-If you want portable bundles to preserve installed packs, replace:
-
-"content_packs": [],
-
-with:
-
-+        "content_packs": [
-+            _safe_dict(item)
-+            for item in _safe_list(_safe_dict(presentation_state.get("modding_state")).get("installed_packs"))
-+            if isinstance(item, dict)
-+        ],
-
-That makes package export/import carry installed pack metadata too.
-
-Part 16/16 — acceptance criteria
-Remaining 12.9/13.0 fixes are complete when:
-package/packs sections are reachable via tabs
-main presentation payloads expose package/pack data or equivalent fetch path exists
-content-pack state writes are authoritative
-Phase 13.1 is complete when:
-pack bootstrap route exists
-start-from-pack route exists
-deterministic bootstrap payload is produced from pack data
-Phase 13.2 is complete when:
-creator pack validate/preview/export routes exist
-pack drafts can be validated without mutating live state
-authoring tests pass
-Phase 13.3 is complete when:
-campaign template build/list/start routes exist
-templates produce reusable start payloads
-template tests pass
++    assert "memory_state" in payload
+Part 18/18 — acceptance criteria
+Phase 13.4 is complete when:
+wizard preview/build routes exist
+wizard UI container/renderer exists
+wizard setup payload is normalized and deterministic
+Phase 13.5 is complete when:
+session save/list/load/archive routes exist
+session registry exists
+sessions are bounded and normalized
+Phase 14.0 is complete when:
+memory module exists
+short-term / long-term / world memory lanes exist
+memory add/get routes exist
+memory UI renderer exists
+memory tests pass

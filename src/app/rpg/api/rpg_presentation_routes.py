@@ -76,6 +76,30 @@ from app.rpg.templates.campaign_templates import (
     list_campaign_templates,
 )
 
+# Phase 13.4 — New Adventure Wizard UI
+from app.rpg.setup.wizard_state import (
+    build_wizard_preview_payload,
+    build_wizard_setup_payload,
+    normalize_wizard_state,
+)
+
+# Phase 13.5 — Session lifecycle + persistence
+from app.rpg.session.session_store import (
+    archive_session,
+    ensure_session_registry,
+    get_session,
+    list_sessions,
+    save_session,
+)
+
+# Phase 14.0 — Memory system
+from app.rpg.memory.memory_state import (
+    append_long_term_memory,
+    append_short_term_memory,
+    append_world_memory,
+    ensure_memory_state,
+)
+
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
 
@@ -1354,6 +1378,145 @@ def list_rpg_templates():
     return jsonify({
         "ok": True,
         "templates": list_campaign_templates(templates),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 13.4 — New Adventure Wizard UI
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/wizard/preview")
+def preview_rpg_wizard():
+    """Preview wizard-composed adventure bootstrap."""
+    data = request.get_json(silent=True) or {}
+    wizard_state = normalize_wizard_state(data.get("wizard_state"))
+    return jsonify({
+        "ok": True,
+        "preview": build_wizard_preview_payload(wizard_state),
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/wizard/build")
+def build_rpg_wizard_setup():
+    """Build normalized setup payload from wizard state."""
+    data = request.get_json(silent=True) or {}
+    wizard_state = normalize_wizard_state(data.get("wizard_state"))
+    setup_payload = build_wizard_setup_payload(wizard_state)
+
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+    simulation_state = ensure_player_state(simulation_state)
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+    setup_payload["simulation_state"] = simulation_state
+
+    return jsonify({
+        "ok": True,
+        "setup_payload": setup_payload,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 13.5 — Session lifecycle + persistence
+# ---------------------------------------------------------------------------
+
+_RPG_SESSION_ROOT_STATE: Dict[str, Any] = {"sessions": []}
+
+
+@rpg_presentation_bp.post("/api/rpg/session/save")
+def save_rpg_session():
+    """Save normalized RPG session snapshot into in-memory registry."""
+    global _RPG_SESSION_ROOT_STATE
+    data = request.get_json(silent=True) or {}
+    session = _safe_dict(data.get("session"))
+    _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
+    return jsonify({
+        "ok": True,
+        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/session/list")
+def list_rpg_sessions():
+    """List saved RPG sessions."""
+    global _RPG_SESSION_ROOT_STATE
+    _RPG_SESSION_ROOT_STATE = ensure_session_registry(_RPG_SESSION_ROOT_STATE)
+    return jsonify({
+        "ok": True,
+        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/session/load")
+def load_rpg_session():
+    """Load a saved RPG session by id."""
+    global _RPG_SESSION_ROOT_STATE
+    data = request.get_json(silent=True) or {}
+    session_id = _safe_str(data.get("session_id")).strip()
+    session = get_session(_RPG_SESSION_ROOT_STATE, session_id)
+    if not session:
+        return jsonify({"ok": False, "error": "session_not_found"}), 404
+    return jsonify({
+        "ok": True,
+        "session": session,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/session/archive")
+def archive_rpg_session():
+    """Archive a saved RPG session."""
+    global _RPG_SESSION_ROOT_STATE
+    data = request.get_json(silent=True) or {}
+    session_id = _safe_str(data.get("session_id")).strip()
+    _RPG_SESSION_ROOT_STATE = archive_session(_RPG_SESSION_ROOT_STATE, session_id)
+    return jsonify({
+        "ok": True,
+        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 14.0 — Memory system
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/memory/get")
+def get_rpg_memory():
+    """Return normalized memory state for current simulation."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_memory_state(simulation_state)
+    return jsonify({
+        "ok": True,
+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/memory/add")
+def add_rpg_memory():
+    """Append memory entry to selected memory lane."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    lane = _safe_str(data.get("lane")).strip() or "short_term"
+    entry = _safe_dict(data.get("entry"))
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_memory_state(simulation_state)
+
+    if lane == "long_term":
+        simulation_state = append_long_term_memory(simulation_state, entry)
+    elif lane == "world_memory":
+        simulation_state = append_world_memory(simulation_state, entry)
+    else:
+        simulation_state = append_short_term_memory(simulation_state, entry)
+
+    return jsonify({
+        "ok": True,
+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
     })
 
 

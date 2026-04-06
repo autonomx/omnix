@@ -44,6 +44,26 @@ function getGMSectionContainer() {
   return document.getElementById("rpg-gm-section");
 }
 
+function getPackageSectionContainer() {
+  return document.getElementById("rpg-package-section");
+}
+
+function getContentPackSectionContainer() {
+  return document.getElementById("rpg-content-pack-section");
+}
+
+function getWizardSectionContainer() {
+  return document.getElementById("rpg-wizard-section");
+}
+
+function getSessionSectionContainer() {
+  return document.getElementById("rpg-session-section");
+}
+
+function getMemorySectionContainer() {
+  return document.getElementById("rpg-memory-section");
+}
+
 export function renderInspectorTabs() {
   const container = getInspectorTabsContainer();
   if (!container) return;
@@ -53,6 +73,11 @@ export function renderInspectorTabs() {
     { id: "world", label: "World" },
     { id: "visuals", label: "Visuals" },
     { id: "gm", label: "GM" },
+    { id: "package", label: "Package" },
+    { id: "packs", label: "Packs" },
+    { id: "wizard", label: "Wizard" },
+    { id: "sessions", label: "Sessions" },
+    { id: "memory", label: "Memory" },
   ];
 
   container.innerHTML = `
@@ -88,11 +113,21 @@ export function updateInspectorVisibility() {
   const worldSection = getWorldSectionContainer();
   const visualsSection = getVisualsSectionContainer();
   const gmSection = getGMSectionContainer();
+  const packageSection = getPackageSectionContainer();
+  const packsSection = getContentPackSectionContainer();
+  const wizardSection = getWizardSectionContainer();
+  const sessionSection = getSessionSectionContainer();
+  const memorySection = getMemorySectionContainer();
 
   if (charactersSection) charactersSection.style.display = activeInspectorTab === "characters" ? "" : "none";
   if (worldSection) worldSection.style.display = activeInspectorTab === "world" ? "" : "none";
   if (visualsSection) visualsSection.style.display = activeInspectorTab === "visuals" ? "" : "none";
   if (gmSection) gmSection.style.display = activeInspectorTab === "gm" ? "" : "none";
+  if (packageSection) packageSection.style.display = activeInspectorTab === "package" ? "" : "none";
+  if (packsSection) packsSection.style.display = activeInspectorTab === "packs" ? "" : "none";
+  if (wizardSection) wizardSection.style.display = activeInspectorTab === "wizard" ? "" : "none";
+  if (sessionSection) sessionSection.style.display = activeInspectorTab === "sessions" ? "" : "none";
+  if (memorySection) memorySection.style.display = activeInspectorTab === "memory" ? "" : "none";
 }
 
 // ---- End Phase 12.7 additions ----
@@ -617,6 +652,21 @@ export function renderPresentation(payload) {
     renderContentPacks(payload);
   }
 
+  // ---- Phase 13.4 — Wizard ----
+  if (payload?.wizard_state && typeof payload.wizard_state === "object") {
+    renderAdventureWizard(payload);
+  }
+
+  // ---- Phase 13.5 — Sessions ----
+  if (Array.isArray(payload?.sessions)) {
+    renderSessions(payload);
+  }
+
+  // ---- Phase 14.0 — Memory ----
+  if (payload?.memory_state && typeof payload.memory_state === "object") {
+    renderMemory(payload);
+  }
+
   return presentation;
 }
 
@@ -781,7 +831,7 @@ export function renderAdventureWizard(payload) {
   let detailsHtml = "";
   if (Object.keys(visualDefaults).length > 0) {
     detailsHtml = Object.entries(visualDefaults).map(([k, v]) => `
-      <div class="wizard-step body">
+      <div class="wizard-step">
         <span class="wizard-step-title">${escapeHtml(k)}:</span>
         <span class="wizard-step-body">${escapeHtml(v)}</span>
       </div>

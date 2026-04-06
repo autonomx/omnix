@@ -76,6 +76,14 @@ from app.rpg.memory.campaign_memory_builder import CampaignMemoryBuilder
 from app.rpg.memory.presenters import MemoryPresenter
 from app.rpg.memory.core import CampaignMemoryCore
 
+# Phase 14.0 — Bounded memory lanes (short-term / long-term / world)
+from app.rpg.memory.memory_state import (
+    append_long_term_memory,
+    append_short_term_memory,
+    append_world_memory,
+    ensure_memory_state,
+)
+
 
 def update_memory(session, events):
     """Update session memory with new events.
@@ -145,4 +153,9 @@ __all__ = [
     "MemoryPresenter",
     "CampaignMemoryCore",
     "update_memory",
+    # Phase 14.0
+    "append_long_term_memory",
+    "append_short_term_memory",
+    "append_world_memory",
+    "ensure_memory_state",
 ]

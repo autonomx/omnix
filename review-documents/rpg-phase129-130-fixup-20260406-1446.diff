@@ -1,0 +1,165 @@
+commit 4fc83a5e80f0ced82e9b1b33b30ca5a31338d0d2
+Author: Autonomx Developer <ehsan.matean@gmail.com>
+Date:   Mon Apr 6 14:46:30 2026 -0700
+
+    Phase 12.9/13.0 fixup: authoritative state writes, integrate renderPresentation, add template containers, new regression tests
+
+diff --git a/src/app/rpg/modding/content_packs.py b/src/app/rpg/modding/content_packs.py
+index fa83f47..5fc10fb 100644
+--- a/src/app/rpg/modding/content_packs.py
++++ b/src/app/rpg/modding/content_packs.py
+@@ -61,7 +61,11 @@ def _normalize_content_pack(value: Any) -> Dict[str, Any]:
+ 
+ def ensure_content_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     simulation_state = ensure_visual_state(_safe_dict(simulation_state))
+-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    presentation_state = simulation_state.get("presentation_state")
++    if not isinstance(presentation_state, dict):
++        presentation_state = {}
++        simulation_state["presentation_state"] = presentation_state
++
+     modding_state = presentation_state.get("modding_state")
+     if not isinstance(modding_state, dict):
+         modding_state = {}
+@@ -89,8 +93,14 @@ def install_content_pack(
+     pack: Dict[str, Any],
+ ) -> Dict[str, Any]:
+     simulation_state = ensure_content_pack_state(simulation_state)
+-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+-    modding_state = _safe_dict(presentation_state.get("modding_state"))
++    presentation_state = simulation_state.get("presentation_state")
++    if not isinstance(presentation_state, dict):
++        presentation_state = {}
++        simulation_state["presentation_state"] = presentation_state
++    modding_state = presentation_state.get("modding_state")
++    if not isinstance(modding_state, dict):
++        modding_state = {}
++        presentation_state["modding_state"] = modding_state
+ 
+     packs = _safe_list(modding_state.get("installed_packs"))
+     packs.append(_normalize_content_pack(pack))
+@@ -107,8 +117,12 @@ def install_content_pack(
+ 
+ def list_content_packs(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+     simulation_state = ensure_content_pack_state(simulation_state)
+-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+-    modding_state = _safe_dict(presentation_state.get("modding_state"))
++    presentation_state = simulation_state.get("presentation_state")
++    if not isinstance(presentation_state, dict):
++        return []
++    modding_state = presentation_state.get("modding_state")
++    if not isinstance(modding_state, dict):
++        return []
+     return _safe_list(modding_state.get("installed_packs"))
+ 
+ 
+@@ -140,8 +154,14 @@ def apply_content_pack(
+ 
+     simulation_state = install_content_pack(simulation_state, pack)
+ 
+-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+-    visual_state = _safe_dict(presentation_state.get("visual_state"))
++    presentation_state = simulation_state.get("presentation_state")
++    if not isinstance(presentation_state, dict):
++        presentation_state = {}
++        simulation_state["presentation_state"] = presentation_state
++    visual_state = presentation_state.get("visual_state")
++    if not isinstance(visual_state, dict):
++        visual_state = {}
++        presentation_state["visual_state"] = visual_state
+     defaults = _safe_dict(visual_state.get("defaults"))
+ 
+     pack_visual_defaults = _safe_dict(pack.get("visual_defaults"))
+diff --git a/src/static/rpg/rpgPresentationRenderer.js b/src/static/rpg/rpgPresentationRenderer.js
+index 0637b40..e9403d6 100644
+--- a/src/static/rpg/rpgPresentationRenderer.js
++++ b/src/static/rpg/rpgPresentationRenderer.js
+@@ -606,6 +606,17 @@ export function renderPresentation(payload) {
+     renderGMInspector(gmInspectorState);
+   }
+ 
++  // ---- Phase 12.9 — Package inspector ----
++  const packageManifest = payload?.package_manifest || payload?.manifest || null;
++  if (packageManifest && typeof packageManifest === "object") {
++    renderPackageInspector(payload);
++  }
++
++  // ---- Phase 13.0 — Content packs ----
++  if (Array.isArray(payload?.content_packs)) {
++    renderContentPacks(payload);
++  }
++
+   return presentation;
+ }
+ 
+@@ -743,23 +754,3 @@ export function renderContentPacks(payload) {
+   }).join("");
+ }
+ 
+-// ---- Extend renderPresentation to include package/packs ----
+-
+-const _originalRenderPresentation = renderPresentation;
+-
+-export function renderPresentationWithPackages(payload) {
+-  const presentation = _originalRenderPresentation(payload);
+-
+-  const packageManifest = payload?.package_manifest || payload?.manifest || null;
+-  if (packageManifest && typeof packageManifest === "object") {
+-    renderPackageInspector(payload);
+-  }
+-
+-  if (Array.isArray(payload?.content_packs)) {
+-    renderContentPacks(payload);
+-  }
+-
+-  return presentation;
+-}
+-
+-// ---- End Phase 12.9 / 13.0 additions ----
+diff --git a/src/templates/index.html b/src/templates/index.html
+index a5a8d01..24c788a 100644
+--- a/src/templates/index.html
++++ b/src/templates/index.html
+@@ -434,6 +434,14 @@
+                     <div id="rpg-gm-section" style="display:none;">
+                         <div id="rpg-gm-inspector"></div>
+                     </div>
++
++                    <div id="rpg-package-section" style="display:none;">
++                        <div id="rpg-package-inspector"></div>
++                    </div>
++
++                    <div id="rpg-content-pack-section" style="display:none;">
++                        <div id="rpg-content-packs"></div>
++                    </div>
+                 </div>
+ 
+                 <!-- Player Stats / Inventory overlay modal -->
+diff --git a/src/tests/unit/rpg/test_content_packs.py b/src/tests/unit/rpg/test_content_packs.py
+index be6c81a..8c8f436 100644
+--- a/src/tests/unit/rpg/test_content_packs.py
++++ b/src/tests/unit/rpg/test_content_packs.py
+@@ -89,4 +89,21 @@ def test_packs_limited_to_max():
+             {"manifest": {"id": f"pack:{i}", "title": f"Pack {i}"}, "characters": []},
+         )
+     packs = list_content_packs(simulation_state)
+-    assert len(packs) <= 32  # _MAX_PACKS
+\ No newline at end of file
++    assert len(packs) <= 32  # _MAX_PACKS
++
++
++def test_ensure_content_pack_state_persists_modding_state_on_missing_presentation_state():
++    simulation_state = {}
++    simulation_state = ensure_content_pack_state(simulation_state)
++    assert "presentation_state" in simulation_state
++    assert "modding_state" in simulation_state["presentation_state"]
++    assert simulation_state["presentation_state"]["modding_state"]["installed_packs"] == []
++
++
++def test_apply_content_pack_persists_visual_defaults_to_authoritative_state():
++    simulation_state = {}
++    simulation_state = apply_content_pack(
++        simulation_state,
++        {"manifest": {"id": "pack:test", "title": "Test"}, "visual_defaults": {"portrait_style": "grimdark"}},
++    )
++    assert simulation_state["presentation_state"]["visual_state"]["defaults"]["portrait_style"] == "grimdark"
