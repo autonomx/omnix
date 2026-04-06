@@ -1,4 +1,4 @@
-"""Phase 10.6 — Replay helpers for captured LLM orchestration artifacts."""
+"""Phase 10.7 — Replay helpers for captured LLM orchestration artifacts."""
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -18,6 +18,24 @@ def _safe_str(v: Any) -> str:
     return "" if v is None else str(v)
 
 
+def _safe_int(v: Any, default: int = 0) -> int:
+    try:
+        return int(v)
+    except Exception:
+        return default
+
+
+def _request_id_counter(request_id: str) -> int:
+    request_id = _safe_str(request_id)
+    parts = request_id.split(":")
+    if not parts:
+        return 0
+    try:
+        return int(parts[-1])
+    except Exception:
+        return 0
+
+
 def find_replayable_llm_request(
     simulation_state: Dict[str, Any],
     *,
@@ -29,6 +47,8 @@ def find_replayable_llm_request(
     Search preference:
         1. exact request_id
         2. exact turn_id
+
+    Only successful captured artifacts are replayable.
     """
     llm_state = get_llm_orchestration_state(simulation_state)
     completed_requests = [
@@ -42,18 +62,22 @@ def find_replayable_llm_request(
 
     if request_id:
         for item in completed_requests:
-            if _safe_str(item.get("request_id")) == request_id and _safe_str(item.get("status")) in {"complete", "replayed", "failed"}:
+            if (
+                _safe_str(item.get("request_id")) == request_id
+                and _safe_str(item.get("status")) in {"complete", "replayed"}
+            ):
                 return item
 
     if turn_id:
         matches = [
             item for item in completed_requests
             if _safe_str(item.get("turn_id")) == turn_id
-            and _safe_str(item.get("status")) in {"complete", "replayed", "failed"}
+            and _safe_str(item.get("status")) in {"complete", "replayed"}
         ]
         matches = sorted(
             matches,
             key=lambda item: (
+                _request_id_counter(_safe_str(item.get("request_id"))),
                 _safe_str(item.get("request_id")),
                 _safe_str(item.get("status")),
             ),

@@ -1,12 +1,12 @@
-"""Phase 10.6 — LLM orchestration controller.
+"""Phase 10.7 — LLM orchestration controller.
 
 This controller owns orchestration flow for one runtime turn:
     - begin request
-    - choose disabled / replay path
+    - choose disabled / replay / capture / live path
     - write stream/output into runtime via adapter
     - finalize or fail orchestration request
 
-Live provider execution is intentionally not added yet in this phase chunk.
+Live provider execution and capture/replay convergence are fully implemented.
 """
 from __future__ import annotations
 
@@ -33,6 +33,15 @@ from .fallback import (
     build_llm_fallback_result,
 )
 from .stream_adapter import apply_provider_result_to_runtime_turn
+from .live_provider import (
+    build_provider_execution_id,
+    begin_provider_execution,
+    append_provider_execution_event,
+    finalize_provider_execution,
+    fail_provider_execution,
+)
+from .provider_adapter import get_provider_adapter
+from .capture import persist_captured_provider_result
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -116,10 +125,8 @@ def execute_llm_request_for_turn(
     Supported in this phase:
         - disabled mode
         - replay mode
-
-    Not yet supported:
-        - live provider execution
-        - capture mode live call path
+        - capture mode via explicit provider adapter
+        - live mode via explicit provider adapter
     """
     scene_state = _safe_dict(scene_state)
     dialogue_input_state = _safe_dict(dialogue_state)
@@ -167,11 +174,13 @@ def execute_llm_request_for_turn(
         request_payload,
         provider_mode=provider_mode,
     )
+    execution_id = build_provider_execution_id(request_id)
 
     try:
         if provider_mode == "replay":
             replay_record = require_replayable_llm_request(
                 simulation_state,
+                request_id=request_id,
                 turn_id=turn_id,
             )
             provider_result = build_replay_provider_result(replay_record)
@@ -234,14 +243,117 @@ def execute_llm_request_for_turn(
                 )
             return simulation_state
 
+        if provider_mode in {"capture", "live"}:
+            simulation_state = begin_provider_execution(
+                simulation_state,
+                request_id=request_id,
+                tick=tick,
+                provider=provider or provider_mode,
+                model=model or "",
+            )
+            simulation_state = append_provider_execution_event(
+                simulation_state,
+                execution_id=execution_id,
+                event_index=0,
+                event_type="request_started",
+                text="",
+                final=False,
+                raw={},
+            )
+
+            adapter = get_provider_adapter(provider_mode)
+            provider_result = adapter.execute(request_payload)
+
+            provider_name = _safe_str(provider_result.get("provider")) or provider or provider_mode
+            model_name = _safe_str(provider_result.get("model")) or model
+
+            provider_stream_events = [
+                _safe_dict(v)
+                for v in _safe_list(provider_result.get("stream_events"))
+                if isinstance(v, dict)
+            ]
+            for event in provider_stream_events:
+                simulation_state = append_llm_stream_event(
+                    simulation_state,
+                    request_id=request_id,
+                    event_index=_safe_int(event.get("event_index"), 0),
+                    event_type=_safe_str(event.get("event_type") or "text_chunk"),
+                    text=_safe_str(event.get("text")),
+                    final=_safe_bool(event.get("final")),
+                    raw=_safe_dict(event.get("raw")),
+                )
+                simulation_state = append_provider_execution_event(
+                    simulation_state,
+                    execution_id=execution_id,
+                    event_index=_safe_int(event.get("event_index"), 0) + 1,
+                    event_type=_safe_str(event.get("event_type") or "text_chunk"),
+                    text=_safe_str(event.get("text")),
+                    final=_safe_bool(event.get("final")),
+                    raw=_safe_dict(event.get("raw")),
+                )
+
+            simulation_state = apply_provider_result_to_runtime_turn(
+                simulation_state,
+                turn_id=turn_id,
+                actor_id=actor_id,
+                speaker_id=speaker_id,
+                provider_result=provider_result,
+                allow_emotional_fallback=False,
+            )
+
+            simulation_state = append_provider_execution_event(
+                simulation_state,
+                execution_id=execution_id,
+                event_index=len(provider_stream_events) + 1,
+                event_type="response_completed",
+                text="",
+                final=True,
+                raw={},
+            )
+            simulation_state = finalize_provider_execution(
+                simulation_state,
+                execution_id=execution_id,
+                output_text=_safe_str(provider_result.get("output_text")),
+            )
+            simulation_state = finalize_llm_request(
+                simulation_state,
+                request_id=request_id,
+                output_text=_safe_str(provider_result.get("output_text")),
+                replayed=False,
+            )
+            if provider_mode == "capture":
+                simulation_state = persist_captured_provider_result(
+                    simulation_state,
+                    request_id=request_id,
+                    provider_result=provider_result,
+                    provider=provider_name,
+                    model=model_name,
+                )
+            return simulation_state
+
         raise NotImplementedError(
-            f"Provider mode '{provider_mode}' is not implemented yet in Phase 10.6"
+            f"Unknown provider mode '{provider_mode}'"
         )
 
     except Exception as exc:
+        if provider_mode in {"capture", "live"} and request_id:
+            simulation_state = append_provider_execution_event(
+                simulation_state,
+                execution_id=execution_id,
+                event_index=999999,
+                event_type="response_failed",
+                text="",
+                final=True,
+                raw={"error": _safe_str(exc)},
+            )
+            simulation_state = fail_provider_execution(
+                simulation_state,
+                execution_id=execution_id,
+                error=_safe_str(exc),
+            )
         simulation_state = fail_llm_request(
             simulation_state,
             request_id=request_id,
-            error=_safe_str(exc),
+            error=f"{provider_mode}: {_safe_str(exc)}",
         )
         return simulation_state

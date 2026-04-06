@@ -36,6 +36,9 @@ from .runtime_bridge import (
 from .orchestration_bridge import (
     build_orchestration_presentation_payload,
 )
+from .live_provider_bridge import (
+    build_live_provider_presentation_payload,
+)
 
 __all__ = [
     "build_personality_prompt_hints",
@@ -53,4 +56,5 @@ __all__ = [
     "build_deterministic_scene_fallback",
     "build_runtime_presentation_payload",
     "build_orchestration_presentation_payload",
+    "build_live_provider_presentation_payload",
 ]

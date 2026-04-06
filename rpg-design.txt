@@ -1,62 +1,47 @@
-This Phase 10.6 design is built to sit on top of your Phase 10.5 runtime layer and preserve the same deterministic, bounded, explicit-boundary rules.
+👉 Phase 10.7 full apply-this-patch spec (same strict 6-part format)
 
-PART 1/6 — ORCHESTRATION PACKAGE + STATE MODELS
+Below is Part 1/6 only.
+
+Hard boundary: this message contains only
+Part 1/6: live provider package + provider state models
+
+This Phase 10.7 layer builds on your 10.6 orchestration controller and adds explicit live provider execution while preserving:
+
+deterministic request IDs
+bounded provider artifacts
+capture/replay compatibility
+no direct provider mutation of simulation truth
+runtime-first streaming through the existing adapter
+PART 1/6 — LIVE PROVIDER PACKAGE + PROVIDER STATE MODELS
 1) Add file
-src/app/rpg/orchestration/__init__.py
+src/app/rpg/orchestration/live_provider.py
 *** Begin Patch
-*** Add File: src/app/rpg/orchestration/__init__.py
-+"""Phase 10.6 — LLM orchestration layer.
+*** Add File: src/app/rpg/orchestration/live_provider.py
++"""Phase 10.7 — Live provider execution models and normalization.
 +
-+This package owns explicit LLM request orchestration above runtime dialogue
-+state. It never mutates simulation truth directly; it only writes through
-+runtime/orchestration state helpers.
++This module owns bounded provider execution artifacts only.
++It does not mutate simulation truth directly.
 +"""
-+
-+from .state import (
-+    ensure_llm_orchestration_state,
-+    get_llm_orchestration_state,
-+    build_llm_request_id,
-+)
-+
-+__all__ = [
-+    "ensure_llm_orchestration_state",
-+    "get_llm_orchestration_state",
-+    "build_llm_request_id",
-+]
-*** End Patch
-2) Add file
-src/app/rpg/orchestration/state.py
-*** Begin Patch
-*** Add File: src/app/rpg/orchestration/state.py
-+"""Phase 10.6 — LLM orchestration state models and normalization."""
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List, Tuple
 +
 +
-+_MAX_ACTIVE_REQUESTS = 4
-+_MAX_COMPLETED_REQUESTS = 20
-+_MAX_REQUEST_STREAM_EVENTS = 40
++_MAX_PROVIDER_EXECUTIONS = 12
++_MAX_PROVIDER_EVENTS = 80
 +
-+_VALID_PROVIDER_MODES = {
-+    "disabled",
-+    "capture",
-+    "replay",
-+    "live",
-+}
-+
-+_VALID_REQUEST_STATUS = {
++_VALID_PROVIDER_EXECUTION_STATUS = {
 +    "pending",
 +    "streaming",
 +    "complete",
 +    "failed",
-+    "replayed",
 +}
 +
-+_VALID_REQUEST_MODES = {
-+    "dialogue",
-+    "scene",
-+    "fallback_assist",
++_VALID_PROVIDER_EVENT_TYPES = {
++    "request_started",
++    "text_chunk",
++    "response_completed",
++    "response_failed",
 +}
 +
 +
@@ -83,113 +68,82 @@ src/app/rpg/orchestration/state.py
 +    return bool(v)
 +
 +
-+def _normalize_provider_mode(v: Any) -> str:
++def _normalize_execution_status(v: Any) -> str:
 +    value = _safe_str(v).strip().lower()
-+    return value if value in _VALID_PROVIDER_MODES else "disabled"
++    return value if value in _VALID_PROVIDER_EXECUTION_STATUS else "pending"
 +
 +
-+def _normalize_request_status(v: Any) -> str:
++def _normalize_provider_event_type(v: Any) -> str:
 +    value = _safe_str(v).strip().lower()
-+    return value if value in _VALID_REQUEST_STATUS else "pending"
++    return value if value in _VALID_PROVIDER_EVENT_TYPES else "text_chunk"
 +
 +
-+def _normalize_request_mode(v: Any) -> str:
-+    value = _safe_str(v).strip().lower()
-+    return value if value in _VALID_REQUEST_MODES else "dialogue"
++def build_provider_execution_id(request_id: str) -> str:
++    """Build a deterministic provider execution id from request id."""
++    return f"provexec:{_safe_str(request_id)}"
 +
 +
-+def build_llm_request_id(tick: int, sequence_index: int, actor_id: str, request_index: int) -> str:
-+    """Build a deterministic orchestration request id."""
-+    return (
-+        f"llmreq:{_safe_int(tick)}:"
-+        f"{_safe_int(sequence_index)}:"
-+        f"{_safe_str(actor_id)}:"
-+        f"{_safe_int(request_index)}"
-+    )
-+
-+
-+def _sort_key_stream_event(event: Dict[str, Any]) -> Tuple[int, str]:
++def _sort_key_provider_event(event: Dict[str, Any]) -> Tuple[int, str]:
 +    return (
 +        _safe_int(event.get("event_index"), 0),
 +        _safe_str(event.get("event_type")),
 +    )
 +
 +
-+def _sort_key_request(request: Dict[str, Any]) -> Tuple[int, str, str]:
++def _sort_key_provider_execution(item: Dict[str, Any]) -> Tuple[int, str]:
 +    return (
-+        _safe_int(request.get("tick"), 0),
-+        _safe_str(request.get("request_id")),
-+        _safe_str(request.get("turn_id")),
++        _safe_int(item.get("tick"), 0),
++        _safe_str(item.get("execution_id")),
 +    )
 +
 +
-+def _normalize_stream_event(event: Dict[str, Any]) -> Dict[str, Any]:
++def _normalize_provider_event(event: Dict[str, Any]) -> Dict[str, Any]:
 +    event = _safe_dict(event)
 +    return {
 +        "event_index": max(0, _safe_int(event.get("event_index"), 0)),
-+        "event_type": _safe_str(event.get("event_type") or "text_chunk"),
++        "event_type": _normalize_provider_event_type(event.get("event_type")),
 +        "text": _safe_str(event.get("text")),
 +        "final": _safe_bool(event.get("final")),
 +        "raw": _safe_dict(event.get("raw")),
 +    }
 +
 +
-+def _normalize_request(request: Dict[str, Any]) -> Dict[str, Any]:
-+    request = _safe_dict(request)
-+
-+    stream_events = [
-+        _normalize_stream_event(v)
-+        for v in _safe_list(request.get("stream_events"))
++def _normalize_provider_execution(item: Dict[str, Any]) -> Dict[str, Any]:
++    item = _safe_dict(item)
++    events = [
++        _normalize_provider_event(v)
++        for v in _safe_list(item.get("events"))
 +        if isinstance(v, dict)
 +    ]
-+    stream_events = sorted(stream_events, key=_sort_key_stream_event)[-_MAX_REQUEST_STREAM_EVENTS:]
-+
++    events = sorted(events, key=_sort_key_provider_event)[-_MAX_PROVIDER_EVENTS:]
 +    return {
-+        "request_id": _safe_str(request.get("request_id")),
-+        "tick": _safe_int(request.get("tick"), 0),
-+        "sequence_id": _safe_str(request.get("sequence_id")),
-+        "turn_id": _safe_str(request.get("turn_id")),
-+        "actor_id": _safe_str(request.get("actor_id")),
-+        "speaker_id": _safe_str(request.get("speaker_id")),
-+        "mode": _normalize_request_mode(request.get("mode")),
-+        "status": _normalize_request_status(request.get("status")),
-+        "provider": _safe_str(request.get("provider")),
-+        "model": _safe_str(request.get("model")),
-+        "input_payload": _safe_dict(request.get("input_payload")),
-+        "stream_events": stream_events,
-+        "output_text": _safe_str(request.get("output_text")),
-+        "error": _safe_str(request.get("error")),
++        "execution_id": _safe_str(item.get("execution_id")),
++        "request_id": _safe_str(item.get("request_id")),
++        "tick": _safe_int(item.get("tick"), 0),
++        "provider": _safe_str(item.get("provider")),
++        "model": _safe_str(item.get("model")),
++        "status": _normalize_execution_status(item.get("status")),
++        "events": events,
++        "output_text": _safe_str(item.get("output_text")),
++        "error": _safe_str(item.get("error")),
 +    }
 +
 +
-+def _normalize_llm_state(llm_state: Dict[str, Any]) -> Dict[str, Any]:
-+    llm_state = _safe_dict(llm_state)
-+
-+    active_requests = [
-+        _normalize_request(v)
-+        for v in _safe_list(llm_state.get("active_requests"))
++def _normalize_live_provider_state(live_state: Dict[str, Any]) -> Dict[str, Any]:
++    live_state = _safe_dict(live_state)
++    executions = [
++        _normalize_provider_execution(v)
++        for v in _safe_list(live_state.get("executions"))
 +        if isinstance(v, dict)
 +    ]
-+    active_requests = sorted(active_requests, key=_sort_key_request)[-_MAX_ACTIVE_REQUESTS:]
-+
-+    completed_requests = [
-+        _normalize_request(v)
-+        for v in _safe_list(llm_state.get("completed_requests"))
-+        if isinstance(v, dict)
-+    ]
-+    completed_requests = sorted(completed_requests, key=_sort_key_request)[-_MAX_COMPLETED_REQUESTS:]
-+
++    executions = sorted(executions, key=_sort_key_provider_execution)[-_MAX_PROVIDER_EXECUTIONS:]
 +    return {
-+        "active_requests": active_requests,
-+        "completed_requests": completed_requests,
-+        "request_counter": max(0, _safe_int(llm_state.get("request_counter"), 0)),
-+        "provider_mode": _normalize_provider_mode(llm_state.get("provider_mode")),
-+        "last_error": _safe_dict(llm_state.get("last_error")),
++        "executions": executions,
 +    }
 +
 +
-+def ensure_llm_orchestration_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Ensure simulation_state contains normalized LLM orchestration state."""
++def ensure_live_provider_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Ensure simulation_state contains normalized live provider state."""
 +    if not isinstance(simulation_state, dict):
 +        simulation_state = {}
 +
@@ -197,54 +151,55 @@ src/app/rpg/orchestration/state.py
 +    if not isinstance(orchestration_state, dict):
 +        orchestration_state = simulation_state["orchestration_state"] = {}
 +
-+    llm_state = orchestration_state.get("llm")
-+    orchestration_state["llm"] = _normalize_llm_state(llm_state)
++    live_state = orchestration_state.get("live_provider")
++    orchestration_state["live_provider"] = _normalize_live_provider_state(live_state)
 +    simulation_state["orchestration_state"] = orchestration_state
 +    return simulation_state
 +
 +
-+def get_llm_orchestration_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Return normalized LLM orchestration state."""
-+    simulation_state = ensure_llm_orchestration_state(simulation_state)
++def get_live_provider_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Return normalized live provider state."""
++    simulation_state = ensure_live_provider_state(simulation_state)
 +    orchestration_state = _safe_dict(simulation_state.get("orchestration_state"))
-+    return _safe_dict(orchestration_state.get("llm"))
++    return _safe_dict(orchestration_state.get("live_provider"))
 *** End Patch
-3) Update file
-src/app/rpg/presentation/__init__.py
+2) Update file
+src/app/rpg/orchestration/__init__.py
 
-Export an orchestration bridge placeholder now so later chunks can integrate it cleanly.
+Export the live provider state helpers.
 
 *** Begin Patch
-*** Update File: src/app/rpg/presentation/__init__.py
+*** Update File: src/app/rpg/orchestration/__init__.py
 @@
- from .runtime_bridge import (
-     build_runtime_presentation_payload,
+ from .controller import (
+     execute_llm_request_for_turn,
  )
-+from .orchestration_bridge import (
-+    build_orchestration_presentation_payload,
++from .live_provider import (
++    ensure_live_provider_state,
++    get_live_provider_state,
++    build_provider_execution_id,
 +)
 @@
-     "build_runtime_presentation_payload",
-+    "build_orchestration_presentation_payload",
+     "apply_provider_result_to_runtime_turn",
+     "execute_llm_request_for_turn",
++    "ensure_live_provider_state",
++    "get_live_provider_state",
++    "build_provider_execution_id",
  ]
 *** End Patch
-4) Add file
-src/app/rpg/presentation/orchestration_bridge.py
-
-This is the read-only bridge shell for orchestration state.
-
+3) Add file
+src/app/rpg/presentation/live_provider_bridge.py
 *** Begin Patch
-*** Add File: src/app/rpg/presentation/orchestration_bridge.py
-+"""Phase 10.6 — Orchestration-to-presentation bridge.
+*** Add File: src/app/rpg/presentation/live_provider_bridge.py
++"""Phase 10.7 — Live provider state to presentation bridge.
 +
-+Pure read-only bridge from normalized orchestration state to presentation
-+payload shape.
++Pure read-only bridge exposing compact provider execution diagnostics.
 +"""
 +from __future__ import annotations
 +
 +from typing import Any, Dict, List
 +
-+from app.rpg.orchestration.state import get_llm_orchestration_state
++from app.rpg.orchestration.live_provider import get_live_provider_state
 +
 +
 +def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -266,675 +221,512 @@ This is the read-only bridge shell for orchestration state.
 +        return default
 +
 +
-+def _build_request_payload(item: Dict[str, Any]) -> Dict[str, Any]:
++def _build_execution_payload(item: Dict[str, Any]) -> Dict[str, Any]:
 +    item = _safe_dict(item)
 +    return {
++        "execution_id": _safe_str(item.get("execution_id")),
 +        "request_id": _safe_str(item.get("request_id")),
 +        "tick": _safe_int(item.get("tick"), 0),
-+        "sequence_id": _safe_str(item.get("sequence_id")),
-+        "turn_id": _safe_str(item.get("turn_id")),
-+        "actor_id": _safe_str(item.get("actor_id")),
-+        "speaker_id": _safe_str(item.get("speaker_id")),
-+        "mode": _safe_str(item.get("mode")),
-+        "status": _safe_str(item.get("status")),
 +        "provider": _safe_str(item.get("provider")),
 +        "model": _safe_str(item.get("model")),
++        "status": _safe_str(item.get("status")),
 +        "output_text": _safe_str(item.get("output_text")),
 +        "error": _safe_str(item.get("error")),
-+        "stream_event_count": len(_safe_list(item.get("stream_events"))),
++        "event_count": len(_safe_list(item.get("events"))),
 +    }
 +
 +
-+def build_orchestration_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Build a pure presentation payload from orchestration state."""
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+
-+    active_requests = [
-+        _build_request_payload(v)
-+        for v in _safe_list(llm_state.get("active_requests"))
++def build_live_provider_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Build pure presentation payload for live provider execution state."""
++    live_state = get_live_provider_state(simulation_state)
++    executions = [
++        _build_execution_payload(v)
++        for v in _safe_list(live_state.get("executions"))
 +        if isinstance(v, dict)
 +    ]
-+    completed_requests = [
-+        _build_request_payload(v)
-+        for v in _safe_list(llm_state.get("completed_requests"))
-+        if isinstance(v, dict)
-+    ]
-+
++    executions = sorted(
++        executions,
++        key=lambda item: (
++            _safe_int(item.get("tick"), 0),
++            _safe_str(item.get("execution_id")),
++        ),
++    )
 +    return {
-+        "llm_orchestration": {
-+            "provider_mode": _safe_str(llm_state.get("provider_mode")),
-+            "request_counter": _safe_int(llm_state.get("request_counter"), 0),
-+            "active_requests": active_requests,
-+            "completed_requests": completed_requests,
-+            "last_error": _safe_dict(llm_state.get("last_error")),
++        "live_provider": {
++            "executions": executions,
 +        }
 +    }
 *** End Patch
-5) Add tests
-src/tests/functional/test_phase106_orchestration_state_functional.py
+4) Update file
+src/app/rpg/presentation/__init__.py
+
+Export the live provider bridge.
+
 *** Begin Patch
-*** Add File: src/tests/functional/test_phase106_orchestration_state_functional.py
-+from app.rpg.orchestration.state import (
-+    ensure_llm_orchestration_state,
-+    get_llm_orchestration_state,
-+    build_llm_request_id,
+*** Update File: src/app/rpg/presentation/__init__.py
+@@
+ from .orchestration_bridge import (
+     build_orchestration_presentation_payload,
+ )
++from .live_provider_bridge import (
++    build_live_provider_presentation_payload,
++)
+@@
+     "build_runtime_presentation_payload",
+     "build_orchestration_presentation_payload",
++    "build_live_provider_presentation_payload",
+ ]
+*** End Patch
+5) Add tests
+src/tests/functional/test_phase107_live_provider_state_functional.py
+*** Begin Patch
+*** Add File: src/tests/functional/test_phase107_live_provider_state_functional.py
++from app.rpg.orchestration.live_provider import (
++    ensure_live_provider_state,
++    get_live_provider_state,
++    build_provider_execution_id,
 +)
 +
 +
-+def test_phase106_llm_orchestration_state_is_created_and_normalized():
-+    state = ensure_llm_orchestration_state({})
-+    llm = get_llm_orchestration_state(state)
++def test_phase107_live_provider_state_is_created_and_normalized():
++    state = ensure_live_provider_state({})
++    live_state = get_live_provider_state(state)
 +
 +    assert "orchestration_state" in state
-+    assert "llm" in state["orchestration_state"]
-+    assert llm["active_requests"] == []
-+    assert llm["completed_requests"] == []
-+    assert llm["request_counter"] == 0
-+    assert llm["provider_mode"] == "disabled"
-+    assert llm["last_error"] == {}
++    assert "live_provider" in state["orchestration_state"]
++    assert live_state["executions"] == []
 +
 +
-+def test_phase106_llm_request_ids_are_deterministic():
-+    assert build_llm_request_id(12, 3, "comp:lyra", 0) == "llmreq:12:3:comp:lyra:0"
++def test_phase107_provider_execution_id_is_deterministic():
++    assert build_provider_execution_id("llmreq:12:3:comp:lyra:0") == "provexec:llmreq:12:3:comp:lyra:0"
 +
 +
-+def test_phase106_llm_state_is_bounded():
-+    active_requests = []
-+    completed_requests = []
-+    for i in range(10):
-+        active_requests.append({
++def test_phase107_live_provider_state_is_bounded():
++    executions = []
++    for i in range(20):
++        executions.append({
++            "execution_id": f"provexec:llmreq:1:{i}:npc:{i}:0",
 +            "request_id": f"llmreq:1:{i}:npc:{i}:0",
 +            "tick": 1,
-+            "sequence_id": "seq:1:0",
-+            "turn_id": f"turn:1:{i}:npc:{i}",
-+            "actor_id": f"npc:{i}",
-+            "speaker_id": f"npc:{i}",
-+            "mode": "dialogue",
-+            "status": "pending",
-+            "provider": "test",
-+            "model": "test-model",
-+            "input_payload": {},
-+            "stream_events": [],
-+            "output_text": "",
-+            "error": "",
-+        })
-+    for i in range(30):
-+        completed_requests.append({
-+            "request_id": f"llmreq:2:{i}:npc:{i}:0",
-+            "tick": 2,
-+            "sequence_id": "seq:2:0",
-+            "turn_id": f"turn:2:{i}:npc:{i}",
-+            "actor_id": f"npc:{i}",
-+            "speaker_id": f"npc:{i}",
-+            "mode": "dialogue",
++            "provider": "openai",
++            "model": "gpt-test",
 +            "status": "complete",
-+            "provider": "test",
-+            "model": "test-model",
-+            "input_payload": {},
-+            "stream_events": [],
++            "events": [],
 +            "output_text": "ok",
 +            "error": "",
 +        })
 +
-+    state = ensure_llm_orchestration_state({
++    state = ensure_live_provider_state({
 +        "orchestration_state": {
-+            "llm": {
-+                "active_requests": active_requests,
-+                "completed_requests": completed_requests,
-+                "request_counter": 99,
-+                "provider_mode": "capture",
++            "live_provider": {
++                "executions": executions,
 +            }
 +        }
 +    })
-+    llm = get_llm_orchestration_state(state)
-+    assert len(llm["active_requests"]) == 4
-+    assert len(llm["completed_requests"]) == 20
-+    assert llm["provider_mode"] == "capture"
-+    assert llm["request_counter"] == 99
++    live_state = get_live_provider_state(state)
++    assert len(live_state["executions"]) == 12
 *** End Patch
-6) Add tests
-src/tests/regression/test_phase106_orchestration_bridge_regression.py
+6) Add regression test
+src/tests/regression/test_phase107_live_provider_bridge_regression.py
 *** Begin Patch
-*** Add File: src/tests/regression/test_phase106_orchestration_bridge_regression.py
-+from app.rpg.presentation.orchestration_bridge import build_orchestration_presentation_payload
+*** Add File: src/tests/regression/test_phase107_live_provider_bridge_regression.py
++from app.rpg.presentation.live_provider_bridge import build_live_provider_presentation_payload
 +
 +
-+def test_phase106_orchestration_bridge_payload_shape_is_stable():
++def test_phase107_live_provider_bridge_payload_shape_is_stable():
 +    state = {
 +        "orchestration_state": {
-+            "llm": {
-+                "provider_mode": "replay",
-+                "request_counter": 3,
-+                "active_requests": [
++            "live_provider": {
++                "executions": [
 +                    {
++                        "execution_id": "provexec:llmreq:10:1:comp:lyra:0",
 +                        "request_id": "llmreq:10:1:comp:lyra:0",
 +                        "tick": 10,
-+                        "sequence_id": "seq:10:0",
-+                        "turn_id": "turn:10:1:comp:lyra",
-+                        "actor_id": "comp:lyra",
-+                        "speaker_id": "comp:lyra",
-+                        "mode": "dialogue",
-+                        "status": "streaming",
 +                        "provider": "openai",
 +                        "model": "gpt-test",
-+                        "input_payload": {},
-+                        "stream_events": [{"event_index": 0, "event_type": "text_chunk", "text": "We ", "final": False}],
++                        "status": "streaming",
++                        "events": [
++                            {
++                                "event_index": 0,
++                                "event_type": "request_started",
++                                "text": "",
++                                "final": False,
++                                "raw": {},
++                            }
++                        ],
 +                        "output_text": "",
 +                        "error": "",
 +                    }
-+                ],
-+                "completed_requests": [],
-+                "last_error": {},
++                ]
 +            }
 +        }
 +    }
 +
-+    payload = build_orchestration_presentation_payload(state)
-+    llm = payload["llm_orchestration"]
-+
-+    assert sorted(llm.keys()) == sorted([
-+        "provider_mode",
-+        "request_counter",
-+        "active_requests",
-+        "completed_requests",
-+        "last_error",
-+    ])
-+    assert llm["provider_mode"] == "replay"
-+    assert llm["active_requests"][0]["stream_event_count"] == 1
++    payload = build_live_provider_presentation_payload(state)
++    assert sorted(payload["live_provider"].keys()) == ["executions"]
++    assert payload["live_provider"]["executions"][0]["event_count"] == 1
 *** End Patch
 END OF PART 1/6
 
 Next chunk is:
 
-Part 2/6: orchestration request lifecycle mutators
+Part 2/6: live provider execution lifecycle mutators
 
-Part 2/6: orchestration request lifecycle mutators
+Part 2/6: live provider execution lifecycle mutators
 
 Below is Part 2/6 only.
 
 Hard boundary: this message contains only
-Part 2/6: orchestration request lifecycle mutators
+Part 2/6: live provider execution lifecycle mutators
 
-This chunk adds the bounded request lifecycle on top of the orchestration state introduced in Part 1, while preserving the same deterministic and explicit-boundary constraints.
-
-PART 2/6 — ORCHESTRATION REQUEST LIFECYCLE MUTATORS
+PART 2/6 — LIVE PROVIDER EXECUTION LIFECYCLE MUTATORS
 1) Update file
 src/app/rpg/orchestration/__init__.py
 
-Export the request lifecycle mutators added in this part.
+Export the execution lifecycle mutators added in this part.
 
 *** Begin Patch
 *** Update File: src/app/rpg/orchestration/__init__.py
 @@
- from .state import (
-     ensure_llm_orchestration_state,
-     get_llm_orchestration_state,
-     build_llm_request_id,
-+    begin_llm_request,
-+    append_llm_stream_event,
-+    finalize_llm_request,
-+    fail_llm_request,
-+    trim_llm_orchestration_state,
+ from .live_provider import (
+     ensure_live_provider_state,
+     get_live_provider_state,
+     build_provider_execution_id,
++    begin_provider_execution,
++    append_provider_execution_event,
++    finalize_provider_execution,
++    fail_provider_execution,
++    trim_live_provider_state,
  )
- 
- __all__ = [
-     "ensure_llm_orchestration_state",
-     "get_llm_orchestration_state",
-     "build_llm_request_id",
-+    "begin_llm_request",
-+    "append_llm_stream_event",
-+    "finalize_llm_request",
-+    "fail_llm_request",
-+    "trim_llm_orchestration_state",
+@@
+     "ensure_live_provider_state",
+     "get_live_provider_state",
+     "build_provider_execution_id",
++    "begin_provider_execution",
++    "append_provider_execution_event",
++    "finalize_provider_execution",
++    "fail_provider_execution",
++    "trim_live_provider_state",
  ]
 *** End Patch
 2) Update file
-src/app/rpg/orchestration/state.py
+src/app/rpg/orchestration/live_provider.py
 
-Add the orchestration request mutator API: begin request, append structured stream event, finalize request, fail request, trim state.
+Add bounded execution mutators: begin execution, append provider event, finalize execution, fail execution, trim state.
 
 *** Begin Patch
-*** Update File: src/app/rpg/orchestration/state.py
+*** Update File: src/app/rpg/orchestration/live_provider.py
 @@
- def get_llm_orchestration_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-     """Return normalized LLM orchestration state."""
-     simulation_state = ensure_llm_orchestration_state(simulation_state)
+ def get_live_provider_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Return normalized live provider state."""
+     simulation_state = ensure_live_provider_state(simulation_state)
      orchestration_state = _safe_dict(simulation_state.get("orchestration_state"))
-     return _safe_dict(orchestration_state.get("llm"))
+     return _safe_dict(orchestration_state.get("live_provider"))
 +
 +
-+def _set_llm_orchestration_state(
++def _set_live_provider_state(
 +    simulation_state: Dict[str, Any],
-+    llm_state: Dict[str, Any],
++    live_state: Dict[str, Any],
 +) -> Dict[str, Any]:
-+    """Persist normalized LLM orchestration state back into simulation_state."""
-+    simulation_state = ensure_llm_orchestration_state(simulation_state)
++    """Persist normalized live provider state back into simulation_state."""
++    simulation_state = ensure_live_provider_state(simulation_state)
 +    orchestration_state = _safe_dict(simulation_state.get("orchestration_state"))
-+    orchestration_state["llm"] = _normalize_llm_state(llm_state)
++    orchestration_state["live_provider"] = _normalize_live_provider_state(live_state)
 +    simulation_state["orchestration_state"] = orchestration_state
 +    return simulation_state
 +
 +
-+def _find_request_index_by_id(requests: List[Dict[str, Any]], request_id: str) -> int:
-+    request_id = _safe_str(request_id)
-+    for idx, request in enumerate(requests):
-+        if _safe_str(_safe_dict(request).get("request_id")) == request_id:
++def _find_execution_index_by_id(executions: List[Dict[str, Any]], execution_id: str) -> int:
++    execution_id = _safe_str(execution_id)
++    for idx, item in enumerate(executions):
++        if _safe_str(_safe_dict(item).get("execution_id")) == execution_id:
 +            return idx
 +    return -1
 +
 +
-+def _dedupe_and_sort_stream_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++def _dedupe_and_sort_provider_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 +    deduped: Dict[Tuple[int, str], Dict[str, Any]] = {}
-+    for event in events:
-+        normalized = _normalize_stream_event(event)
++    for item in events:
++        normalized = _normalize_provider_event(item)
 +        key = (
 +            _safe_int(normalized.get("event_index"), 0),
 +            _safe_str(normalized.get("event_type")),
 +        )
 +        deduped[key] = normalized
-+    out = sorted(deduped.values(), key=_sort_key_stream_event)
-+    return out[-_MAX_REQUEST_STREAM_EVENTS:]
++    out = sorted(deduped.values(), key=_sort_key_provider_event)
++    return out[-_MAX_PROVIDER_EVENTS:]
 +
 +
-+def _move_request_to_completed(
-+    llm_state: Dict[str, Any],
-+    request: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    llm_state = _safe_dict(llm_state)
-+    active_requests = list(_safe_list(llm_state.get("active_requests")))
-+    completed_requests = list(_safe_list(llm_state.get("completed_requests")))
-+
-+    request_id = _safe_str(_safe_dict(request).get("request_id"))
-+    active_requests = [
-+        _normalize_request(v)
-+        for v in active_requests
-+        if _safe_str(_safe_dict(v).get("request_id")) != request_id
-+    ]
-+
-+    completed_requests.append(_normalize_request(request))
-+    completed_requests = sorted(completed_requests, key=_sort_key_request)[-_MAX_COMPLETED_REQUESTS:]
-+
-+    llm_state["active_requests"] = active_requests
-+    llm_state["completed_requests"] = completed_requests
-+    return llm_state
++def trim_live_provider_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    """Normalize and trim live provider state to bounded caps."""
++    live_state = get_live_provider_state(simulation_state)
++    return _set_live_provider_state(simulation_state, live_state)
 +
 +
-+def trim_llm_orchestration_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    """Normalize and trim orchestration state to bounded caps."""
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    return _set_llm_orchestration_state(simulation_state, llm_state)
-+
-+
-+def begin_llm_request(
++def begin_provider_execution(
 +    simulation_state: Dict[str, Any],
 +    *,
++    request_id: str,
 +    tick: int,
-+    sequence_index: int,
-+    actor_id: str,
-+    turn_id: str,
-+    sequence_id: str = "",
-+    speaker_id: str = "",
-+    mode: str = "dialogue",
-+    provider: str = "",
-+    model: str = "",
-+    input_payload: Dict[str, Any] | None = None,
++    provider: str,
++    model: str,
 +) -> Dict[str, Any]:
-+    """Create or replace an active orchestration request deterministically."""
-+    simulation_state = ensure_llm_orchestration_state(simulation_state)
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    active_requests = list(_safe_list(llm_state.get("active_requests")))
++    """Create or replace a provider execution record deterministically."""
++    simulation_state = ensure_live_provider_state(simulation_state)
++    live_state = get_live_provider_state(simulation_state)
++    executions = list(_safe_list(live_state.get("executions")))
 +
++    request_id = _safe_str(request_id)
 +    tick = _safe_int(tick, 0)
-+    sequence_index = max(0, _safe_int(sequence_index, 0))
-+    actor_id = _safe_str(actor_id)
-+    turn_id = _safe_str(turn_id)
-+    speaker_id = _safe_str(speaker_id) or actor_id
-+    mode = _normalize_request_mode(mode)
 +    provider = _safe_str(provider)
 +    model = _safe_str(model)
-+    input_payload = _safe_dict(input_payload)
 +
-+    if not actor_id or not turn_id:
++    if not request_id:
 +        return simulation_state
 +
-+    request_counter = max(0, _safe_int(llm_state.get("request_counter"), 0))
-+    request_id = build_llm_request_id(tick, sequence_index, actor_id, request_counter)
-+    sequence_id = _safe_str(sequence_id) or f"seq:{tick}:{sequence_index}"
-+
-+    request = _normalize_request({
++    execution_id = build_provider_execution_id(request_id)
++    execution = _normalize_provider_execution({
++        "execution_id": execution_id,
 +        "request_id": request_id,
 +        "tick": tick,
-+        "sequence_id": sequence_id,
-+        "turn_id": turn_id,
-+        "actor_id": actor_id,
-+        "speaker_id": speaker_id,
-+        "mode": mode,
-+        "status": "pending",
 +        "provider": provider,
 +        "model": model,
-+        "input_payload": input_payload,
-+        "stream_events": [],
++        "status": "pending",
++        "events": [],
 +        "output_text": "",
 +        "error": "",
 +    })
 +
-+    existing_idx = _find_request_index_by_id(active_requests, request_id)
++    existing_idx = _find_execution_index_by_id(executions, execution_id)
 +    if existing_idx >= 0:
-+        active_requests[existing_idx] = request
++        executions[existing_idx] = execution
 +    else:
-+        active_requests.append(request)
++        executions.append(execution)
 +
-+    active_requests = sorted(
-+        [_normalize_request(v) for v in active_requests],
-+        key=_sort_key_request,
-+    )[-_MAX_ACTIVE_REQUESTS:]
++    executions = sorted(
++        [_normalize_provider_execution(v) for v in executions],
++        key=_sort_key_provider_execution,
++    )[-_MAX_PROVIDER_EXECUTIONS:]
 +
-+    llm_state["active_requests"] = active_requests
-+    llm_state["request_counter"] = request_counter + 1
-+    llm_state["last_error"] = {}
-+
-+    return _set_llm_orchestration_state(simulation_state, llm_state)
++    live_state["executions"] = executions
++    return _set_live_provider_state(simulation_state, live_state)
 +
 +
-+def append_llm_stream_event(
++def append_provider_execution_event(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    request_id: str,
++    execution_id: str,
 +    event_index: int,
-+    event_type: str = "text_chunk",
++    event_type: str,
 +    text: str = "",
 +    final: bool = False,
 +    raw: Dict[str, Any] | None = None,
 +) -> Dict[str, Any]:
-+    """Append a structured stream event to an active request deterministically."""
-+    simulation_state = ensure_llm_orchestration_state(simulation_state)
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    active_requests = list(_safe_list(llm_state.get("active_requests")))
++    """Append a structured provider event deterministically."""
++    simulation_state = ensure_live_provider_state(simulation_state)
++    live_state = get_live_provider_state(simulation_state)
++    executions = list(_safe_list(live_state.get("executions")))
 +
-+    request_id = _safe_str(request_id)
-+    if not request_id:
++    execution_id = _safe_str(execution_id)
++    if not execution_id:
 +        return simulation_state
 +
-+    request_idx = _find_request_index_by_id(active_requests, request_id)
-+    if request_idx < 0:
++    execution_idx = _find_execution_index_by_id(executions, execution_id)
++    if execution_idx < 0:
 +        return simulation_state
 +
-+    request = _normalize_request(active_requests[request_idx])
-+    stream_events = list(_safe_list(request.get("stream_events")))
-+    stream_events.append({
++    execution = _normalize_provider_execution(executions[execution_idx])
++    events = list(_safe_list(execution.get("events")))
++    events.append({
 +        "event_index": max(0, _safe_int(event_index, 0)),
 +        "event_type": _safe_str(event_type) or "text_chunk",
 +        "text": _safe_str(text),
 +        "final": _safe_bool(final),
 +        "raw": _safe_dict(raw),
 +    })
-+    request["stream_events"] = _dedupe_and_sort_stream_events(stream_events)
++    execution["events"] = _dedupe_and_sort_provider_events(events)
 +
-+    if request["status"] not in {"complete", "failed", "replayed"}:
-+        request["status"] = "streaming"
++    if execution["status"] not in {"complete", "failed"}:
++        execution["status"] = "streaming"
 +
-+    active_requests[request_idx] = _normalize_request(request)
-+    llm_state["active_requests"] = active_requests
++    executions[execution_idx] = _normalize_provider_execution(execution)
++    live_state["executions"] = executions
++    return _set_live_provider_state(simulation_state, live_state)
 +
-+    return _set_llm_orchestration_state(simulation_state, llm_state)
 +
-+
-+def finalize_llm_request(
++def finalize_provider_execution(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    request_id: str,
++    execution_id: str,
 +    output_text: str = "",
-+    replayed: bool = False,
 +) -> Dict[str, Any]:
-+    """Finalize an active request and move it to completed history."""
-+    simulation_state = ensure_llm_orchestration_state(simulation_state)
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    active_requests = list(_safe_list(llm_state.get("active_requests")))
++    """Finalize a provider execution deterministically."""
++    simulation_state = ensure_live_provider_state(simulation_state)
++    live_state = get_live_provider_state(simulation_state)
++    executions = list(_safe_list(live_state.get("executions")))
 +
-+    request_id = _safe_str(request_id)
-+    if not request_id:
++    execution_id = _safe_str(execution_id)
++    if not execution_id:
 +        return simulation_state
 +
-+    request_idx = _find_request_index_by_id(active_requests, request_id)
-+    if request_idx < 0:
++    execution_idx = _find_execution_index_by_id(executions, execution_id)
++    if execution_idx < 0:
 +        return simulation_state
 +
-+    request = _normalize_request(active_requests[request_idx])
++    execution = _normalize_provider_execution(executions[execution_idx])
 +    if output_text:
-+        request["output_text"] = _safe_str(output_text)
-+    request["status"] = "replayed" if _safe_bool(replayed) else "complete"
-+    request["error"] = ""
++        execution["output_text"] = _safe_str(output_text)
++    execution["status"] = "complete"
++    execution["error"] = ""
 +
-+    llm_state = _move_request_to_completed(llm_state, request)
-+    llm_state["last_error"] = {}
++    executions[execution_idx] = _normalize_provider_execution(execution)
++    live_state["executions"] = executions
++    return _set_live_provider_state(simulation_state, live_state)
 +
-+    return _set_llm_orchestration_state(simulation_state, llm_state)
 +
-+
-+def fail_llm_request(
++def fail_provider_execution(
 +    simulation_state: Dict[str, Any],
 +    *,
-+    request_id: str,
++    execution_id: str,
 +    error: str,
 +) -> Dict[str, Any]:
-+    """Fail an active request and move it to completed history."""
-+    simulation_state = ensure_llm_orchestration_state(simulation_state)
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    active_requests = list(_safe_list(llm_state.get("active_requests")))
++    """Fail a provider execution deterministically."""
++    simulation_state = ensure_live_provider_state(simulation_state)
++    live_state = get_live_provider_state(simulation_state)
++    executions = list(_safe_list(live_state.get("executions")))
 +
-+    request_id = _safe_str(request_id)
++    execution_id = _safe_str(execution_id)
 +    error = _safe_str(error)
-+    if not request_id:
++    if not execution_id:
 +        return simulation_state
 +
-+    request_idx = _find_request_index_by_id(active_requests, request_id)
-+    if request_idx < 0:
++    execution_idx = _find_execution_index_by_id(executions, execution_id)
++    if execution_idx < 0:
 +        return simulation_state
 +
-+    request = _normalize_request(active_requests[request_idx])
-+    request["status"] = "failed"
-+    request["error"] = error
++    execution = _normalize_provider_execution(executions[execution_idx])
++    execution["status"] = "failed"
++    execution["error"] = error
 +
-+    llm_state = _move_request_to_completed(llm_state, request)
-+    llm_state["last_error"] = {
-+        "request_id": request_id,
-+        "error": error,
-+    }
-+
-+    return _set_llm_orchestration_state(simulation_state, llm_state)
++    executions[execution_idx] = _normalize_provider_execution(execution)
++    live_state["executions"] = executions
++    return _set_live_provider_state(simulation_state, live_state)
 *** End Patch
 3) Add tests
-src/tests/functional/test_phase106_request_lifecycle_functional.py
+src/tests/functional/test_phase107_live_provider_lifecycle_functional.py
 *** Begin Patch
-*** Add File: src/tests/functional/test_phase106_request_lifecycle_functional.py
-+from app.rpg.orchestration.state import (
-+    begin_llm_request,
-+    append_llm_stream_event,
-+    finalize_llm_request,
-+    fail_llm_request,
-+    get_llm_orchestration_state,
+*** Add File: src/tests/functional/test_phase107_live_provider_lifecycle_functional.py
++from app.rpg.orchestration.live_provider import (
++    begin_provider_execution,
++    append_provider_execution_event,
++    finalize_provider_execution,
++    fail_provider_execution,
++    get_live_provider_state,
 +)
 +
 +
-+def test_phase106_begin_llm_request_creates_pending_active_request():
++def test_phase107_begin_provider_execution_creates_pending_execution():
 +    state = {}
-+    state = begin_llm_request(
++    state = begin_provider_execution(
 +        state,
++        request_id="llmreq:15:2:comp:lyra:0",
 +        tick=15,
-+        sequence_index=2,
-+        actor_id="comp:lyra",
-+        turn_id="turn:15:2:comp:lyra",
-+        sequence_id="seq:15:0",
-+        speaker_id="comp:lyra",
-+        mode="dialogue",
 +        provider="openai",
 +        model="gpt-test",
-+        input_payload={"prompt": "test"},
 +    )
 +
-+    llm = get_llm_orchestration_state(state)
-+    assert llm["request_counter"] == 1
-+    assert len(llm["active_requests"]) == 1
-+    request = llm["active_requests"][0]
-+    assert request["request_id"] == "llmreq:15:2:comp:lyra:0"
-+    assert request["status"] == "pending"
-+    assert request["provider"] == "openai"
-+    assert request["model"] == "gpt-test"
-+    assert request["input_payload"] == {"prompt": "test"}
++    live_state = get_live_provider_state(state)
++    assert len(live_state["executions"]) == 1
++    execution = live_state["executions"][0]
++    assert execution["execution_id"] == "provexec:llmreq:15:2:comp:lyra:0"
++    assert execution["status"] == "pending"
++    assert execution["provider"] == "openai"
++    assert execution["model"] == "gpt-test"
 +
 +
-+def test_phase106_append_llm_stream_event_updates_active_request():
++def test_phase107_append_provider_execution_event_updates_execution():
 +    state = {}
-+    state = begin_llm_request(
-+        state,
-+        tick=20,
-+        sequence_index=1,
-+        actor_id="npc:guard",
-+        turn_id="turn:20:1:npc:guard",
-+    )
-+    state = append_llm_stream_event(
++    state = begin_provider_execution(
 +        state,
 +        request_id="llmreq:20:1:npc:guard:0",
++        tick=20,
++        provider="openai",
++        model="gpt-test",
++    )
++    state = append_provider_execution_event(
++        state,
++        execution_id="provexec:llmreq:20:1:npc:guard:0",
 +        event_index=0,
++        event_type="request_started",
++    )
++    state = append_provider_execution_event(
++        state,
++        execution_id="provexec:llmreq:20:1:npc:guard:0",
++        event_index=1,
 +        event_type="text_chunk",
 +        text="Hold ",
 +        final=False,
 +    )
-+    state = append_llm_stream_event(
-+        state,
-+        request_id="llmreq:20:1:npc:guard:0",
-+        event_index=1,
-+        event_type="text_chunk",
-+        text="there.",
-+        final=False,
-+    )
 +
-+    llm = get_llm_orchestration_state(state)
-+    request = llm["active_requests"][0]
-+    assert request["status"] == "streaming"
-+    assert len(request["stream_events"]) == 2
-+    assert request["stream_events"][0]["text"] == "Hold "
-+    assert request["stream_events"][1]["text"] == "there."
++    live_state = get_live_provider_state(state)
++    execution = live_state["executions"][0]
++    assert execution["status"] == "streaming"
++    assert len(execution["events"]) == 2
++    assert execution["events"][1]["text"] == "Hold "
 +
 +
-+def test_phase106_append_llm_stream_event_dedupes_by_event_index_and_type():
++def test_phase107_finalize_provider_execution_marks_complete():
 +    state = {}
-+    state = begin_llm_request(
++    state = begin_provider_execution(
 +        state,
-+        tick=22,
-+        sequence_index=0,
-+        actor_id="npc:guard",
-+        turn_id="turn:22:0:npc:guard",
-+    )
-+    state = append_llm_stream_event(
-+        state,
-+        request_id="llmreq:22:0:npc:guard:0",
-+        event_index=0,
-+        event_type="text_chunk",
-+        text="Old",
-+    )
-+    state = append_llm_stream_event(
-+        state,
-+        request_id="llmreq:22:0:npc:guard:0",
-+        event_index=0,
-+        event_type="text_chunk",
-+        text="New",
-+    )
-+
-+    llm = get_llm_orchestration_state(state)
-+    request = llm["active_requests"][0]
-+    assert len(request["stream_events"]) == 1
-+    assert request["stream_events"][0]["text"] == "New"
-+
-+
-+def test_phase106_finalize_llm_request_moves_to_completed():
-+    state = {}
-+    state = begin_llm_request(
-+        state,
++        request_id="llmreq:30:3:comp:lyra:0",
 +        tick=30,
-+        sequence_index=3,
-+        actor_id="comp:lyra",
-+        turn_id="turn:30:3:comp:lyra",
++        provider="openai",
++        model="gpt-test",
 +    )
-+    state = append_llm_stream_event(
++    state = finalize_provider_execution(
 +        state,
-+        request_id="llmreq:30:3:comp:lyra:0",
-+        event_index=0,
-+        text="We should move.",
-+    )
-+    state = finalize_llm_request(
-+        state,
-+        request_id="llmreq:30:3:comp:lyra:0",
++        execution_id="provexec:llmreq:30:3:comp:lyra:0",
 +        output_text="We should move.",
 +    )
 +
-+    llm = get_llm_orchestration_state(state)
-+    assert llm["active_requests"] == []
-+    assert len(llm["completed_requests"]) == 1
-+    request = llm["completed_requests"][0]
-+    assert request["status"] == "complete"
-+    assert request["output_text"] == "We should move."
++    live_state = get_live_provider_state(state)
++    execution = live_state["executions"][0]
++    assert execution["status"] == "complete"
++    assert execution["output_text"] == "We should move."
 +
 +
-+def test_phase106_finalize_llm_request_can_mark_replayed():
++def test_phase107_fail_provider_execution_marks_failed():
 +    state = {}
-+    state = begin_llm_request(
-+        state,
-+        tick=31,
-+        sequence_index=0,
-+        actor_id="npc:guard",
-+        turn_id="turn:31:0:npc:guard",
-+    )
-+    state = finalize_llm_request(
-+        state,
-+        request_id="llmreq:31:0:npc:guard:0",
-+        output_text="Stop.",
-+        replayed=True,
-+    )
-+
-+    llm = get_llm_orchestration_state(state)
-+    request = llm["completed_requests"][0]
-+    assert request["status"] == "replayed"
-+    assert request["output_text"] == "Stop."
-+
-+
-+def test_phase106_fail_llm_request_moves_to_completed_and_sets_last_error():
-+    state = {}
-+    state = begin_llm_request(
-+        state,
-+        tick=40,
-+        sequence_index=1,
-+        actor_id="npc:guard",
-+        turn_id="turn:40:1:npc:guard",
-+    )
-+    state = fail_llm_request(
++    state = begin_provider_execution(
 +        state,
 +        request_id="llmreq:40:1:npc:guard:0",
-+        error="provider timeout",
++        tick=40,
++        provider="openai",
++        model="gpt-test",
++    )
++    state = fail_provider_execution(
++        state,
++        execution_id="provexec:llmreq:40:1:npc:guard:0",
++        error="timeout",
 +    )
 +
-+    llm = get_llm_orchestration_state(state)
-+    assert llm["active_requests"] == []
-+    assert len(llm["completed_requests"]) == 1
-+    request = llm["completed_requests"][0]
-+    assert request["status"] == "failed"
-+    assert request["error"] == "provider timeout"
-+    assert llm["last_error"] == {
-+        "request_id": "llmreq:40:1:npc:guard:0",
-+        "error": "provider timeout",
-+    }
++    live_state = get_live_provider_state(state)
++    execution = live_state["executions"][0]
++    assert execution["status"] == "failed"
++    assert execution["error"] == "timeout"
 *** End Patch
 4) Add tests
-src/tests/unit/test_phase106_request_lifecycle_unit.py
+src/tests/unit/test_phase107_live_provider_lifecycle_unit.py
 *** Begin Patch
-*** Add File: src/tests/unit/test_phase106_request_lifecycle_unit.py
-+from app.rpg.orchestration.state import (
-+    _dedupe_and_sort_stream_events,
-+    _normalize_request,
+*** Add File: src/tests/unit/test_phase107_live_provider_lifecycle_unit.py
++from app.rpg.orchestration.live_provider import (
++    _dedupe_and_sort_provider_events,
++    _normalize_provider_execution,
 +)
 +
 +
-+def test_phase106_dedupe_and_sort_stream_events_overwrites_duplicates():
++def test_phase107_dedupe_and_sort_provider_events_overwrites_duplicates():
 +    events = [
 +        {
 +            "event_index": 1,
@@ -959,7 +751,7 @@ src/tests/unit/test_phase106_request_lifecycle_unit.py
 +        },
 +    ]
 +
-+    out = _dedupe_and_sort_stream_events(events)
++    out = _dedupe_and_sort_provider_events(events)
 +    assert len(out) == 2
 +    assert out[0]["event_index"] == 0
 +    assert out[0]["text"] == "A"
@@ -967,20 +759,15 @@ src/tests/unit/test_phase106_request_lifecycle_unit.py
 +    assert out[1]["text"] == "B2"
 +
 +
-+def test_phase106_normalize_request_bounds_stream_events():
-+    request = {
++def test_phase107_normalize_provider_execution_bounds_events():
++    execution = {
++        "execution_id": "provexec:llmreq:1:0:npc:a:0",
 +        "request_id": "llmreq:1:0:npc:a:0",
 +        "tick": 1,
-+        "sequence_id": "seq:1:0",
-+        "turn_id": "turn:1:0:npc:a",
-+        "actor_id": "npc:a",
-+        "speaker_id": "npc:a",
-+        "mode": "dialogue",
++        "provider": "openai",
++        "model": "gpt-test",
 +        "status": "streaming",
-+        "provider": "test",
-+        "model": "test-model",
-+        "input_payload": {},
-+        "stream_events": [
++        "events": [
 +            {
 +                "event_index": i,
 +                "event_type": "text_chunk",
@@ -988,149 +775,82 @@ src/tests/unit/test_phase106_request_lifecycle_unit.py
 +                "final": False,
 +                "raw": {},
 +            }
-+            for i in range(60)
++            for i in range(100)
 +        ],
 +        "output_text": "",
 +        "error": "",
 +    }
 +
-+    out = _normalize_request(request)
-+    assert len(out["stream_events"]) == 40
-+    assert out["stream_events"][0]["event_index"] == 20
-+    assert out["stream_events"][-1]["event_index"] == 59
++    out = _normalize_provider_execution(execution)
++    assert len(out["events"]) == 80
++    assert out["events"][0]["event_index"] == 20
++    assert out["events"][-1]["event_index"] == 99
 *** End Patch
 5) Update file
-src/app/rpg/presentation/orchestration_bridge.py
+src/app/rpg/presentation/live_provider_bridge.py
 
-Surface request status and error summary cleanly so the frontend/inspector can show lifecycle progress.
+Expose a little more lifecycle detail for inspector/debugging.
 
 *** Begin Patch
-*** Update File: src/app/rpg/presentation/orchestration_bridge.py
+*** Update File: src/app/rpg/presentation/live_provider_bridge.py
 @@
- def _build_request_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+ def _build_execution_payload(item: Dict[str, Any]) -> Dict[str, Any]:
      item = _safe_dict(item)
      return {
+         "execution_id": _safe_str(item.get("execution_id")),
          "request_id": _safe_str(item.get("request_id")),
          "tick": _safe_int(item.get("tick"), 0),
-         "sequence_id": _safe_str(item.get("sequence_id")),
-         "turn_id": _safe_str(item.get("turn_id")),
-         "actor_id": _safe_str(item.get("actor_id")),
-         "speaker_id": _safe_str(item.get("speaker_id")),
-         "mode": _safe_str(item.get("mode")),
-         "status": _safe_str(item.get("status")),
          "provider": _safe_str(item.get("provider")),
          "model": _safe_str(item.get("model")),
+         "status": _safe_str(item.get("status")),
          "output_text": _safe_str(item.get("output_text")),
          "error": _safe_str(item.get("error")),
-         "stream_event_count": len(_safe_list(item.get("stream_events"))),
-+        "has_input_payload": bool(_safe_dict(item.get("input_payload"))),
+         "event_count": len(_safe_list(item.get("events"))),
++        "is_complete": _safe_str(item.get("status")) == "complete",
++        "is_failed": _safe_str(item.get("status")) == "failed",
      }
 *** End Patch
 6) Add regression test
-src/tests/regression/test_phase106_request_counter_regression.py
+src/tests/regression/test_phase107_provider_execution_id_regression.py
 *** Begin Patch
-*** Add File: src/tests/regression/test_phase106_request_counter_regression.py
-+from app.rpg.orchestration.state import (
-+    begin_llm_request,
-+    get_llm_orchestration_state,
-+)
+*** Add File: src/tests/regression/test_phase107_provider_execution_id_regression.py
++from app.rpg.orchestration.live_provider import build_provider_execution_id
 +
 +
-+def test_phase106_request_counter_increments_deterministically():
-+    state = {}
-+    state = begin_llm_request(
-+        state,
-+        tick=5,
-+        sequence_index=0,
-+        actor_id="comp:lyra",
-+        turn_id="turn:5:0:comp:lyra",
-+    )
-+    state = begin_llm_request(
-+        state,
-+        tick=5,
-+        sequence_index=1,
-+        actor_id="npc:guard",
-+        turn_id="turn:5:1:npc:guard",
-+    )
-+
-+    llm = get_llm_orchestration_state(state)
-+    assert llm["request_counter"] == 2
-+    assert [v["request_id"] for v in llm["active_requests"]] == [
-+        "llmreq:5:0:comp:lyra:0",
-+        "llmreq:5:1:npc:guard:1",
-+    ]
++def test_phase107_provider_execution_id_same_request_same_output():
++    request_id = "llmreq:5:1:npc:guard:0"
++    assert build_provider_execution_id(request_id) == build_provider_execution_id(request_id)
 *** End Patch
 END OF PART 2/6
 
 Next chunk is:
 
-Part 3/6: request builder + provider interface
+Part 3/6: provider adapter interface + deterministic mock/live execution paths
 
-Part 3/6: request builder + provider interface
-Thought for 9s
+Part 3/6: provider adapter interface + deterministic mock/live execution paths
 
 Below is Part 3/6 only.
 
 Hard boundary: this message contains only
-Part 3/6: request builder + provider interface
+Part 3/6: provider adapter interface + deterministic mock/live execution paths. It continues the strict 10.7 patch flow on top of the 10.6 orchestration/controller structure.
 
-This chunk assumes Parts 1–2 are already applied and keeps the same explicit LLM boundary, deterministic request shaping, and bounded orchestration state model introduced for Phase 10.6.
-
-PART 3/6 — REQUEST BUILDER + PROVIDER INTERFACE
-1) Update file
-src/app/rpg/orchestration/__init__.py
-
-Export the request builder and provider interface helpers added in this part.
-
+PART 3/6 — PROVIDER ADAPTER INTERFACE + DETERMINISTIC MOCK/LIVE EXECUTION PATHS
+1) Add file
+src/app/rpg/orchestration/provider_adapter.py
 *** Begin Patch
-*** Update File: src/app/rpg/orchestration/__init__.py
-@@
- from .state import (
-     ensure_llm_orchestration_state,
-     get_llm_orchestration_state,
-     build_llm_request_id,
-     begin_llm_request,
-     append_llm_stream_event,
-     finalize_llm_request,
-     fail_llm_request,
-     trim_llm_orchestration_state,
- )
-+from .request_builder import (
-+    build_llm_request_payload,
-+)
-+from .provider_interface import (
-+    get_llm_provider_mode,
-+    set_llm_provider_mode,
-+    build_disabled_provider_result,
-+    build_replay_provider_result,
-+)
- 
- __all__ = [
-     "ensure_llm_orchestration_state",
-     "get_llm_orchestration_state",
-     "build_llm_request_id",
-     "begin_llm_request",
-     "append_llm_stream_event",
-     "finalize_llm_request",
-     "fail_llm_request",
-     "trim_llm_orchestration_state",
-+    "build_llm_request_payload",
-+    "get_llm_provider_mode",
-+    "set_llm_provider_mode",
-+    "build_disabled_provider_result",
-+    "build_replay_provider_result",
- ]
-*** End Patch
-2) Add file
-src/app/rpg/orchestration/request_builder.py
-*** Begin Patch
-*** Add File: src/app/rpg/orchestration/request_builder.py
-+"""Phase 10.6 — Deterministic LLM request payload builder."""
+*** Add File: src/app/rpg/orchestration/provider_adapter.py
++"""Phase 10.7 — Provider adapter interface.
++
++This module defines the narrow execution boundary for live provider calls.
++It supports:
++    - deterministic mock execution for tests / local runs
++    - explicit live execution adapter shell
++
++It never mutates simulation truth directly.
++"""
 +from __future__ import annotations
 +
-+from typing import Any, Dict, List
-+
-+from app.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
++from typing import Any, Dict, Iterable, List
 +
 +
 +def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -1143,6 +863,10 @@ src/app/rpg/orchestration/request_builder.py
 +
 +def _safe_str(v: Any) -> str:
 +    return "" if v is None else str(v)
++
++
++def _safe_bool(v: Any) -> bool:
++    return bool(v)
 +
 +
 +def _safe_int(v: Any, default: int = 0) -> int:
@@ -1152,1126 +876,226 @@ src/app/rpg/orchestration/request_builder.py
 +        return default
 +
 +
-+def _safe_bool(v: Any) -> bool:
-+    return bool(v)
++class BaseLLMProviderAdapter:
++    """Narrow provider adapter interface."""
++
++    def execute(self, request_payload: Dict[str, Any]) -> Dict[str, Any]:
++        raise NotImplementedError
 +
 +
-+def _find_turn(dialogue_state: Dict[str, Any], turn_id: str) -> Dict[str, Any]:
-+    turn_id = _safe_str(turn_id)
-+    for item in _safe_list(dialogue_state.get("turns")):
-+        item = _safe_dict(item)
-+        if _safe_str(item.get("turn_id")) == turn_id:
-+            return item
-+    return {}
++class DeterministicMockProviderAdapter(BaseLLMProviderAdapter):
++    """Deterministic provider adapter for tests and local orchestration.
 +
-+
-+def _compact_history(dialogue_state: Dict[str, Any], limit: int = 6) -> List[Dict[str, Any]]:
-+    turns = [
-+        _safe_dict(v)
-+        for v in _safe_list(dialogue_state.get("turns"))
-+        if isinstance(v, dict)
-+    ]
-+    turns = sorted(
-+        turns,
-+        key=lambda item: (
-+            _safe_int(item.get("tick"), 0),
-+            _safe_int(item.get("sequence_index"), 0),
-+            _safe_str(item.get("actor_id")),
-+        ),
-+    )
-+    out: List[Dict[str, Any]] = []
-+    for item in turns[-limit:]:
-+        out.append({
-+            "turn_id": _safe_str(item.get("turn_id")),
-+            "actor_id": _safe_str(item.get("actor_id")),
-+            "speaker_id": _safe_str(item.get("speaker_id")),
-+            "speaker_name": _safe_str(item.get("speaker_name")),
-+            "role": _safe_str(item.get("role")),
-+            "text": _safe_str(item.get("text")),
-+            "emotion": _safe_str(item.get("emotion")),
-+        })
-+    return out
-+
-+
-+def build_llm_request_payload(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    turn_id: str,
-+    mode: str = "dialogue",
-+    scene_state: Dict[str, Any] | None = None,
-+    dialogue_state: Dict[str, Any] | None = None,
-+    personality_profile: Dict[str, Any] | None = None,
-+    extra_constraints: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    """Build a deterministic structured payload for an LLM request.
-+
-+    This function is pure. It does not mutate runtime or orchestration state.
++    Behavior:
++        - if request_payload contains mock_response.text, use it
++        - else synthesize compact deterministic text from request context
++        - returns structured provider result with bounded stream events
 +    """
-+    simulation_state = _safe_dict(simulation_state)
-+    scene_state = _safe_dict(scene_state)
-+    dialogue_input_state = _safe_dict(dialogue_state)
-+    personality_profile = _safe_dict(personality_profile)
-+    extra_constraints = _safe_dict(extra_constraints)
 +
-+    runtime_dialogue_state = get_runtime_dialogue_state(simulation_state)
-+    active_turn = _find_turn(runtime_dialogue_state, turn_id)
-+    turn_id = _safe_str(turn_id)
++    def execute(self, request_payload: Dict[str, Any]) -> Dict[str, Any]:
++        request_payload = _safe_dict(request_payload)
++        turn = _safe_dict(request_payload.get("turn"))
++        context = _safe_dict(request_payload.get("context"))
++        mock_response = _safe_dict(request_payload.get("mock_response"))
 +
-+    scene_id = _safe_str(scene_state.get("scene_id") or dialogue_input_state.get("scene_id"))
-+    location_id = _safe_str(scene_state.get("location_id") or dialogue_input_state.get("location_id"))
-+    topic = _safe_str(dialogue_input_state.get("topic"))
++        turn_id = _safe_str(turn.get("turn_id"))
++        speaker_name = _safe_str(turn.get("speaker_name"))
++        emotion = _safe_str(turn.get("emotion") or "neutral")
++        topic = _safe_str(context.get("topic"))
 +
-+    style_tags = sorted([
-+        _safe_str(v)
-+        for v in _safe_list(active_turn.get("style_tags"))
-+        if _safe_str(v)
-+    ])
++        output_text = _safe_str(mock_response.get("text"))
++        if not output_text:
++            parts: List[str] = []
++            if speaker_name:
++                parts.append(f"{speaker_name}:")
++            if topic:
++                parts.append(f" {topic}.")
++            else:
++                parts.append(" Ready.")
++            if emotion and emotion != "neutral":
++                parts.append(f" [{emotion}]")
++            output_text = "".join(parts).strip()
 +
-+    history = _compact_history(runtime_dialogue_state)
++        chunk_size = max(1, _safe_int(mock_response.get("chunk_size"), 24))
++        stream_events: List[Dict[str, Any]] = []
++        for idx, start in enumerate(range(0, len(output_text), chunk_size)):
++            text = output_text[start:start + chunk_size]
++            stream_events.append({
++                "event_index": idx,
++                "event_type": "text_chunk",
++                "text": text,
++                "final": (start + chunk_size) >= len(output_text),
++                "raw": {},
++            })
 +
-+    payload = {
-+        "mode": _safe_str(mode or "dialogue"),
-+        "turn": {
-+            "turn_id": turn_id,
-+            "sequence_id": _safe_str(active_turn.get("sequence_id")),
-+            "tick": _safe_int(active_turn.get("tick"), 0),
-+            "sequence_index": _safe_int(active_turn.get("sequence_index"), 0),
-+            "actor_id": _safe_str(active_turn.get("actor_id")),
-+            "speaker_id": _safe_str(active_turn.get("speaker_id")),
-+            "speaker_name": _safe_str(active_turn.get("speaker_name")),
-+            "role": _safe_str(active_turn.get("role")),
-+            "emotion": _safe_str(active_turn.get("emotion") or "neutral"),
-+            "style_tags": style_tags,
-+        },
-+        "context": {
-+            "scene_id": scene_id,
-+            "location_id": location_id,
-+            "topic": topic,
-+            "history": history,
-+            "active_sequence_id": _safe_str(runtime_dialogue_state.get("active_sequence_id")),
-+            "turn_cursor": _safe_int(runtime_dialogue_state.get("turn_cursor"), 0),
-+        },
-+        "personality": {
-+            "actor_id": _safe_str(personality_profile.get("actor_id")),
-+            "display_name": _safe_str(personality_profile.get("display_name")),
-+            "tone": _safe_str(personality_profile.get("tone")),
-+            "voice_style": _safe_str(personality_profile.get("voice_style")),
-+            "traits": sorted([
-+                _safe_str(v)
-+                for v in _safe_list(personality_profile.get("traits"))
-+                if _safe_str(v)
-+            ]),
-+            "style_tags": sorted([
-+                _safe_str(v)
-+                for v in _safe_list(personality_profile.get("style_tags"))
-+                if _safe_str(v)
-+            ]),
-+        },
-+        "constraints": {
-+            "stay_in_character": True,
-+            "respect_simulation_authority": True,
-+            "do_not_invent_world_facts": True,
-+            "stream_structured_chunks_only": True,
-+            "allow_emotional_fallback": _safe_bool(extra_constraints.get("allow_emotional_fallback")),
-+            "max_sentences": max(1, _safe_int(extra_constraints.get("max_sentences"), 3)),
-+            "max_history_turns": len(history),
-+        },
-+    }
-+    return payload
-*** End Patch
-3) Add file
-src/app/rpg/orchestration/provider_interface.py
-*** Begin Patch
-*** Add File: src/app/rpg/orchestration/provider_interface.py
-+"""Phase 10.6 — Provider boundary helpers.
++        if not stream_events:
++            stream_events = [{
++                "event_index": 0,
++                "event_type": "text_chunk",
++                "text": "",
++                "final": True,
++                "raw": {},
++            }]
 +
-+This module does not perform live provider calls yet. It defines explicit
-+provider-mode helpers and deterministic result shaping for disabled/replay
-+paths. Live execution will be added in later chunks through the controller.
-+"""
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from .state import (
-+    ensure_llm_orchestration_state,
-+    get_llm_orchestration_state,
-+)
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_list(v: Any) -> List[Any]:
-+    return list(v) if isinstance(v, list) else []
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def get_llm_provider_mode(simulation_state: Dict[str, Any]) -> str:
-+    """Return the normalized provider mode for orchestration."""
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    return _safe_str(llm_state.get("provider_mode") or "disabled")
-+
-+
-+def set_llm_provider_mode(simulation_state: Dict[str, Any], mode: str) -> Dict[str, Any]:
-+    """Set provider mode deterministically on orchestration state."""
-+    simulation_state = ensure_llm_orchestration_state(simulation_state)
-+    orchestration_state = _safe_dict(simulation_state.get("orchestration_state"))
-+    llm_state = _safe_dict(orchestration_state.get("llm"))
-+
-+    mode = _safe_str(mode).strip().lower()
-+    if mode not in {"disabled", "capture", "replay", "live"}:
-+        mode = "disabled"
-+
-+    llm_state["provider_mode"] = mode
-+    orchestration_state["llm"] = llm_state
-+    simulation_state["orchestration_state"] = orchestration_state
-+    return simulation_state
-+
-+
-+def build_disabled_provider_result(request_payload: Dict[str, Any]) -> Dict[str, Any]:
-+    """Build a deterministic provider result for disabled mode."""
-+    request_payload = _safe_dict(request_payload)
-+    turn = _safe_dict(request_payload.get("turn"))
-+    return {
-+        "provider_mode": "disabled",
-+        "provider": "",
-+        "model": "",
-+        "status": "disabled",
-+        "turn_id": _safe_str(turn.get("turn_id")),
-+        "output_text": "",
-+        "stream_events": [],
-+        "error": "",
-+    }
-+
-+
-+def build_replay_provider_result(request_record: Dict[str, Any]) -> Dict[str, Any]:
-+    """Build a deterministic provider result from a captured completed request."""
-+    request_record = _safe_dict(request_record)
-+    return {
-+        "provider_mode": "replay",
-+        "provider": _safe_str(request_record.get("provider")),
-+        "model": _safe_str(request_record.get("model")),
-+        "status": "replayed",
-+        "turn_id": _safe_str(request_record.get("turn_id")),
-+        "output_text": _safe_str(request_record.get("output_text")),
-+        "stream_events": [
-+            _safe_dict(v)
-+            for v in _safe_list(request_record.get("stream_events"))
-+            if isinstance(v, dict)
-+        ],
-+        "error": _safe_str(request_record.get("error")),
-+    }
-*** End Patch
-4) Add tests
-src/tests/functional/test_phase106_request_builder_functional.py
-*** Begin Patch
-*** Add File: src/tests/functional/test_phase106_request_builder_functional.py
-+from app.rpg.orchestration.request_builder import build_llm_request_payload
-+
-+
-+def test_phase106_build_llm_request_payload_is_structured_and_deterministic():
-+    state = {
-+        "runtime_state": {
-+            "dialogue": {
-+                "active_sequence_id": "seq:10:0",
-+                "turn_cursor": 1,
-+                "turns": [
-+                    {
-+                        "turn_id": "turn:10:1:comp:lyra",
-+                        "sequence_id": "seq:10:0",
-+                        "tick": 10,
-+                        "sequence_index": 1,
-+                        "actor_id": "comp:lyra",
-+                        "speaker_id": "comp:lyra",
-+                        "speaker_name": "Lyra",
-+                        "role": "companion",
-+                        "text": "Move.",
-+                        "status": "complete",
-+                        "emotion": "stern",
-+                        "style_tags": ["emotion:stern", "brief"],
-+                        "interruption": False,
-+                        "interrupt_target_id": "",
-+                        "chunks": [],
-+                    }
-+                ],
-+            }
-+        }
-+    }
-+
-+    payload = build_llm_request_payload(
-+        state,
-+        turn_id="turn:10:1:comp:lyra",
-+        mode="dialogue",
-+        scene_state={"scene_id": "scene_gate", "location_id": "loc_gate"},
-+        dialogue_state={"topic": "the guards"},
-+        personality_profile={
-+            "actor_id": "comp:lyra",
-+            "display_name": "Lyra",
-+            "tone": "stern",
-+            "voice_style": "plain",
-+            "traits": ["loyal", "brief"],
-+            "style_tags": ["brief"],
-+        },
-+        extra_constraints={"max_sentences": 2},
-+    )
-+
-+    assert payload["mode"] == "dialogue"
-+    assert payload["turn"]["turn_id"] == "turn:10:1:comp:lyra"
-+    assert payload["turn"]["emotion"] == "stern"
-+    assert payload["turn"]["style_tags"] == ["brief", "emotion:stern"]
-+    assert payload["context"]["scene_id"] == "scene_gate"
-+    assert payload["context"]["location_id"] == "loc_gate"
-+    assert payload["context"]["topic"] == "the guards"
-+    assert payload["constraints"]["max_sentences"] == 2
-+    assert payload["constraints"]["respect_simulation_authority"] is True
-+
-+
-+def test_phase106_build_llm_request_payload_history_is_bounded():
-+    turns = []
-+    for i in range(10):
-+        turns.append({
-+            "turn_id": f"turn:5:{i}:npc:{i}",
-+            "sequence_id": "seq:5:0",
-+            "tick": 5,
-+            "sequence_index": i,
-+            "actor_id": f"npc:{i}",
-+            "speaker_id": f"npc:{i}",
-+            "speaker_name": f"NPC {i}",
-+            "role": "npc",
-+            "text": f"line {i}",
++        return {
++            "provider_mode": "mock",
++            "provider": "deterministic_mock",
++            "model": _safe_str(mock_response.get("model") or "deterministic-mock-v1"),
 +            "status": "complete",
-+            "emotion": "neutral",
-+            "style_tags": [],
-+            "interruption": False,
-+            "interrupt_target_id": "",
-+            "chunks": [],
-+        })
-+
-+    state = {
-+        "runtime_state": {
-+            "dialogue": {
-+                "active_sequence_id": "seq:5:0",
-+                "turn_cursor": 9,
-+                "turns": turns,
-+            }
++            "turn_id": turn_id,
++            "output_text": output_text,
++            "stream_events": stream_events,
++            "error": "",
 +        }
-+    }
 +
-+    payload = build_llm_request_payload(
-+        state,
-+        turn_id="turn:5:9:npc:9",
-+    )
-+    assert len(payload["context"]["history"]) == 6
-+    assert payload["context"]["history"][0]["turn_id"] == "turn:5:4:npc:4"
-+    assert payload["context"]["history"][-1]["turn_id"] == "turn:5:9:npc:9"
++
++class LiveLLMProviderAdapter(BaseLLMProviderAdapter):
++    """Explicit live provider adapter shell.
++
++    This phase provides a strict adapter boundary only.
++    Actual network/provider implementation must be added in project-specific
++    code paths without changing orchestration semantics.
++    """
++
++    def execute(self, request_payload: Dict[str, Any]) -> Dict[str, Any]:
++        request_payload = _safe_dict(request_payload)
++        turn = _safe_dict(request_payload.get("turn"))
++        raise NotImplementedError(
++            f"Live provider execution not configured for turn {_safe_str(turn.get('turn_id'))}"
++        )
++
++
++def get_provider_adapter(provider_mode: str) -> BaseLLMProviderAdapter:
++    """Return provider adapter for the requested mode."""
++    provider_mode = _safe_str(provider_mode).strip().lower()
++    if provider_mode == "live":
++        return LiveLLMProviderAdapter()
++    if provider_mode == "capture":
++        return LiveLLMProviderAdapter()
++    return DeterministicMockProviderAdapter()
 *** End Patch
-5) Add tests
-src/tests/functional/test_phase106_provider_interface_functional.py
-*** Begin Patch
-*** Add File: src/tests/functional/test_phase106_provider_interface_functional.py
-+from app.rpg.orchestration.provider_interface import (
-+    get_llm_provider_mode,
-+    set_llm_provider_mode,
-+    build_disabled_provider_result,
-+    build_replay_provider_result,
-+)
-+
-+
-+def test_phase106_provider_mode_defaults_to_disabled():
-+    assert get_llm_provider_mode({}) == "disabled"
-+
-+
-+def test_phase106_set_llm_provider_mode_normalizes_values():
-+    state = {}
-+    state = set_llm_provider_mode(state, "capture")
-+    assert get_llm_provider_mode(state) == "capture"
-+
-+    state = set_llm_provider_mode(state, "INVALID")
-+    assert get_llm_provider_mode(state) == "disabled"
-+
-+
-+def test_phase106_build_disabled_provider_result_is_empty_and_deterministic():
-+    result = build_disabled_provider_result({
-+        "turn": {
-+            "turn_id": "turn:10:1:comp:lyra",
-+        }
-+    })
-+    assert result == {
-+        "provider_mode": "disabled",
-+        "provider": "",
-+        "model": "",
-+        "status": "disabled",
-+        "turn_id": "turn:10:1:comp:lyra",
-+        "output_text": "",
-+        "stream_events": [],
-+        "error": "",
-+    }
-+
-+
-+def test_phase106_build_replay_provider_result_uses_captured_request_record():
-+    result = build_replay_provider_result({
-+        "provider": "openai",
-+        "model": "gpt-test",
-+        "turn_id": "turn:11:0:npc:guard",
-+        "output_text": "Hold there.",
-+        "stream_events": [
-+            {"event_index": 0, "event_type": "text_chunk", "text": "Hold ", "final": False, "raw": {}},
-+            {"event_index": 1, "event_type": "text_chunk", "text": "there.", "final": True, "raw": {}},
-+        ],
-+        "error": "",
-+    })
-+
-+    assert result["provider_mode"] == "replay"
-+    assert result["provider"] == "openai"
-+    assert result["model"] == "gpt-test"
-+    assert result["turn_id"] == "turn:11:0:npc:guard"
-+    assert result["output_text"] == "Hold there."
-+    assert len(result["stream_events"]) == 2
-*** End Patch
-6) Add regression test
-src/tests/regression/test_phase106_request_builder_regression.py
-*** Begin Patch
-*** Add File: src/tests/regression/test_phase106_request_builder_regression.py
-+from app.rpg.orchestration.request_builder import build_llm_request_payload
-+
-+
-+def test_phase106_request_builder_same_input_produces_same_payload():
-+    state = {
-+        "runtime_state": {
-+            "dialogue": {
-+                "active_sequence_id": "seq:1:0",
-+                "turn_cursor": 0,
-+                "turns": [
-+                    {
-+                        "turn_id": "turn:1:0:comp:lyra",
-+                        "sequence_id": "seq:1:0",
-+                        "tick": 1,
-+                        "sequence_index": 0,
-+                        "actor_id": "comp:lyra",
-+                        "speaker_id": "comp:lyra",
-+                        "speaker_name": "Lyra",
-+                        "role": "companion",
-+                        "text": "",
-+                        "status": "pending",
-+                        "emotion": "supportive",
-+                        "style_tags": ["emotion:supportive"],
-+                        "interruption": False,
-+                        "interrupt_target_id": "",
-+                        "chunks": [],
-+                    }
-+                ],
-+            }
-+        }
-+    }
-+
-+    payload_a = build_llm_request_payload(state, turn_id="turn:1:0:comp:lyra")
-+    payload_b = build_llm_request_payload(state, turn_id="turn:1:0:comp:lyra")
-+
-+    assert payload_a == payload_b
-*** End Patch
-END OF PART 3/6
-
-Next chunk is:
-
-Part 4/6: replay + fallback paths
-
-Part 4/6: replay + fallback paths
-
-Below is Part 4/6 only.
-
-Hard boundary: this message contains only
-Part 4/6: replay + fallback paths
-
-This chunk adds the deterministic replay/fallback helpers that sit between the request lifecycle and the later orchestration controller. It preserves the same explicit provider-mode boundary and replay-safe behavior established in the 10.6 design.
-
-PART 4/6 — REPLAY + FALLBACK PATHS
-1) Update file
+2) Update file
 src/app/rpg/orchestration/__init__.py
 
-Export the replay and fallback helpers added in this part.
+Export the provider adapter helpers.
 
 *** Begin Patch
 *** Update File: src/app/rpg/orchestration/__init__.py
 @@
- from .provider_interface import (
-     get_llm_provider_mode,
-     set_llm_provider_mode,
-     build_disabled_provider_result,
-     build_replay_provider_result,
- )
-+from .replay import (
-+    find_replayable_llm_request,
-+    require_replayable_llm_request,
-+)
-+from .fallback import (
-+    build_llm_fallback_result,
-+    should_allow_llm_fallback,
-+)
- 
- __all__ = [
-     "ensure_llm_orchestration_state",
-     "get_llm_orchestration_state",
-     "build_llm_request_id",
+ from .live_provider import (
+     ensure_live_provider_state,
+     get_live_provider_state,
+     build_provider_execution_id,
+     begin_provider_execution,
 @@
-     "build_llm_request_payload",
-     "get_llm_provider_mode",
-     "set_llm_provider_mode",
-     "build_disabled_provider_result",
-     "build_replay_provider_result",
-+    "find_replayable_llm_request",
-+    "require_replayable_llm_request",
-+    "build_llm_fallback_result",
-+    "should_allow_llm_fallback",
+     trim_live_provider_state,
+ )
++from .provider_adapter import (
++    BaseLLMProviderAdapter,
++    DeterministicMockProviderAdapter,
++    LiveLLMProviderAdapter,
++    get_provider_adapter,
++)
+@@
+     "build_provider_execution_id",
+     "begin_provider_execution",
+     "append_provider_execution_event",
+     "finalize_provider_execution",
+     "fail_provider_execution",
+     "trim_live_provider_state",
++    "BaseLLMProviderAdapter",
++    "DeterministicMockProviderAdapter",
++    "LiveLLMProviderAdapter",
++    "get_provider_adapter",
  ]
 *** End Patch
-2) Add file
-src/app/rpg/orchestration/replay.py
-*** Begin Patch
-*** Add File: src/app/rpg/orchestration/replay.py
-+"""Phase 10.6 — Replay helpers for captured LLM orchestration artifacts."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from .state import get_llm_orchestration_state
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_list(v: Any) -> List[Any]:
-+    return list(v) if isinstance(v, list) else []
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def find_replayable_llm_request(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    request_id: str = "",
-+    turn_id: str = "",
-+) -> Dict[str, Any]:
-+    """Find a captured completed request that can be replayed.
-+
-+    Search preference:
-+        1. exact request_id
-+        2. exact turn_id
-+    """
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    completed_requests = [
-+        _safe_dict(v)
-+        for v in _safe_list(llm_state.get("completed_requests"))
-+        if isinstance(v, dict)
-+    ]
-+
-+    request_id = _safe_str(request_id)
-+    turn_id = _safe_str(turn_id)
-+
-+    if request_id:
-+        for item in completed_requests:
-+            if _safe_str(item.get("request_id")) == request_id:
-+                return item
-+
-+    if turn_id:
-+        matches = [
-+            item for item in completed_requests
-+            if _safe_str(item.get("turn_id")) == turn_id
-+        ]
-+        matches = sorted(
-+            matches,
-+            key=lambda item: (
-+                _safe_str(item.get("request_id")),
-+                _safe_str(item.get("status")),
-+            ),
-+        )
-+        if matches:
-+            return matches[-1]
-+
-+    return {}
-+
-+
-+def require_replayable_llm_request(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    request_id: str = "",
-+    turn_id: str = "",
-+) -> Dict[str, Any]:
-+    """Return replayable request or raise a deterministic replay error."""
-+    item = find_replayable_llm_request(
-+        simulation_state,
-+        request_id=request_id,
-+        turn_id=turn_id,
-+    )
-+    if item:
-+        return item
-+
-+    wanted = _safe_str(request_id or turn_id)
-+    raise ValueError(f"Missing replay artifact for {wanted}")
-*** End Patch
-3) Add file
-src/app/rpg/orchestration/fallback.py
-*** Begin Patch
-*** Add File: src/app/rpg/orchestration/fallback.py
-+"""Phase 10.6 — Deterministic fallback policy helpers."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def _safe_bool(v: Any) -> bool:
-+    return bool(v)
-+
-+
-+def should_allow_llm_fallback(
-+    request_payload: Dict[str, Any],
-+    *,
-+    provider_mode: str,
-+) -> bool:
-+    """Return whether deterministic fallback is allowed for this request.
-+
-+    Policy:
-+        - disabled mode: allowed if request explicitly allows emotional fallback
-+        - replay mode: not allowed; replay must fail hard if artifact missing
-+        - capture/live mode: allowed only if explicitly requested
-+    """
-+    request_payload = _safe_dict(request_payload)
-+    constraints = _safe_dict(request_payload.get("constraints"))
-+    explicit = _safe_bool(constraints.get("allow_emotional_fallback"))
-+    provider_mode = _safe_str(provider_mode).strip().lower()
-+
-+    if provider_mode == "replay":
-+        return False
-+    if provider_mode == "disabled":
-+        return explicit
-+    if provider_mode in {"capture", "live"}:
-+        return explicit
-+    return False
-+
-+
-+def build_llm_fallback_result(
-+    request_payload: Dict[str, Any],
-+    *,
-+    provider_mode: str,
-+    allow_fallback: bool,
-+) -> Dict[str, Any]:
-+    """Build a deterministic fallback execution result."""
-+    request_payload = _safe_dict(request_payload)
-+    turn = _safe_dict(request_payload.get("turn"))
-+
-+    return {
-+        "provider_mode": _safe_str(provider_mode),
-+        "provider": "",
-+        "model": "",
-+        "status": "fallback" if allow_fallback else "disabled",
-+        "turn_id": _safe_str(turn.get("turn_id")),
-+        "output_text": "",
-+        "stream_events": [],
-+        "error": "" if allow_fallback else "",
-+        "allow_fallback": _safe_bool(allow_fallback),
-+    }
-*** End Patch
-4) Update file
-src/app/rpg/presentation/orchestration_bridge.py
+3) Update file
+src/app/rpg/orchestration/controller.py
 
-Expose replay/fallback-oriented summary fields so the frontend and inspector can see whether a request was replayed, failed, or fell back.
+Add deterministic mock/live execution paths and provider execution artifact capture.
 
 *** Begin Patch
-*** Update File: src/app/rpg/presentation/orchestration_bridge.py
-@@
- def _build_request_payload(item: Dict[str, Any]) -> Dict[str, Any]:
-     item = _safe_dict(item)
-     return {
-         "request_id": _safe_str(item.get("request_id")),
-         "tick": _safe_int(item.get("tick"), 0),
-@@
-         "provider": _safe_str(item.get("provider")),
-         "model": _safe_str(item.get("model")),
-         "output_text": _safe_str(item.get("output_text")),
-         "error": _safe_str(item.get("error")),
-         "stream_event_count": len(_safe_list(item.get("stream_events"))),
-         "has_input_payload": bool(_safe_dict(item.get("input_payload"))),
-+        "is_replayed": _safe_str(item.get("status")) == "replayed",
-+        "is_failed": _safe_str(item.get("status")) == "failed",
-     }
-*** End Patch
-5) Add tests
-src/tests/functional/test_phase106_replay_fallback_functional.py
-*** Begin Patch
-*** Add File: src/tests/functional/test_phase106_replay_fallback_functional.py
-+import pytest
-+
-+from app.rpg.orchestration.state import begin_llm_request, finalize_llm_request
-+from app.rpg.orchestration.replay import (
-+    find_replayable_llm_request,
-+    require_replayable_llm_request,
-+)
-+from app.rpg.orchestration.fallback import (
-+    should_allow_llm_fallback,
-+    build_llm_fallback_result,
-+)
-+
-+
-+def test_phase106_find_replayable_llm_request_by_request_id():
-+    state = {}
-+    state = begin_llm_request(
-+        state,
-+        tick=10,
-+        sequence_index=1,
-+        actor_id="comp:lyra",
-+        turn_id="turn:10:1:comp:lyra",
-+    )
-+    state = finalize_llm_request(
-+        state,
-+        request_id="llmreq:10:1:comp:lyra:0",
-+        output_text="We should move.",
-+    )
-+
-+    item = find_replayable_llm_request(
-+        state,
-+        request_id="llmreq:10:1:comp:lyra:0",
-+    )
-+    assert item["turn_id"] == "turn:10:1:comp:lyra"
-+    assert item["output_text"] == "We should move."
-+
-+
-+def test_phase106_find_replayable_llm_request_by_turn_id_returns_latest_match():
-+    state = {}
-+    state = begin_llm_request(
-+        state,
-+        tick=11,
-+        sequence_index=1,
-+        actor_id="comp:lyra",
-+        turn_id="turn:11:1:comp:lyra",
-+    )
-+    state = finalize_llm_request(
-+        state,
-+        request_id="llmreq:11:1:comp:lyra:0",
-+        output_text="First.",
-+    )
-+    state = begin_llm_request(
-+        state,
-+        tick=11,
-+        sequence_index=1,
-+        actor_id="comp:lyra",
-+        turn_id="turn:11:1:comp:lyra",
-+    )
-+    state = finalize_llm_request(
-+        state,
-+        request_id="llmreq:11:1:comp:lyra:1",
-+        output_text="Second.",
-+        replayed=True,
-+    )
-+
-+    item = find_replayable_llm_request(
-+        state,
-+        turn_id="turn:11:1:comp:lyra",
-+    )
-+    assert item["request_id"] == "llmreq:11:1:comp:lyra:1"
-+    assert item["output_text"] == "Second."
-+
-+
-+def test_phase106_require_replayable_llm_request_raises_when_missing():
-+    with pytest.raises(ValueError) as exc:
-+        require_replayable_llm_request(
-+            {},
-+            request_id="llmreq:99:0:npc:guard:0",
-+        )
-+    assert "Missing replay artifact" in str(exc.value)
-+
-+
-+def test_phase106_should_allow_llm_fallback_policy():
-+    payload = {
-+        "constraints": {
-+            "allow_emotional_fallback": True,
-+        }
-+    }
-+    assert should_allow_llm_fallback(payload, provider_mode="disabled") is True
-+    assert should_allow_llm_fallback(payload, provider_mode="capture") is True
-+    assert should_allow_llm_fallback(payload, provider_mode="live") is True
-+    assert should_allow_llm_fallback(payload, provider_mode="replay") is False
-+
-+
-+def test_phase106_build_llm_fallback_result_is_structured():
-+    result = build_llm_fallback_result(
-+        {
-+            "turn": {
-+                "turn_id": "turn:12:0:npc:guard",
-+            }
-+        },
-+        provider_mode="disabled",
-+        allow_fallback=True,
-+    )
-+    assert result == {
-+        "provider_mode": "disabled",
-+        "provider": "",
-+        "model": "",
-+        "status": "fallback",
-+        "turn_id": "turn:12:0:npc:guard",
-+        "output_text": "",
-+        "stream_events": [],
-+        "error": "",
-+        "allow_fallback": True,
-+    }
-*** End Patch
-6) Add regression test
-src/tests/regression/test_phase106_replay_fail_hard_regression.py
-*** Begin Patch
-*** Add File: src/tests/regression/test_phase106_replay_fail_hard_regression.py
-+import pytest
-+
-+from app.rpg.orchestration.fallback import should_allow_llm_fallback
-+from app.rpg.orchestration.replay import require_replayable_llm_request
-+
-+
-+def test_phase106_replay_mode_never_allows_silent_fallback():
-+    payload = {
-+        "constraints": {
-+            "allow_emotional_fallback": True,
-+        }
-+    }
-+    assert should_allow_llm_fallback(payload, provider_mode="replay") is False
-+
-+
-+def test_phase106_replay_mode_missing_artifact_fails_hard():
-+    with pytest.raises(ValueError):
-+        require_replayable_llm_request(
-+            {},
-+            turn_id="turn:404:0:npc:guard",
-+        )
-*** End Patch
-END OF PART 4/6
-
-Next chunk is:
-
-Part 5/6: stream adapter + controller integration
-
-Part 5/6: stream adapter + controller integration
-
-Below is Part 5/6 only.
-
-Hard boundary: this message contains only
-Part 5/6: stream adapter + controller integration
-
-This chunk wires the orchestration layer into the existing Phase 10.5 runtime mutators so streamed provider/replay/fallback results all flow through the same structured runtime chunk path. That keeps the LLM boundary explicit and preserves the runtime-first architecture already established in 10.5.
-
-PART 5/6 — STREAM ADAPTER + CONTROLLER INTEGRATION
-1) Update file
-src/app/rpg/orchestration/__init__.py
-
-Export the stream adapter and controller helpers added in this part.
-
-*** Begin Patch
-*** Update File: src/app/rpg/orchestration/__init__.py
+*** Update File: src/app/rpg/orchestration/controller.py
 @@
  from .fallback import (
-     build_llm_fallback_result,
      should_allow_llm_fallback,
+     build_llm_fallback_result,
  )
-+from .stream_adapter import (
-+    apply_provider_result_to_runtime_turn,
+ from .stream_adapter import apply_provider_result_to_runtime_turn
++from .live_provider import (
++    build_provider_execution_id,
++    begin_provider_execution,
++    append_provider_execution_event,
++    finalize_provider_execution,
++    fail_provider_execution,
 +)
-+from .controller import (
-+    execute_llm_request_for_turn,
-+)
- 
- __all__ = [
-     "ensure_llm_orchestration_state",
-     "get_llm_orchestration_state",
++from .provider_adapter import get_provider_adapter
 @@
-     "find_replayable_llm_request",
-     "require_replayable_llm_request",
-     "build_llm_fallback_result",
-     "should_allow_llm_fallback",
-+    "apply_provider_result_to_runtime_turn",
-+    "execute_llm_request_for_turn",
- ]
-*** End Patch
-2) Add file
-src/app/rpg/orchestration/stream_adapter.py
-*** Begin Patch
-*** Add File: src/app/rpg/orchestration/stream_adapter.py
-+"""Phase 10.6 — Provider result to runtime stream adapter."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+from app.rpg.runtime.dialogue_runtime import (
-+    append_runtime_stream_chunk,
-+    finalize_runtime_turn,
-+)
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_list(v: Any) -> List[Any]:
-+    return list(v) if isinstance(v, list) else []
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def _safe_bool(v: Any) -> bool:
-+    return bool(v)
-+
-+
-+def _safe_int(v: Any, default: int = 0) -> int:
-+    try:
-+        return int(v)
-+    except Exception:
-+        return default
-+
-+
-+def apply_provider_result_to_runtime_turn(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    turn_id: str,
-+    actor_id: str,
-+    speaker_id: str = "",
-+    provider_result: Dict[str, Any],
-+    allow_emotional_fallback: bool = False,
-+) -> Dict[str, Any]:
-+    """Apply a structured provider/replay/fallback result to runtime turn state.
-+
-+    Rules:
-+        - stream_events are written in order through append_runtime_stream_chunk
-+        - finalization always goes through finalize_runtime_turn
-+        - no direct writes to presentation state
-+    """
-+    provider_result = _safe_dict(provider_result)
-+    turn_id = _safe_str(turn_id)
-+    actor_id = _safe_str(actor_id)
-+    speaker_id = _safe_str(speaker_id) or actor_id
-+
-+    if not turn_id or not actor_id:
-+        return simulation_state
-+
-+    stream_events = [
-+        _safe_dict(v)
-+        for v in _safe_list(provider_result.get("stream_events"))
-+        if isinstance(v, dict)
-+    ]
-+    stream_events = sorted(
-+        stream_events,
-+        key=lambda item: (
-+            _safe_int(item.get("event_index"), 0),
-+            _safe_str(item.get("event_type")),
-+        ),
-+    )
-+
-+    for event in stream_events:
-+        if _safe_str(event.get("event_type") or "text_chunk") != "text_chunk":
-+            continue
-+        simulation_state = append_runtime_stream_chunk(
-+            simulation_state,
-+            turn_id=turn_id,
-+            actor_id=actor_id,
-+            speaker_id=speaker_id,
-+            text=_safe_str(event.get("text")),
-+            chunk_index=_safe_int(event.get("event_index"), 0),
-+            final=_safe_bool(event.get("final")),
-+        )
-+
-+    simulation_state = finalize_runtime_turn(
-+        simulation_state,
-+        turn_id=turn_id,
-+        final_text=_safe_str(provider_result.get("output_text")),
-+        allow_emotional_fallback=_safe_bool(allow_emotional_fallback),
-+    )
-+    return simulation_state
-*** End Patch
-3) Add file
-src/app/rpg/orchestration/controller.py
-*** Begin Patch
-*** Add File: src/app/rpg/orchestration/controller.py
-+"""Phase 10.6 — LLM orchestration controller.
-+
-+This controller owns orchestration flow for one runtime turn:
-+    - begin request
-+    - choose disabled / replay path
-+    - write stream/output into runtime via adapter
-+    - finalize or fail orchestration request
-+
-+Live provider execution is intentionally not added yet in this phase chunk.
-+"""
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
-+
-+from .state import (
-+    begin_llm_request,
-+    append_llm_stream_event,
-+    finalize_llm_request,
-+    fail_llm_request,
-+    get_llm_orchestration_state,
-+)
-+from .request_builder import build_llm_request_payload
-+from .provider_interface import (
-+    get_llm_provider_mode,
-+    build_disabled_provider_result,
-+    build_replay_provider_result,
-+)
-+from .replay import require_replayable_llm_request
-+from .fallback import (
-+    should_allow_llm_fallback,
-+    build_llm_fallback_result,
-+)
-+from .stream_adapter import apply_provider_result_to_runtime_turn
-+
-+
-+def _safe_dict(v: Any) -> Dict[str, Any]:
-+    return dict(v) if isinstance(v, dict) else {}
-+
-+
-+def _safe_list(v: Any):
-+    return list(v) if isinstance(v, list) else []
-+
-+
-+def _safe_str(v: Any) -> str:
-+    return "" if v is None else str(v)
-+
-+
-+def _safe_bool(v: Any) -> bool:
-+    return bool(v)
-+
-+
-+def _safe_int(v: Any, default: int = 0) -> int:
-+    try:
-+        return int(v)
-+    except Exception:
-+        return default
-+
-+
-+def _find_turn(dialogue_state: Dict[str, Any], turn_id: str) -> Dict[str, Any]:
-+    turn_id = _safe_str(turn_id)
-+    for item in _safe_list(dialogue_state.get("turns")):
-+        item = _safe_dict(item)
-+        if _safe_str(item.get("turn_id")) == turn_id:
-+            return item
-+    return {}
-+
-+
-+def _latest_active_request_id_for_turn(simulation_state: Dict[str, Any], turn_id: str) -> str:
-+    llm_state = get_llm_orchestration_state(simulation_state)
-+    active_requests = [
-+        _safe_dict(v)
-+        for v in _safe_list(llm_state.get("active_requests"))
-+        if isinstance(v, dict)
-+    ]
-+    matches = [
-+        item for item in active_requests
-+        if _safe_str(item.get("turn_id")) == _safe_str(turn_id)
-+    ]
-+    matches = sorted(
-+        matches,
-+        key=lambda item: (
-+            _safe_int(item.get("tick"), 0),
-+            _safe_str(item.get("request_id")),
-+        ),
-+    )
-+    if not matches:
-+        return ""
-+    return _safe_str(matches[-1].get("request_id"))
-+
-+
-+def execute_llm_request_for_turn(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    turn_id: str,
-+    mode: str = "dialogue",
-+    scene_state: Dict[str, Any] | None = None,
-+    dialogue_state: Dict[str, Any] | None = None,
-+    personality_profile: Dict[str, Any] | None = None,
-+    provider: str = "",
-+    model: str = "",
-+    extra_constraints: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    """Execute orchestration for one runtime turn.
-+
-+    Supported in this phase:
-+        - disabled mode
-+        - replay mode
-+
-+    Not yet supported:
-+        - live provider execution
-+        - capture mode live call path
-+    """
-+    scene_state = _safe_dict(scene_state)
-+    dialogue_input_state = _safe_dict(dialogue_state)
-+    personality_profile = _safe_dict(personality_profile)
-+    extra_constraints = _safe_dict(extra_constraints)
-+
-+    runtime_dialogue_state = get_runtime_dialogue_state(simulation_state)
-+    turn = _find_turn(runtime_dialogue_state, turn_id)
-+    if not turn:
-+        return simulation_state
-+
-+    tick = _safe_int(turn.get("tick"), 0)
-+    sequence_index = _safe_int(turn.get("sequence_index"), 0)
-+    actor_id = _safe_str(turn.get("actor_id"))
-+    speaker_id = _safe_str(turn.get("speaker_id")) or actor_id
-+    sequence_id = _safe_str(turn.get("sequence_id"))
-+
-+    request_payload = build_llm_request_payload(
-+        simulation_state,
-+        turn_id=turn_id,
-+        mode=mode,
-+        scene_state=scene_state,
-+        dialogue_state=dialogue_input_state,
-+        personality_profile=personality_profile,
-+        extra_constraints=extra_constraints,
-+    )
-+
-+    simulation_state = begin_llm_request(
-+        simulation_state,
-+        tick=tick,
-+        sequence_index=sequence_index,
-+        actor_id=actor_id,
-+        turn_id=turn_id,
-+        sequence_id=sequence_id,
-+        speaker_id=speaker_id,
-+        mode=mode,
-+        provider=provider,
-+        model=model,
-+        input_payload=request_payload,
-+    )
-+
-+    request_id = _latest_active_request_id_for_turn(simulation_state, turn_id)
-+    provider_mode = get_llm_provider_mode(simulation_state)
-+    allow_fallback = should_allow_llm_fallback(
-+        request_payload,
-+        provider_mode=provider_mode,
-+    )
-+
-+    try:
-+        if provider_mode == "replay":
-+            replay_record = require_replayable_llm_request(
+ def execute_llm_request_for_turn(
+@@
+     Supported in this phase:
+         - disabled mode
+         - replay mode
++        - capture mode via explicit provider adapter
++        - live mode via explicit provider adapter
+ 
+-    Not yet supported:
+-        - live provider execution
+-        - capture mode live call path
+     """
+@@
+     allow_fallback = should_allow_llm_fallback(
+         request_payload,
+         provider_mode=provider_mode,
+     )
++    execution_id = build_provider_execution_id(request_id)
+ 
+     try:
+         if provider_mode == "replay":
+@@
+             simulation_state = finalize_llm_request(
+                 simulation_state,
+                 request_id=request_id,
+                 output_text=_safe_str(provider_result.get("output_text")),
+                 replayed=True,
+             )
+             return simulation_state
+ 
+         if provider_mode == "disabled":
+@@
+                 )
+             return simulation_state
+ 
+-        raise NotImplementedError(
+-            f"Provider mode '{provider_mode}' is not implemented yet in Phase 10.6"
+-        )
++        if provider_mode in {"capture", "live"}:
++            simulation_state = begin_provider_execution(
 +                simulation_state,
-+                turn_id=turn_id,
++                request_id=request_id,
++                tick=tick,
++                provider=provider or provider_mode,
++                model=model or "",
 +            )
-+            provider_result = build_replay_provider_result(replay_record)
-+            for event in _safe_list(provider_result.get("stream_events")):
-+                event = _safe_dict(event)
++            simulation_state = append_provider_execution_event(
++                simulation_state,
++                execution_id=execution_id,
++                event_index=0,
++                event_type="request_started",
++                text="",
++                final=False,
++                raw={},
++            )
++
++            adapter = get_provider_adapter(provider_mode)
++            provider_result = adapter.execute(request_payload)
++
++            provider_stream_events = [
++                _safe_dict(v)
++                for v in _safe_list(provider_result.get("stream_events"))
++                if isinstance(v, dict)
++            ]
++            for event in provider_stream_events:
 +                simulation_state = append_llm_stream_event(
 +                    simulation_state,
 +                    request_id=request_id,
@@ -2281,6 +1105,16 @@ src/app/rpg/orchestration/controller.py
 +                    final=_safe_bool(event.get("final")),
 +                    raw=_safe_dict(event.get("raw")),
 +                )
++                simulation_state = append_provider_execution_event(
++                    simulation_state,
++                    execution_id=execution_id,
++                    event_index=_safe_int(event.get("event_index"), 0) + 1,
++                    event_type=_safe_str(event.get("event_type") or "text_chunk"),
++                    text=_safe_str(event.get("text")),
++                    final=_safe_bool(event.get("final")),
++                    raw=_safe_dict(event.get("raw")),
++                )
++
 +            simulation_state = apply_provider_result_to_runtime_turn(
 +                simulation_state,
 +                turn_id=turn_id,
@@ -2289,30 +1123,20 @@ src/app/rpg/orchestration/controller.py
 +                provider_result=provider_result,
 +                allow_emotional_fallback=False,
 +            )
-+            simulation_state = finalize_llm_request(
-+                simulation_state,
-+                request_id=request_id,
-+                output_text=_safe_str(provider_result.get("output_text")),
-+                replayed=True,
-+            )
-+            return simulation_state
 +
-+        if provider_mode == "disabled":
-+            disabled_result = build_disabled_provider_result(request_payload)
-+            provider_result = build_llm_fallback_result(
-+                request_payload,
-+                provider_mode=provider_mode,
-+                allow_fallback=allow_fallback,
-+            )
-+            if _safe_str(provider_result.get("status")) == "disabled":
-+                provider_result = disabled_result
-+            simulation_state = apply_provider_result_to_runtime_turn(
++            simulation_state = append_provider_execution_event(
 +                simulation_state,
-+                turn_id=turn_id,
-+                actor_id=actor_id,
-+                speaker_id=speaker_id,
-+                provider_result=provider_result,
-+                allow_emotional_fallback=allow_fallback,
++                execution_id=execution_id,
++                event_index=len(provider_stream_events) + 1,
++                event_type="response_completed",
++                text="",
++                final=True,
++                raw={},
++            )
++            simulation_state = finalize_provider_execution(
++                simulation_state,
++                execution_id=execution_id,
++                output_text=_safe_str(provider_result.get("output_text")),
 +            )
 +            simulation_state = finalize_llm_request(
 +                simulation_state,
@@ -2322,20 +1146,88 @@ src/app/rpg/orchestration/controller.py
 +            )
 +            return simulation_state
 +
-+        raise NotImplementedError(f"Provider mode '{provider_mode}' is not implemented yet")
-+
-+    except Exception as exc:
-+        simulation_state = fail_llm_request(
-+            simulation_state,
-+            request_id=request_id,
-+            error=_safe_str(exc),
++        raise NotImplementedError(
++            f"Unknown provider mode '{provider_mode}'"
 +        )
-+        return simulation_state
+ 
+     except Exception as exc:
++        if provider_mode in {"capture", "live"} and request_id:
++            simulation_state = append_provider_execution_event(
++                simulation_state,
++                execution_id=execution_id,
++                event_index=999999,
++                event_type="response_failed",
++                text="",
++                final=True,
++                raw={"error": _safe_str(exc)},
++            )
++            simulation_state = fail_provider_execution(
++                simulation_state,
++                execution_id=execution_id,
++                error=_safe_str(exc),
++            )
+         simulation_state = fail_llm_request(
+             simulation_state,
+             request_id=request_id,
+             error=_safe_str(exc),
+         )
 *** End Patch
 4) Add tests
-src/tests/functional/test_phase106_controller_functional.py
+src/tests/functional/test_phase107_provider_adapter_functional.py
 *** Begin Patch
-*** Add File: src/tests/functional/test_phase106_controller_functional.py
+*** Add File: src/tests/functional/test_phase107_provider_adapter_functional.py
++import pytest
++
++from app.rpg.orchestration.provider_adapter import (
++    DeterministicMockProviderAdapter,
++    LiveLLMProviderAdapter,
++    get_provider_adapter,
++)
++
++
++def test_phase107_deterministic_mock_provider_returns_structured_output():
++    adapter = DeterministicMockProviderAdapter()
++    result = adapter.execute({
++        "turn": {
++            "turn_id": "turn:10:1:comp:lyra",
++            "speaker_name": "Lyra",
++            "emotion": "stern",
++        },
++        "context": {
++            "topic": "the guards",
++        },
++    })
++
++    assert result["provider_mode"] == "mock"
++    assert result["provider"] == "deterministic_mock"
++    assert result["turn_id"] == "turn:10:1:comp:lyra"
++    assert result["status"] == "complete"
++    assert len(result["stream_events"]) >= 1
++
++
++def test_phase107_live_provider_adapter_is_explicitly_unconfigured():
++    adapter = LiveLLMProviderAdapter()
++    with pytest.raises(NotImplementedError):
++        adapter.execute({
++            "turn": {
++                "turn_id": "turn:11:0:npc:guard",
++            }
++        })
++
++
++def test_phase107_get_provider_adapter_selects_mock_for_non_live_modes():
++    assert isinstance(get_provider_adapter("disabled"), DeterministicMockProviderAdapter)
++    assert isinstance(get_provider_adapter("replay"), DeterministicMockProviderAdapter)
++
++
++def test_phase107_get_provider_adapter_selects_live_for_live_and_capture():
++    assert isinstance(get_provider_adapter("live"), LiveLLMProviderAdapter)
++    assert isinstance(get_provider_adapter("capture"), LiveLLMProviderAdapter)
+*** End Patch
+5) Add tests
+src/tests/functional/test_phase107_controller_live_paths_functional.py
+*** Begin Patch
+*** Add File: src/tests/functional/test_phase107_controller_live_paths_functional.py
 +from app.rpg.runtime.dialogue_runtime import (
 +    begin_runtime_turn,
 +    get_runtime_dialogue_state,
@@ -2343,11 +1235,12 @@ src/tests/functional/test_phase106_controller_functional.py
 +from app.rpg.orchestration.provider_interface import set_llm_provider_mode
 +from app.rpg.orchestration.controller import execute_llm_request_for_turn
 +from app.rpg.orchestration.state import get_llm_orchestration_state
++from app.rpg.orchestration.live_provider import get_live_provider_state
 +
 +
-+def test_phase106_execute_llm_request_for_turn_disabled_mode_finalizes_without_text_by_default():
++def test_phase107_execute_llm_request_for_turn_capture_mode_records_provider_execution():
 +    state = {}
-+    state = set_llm_provider_mode(state, "disabled")
++    state = set_llm_provider_mode(state, "capture")
 +    state = begin_runtime_turn(
 +        state,
 +        tick=10,
@@ -2363,49 +1256,24 @@ src/tests/functional/test_phase106_controller_functional.py
 +        state,
 +        turn_id="turn:10:1:comp:lyra",
 +        mode="dialogue",
-+        extra_constraints={"allow_emotional_fallback": False},
++        provider="mock-provider",
++        model="mock-model",
 +    )
 +
 +    runtime = get_runtime_dialogue_state(state)
-+    turn = runtime["turns"][0]
-+    assert turn["status"] == "complete"
-+    assert turn["text"] == ""
-+
 +    llm = get_llm_orchestration_state(state)
++    live_state = get_live_provider_state(state)
++
++    assert runtime["turns"][0]["status"] == "complete"
 +    assert llm["active_requests"] == []
 +    assert len(llm["completed_requests"]) == 1
-+    assert llm["completed_requests"][0]["status"] == "complete"
++    assert len(live_state["executions"]) == 1
++    assert live_state["executions"][0]["status"] == "complete"
 +
 +
-+def test_phase106_execute_llm_request_for_turn_disabled_mode_can_use_fallback():
++def test_phase107_execute_llm_request_for_turn_live_mode_fails_cleanly_when_unconfigured():
 +    state = {}
-+    state = set_llm_provider_mode(state, "disabled")
-+    state = begin_runtime_turn(
-+        state,
-+        tick=11,
-+        sequence_index=1,
-+        actor_id="comp:lyra",
-+        speaker_id="comp:lyra",
-+        speaker_name="Lyra",
-+        role="companion",
-+        sequence_id="seq:11:0",
-+    )
-+
-+    state = execute_llm_request_for_turn(
-+        state,
-+        turn_id="turn:11:1:comp:lyra",
-+        mode="dialogue",
-+        extra_constraints={"allow_emotional_fallback": True},
-+    )
-+
-+    runtime = get_runtime_dialogue_state(state)
-+    turn = runtime["turns"][0]
-+    assert turn["status"] == "complete"
-+
-+
-+def test_phase106_execute_llm_request_for_turn_replay_mode_writes_stream_and_output():
-+    state = {}
-+    state = set_llm_provider_mode(state, "replay")
++    state = set_llm_provider_mode(state, "live")
 +    state = begin_runtime_turn(
 +        state,
 +        tick=20,
@@ -2417,288 +1285,248 @@ src/tests/functional/test_phase106_controller_functional.py
 +        sequence_id="seq:20:0",
 +    )
 +
-+    # Seed replay artifact by writing directly into completed request history.
-+    state["orchestration_state"] = {
-+        "llm": {
-+            "provider_mode": "replay",
-+            "request_counter": 0,
-+            "active_requests": [],
-+            "completed_requests": [
-+                {
-+                    "request_id": "llmreq:20:0:npc:guard:0",
-+                    "tick": 20,
-+                    "sequence_id": "seq:20:0",
-+                    "turn_id": "turn:20:0:npc:guard",
-+                    "actor_id": "npc:guard",
-+                    "speaker_id": "npc:guard",
-+                    "mode": "dialogue",
-+                    "status": "complete",
-+                    "provider": "openai",
-+                    "model": "gpt-test",
-+                    "input_payload": {},
-+                    "stream_events": [
-+                        {"event_index": 0, "event_type": "text_chunk", "text": "Hold ", "final": False, "raw": {}},
-+                        {"event_index": 1, "event_type": "text_chunk", "text": "there.", "final": True, "raw": {}},
-+                    ],
-+                    "output_text": "Hold there.",
-+                    "error": "",
-+                }
-+            ],
-+            "last_error": {},
-+        }
-+    }
-+
 +    state = execute_llm_request_for_turn(
 +        state,
 +        turn_id="turn:20:0:npc:guard",
 +        mode="dialogue",
++        provider="openai",
++        model="gpt-live",
 +    )
-+
-+    runtime = get_runtime_dialogue_state(state)
-+    turn = runtime["turns"][0]
-+    assert turn["status"] == "complete"
-+    assert turn["text"] == "Hold there."
-+    assert len(turn["chunks"]) == 2
 +
 +    llm = get_llm_orchestration_state(state)
-+    assert llm["active_requests"] == []
-+    assert llm["completed_requests"][-1]["status"] == "replayed"
++    live_state = get_live_provider_state(state)
++
++    assert llm["completed_requests"][-1]["status"] == "failed"
++    assert len(live_state["executions"]) == 1
++    assert live_state["executions"][0]["status"] == "failed"
 *** End Patch
-5) Add tests
-src/tests/functional/test_phase106_stream_adapter_functional.py
+6) Add regression test
+src/tests/regression/test_phase107_mock_provider_determinism_regression.py
 *** Begin Patch
-*** Add File: src/tests/functional/test_phase106_stream_adapter_functional.py
-+from app.rpg.runtime.dialogue_runtime import (
-+    begin_runtime_turn,
-+    get_runtime_dialogue_state,
-+)
-+from app.rpg.orchestration.stream_adapter import apply_provider_result_to_runtime_turn
+*** Add File: src/tests/regression/test_phase107_mock_provider_determinism_regression.py
++from app.rpg.orchestration.provider_adapter import DeterministicMockProviderAdapter
 +
 +
-+def test_phase106_apply_provider_result_to_runtime_turn_streams_and_finalizes():
-+    state = {}
-+    state = begin_runtime_turn(
-+        state,
-+        tick=30,
-+        sequence_index=2,
-+        actor_id="npc:guard",
-+        speaker_id="npc:guard",
-+        speaker_name="Guard",
-+        role="npc",
-+        sequence_id="seq:30:0",
-+    )
-+
-+    state = apply_provider_result_to_runtime_turn(
-+        state,
-+        turn_id="turn:30:2:npc:guard",
-+        actor_id="npc:guard",
-+        speaker_id="npc:guard",
-+        provider_result={
-+            "stream_events": [
-+                {"event_index": 0, "event_type": "text_chunk", "text": "Hold ", "final": False},
-+                {"event_index": 1, "event_type": "text_chunk", "text": "there.", "final": True},
-+            ],
-+            "output_text": "Hold there.",
++def test_phase107_deterministic_mock_provider_same_input_same_output():
++    adapter = DeterministicMockProviderAdapter()
++    payload = {
++        "turn": {
++            "turn_id": "turn:1:0:comp:lyra",
++            "speaker_name": "Lyra",
++            "emotion": "supportive",
 +        },
-+        allow_emotional_fallback=False,
-+    )
-+
-+    runtime = get_runtime_dialogue_state(state)
-+    turn = runtime["turns"][0]
-+    assert turn["status"] == "complete"
-+    assert turn["text"] == "Hold there."
-+    assert len(turn["chunks"]) == 2
++        "context": {
++            "topic": "the road ahead",
++        },
++    }
++    result_a = adapter.execute(payload)
++    result_b = adapter.execute(payload)
++    assert result_a == result_b
 *** End Patch
-6) Update file
-src/app/rpg/presentation/orchestration_bridge.py
-
-Expose a small controller-friendly summary so the frontend/inspector can see when live execution is still unsupported.
-
-*** Begin Patch
-*** Update File: src/app/rpg/presentation/orchestration_bridge.py
-@@
- def build_orchestration_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-     """Build a pure presentation payload from orchestration state."""
-     llm_state = get_llm_orchestration_state(simulation_state)
-@@
-     return {
-         "llm_orchestration": {
-             "provider_mode": _safe_str(llm_state.get("provider_mode")),
-             "request_counter": _safe_int(llm_state.get("request_counter"), 0),
-+            "live_execution_supported": False,
-             "active_requests": active_requests,
-             "completed_requests": completed_requests,
-             "last_error": _safe_dict(llm_state.get("last_error")),
-         }
-     }
-*** End Patch
-END OF PART 5/6
+END OF PART 3/6
 
 Next chunk is:
 
-Part 6/6: presentation integration + bug pass + fix patches
+Part 4/6: capture persistence + replay/live convergence fixes
 
-Part 6/6: presentation integration + bug pass + fix patches
+Part 4/6: capture persistence + replay/live convergence fixes
 
-Below is Part 6/6 only.
+Below is Part 4/6 only.
 
 Hard boundary: this message contains only
-Part 6/6: presentation integration + bug pass + fix patches
+Part 4/6: capture persistence + replay/live convergence fixes
 
-This final chunk completes Phase 10.6 by exposing orchestration state through the presentation routes and applying the required fix patches to keep the orchestration layer deterministic, bounded, replay-safe, and aligned with the runtime-first architecture established in Phase 10.5.
-
-PART 6/6 — PRESENTATION INTEGRATION + BUG PASS + FIX PATCHES
-1) Update file
-src/app/rpg/api/rpg_presentation_routes.py
-
-Merge orchestration output into the actual presentation routes alongside the runtime payload.
-
+PART 4/6 — CAPTURE PERSISTENCE + REPLAY/LIVE CONVERGENCE FIXES
+1) Add file
+src/app/rpg/orchestration/capture.py
 *** Begin Patch
-*** Update File: src/app/rpg/api/rpg_presentation_routes.py
-@@
- from app.rpg.presentation import (
-     build_scene_presentation_payload,
-     build_dialogue_presentation_payload,
-     build_runtime_presentation_payload,
-+    build_orchestration_presentation_payload,
- )
-@@
- def presentation_scene():
-@@
-     payload = build_scene_presentation_payload(simulation_state, scene_state)
-     runtime_payload = build_runtime_presentation_payload(simulation_state)
-+    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
-     if isinstance(payload, dict):
-         payload = dict(payload)
-         payload["runtime"] = runtime_payload
-+        payload["orchestration"] = orchestration_payload
-     else:
-         payload = {
-             "content": payload,
-             "runtime": runtime_payload,
-+            "orchestration": orchestration_payload,
-         }
-@@
- def presentation_dialogue():
-@@
-     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
-     runtime_payload = build_runtime_presentation_payload(simulation_state)
-+    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
-     if isinstance(payload, dict):
-         payload = dict(payload)
-         payload["runtime"] = runtime_payload
-+        payload["orchestration"] = orchestration_payload
-     else:
-         payload = {
-             "content": payload,
-             "runtime": runtime_payload,
-+            "orchestration": orchestration_payload,
-         }
-@@
- def presentation_speakers():
-@@
-     cards = build_speaker_cards(simulation_state, scene_state)
-     runtime_payload = build_runtime_presentation_payload(simulation_state)
-+    orchestration_payload = build_orchestration_presentation_payload(simulation_state)
- 
-     return jsonify({
-         "ok": True,
-         "speaker_cards": cards,
-         "runtime": runtime_payload,
-+        "orchestration": orchestration_payload,
-     })
-*** End Patch
-2) Update file
-src/app/rpg/presentation/orchestration_bridge.py
-
-Sort requests deterministically in the outward payload and expose compact last-error details.
-
-*** Begin Patch
-*** Update File: src/app/rpg/presentation/orchestration_bridge.py
-@@
- def build_orchestration_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-     """Build a pure presentation payload from orchestration state."""
-     llm_state = get_llm_orchestration_state(simulation_state)
- 
-     active_requests = [
-         _build_request_payload(v)
-         for v in _safe_list(llm_state.get("active_requests"))
-         if isinstance(v, dict)
-     ]
-+    active_requests = sorted(
-+        active_requests,
-+        key=lambda item: (
-+            _safe_int(item.get("tick"), 0),
-+            _safe_str(item.get("request_id")),
-+            _safe_str(item.get("turn_id")),
-+        ),
-+    )
-     completed_requests = [
-         _build_request_payload(v)
-         for v in _safe_list(llm_state.get("completed_requests"))
-         if isinstance(v, dict)
-     ]
-+    completed_requests = sorted(
-+        completed_requests,
-+        key=lambda item: (
-+            _safe_int(item.get("tick"), 0),
-+            _safe_str(item.get("request_id")),
-+            _safe_str(item.get("turn_id")),
-+        ),
-+    )
-+    last_error = _safe_dict(llm_state.get("last_error"))
- 
-     return {
-         "llm_orchestration": {
-             "provider_mode": _safe_str(llm_state.get("provider_mode")),
-             "request_counter": _safe_int(llm_state.get("request_counter"), 0),
-             "live_execution_supported": False,
-             "active_requests": active_requests,
-             "completed_requests": completed_requests,
--            "last_error": _safe_dict(llm_state.get("last_error")),
-+            "last_error": {
-+                "request_id": _safe_str(last_error.get("request_id")),
-+                "error": _safe_str(last_error.get("error")),
-+            },
-         }
-     }
-*** End Patch
-3) FIX PATCH — normalize provider mode through the state layer
-
-set_llm_provider_mode() currently mutates orchestration state directly instead of round-tripping through the normalized state helper. That is safe most of the time, but it weakens the single normalization path.
-
-Update file
-
-src/app/rpg/orchestration/provider_interface.py
-
-*** Begin Patch
-*** Update File: src/app/rpg/orchestration/provider_interface.py
-@@
- from .state import (
-     ensure_llm_orchestration_state,
-     get_llm_orchestration_state,
+*** Add File: src/app/rpg/orchestration/capture.py
++"""Phase 10.7 — Capture persistence helpers.
++
++These helpers persist live/capture provider outputs back into completed LLM
++request artifacts so replay mode can consume the exact same structured result.
++"""
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from .state import (
++    get_llm_orchestration_state,
 +    trim_llm_orchestration_state,
- )
-@@
- def set_llm_provider_mode(simulation_state: Dict[str, Any], mode: str) -> Dict[str, Any]:
-     """Set provider mode deterministically on orchestration state."""
-     simulation_state = ensure_llm_orchestration_state(simulation_state)
-     orchestration_state = _safe_dict(simulation_state.get("orchestration_state"))
-     llm_state = _safe_dict(orchestration_state.get("llm"))
-@@
-     llm_state["provider_mode"] = mode
-     orchestration_state["llm"] = llm_state
-     simulation_state["orchestration_state"] = orchestration_state
--    return simulation_state
++)
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_list(v: Any) -> List[Any]:
++    return list(v) if isinstance(v, list) else []
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
++
++
++def _find_completed_request_index(completed_requests: List[Dict[str, Any]], request_id: str) -> int:
++    request_id = _safe_str(request_id)
++    for idx, item in enumerate(completed_requests):
++        if _safe_str(_safe_dict(item).get("request_id")) == request_id:
++            return idx
++    return -1
++
++
++def persist_captured_provider_result(
++    simulation_state: Dict[str, Any],
++    *,
++    request_id: str,
++    provider_result: Dict[str, Any],
++    provider: str,
++    model: str,
++) -> Dict[str, Any]:
++    """Persist provider result into completed orchestration request artifact.
++
++    This keeps replay-mode inputs identical to what live/capture execution saw.
++    """
++    simulation_state = trim_llm_orchestration_state(simulation_state)
++    llm_state = get_llm_orchestration_state(simulation_state)
++
++    request_id = _safe_str(request_id)
++    provider_result = _safe_dict(provider_result)
++    provider = _safe_str(provider)
++    model = _safe_str(model)
++    if not request_id:
++        return simulation_state
++
++    completed_requests = [
++        _safe_dict(v)
++        for v in _safe_list(llm_state.get("completed_requests"))
++        if isinstance(v, dict)
++    ]
++    idx = _find_completed_request_index(completed_requests, request_id)
++    if idx < 0:
++        return simulation_state
++
++    request = _safe_dict(completed_requests[idx])
++    request["provider"] = provider or _safe_str(provider_result.get("provider"))
++    request["model"] = model or _safe_str(provider_result.get("model"))
++    request["output_text"] = _safe_str(provider_result.get("output_text"))
++    request["stream_events"] = [
++        _safe_dict(v)
++        for v in _safe_list(provider_result.get("stream_events"))
++        if isinstance(v, dict)
++    ]
++    request["error"] = _safe_str(provider_result.get("error"))
++
++    completed_requests[idx] = request
++    llm_state["completed_requests"] = completed_requests
++    simulation_state["orchestration_state"]["llm"] = llm_state
 +    return trim_llm_orchestration_state(simulation_state)
 *** End Patch
-4) FIX PATCH — replay should not reuse the just-created active request as a replay source
+2) Update file
+src/app/rpg/orchestration/__init__.py
 
-In replay mode, execute_llm_request_for_turn() begins a fresh active request and then looks for a replay artifact by turn_id. That can accidentally match the wrong request if later code changes allow active/completed overlap or if turn-level replay selection gets refactored. Make replay lookup explicitly ignore the just-created active request by requiring a completed artifact.
+Export capture persistence helper.
 
-Update file
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/__init__.py
+@@
+ from .provider_adapter import (
+     BaseLLMProviderAdapter,
+     DeterministicMockProviderAdapter,
+     LiveLLMProviderAdapter,
+     get_provider_adapter,
+ )
++from .capture import (
++    persist_captured_provider_result,
++)
+@@
+     "DeterministicMockProviderAdapter",
+     "LiveLLMProviderAdapter",
+     "get_provider_adapter",
++    "persist_captured_provider_result",
+ ]
+*** End Patch
+3) Update file
+src/app/rpg/orchestration/controller.py
 
+Converge capture/live paths so:
+
+capture persists replayable artifacts
+live uses the same provider-result shape
+replay/live/capture all flow through identical runtime write path
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/controller.py
+@@
+ from .provider_adapter import get_provider_adapter
++from .capture import persist_captured_provider_result
+@@
+         if provider_mode in {"capture", "live"}:
+             simulation_state = begin_provider_execution(
+                 simulation_state,
+                 request_id=request_id,
+                 tick=tick,
+@@
+             simulation_state = apply_provider_result_to_runtime_turn(
+                 simulation_state,
+                 turn_id=turn_id,
+                 actor_id=actor_id,
+                 speaker_id=speaker_id,
+                 provider_result=provider_result,
+                 allow_emotional_fallback=False,
+             )
+@@
+             simulation_state = finalize_provider_execution(
+                 simulation_state,
+                 execution_id=execution_id,
+                 output_text=_safe_str(provider_result.get("output_text")),
+             )
+             simulation_state = finalize_llm_request(
+                 simulation_state,
+                 request_id=request_id,
+                 output_text=_safe_str(provider_result.get("output_text")),
+                 replayed=False,
+             )
++            if provider_mode == "capture":
++                simulation_state = persist_captured_provider_result(
++                    simulation_state,
++                    request_id=request_id,
++                    provider_result=provider_result,
++                    provider=_safe_str(provider_result.get("provider")) or provider,
++                    model=_safe_str(provider_result.get("model")) or model,
++                )
+             return simulation_state
+*** End Patch
+4) Update file
+src/app/rpg/orchestration/provider_adapter.py
+
+Make capture mode deterministically use the mock adapter until a real live adapter is wired, while leaving live explicit and unconfigured.
+
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/provider_adapter.py
+@@
+ def get_provider_adapter(provider_mode: str) -> BaseLLMProviderAdapter:
+     """Return provider adapter for the requested mode."""
+     provider_mode = _safe_str(provider_mode).strip().lower()
+     if provider_mode == "live":
+         return LiveLLMProviderAdapter()
+-    if provider_mode == "capture":
+-        return LiveLLMProviderAdapter()
++    if provider_mode == "capture":
++        return DeterministicMockProviderAdapter()
+     return DeterministicMockProviderAdapter()
+*** End Patch
+5) Update file
 src/app/rpg/orchestration/replay.py
+
+Prefer exact captured request match when request_id is available, and keep turn-level fallback deterministic.
 
 *** Begin Patch
 *** Update File: src/app/rpg/orchestration/replay.py
@@ -2712,79 +1540,33 @@ src/app/rpg/orchestration/replay.py
 @@
      if request_id:
          for item in completed_requests:
--            if _safe_str(item.get("request_id")) == request_id:
-+            if _safe_str(item.get("request_id")) == request_id and _safe_str(item.get("status")) in {"complete", "replayed", "failed"}:
+             if (
+                 _safe_str(item.get("request_id")) == request_id
+                 and _safe_str(item.get("status")) in {"complete", "replayed", "failed"}
+             ):
                  return item
 @@
-         matches = [
-             item for item in completed_requests
--            if _safe_str(item.get("turn_id")) == turn_id
-+            if _safe_str(item.get("turn_id")) == turn_id
-+            and _safe_str(item.get("status")) in {"complete", "replayed", "failed"}
-         ]
-*** End Patch
-5) FIX PATCH — do not silently swallow unimplemented live/capture mode as generic failure metadata
-
-Right now execute_llm_request_for_turn() raises NotImplementedError, which then gets collapsed into a generic failed request. Preserve explicit mode-failure detail.
-
-Update file
-
-src/app/rpg/orchestration/controller.py
-
-*** Begin Patch
-*** Update File: src/app/rpg/orchestration/controller.py
-@@
--        raise NotImplementedError(f"Provider mode '{provider_mode}' is not implemented yet")
-+        raise NotImplementedError(
-+            f"Provider mode '{provider_mode}' is not implemented yet in Phase 10.6"
-+        )
-@@
-     except Exception as exc:
-         simulation_state = fail_llm_request(
-             simulation_state,
-             request_id=request_id,
-             error=_safe_str(exc),
+         matches = sorted(
+             matches,
+             key=lambda item: (
++                _safe_int(_safe_str(item.get("request_id")).split(":")[-1] or 0, 0) if ":" in _safe_str(item.get("request_id")) else 0,
+                 _safe_str(item.get("request_id")),
+                 _safe_str(item.get("status")),
+             ),
          )
-         return simulation_state
+         if matches:
+             return matches[-1]
 *** End Patch
-6) FIX PATCH — active request lookup should prefer exact latest request ordering
+6) Update file
+src/app/rpg/orchestration/replay.py
 
-Tighten _latest_active_request_id_for_turn() so it remains deterministic even if future changes allow multiple active requests with identical tick/request ordering patterns.
-
-Update file
-
-src/app/rpg/orchestration/controller.py
+Add a safe helper so request-id ordering is not parsed inline.
 
 *** Begin Patch
-*** Update File: src/app/rpg/orchestration/controller.py
+*** Update File: src/app/rpg/orchestration/replay.py
 @@
- def _latest_active_request_id_for_turn(simulation_state: Dict[str, Any], turn_id: str) -> str:
-@@
-     matches = sorted(
-         matches,
-         key=lambda item: (
-             _safe_int(item.get("tick"), 0),
-+            _safe_int(_safe_str(item.get("request_id")).split(":")[-1] or 0, 0) if ":" in _safe_str(item.get("request_id")) else 0,
-             _safe_str(item.get("request_id")),
-         ),
-     )
-*** End Patch
-7) FIX PATCH — avoid parsing request id inline with a fragile expression
-
-The previous patch’s inline split is brittle. Add a helper instead.
-
-Update file
-
-src/app/rpg/orchestration/controller.py
-
-*** Begin Patch
-*** Update File: src/app/rpg/orchestration/controller.py
-@@
- def _safe_int(v: Any, default: int = 0) -> int:
-     try:
-         return int(v)
-     except Exception:
-         return default
+ def _safe_str(v: Any) -> str:
+     return "" if v is None else str(v)
 +
 +
 +def _request_id_counter(request_id: str) -> int:
@@ -2792,78 +1574,363 @@ src/app/rpg/orchestration/controller.py
 +    parts = request_id.split(":")
 +    if not parts:
 +        return 0
-+    return _safe_int(parts[-1], 0)
++    try:
++        return int(parts[-1])
++    except Exception:
++        return 0
 @@
-     matches = sorted(
-         matches,
+         matches = sorted(
+             matches,
+             key=lambda item: (
+-                _safe_int(_safe_str(item.get("request_id")).split(":")[-1] or 0, 0) if ":" in _safe_str(item.get("request_id")) else 0,
++                _request_id_counter(_safe_str(item.get("request_id"))),
+                 _safe_str(item.get("request_id")),
+                 _safe_str(item.get("status")),
+             ),
+         )
+*** End Patch
+7) Add tests
+src/tests/functional/test_phase107_capture_persistence_functional.py
+*** Begin Patch
+*** Add File: src/tests/functional/test_phase107_capture_persistence_functional.py
++from app.rpg.runtime.dialogue_runtime import begin_runtime_turn
++from app.rpg.orchestration.provider_interface import set_llm_provider_mode
++from app.rpg.orchestration.controller import execute_llm_request_for_turn
++from app.rpg.orchestration.state import get_llm_orchestration_state
++from app.rpg.orchestration.replay import find_replayable_llm_request
++
++
++def test_phase107_capture_mode_persists_replayable_artifact():
++    state = {}
++    state = set_llm_provider_mode(state, "capture")
++    state = begin_runtime_turn(
++        state,
++        tick=10,
++        sequence_index=1,
++        actor_id="comp:lyra",
++        speaker_id="comp:lyra",
++        speaker_name="Lyra",
++        role="companion",
++        sequence_id="seq:10:0",
++    )
++
++    state = execute_llm_request_for_turn(
++        state,
++        turn_id="turn:10:1:comp:lyra",
++        mode="dialogue",
++        provider="mock-provider",
++        model="mock-model",
++    )
++
++    llm = get_llm_orchestration_state(state)
++    assert len(llm["completed_requests"]) == 1
++    request = llm["completed_requests"][0]
++    assert request["status"] == "complete"
++    assert request["provider"] == "mock-provider" or request["provider"] == "deterministic_mock"
++    assert request["output_text"] != ""
++    assert len(request["stream_events"]) >= 1
++
++    replay_item = find_replayable_llm_request(
++        state,
++        request_id=request["request_id"],
++    )
++    assert replay_item["request_id"] == request["request_id"]
++    assert replay_item["output_text"] == request["output_text"]
+*** End Patch
+8) Add regression test
+src/tests/regression/test_phase107_capture_replay_convergence_regression.py
+*** Begin Patch
+*** Add File: src/tests/regression/test_phase107_capture_replay_convergence_regression.py
++from app.rpg.runtime.dialogue_runtime import (
++    begin_runtime_turn,
++    get_runtime_dialogue_state,
++)
++from app.rpg.orchestration.provider_interface import set_llm_provider_mode
++from app.rpg.orchestration.controller import execute_llm_request_for_turn
++
++
++def test_phase107_capture_then_replay_produces_same_runtime_text():
++    state = {}
++    state = set_llm_provider_mode(state, "capture")
++    state = begin_runtime_turn(
++        state,
++        tick=20,
++        sequence_index=0,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:20:0",
++    )
++
++    state = execute_llm_request_for_turn(
++        state,
++        turn_id="turn:20:0:npc:guard",
++        mode="dialogue",
++        provider="mock-provider",
++        model="mock-model",
++    )
++    runtime_after_capture = get_runtime_dialogue_state(state)
++    captured_text = runtime_after_capture["turns"][0]["text"]
++
++    replay_state = {
++        "runtime_state": {
++            "dialogue": {
++                "active_sequence_id": "seq:20:0",
++                "active_turn_id": "",
++                "sequence_tick": 20,
++                "turn_cursor": 0,
++                "turns": [
++                    {
++                        "turn_id": "turn:20:0:npc:guard",
++                        "sequence_id": "seq:20:0",
++                        "tick": 20,
++                        "sequence_index": 0,
++                        "actor_id": "npc:guard",
++                        "speaker_id": "npc:guard",
++                        "speaker_name": "Guard",
++                        "role": "npc",
++                        "text": "",
++                        "status": "pending",
++                        "emotion": "neutral",
++                        "style_tags": [],
++                        "interruption": False,
++                        "interrupt_target_id": "",
++                        "chunks": [],
++                    }
++                ],
++            }
++        },
++        "orchestration_state": state["orchestration_state"],
++    }
++    replay_state = set_llm_provider_mode(replay_state, "replay")
++    replay_state = execute_llm_request_for_turn(
++        replay_state,
++        turn_id="turn:20:0:npc:guard",
++        mode="dialogue",
++    )
++
++    runtime_after_replay = get_runtime_dialogue_state(replay_state)
++    replayed_text = runtime_after_replay["turns"][0]["text"]
++    assert replayed_text == captured_text
+*** End Patch
+9) Update file
+src/app/rpg/presentation/orchestration_bridge.py
+
+Expose whether completed requests have captured stream artifacts.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/orchestration_bridge.py
+@@
+ def _build_request_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+     item = _safe_dict(item)
+     return {
+@@
+         "stream_event_count": len(_safe_list(item.get("stream_events"))),
+         "has_input_payload": bool(_safe_dict(item.get("input_payload"))),
+         "is_replayed": _safe_str(item.get("status")) == "replayed",
+         "is_failed": _safe_str(item.get("status")) == "failed",
++        "has_captured_stream": len(_safe_list(item.get("stream_events"))) > 0,
+     }
+*** End Patch
+10) Update file
+src/app/rpg/presentation/live_provider_bridge.py
+
+Expose whether provider executions have persisted output.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/live_provider_bridge.py
+@@
+ def _build_execution_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+     item = _safe_dict(item)
+     return {
+@@
+         "event_count": len(_safe_list(item.get("events"))),
+         "is_complete": _safe_str(item.get("status")) == "complete",
+         "is_failed": _safe_str(item.get("status")) == "failed",
++        "has_output_text": bool(_safe_str(item.get("output_text"))),
+     }
+*** End Patch
+END OF PART 4/6
+
+Next chunk is:
+
+Part 5/6: presentation integration + live provider diagnostics exposure
+
+Part 5/6: presentation integration + live provider diagnostics exposure
+
+Below is Part 5/6 only.
+
+Hard boundary: this message contains only
+Part 5/6: presentation integration + live provider diagnostics exposure
+
+PART 5/6 — PRESENTATION INTEGRATION + LIVE PROVIDER DIAGNOSTICS EXPOSURE
+1) Update file
+src/app/rpg/presentation/__init__.py
+
+Export the live provider bridge from the presentation package.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/__init__.py
+@@
+ from .orchestration_bridge import (
+     build_orchestration_presentation_payload,
+ )
++from .live_provider_bridge import (
++    build_live_provider_presentation_payload,
++)
+@@
+     "build_runtime_presentation_payload",
+     "build_orchestration_presentation_payload",
++    "build_live_provider_presentation_payload",
+ ]
+*** End Patch
+2) Update file
+src/app/rpg/api/rpg_presentation_routes.py
+
+Merge live provider diagnostics into the actual presentation routes alongside runtime and orchestration.
+
+*** Begin Patch
+*** Update File: src/app/rpg/api/rpg_presentation_routes.py
+@@
+ from app.rpg.presentation import (
+     build_scene_presentation_payload,
+     build_dialogue_presentation_payload,
+     build_runtime_presentation_payload,
+     build_orchestration_presentation_payload,
++    build_live_provider_presentation_payload,
+ )
+ from app.rpg.presentation.speaker_cards import build_speaker_cards
+@@
+ def presentation_scene():
+@@
+     payload = build_scene_presentation_payload(simulation_state, scene_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+     orchestration_payload = build_orchestration_presentation_payload(simulation_state)
++    live_provider_payload = build_live_provider_presentation_payload(simulation_state)
+     if isinstance(payload, dict):
+         payload = dict(payload)
+         payload["runtime"] = runtime_payload
+         payload["orchestration"] = orchestration_payload
++        payload["live_provider"] = live_provider_payload
+     else:
+         payload = {
+             "content": payload,
+             "runtime": runtime_payload,
+             "orchestration": orchestration_payload,
++            "live_provider": live_provider_payload,
+         }
+@@
+ def presentation_dialogue():
+@@
+     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+     orchestration_payload = build_orchestration_presentation_payload(simulation_state)
++    live_provider_payload = build_live_provider_presentation_payload(simulation_state)
+     if isinstance(payload, dict):
+         payload = dict(payload)
+         payload["runtime"] = runtime_payload
+         payload["orchestration"] = orchestration_payload
++        payload["live_provider"] = live_provider_payload
+     else:
+         payload = {
+             "content": payload,
+             "runtime": runtime_payload,
+             "orchestration": orchestration_payload,
++            "live_provider": live_provider_payload,
+         }
+@@
+ def presentation_speakers():
+@@
+     cards = build_speaker_cards(simulation_state, scene_state)
+     runtime_payload = build_runtime_presentation_payload(simulation_state)
+     orchestration_payload = build_orchestration_presentation_payload(simulation_state)
++    live_provider_payload = build_live_provider_presentation_payload(simulation_state)
+ 
+     return jsonify({
+         "ok": True,
+         "speaker_cards": cards,
+         "runtime": runtime_payload,
+         "orchestration": orchestration_payload,
++        "live_provider": live_provider_payload,
+     })
+*** End Patch
+3) Update file
+src/app/rpg/presentation/live_provider_bridge.py
+
+Expand the outward payload with compact status summaries and deterministic ordering.
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/live_provider_bridge.py
+@@
+ def build_live_provider_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Build pure presentation payload for live provider execution state."""
+     live_state = get_live_provider_state(simulation_state)
+     executions = [
+         _build_execution_payload(v)
+         for v in _safe_list(live_state.get("executions"))
+         if isinstance(v, dict)
+     ]
+     executions = sorted(
+         executions,
          key=lambda item: (
              _safe_int(item.get("tick"), 0),
--            _safe_int(_safe_str(item.get("request_id")).split(":")[-1] or 0, 0) if ":" in _safe_str(item.get("request_id")) else 0,
-+            _request_id_counter(_safe_str(item.get("request_id"))),
-             _safe_str(item.get("request_id")),
+             _safe_str(item.get("execution_id")),
          ),
      )
++    complete_count = sum(1 for item in executions if bool(item.get("is_complete")))
++    failed_count = sum(1 for item in executions if bool(item.get("is_failed")))
++    streaming_count = sum(1 for item in executions if _safe_str(item.get("status")) == "streaming")
+     return {
+         "live_provider": {
++            "execution_count": len(executions),
++            "complete_count": complete_count,
++            "failed_count": failed_count,
++            "streaming_count": streaming_count,
+             "executions": executions,
+         }
+     }
 *** End Patch
-8) FIX PATCH — preserve explicit disabled vs fallback completion status in completed requests
+4) Update file
+src/app/rpg/presentation/orchestration_bridge.py
 
-If disabled mode runs with allow_fallback=False, the request currently finalizes as complete with empty output, which makes it hard to distinguish a deliberate “no provider / no fallback” run from a successful generated response. Encode that in the request error/output path.
-
-Update file
-
-src/app/rpg/orchestration/controller.py
+Expose a compact bridge-level flag showing whether live provider diagnostics are present in state.
 
 *** Begin Patch
-*** Update File: src/app/rpg/orchestration/controller.py
+*** Update File: src/app/rpg/presentation/orchestration_bridge.py
 @@
-         if provider_mode == "disabled":
-             disabled_result = build_disabled_provider_result(request_payload)
-             provider_result = build_llm_fallback_result(
-                 request_payload,
-                 provider_mode=provider_mode,
-                 allow_fallback=allow_fallback,
-             )
-             if _safe_str(provider_result.get("status")) == "disabled":
-                 provider_result = disabled_result
-             simulation_state = apply_provider_result_to_runtime_turn(
-                 simulation_state,
-                 turn_id=turn_id,
-                 actor_id=actor_id,
-                 speaker_id=speaker_id,
-                 provider_result=provider_result,
-                 allow_emotional_fallback=allow_fallback,
-             )
--            simulation_state = finalize_llm_request(
--                simulation_state,
--                request_id=request_id,
--                output_text=_safe_str(provider_result.get("output_text")),
--                replayed=False,
--            )
-+            if _safe_str(provider_result.get("status")) == "disabled":
-+                simulation_state = fail_llm_request(
-+                    simulation_state,
-+                    request_id=request_id,
-+                    error="Provider mode disabled and fallback not allowed",
-+                )
-+            else:
-+                simulation_state = finalize_llm_request(
-+                    simulation_state,
-+                    request_id=request_id,
-+                    output_text=_safe_str(provider_result.get("output_text")),
-+                    replayed=False,
-+                )
-             return simulation_state
+-from app.rpg.orchestration.state import get_llm_orchestration_state
++from app.rpg.orchestration.state import get_llm_orchestration_state
++from app.rpg.orchestration.live_provider import get_live_provider_state
+@@
+ def build_orchestration_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     """Build a pure presentation payload from orchestration state."""
+     llm_state = get_llm_orchestration_state(simulation_state)
++    live_state = get_live_provider_state(simulation_state)
+@@
+     return {
+         "llm_orchestration": {
+             "provider_mode": _safe_str(llm_state.get("provider_mode")),
+             "request_counter": _safe_int(llm_state.get("request_counter"), 0),
+             "live_execution_supported": False,
++            "has_live_provider_diagnostics": len(_safe_list(live_state.get("executions"))) > 0,
+             "active_requests": active_requests,
+             "completed_requests": completed_requests,
+             "last_error": {
+                 "request_id": _safe_str(last_error.get("request_id")),
+                 "error": _safe_str(last_error.get("error")),
 *** End Patch
-9) Add tests
-src/tests/functional/test_phase106_presentation_routes_functional.py
+5) Add tests
+src/tests/functional/test_phase107_presentation_routes_functional.py
 
-Validate orchestration payload appears in the actual routes.
+Validate live provider payload appears in the actual presentation routes.
 
 *** Begin Patch
-*** Add File: src/tests/functional/test_phase106_presentation_routes_functional.py
+*** Add File: src/tests/functional/test_phase107_presentation_routes_functional.py
 +from app import create_app
 +
 +
-+def test_phase106_scene_presentation_route_includes_orchestration_payload():
++def test_phase107_scene_presentation_route_includes_live_provider_payload():
 +    app = create_app()
 +    client = app.test_client()
 +
@@ -2878,12 +1945,27 @@ Validate orchestration payload appears in the actual routes.
 +                    },
 +                    "orchestration_state": {
 +                        "llm": {
-+                            "provider_mode": "disabled",
++                            "provider_mode": "capture",
 +                            "request_counter": 0,
 +                            "active_requests": [],
 +                            "completed_requests": [],
 +                            "last_error": {},
-+                        }
++                        },
++                        "live_provider": {
++                            "executions": [
++                                {
++                                    "execution_id": "provexec:llmreq:10:1:comp:lyra:0",
++                                    "request_id": "llmreq:10:1:comp:lyra:0",
++                                    "tick": 10,
++                                    "provider": "mock-provider",
++                                    "model": "mock-model",
++                                    "status": "complete",
++                                    "events": [],
++                                    "output_text": "Lyra: Ready.",
++                                    "error": "",
++                                }
++                            ]
++                        },
 +                    },
 +                }
 +            },
@@ -2897,11 +1979,11 @@ Validate orchestration payload appears in the actual routes.
 +    assert response.status_code == 200
 +    payload = response.get_json()
 +    assert payload["ok"] is True
-+    assert "orchestration" in payload["presentation"]
-+    assert payload["presentation"]["orchestration"]["llm_orchestration"]["provider_mode"] == "disabled"
++    assert "live_provider" in payload["presentation"]
++    assert payload["presentation"]["live_provider"]["live_provider"]["execution_count"] == 1
 +
 +
-+def test_phase106_dialogue_presentation_route_includes_orchestration_payload():
++def test_phase107_dialogue_presentation_route_includes_live_provider_payload():
 +    app = create_app()
 +    client = app.test_client()
 +
@@ -2916,12 +1998,15 @@ Validate orchestration payload appears in the actual routes.
 +                    },
 +                    "orchestration_state": {
 +                        "llm": {
-+                            "provider_mode": "replay",
++                            "provider_mode": "live",
 +                            "request_counter": 1,
 +                            "active_requests": [],
 +                            "completed_requests": [],
 +                            "last_error": {},
-+                        }
++                        },
++                        "live_provider": {
++                            "executions": []
++                        },
 +                    },
 +                }
 +            },
@@ -2936,11 +2021,11 @@ Validate orchestration payload appears in the actual routes.
 +    assert response.status_code == 200
 +    payload = response.get_json()
 +    assert payload["ok"] is True
-+    assert "orchestration" in payload["presentation"]
-+    assert payload["presentation"]["orchestration"]["llm_orchestration"]["provider_mode"] == "replay"
++    assert "live_provider" in payload["presentation"]
++    assert payload["presentation"]["live_provider"]["live_provider"]["execution_count"] == 0
 +
 +
-+def test_phase106_speakers_route_includes_orchestration_payload():
++def test_phase107_speakers_route_includes_live_provider_payload():
 +    app = create_app()
 +    client = app.test_client()
 +
@@ -2955,12 +2040,15 @@ Validate orchestration payload appears in the actual routes.
 +                    },
 +                    "orchestration_state": {
 +                        "llm": {
-+                            "provider_mode": "disabled",
++                            "provider_mode": "capture",
 +                            "request_counter": 0,
 +                            "active_requests": [],
 +                            "completed_requests": [],
 +                            "last_error": {},
-+                        }
++                        },
++                        "live_provider": {
++                            "executions": []
++                        },
 +                    },
 +                }
 +            },
@@ -2971,44 +2059,517 @@ Validate orchestration payload appears in the actual routes.
 +    assert response.status_code == 200
 +    payload = response.get_json()
 +    assert payload["ok"] is True
-+    assert "orchestration" in payload
-+    assert "llm_orchestration" in payload["orchestration"]
++    assert "live_provider" in payload
++    assert "executions" in payload["live_provider"]["live_provider"]
 *** End Patch
-10) Add regression test
-src/tests/regression/test_phase106_bridge_purity_regression.py
+6) Add regression test
+src/tests/regression/test_phase107_live_provider_bridge_purity_regression.py
 
-Ensure orchestration presentation bridge remains read-only.
+Ensure the live provider bridge remains read-only.
 
 *** Begin Patch
-*** Add File: src/tests/regression/test_phase106_bridge_purity_regression.py
+*** Add File: src/tests/regression/test_phase107_live_provider_bridge_purity_regression.py
 +import copy
 +
-+from app.rpg.presentation.orchestration_bridge import build_orchestration_presentation_payload
++from app.rpg.presentation.live_provider_bridge import build_live_provider_presentation_payload
 +
 +
-+def test_phase106_orchestration_bridge_does_not_mutate_input_state():
++def test_phase107_live_provider_bridge_does_not_mutate_input_state():
++    state = {
++        "orchestration_state": {
++            "live_provider": {
++                "executions": [
++                    {
++                        "execution_id": "provexec:llmreq:1:0:comp:lyra:0",
++                        "request_id": "llmreq:1:0:comp:lyra:0",
++                        "tick": 1,
++                        "provider": "mock-provider",
++                        "model": "mock-model",
++                        "status": "complete",
++                        "events": [],
++                        "output_text": "Lyra: Ready.",
++                        "error": "",
++                    }
++                ]
++            }
++        }
++    }
++
++    before = copy.deepcopy(state)
++    payload = build_live_provider_presentation_payload(state)
++
++    assert state == before
++    assert payload["live_provider"]["execution_count"] == 1
++    assert payload["live_provider"]["executions"][0]["is_complete"] is True
+*** End Patch
+END OF PART 5/6
+
+Next chunk is:
+
+Part 6/6: bug pass + convergence fixes for live/capture/replay execution
+
+Part 6/6: bug pass + convergence fixes for live/capture/replay execution
+
+Below is Part 6/6 only.
+
+Hard boundary: this message contains only
+Part 6/6: bug pass + convergence fixes for live/capture/replay execution
+
+PART 6/6 — BUG PASS + CONVERGENCE FIXES FOR LIVE/CAPTURE/REPLAY EXECUTION
+
+This final chunk completes Phase 10.7 by tightening the live/capture/replay behavior so all three paths converge on the same runtime/orchestration contracts, with clear diagnostics and fail-hard replay rules.
+
+1) FIX PATCH — capture must persist replayable artifacts before route inspection
+
+The current Part 4 persistence path updates completed requests after finalize_llm_request(), which is correct, but this fix makes that path explicit and stable even if future refactors reorder controller steps.
+
+Update file
+
+src/app/rpg/orchestration/controller.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/controller.py
+@@
+         if provider_mode in {"capture", "live"}:
+@@
+             simulation_state = finalize_provider_execution(
+                 simulation_state,
+                 execution_id=execution_id,
+                 output_text=_safe_str(provider_result.get("output_text")),
+             )
+             simulation_state = finalize_llm_request(
+                 simulation_state,
+                 request_id=request_id,
+                 output_text=_safe_str(provider_result.get("output_text")),
+                 replayed=False,
+             )
+             if provider_mode == "capture":
+                 simulation_state = persist_captured_provider_result(
+                     simulation_state,
+                     request_id=request_id,
+                     provider_result=provider_result,
+                     provider=_safe_str(provider_result.get("provider")) or provider,
+                     model=_safe_str(provider_result.get("model")) or model,
+                 )
+             return simulation_state
+*** End Patch
+
+This patch is logically a no-op if Part 4 was applied exactly, but it locks in the intended final order for merge review.
+
+2) FIX PATCH — live failures should not masquerade as generic orchestration failures
+
+If live execution fails because the adapter is unconfigured or the provider errors, keep that failure clearly visible in both:
+
+live_provider execution state
+llm completed request state
+Update file
+
+src/app/rpg/orchestration/controller.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/controller.py
+@@
+     except Exception as exc:
+         if provider_mode in {"capture", "live"} and request_id:
+             simulation_state = append_provider_execution_event(
+                 simulation_state,
+                 execution_id=execution_id,
+                 event_index=999999,
+                 event_type="response_failed",
+                 text="",
+                 final=True,
+                 raw={"error": _safe_str(exc)},
+             )
+             simulation_state = fail_provider_execution(
+                 simulation_state,
+                 execution_id=execution_id,
+                 error=_safe_str(exc),
+             )
+         simulation_state = fail_llm_request(
+             simulation_state,
+             request_id=request_id,
+-            error=_safe_str(exc),
++            error=f"{provider_mode}: {_safe_str(exc)}",
+         )
+         return simulation_state
+*** End Patch
+
+This preserves the mode context in the orchestration request history.
+
+3) FIX PATCH — replay lookup should prefer exact request replay when available
+
+When replaying, the safest path is:
+
+exact request_id if known
+fallback to turn_id
+
+Right now the controller replays by turn_id only. Tighten that.
+
+Update file
+
+src/app/rpg/orchestration/controller.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/controller.py
+@@
+         if provider_mode == "replay":
+             replay_record = require_replayable_llm_request(
+                 simulation_state,
+-                turn_id=turn_id,
++                request_id=request_id,
++                turn_id=turn_id,
+             )
+             provider_result = build_replay_provider_result(replay_record)
+*** End Patch
+
+This makes replay alignment stricter and more future-proof.
+
+4) FIX PATCH — deterministic event ordering in provider execution diagnostics
+
+Provider execution events are already normalized and sorted, but this fix makes the bridge explicitly stable if future raw event order changes.
+
+Update file
+
+src/app/rpg/presentation/live_provider_bridge.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/live_provider_bridge.py
+@@
+ def _build_execution_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+     item = _safe_dict(item)
++    events = [
++        _safe_dict(v)
++        for v in _safe_list(item.get("events"))
++        if isinstance(v, dict)
++    ]
++    events = sorted(
++        events,
++        key=lambda event: (
++            _safe_int(event.get("event_index"), 0),
++            _safe_str(event.get("event_type")),
++        ),
++    )
+     return {
+         "execution_id": _safe_str(item.get("execution_id")),
+         "request_id": _safe_str(item.get("request_id")),
+         "tick": _safe_int(item.get("tick"), 0),
+         "provider": _safe_str(item.get("provider")),
+         "model": _safe_str(item.get("model")),
+         "status": _safe_str(item.get("status")),
+         "output_text": _safe_str(item.get("output_text")),
+         "error": _safe_str(item.get("error")),
+-        "event_count": len(_safe_list(item.get("events"))),
++        "event_count": len(events),
+         "is_complete": _safe_str(item.get("status")) == "complete",
+         "is_failed": _safe_str(item.get("status")) == "failed",
+         "has_output_text": bool(_safe_str(item.get("output_text"))),
+     }
+*** End Patch
+5) FIX PATCH — make capture visibly distinct from live in outward payloads
+
+Both currently execute through the provider adapter path. Add a presentation-visible indicator for diagnostics.
+
+Update file
+
+src/app/rpg/presentation/orchestration_bridge.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/orchestration_bridge.py
+@@
+     return {
+         "llm_orchestration": {
+             "provider_mode": _safe_str(llm_state.get("provider_mode")),
+             "request_counter": _safe_int(llm_state.get("request_counter"), 0),
+             "live_execution_supported": False,
+             "has_live_provider_diagnostics": len(_safe_list(live_state.get("executions"))) > 0,
++            "capture_mode_active": _safe_str(llm_state.get("provider_mode")) == "capture",
++            "live_mode_active": _safe_str(llm_state.get("provider_mode")) == "live",
+             "active_requests": active_requests,
+             "completed_requests": completed_requests,
+             "last_error": {
+                 "request_id": _safe_str(last_error.get("request_id")),
+                 "error": _safe_str(last_error.get("error")),
+*** End Patch
+6) FIX PATCH — if capture uses mock adapter, say so explicitly in provider execution record
+
+This avoids confusion where capture mode is active but the adapter is deterministic mock.
+
+Update file
+
+src/app/rpg/orchestration/controller.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/controller.py
+@@
+             simulation_state = begin_provider_execution(
+                 simulation_state,
+                 request_id=request_id,
+                 tick=tick,
+-                provider=provider or provider_mode,
+-                model=model or "",
++                provider=provider or provider_mode,
++                model=model or "",
+             )
+@@
+             adapter = get_provider_adapter(provider_mode)
+             provider_result = adapter.execute(request_payload)
++            provider_name = _safe_str(provider_result.get("provider")) or provider or provider_mode
++            model_name = _safe_str(provider_result.get("model")) or model
+ 
+             provider_stream_events = [
+                 _safe_dict(v)
+                 for v in _safe_list(provider_result.get("stream_events"))
+                 if isinstance(v, dict)
+@@
+             simulation_state = finalize_provider_execution(
+                 simulation_state,
+                 execution_id=execution_id,
+                 output_text=_safe_str(provider_result.get("output_text")),
+             )
+             simulation_state = finalize_llm_request(
+                 simulation_state,
+                 request_id=request_id,
+                 output_text=_safe_str(provider_result.get("output_text")),
+                 replayed=False,
+             )
+             if provider_mode == "capture":
+                 simulation_state = persist_captured_provider_result(
+                     simulation_state,
+                     request_id=request_id,
+                     provider_result=provider_result,
+-                    provider=_safe_str(provider_result.get("provider")) or provider,
+-                    model=_safe_str(provider_result.get("model")) or model,
++                    provider=provider_name,
++                    model=model_name,
+                 )
+             return simulation_state
+*** End Patch
+7) FIX PATCH — replay artifacts should never be sourced from failed disabled-mode requests
+
+If a request failed because provider mode was disabled and fallback was not allowed, that should not later masquerade as a replayable provider artifact.
+
+Update file
+
+src/app/rpg/orchestration/replay.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/orchestration/replay.py
+@@
+     if request_id:
+         for item in completed_requests:
+             if (
+                 _safe_str(item.get("request_id")) == request_id
+-                and _safe_str(item.get("status")) in {"complete", "replayed", "failed"}
++                and _safe_str(item.get("status")) in {"complete", "replayed"}
+             ):
+                 return item
+@@
+         matches = [
+             item for item in completed_requests
+             if _safe_str(item.get("turn_id")) == turn_id
+-            and _safe_str(item.get("status")) in {"complete", "replayed", "failed"}
++            and _safe_str(item.get("status")) in {"complete", "replayed"}
+         ]
+*** End Patch
+
+This keeps replay strictly tied to captured successful artifacts.
+
+8) FIX PATCH — expose live provider diagnostics under orchestration payload too
+
+This makes inspection easier without forcing consumers to join two top-level payloads.
+
+Update file
+
+src/app/rpg/presentation/orchestration_bridge.py
+
+*** Begin Patch
+*** Update File: src/app/rpg/presentation/orchestration_bridge.py
+@@
+     live_state = get_live_provider_state(simulation_state)
++    live_execution_count = len(_safe_list(live_state.get("executions")))
+@@
+         "llm_orchestration": {
+             "provider_mode": _safe_str(llm_state.get("provider_mode")),
+             "request_counter": _safe_int(llm_state.get("request_counter"), 0),
+             "live_execution_supported": False,
+             "has_live_provider_diagnostics": len(_safe_list(live_state.get("executions"))) > 0,
+             "capture_mode_active": _safe_str(llm_state.get("provider_mode")) == "capture",
+             "live_mode_active": _safe_str(llm_state.get("provider_mode")) == "live",
++            "live_execution_count": live_execution_count,
+             "active_requests": active_requests,
+             "completed_requests": completed_requests,
+             "last_error": {
+                 "request_id": _safe_str(last_error.get("request_id")),
+                 "error": _safe_str(last_error.get("error")),
+*** End Patch
+9) Add tests
+src/tests/functional/test_phase107_live_capture_replay_functional.py
+*** Begin Patch
+*** Add File: src/tests/functional/test_phase107_live_capture_replay_functional.py
++from app.rpg.runtime.dialogue_runtime import (
++    begin_runtime_turn,
++    get_runtime_dialogue_state,
++)
++from app.rpg.orchestration.provider_interface import set_llm_provider_mode
++from app.rpg.orchestration.controller import execute_llm_request_for_turn
++from app.rpg.orchestration.state import get_llm_orchestration_state
++from app.rpg.orchestration.live_provider import get_live_provider_state
++
++
++def test_phase107_capture_mode_produces_completed_request_and_provider_execution():
++    state = {}
++    state = set_llm_provider_mode(state, "capture")
++    state = begin_runtime_turn(
++        state,
++        tick=10,
++        sequence_index=1,
++        actor_id="comp:lyra",
++        speaker_id="comp:lyra",
++        speaker_name="Lyra",
++        role="companion",
++        sequence_id="seq:10:0",
++    )
++
++    state = execute_llm_request_for_turn(
++        state,
++        turn_id="turn:10:1:comp:lyra",
++        provider="mock-provider",
++        model="mock-model",
++    )
++
++    llm = get_llm_orchestration_state(state)
++    live_state = get_live_provider_state(state)
++    runtime = get_runtime_dialogue_state(state)
++
++    assert llm["completed_requests"][-1]["status"] == "complete"
++    assert len(live_state["executions"]) == 1
++    assert live_state["executions"][0]["status"] == "complete"
++    assert runtime["turns"][0]["status"] == "complete"
++    assert runtime["turns"][0]["text"] != ""
++
++
++def test_phase107_live_mode_unconfigured_records_failed_execution_and_failed_request():
++    state = {}
++    state = set_llm_provider_mode(state, "live")
++    state = begin_runtime_turn(
++        state,
++        tick=20,
++        sequence_index=0,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:20:0",
++    )
++
++    state = execute_llm_request_for_turn(
++        state,
++        turn_id="turn:20:0:npc:guard",
++        provider="openai",
++        model="gpt-live",
++    )
++
++    llm = get_llm_orchestration_state(state)
++    live_state = get_live_provider_state(state)
++
++    assert llm["completed_requests"][-1]["status"] == "failed"
++    assert llm["completed_requests"][-1]["error"].startswith("live:")
++    assert live_state["executions"][-1]["status"] == "failed"
++
++
++def test_phase107_capture_then_replay_uses_captured_success_artifact_only():
++    state = {}
++    state = set_llm_provider_mode(state, "capture")
++    state = begin_runtime_turn(
++        state,
++        tick=30,
++        sequence_index=0,
++        actor_id="npc:guard",
++        speaker_id="npc:guard",
++        speaker_name="Guard",
++        role="npc",
++        sequence_id="seq:30:0",
++    )
++    state = execute_llm_request_for_turn(
++        state,
++        turn_id="turn:30:0:npc:guard",
++        provider="mock-provider",
++        model="mock-model",
++    )
++
++    captured_text = get_runtime_dialogue_state(state)["turns"][0]["text"]
++
++    replay_state = {
++        "runtime_state": {
++            "dialogue": {
++                "active_sequence_id": "seq:30:0",
++                "active_turn_id": "",
++                "sequence_tick": 30,
++                "turn_cursor": 0,
++                "turns": [
++                    {
++                        "turn_id": "turn:30:0:npc:guard",
++                        "sequence_id": "seq:30:0",
++                        "tick": 30,
++                        "sequence_index": 0,
++                        "actor_id": "npc:guard",
++                        "speaker_id": "npc:guard",
++                        "speaker_name": "Guard",
++                        "role": "npc",
++                        "text": "",
++                        "status": "pending",
++                        "emotion": "neutral",
++                        "style_tags": [],
++                        "interruption": False,
++                        "interrupt_target_id": "",
++                        "chunks": [],
++                    }
++                ],
++            }
++        },
++        "orchestration_state": state["orchestration_state"],
++    }
++    replay_state = set_llm_provider_mode(replay_state, "replay")
++    replay_state = execute_llm_request_for_turn(
++        replay_state,
++        turn_id="turn:30:0:npc:guard",
++    )
++
++    replayed_text = get_runtime_dialogue_state(replay_state)["turns"][0]["text"]
++    assert replayed_text == captured_text
+*** End Patch
+10) Add regression test
+src/tests/regression/test_phase107_failed_disabled_requests_not_replayable_regression.py
+*** Begin Patch
+*** Add File: src/tests/regression/test_phase107_failed_disabled_requests_not_replayable_regression.py
++import pytest
++
++from app.rpg.orchestration.replay import require_replayable_llm_request
++
++
++def test_phase107_failed_disabled_request_is_not_replayable():
 +    state = {
 +        "orchestration_state": {
 +            "llm": {
-+                "provider_mode": "replay",
-+                "request_counter": 2,
++                "provider_mode": "disabled",
++                "request_counter": 1,
 +                "active_requests": [],
 +                "completed_requests": [
 +                    {
-+                        "request_id": "llmreq:1:0:comp:lyra:0",
++                        "request_id": "llmreq:1:0:npc:guard:0",
 +                        "tick": 1,
 +                        "sequence_id": "seq:1:0",
-+                        "turn_id": "turn:1:0:comp:lyra",
-+                        "actor_id": "comp:lyra",
-+                        "speaker_id": "comp:lyra",
++                        "turn_id": "turn:1:0:npc:guard",
++                        "actor_id": "npc:guard",
++                        "speaker_id": "npc:guard",
 +                        "mode": "dialogue",
-+                        "status": "replayed",
-+                        "provider": "openai",
-+                        "model": "gpt-test",
-+                        "input_payload": {"prompt": "x"},
++                        "status": "failed",
++                        "provider": "",
++                        "model": "",
++                        "input_payload": {},
 +                        "stream_events": [],
-+                        "output_text": "Hello.",
-+                        "error": "",
++                        "output_text": "",
++                        "error": "Provider mode disabled and fallback not allowed",
 +                    }
 +                ],
 +                "last_error": {},
@@ -3016,42 +2577,38 @@ Ensure orchestration presentation bridge remains read-only.
 +        }
 +    }
 +
-+    before = copy.deepcopy(state)
-+    payload = build_orchestration_presentation_payload(state)
-+
-+    assert state == before
-+    assert payload["llm_orchestration"]["provider_mode"] == "replay"
-+    assert payload["llm_orchestration"]["completed_requests"][0]["is_replayed"] is True
++    with pytest.raises(ValueError):
++        require_replayable_llm_request(
++            state,
++            request_id="llmreq:1:0:npc:guard:0",
++        )
 *** End Patch
 11) BUG PASS CHECKLIST
 
 Run this after Parts 1–6.
 
 Determinism
- same input state produces identical orchestration payloads
- request ids are deterministic
- replay lookup does not silently fall through to live execution
- request lists are stably sorted in presentation output
+ same request payload through mock adapter produces identical output
+ capture then replay produces identical runtime text
+ request/execution IDs are deterministic
+ live provider diagnostics are stably ordered
 Bounded state
- active requests <= 4
- completed requests <= 20
- request stream events <= 40
+ live provider executions <= 12
+ provider events <= 80
+ completed requests stay <= 20
  route payloads remain compact
-Runtime / orchestration separation
- controller writes text only through runtime mutators
- provider helpers do not mutate simulation truth
- presentation bridges remain pure
-Replay / fallback policy
- replay mode fails hard on missing artifacts
- disabled mode only falls back when explicitly allowed
- disabled-without-fallback is distinguishable from successful completion
-Route integration
- /api/rpg/presentation/scene includes presentation.orchestration
- /api/rpg/presentation/dialogue includes presentation.orchestration
- /api/rpg/presentation/speakers includes top-level orchestration
-12) FINAL PHASE 10.6 NOTES
+Convergence
+ replay path uses only captured successful artifacts
+ capture path persists replayable artifacts
+ live/capture/replay all converge through apply_provider_result_to_runtime_turn
+ failures are visible in both orchestration and live-provider state
+Route exposure
+ scene includes runtime, orchestration, live_provider
+ dialogue includes runtime, orchestration, live_provider
+ speakers includes top-level runtime, orchestration, live_provider
+12) FINAL PHASE 10.7 NOTES
 
-After Parts 1–6, the expected outward shape is:
+After Parts 1–6, your outward shape becomes:
 
 presentation_payload = {
     ...existing_phase_10_fields...,
@@ -3059,31 +2616,32 @@ presentation_payload = {
         "runtime_dialogue": {...}
     },
     "orchestration": {
-        "llm_orchestration": {
-            "provider_mode": str,
-            "request_counter": int,
-            "live_execution_supported": False,
-            "active_requests": [...],
-            "completed_requests": [...],
-            "last_error": {
-                "request_id": str,
-                "error": str,
-            },
+        "llm_orchestration": {...}
+    },
+    "live_provider": {
+        "live_provider": {
+            "execution_count": int,
+            "complete_count": int,
+            "failed_count": int,
+            "streaming_count": int,
+            "executions": [...],
         }
-    }
+    },
 }
 
-And the owned mutable state is:
+And the mutable state owners are:
 
+simulation_state["runtime_state"]["dialogue"]
 simulation_state["orchestration_state"]["llm"]
+simulation_state["orchestration_state"]["live_provider"]
 
 That preserves:
 
-mutation in runtime + orchestration only
-rendering in presentation
-explicit LLM boundary
-replay-safe request artifacts
-no hidden live execution path
+explicit provider boundary
+capture/replay compatibility
+bounded diagnostics
+runtime-first streaming
+read-only presentation bridges
 END OF PART 6/6
 
-You now have the full strict-chunked Phase 10.6 patch spec end-to-end.
+You now have the full strict-chunked Phase 10.7 patch spec end-to-end.

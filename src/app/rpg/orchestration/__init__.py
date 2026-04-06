@@ -1,4 +1,4 @@
-"""Phase 10.6 — LLM orchestration layer.
+"""Phase 10.7 — LLM orchestration layer.
 
 This package owns explicit LLM request orchestration above runtime dialogue
 state. It never mutates simulation truth directly; it only writes through
@@ -38,6 +38,25 @@ from .stream_adapter import (
 from .controller import (
     execute_llm_request_for_turn,
 )
+from .live_provider import (
+    ensure_live_provider_state,
+    get_live_provider_state,
+    build_provider_execution_id,
+    begin_provider_execution,
+    append_provider_execution_event,
+    finalize_provider_execution,
+    fail_provider_execution,
+    trim_live_provider_state,
+)
+from .provider_adapter import (
+    BaseLLMProviderAdapter,
+    DeterministicMockProviderAdapter,
+    LiveLLMProviderAdapter,
+    get_provider_adapter,
+)
+from .capture import (
+    persist_captured_provider_result,
+)
 
 __all__ = [
     "ensure_llm_orchestration_state",
@@ -59,4 +78,17 @@ __all__ = [
     "should_allow_llm_fallback",
     "apply_provider_result_to_runtime_turn",
     "execute_llm_request_for_turn",
+    "ensure_live_provider_state",
+    "get_live_provider_state",
+    "build_provider_execution_id",
+    "begin_provider_execution",
+    "append_provider_execution_event",
+    "finalize_provider_execution",
+    "fail_provider_execution",
+    "trim_live_provider_state",
+    "BaseLLMProviderAdapter",
+    "DeterministicMockProviderAdapter",
+    "LiveLLMProviderAdapter",
+    "get_provider_adapter",
+    "persist_captured_provider_result",
 ]

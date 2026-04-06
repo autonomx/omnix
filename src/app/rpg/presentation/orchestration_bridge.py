@@ -1,4 +1,4 @@
-"""Phase 10.6 — Orchestration-to-presentation bridge.
+"""Phase 10.7 — Orchestration-to-presentation bridge.
 
 Pure read-only bridge from normalized orchestration state to presentation
 payload shape.
@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.rpg.orchestration.state import get_llm_orchestration_state
+from app.rpg.orchestration.live_provider import get_live_provider_state
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -48,12 +49,14 @@ def _build_request_payload(item: Dict[str, Any]) -> Dict[str, Any]:
         "has_input_payload": bool(_safe_dict(item.get("input_payload"))),
         "is_replayed": _safe_str(item.get("status")) == "replayed",
         "is_failed": _safe_str(item.get("status")) == "failed",
+        "has_captured_stream": len(_safe_list(item.get("stream_events"))) > 0,
     }
 
 
 def build_orchestration_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     """Build a pure presentation payload from orchestration state."""
     llm_state = get_llm_orchestration_state(simulation_state)
+    live_state = get_live_provider_state(simulation_state)
 
     active_requests = [
         _build_request_payload(v)
@@ -83,11 +86,17 @@ def build_orchestration_presentation_payload(simulation_state: Dict[str, Any]) -
     )
     last_error = _safe_dict(llm_state.get("last_error"))
 
+    live_execution_count = len(_safe_list(live_state.get("executions")))
+
     return {
         "llm_orchestration": {
             "provider_mode": _safe_str(llm_state.get("provider_mode")),
             "request_counter": _safe_int(llm_state.get("request_counter"), 0),
             "live_execution_supported": False,
+            "has_live_provider_diagnostics": live_execution_count > 0,
+            "capture_mode_active": _safe_str(llm_state.get("provider_mode")) == "capture",
+            "live_mode_active": _safe_str(llm_state.get("provider_mode")) == "live",
+            "live_execution_count": live_execution_count,
             "active_requests": active_requests,
             "completed_requests": completed_requests,
             "last_error": {
