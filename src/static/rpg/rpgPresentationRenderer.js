@@ -606,6 +606,17 @@ export function renderPresentation(payload) {
     renderGMInspector(gmInspectorState);
   }
 
+  // ---- Phase 12.9 — Package inspector ----
+  const packageManifest = payload?.package_manifest || payload?.manifest || null;
+  if (packageManifest && typeof packageManifest === "object") {
+    renderPackageInspector(payload);
+  }
+
+  // ---- Phase 13.0 — Content packs ----
+  if (Array.isArray(payload?.content_packs)) {
+    renderContentPacks(payload);
+  }
+
   return presentation;
 }
 
@@ -743,23 +754,3 @@ export function renderContentPacks(payload) {
   }).join("");
 }
 
-// ---- Extend renderPresentation to include package/packs ----
-
-const _originalRenderPresentation = renderPresentation;
-
-export function renderPresentationWithPackages(payload) {
-  const presentation = _originalRenderPresentation(payload);
-
-  const packageManifest = payload?.package_manifest || payload?.manifest || null;
-  if (packageManifest && typeof packageManifest === "object") {
-    renderPackageInspector(payload);
-  }
-
-  if (Array.isArray(payload?.content_packs)) {
-    renderContentPacks(payload);
-  }
-
-  return presentation;
-}
-
-// ---- End Phase 12.9 / 13.0 additions ----

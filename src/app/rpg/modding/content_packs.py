@@ -61,7 +61,11 @@ def _normalize_content_pack(value: Any) -> Dict[str, Any]:
 
 def ensure_content_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = ensure_visual_state(_safe_dict(simulation_state))
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    presentation_state = simulation_state.get("presentation_state")
+    if not isinstance(presentation_state, dict):
+        presentation_state = {}
+        simulation_state["presentation_state"] = presentation_state
+
     modding_state = presentation_state.get("modding_state")
     if not isinstance(modding_state, dict):
         modding_state = {}
@@ -89,8 +93,14 @@ def install_content_pack(
     pack: Dict[str, Any],
 ) -> Dict[str, Any]:
     simulation_state = ensure_content_pack_state(simulation_state)
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    modding_state = _safe_dict(presentation_state.get("modding_state"))
+    presentation_state = simulation_state.get("presentation_state")
+    if not isinstance(presentation_state, dict):
+        presentation_state = {}
+        simulation_state["presentation_state"] = presentation_state
+    modding_state = presentation_state.get("modding_state")
+    if not isinstance(modding_state, dict):
+        modding_state = {}
+        presentation_state["modding_state"] = modding_state
 
     packs = _safe_list(modding_state.get("installed_packs"))
     packs.append(_normalize_content_pack(pack))
@@ -107,8 +117,12 @@ def install_content_pack(
 
 def list_content_packs(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     simulation_state = ensure_content_pack_state(simulation_state)
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    modding_state = _safe_dict(presentation_state.get("modding_state"))
+    presentation_state = simulation_state.get("presentation_state")
+    if not isinstance(presentation_state, dict):
+        return []
+    modding_state = presentation_state.get("modding_state")
+    if not isinstance(modding_state, dict):
+        return []
     return _safe_list(modding_state.get("installed_packs"))
 
 
@@ -140,8 +154,14 @@ def apply_content_pack(
 
     simulation_state = install_content_pack(simulation_state, pack)
 
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    presentation_state = simulation_state.get("presentation_state")
+    if not isinstance(presentation_state, dict):
+        presentation_state = {}
+        simulation_state["presentation_state"] = presentation_state
+    visual_state = presentation_state.get("visual_state")
+    if not isinstance(visual_state, dict):
+        visual_state = {}
+        presentation_state["visual_state"] = visual_state
     defaults = _safe_dict(visual_state.get("defaults"))
 
     pack_visual_defaults = _safe_dict(pack.get("visual_defaults"))

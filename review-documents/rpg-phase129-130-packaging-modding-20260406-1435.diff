@@ -1,0 +1,1024 @@
+commit 8032e1ffe09f19686b2ac4d75951ab66bbb27933
+Author: Autonomx Developer <ehsan.matean@gmail.com>
+Date:   Mon Apr 6 14:36:00 2026 -0700
+
+    Phase 12.9 + 13.0: Save/Export/Packaging + Modding/Content Pack System
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 07c2e62..068eba2 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -54,6 +54,16 @@ from app.rpg.compat.character_cards import (
+     export_canonical_character_card,
+     import_external_character_card,
+ )
++from app.rpg.packaging.package_io import (
++    export_session_package,
++    import_session_package,
++)
++from app.rpg.modding.content_packs import (
++    apply_content_pack,
++    build_pack_application_preview,
++    ensure_content_pack_state,
++    list_content_packs,
++)
+ 
+ rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
+ 
+@@ -1077,3 +1087,105 @@ def presentation_gm_trace():
+             "image_requests": image_requests,
+         },
+     })
++
++
++# ---------------------------------------------------------------------------
++# Phase 12.9 — Save / Export / Packaging Layer
++# ---------------------------------------------------------------------------
++
++@rpg_presentation_bp.post("/api/rpg/package/export")
++def export_rpg_package():
++    """Export current RPG session to portable package format."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    title = _safe_str(data.get("title")).strip() or "RPG Session Export"
++    description = _safe_str(data.get("description")).strip()
++    created_by = _safe_str(data.get("created_by")).strip() or "unknown"
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = _ensure_character_inspector_state(simulation_state)
++    simulation_state = _ensure_world_inspector_state(simulation_state)
++    simulation_state = ensure_visual_state(simulation_state)
++
++    package_data = export_session_package(
++        simulation_state,
++        title=title,
++        description=description,
++        created_by=created_by,
++    )
++
++    return jsonify({
++        "ok": True,
++        "package": package_data,
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/package/import")
++def import_rpg_package():
++    """Import portable RPG package into canonical normalized state."""
++    data = request.get_json(silent=True) or {}
++    package_data = _safe_dict(data.get("package"))
++
++    imported = import_session_package(package_data)
++    return jsonify({
++        "ok": True,
++        "imported": imported,
++    })
++
++
++# ---------------------------------------------------------------------------
++# Phase 13.0 — Modding / Extension System / Content Pack Pipeline
++# ---------------------------------------------------------------------------
++
++@rpg_presentation_bp.post("/api/rpg/packs/list")
++def list_rpg_packs():
++    """List installed RPG content packs."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_visual_state(simulation_state)
++    simulation_state = ensure_content_pack_state(simulation_state)
++
++    return jsonify({
++        "ok": True,
++        "packs": list_content_packs(simulation_state),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/packs/preview")
++def preview_rpg_pack():
++    """Preview a content pack before installation/application."""
++    data = request.get_json(silent=True) or {}
++    pack = _safe_dict(data.get("pack"))
++    preview = build_pack_application_preview(pack)
++    return jsonify({
++        "ok": True,
++        "preview": preview,
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/packs/apply")
++def apply_rpg_pack():
++    """Apply a content pack to current simulation presentation/modding state."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    pack = _safe_dict(data.get("pack"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_visual_state(simulation_state)
++    simulation_state = ensure_content_pack_state(simulation_state)
++    simulation_state = apply_content_pack(simulation_state, pack)
++
++    return jsonify({
++        "ok": True,
++        "packs": list_content_packs(simulation_state),
++        "visual_state": _extract_visual_state(simulation_state),
++    })
+diff --git a/src/app/rpg/modding/__init__.py b/src/app/rpg/modding/__init__.py
+new file mode 100644
+index 0000000..a4cdb1a
+--- /dev/null
++++ b/src/app/rpg/modding/__init__.py
+@@ -0,0 +1,17 @@
++from __future__ import annotations
++
++from .content_packs import (
++    apply_content_pack,
++    build_pack_application_preview,
++    ensure_content_pack_state,
++    install_content_pack,
++    list_content_packs,
++)
++
++__all__ = [
++    "apply_content_pack",
++    "build_pack_application_preview",
++    "ensure_content_pack_state",
++    "install_content_pack",
++    "list_content_packs",
++]
+\ No newline at end of file
+diff --git a/src/app/rpg/modding/content_packs.py b/src/app/rpg/modding/content_packs.py
+new file mode 100644
+index 0000000..fa83f47
+--- /dev/null
++++ b/src/app/rpg/modding/content_packs.py
+@@ -0,0 +1,156 @@
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.compat.character_cards import import_external_character_card
++from app.rpg.presentation.visual_state import ensure_visual_state
++
++
++_MAX_PACKS = 32
++_MAX_PACK_CHARACTERS = 64
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    if value is None:
++        return ""
++    if isinstance(value, str):
++        return value
++    return str(value)
++
++
++def _first_non_empty(*values: Any) -> str:
++    for value in values:
++        text = _safe_str(value).strip()
++        if text:
++            return text
++    return ""
++
++
++def _normalize_pack_manifest(value: Any) -> Dict[str, Any]:
++    data = _safe_dict(value)
++    return {
++        "id": _safe_str(data.get("id")).strip(),
++        "title": _safe_str(data.get("title")).strip(),
++        "description": _safe_str(data.get("description")).strip(),
++        "author": _safe_str(data.get("author")).strip(),
++        "version": _first_non_empty(data.get("version"), "1.0"),
++        "pack_type": _first_non_empty(data.get("pack_type"), "mixed"),
++    }
++
++
++def _normalize_content_pack(value: Any) -> Dict[str, Any]:
++    data = _safe_dict(value)
++    return {
++        "manifest": _normalize_pack_manifest(data.get("manifest")),
++        "characters": [
++            _safe_dict(item) for item in _safe_list(data.get("characters")) if isinstance(item, dict)
++        ][:_MAX_PACK_CHARACTERS],
++        "scenario": _safe_dict(data.get("scenario")),
++        "world_seed": _safe_dict(data.get("world_seed")),
++        "visual_defaults": _safe_dict(data.get("visual_defaults")),
++    }
++
++
++def ensure_content_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = ensure_visual_state(_safe_dict(simulation_state))
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    modding_state = presentation_state.get("modding_state")
++    if not isinstance(modding_state, dict):
++        modding_state = {}
++        presentation_state["modding_state"] = modding_state
++
++    packs_in = _safe_list(modding_state.get("installed_packs"))
++    packs_out = [
++        _normalize_content_pack(item)
++        for item in packs_in
++        if isinstance(item, dict)
++    ]
++    packs_out = sorted(
++        packs_out,
++        key=lambda item: (
++            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
++            _safe_str(_safe_dict(item.get("manifest")).get("id")),
++        ),
++    )[:_MAX_PACKS]
++    modding_state["installed_packs"] = packs_out
++    return simulation_state
++
++
++def install_content_pack(
++    simulation_state: Dict[str, Any],
++    pack: Dict[str, Any],
++) -> Dict[str, Any]:
++    simulation_state = ensure_content_pack_state(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    modding_state = _safe_dict(presentation_state.get("modding_state"))
++
++    packs = _safe_list(modding_state.get("installed_packs"))
++    packs.append(_normalize_content_pack(pack))
++    packs = sorted(
++        [item for item in packs if isinstance(item, dict)],
++        key=lambda item: (
++            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
++            _safe_str(_safe_dict(item.get("manifest")).get("id")),
++        ),
++    )[:_MAX_PACKS]
++    modding_state["installed_packs"] = packs
++    return simulation_state
++
++
++def list_content_packs(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    simulation_state = ensure_content_pack_state(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    modding_state = _safe_dict(presentation_state.get("modding_state"))
++    return _safe_list(modding_state.get("installed_packs"))
++
++
++def build_pack_application_preview(pack: Dict[str, Any]) -> Dict[str, Any]:
++    pack = _normalize_content_pack(pack)
++
++    imported_characters = [
++        import_external_character_card(card)
++        for card in _safe_list(pack.get("characters"))
++        if isinstance(card, dict)
++    ][: _MAX_PACK_CHARACTERS]
++
++    return {
++        "manifest": _safe_dict(pack.get("manifest")),
++        "character_count": len(imported_characters),
++        "characters": imported_characters,
++        "scenario": _safe_dict(pack.get("scenario")),
++        "world_seed": _safe_dict(pack.get("world_seed")),
++        "visual_defaults": _safe_dict(pack.get("visual_defaults")),
++    }
++
++
++def apply_content_pack(
++    simulation_state: Dict[str, Any],
++    pack: Dict[str, Any],
++) -> Dict[str, Any]:
++    simulation_state = ensure_content_pack_state(simulation_state)
++    pack = _normalize_content_pack(pack)
++
++    simulation_state = install_content_pack(simulation_state, pack)
++
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++    defaults = _safe_dict(visual_state.get("defaults"))
++
++    pack_visual_defaults = _safe_dict(pack.get("visual_defaults"))
++    if pack_visual_defaults:
++        defaults.update({
++            key: value
++            for key, value in pack_visual_defaults.items()
++            if _safe_str(key).strip()
++        })
++        visual_state["defaults"] = defaults
++
++    return simulation_state
+\ No newline at end of file
+diff --git a/src/app/rpg/packaging/__init__.py b/src/app/rpg/packaging/__init__.py
+new file mode 100644
+index 0000000..92f3b6b
+--- /dev/null
++++ b/src/app/rpg/packaging/__init__.py
+@@ -0,0 +1,13 @@
++from __future__ import annotations
++
++from .package_io import (
++    build_package_manifest,
++    export_session_package,
++    import_session_package,
++)
++
++__all__ = [
++    "build_package_manifest",
++    "export_session_package",
++    "import_session_package",
++]
+\ No newline at end of file
+diff --git a/src/app/rpg/packaging/package_io.py b/src/app/rpg/packaging/package_io.py
+new file mode 100644
+index 0000000..152a184
+--- /dev/null
++++ b/src/app/rpg/packaging/package_io.py
+@@ -0,0 +1,172 @@
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++from app.rpg.compat.character_cards import export_canonical_character_card, import_external_character_card
++from app.rpg.presentation.personality_state import ensure_personality_state
++from app.rpg.presentation.visual_state import ensure_visual_state
++from app.rpg.ui.character_builder import build_character_ui_state
++from app.rpg.ui.world_builder import build_world_inspector_state
++
++
++_PACKAGE_VERSION = "1.0"
++_MAX_PACKAGE_CHARACTERS = 64
++_MAX_PACKAGE_CARDS = 64
++_MAX_PACKAGE_VISUAL_ASSETS = 128
++_MAX_PACKAGE_SCENE_ILLUSTRATIONS = 64
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _safe_str(value: Any) -> str:
++    if value is None:
++        return ""
++    if isinstance(value, str):
++        return value
++    return str(value)
++
++
++def _first_non_empty(*values: Any) -> str:
++    for value in values:
++        text = _safe_str(value).strip()
++        if text:
++            return text
++    return ""
++
++
++def _normalize_manifest(value: Any) -> Dict[str, Any]:
++    data = _safe_dict(value)
++    return {
++        "package_version": _first_non_empty(data.get("package_version"), _PACKAGE_VERSION),
++        "title": _safe_str(data.get("title")).strip(),
++        "description": _safe_str(data.get("description")).strip(),
++        "created_by": _safe_str(data.get("created_by")).strip(),
++        "source": _safe_str(data.get("source")).strip(),
++    }
++
++
++def _normalize_package(value: Any) -> Dict[str, Any]:
++    data = _safe_dict(value)
++    return {
++        "manifest": _normalize_manifest(data.get("manifest")),
++        "simulation_state": _safe_dict(data.get("simulation_state")),
++        "presentation_state": _safe_dict(data.get("presentation_state")),
++        "character_cards": [
++            _safe_dict(item) for item in _safe_list(data.get("character_cards")) if isinstance(item, dict)
++        ][:_MAX_PACKAGE_CARDS],
++        "world_summary": _safe_dict(data.get("world_summary")),
++        "visual_registry": _safe_dict(data.get("visual_registry")),
++        "content_packs": [
++            _safe_dict(item) for item in _safe_list(data.get("content_packs")) if isinstance(item, dict)
++        ],
++    }
++
++
++def build_package_manifest(
++    *,
++    title: str,
++    description: str,
++    created_by: str,
++    source: str = "rpg-engine",
++) -> Dict[str, Any]:
++    return {
++        "package_version": _PACKAGE_VERSION,
++        "title": _safe_str(title).strip(),
++        "description": _safe_str(description).strip(),
++        "created_by": _safe_str(created_by).strip(),
++        "source": _safe_str(source).strip(),
++    }
++
++
++def export_session_package(
++    simulation_state: Dict[str, Any],
++    *,
++    title: str,
++    description: str,
++    created_by: str,
++) -> Dict[str, Any]:
++    simulation_state = ensure_personality_state(_safe_dict(simulation_state))
++    simulation_state = ensure_visual_state(simulation_state)
++
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++
++    character_ui_state = build_character_ui_state(simulation_state)
++    world_inspector_state = build_world_inspector_state(simulation_state)
++
++    characters = character_ui_state.get("characters") if isinstance(character_ui_state, dict) else []
++    if not isinstance(characters, list):
++        characters = []
++
++    character_cards = [
++        export_canonical_character_card(character)
++        for character in characters[:_MAX_PACKAGE_CHARACTERS]
++        if isinstance(character, dict)
++    ]
++
++    visual_registry = {
++        "visual_assets": [
++            _safe_dict(item)
++            for item in _safe_list(visual_state.get("visual_assets"))
++            if isinstance(item, dict)
++        ][:_MAX_PACKAGE_VISUAL_ASSETS],
++        "scene_illustrations": [
++            _safe_dict(item)
++            for item in _safe_list(visual_state.get("scene_illustrations"))
++            if isinstance(item, dict)
++        ][:_MAX_PACKAGE_SCENE_ILLUSTRATIONS],
++        "image_requests": [
++            _safe_dict(item)
++            for item in _safe_list(visual_state.get("image_requests"))
++            if isinstance(item, dict)
++        ][:_MAX_PACKAGE_VISUAL_ASSETS],
++        "defaults": _safe_dict(visual_state.get("defaults")),
++    }
++
++    return {
++        "manifest": build_package_manifest(
++            title=title,
++            description=description,
++            created_by=created_by,
++        ),
++        "simulation_state": simulation_state,
++        "presentation_state": presentation_state,
++        "character_cards": character_cards,
++        "world_summary": world_inspector_state,
++        "visual_registry": visual_registry,
++        "content_packs": [],
++    }
++
++
++def import_session_package(package_data: Dict[str, Any]) -> Dict[str, Any]:
++    package_data = _normalize_package(package_data)
++
++    simulation_state = _safe_dict(package_data.get("simulation_state"))
++    presentation_state = _safe_dict(package_data.get("presentation_state"))
++
++    if presentation_state:
++        simulation_state["presentation_state"] = presentation_state
++
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_visual_state(simulation_state)
++
++    imported_cards = [
++        import_external_character_card(card)
++        for card in _safe_list(package_data.get("character_cards"))
++        if isinstance(card, dict)
++    ][: _MAX_PACKAGE_CARDS]
++
++    return {
++        "manifest": _safe_dict(package_data.get("manifest")),
++        "simulation_state": simulation_state,
++        "imported_cards": imported_cards,
++        "world_summary": _safe_dict(package_data.get("world_summary")),
++        "visual_registry": _safe_dict(package_data.get("visual_registry")),
++        "content_packs": _safe_list(package_data.get("content_packs")),
++    }
+\ No newline at end of file
+diff --git a/src/static/rpg/rpgInspectorStyles.css b/src/static/rpg/rpgInspectorStyles.css
+index 76e9b18..0b069f3 100644
+--- a/src/static/rpg/rpgInspectorStyles.css
++++ b/src/static/rpg/rpgInspectorStyles.css
+@@ -594,3 +594,32 @@
+ .gm-request-status.failed {
+   color: #dc3545;
+ }
++
++/* ---- Phase 12.9 — Package Inspector styles ---- */
++.package-card {
++  border: 1px solid var(--rpg-border-color, #555);
++  border-radius: 8px;
++  padding: 12px;
++  margin-bottom: 10px;
++  background: var(--rpg-surface-dark, #1a1a2e);
++}
++
++/* ---- Phase 13.0 — Content Pack styles ---- */
++.content-pack-card {
++  border: 1px solid var(--rpg-border-color, #555);
++  border-radius: 8px;
++  padding: 12px;
++  margin-bottom: 10px;
++  background: var(--rpg-surface-dark, #1a1a2e);
++}
++
++.content-pack-title {
++  font-weight: bold;
++  margin-bottom: 6px;
++}
++
++.pack-meta {
++  font-size: 0.85em;
++  color: var(--rpg-text-secondary, #aaa);
++  margin-bottom: 4px;
++}
+diff --git a/src/static/rpg/rpgPresentationRenderer.js b/src/static/rpg/rpgPresentationRenderer.js
+index fc2c2e7..0637b40 100644
+--- a/src/static/rpg/rpgPresentationRenderer.js
++++ b/src/static/rpg/rpgPresentationRenderer.js
+@@ -687,3 +687,79 @@ export function renderGMInspector(payload) {
+ }
+ 
+ // ---- End Phase 12.8 additions ----
++
++// ---- Phase 12.9 — Package Inspector renderer ----
++
++function getPackageInspectorContainer() {
++  return document.getElementById("rpg-package-inspector");
++}
++
++export function renderPackageInspector(payload) {
++  const container = getPackageInspectorContainer();
++  if (!container) return;
++
++  const manifest = payload?.package_manifest || payload?.manifest || null;
++  if (!manifest || typeof manifest !== "object") {
++    container.innerHTML = `<div class="inspector-empty">No package loaded.</div>`;
++    return;
++  }
++
++  container.innerHTML = `
++    <div class="inspector-panel">
++      <div class="inspector-header">Package</div>
++      <div class="inspector-section"><h5>Title</h5><div>${escapeHtml(manifest.title || "—")}</div></div>
++      <div class="inspector-section"><h5>Description</h5><div>${escapeHtml(manifest.description || "—")}</div></div>
++      <div class="inspector-section"><h5>Version</h5><div>${escapeHtml(manifest.package_version || "—")}</div></div>
++      <div class="inspector-section"><h5>Created By</h5><div>${escapeHtml(manifest.created_by || "—")}</div></div>
++    </div>
++  `;
++}
++
++// ---- Phase 13.0 — Content Packs renderer ----
++
++function getContentPackContainer() {
++  return document.getElementById("rpg-content-packs");
++}
++
++export function renderContentPacks(payload) {
++  const container = getContentPackContainer();
++  if (!container) return;
++
++  const packs = Array.isArray(payload?.content_packs) ? payload.content_packs : [];
++  if (!packs.length) {
++    container.innerHTML = `<div class="inspector-empty">No content packs.</div>`;
++    return;
++  }
++
++  container.innerHTML = packs.map((pack) => {
++    const manifest = pack?.manifest || {};
++    return `
++      <div class="content-pack-card">
++        <div class="content-pack-title">${escapeHtml(manifest.title || manifest.id || "Pack")}</div>
++        <div class="pack-meta">${escapeHtml(manifest.description || "")}</div>
++        <div class="pack-meta">${escapeHtml(manifest.author || "")} · ${escapeHtml(manifest.version || "")}</div>
++      </div>
++    `;
++  }).join("");
++}
++
++// ---- Extend renderPresentation to include package/packs ----
++
++const _originalRenderPresentation = renderPresentation;
++
++export function renderPresentationWithPackages(payload) {
++  const presentation = _originalRenderPresentation(payload);
++
++  const packageManifest = payload?.package_manifest || payload?.manifest || null;
++  if (packageManifest && typeof packageManifest === "object") {
++    renderPackageInspector(payload);
++  }
++
++  if (Array.isArray(payload?.content_packs)) {
++    renderContentPacks(payload);
++  }
++
++  return presentation;
++}
++
++// ---- End Phase 12.9 / 13.0 additions ----
+diff --git a/src/tests/functional/test_character_ui_functional.py b/src/tests/functional/test_character_ui_functional.py
+index b3c4a56..2aeacc2 100644
+--- a/src/tests/functional/test_character_ui_functional.py
++++ b/src/tests/functional/test_character_ui_functional.py
+@@ -453,3 +453,103 @@ def test_character_portrait_request_blocked_on_empty_prompt():
+         assert response.status_code == 200
+         payload = response.get_json()
+         assert payload["moderation"]["status"] in {"approved", "blocked"}
++
++
++# ---- Phase 12.9 — Package Export/Import functional tests ----
++
++
++def test_package_export_route_returns_package():
++    """Package export route returns ok=True with package payload."""
++    import json
++    from flask import Flask
++    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
++
++    app = Flask(__name__)
++    app.register_blueprint(rpg_presentation_bp)
++
++    with app.test_client() as client:
++        response = client.post(
++            "/api/rpg/package/export",
++            json={
++                "setup_payload": {},
++                "title": "Export Test",
++                "created_by": "tester",
++            },
++        )
++        assert response.status_code == 200
++        payload = response.get_json()
++        assert payload["ok"] is True
++        assert "package" in payload
++
++
++def test_package_import_route_returns_imported():
++    """Package import route returns ok=True with imported payload."""
++    import json
++    from flask import Flask
++    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
++
++    app = Flask(__name__)
++    app.register_blueprint(rpg_presentation_bp)
++
++    with app.test_client() as client:
++        response = client.post(
++            "/api/rpg/package/import",
++            json={
++                "package": {
++                    "manifest": {"package_version": "1.0", "title": "Pkg"},
++                    "simulation_state": {"presentation_state": {}},
++                }
++            },
++        )
++        assert response.status_code == 200
++        payload = response.get_json()
++        assert payload["ok"] is True
++        assert "imported" in payload
++
++
++# ---- Phase 13.0 — Content Pack functional tests ----
++
++
++def test_packs_preview_route_returns_preview():
++    """Pack preview route returns ok=True with preview payload."""
++    import json
++    from flask import Flask
++    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
++
++    app = Flask(__name__)
++    app.register_blueprint(rpg_presentation_bp)
++
++    with app.test_client() as client:
++        response = client.post(
++            "/api/rpg/packs/preview",
++            json={
++                "pack": {
++                    "manifest": {"id": "pack:test", "title": "Test Pack"},
++                    "characters": [{"name": "Captain Elira"}],
++                }
++            },
++        )
++        assert response.status_code == 200
++        payload = response.get_json()
++        assert payload["ok"] is True
++        assert "preview" in payload
++
++
++def test_packs_list_route_returns_packs():
++    """Pack list route returns ok=True with packs payload."""
++    import json
++    from flask import Flask
++    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
++
++    app = Flask(__name__)
++    app.register_blueprint(rpg_presentation_bp)
++
++    with app.test_client() as client:
++        response = client.post(
++            "/api/rpg/packs/list",
++            json={"setup_payload": {}},
++        )
++        assert response.status_code == 200
++        payload = response.get_json()
++        assert payload["ok"] is True
++        assert "packs" in payload
+diff --git a/src/tests/regression/test_phase129_packaging_modding_regression.py b/src/tests/regression/test_phase129_packaging_modding_regression.py
+new file mode 100644
+index 0000000..c53f050
+--- /dev/null
++++ b/src/tests/regression/test_phase129_packaging_modding_regression.py
+@@ -0,0 +1,98 @@
++"""Phase 12.9 + 13.0 — Packaging/Modding regression tests.
++
++Ensures that package export/import and content pack operations
++don't break existing functionality.
++"""
++
++from app.rpg.packaging.package_io import (
++    build_package_manifest,
++    export_session_package,
++    import_session_package,
++)
++from app.rpg.modding.content_packs import (
++    apply_content_pack,
++    build_pack_application_preview,
++    ensure_content_pack_state,
++    install_content_pack,
++    list_content_packs,
++)
++
++
++def test_export_package_preserves_top_level_keys():
++    """Export should preserve top-level keys from original state."""
++    original = {"presentation_state": {}, "some_key": "value"}
++    result = export_session_package(
++        original,
++        title="Test",
++        description="Test",
++        created_by="tester",
++    )
++    # The export normalizes state, but the result should have expected keys
++    assert "manifest" in result
++    assert "simulation_state" in result
++    assert "character_cards" in result
++    assert result["manifest"]["title"] == "Test"
++
++
++def test_import_package_normalizes_malformed_input():
++    """Import should normalize malformed package data."""
++    malformed = {"garbage": True}
++    result = import_session_package(malformed)
++    assert "simulation_state" in result
++    assert isinstance(result["simulation_state"], dict)
++
++
++def test_content_pack_state_does_not_break_visual_state():
++    """ensure_content_pack_state should not break visual_state."""
++    simulation_state = {
++        "presentation_state": {
++            "visual_state": {"defaults": {}, "character_visual_identities": {}}
++        }
++    }
++    result = ensure_content_pack_state(simulation_state)
++    assert "presentation_state" in result
++    assert "visual_state" in result["presentation_state"]
++    assert "modding_state" in result["presentation_state"]
++
++
++def test_package_manifest_has_required_fields():
++    """Package manifest should always have required fields."""
++    manifest = build_package_manifest(
++        title="Test",
++        description="Test",
++        created_by="tester",
++    )
++    for field in ["package_version", "title", "description", "created_by", "source"]:
++        assert field in manifest
++
++
++def test_pack_preview_does_not_modify_original():
++    """Preview should not modify the original pack data."""
++    pack = {"manifest": {"id": "test", "title": "Test"}, "characters": []}
++    build_pack_application_preview(pack)
++    assert "manifest" in pack
++    assert pack["manifest"]["id"] == "test"
++
++
++def test_multiple_packs_install_without_error():
++    """Installing multiple packs should work without error."""
++    simulation_state = {"presentation_state": {}}
++    for i in range(5):
++        simulation_state = install_content_pack(
++            simulation_state,
++            {"manifest": {"id": f"pack:{i}", "title": f"Pack {i}"}, "characters": []},
++        )
++    packs = list_content_packs(simulation_state)
++    assert len(packs) == 5
++
++
++def test_apply_pack_with_empty_visual_defaults():
++    """Applying a pack with empty visual_defaults should not break."""
++    simulation_state = {
++        "presentation_state": {"visual_state": {"defaults": {}}}
++    }
++    result = apply_content_pack(
++        simulation_state,
++        {"manifest": {"id": "empty", "title": "Empty"}, "visual_defaults": {}},
++    )
++    assert "presentation_state" in result
+\ No newline at end of file
+diff --git a/src/tests/unit/rpg/test_content_packs.py b/src/tests/unit/rpg/test_content_packs.py
+new file mode 100644
+index 0000000..be6c81a
+--- /dev/null
++++ b/src/tests/unit/rpg/test_content_packs.py
+@@ -0,0 +1,92 @@
++from app.rpg.modding.content_packs import (
++    apply_content_pack,
++    build_pack_application_preview,
++    ensure_content_pack_state,
++    install_content_pack,
++    list_content_packs,
++)
++
++
++def test_ensure_content_pack_state():
++    result = ensure_content_pack_state({"presentation_state": {}})
++    modding_state = result["presentation_state"]["modding_state"]
++    assert modding_state["installed_packs"] == []
++
++
++def test_install_and_list_content_packs():
++    simulation_state = {"presentation_state": {}}
++    simulation_state = install_content_pack(
++        simulation_state,
++        {
++            "manifest": {"id": "pack:test", "title": "Test Pack"},
++            "characters": [],
++        },
++    )
++    packs = list_content_packs(simulation_state)
++    assert len(packs) == 1
++    assert packs[0]["manifest"]["id"] == "pack:test"
++
++
++def test_build_pack_application_preview():
++    preview = build_pack_application_preview(
++        {
++            "manifest": {"id": "pack:test", "title": "Test Pack"},
++            "characters": [{"name": "Captain Elira"}],
++        }
++    )
++    assert preview["manifest"]["id"] == "pack:test"
++    assert preview["character_count"] == 1
++
++
++def test_apply_content_pack_updates_visual_defaults():
++    simulation_state = {"presentation_state": {"visual_state": {"defaults": {}}}}
++    simulation_state = apply_content_pack(
++        simulation_state,
++        {
++            "manifest": {"id": "pack:visual", "title": "Visual Pack"},
++            "visual_defaults": {"portrait_style": "grimdark"},
++        },
++    )
++    defaults = simulation_state["presentation_state"]["visual_state"]["defaults"]
++    assert defaults["portrait_style"] == "grimdark"
++
++
++def test_normalize_pack_manifest_defaults():
++    pack = {
++        "manifest": {},
++    }
++    simulation_state = install_content_pack({"presentation_state": {}}, pack)
++    packs = list_content_packs(simulation_state)
++    assert len(packs) == 1
++    manifest = packs[0]["manifest"]
++    assert manifest["version"] == "1.0"
++    assert manifest["pack_type"] == "mixed"
++    assert manifest["id"] == ""
++    assert manifest["title"] == ""
++
++
++def test_packs_sorted_by_title():
++    simulation_state = {"presentation_state": {}}
++    simulation_state = install_content_pack(
++        simulation_state,
++        {"manifest": {"id": "b", "title": "Beta Pack"}, "characters": []},
++    )
++    simulation_state = install_content_pack(
++        simulation_state,
++        {"manifest": {"id": "a", "title": "Alpha Pack"}, "characters": []},
++    )
++    packs = list_content_packs(simulation_state)
++    assert len(packs) == 2
++    assert packs[0]["manifest"]["title"] == "Alpha Pack"
++    assert packs[1]["manifest"]["title"] == "Beta Pack"
++
++
++def test_packs_limited_to_max():
++    simulation_state = {"presentation_state": {}}
++    for i in range(50):
++        simulation_state = install_content_pack(
++            simulation_state,
++            {"manifest": {"id": f"pack:{i}", "title": f"Pack {i}"}, "characters": []},
++        )
++    packs = list_content_packs(simulation_state)
++    assert len(packs) <= 32  # _MAX_PACKS
+\ No newline at end of file
+diff --git a/src/tests/unit/rpg/test_package_io.py b/src/tests/unit/rpg/test_package_io.py
+new file mode 100644
+index 0000000..0e3876d
+--- /dev/null
++++ b/src/tests/unit/rpg/test_package_io.py
+@@ -0,0 +1,65 @@
++from app.rpg.packaging.package_io import (
++    build_package_manifest,
++    export_session_package,
++    import_session_package,
++)
++
++
++def test_build_package_manifest():
++    manifest = build_package_manifest(
++        title="Test Package",
++        description="Portable RPG session",
++        created_by="tester",
++    )
++    assert manifest["package_version"] == "1.0"
++    assert manifest["title"] == "Test Package"
++
++
++def test_export_session_package_basic():
++    result = export_session_package(
++        {"presentation_state": {}},
++        title="Export",
++        description="Desc",
++        created_by="tester",
++    )
++    assert "manifest" in result
++    assert "simulation_state" in result
++    assert "character_cards" in result
++
++
++def test_import_session_package_basic():
++    package_data = {
++        "manifest": {"package_version": "1.0", "title": "Pkg"},
++        "simulation_state": {"presentation_state": {}},
++        "character_cards": [],
++    }
++    result = import_session_package(package_data)
++    assert "simulation_state" in result
++    assert "imported_cards" in result
++
++
++def test_package_manifest_fields():
++    manifest = build_package_manifest(
++        title="My Adventure",
++        description="Epic quest",
++        created_by="admin",
++        source="custom",
++    )
++    assert manifest["title"] == "My Adventure"
++    assert manifest["description"] == "Epic quest"
++    assert manifest["created_by"] == "admin"
++    assert manifest["source"] == "custom"
++
++
++def test_export_includes_visual_registry():
++    result = export_session_package(
++        {"presentation_state": {"visual_state": {}}},
++        title="Test",
++        description="",
++        created_by="tester",
++    )
++    assert "visual_registry" in result
++    assert "visual_assets" in result["visual_registry"]
++    assert "scene_illustrations" in result["visual_registry"]
++    assert "image_requests" in result["visual_registry"]
++    assert "defaults" in result["visual_registry"]
+\ No newline at end of file

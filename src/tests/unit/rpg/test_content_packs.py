@@ -90,3 +90,20 @@ def test_packs_limited_to_max():
         )
     packs = list_content_packs(simulation_state)
     assert len(packs) <= 32  # _MAX_PACKS
+
+
+def test_ensure_content_pack_state_persists_modding_state_on_missing_presentation_state():
+    simulation_state = {}
+    simulation_state = ensure_content_pack_state(simulation_state)
+    assert "presentation_state" in simulation_state
+    assert "modding_state" in simulation_state["presentation_state"]
+    assert simulation_state["presentation_state"]["modding_state"]["installed_packs"] == []
+
+
+def test_apply_content_pack_persists_visual_defaults_to_authoritative_state():
+    simulation_state = {}
+    simulation_state = apply_content_pack(
+        simulation_state,
+        {"manifest": {"id": "pack:test", "title": "Test"}, "visual_defaults": {"portrait_style": "grimdark"}},
+    )
+    assert simulation_state["presentation_state"]["visual_state"]["defaults"]["portrait_style"] == "grimdark"
