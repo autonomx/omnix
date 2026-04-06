@@ -623,3 +623,158 @@
   color: var(--rpg-text-secondary, #aaa);
   margin-bottom: 4px;
 }
+
+/* ---- Phase 13.4 — Wizard UI styles ---- */
+#wizard {
+  padding: 12px;
+}
+
+.wizard-step {
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--rpg-surface-dark, #1a1a2e);
+}
+
+.wizard-step-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--rpg-text-primary, #e0e0e0);
+  margin-bottom: 4px;
+}
+
+.wizard-step-body {
+  font-size: 0.8rem;
+  color: var(--rpg-text-secondary, #aaa);
+}
+
+.wizard-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.wizard-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--rpg-border-color, #555);
+  background: var(--rpg-button-bg, #2a2a4e);
+  color: var(--rpg-text-primary, #e0e0e0);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.wizard-btn:hover {
+  background: var(--rpg-button-bg-hover, #3a3a5e);
+}
+
+.wizard-btn--primary {
+  background: var(--rpg-accent, #6366f1);
+  border-color: var(--rpg-accent, #6366f1);
+}
+
+.wizard-btn--primary:hover {
+  background: var(--rpg-accent-hover, #4f46e5);
+}
+
+/* ---- Phase 13.5 — Session UI styles ---- */
+#rpg-sessions {
+  padding: 12px;
+}
+
+.session-card {
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: var(--rpg-surface-dark, #1a1a2e);
+  cursor: pointer;
+}
+
+.session-card:hover {
+  border-color: var(--rpg-accent, #6366f1);
+}
+
+.session-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--rpg-text-primary, #e0e0e0);
+}
+
+.session-meta {
+  font-size: 0.75rem;
+  color: var(--rpg-text-secondary, #aaa);
+  margin-top: 4px;
+}
+
+.session-status {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  background: var(--rpg-status-bg, #1e40af);
+  color: var(--rpg-text-primary, #e0e0e0);
+}
+
+.session-status--archived {
+  background: var(--rpg-status-archived, #4b5563);
+}
+
+.session-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.session-action-btn {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--rpg-border-color, #555);
+  background: var(--rpg-button-bg, #2a2a4e);
+  color: var(--rpg-text-secondary, #aaa);
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+.session-action-btn:hover {
+  background: var(--rpg-button-bg-hover, #3a3a5e);
+  color: var(--rpg-text-primary, #e0e0e0);
+}
+
+/* ---- Phase 14.0 — Memory UI styles ---- */
+#rpg-memory {
+  padding: 12px;
+}
+
+.memory-lane {
+  margin-bottom: 12px;
+}
+
+.memory-lane-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--rpg-text-primary, #e0e0e0);
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rpg-border-color, #555);
+}
+
+.memory-entry {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  background: var(--rpg-surface-darker, #111128);
+  font-size: 0.8rem;
+  color: var(--rpg-text-secondary, #aaa);
+}
+
+.memory-entry-summary {
+  color: var(--rpg-text-primary, #e0e0e0);
+}
+
+.memory-entry-kind {
+  font-size: 0.7rem;
+  color: var(--rpg-accent, #6366f1);
+  margin-left: 6px;
+}

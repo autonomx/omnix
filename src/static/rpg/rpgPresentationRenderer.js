@@ -754,3 +754,142 @@ export function renderContentPacks(payload) {
   }).join("");
 }
 
+// ---- Phase 13.4 — Wizard UI renderer ----
+
+function getWizardContainer() {
+  return document.getElementById("rpg-wizard");
+}
+
+export function renderAdventureWizard(payload) {
+  const container = getWizardContainer();
+  if (!container) return;
+
+  const wizardState = payload?.wizard_state || null;
+  if (!wizardState || typeof wizardState !== "object") {
+    container.innerHTML = `<div class="inspector-empty">No wizard active.</div>`;
+    return;
+  }
+
+  const preview = payload?.wizard_preview || {};
+  const step = escapeHtml(wizardState.step || "mode");
+  const mode = escapeHtml(wizardState.mode || "blank");
+  const title = escapeHtml(preview.title || wizardState.title || "—");
+  const summary = escapeHtml(preview.summary || wizardState.summary || "—");
+  const characterCount = preview.character_count ?? 0;
+  const visualDefaults = preview.visual_defaults || wizardState.visual_defaults || {};
+
+  let detailsHtml = "";
+  if (Object.keys(visualDefaults).length > 0) {
+    detailsHtml = Object.entries(visualDefaults).map(([k, v]) => `
+      <div class="wizard-step body">
+        <span class="wizard-step-title">${escapeHtml(k)}:</span>
+        <span class="wizard-step-body">${escapeHtml(v)}</span>
+      </div>
+    `).join("");
+  }
+
+  container.innerHTML = `
+    <div class="wizard-card">
+      <div class="wizard-step-title">New Adventure Wizard</div>
+      <div class="wizard-step">
+        <span class="wizard-step-title">Step:</span>
+        <span class="wizard-step-body">${step}</span>
+      </div>
+      <div class="wizard-step">
+        <span class="wizard-step-title">Mode:</span>
+        <span class="wizard-step-body">${mode}</span>
+      </div>
+      <div class="wizard-step">
+        <span class="wizard-step-title">Title:</span>
+        <span class="wizard-step-body">${title}</span>
+      </div>
+      <div class="wizard-step">
+        <span class="wizard-step-title">Summary:</span>
+        <span class="wizard-step-body">${summary}</span>
+      </div>
+      <div class="wizard-step">
+        <span class="wizard-step-title">Characters:</span>
+        <span class="wizard-step-body">${characterCount}</span>
+      </div>
+      ${detailsHtml}
+    </div>
+  `;
+}
+
+// ---- Phase 13.5 — Session UI renderer ----
+
+function getSessionContainer() {
+  return document.getElementById("rpg-sessions");
+}
+
+export function renderSessions(payload) {
+  const container = getSessionContainer();
+  if (!container) return;
+
+  const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
+  if (!sessions.length) {
+    container.innerHTML = `<div class="inspector-empty">No sessions.</div>`;
+    return;
+  }
+
+  container.innerHTML = sessions.map((session) => {
+    const manifest = session?.manifest || {};
+    const status = escapeHtml(manifest.status || "active");
+    const statusClass = status === "archived" ? "session-status--archived" : "session-status";
+    const sessionId = escapeHtml(manifest.id || "");
+    const title = escapeHtml(manifest.title || manifest.id || "Session");
+    const createdAt = escapeHtml(manifest.created_at || "");
+    const updatedAt = escapeHtml(manifest.updated_at || "");
+
+    return `
+      <div class="session-card" data-session-id="${sessionId}">
+        <div class="session-title">${title}</div>
+        <div class="session-meta">
+          <span class="session-status ${statusClass}">${status}</span>
+          ${createdAt ? ` · Created: ${createdAt}` : ""}
+          ${updatedAt ? ` · Updated: ${updatedAt}` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// ---- Phase 14.0 — Memory UI renderer ----
+
+function getMemoryContainer() {
+  return document.getElementById("rpg-memory");
+}
+
+export function renderMemory(payload) {
+  const container = getMemoryContainer();
+  if (!container) return;
+
+  const memoryState = payload?.memory_state || null;
+  if (!memoryState || typeof memoryState !== "object") {
+    container.innerHTML = `<div class="inspector-empty">No memory data.</div>`;
+    return;
+  }
+
+  const shortTerm = Array.isArray(memoryState.short_term) ? memoryState.short_term : [];
+  const longTerm = Array.isArray(memoryState.long_term) ? memoryState.long_term : [];
+  const worldMemory = Array.isArray(memoryState.world_memory) ? memoryState.world_memory : [];
+
+  if (!shortTerm.length && !longTerm.length && !worldMemory.length) {
+    container.innerHTML = `<div class="inspector-empty">No memories stored.</div>`;
+    return;
+  }
+
+  const renderEntries = (entries) => entries.map((e) => {
+    const summary = escapeHtml(e.summary || "");
+    const kind = escapeHtml(e.kind || "fact");
+    const tick = typeof e.tick === "number" ? ` (tick ${e.tick})` : "";
+    return `<div class="memory-entry"><span class="memory-entry-summary">${summary}</span><span class="memory-entry-kind">${kind}${tick}</span></div>`;
+  }).join("");
+
+  container.innerHTML = `
+    ${shortTerm.length ? `<div class="memory-lane"><div class="memory-lane-title">Short-term Memory (${shortTerm.length})</div>${renderEntries(shortTerm)}</div>` : ""}
+    ${longTerm.length ? `<div class="memory-lane"><div class="memory-lane-title">Long-term Memory (${longTerm.length})</div>${renderEntries(longTerm)}</div>` : ""}
+    ${worldMemory.length ? `<div class="memory-lane"><div class="memory-lane-title">World Memory (${worldMemory.length})</div>${renderEntries(worldMemory)}</div>` : ""}
+  `;
+}
+
