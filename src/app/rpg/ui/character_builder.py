@@ -183,6 +183,24 @@ def _normalize_current_intent(
     )
 
 
+def _normalize_card_meta(entry: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "subtitle": _first_non_empty(
+            entry.get("title"),
+            entry.get("role"),
+            profile.get("archetype"),
+        ),
+        "summary": _first_non_empty(
+            entry.get("description"),
+            profile.get("summary"),
+        ),
+        "badge": _first_non_empty(
+            entry.get("faction"),
+            entry.get("group"),
+        ),
+    }
+
+
 def _normalize_visual_identity(entry: Dict[str, Any]) -> Dict[str, Any]:
     visual_identity = _safe_dict(entry.get("visual_identity"))
     seed = visual_identity.get("seed")
@@ -219,6 +237,8 @@ def build_character_ui_entry(
     if not isinstance(speaker_order, int):
         speaker_order = fallback_index
 
+    card_meta = _normalize_card_meta(presentation_entry, profile)
+
     return {
         "id": actor_id,
         "name": _derive_display_name(presentation_entry),
@@ -231,6 +251,7 @@ def build_character_ui_entry(
         "relationships": _normalize_relationships(simulation_state, actor_id),
         "personality": profile,
         "visual_identity": _normalize_visual_identity(presentation_entry),
+        "card": card_meta,
         "meta": {
             "present": bool(presentation_entry.get("present", True)),
             "speaker_order": speaker_order,

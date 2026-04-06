@@ -333,3 +333,71 @@
 .inspector-rel-negative {
   color: var(--rpg-negative, #f44336);
 }
+
+/* ---- Phase 11.3 — World Inspector styles ---- */
+.inspector-world-button {
+  width: 100%;
+  display: block;
+  text-align: left;
+  background: var(--rpg-surface-dark, #1a1a2e);
+  color: inherit;
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 4px;
+  padding: 10px;
+  margin: 0 0 8px 0;
+  cursor: pointer;
+}
+
+.inspector-world-button.is-selected {
+  border-color: var(--rpg-accent, #7eb8da);
+  background: rgba(126, 184, 218, 0.12);
+}
+
+.inspector-world-name {
+  font-weight: bold;
+}
+
+.inspector-world-kind {
+  font-size: 0.85em;
+  opacity: 0.8;
+  text-transform: capitalize;
+}
+
+.inspector-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin: 0 6px 6px 0;
+  background: rgba(255,255,255,0.08);
+  font-size: 0.85em;
+}
+
+/* ---- Phase 11.4 — Character Cards + Portraits ---- */
+.inspector-character-portrait {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.inspector-character-portrait--placeholder {
+  background: rgba(255,255,255,0.08);
+}
+
+.inspector-character-badge {
+  display: inline-block;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(126, 184, 218, 0.14);
+  font-size: 0.8em;
+}
+
+.inspector-character-summary {
+  margin-top: 4px;
+  font-size: 0.85em;
+  color: var(--rpg-text-secondary, #aaa);
+}

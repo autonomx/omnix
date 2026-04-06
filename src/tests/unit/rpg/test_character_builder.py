@@ -528,3 +528,31 @@ def test_build_character_inspector_empty_inventory_and_quests():
     assert result["inspector"]["inventory"] == []
     assert result["inspector"]["active_quests"] == []
     assert result["inspector"]["beliefs"] == []
+
+
+def test_build_character_ui_entry_includes_card_meta():
+    """Character entry includes card metadata from profile and entry."""
+    simulation_state = {
+        "presentation_state": {
+            "personality_state": {
+                "profiles": {
+                    "npc:guard": {
+                        "archetype": "authority",
+                        "summary": "Veteran commander",
+                    }
+                }
+            }
+        }
+    }
+    entry = {
+        "entity_id": "npc:guard",
+        "speaker_name": "Captain Elira",
+        "role": "guard_captain",
+        "description": "Commands the city gate.",
+        "faction": "City Guard",
+    }
+    result = build_character_ui_entry(simulation_state, entry, 0)
+    assert "card" in result
+    assert result["card"]["subtitle"] == "guard_captain"
+    assert result["card"]["summary"] == "Commands the city gate."
+    assert result["card"]["badge"] == "City Guard"

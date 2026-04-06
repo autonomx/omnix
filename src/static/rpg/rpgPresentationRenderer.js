@@ -137,6 +137,16 @@ export function renderCharacterList(inspectorState) {
     const name = escapeHtml(c.name || c.id || "Unknown");
     const role = escapeHtml(c.role || "character");
     const currentIntent = escapeHtml(c.current_intent || "");
+    // ---- Phase 11.4 — Character Cards + Portraits ----
+    const subtitle = escapeHtml(c.card?.subtitle || role);
+    const summary = escapeHtml(c.card?.summary || "");
+    const badge = escapeHtml(c.card?.badge || "");
+    const portraitUrl = escapeHtml(c.visual_identity?.portrait_url || "");
+
+    const portrait = portraitUrl
+      ? `<img class="inspector-character-portrait" src="${portraitUrl}" alt="${name}">`
+      : `<div class="inspector-character-portrait inspector-character-portrait--placeholder"></div>`;
+
     const selected = selectedCharacterId && selectedCharacterId === (c.id || "") ? " is-selected" : "";
     return `
       <button
@@ -144,8 +154,11 @@ export function renderCharacterList(inspectorState) {
         class="inspector-character-button${selected}"
         data-character-id="${id}"
       >
+        ${portrait}
         <div class="inspector-character-name">${name}</div>
-        <div class="inspector-character-role">${role}</div>
+        <div class="inspector-character-role">${subtitle}</div>
+        ${badge ? `<div class="inspector-character-badge">${badge}</div>` : ""}
+        ${summary ? `<div class="inspector-character-summary">${summary}</div>` : ""}
         ${currentIntent ? `<div class="inspector-character-intent">${currentIntent}</div>` : ""}
       </button>
     `;
@@ -246,6 +259,126 @@ export function renderDialoguePresentation(presentation) {
   `;
 }
 
+// ---- Phase 11.3 — World Inspector ----
+
+let selectedWorldItemId = "";
+let selectedWorldItemKind = "location";
+
+function getWorldInspectorContainer() {
+  return document.getElementById("rpg-world-inspector");
+}
+
+function getWorldListContainer() {
+  return document.getElementById("rpg-world-panel");
+}
+
+export function renderWorldList(worldInspectorState) {
+  const container = getWorldListContainer();
+  if (!container) return;
+
+  const factions = Array.isArray(worldInspectorState?.factions?.factions) ? worldInspectorState.factions.factions : [];
+  const locations = Array.isArray(worldInspectorState?.locations?.locations) ? worldInspectorState.locations.locations : [];
+
+  const items = [
+    ...locations.map((item) => ({ ...item, _kind: "location" })),
+    ...factions.map((item) => ({ ...item, _kind: "faction" })),
+  ];
+
+  if (!items.length) {
+    container.innerHTML = `<div class="inspector-empty">No world items available.</div>`;
+    return;
+  }
+
+  container.innerHTML = items.map((item) => {
+    const id = escapeHtml(item.id || "");
+    const name = escapeHtml(item.name || item.id || "Unknown");
+    const kind = escapeHtml(item._kind || item.kind || "world");
+    const selected =
+      selectedWorldItemId === (item.id || "") && selectedWorldItemKind === (item._kind || "")
+        ? " is-selected"
+        : "";
+
+    return `
+      <button
+        type="button"
+        class="inspector-world-button${selected}"
+        data-world-id="${id}"
+        data-world-kind="${kind}"
+      >
+        <div class="inspector-world-name">${name}</div>
+        <div class="inspector-world-kind">${kind}</div>
+      </button>
+    `;
+  }).join("");
+}
+
+export function renderWorldInspector(worldInspectorState) {
+  const container = getWorldInspectorContainer();
+  if (!container) return;
+
+  const factions = Array.isArray(worldInspectorState?.factions?.factions) ? worldInspectorState.factions.factions : [];
+  const locations = Array.isArray(worldInspectorState?.locations?.locations) ? worldInspectorState.locations.locations : [];
+
+  const items = [
+    ...locations.map((item) => ({ ...item, _kind: "location" })),
+    ...factions.map((item) => ({ ...item, _kind: "faction" })),
+  ];
+
+  const selected =
+    items.find((item) => String(item.id || "") === selectedWorldItemId && String(item._kind || "") === selectedWorldItemKind) ||
+    items[0] ||
+    null;
+
+  if (!selected) {
+    container.innerHTML = `<div class="inspector-empty">Select a world item.</div>`;
+    return;
+  }
+
+  if (selected._kind === "location") {
+    const tags = Array.isArray(selected.tags) ? selected.tags.map((t) => `<span class="inspector-tag">${escapeHtml(t)}</span>`).join("") : "";
+    const actors = Array.isArray(selected.actors) ? selected.actors.map((a) => `<li>${escapeHtml(a)}</li>`).join("") : "";
+    container.innerHTML = `
+      <div class="inspector-panel">
+        <div class="inspector-header">${escapeHtml(selected.name || selected.id)}</div>
+        <div class="inspector-section"><h5>Description</h5><div>${escapeHtml(selected.description || "—")}</div></div>
+        <div class="inspector-section"><h5>Tags</h5><div>${tags || '<div class="inspector-empty">None</div>'}</div></div>
+        <div class="inspector-section"><h5>Actors</h5>${actors ? `<ul class="inspector-list">${actors}</ul>` : '<div class="inspector-empty">None</div>'}</div>
+      </div>
+    `;
+    return;
+  }
+
+  const rels = Array.isArray(selected.relationships)
+    ? selected.relationships.map((r) => `<li>${escapeHtml(r.target_id)} — ${escapeHtml(r.kind || "neutral")}</li>`).join("")
+    : "";
+  const members = Array.isArray(selected.members)
+    ? selected.members.map((m) => `<li>${escapeHtml(m)}</li>`).join("")
+    : "";
+
+  container.innerHTML = `
+    <div class="inspector-panel">
+      <div class="inspector-header">${escapeHtml(selected.name || selected.id)}</div>
+      <div class="inspector-section"><h5>Description</h5><div>${escapeHtml(selected.description || "—")}</div></div>
+      <div class="inspector-section"><h5>Members</h5>${members ? `<ul class="inspector-list">${members}</ul>` : '<div class="inspector-empty">None</div>'}</div>
+      <div class="inspector-section"><h5>Relationships</h5>${rels ? `<ul class="inspector-list">${rels}</ul>` : '<div class="inspector-empty">None</div>'}</div>
+    </div>
+  `;
+}
+
+export function bindWorldInspectorEvents(worldInspectorState) {
+  const container = getWorldListContainer();
+  if (!container) return;
+
+  container.onclick = (e) => {
+    const node = e.target.closest("[data-world-id]");
+    if (!node) return;
+    selectedWorldItemId = String(node.getAttribute("data-world-id") || "");
+    selectedWorldItemKind = String(node.getAttribute("data-world-kind") || "location");
+    renderWorldList(worldInspectorState);
+    renderWorldInspector(worldInspectorState);
+  };
+}
+
 export function renderPresentation(payload) {
   const presentation = payload && typeof payload === "object" ? payload.presentation : null;
   // existing presentation rendering continues here
@@ -281,6 +414,23 @@ export function renderPresentation(payload) {
   renderCharacterList(normalizedInspectorState);
   renderCharacterInspector(selected);
   bindCharacterInspectorEvents(normalizedInspectorState);
+
+  // ---- Phase 11.3 — World Inspector ----
+  const worldInspectorState = payload?.world_inspector_state || null;
+  if (worldInspectorState && typeof worldInspectorState === "object") {
+    const locations = Array.isArray(worldInspectorState?.locations?.locations) ? worldInspectorState.locations.locations : [];
+    const factions = Array.isArray(worldInspectorState?.factions?.factions) ? worldInspectorState.factions.factions : [];
+    if (!selectedWorldItemId) {
+      const first = locations[0] || factions[0] || null;
+      if (first) {
+        selectedWorldItemId = String(first.id || "");
+        selectedWorldItemKind = locations[0] ? "location" : "faction";
+      }
+    }
+    renderWorldList(worldInspectorState);
+    renderWorldInspector(worldInspectorState);
+    bindWorldInspectorEvents(worldInspectorState);
+  }
 
   return presentation;
 }

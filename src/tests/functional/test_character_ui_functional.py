@@ -335,3 +335,63 @@ def test_build_character_inspector_state_full_integration():
     assert len(inspector["beliefs"]) == 1
     assert len(inspector["active_quests"]) == 1
     assert "relationship_summary" in inspector
+
+
+# ---- Phase 11.3 — World Inspector functional tests ----
+
+
+def test_world_inspector_endpoint_returns_ok():
+    """World inspector endpoint returns ok=True."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post("/api/rpg/world_inspector", json={"setup_payload": {}})
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "world_inspector_state" in payload
+
+
+def test_scene_presentation_includes_world_inspector_state():
+    """Scene presentation includes world_inspector_state."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/presentation/scene",
+            data=json.dumps({"setup_payload": {}, "scene_state": {}}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert "world_inspector_state" in payload
+
+
+def test_dialogue_presentation_includes_world_inspector_state():
+    """Dialogue presentation includes world_inspector_state."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/presentation/dialogue",
+            data=json.dumps({"setup_payload": {}, "dialogue_state": {}}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert "world_inspector_state" in payload

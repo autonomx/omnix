@@ -33,6 +33,7 @@ from app.rpg.presentation import (
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_speaker_cards
 from app.rpg.ui.character_builder import build_character_inspector_state, build_character_ui_state
+from app.rpg.ui.world_builder import build_world_inspector_state
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
@@ -126,6 +127,66 @@ def _extract_character_inspector_state(simulation_state: Dict[str, Any]) -> Dict
     return _safe_character_inspector_state(inspector_state)
 
 
+def _safe_world_inspector_state(v: Any) -> Dict[str, Any]:
+    if not isinstance(v, dict):
+        return {
+            "summary": {},
+            "threads": [],
+            "thread_count": 0,
+            "factions": {"factions": [], "count": 0},
+            "locations": {"locations": [], "count": 0},
+        }
+
+    summary = v.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+
+    raw_threads = v.get("threads")
+    if not isinstance(raw_threads, list):
+        raw_threads = []
+    threads = [item for item in raw_threads if isinstance(item, dict)]
+
+    thread_count = v.get("thread_count", len(threads))
+    if not isinstance(thread_count, int):
+        thread_count = len(threads)
+
+    factions = v.get("factions")
+    if not isinstance(factions, dict):
+        factions = {"factions": [], "count": 0}
+
+    locations = v.get("locations")
+    if not isinstance(locations, dict):
+        locations = {"locations": [], "count": 0}
+
+    return {
+        "summary": summary,
+        "threads": threads,
+        "thread_count": thread_count,
+        "factions": factions,
+        "locations": locations,
+    }
+
+
+def _ensure_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    presentation_state = simulation_state.get("presentation_state")
+    if not isinstance(presentation_state, dict):
+        presentation_state = {}
+        simulation_state["presentation_state"] = presentation_state
+
+    presentation_state["world_inspector_state"] = build_world_inspector_state(simulation_state)
+    return simulation_state
+
+
+def _extract_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    presentation_state = simulation_state.get("presentation_state") or {}
+    if not isinstance(presentation_state, dict):
+        presentation_state = {}
+    world_inspector_state = presentation_state.get("world_inspector_state") or {}
+    return _safe_world_inspector_state(world_inspector_state)
+
+
 @rpg_presentation_bp.post("/api/rpg/presentation/scene")
 def presentation_scene():
     """Build a presentation-ready scene payload."""
@@ -138,6 +199,7 @@ def presentation_scene():
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = _ensure_character_ui_state(simulation_state)
     simulation_state = _ensure_character_inspector_state(simulation_state)
+    simulation_state = _ensure_world_inspector_state(simulation_state)
 
     payload = build_scene_presentation_payload(simulation_state, scene_state)
     runtime_payload = build_runtime_presentation_payload(simulation_state)
@@ -169,6 +231,7 @@ def presentation_scene():
         "presentation": payload,
         "character_ui_state": _extract_character_ui_state(simulation_state),
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
+        "world_inspector_state": _extract_world_inspector_state(simulation_state),
     })
 
 
@@ -184,6 +247,7 @@ def presentation_dialogue():
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = _ensure_character_ui_state(simulation_state)
     simulation_state = _ensure_character_inspector_state(simulation_state)
+    simulation_state = _ensure_world_inspector_state(simulation_state)
 
     payload = build_dialogue_presentation_payload(simulation_state, dialogue_state)
     runtime_payload = build_runtime_presentation_payload(simulation_state)
@@ -222,6 +286,7 @@ def presentation_dialogue():
         "presentation": payload,
         "character_ui_state": _extract_character_ui_state(simulation_state),
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
+        "world_inspector_state": _extract_world_inspector_state(simulation_state),
     })
 
 
@@ -329,6 +394,7 @@ def presentation_narrative_recap():
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = _ensure_character_ui_state(simulation_state)
     simulation_state = _ensure_character_inspector_state(simulation_state)
+    simulation_state = _ensure_world_inspector_state(simulation_state)
     runtime_payload = build_runtime_presentation_payload(simulation_state)
     payload = build_narrative_recap_payload(simulation_state, runtime_payload)
     return jsonify({
@@ -336,6 +402,7 @@ def presentation_narrative_recap():
         "presentation": payload,
         "character_ui_state": _extract_character_ui_state(simulation_state),
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
+        "world_inspector_state": _extract_world_inspector_state(simulation_state),
     })
 
 
@@ -404,3 +471,21 @@ def presentation_character_inspector_detail():
         "error": "character_not_found",
         "character": None,
     }), 404
+
+
+@rpg_presentation_bp.post("/api/rpg/world_inspector")
+def presentation_world_inspector():
+    """Return canonical world inspector state for current simulation."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = _ensure_character_ui_state(simulation_state)
+    simulation_state = _ensure_character_inspector_state(simulation_state)
+    simulation_state = _ensure_world_inspector_state(simulation_state)
+
+    return jsonify({
+        "ok": True,
+        "world_inspector_state": _extract_world_inspector_state(simulation_state),
+    })
