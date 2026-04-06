@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 _MAX_TRAITS = 8
 _MAX_STYLE_TAGS = 8
 
@@ -70,6 +69,7 @@ def ensure_personality_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
         profiles_out[str(actor_id)] = normalized
 
     personality_state["profiles"] = profiles_out
+
     return simulation_state
 
 

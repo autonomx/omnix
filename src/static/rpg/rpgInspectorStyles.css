@@ -173,3 +173,163 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Phase 11.2 — Character Inspector layout + selection ---- */
+.rpg-character-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(320px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.inspector-character-button {
+  width: 100%;
+  display: block;
+  text-align: left;
+  background: var(--rpg-surface-dark, #1a1a2e);
+  color: inherit;
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 4px;
+  padding: 10px;
+  margin: 0 0 8px 0;
+  cursor: pointer;
+}
+
+.inspector-character-button.is-selected {
+  border-color: var(--rpg-accent, #7eb8da);
+  background: rgba(126, 184, 218, 0.12);
+}
+
+.inspector-character-name {
+  font-weight: bold;
+}
+
+.inspector-character-role {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.inspector-character-intent {
+  margin-top: 4px;
+  font-size: 0.85em;
+  color: var(--rpg-text-secondary, #aaa);
+}
+
+@media (max-width: 900px) {
+  .rpg-character-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Phase 11.2 — Character Inspector presentation styles ---- */
+.inspector-panel {
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 4px;
+  padding: 12px;
+  margin: 8px 0;
+  background: var(--rpg-surface-dark, #1a1a2e);
+}
+
+.inspector-header {
+  font-weight: bold;
+  font-size: 1.1em;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--rpg-border-color, #444);
+  padding-bottom: 4px;
+}
+
+.inspector-section {
+  margin: 6px 0;
+}
+
+.inspector-section h5 {
+  margin: 0 0 4px 0;
+  font-size: 0.9em;
+  color: var(--rpg-accent, #7eb8da);
+}
+
+.inspector-empty {
+  color: var(--rpg-muted, #888);
+  font-style: italic;
+  font-size: 0.85em;
+}
+
+.inspector-inventory-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px dotted var(--rpg-border-color, #333);
+}
+
+.inspector-item-name {
+  font-size: 0.9em;
+}
+
+.inspector-item-qty {
+  color: var(--rpg-accent, #7eb8da);
+  font-weight: bold;
+}
+
+.inspector-list {
+  list-style: disc inside;
+  margin: 0;
+  padding: 0;
+}
+
+.inspector-list li {
+  font-size: 0.9em;
+  padding: 1px 0;
+}
+
+.inspector-belief {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  border-bottom: 1px dotted var(--rpg-border-color, #333);
+  font-size: 0.9em;
+}
+
+.inspector-belief-target {
+  font-weight: bold;
+  color: var(--rpg-accent, #7eb8da);
+}
+
+.inspector-belief-summary {
+  color: var(--rpg-text-secondary, #aaa);
+}
+
+.inspector-quest {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px dotted var(--rpg-border-color, #333);
+}
+
+.inspector-quest-title {
+  font-weight: bold;
+  font-size: 0.9em;
+}
+
+.inspector-quest-status {
+  font-size: 0.8em;
+  color: var(--rpg-muted, #888);
+  text-transform: capitalize;
+}
+
+.inspector-relationships {
+  display: flex;
+  gap: 12px;
+  font-size: 0.9em;
+}
+
+.inspector-rel-positive {
+  color: var(--rpg-positive, #4caf50);
+}
+
+.inspector-rel-neutral {
+  color: var(--rpg-neutral, #ffc107);
+}
+
+.inspector-rel-negative {
+  color: var(--rpg-negative, #f44336);
+}
