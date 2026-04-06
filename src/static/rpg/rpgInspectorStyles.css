@@ -498,3 +498,99 @@
 .portrait-status-blocked {
   color: #ff9800;
 }
+
+/* ---- Phase 12.7 — Tabbed inspector layout ---- */
+
+.inspector-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--rpg-border-color, #555);
+  padding-bottom: 8px;
+}
+
+.inspector-tab {
+  background: var(--rpg-surface-dark, #1a1a2e);
+  color: inherit;
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 4px 4px 0 0;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 0.9em;
+  text-transform: capitalize;
+}
+
+.inspector-tab.is-active {
+  border-color: var(--rpg-accent, #7eb8da);
+  background: rgba(126, 184, 218, 0.12);
+  color: var(--rpg-accent, #7eb8da);
+  font-weight: 600;
+}
+
+.inspector-tab:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ---- Phase 12.8 — GM Inspector panel ---- */
+
+.gm-inspector-panel {
+  border: 1px solid var(--rpg-border-color, #555);
+  border-radius: 4px;
+  padding: 12px;
+  margin: 8px 0;
+  background: var(--rpg-surface-dark, #1a1a2e);
+}
+
+.gm-inspector-section {
+  margin: 10px 0;
+}
+
+.gm-inspector-section h5 {
+  margin: 0 0 6px 0;
+  font-size: 0.9em;
+  color: var(--rpg-accent, #7eb8da);
+}
+
+.visual-asset-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 6px;
+}
+
+.visual-asset-image {
+  width: 100%;
+  max-width: 200px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-top: 6px;
+}
+
+.gm-image-request {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--rpg-border-color, #333);
+  font-size: 0.85em;
+}
+
+.gm-request-actor {
+  font-weight: 600;
+}
+
+.gm-request-status {
+  text-transform: capitalize;
+}
+
+.gm-request-status.pending {
+  color: #ffc107;
+}
+
+.gm-request-status.complete {
+  color: #28a745;
+}
+
+.gm-request-status.failed {
+  color: #dc3545;
+}

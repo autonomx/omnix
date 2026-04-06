@@ -1,936 +1,726 @@
-👉 Phase 12.3 + 12.4 + 12.5 — literal apply-this-patch diff spec
+👉 Phase 12.6 + 12.7 + 12.8 — full apply-this-patch spec (same style)
 
 This combines:
 
-12.3 — Image cache / storage / replay-safe asset references
-12.4 — Visual continuity system / appearance evolution tracking
-12.5 — Image generation controls / moderation / fallback handling
+12.6 — Character card compatibility / external persona mapping
+12.7 — UI polish / layout / navigation / responsiveness
+12.8 — GM / inspector convergence / causal trace overlays
 
-It builds directly on your current Phase 12 backend, which already has visual_state, portrait request/result routes, and scene illustration request/result routes.
+It builds on your current state:
 
-This phase keeps the same rules:
+canonical character UI + inspector
+world inspector
+visual identity / portraits / scene illustrations
+visual asset registry + appearance continuity
+replay-safe presentation payloads
 
-images remain presentation assets, not simulation truth
-deterministic gameplay must not depend on asset generation output
-asset references must be stable, bounded, and replay-safe
-visual continuity changes must be explicit and inspectable
-moderation/fallback must be explicit and provider-agnostic
+The goal of this combined phase is to make the system feel like a real product:
+
+import/export compatible character cards
+more polished character/world UI
+unified GM inspector tying together state, visuals, and causality
 High-level outcome
 
-After this patch, your visual system will support:
+After this phase, the project will support:
 
-stable asset registry entries instead of only loose URLs
-cache keys / asset IDs for replay-safe references
-appearance profile + evolution log for continuity
-visual refresh reasons like injury, faction change, corruption, disguise, promotion
-moderation / validation / fallback state for portrait and scene requests
-request lifecycle with retryable failure states and blocked status
-Part 1/12 — extend visual state model for assets, continuity, moderation
-Edit file: src/app/rpg/presentation/visual_state.py
+12.6
+importing external character cards into your canonical RPG character schema
+exporting canonical characters back out as portable cards
+mapping external persona fields into:
+personality profile
+appearance profile
+visual identity defaults
+scenario/world seed hints
+12.7
+tabbed inspector layout
+responsive two-column/stacked panel behavior
+cleaner card hierarchy
+navigation between Characters / World / Visuals / GM
+12.8
+GM inspector that converges:
+character state
+appearance events
+visual assets
+timeline/causal traces
+“why did this portrait change?” style traceability
+Phase 12.6 — Character Card Compatibility Layer
+Goal
 
-Add new constants near the top:
+Add a compatibility layer for importing/exporting external character cards without letting imported prompt structures become simulation truth.
 
- _MAX_SCENE_ILLUSTRATIONS = 24
- _MAX_IMAGE_REQUESTS = 24
-+_MAX_VISUAL_ASSETS = 64
-+_MAX_APPEARANCE_EVENTS = 32
-Add helpers below _safe_int(...)
-+def _safe_bool(value: Any, default: bool = False) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    if isinstance(value, (int, float)):
-+        return bool(value)
-+    if isinstance(value, str):
-+        text = value.strip().lower()
-+        if text in {"1", "true", "yes", "y", "on"}:
-+            return True
-+        if text in {"0", "false", "no", "n", "off"}:
-+            return False
-+    return default
-Add helper below _stable_seed_from_text(...)
-+def _stable_asset_id(kind: str, target_id: str, version: int, seed: int | None) -> str:
-+    seed_text = str(seed) if isinstance(seed, int) else "none"
-+    return f"{_safe_str(kind).strip()}:{_safe_str(target_id).strip()}:{max(1, int(version))}:{seed_text}"
-Add normalization helpers below _normalize_image_request(...)
-+def _normalize_visual_asset(value: Any) -> Dict[str, Any]:
-+    data = _safe_dict(value)
-+    version = _safe_int(data.get("version"), 1)
-+    if version is None or version < 1:
-+        version = 1
-+
-+    kind = _first_non_empty(data.get("kind"), "character_portrait")
-+    if kind not in {"character_portrait", "scene_illustration"}:
-+        kind = "character_portrait"
-+
-+    status = _first_non_empty(data.get("status"), "complete")
-+    if status not in {"pending", "complete", "failed", "blocked"}:
-+        status = "complete"
-+
-+    moderation = _safe_dict(data.get("moderation"))
-+    moderation_status = _first_non_empty(moderation.get("status"), "unchecked")
-+    if moderation_status not in {"unchecked", "approved", "blocked", "flagged"}:
-+        moderation_status = "unchecked"
-+
-+    return {
-+        "asset_id": _safe_str(data.get("asset_id")).strip(),
-+        "kind": kind,
-+        "target_id": _safe_str(data.get("target_id")).strip(),
-+        "url": _safe_str(data.get("url")).strip(),
-+        "local_path": _safe_str(data.get("local_path")).strip(),
-+        "cache_key": _safe_str(data.get("cache_key")).strip(),
-+        "seed": _safe_int(data.get("seed"), None),
-+        "style": _safe_str(data.get("style")).strip(),
-+        "model": _safe_str(data.get("model")).strip(),
-+        "prompt": _safe_str(data.get("prompt")).strip(),
-+        "version": version,
-+        "status": status,
-+        "created_from_request_id": _safe_str(data.get("created_from_request_id")).strip(),
-+        "moderation": {
-+            "status": moderation_status,
-+            "reason": _safe_str(moderation.get("reason")).strip(),
-+        },
-+    }
-+
-+
-+def _normalize_appearance_profile(value: Any) -> Dict[str, Any]:
-+    data = _safe_dict(value)
-+
-+    features = _safe_dict(data.get("features"))
-+    normalized_features = {}
-+    for key in sorted(features.keys(), key=lambda v: _safe_str(v)):
-+        if not _safe_str(key).strip():
-+            continue
-+        normalized_features[_safe_str(key)] = _normalize_scalar(features.get(key))
-+
-+    return {
-+        "base_description": _safe_str(data.get("base_description")).strip(),
-+        "current_summary": _safe_str(data.get("current_summary")).strip(),
-+        "features": normalized_features,
-+        "last_reason": _safe_str(data.get("last_reason")).strip(),
-+        "version": max(1, _safe_int(data.get("version"), 1) or 1),
-+    }
-+
-+
-+def _normalize_appearance_event(value: Any) -> Dict[str, Any]:
-+    data = _safe_dict(value)
-+    reason = _first_non_empty(data.get("reason"), "update")
-+    if reason not in {
-+        "initial",
-+        "injury",
-+        "promotion",
-+        "faction_change",
-+        "equipment_change",
-+        "corruption",
-+        "disguise",
-+        "aging",
-+        "manual_refresh",
-+        "update",
-+    }:
-+        reason = "update"
-+
-+    return {
-+        "event_id": _safe_str(data.get("event_id")).strip(),
-+        "reason": reason,
-+        "summary": _safe_str(data.get("summary")).strip(),
-+        "tick": max(0, _safe_int(data.get("tick"), 0) or 0),
-+    }
-+```
+Imported cards must be treated as:
 
----
+seed data
+presentation/personality hints
+optional world/setup hints
 
-### Extend `ensure_visual_state(...)`
+Never as authoritative simulation state by themselves.
 
-Inside `ensure_visual_state(...)`, after `image_requests` normalization and before defaults, add:
+Part 1/12 — add compatibility module
+Create file: src/app/rpg/compat/character_cards.py
+from __future__ import annotations
 
-```diff
-+    assets_in = _safe_list(visual_state.get("visual_assets"))
-+    assets_out = [
-+        _normalize_visual_asset(item)
-+        for item in assets_in
-+        if isinstance(item, dict)
-+    ]
-+    assets_out = sorted(
-+        assets_out,
-+        key=lambda item: (
-+            _safe_str(item.get("kind")),
-+            _safe_str(item.get("target_id")),
-+            _safe_str(item.get("asset_id")),
-+        ),
-+    )[-_MAX_VISUAL_ASSETS:]
-+    visual_state["visual_assets"] = assets_out
-+
-+    profiles_in = _safe_dict(visual_state.get("appearance_profiles"))
-+    profiles_out: Dict[str, Any] = {}
-+    for actor_id in sorted(profiles_in.keys(), key=lambda v: _safe_str(v)):
-+        profiles_out[_safe_str(actor_id)] = _normalize_appearance_profile(profiles_in.get(actor_id))
-+    visual_state["appearance_profiles"] = profiles_out
-+
-+    events_in = _safe_dict(visual_state.get("appearance_events"))
-+    events_out: Dict[str, Any] = {}
-+    for actor_id in sorted(events_in.keys(), key=lambda v: _safe_str(v)):
-+        raw_events = _safe_list(events_in.get(actor_id))
-+        normalized_events = [
-+            _normalize_appearance_event(item)
-+            for item in raw_events
-+            if isinstance(item, dict)
-+        ]
-+        normalized_events = sorted(
-+            normalized_events,
-+            key=lambda item: (
-+                item.get("tick", 0),
-+                _safe_str(item.get("reason")),
-+                _safe_str(item.get("event_id")),
-+            ),
-+        )[-_MAX_APPEARANCE_EVENTS:]
-+        events_out[_safe_str(actor_id)] = normalized_events
-+    visual_state["appearance_events"] = events_out
-+
-     defaults = _safe_dict(visual_state.get("defaults"))
-     visual_state["defaults"] = {
-         "portrait_style": _first_non_empty(defaults.get("portrait_style"), "rpg-portrait"),
-         "scene_style": _first_non_empty(defaults.get("scene_style"), "rpg-scene"),
-         "model": _first_non_empty(defaults.get("model"), "default"),
-+        "fallback_portrait_url": _safe_str(defaults.get("fallback_portrait_url")).strip(),
-+        "fallback_scene_url": _safe_str(defaults.get("fallback_scene_url")).strip(),
-     }
-Part 2/12 — add asset registry + continuity mutators
-Edit file: src/app/rpg/presentation/visual_state.py
+from typing import Any, Dict, List
 
-Add these functions below append_image_request(...):
 
-+def append_visual_asset(
-+    simulation_state: Dict[str, Any],
-+    asset: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    simulation_state = ensure_visual_state(simulation_state)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    assets = _safe_list(visual_state.get("visual_assets"))
-+
-+    assets.append(_normalize_visual_asset(asset))
-+    assets = sorted(
-+        [item for item in assets if isinstance(item, dict)],
-+        key=lambda item: (
-+            _safe_str(item.get("kind")),
-+            _safe_str(item.get("target_id")),
-+            _safe_str(item.get("asset_id")),
-+        ),
-+    )[-_MAX_VISUAL_ASSETS:]
-+    visual_state["visual_assets"] = assets
-+    return simulation_state
-+
-+
-+def upsert_appearance_profile(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    actor_id: str,
-+    profile: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    simulation_state = ensure_visual_state(simulation_state)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    profiles = _safe_dict(visual_state.get("appearance_profiles"))
-+
-+    profiles[_safe_str(actor_id)] = _normalize_appearance_profile(profile)
-+    visual_state["appearance_profiles"] = dict(sorted(profiles.items(), key=lambda item: _safe_str(item[0])))
-+    return simulation_state
-+
-+
-+def append_appearance_event(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    actor_id: str,
-+    event: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    simulation_state = ensure_visual_state(simulation_state)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    events = _safe_dict(visual_state.get("appearance_events"))
-+
-+    actor_events = _safe_list(events.get(actor_id))
-+    actor_events.append(_normalize_appearance_event(event))
-+    actor_events = sorted(
-+        [item for item in actor_events if isinstance(item, dict)],
-+        key=lambda item: (
-+            item.get("tick", 0),
-+            _safe_str(item.get("reason")),
-+            _safe_str(item.get("event_id")),
-+        ),
-+    )[-_MAX_APPEARANCE_EVENTS:]
-+
-+    events[_safe_str(actor_id)] = actor_events
-+    visual_state["appearance_events"] = dict(sorted(events.items(), key=lambda item: _safe_str(item[0])))
-+    return simulation_state
-+
-+
-+def build_default_appearance_profile(
-+    *,
-+    actor_id: str,
-+    name: str,
-+    role: str,
-+    description: str,
-+) -> Dict[str, Any]:
-+    base_description = ", ".join([part for part in [_safe_str(name).strip(), _safe_str(role).strip(), _safe_str(description).strip()] if part])
-+    return {
-+        "base_description": base_description,
-+        "current_summary": base_description,
-+        "features": {},
-+        "last_reason": "initial",
-+        "version": 1,
-+    }
-+
-+
-+def build_visual_asset_record(
-+    *,
-+    kind: str,
-+    target_id: str,
-+    version: int,
-+    seed: int | None,
-+    style: str,
-+    model: str,
-+    prompt: str,
-+    url: str,
-+    local_path: str,
-+    status: str,
-+    created_from_request_id: str,
-+    moderation_status: str = "unchecked",
-+    moderation_reason: str = "",
-+) -> Dict[str, Any]:
-+    asset_id = _stable_asset_id(kind, target_id, version, seed)
-+    cache_key = f"{kind}|{target_id}|{version}|{seed if isinstance(seed, int) else 'none'}|{style}|{model}"
-+    return {
-+        "asset_id": asset_id,
-+        "kind": kind,
-+        "target_id": target_id,
-+        "url": _safe_str(url).strip(),
-+        "local_path": _safe_str(local_path).strip(),
-+        "cache_key": cache_key,
-+        "seed": seed,
-+        "style": _safe_str(style).strip(),
-+        "model": _safe_str(model).strip(),
-+        "prompt": _safe_str(prompt).strip(),
-+        "version": max(1, int(version)),
-+        "status": _first_non_empty(status, "complete"),
-+        "created_from_request_id": _safe_str(created_from_request_id).strip(),
-+        "moderation": {
-+            "status": _first_non_empty(moderation_status, "unchecked"),
-+            "reason": _safe_str(moderation_reason).strip(),
-+        },
-+    }
-Part 3/12 — add request validation / moderation / fallback helpers
-Edit file: src/app/rpg/presentation/visual_state.py
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
-Add below build_visual_asset_record(...):
 
-+def validate_visual_prompt(prompt: str) -> Dict[str, Any]:
-+    prompt = _safe_str(prompt).strip()
-+    if not prompt:
-+        return {"ok": False, "status": "blocked", "reason": "empty_prompt"}
-+    if len(prompt) > 2000:
-+        return {"ok": False, "status": "blocked", "reason": "prompt_too_long"}
-+    return {"ok": True, "status": "approved", "reason": ""}
-+
-+
-+def normalize_visual_status(value: Any, *, default: str = "pending") -> str:
-+    status = _first_non_empty(value, default)
-+    if status not in {"idle", "pending", "complete", "failed", "blocked"}:
-+        status = default
-+    return status
-+
-+
-+def apply_visual_fallback(identity_or_illustration: Dict[str, Any], fallback_url: str) -> Dict[str, Any]:
-+    payload = dict(_safe_dict(identity_or_illustration))
-+    if not _safe_str(payload.get("portrait_url")).strip() and not _safe_str(payload.get("image_url")).strip():
-+        if "portrait_url" in payload:
-+            payload["portrait_url"] = _safe_str(fallback_url).strip()
-+        if "image_url" in payload:
-+            payload["image_url"] = _safe_str(fallback_url).strip()
-+    return payload
-Part 4/12 — surface appearance profile in canonical character UI
-Edit file: src/app/rpg/ui/character_builder.py
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
 
-Add import near top:
 
- from app.rpg.presentation.visual_state import (
-     build_default_character_visual_identity,
-+    build_default_appearance_profile,
-     ensure_visual_state,
- )
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
 
-Add helper below _normalize_visual_identity(...):
 
-+def _normalize_appearance(
-+    simulation_state: Dict[str, Any],
-+    actor_id: str,
-+    entry: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    simulation_state = ensure_visual_state(simulation_state)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    profiles = _safe_dict(visual_state.get("appearance_profiles"))
-+    events = _safe_dict(visual_state.get("appearance_events"))
-+
-+    profile = _safe_dict(profiles.get(actor_id))
-+    if not profile:
-+        profile = build_default_appearance_profile(
-+            actor_id=actor_id,
-+            name=_derive_display_name(entry),
-+            role=_derive_role(entry),
-+            description=_safe_str(entry.get("description")).strip(),
-+        )
-+
-+    appearance_events = _safe_list(events.get(actor_id))
-+    appearance_events = [item for item in appearance_events if isinstance(item, dict)][-_MAX_RECENT_ACTIONS:]
-+
-+    return {
-+        "profile": profile,
-+        "recent_events": appearance_events,
-+    }
+def _first_non_empty(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
 
-Inside build_character_ui_entry(...), add:
 
--    card_meta = _normalize_card_meta(presentation_entry, profile)
-+    card_meta = _normalize_card_meta(presentation_entry, profile)
-+    appearance = _normalize_appearance(simulation_state, actor_id, presentation_entry)
+def _normalize_tags(*tag_lists: Any, limit: int = 12) -> List[str]:
+    tags: List[str] = []
+    seen = set()
+    for tag_list in tag_lists:
+        for raw in _safe_list(tag_list):
+            tag = _safe_str(raw).strip()
+            if not tag:
+                continue
+            lowered = tag.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            tags.append(tag)
+    return sorted(tags, key=lambda v: v.lower())[:limit]
 
-And in returned object add:
 
-         "personality": profile,
-         "visual_identity": _normalize_visual_identity(simulation_state, actor_id, presentation_entry, profile),
-+        "appearance": appearance,
-         "card": card_meta,
-Part 5/12 — extend visual extraction in routes
+def import_external_character_card(card: Dict[str, Any]) -> Dict[str, Any]:
+    """Map an external character card into canonical RPG-compatible seed data."""
+    card = _safe_dict(card)
+
+    data = _safe_dict(card.get("data"))
+    content = card if data else card
+
+    name = _first_non_empty(
+        content.get("name"),
+        data.get("name"),
+        "Unknown Character",
+    )
+    description = _first_non_empty(
+        content.get("description"),
+        data.get("description"),
+        content.get("personality"),
+        data.get("personality"),
+    )
+    personality = _first_non_empty(
+        content.get("personality"),
+        data.get("personality"),
+        content.get("scenario"),
+        data.get("scenario"),
+    )
+    scenario = _first_non_empty(
+        content.get("scenario"),
+        data.get("scenario"),
+    )
+    first_mes = _first_non_empty(
+        content.get("first_mes"),
+        data.get("first_mes"),
+    )
+    mes_example = _first_non_empty(
+        content.get("mes_example"),
+        data.get("mes_example"),
+    )
+
+    tags = _normalize_tags(
+        content.get("tags"),
+        data.get("tags"),
+    )
+
+    creator_notes = _first_non_empty(
+        data.get("creator_notes"),
+        content.get("creator_notes"),
+    )
+
+    system_prompt = _first_non_empty(
+        data.get("system_prompt"),
+        content.get("system_prompt"),
+    )
+
+    post_history_instructions = _first_non_empty(
+        data.get("post_history_instructions"),
+        content.get("post_history_instructions"),
+    )
+
+    alternate_greetings = [
+        _safe_str(v).strip()
+        for v in _safe_list(data.get("alternate_greetings"))
+        if _safe_str(v).strip()
+    ][:6]
+
+    return {
+        "canonical_seed": {
+            "name": name,
+            "description": description,
+            "role": _first_non_empty(data.get("role"), "character"),
+            "traits": tags[:8],
+            "greeting": first_mes,
+        },
+        "personality_seed": {
+            "summary": personality,
+            "style_tags": tags[:8],
+            "archetype": _first_non_empty(data.get("archetype"), ""),
+            "tone": _first_non_empty(data.get("tone"), ""),
+        },
+        "appearance_seed": {
+            "base_description": description,
+            "current_summary": description,
+            "features": {},
+            "last_reason": "initial",
+            "version": 1,
+        },
+        "visual_seed": {
+            "style": _first_non_empty(data.get("portrait_style"), "rpg-portrait"),
+            "model": _first_non_empty(data.get("portrait_model"), "default"),
+            "base_prompt": _first_non_empty(description, personality, name),
+        },
+        "scenario_seed": {
+            "scenario": scenario,
+            "example_dialogue": mes_example,
+            "system_prompt": system_prompt,
+            "post_history_instructions": post_history_instructions,
+            "alternate_greetings": alternate_greetings,
+            "creator_notes": creator_notes,
+        },
+        "source_meta": {
+            "format": _first_non_empty(card.get("spec"), "generic"),
+            "spec_version": _safe_str(card.get("spec_version")).strip(),
+        },
+    }
+
+
+def export_canonical_character_card(character: Dict[str, Any]) -> Dict[str, Any]:
+    """Export canonical character UI object into a portable external-style card."""
+    character = _safe_dict(character)
+    personality = _safe_dict(character.get("personality"))
+    visual_identity = _safe_dict(character.get("visual_identity"))
+    appearance = _safe_dict(character.get("appearance"))
+    appearance_profile = _safe_dict(appearance.get("profile"))
+    card_meta = _safe_dict(character.get("card"))
+
+    tags = _normalize_tags(
+        character.get("traits"),
+        personality.get("style_tags"),
+    )
+
+    description = _first_non_empty(
+        character.get("description"),
+        appearance_profile.get("current_summary"),
+        card_meta.get("summary"),
+    )
+
+    return {
+        "spec": "rpg-canonical-card",
+        "spec_version": "1.0",
+        "name": _first_non_empty(character.get("name"), "Unknown Character"),
+        "description": description,
+        "personality": _first_non_empty(
+            personality.get("summary"),
+            card_meta.get("summary"),
+        ),
+        "scenario": "",
+        "first_mes": "",
+        "mes_example": "",
+        "data": {
+            "role": _first_non_empty(character.get("role"), "character"),
+            "tags": tags,
+            "archetype": _safe_str(personality.get("archetype")).strip(),
+            "tone": _safe_str(personality.get("tone")).strip(),
+            "portrait_style": _safe_str(visual_identity.get("style")).strip(),
+            "portrait_model": _safe_str(visual_identity.get("model")).strip(),
+            "base_prompt": _safe_str(visual_identity.get("base_prompt")).strip(),
+            "appearance_summary": _safe_str(appearance_profile.get("current_summary")).strip(),
+            "badge": _safe_str(card_meta.get("badge")).strip(),
+        },
+    }
+Part 2/12 — export compatibility module
+Create file: src/app/rpg/compat/__init__.py
+from .character_cards import (
+    export_canonical_character_card,
+    import_external_character_card,
+)
+
+__all__ = [
+    "export_canonical_character_card",
+    "import_external_character_card",
+]
+Part 3/12 — add import/export routes
 Edit file: src/app/rpg/api/rpg_presentation_routes.py
 
 Add imports:
 
- from app.rpg.presentation.visual_state import (
-     append_image_request,
-+    append_appearance_event,
-+    append_visual_asset,
-+    apply_visual_fallback,
-     append_scene_illustration,
-+    build_default_appearance_profile,
-     build_default_character_visual_identity,
-+    build_visual_asset_record,
-     ensure_visual_state,
-     stable_visual_seed_from_text,
-+    normalize_visual_status,
-     upsert_character_visual_identity,
-+    upsert_appearance_profile,
-+    validate_visual_prompt,
- )
++from app.rpg.compat.character_cards import (
++    export_canonical_character_card,
++    import_external_character_card,
++)
 
-Update _safe_visual_state(...) to include new fields:
+Add routes near the visual routes:
 
-     if not isinstance(v, dict):
-         return {
-             "character_visual_identities": {},
-             "scene_illustrations": [],
-             "image_requests": [],
-+            "visual_assets": [],
-+            "appearance_profiles": {},
-+            "appearance_events": {},
-             "defaults": {},
-         }
-@@
-     requests = v.get("image_requests")
-     if not isinstance(requests, list):
-         requests = []
-     requests = [item for item in requests if isinstance(item, dict)]
++@rpg_presentation_bp.post("/api/rpg/character/import")
++def import_character_card():
++    """Import external character card into canonical RPG seed payload."""
++    data = request.get_json(silent=True) or {}
++    card = _safe_dict(data.get("card"))
++    imported = import_external_character_card(card)
++    return jsonify({
++        "ok": True,
++        "imported": imported,
++    })
 +
-+    assets = v.get("visual_assets")
-+    if not isinstance(assets, list):
-+        assets = []
-+    assets = [item for item in assets if isinstance(item, dict)]
 +
-+    appearance_profiles = v.get("appearance_profiles")
-+    if not isinstance(appearance_profiles, dict):
-+        appearance_profiles = {}
-+
-+    appearance_events = v.get("appearance_events")
-+    if not isinstance(appearance_events, dict):
-+        appearance_events = {}
-@@
-     return {
-         "character_visual_identities": identities,
-         "scene_illustrations": illustrations,
-         "image_requests": requests,
-+        "visual_assets": assets,
-+        "appearance_profiles": appearance_profiles,
-+        "appearance_events": appearance_events,
-         "defaults": defaults,
-     }
-Part 6/12 — harden portrait request route
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Inside request_character_portrait(), after portrait_style/portrait_model are resolved, add prompt validation and appearance profile init.
-
-Replace:
-
--    identity = build_default_character_visual_identity(
-+    identity = build_default_character_visual_identity(
-         actor_id=actor_id,
-         name=_safe_str(target.get("name")).strip(),
-         role=_safe_str(target.get("role")).strip(),
-         description=_safe_str(target.get("description")).strip(),
-         personality_summary=_safe_str(_safe_dict(target.get("personality")).get("summary")).strip(),
-         style=portrait_style,
-         model=portrait_model,
-     )
-
-with the same block plus following additions below it:
-
-+    profile_payload = build_default_appearance_profile(
-+        actor_id=actor_id,
-+        name=_safe_str(target.get("name")).strip(),
-+        role=_safe_str(target.get("role")).strip(),
-+        description=_safe_str(target.get("description")).strip(),
-+    )
-+    simulation_state = upsert_appearance_profile(
-+        simulation_state,
-+        actor_id=actor_id,
-+        profile=profile_payload,
-+    )
-
-Then replace the prompt override handling with:
-
--    if prompt_override:
--        identity["base_prompt"] = prompt_override
-+    if prompt_override:
-+        identity["base_prompt"] = prompt_override
-     identity["style"] = portrait_style
-     identity["model"] = portrait_model
--    identity["status"] = "pending"
-+    prompt_check = validate_visual_prompt(identity.get("base_prompt", ""))
-+    identity["status"] = "pending" if prompt_check.get("ok") else "blocked"
-
-After version increment, add:
-
-+    simulation_state = append_appearance_event(
-+        simulation_state,
-+        actor_id=actor_id,
-+        event={
-+            "event_id": f"appearance:{actor_id}:{identity['version']}",
-+            "reason": "manual_refresh" if prompt_override else "initial",
-+            "summary": "Portrait refresh requested",
-+            "tick": 0,
-+        },
-+    )
-
-Then replace request append with:
-
--    simulation_state = append_image_request(
--        simulation_state,
--        {
--            "request_id": request_id,
--            "kind": "character_portrait",
--            "target_id": actor_id,
--            "prompt": identity.get("base_prompt", ""),
--            "seed": identity.get("seed"),
--            "style": identity.get("style", ""),
--            "model": identity.get("model", ""),
--            "status": "pending",
--        },
--    )
-+    simulation_state = append_image_request(
-+        simulation_state,
-+        {
-+            "request_id": request_id,
-+            "kind": "character_portrait",
-+            "target_id": actor_id,
-+            "prompt": identity.get("base_prompt", ""),
-+            "seed": identity.get("seed"),
-+            "style": identity.get("style", ""),
-+            "model": identity.get("model", ""),
-+            "status": "pending" if prompt_check.get("ok") else "blocked",
-+        },
-+    )
-
-Add blocked response metadata:
-
-     return jsonify({
-         "ok": True,
-         "request_id": request_id,
-+        "moderation": {
-+            "status": "approved" if prompt_check.get("ok") else "blocked",
-+            "reason": _safe_str(prompt_check.get("reason")).strip(),
-+        },
-         "visual_state": _extract_visual_state(simulation_state),
-         "character_ui_state": _extract_character_ui_state(simulation_state),
-     })
-Part 7/12 — harden portrait result route and asset registry
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Inside complete_character_portrait(), replace:
-
--    status = _first_non_empty(data.get("status"), "complete")
-+    status = normalize_visual_status(data.get("status"), default="complete")
-+    request_id = _safe_str(data.get("request_id")).strip()
-+    local_path = _safe_str(data.get("local_path")).strip()
-+    moderation_status = _first_non_empty(data.get("moderation_status"), "approved")
-+    moderation_reason = _safe_str(data.get("moderation_reason")).strip()
-
-After identity lookup and before upsert, add fallback logic:
-
-+    visual_state_defaults = _safe_dict(_extract_visual_state(simulation_state).get("defaults"))
-+    if status in {"failed", "blocked"}:
-+        identity = apply_visual_fallback(identity, visual_state_defaults.get("fallback_portrait_url"))
-
-Keep setting portrait fields, but make status normalized:
-
-     identity["portrait_url"] = image_url
-     identity["portrait_asset_id"] = asset_id
-     identity["status"] = status
-
-After upsert_character_visual_identity(...), add:
-
-+    version = identity.get("version")
-+    if not isinstance(version, int) or version < 1:
-+        version = 1
-+
-+    simulation_state = append_visual_asset(
-+        simulation_state,
-+        build_visual_asset_record(
-+            kind="character_portrait",
-+            target_id=actor_id,
-+            version=version,
-+            seed=identity.get("seed") if isinstance(identity.get("seed"), int) else None,
-+            style=_safe_str(identity.get("style")).strip(),
-+            model=_safe_str(identity.get("model")).strip(),
-+            prompt=_safe_str(identity.get("base_prompt")).strip(),
-+            url=_safe_str(identity.get("portrait_url")).strip(),
-+            local_path=local_path,
-+            status=status,
-+            created_from_request_id=request_id,
-+            moderation_status=moderation_status,
-+            moderation_reason=moderation_reason,
-+        ),
-+    )
-
-And append appearance event:
-
-+    simulation_state = append_appearance_event(
-+        simulation_state,
-+        actor_id=actor_id,
-+        event={
-+            "event_id": f"appearance-result:{actor_id}:{version}",
-+            "reason": "manual_refresh",
-+            "summary": f"Portrait result recorded ({status})",
-+            "tick": 0,
-+        },
-+    )
-Part 8/12 — harden scene illustration request/result routes
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-In request_scene_illustration()
-
-After prompt/style/model resolution, add validation:
-
-+    prompt_check = validate_visual_prompt(prompt)
-
-Then replace request append with:
-
-     simulation_state = append_image_request(
-         simulation_state,
-         {
-             "request_id": request_id,
-             "kind": "scene_illustration",
-             "target_id": resolved_target,
-             "prompt": prompt,
-             "seed": seed,
-             "style": scene_style,
-             "model": scene_model,
--            "status": "pending",
-+            "status": "pending" if prompt_check.get("ok") else "blocked",
-         },
-     )
-
-And return moderation payload:
-
-     return jsonify({
-         "ok": True,
-         "request_id": request_id,
-+        "moderation": {
-+            "status": "approved" if prompt_check.get("ok") else "blocked",
-+            "reason": _safe_str(prompt_check.get("reason")).strip(),
-+        },
-         "visual_state": _extract_visual_state(simulation_state),
-     })
-In complete_scene_illustration()
-
-Replace beginning of function variable extraction with:
-
-+    request_id = _safe_str(data.get("request_id")).strip()
-+    status = normalize_visual_status(data.get("status"), default="complete")
-+    local_path = _safe_str(data.get("local_path")).strip()
-+    moderation_status = _first_non_empty(data.get("moderation_status"), "approved")
-+    moderation_reason = _safe_str(data.get("moderation_reason")).strip()
-
-Replace illustration append payload with:
-
--    simulation_state = append_scene_illustration(
--        simulation_state,
--        {
--            "scene_id": _safe_str(data.get("scene_id")).strip(),
--            "event_id": _safe_str(data.get("event_id")).strip(),
--            "title": _safe_str(data.get("title")).strip(),
--            "image_url": _safe_str(data.get("image_url")).strip(),
--            "asset_id": _safe_str(data.get("asset_id")).strip(),
--            "seed": data.get("seed") if isinstance(data.get("seed"), int) else None,
--            "style": _safe_str(data.get("style")).strip(),
--            "prompt": _safe_str(data.get("prompt")).strip(),
--            "model": _safe_str(data.get("model")).strip(),
--            "status": _first_non_empty(data.get("status"), "complete"),
--        },
--    )
-+    scene_id = _safe_str(data.get("scene_id")).strip()
-+    event_id = _safe_str(data.get("event_id")).strip()
-+    title = _safe_str(data.get("title")).strip()
-+    image_url = _safe_str(data.get("image_url")).strip()
-+    asset_id = _safe_str(data.get("asset_id")).strip()
-+    seed = data.get("seed") if isinstance(data.get("seed"), int) else None
-+    style = _safe_str(data.get("style")).strip()
-+    prompt = _safe_str(data.get("prompt")).strip()
-+    model = _safe_str(data.get("model")).strip()
-+
-+    visual_defaults = _safe_dict(_extract_visual_state(simulation_state).get("defaults"))
-+    illustration_payload = {
-+        "scene_id": scene_id,
-+        "event_id": event_id,
-+        "title": title,
-+        "image_url": image_url,
-+        "asset_id": asset_id,
-+        "seed": seed,
-+        "style": style,
-+        "prompt": prompt,
-+        "model": model,
-+        "status": status,
-+    }
-+    if status in {"failed", "blocked"}:
-+        illustration_payload = apply_visual_fallback(illustration_payload, visual_defaults.get("fallback_scene_url"))
-+
-+    simulation_state = append_scene_illustration(
-+        simulation_state,
-+        illustration_payload,
-+    )
-+
-+    simulation_state = append_visual_asset(
-+        simulation_state,
-+        build_visual_asset_record(
-+            kind="scene_illustration",
-+            target_id=_first_non_empty(event_id, scene_id, title, "scene"),
-+            version=1,
-+            seed=seed,
-+            style=style,
-+            model=model,
-+            prompt=prompt,
-+            url=_safe_str(illustration_payload.get("image_url")).strip(),
-+            local_path=local_path,
-+            status=status,
-+            created_from_request_id=request_id,
-+            moderation_status=moderation_status,
-+            moderation_reason=moderation_reason,
-+        ),
-+    )
-Part 9/12 — expose visual assets and appearance in UI/frontend
-Edit file: src/static/rpg/rpgPresentationRenderer.js
-
-In renderCharacterList(inspectorState), after existing portrait status line, add appearance summary:
-
-+        ${c.appearance?.profile?.last_reason ? `<div class="inspector-character-summary">appearance: ${escapeHtml(c.appearance.profile.last_reason)}</div>` : ""}
-
-In renderCharacterInspector(character), after rendering existing inspector panel, append recent appearance events if available by modifying renderInspectorPanel(character).
-
-Inside renderInspectorPanel(character), after relationships section add:
-
-+      <div class="inspector-section">
-+        <h5>Appearance</h5>
-+        <div>${escapeHtml(character.appearance?.profile?.current_summary || "—")}</div>
-+      </div>
-Edit file: src/static/rpg/rpgInspectorStyles.css
-
-Append:
-
-+.visual-asset-meta {
-+  margin-top: 4px;
-+  font-size: 0.8em;
-+  color: var(--rpg-text-secondary, #aaa);
-+}
-Part 10/12 — add replay-safe asset reference route
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add route:
-
-+@rpg_presentation_bp.post("/api/rpg/visual_assets")
-+def presentation_visual_assets():
-+    """Return replay-safe visual asset registry."""
++@rpg_presentation_bp.post("/api/rpg/character/export")
++def export_character_card():
++    """Export canonical character UI object into portable card format."""
 +    data = request.get_json(silent=True) or {}
 +    setup_payload = _safe_dict(data.get("setup_payload"))
++    actor_id = _safe_str(data.get("actor_id")).strip()
 +
 +    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
 +    simulation_state = ensure_player_party(simulation_state)
 +    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = ensure_visual_state(simulation_state)
++
++    character_ui_state = _extract_character_ui_state(simulation_state)
++    characters = character_ui_state.get("characters") if isinstance(character_ui_state, dict) else []
++    if not isinstance(characters, list):
++        characters = []
++
++    for character in characters:
++        if isinstance(character, dict) and _safe_str(character.get("id")).strip() == actor_id:
++            return jsonify({
++                "ok": True,
++                "card": export_canonical_character_card(character),
++            })
++
++    return jsonify({
++        "ok": False,
++        "error": "character_not_found",
++    }), 404
+Phase 12.7 — UI Polish / Layout / Navigation / Responsiveness
+Goal
+
+Promote the current inspector-first UI into a more productized layout with:
+
+tabs
+responsive pane behavior
+clearer information hierarchy
+better navigation between surfaces
+Part 4/12 — add tabbed inspector shell in renderer
+Edit file: src/static/rpg/rpgPresentationRenderer.js
+
+Near top-level state, add:
+
++let activeInspectorTab = "characters";
+
+Add helpers near existing DOM helpers:
+
++function getInspectorTabsContainer() {
++  return document.getElementById("rpg-inspector-tabs");
++}
++
++function getInspectorSection(id) {
++  return document.getElementById(id);
++}
++
++export function renderInspectorTabs() {
++  const container = getInspectorTabsContainer();
++  if (!container) return;
++
++  const tabs = [
++    ["characters", "Characters"],
++    ["world", "World"],
++    ["visuals", "Visuals"],
++    ["gm", "GM"],
++  ];
++
++  container.innerHTML = tabs.map(([key, label]) => `
++    <button
++      type="button"
++      class="rpg-inspector-tab${activeInspectorTab === key ? " is-active" : ""}"
++      data-inspector-tab="${escapeHtml(key)}"
++    >
++      ${escapeHtml(label)}
++    </button>
++  `).join("");
++}
++
++export function bindInspectorTabs() {
++  const container = getInspectorTabsContainer();
++  if (!container) return;
++
++  container.onclick = (e) => {
++    const node = e.target.closest("[data-inspector-tab]");
++    if (!node) return;
++    activeInspectorTab = String(node.getAttribute("data-inspector-tab") || "characters");
++    renderInspectorTabs();
++    updateInspectorVisibility();
++  };
++}
++
++export function updateInspectorVisibility() {
++  const sections = {
++    characters: getInspectorSection("rpg-characters-section"),
++    world: getInspectorSection("rpg-world-section"),
++    visuals: getInspectorSection("rpg-visuals-section"),
++    gm: getInspectorSection("rpg-gm-section"),
++  };
++
++  Object.entries(sections).forEach(([key, node]) => {
++    if (!node) return;
++    node.style.display = activeInspectorTab === key ? "" : "none";
++  });
++}
+
+In renderPresentation(payload), before returning, add:
+
++  renderInspectorTabs();
++  bindInspectorTabs();
++  updateInspectorVisibility();
+Part 5/12 — add GM panel renderer
+Edit file: src/static/rpg/rpgPresentationRenderer.js
+
+Add helper:
+
++function getGMInspectorContainer() {
++  return document.getElementById("rpg-gm-inspector");
++}
++
++export function renderGMInspector(payload) {
++  const container = getGMInspectorContainer();
++  if (!container) return;
++
++  const visualState = payload?.visual_state || {};
++  const characterInspectorState = payload?.character_inspector_state || {};
++  const worldInspectorState = payload?.world_inspector_state || {};
++
++  const visualAssets = Array.isArray(visualState.visual_assets) ? visualState.visual_assets : [];
++  const imageRequests = Array.isArray(visualState.image_requests) ? visualState.image_requests : [];
++  const worldThreads = Array.isArray(worldInspectorState.threads) ? worldInspectorState.threads : [];
++  const characterCount = typeof characterInspectorState.count === "number" ? characterInspectorState.count : 0;
++
++  container.innerHTML = `
++    <div class="inspector-panel">
++      <div class="inspector-header">GM Overview</div>
++      <div class="inspector-section">
++        <h5>Counts</h5>
++        <div class="visual-asset-meta">characters: ${escapeHtml(characterCount)}</div>
++        <div class="visual-asset-meta">visual assets: ${escapeHtml(visualAssets.length)}</div>
++        <div class="visual-asset-meta">image requests: ${escapeHtml(imageRequests.length)}</div>
++        <div class="visual-asset-meta">world threads: ${escapeHtml(worldThreads.length)}</div>
++      </div>
++    </div>
++  `;
++}
+
+And inside renderPresentation(payload) add:
+
++  renderGMInspector(payload);
+Part 6/12 — add responsive layout + tab styles
+Edit file: src/static/rpg/rpgInspectorStyles.css
+
+Append:
+
++.rpg-inspector-tabs {
++  display: flex;
++  gap: 8px;
++  margin-bottom: 12px;
++  flex-wrap: wrap;
++}
++
++.rpg-inspector-tab {
++  border: 1px solid var(--rpg-border-color, #555);
++  background: var(--rpg-surface-dark, #1a1a2e);
++  color: inherit;
++  border-radius: 8px;
++  padding: 8px 12px;
++  cursor: pointer;
++}
++
++.rpg-inspector-tab.is-active {
++  border-color: var(--rpg-accent, #7eb8da);
++  background: rgba(126, 184, 218, 0.12);
++}
++
++.rpg-inspector-section {
++  margin-top: 12px;
++}
++
++@media (max-width: 900px) {
++  .rpg-character-layout {
++    grid-template-columns: 1fr;
++  }
++}
+Part 7/12 — template structure for tabs/sections
+Edit the RPG template file
+
+Add this wrapper around existing character/world/visual/GM areas:
+
++<div id="rpg-inspector-tabs" class="rpg-inspector-tabs"></div>
++
++<div id="rpg-characters-section" class="rpg-inspector-section">
++  <div class="rpg-character-layout">
++    <div id="rpg-character-panel" class="rpg-character-panel"></div>
++    <div id="rpg-character-inspector" class="rpg-character-inspector"></div>
++  </div>
++</div>
++
++<div id="rpg-world-section" class="rpg-inspector-section">
++  <div class="rpg-character-layout">
++    <div id="rpg-world-panel" class="rpg-character-panel"></div>
++    <div id="rpg-world-inspector" class="rpg-character-inspector"></div>
++  </div>
++</div>
++
++<div id="rpg-visuals-section" class="rpg-inspector-section">
++  <div id="rpg-scene-illustrations" class="rpg-scene-illustrations"></div>
++</div>
++
++<div id="rpg-gm-section" class="rpg-inspector-section">
++  <div id="rpg-gm-inspector"></div>
++</div>
+Phase 12.8 — GM / Inspector Convergence / Causal Trace Overlays
+Goal
+
+Bring the data together so a GM can inspect:
+
+what changed
+why it changed
+what visual artifact came from what request
+what appearance event corresponds to which portrait refresh
+Part 8/12 — add trace payload route
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+Add route:
+
++@rpg_presentation_bp.post("/api/rpg/gm_trace")
++def presentation_gm_trace():
++    """Return converged GM trace payload for visuals + appearance + world state."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    actor_id = _safe_str(data.get("actor_id")).strip()
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = _ensure_character_ui_state(simulation_state)
++    simulation_state = _ensure_character_inspector_state(simulation_state)
++    simulation_state = _ensure_world_inspector_state(simulation_state)
 +    simulation_state = ensure_visual_state(simulation_state)
 +
 +    visual_state = _extract_visual_state(simulation_state)
++    character_ui_state = _extract_character_ui_state(simulation_state)
++    character_inspector_state = _extract_character_inspector_state(simulation_state)
++
++    characters = character_ui_state.get("characters") if isinstance(character_ui_state, dict) else []
++    if not isinstance(characters, list):
++        characters = []
++
++    inspector_characters = character_inspector_state.get("characters") if isinstance(character_inspector_state, dict) else []
++    if not isinstance(inspector_characters, list):
++        inspector_characters = []
++
++    selected_character = None
++    for character in characters:
++        if isinstance(character, dict) and _safe_str(character.get("id")).strip() == actor_id:
++            selected_character = character
++            break
++
++    selected_inspector = None
++    for character in inspector_characters:
++        if isinstance(character, dict) and _safe_str(character.get("id")).strip() == actor_id:
++            selected_inspector = character
++            break
++
++    appearance_events = _safe_dict(visual_state.get("appearance_events")).get(actor_id, [])
++    if not isinstance(appearance_events, list):
++        appearance_events = []
++
++    visual_assets = [
++        item for item in _safe_list(visual_state.get("visual_assets"))
++        if isinstance(item, dict) and _safe_str(item.get("target_id")).strip() == actor_id
++    ]
++
++    image_requests = [
++        item for item in _safe_list(visual_state.get("image_requests"))
++        if isinstance(item, dict) and _safe_str(item.get("target_id")).strip() == actor_id
++    ]
++
 +    return jsonify({
 +        "ok": True,
-+        "visual_assets": visual_state.get("visual_assets", []),
-+        "appearance_profiles": visual_state.get("appearance_profiles", {}),
-+        "appearance_events": visual_state.get("appearance_events", {}),
++        "trace": {
++            "character": selected_character,
++            "inspector": selected_inspector,
++            "appearance_events": appearance_events,
++            "visual_assets": visual_assets,
++            "image_requests": image_requests,
++        },
 +    })
-Part 11/12 — tests
-Edit file: src/tests/unit/rpg/test_phase12_visual_identity.py
+Part 9/12 — GM trace frontend
+Edit file: src/static/rpg/rpgPresentationRenderer.js
 
-Add imports:
+Extend renderGMInspector(payload) to show a simple causal visual summary:
 
- from app.rpg.presentation.visual_state import (
-+    append_appearance_event,
-     append_image_request,
-+    append_visual_asset,
-+    apply_visual_fallback,
-     append_scene_illustration,
-+    build_default_appearance_profile,
-     build_default_character_visual_identity,
-+    build_visual_asset_record,
-     ensure_visual_state,
-+    normalize_visual_status,
-     stable_visual_seed_from_text,
-     upsert_character_visual_identity,
-+    upsert_appearance_profile,
-+    validate_visual_prompt,
- )
-
-Append tests:
-
-+def test_build_default_appearance_profile():
-+    profile = build_default_appearance_profile(
-+        actor_id="npc:guard",
-+        name="Captain Elira",
-+        role="guard_captain",
-+        description="Veteran commander",
-+    )
-+    assert profile["version"] == 1
-+    assert profile["last_reason"] == "initial"
-+
-+
-+def test_append_visual_asset_bounded():
-+    simulation_state = {}
-+    for i in range(80):
-+        simulation_state = append_visual_asset(
-+            simulation_state,
-+            {
-+                "asset_id": f"asset:{i}",
-+                "kind": "character_portrait",
-+                "target_id": f"npc:{i}",
-+                "version": 1,
-+            },
-+        )
-+    assets = simulation_state["presentation_state"]["visual_state"]["visual_assets"]
-+    assert len(assets) == 64
-+
-+
-+def test_upsert_appearance_profile_and_events():
-+    simulation_state = {}
-+    simulation_state = upsert_appearance_profile(
-+        simulation_state,
-+        actor_id="npc:test",
-+        profile={"current_summary": "scarred veteran", "version": 2},
-+    )
-+    simulation_state = append_appearance_event(
-+        simulation_state,
-+        actor_id="npc:test",
-+        event={"event_id": "e1", "reason": "injury", "summary": "Scar gained", "tick": 3},
-+    )
-+    visual_state = simulation_state["presentation_state"]["visual_state"]
-+    assert visual_state["appearance_profiles"]["npc:test"]["version"] == 2
-+    assert len(visual_state["appearance_events"]["npc:test"]) == 1
-+
-+
-+def test_validate_visual_prompt():
-+    assert validate_visual_prompt("portrait of a stern guard")["ok"] is True
-+    assert validate_visual_prompt("")["ok"] is False
-+
-+
-+def test_apply_visual_fallback():
-+    payload = {"portrait_url": "", "status": "failed"}
-+    out = apply_visual_fallback(payload, "/fallback.png")
-+    assert out["portrait_url"] == "/fallback.png"
-+
-+
-+def test_normalize_visual_status():
-+    assert normalize_visual_status("complete") == "complete"
-+    assert normalize_visual_status("weird") == "pending"
-+
-+
-+def test_build_visual_asset_record():
-+    asset = build_visual_asset_record(
-+        kind="character_portrait",
-+        target_id="npc:guard",
-+        version=2,
-+        seed=123,
-+        style="rpg-portrait",
-+        model="default",
-+        prompt="guard portrait",
-+        url="/img.png",
-+        local_path="/tmp/img.png",
-+        status="complete",
-+        created_from_request_id="req:1",
-+    )
-+    assert asset["asset_id"].startswith("character_portrait:npc:guard:2:")
+ export function renderGMInspector(payload) {
+   const container = getGMInspectorContainer();
+   if (!container) return;
+@@
+   const visualAssets = Array.isArray(visualState.visual_assets) ? visualState.visual_assets : [];
+   const imageRequests = Array.isArray(visualState.image_requests) ? visualState.image_requests : [];
+   const worldThreads = Array.isArray(worldInspectorState.threads) ? worldInspectorState.threads : [];
+   const characterCount = typeof characterInspectorState.count === "number" ? characterInspectorState.count : 0;
++  const recentAssets = visualAssets.slice(-5).map((asset) => `
++    <div class="visual-asset-meta">
++      ${escapeHtml(asset.kind)} → ${escapeHtml(asset.target_id)} → ${escapeHtml(asset.status)}
++    </div>
++  `).join("");
+ 
+   container.innerHTML = `
+     <div class="inspector-panel">
+       <div class="inspector-header">GM Overview</div>
+       <div class="inspector-section">
+@@
+         <div class="visual-asset-meta">image requests: ${escapeHtml(imageRequests.length)}</div>
+         <div class="visual-asset-meta">world threads: ${escapeHtml(worldThreads.length)}</div>
+       </div>
++      <div class="inspector-section">
++        <h5>Recent Visual Assets</h5>
++        ${recentAssets || '<div class="inspector-empty">No visual assets.</div>'}
++      </div>
+     </div>
+   `;
+ }
+Part 10/12 — tests for compatibility + GM trace
 Edit file: src/tests/functional/test_character_ui_functional.py
 
 Append:
 
-+def test_visual_assets_endpoint_returns_ok(client):
++def test_character_import_route_returns_imported_payload(client):
++    response = client.post(
++        "/api/rpg/character/import",
++        json={
++            "card": {
++                "name": "Captain Elira",
++                "description": "Veteran city guard commander",
++                "personality": "Dry, practical, disciplined",
++                "data": {
++                    "tags": ["guard", "authority"],
++                },
++            }
++        },
++    )
++    assert response.status_code == 200
++    payload = response.get_json()
++    assert payload["ok"] is True
++    assert "imported" in payload
++
++
++def test_visual_assets_endpoint_returns_registry(client):
 +    response = client.post("/api/rpg/visual_assets", json={"setup_payload": {}})
 +    assert response.status_code == 200
 +    payload = response.get_json()
 +    assert payload["ok"] is True
 +    assert "visual_assets" in payload
-+    assert "appearance_profiles" in payload
-+    assert "appearance_events" in payload
 +
 +
-+def test_character_portrait_request_blocked_on_empty_prompt(client):
++def test_gm_trace_route_returns_trace(client):
 +    response = client.post(
-+        "/api/rpg/character_portrait/request",
++        "/api/rpg/gm_trace",
 +        json={
-+            "setup_payload": {
-+                "simulation_state": {
-+                    "presentation_state": {
-+                        "speaker_cards": [
-+                            {
-+                                "entity_id": "npc:guard",
-+                                "speaker_name": "Captain Elira",
-+                                "role": "guard_captain",
-+                            }
-+                        ]
-+                    }
-+                }
-+            },
-+            "actor_id": "npc:guard",
-+            "prompt": "",
++            "setup_payload": {},
++            "actor_id": "npc:test",
 +        },
 +    )
 +    assert response.status_code == 200
 +    payload = response.get_json()
-+    assert payload["moderation"]["status"] in {"approved", "blocked"}
++    assert payload["ok"] is True
++    assert "trace" in payload
+Part 11/12 — unit tests for compatibility mapping
+Create file: src/tests/unit/rpg/test_character_card_compat.py
+from app.rpg.compat.character_cards import (
+    export_canonical_character_card,
+    import_external_character_card,
+)
+
+
+def test_import_external_character_card_basic():
+    card = {
+        "name": "Captain Elira",
+        "description": "Veteran city guard commander",
+        "personality": "Dry and disciplined",
+        "data": {
+            "tags": ["guard", "authority"],
+            "tone": "dry",
+        },
+    }
+    result = import_external_character_card(card)
+    assert result["canonical_seed"]["name"] == "Captain Elira"
+    assert "guard" in result["canonical_seed"]["traits"]
+    assert result["personality_seed"]["tone"] == "dry"
+
+
+def test_export_canonical_character_card_basic():
+    character = {
+        "name": "Captain Elira",
+        "description": "Veteran commander",
+        "role": "guard_captain",
+        "traits": ["guard", "authority"],
+        "personality": {
+            "summary": "Dry and practical",
+            "archetype": "authority",
+            "tone": "dry",
+            "style_tags": ["disciplined"],
+        },
+        "visual_identity": {
+            "style": "rpg-portrait",
+            "model": "default",
+            "base_prompt": "Captain Elira, guard captain",
+        },
+        "appearance": {
+            "profile": {
+                "current_summary": "Veteran commander in city guard armor",
+            }
+        },
+        "card": {
+            "summary": "Veteran commander",
+            "badge": "City Guard",
+        },
+    }
+    result = export_canonical_character_card(character)
+    assert result["name"] == "Captain Elira"
+    assert result["data"]["role"] == "guard_captain"
+    assert result["data"]["badge"] == "City Guard"
 Part 12/12 — acceptance criteria
-
-Phase 12.3 is complete when:
-
-visual assets are registered with stable asset IDs and cache keys
-asset references are replay-safe and returned through /api/rpg/visual_assets
-
-Phase 12.4 is complete when:
-
-characters expose appearance profile + recent appearance events
-portrait refreshes can be tied to explicit appearance events/reasons
-
-Phase 12.5 is complete when:
-
-prompt validation exists
-blocked/failed statuses are normalized
-fallback URLs can be applied for failed/blocked results
-moderation/fallback metadata is returned in request/result routes
+Phase 12.6 is complete when:
+external character cards can be imported into canonical seed payloads
+canonical characters can be exported to portable card format
+import/export routes exist
+compatibility tests pass
+Phase 12.7 is complete when:
+tabbed inspector layout exists
+responsive panel visibility works
+sections are split into Characters / World / Visuals / GM
+renderer updates tab visibility correctly
+Phase 12.8 is complete when:
+GM overview panel exists
+GM trace route exists
+visual assets / appearance events / image requests can be inspected together
+basic causal convergence is visible in UI and API
