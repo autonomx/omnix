@@ -1,7 +1,8 @@
 """Phase 10 — RPG Presentation package.
 
 Provides presentation builders for scene/dialogue payloads, speaker cards,
-and personality style helpers used by both the API layer and frontend rendering.
+personality style helpers, and product-layer UX helpers used by both
+the API layer and frontend rendering.
 """
 from .personality import (
     build_personality_prompt_hints,
@@ -39,6 +40,24 @@ from .orchestration_bridge import (
 from .live_provider_bridge import (
     build_live_provider_presentation_payload,
 )
+from .setup_flow import (
+    build_setup_flow_payload,
+)
+from .intro_scene import (
+    build_intro_scene_payload,
+)
+from .dialogue_ux import (
+    build_dialogue_ux_payload,
+)
+from .player_inspector import (
+    build_player_inspector_overlay_payload,
+)
+from .save_load_ux import (
+    build_save_load_ux_payload,
+)
+from .narrative_recap import (
+    build_narrative_recap_payload,
+)
 
 __all__ = [
     "build_personality_prompt_hints",
@@ -57,4 +76,10 @@ __all__ = [
     "build_runtime_presentation_payload",
     "build_orchestration_presentation_payload",
     "build_live_provider_presentation_payload",
+    "build_setup_flow_payload",
+    "build_intro_scene_payload",
+    "build_dialogue_ux_payload",
+    "build_player_inspector_overlay_payload",
+    "build_save_load_ux_payload",
+    "build_narrative_recap_payload",
 ]

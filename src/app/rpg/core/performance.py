@@ -3,6 +3,10 @@
 Profiling, hot-path optimization, partial recompute, batching,
 streaming latency, memory compaction, large-world scaling,
 stress testing, performance stability.
+
+IMPORTANT:
+This module is strictly diagnostic. Wall-clock timing and benchmark
+measurements must never be used as authoritative simulation inputs.
 """
 from __future__ import annotations
 
@@ -25,10 +29,16 @@ def _si(v: Any, d: int = 0) -> int:
 def _ss(v: Any, d: str = "") -> str:
     return str(v) if v is not None else d
 
+
+def _normalize_unit(v: Any) -> str:
+    unit = _ss(v, "ms")
+    return unit if unit in VALID_METRIC_UNITS else "ms"
+
 # Constants
 MAX_METRICS = 1000
 MAX_BATCH_SIZE = 50
 MAX_PROFILE_ENTRIES = 500
+VALID_METRIC_UNITS = {"ms", "count", "bytes"}
 
 # ---------------------------------------------------------------------------
 # 21.0 — Profiling / metrics foundations
@@ -42,13 +52,21 @@ class PerformanceMetric:
     tick: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"name": self.name, "value": self.value,
-                "unit": self.unit, "tick": self.tick}
+        return {
+            "name": self.name,
+            "value": self.value,
+            "unit": self.unit,
+            "tick": self.tick,
+        }
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "PerformanceMetric":
-        return cls(name=_ss(d.get("name")), value=_sf(d.get("value")),
-                   unit=_ss(d.get("unit"), "ms"), tick=_si(d.get("tick")))
+        return cls(
+            name=_ss(d.get("name")),
+            value=max(0.0, _sf(d.get("value"))),
+            unit=_normalize_unit(d.get("unit")),
+            tick=max(0, _si(d.get("tick"))),
+        )
 
 
 @dataclass
@@ -73,10 +91,17 @@ class PerformanceState:
 
     def record(self, name: str, value: float, unit: str = "ms") -> None:
         self.metrics.append(PerformanceMetric(
-            name=name, value=value, unit=unit, tick=self.tick,
+            name=_ss(name),
+            value=max(0.0, _sf(value)),
+            unit=_normalize_unit(unit),
+            tick=max(0, self.tick),
         ))
         if len(self.metrics) > MAX_METRICS:
             self.metrics = self.metrics[-MAX_METRICS:]
+
+    def record_diagnostic_only(self, name: str, value: float, unit: str = "ms") -> None:
+        """Alias that makes the intended usage explicit."""
+        self.record(name=name, value=value, unit=unit)
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +283,7 @@ class BenchmarkHarness:
             "min_ms": round(min(times), 3) if times else 0,
             "max_ms": round(max(times), 3) if times else 0,
             "total_ms": round(sum(times), 3),
+            "diagnostic_only": True,
         }
 
 
@@ -271,13 +297,33 @@ class PerformanceDeterminismValidator:
         violations: List[str] = []
         if len(state.metrics) > MAX_METRICS:
             violations.append(f"metrics exceed max ({len(state.metrics)} > {MAX_METRICS})")
+        for metric in state.metrics:
+            if metric.value < 0.0:
+                violations.append(f"metric {metric.name} has negative value: {metric.value}")
+            if metric.tick < 0:
+                violations.append(f"metric {metric.name} has negative tick: {metric.tick}")
+            if metric.unit not in VALID_METRIC_UNITS:
+                violations.append(f"metric {metric.name} has invalid unit: {metric.unit}")
+        return violations
+
+    @staticmethod
+    def validate_diagnostic_only_payload(payload: Dict[str, Any]) -> List[str]:
+        violations: List[str] = []
+        if "diagnostic_only" in payload and payload.get("diagnostic_only") is not True:
+            violations.append("benchmark payload diagnostic_only flag must be True")
         return violations
 
     @staticmethod
     def normalize_state(state: PerformanceState) -> PerformanceState:
-        metrics = list(state.metrics)
+        metrics = [PerformanceMetric.from_dict(m.to_dict()) for m in state.metrics]
         if len(metrics) > MAX_METRICS:
             metrics = metrics[-MAX_METRICS:]
+        metrics = sorted(
+            metrics,
+            key=lambda m: (m.tick, m.name, m.unit, m.value),
+        )
         return PerformanceState(
-            metrics=metrics, tick=state.tick, budget_ms=state.budget_ms,
+            metrics=metrics,
+            tick=max(0, state.tick),
+            budget_ms=max(0.0, state.budget_ms),
         )

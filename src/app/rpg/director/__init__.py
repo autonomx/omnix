@@ -25,8 +25,38 @@ Components:
     EmergenceAdapter: Standardizes system metrics for Director consumption
 """
 
-from .director import Director
-from .event_engine import EventEngine
-from .emergence_adapter import EmergenceAdapter
+try:
+    from .director import Director
+except RuntimeError:  # DEPRECATED: director.py raises
+    Director = None  # noqa
 
-__all__ = ["Director", "EventEngine", "EmergenceAdapter"]
+from .event_engine import EventEngine  # type: ignore[attr-defined]
+from .emergence_adapter import EmergenceAdapter  # type: ignore[attr-defined]
+from .director_integration import (
+    StoryBeat,
+    StoryArcState,
+    DirectorState,
+    TensionPacingController,
+    ArcBeatTracker,
+    SceneBiasEngine,
+    DirectorDialogueInfluence,
+    DirectorQuestInfluence,
+    DirectorInspector,
+    DirectorDeterminismValidator,
+)
+
+__all__ = [
+    "Director",
+    "EventEngine",
+    "EmergenceAdapter",
+    "StoryBeat",
+    "StoryArcState",
+    "DirectorState",
+    "TensionPacingController",
+    "ArcBeatTracker",
+    "SceneBiasEngine",
+    "DirectorDialogueInfluence",
+    "DirectorQuestInfluence",
+    "DirectorInspector",
+    "DirectorDeterminismValidator",
+]

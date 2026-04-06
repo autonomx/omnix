@@ -30,6 +30,34 @@ def _si(v: Any, d: int = 0) -> int:
 def _ss(v: Any, d: str = "") -> str:
     return str(v) if v is not None else d
 
+
+def _normalize_arc_phase(v: Any) -> str:
+    value = _ss(v, "setup")
+    return value if value in ARC_PHASES else "setup"
+
+
+def _normalize_beat_type(v: Any) -> str:
+    value = _ss(v, "event")
+    return value if value in VALID_BEAT_TYPES else "event"
+
+
+def _normalize_beat_status(v: Any) -> str:
+    value = _ss(v, "pending")
+    return value if value in VALID_BEAT_STATUS else "pending"
+
+
+def _normalize_arc_status(v: Any) -> str:
+    value = _ss(v, "active")
+    return value if value in VALID_ARC_STATUS else "active"
+
+
+def _sort_key_beat(beat: "StoryBeat") -> tuple[str, str]:
+    return (_ss(beat.arc_id), _ss(beat.beat_id))
+
+
+def _sort_key_arc(arc: "StoryArcState") -> tuple[float, str]:
+    return (-_sf(arc.priority, 0.0), _ss(arc.arc_id))
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -38,6 +66,9 @@ MAX_ARCS = 10
 MAX_BEATS_PER_ARC = 20
 MAX_SCENE_BIASES = 10
 ARC_PHASES = ("setup", "rising", "climax", "falling", "resolution")
+VALID_BEAT_TYPES = {"event", "revelation", "confrontation", "resolution"}
+VALID_BEAT_STATUS = {"pending", "active", "completed", "skipped"}
+VALID_ARC_STATUS = {"active", "resolved", "abandoned"}
 
 # ---------------------------------------------------------------------------
 # 14.0 — Director state foundations
@@ -66,8 +97,8 @@ class StoryBeat:
         return cls(
             beat_id=_ss(d.get("beat_id")), arc_id=_ss(d.get("arc_id")),
             description=_ss(d.get("description")),
-            beat_type=_ss(d.get("beat_type"), "event"),
-            status=_ss(d.get("status"), "pending"),
+            beat_type=_normalize_beat_type(d.get("beat_type")),
+            status=_normalize_beat_status(d.get("status")),
             tick_triggered=_si(d.get("tick_triggered")),
             tension_delta=_sf(d.get("tension_delta")),
         )
@@ -98,12 +129,12 @@ class StoryArcState:
     def from_dict(cls, d: Dict[str, Any]) -> "StoryArcState":
         return cls(
             arc_id=_ss(d.get("arc_id")), title=_ss(d.get("title")),
-            phase=_ss(d.get("phase"), "setup"),
+            phase=_normalize_arc_phase(d.get("phase")),
             tension=_clamp(_sf(d.get("tension"))),
             priority=_clamp(_sf(d.get("priority"), 0.5)),
             beats=[StoryBeat.from_dict(b) for b in (d.get("beats") or [])],
             focus_entities=list(d.get("focus_entities") or []),
-            status=_ss(d.get("status"), "active"),
+            status=_normalize_arc_status(d.get("status")),
         )
 
 
@@ -223,7 +254,12 @@ class ArcBeatTracker:
 # ---------------------------------------------------------------------------
 
 class SceneBiasEngine:
-    """Bias scene selection without overriding simulation truth."""
+    """Bias scene selection without overriding simulation truth.
+
+    Important: this class must only emit advisory metadata.
+    It must never mutate simulation state, encounter truth, quest truth,
+    runtime turn ownership, or authoritative outcome selection.
+    """
 
     @staticmethod
     def compute_scene_bias(state: DirectorState) -> Dict[str, Any]:
@@ -259,7 +295,11 @@ class SceneBiasEngine:
 # ---------------------------------------------------------------------------
 
 class DirectorDialogueInfluence:
-    """Influence dialogue based on director state."""
+    """Influence dialogue based on director state.
+
+    Returns advisory directives only. Callers must treat these as hints,
+    not as authoritative overrides of dialogue/runtime truth.
+    """
 
     @staticmethod
     def get_dialogue_directives(
@@ -295,7 +335,11 @@ class DirectorDialogueInfluence:
 # ---------------------------------------------------------------------------
 
 class DirectorQuestInfluence:
-    """Influence quest progression based on director state."""
+    """Influence quest progression based on director state.
+
+    Returns priority/urgency hints only. It must not complete, fail, or
+    mutate quest state directly.
+    """
 
     @staticmethod
     def get_quest_directives(
@@ -386,10 +430,19 @@ class DirectorDeterminismValidator:
         if state.global_tension < 0.0 or state.global_tension > 1.0:
             violations.append(f"global_tension out of range: {state.global_tension}")
         for arc in state.arcs:
+            if arc.phase not in ARC_PHASES:
+                violations.append(f"arc {arc.arc_id} invalid phase: {arc.phase}")
+            if arc.status not in VALID_ARC_STATUS:
+                violations.append(f"arc {arc.arc_id} invalid status: {arc.status}")
             if len(arc.beats) > MAX_BEATS_PER_ARC:
                 violations.append(f"arc {arc.arc_id} beats exceed max ({len(arc.beats)} > {MAX_BEATS_PER_ARC})")
             if arc.tension < 0.0 or arc.tension > 1.0:
                 violations.append(f"arc {arc.arc_id} tension out of range: {arc.tension}")
+            for beat in arc.beats:
+                if beat.beat_type not in VALID_BEAT_TYPES:
+                    violations.append(f"beat {beat.beat_id} invalid type: {beat.beat_type}")
+                if beat.status not in VALID_BEAT_STATUS:
+                    violations.append(f"beat {beat.beat_id} invalid status: {beat.status}")
         if len(state.scene_biases) > MAX_SCENE_BIASES:
             violations.append(f"scene_biases exceed max ({len(state.scene_biases)} > {MAX_SCENE_BIASES})")
         return violations
@@ -403,12 +456,23 @@ class DirectorDeterminismValidator:
         for a in arcs:
             a.tension = _clamp(a.tension)
             a.priority = _clamp(a.priority)
+            a.phase = _normalize_arc_phase(a.phase)
+            a.status = _normalize_arc_status(a.status)
+            a.focus_entities = sorted([_ss(v) for v in a.focus_entities if _ss(v)])[:5]
             if len(a.beats) > MAX_BEATS_PER_ARC:
                 a.beats = a.beats[:MAX_BEATS_PER_ARC]
+            a.beats = sorted(
+                [StoryBeat.from_dict(b.to_dict()) for b in a.beats],
+                key=_sort_key_beat,
+            )
+            for b in a.beats:
+                b.beat_type = _normalize_beat_type(b.beat_type)
+                b.status = _normalize_beat_status(b.status)
 
         biases = list(state.scene_biases)
         if len(biases) > MAX_SCENE_BIASES:
             biases = biases[-MAX_SCENE_BIASES:]
+        arcs = sorted(arcs, key=_sort_key_arc)
 
         return DirectorState(
             tick=state.tick,
