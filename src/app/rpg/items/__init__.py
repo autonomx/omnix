@@ -40,6 +40,14 @@ from .inventory_state import (
     get_equipped_weapon,
     get_equipped_armor,
 )
+from .world_items import (
+    ensure_world_item_state,
+    spawn_world_item,
+    pickup_world_item,
+    drop_world_item,
+    list_scene_items,
+)
+from .item_effects import apply_item_effects
 
 __all__ = [
     "get_item_definition",
@@ -68,4 +76,10 @@ __all__ = [
     "find_inventory_item",
     "get_equipped_weapon",
     "get_equipped_armor",
+    "ensure_world_item_state",
+    "spawn_world_item",
+    "pickup_world_item",
+    "drop_world_item",
+    "list_scene_items",
+    "apply_item_effects",
 ]

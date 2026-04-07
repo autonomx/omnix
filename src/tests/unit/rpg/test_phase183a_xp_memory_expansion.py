@@ -1,66 +1,66 @@
 """Phase 18.3A — Unit tests for XP rules, memory UI, and world expansion."""
-import importlib.util
-import os
 import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
 import pytest
 
-_SRC = os.path.join(os.path.dirname(__file__), "..", "..", "..")
-
-def _load(name, rel_path):
-    path = os.path.normpath(os.path.join(_SRC, rel_path))
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-_xp = _load("player_xp_rules", "app/rpg/player/player_xp_rules.py")
-_mi = _load("memory_inspector_test", "app/rpg/presentation/memory_inspector.py")
-_we = _load("world_expansion", "app/rpg/creator/world_expansion.py")
-_sp = _load("startup_pipeline_funcs", "app/rpg/creator/startup_pipeline.py")
+from app.rpg.player.player_xp_rules import (
+    compute_enemy_difficulty_xp,
+    compute_quest_xp,
+    compute_action_skill_xp,
+    compute_stat_influence_bonus,
+)
+from app.rpg.presentation.memory_inspector import build_memory_ui_summary
+from app.rpg.creator.world_expansion import (
+    maybe_spawn_dynamic_npc,
+    maybe_spawn_dynamic_location,
+    maybe_spawn_dynamic_faction,
+)
+from app.rpg.creator.startup_pipeline import mark_seed_origins, add_world_expansion_caps
 
 
 class TestXpRules:
     def test_enemy_difficulty_xp(self):
-        xp = _xp.compute_enemy_difficulty_xp({"difficulty_tier": 1})
+        xp = compute_enemy_difficulty_xp({"difficulty_tier": 1})
         assert xp == 35  # 20 + 1*15
 
     def test_enemy_difficulty_xp_tier_0(self):
-        xp = _xp.compute_enemy_difficulty_xp({"difficulty_tier": 0})
+        xp = compute_enemy_difficulty_xp({"difficulty_tier": 0})
         assert xp == 20
 
     def test_quest_xp(self):
-        xp = _xp.compute_quest_xp({"quest_rank": 2})
+        xp = compute_quest_xp({"quest_rank": 2})
         assert xp == 100  # 50 + 2*25
 
     def test_action_skill_xp_success(self):
-        result = _xp.compute_action_skill_xp({"skill_id": "swordsmanship", "outcome": "success", "difficulty": "normal"})
+        result = compute_action_skill_xp({"skill_id": "swordsmanship", "outcome": "success", "difficulty": "normal"})
         assert "swordsmanship" in result
         assert result["swordsmanship"] > 0
 
     def test_action_skill_xp_failure(self):
-        result = _xp.compute_action_skill_xp({"skill_id": "archery", "outcome": "failure", "difficulty": "normal"})
+        result = compute_action_skill_xp({"skill_id": "archery", "outcome": "failure", "difficulty": "normal"})
         assert "archery" in result
         assert result["archery"] >= 2
 
     def test_action_skill_xp_no_skill(self):
-        result = _xp.compute_action_skill_xp({"outcome": "success"})
+        result = compute_action_skill_xp({"outcome": "success"})
         assert result == {}
 
     def test_stat_influence_bonus(self):
         ps = {"stats": {"intelligence": 16}}
-        bonus = _xp.compute_stat_influence_bonus(ps, {"stat_used": "intelligence"})
+        bonus = compute_stat_influence_bonus(ps, {"stat_used": "intelligence"})
         assert bonus >= 1
 
     def test_stat_influence_low(self):
         ps = {"stats": {"strength": 8}}
-        bonus = _xp.compute_stat_influence_bonus(ps, {"stat_used": "strength"})
+        bonus = compute_stat_influence_bonus(ps, {"stat_used": "strength"})
         assert bonus == 0
 
 
 class TestMemoryUISummary:
     def test_empty_state(self):
-        result = _mi.build_memory_ui_summary({})
+        result = build_memory_ui_summary({})
         assert "important_memory" in result
         assert "recent_memory" in result
         assert "recent_world_events" in result
@@ -76,7 +76,7 @@ class TestMemoryUISummary:
                 ]
             }
         }
-        result = _mi.build_memory_ui_summary(sim)
+        result = build_memory_ui_summary(sim)
         texts = [m["text"] for m in result["expanded"]]
         assert texts.count("Same memory") == 1
 
@@ -89,7 +89,7 @@ class TestMemoryUISummary:
                 ]
             }
         }
-        result = _mi.build_memory_ui_summary(sim)
+        result = build_memory_ui_summary(sim)
         assert len(result["important_memory"]) >= 1
         assert result["important_memory"][0]["text"] == "Very important"
 
@@ -99,59 +99,59 @@ class TestMemoryUISummary:
                 "npc1": [{"text": f"Memory {i}", "strength": 0.5} for i in range(20)]
             }
         }
-        result = _mi.build_memory_ui_summary(sim)
+        result = build_memory_ui_summary(sim)
         assert len(result["recent_memory"]) <= 5
 
 
 class TestWorldExpansion:
     def test_spawn_dynamic_npc(self):
         sim = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
-        sim = _we.maybe_spawn_dynamic_npc(sim, {"name": "New NPC", "role": "merchant"})
+        sim = maybe_spawn_dynamic_npc(sim, {"name": "New NPC", "role": "merchant"})
         assert sim["_spawn_result"]["ok"] is True
         assert any(n.get("name") == "New NPC" for n in sim.get("npcs", []))
 
     def test_npc_budget_exceeded(self):
         sim = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 0, "entities_spawned": 0, "npcs_spawned": 0}}
-        sim = _we.maybe_spawn_dynamic_npc(sim, {"name": "Test"})
+        sim = maybe_spawn_dynamic_npc(sim, {"name": "Test"})
         assert sim["_spawn_result"]["ok"] is False
         assert sim["_spawn_result"]["reason"] == "budget_exceeded"
 
     def test_npc_generation_disabled(self):
         sim = {"world_expansion": {"allow_dynamic_npc_generation": False}}
-        sim = _we.maybe_spawn_dynamic_npc(sim, {"name": "Test"})
+        sim = maybe_spawn_dynamic_npc(sim, {"name": "Test"})
         assert sim["_spawn_result"]["ok"] is False
 
     def test_spawn_dynamic_location(self):
         sim = {"world_expansion": {"allow_dynamic_location_generation": True, "world_growth_budget": 20, "location_budget": 8, "entities_spawned": 0}}
-        sim = _we.maybe_spawn_dynamic_location(sim, {"name": "Hidden Cave"})
+        sim = maybe_spawn_dynamic_location(sim, {"name": "Hidden Cave"})
         assert sim["_spawn_result"]["ok"] is True
 
     def test_spawn_dynamic_faction(self):
         sim = {"world_expansion": {"allow_dynamic_faction_generation": True, "world_growth_budget": 20, "faction_budget": 4, "entities_spawned": 0}}
-        sim = _we.maybe_spawn_dynamic_faction(sim, {"name": "Shadow Guild"})
+        sim = maybe_spawn_dynamic_faction(sim, {"name": "Shadow Guild"})
         assert sim["_spawn_result"]["ok"] is True
 
     def test_deterministic_ids(self):
         sim1 = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
         sim2 = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
-        sim1 = _we.maybe_spawn_dynamic_npc(sim1, {"name": "John", "role": "guard"})
-        sim2 = _we.maybe_spawn_dynamic_npc(sim2, {"name": "John", "role": "guard"})
+        sim1 = maybe_spawn_dynamic_npc(sim1, {"name": "John", "role": "guard"})
+        sim2 = maybe_spawn_dynamic_npc(sim2, {"name": "John", "role": "guard"})
         id1 = sim1.get("npcs", [{}])[-1].get("npc_id")
         id2 = sim2.get("npcs", [{}])[-1].get("npc_id")
         assert id1 == id2
 
     def test_seed_origins_preserved(self):
         data = {"npcs": [{"name": "Starting NPC"}], "factions": [{"name": "Starting Faction"}]}
-        data = _sp.mark_seed_origins(data)
+        data = mark_seed_origins(data)
         assert data["npcs"][0]["seed_origin"] == "startup"
         assert data["factions"][0]["seed_origin"] == "startup"
 
     def test_expansion_caps_added(self):
-        data = _sp.add_world_expansion_caps({})
+        data = add_world_expansion_caps({})
         assert "world_expansion" in data
         assert data["world_expansion"]["world_growth_budget"] == 20
 
     def test_total_budget_enforcement(self):
         sim = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 1, "npc_budget": 10, "entities_spawned": 1}}
-        sim = _we.maybe_spawn_dynamic_npc(sim, {"name": "Over budget"})
+        sim = maybe_spawn_dynamic_npc(sim, {"name": "Over budget"})
         assert sim["_spawn_result"]["ok"] is False
