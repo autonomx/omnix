@@ -423,3 +423,19 @@ class EncounterResolver:
             "turn_index": state.turn_index,
             "reason": f"{action_type} in {mode} mode -> {outcome_type}",
         }
+
+    def resolve_combat_round(self, action: dict, seed: int | None = None) -> dict:
+        """Resolve a combat round using the authoritative action resolver."""
+        from app.rpg.action_resolver import resolve_player_action, resolve_attack_roll, select_equipped_weapon
+        sim = self._state if hasattr(self, '_state') else {}
+        result = resolve_player_action(sim, action, seed)
+        combat_result = result.get("result", {})
+        return {
+            "attack_result": combat_result.get("outcome", "miss"),
+            "damage_dealt": combat_result.get("damage", 0),
+            "is_crit": combat_result.get("is_crit", False),
+            "defender_hp_after": combat_result.get("defender_hp_after"),
+            "skill_id": combat_result.get("skill_id", ""),
+            "stat_used": combat_result.get("stat_used", ""),
+            "weapon_id": combat_result.get("weapon_id", "unarmed"),
+        }

@@ -15,6 +15,9 @@ from typing import Any, Dict, List
 
 from .encounter_actions import build_player_actions
 
+# Phase 18.3A: Legacy dict resolver — damage resolution now routes through action_resolver.
+# This module is kept for backward compatibility.
+
 _MAX_LOG = 100
 
 
