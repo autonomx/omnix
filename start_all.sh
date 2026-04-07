@@ -18,6 +18,13 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+# Cleanup existing server processes
+echo "[Cleanup] Killing existing server processes on ports 5000 and 8000..."
+kill $(lsof -ti:5000) 2>/dev/null
+kill $(lsof -ti:8000) 2>/dev/null
+sleep 2
+echo "[Cleanup] Done."
+
 # Check if virtual environment exists and activate it
 if [ -d "venv" ]; then
     echo "[Setup] Activating virtual environment..."
@@ -82,7 +89,7 @@ sleep 5
 # Start Omnix FastAPI Server (supports WebSocket TTS streaming)
 echo "[2/2] Starting Omnix FastAPI Server on port 5000..."
 echo ""
-python server_fastapi.py &
+python app.py &
 CHATBOT_PID=$!
 
 # Wait for chatbot

@@ -15,6 +15,16 @@ echo.
 
 cd /d "%~dp0"
 
+echo [Cleanup] Killing existing server processes...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5000 ^| findstr LISTENING') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
+timeout /t 2 /nobreak >nul
+echo [Cleanup] Done.
+
 if exist "venv\Scripts\activate.bat" (
     call venv\Scripts\activate.bat
 ) else (
@@ -35,11 +45,7 @@ echo Waiting for STT...
 ping -n 6 127.0.0.1 >nul
 
 echo [2/3] Starting Chatbot...
-if "%SERVER_MODE%"=="fastapi" (
-    start "Omnix FastAPI" cmd /k "cd /d "%~dp0" && python server_fastapi.py 2>&1"
-) else (
-    start "Omnix Flask" cmd /k "cd /d "%~dp0" && python app.py 2>&1"
-)
+start "Omnix FastAPI" cmd /k "cd /d "%~dp0" && python app.py 2>&1"
 
 echo.
 echo All servers started!

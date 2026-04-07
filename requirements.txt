@@ -4,10 +4,10 @@
 # ============================================
 # CORE WEB FRAMEWORK
 # ============================================
-Flask==3.0.0
 requests==2.31.0
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6
 pydantic>=2.5.0
 websockets>=12.0
 python-socketio>=5.9.0

@@ -299,8 +299,7 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
     current_scene = _safe_dict(runtime_state.get("current_scene"))
     memory_context = build_dialogue_memory_context(
         simulation_state,
-        speaker="player",
-        max_items=8,
+        actor_id="player",
     )
     return {
         "success": True,
