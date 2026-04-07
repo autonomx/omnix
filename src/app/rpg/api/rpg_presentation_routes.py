@@ -147,6 +147,12 @@ from app.rpg.session.migrations import migrate_session_payload
 # Phase 12.15 — Visual inspector
 from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
 
+# Phase 16.2 — Memory inspector
+from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
+
+# Phase 18.0 — Unified GM tooling
+from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
+
 # Phase 14.4 — Memory decay (canonical decay engine)
 from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
 
@@ -1931,6 +1937,49 @@ def visual_inspector():
         asset_manifest=asset_manifest,
     )
     return jsonify({"ok": True, "visual_inspector": payload})
+
+
+# ---------------------------------------------------------------------------
+# Phase 16.2 — Memory Inspector
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/memory/inspector")
+def memory_inspector():
+    """Return an inspector payload for memory state."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+    payload = build_memory_inspector_payload(simulation_state)
+    return jsonify({"ok": True, "memory_inspector": payload})
+
+
+# ---------------------------------------------------------------------------
+# Phase 18.0 — Unified GM Tooling
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/gm/tooling")
+def gm_tooling():
+    """Return unified GM tooling payload with visuals, memory, and operations."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+
+    try:
+        queue_jobs = list_visual_jobs()
+    except Exception:
+        queue_jobs = []
+
+    try:
+        asset_manifest = get_asset_manifest()
+    except Exception:
+        asset_manifest = {"assets": {}}
+
+    payload = build_gm_tooling_payload(
+        simulation_state,
+        queue_jobs=queue_jobs,
+        asset_manifest=asset_manifest,
+    )
+    return jsonify({"ok": True, "gm_tooling": payload})
 
 
 # ---------------------------------------------------------------------------
