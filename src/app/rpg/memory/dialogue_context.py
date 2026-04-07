@@ -1,17 +1,12 @@
-"""Phase 14.3 — Dialogue memory context builder (canonical).
-
-Builds deterministic, bounded memory context for dialogue injection.
-Ensures stable ordering and prompt-safe text sizes.
-"""
+"""Phase 16.0 — Canonical dialogue memory shaping."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Union
-
-ActorIds = Union[str, List[str]]
+from typing import Any, Dict, List
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+_MAX_CONTEXT_ITEMS = 5
+_MAX_LINE_LEN = 240
+_MAX_PROMPT_LEN = 2000
 
 
 def _safe_str(value: Any) -> str:
@@ -22,8 +17,15 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _score_memory(item: Dict[str, Any]) -> tuple:
-    """Deterministic sort key: strength desc, then updated_at, then text."""
     item = _safe_dict(item)
     strength = float(item.get("strength") or 0.0)
     updated_at = _safe_str(item.get("updated_at")).strip()
@@ -31,87 +33,90 @@ def _score_memory(item: Dict[str, Any]) -> tuple:
     return (-strength, updated_at, text)
 
 
-def build_dialogue_memory_context(
-    simulation_state: Dict[str, Any],
-    actor_ids: ActorIds,
-) -> Dict[str, Any]:
+def build_actor_memory_context(simulation_state: Dict[str, Any], actor_id: str, *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    actor_memory = _safe_dict(_safe_dict(memory_state.get("actor_memory")).get(actor_id))
+    entries = [_safe_dict(item) for item in _safe_list(actor_memory.get("entries"))]
+    entries.sort(key=_score_memory)
+    return entries[: max(0, int(limit))]
+
+
+def build_world_rumor_context(simulation_state: Dict[str, Any], *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    world_memory = _safe_dict(memory_state.get("world_memory"))
+    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
+    rumors.sort(key=_score_memory)
+    return rumors[: max(0, int(limit))]
+
+
+def build_dialogue_memory_context(simulation_state: Dict[str, Any], actor_id: str = "", actor_ids: Any = None) -> Dict[str, Any]:
     """Build dialogue memory context for one or more actors.
 
-    Returns deterministic, bounded output suitable for LLM prompt injection.
+    Supports both actor_id (single string) and actor_ids (list) for backward
+    compatibility with existing callers.
     """
-    if isinstance(actor_ids, str):
-        actor_ids = [actor_ids]
+    if actor_ids is not None:
+        if isinstance(actor_ids, str):
+            actor_ids = [actor_ids]
+    elif actor_id:
+        actor_ids = [actor_id]
+    else:
+        actor_ids = []
 
     simulation_state = _safe_dict(simulation_state)
     memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-    world_memory = _safe_dict(memory_state.get("world_memory"))
+    actor_memory_all = _safe_dict(memory_state.get("actor_memory"))
 
     collected_actor_memory: List[Dict[str, Any]] = []
     for aid in actor_ids:
         aid = _safe_str(aid).strip()
         if not aid:
             continue
-        entries = _safe_dict(actor_memory.get(aid)).get("entries", [])
+        entries = _safe_dict(actor_memory_all.get(aid)).get("entries", [])
         if not isinstance(entries, list):
             entries = []
         for entry in entries:
             if isinstance(entry, dict):
                 collected_actor_memory.append(entry)
 
-    # Deterministic sort by strength, then text
     collected_actor_memory.sort(key=_score_memory)
-    # Cap total entries
     collected_actor_memory = collected_actor_memory[:50]
 
-    world_rumors = world_memory.get("rumors", [])
-    if not isinstance(world_rumors, list):
-        world_rumors = []
-    world_rumors = [r for r in world_rumors if isinstance(r, dict)]
-    # Sort rumors deterministically
-    world_rumors.sort(key=lambda item: (
-        -float(item.get("strength") or 0.0),
-        _safe_str(item.get("text")).strip(),
-    ))
-    world_rumors = world_rumors[:25]
+    rumor_context = build_world_rumor_context(simulation_state)
 
     return {
-        "actor_memory": collected_actor_memory,
-        "world_rumors": world_rumors,
+        "actor_id": _safe_str(actor_id).strip() if actor_id else (_safe_str(actor_ids[0]).strip() if actor_ids else ""),
         "actor_ids": [_safe_str(a).strip() for a in actor_ids if _safe_str(a).strip()],
+        "actor_memory": collected_actor_memory,
+        "world_rumors": rumor_context,
     }
 
 
-def build_llm_memory_prompt_block(
-    dialogue_memory_context: Dict[str, Any],
-) -> str:
-    """Build a bounded text block for LLM memory prompt injection.
-
-    Capped at 16 lines total, each text field bounded to 240 chars.
-    """
+def build_llm_memory_prompt_block(dialogue_memory_context: Dict[str, Any]) -> str:
     dialogue_memory_context = _safe_dict(dialogue_memory_context)
-    lines: List[str] = []
+    actor_memory = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("actor_memory"))]
+    world_rumors = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("world_rumors"))]
 
-    actor_memory = dialogue_memory_context.get("actor_memory", [])
-    if isinstance(actor_memory, list):
+    lines: List[str] = ["[MEMORY CONTEXT]"]
+
+    if actor_memory:
+        lines.append("Actor memories:")
         for item in actor_memory:
-            item = _safe_dict(item)
-            text = _safe_str(item.get("text")).strip()[:240]
-            strength = item.get("strength", 0.0)
+            text = _safe_str(item.get("text")).strip()[:_MAX_LINE_LEN]
             if text:
-                lines.append(f"[Memory] (s={strength}) {text}")
+                lines.append(f"- {text}")
 
-    world_rumors = dialogue_memory_context.get("world_rumors", [])
-    if isinstance(world_rumors, list):
+    if world_rumors:
+        lines.append("World rumors:")
         for item in world_rumors:
-            item = _safe_dict(item)
-            text = _safe_str(item.get("text")).strip()[:240]
-            strength = item.get("strength", 0.0)
+            text = _safe_str(item.get("text")).strip()[:_MAX_LINE_LEN]
             if text:
-                lines.append(f"[Rumor] (s={strength}) {text}")
+                lines.append(f"- {text}")
 
-    # Cap total lines to keep prompt bounded
-    if len(lines) > 16:
-        lines = lines[:16]
+    if len(lines) == 1:
+        lines.append("- none")
 
-    return "\n".join(lines) if lines else "(no memory context)"
+    prompt = "\n".join(lines[:16])
+    return prompt[:_MAX_PROMPT_LEN]

@@ -128,6 +128,9 @@ from app.rpg.memory.dialogue_context import (
     build_llm_memory_prompt_block,
 )
 
+# Phase 16.1 — Memory lifecycle automation
+from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
+
 # Phase 14.4 — Memory Decay / Reinforcement
 from app.rpg.memory.memory_decay import apply_memory_decay
 
@@ -537,7 +540,16 @@ def presentation_dialogue():
             if len(actor_ids) >= 6:
                 break
 
-    dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_ids)
+    # Phase 16.1 — apply dialogue memory lifecycle hooks
+    primary_actor_id = actor_ids[0] if actor_ids else ""
+    player_text = _safe_str(data.get("text") or data.get("message")).strip()
+    simulation_state = apply_dialogue_memory_hooks(
+        simulation_state,
+        actor_id=primary_actor_id,
+        player_text=player_text,
+    )
+
+    dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_id=primary_actor_id, actor_ids=actor_ids)
     memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
 
     response = {
@@ -550,6 +562,11 @@ def presentation_dialogue():
         "memory_state": _safe_dict(simulation_state.get("memory_state")),
         "dialogue_memory_context": dialogue_memory_context,
         "llm_memory_prompt_block": memory_prompt_block,
+        "gm_memory_visibility": {
+            "actor_id": primary_actor_id,
+            "actor_memory_count": len(dialogue_memory_context.get("actor_memory", [])),
+            "world_rumor_count": len(dialogue_memory_context.get("world_rumors", [])),
+        },
     }
     return jsonify(_add_content_pack_data(response, simulation_state))
 
@@ -1752,7 +1769,7 @@ def get_rpg_memory_dialogue_context():
     simulation_state = ensure_actor_memory_state(simulation_state)
     simulation_state = ensure_world_memory_state(simulation_state)
 
-    memory_context = build_dialogue_memory_context(simulation_state, actor_ids)
+    memory_context = build_dialogue_memory_context(simulation_state, actor_ids=actor_ids)
     memory_prompt_block = build_llm_memory_prompt_block(memory_context)
 
     return jsonify({
