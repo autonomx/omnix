@@ -737,6 +737,47 @@ def test_memory_add_route_returns_memory_state():
         assert "memory_state" in payload
 
 
+def test_dialogue_presentation_includes_dialogue_memory_context():
+    """Dialogue presentation includes dialogue_memory_context and llm_memory_prompt_block."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/presentation/dialogue",
+            json={"setup_payload": {}, "dialogue_state": {}},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert "dialogue_memory_context" in payload
+        assert "llm_memory_prompt_block" in payload
+
+
+def test_visual_process_requests_route_returns_simulation_state():
+    """Visual process requests route returns simulation_state."""
+    import json
+    from flask import Flask
+    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+
+    app = Flask(__name__)
+    app.register_blueprint(rpg_presentation_bp)
+
+    with app.test_client() as client:
+        response = client.post(
+            "/api/rpg/visual/process_requests",
+            json={"setup_payload": {}, "limit": 2},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["ok"] is True
+        assert "simulation_state" in payload
+        assert "visual_state" in payload
+
+
 def test_memory_get_route_returns_memory_state():
     """Memory get endpoint returns ok=True with memory_state."""
     import json

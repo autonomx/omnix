@@ -139,6 +139,12 @@ def _normalize_image_request(value: Any) -> Dict[str, Any]:
         "style": _safe_str(data.get("style")).strip(),
         "model": _safe_str(data.get("model")).strip(),
         "status": status,
+        "attempts": max(0, _safe_int(data.get("attempts"), 0) or 0),
+        "max_attempts": max(1, _safe_int(data.get("max_attempts"), 3) or 3),
+        "error": _safe_str(data.get("error")).strip(),
+        "created_at": _safe_str(data.get("created_at")).strip(),
+        "updated_at": _safe_str(data.get("updated_at")).strip(),
+        "completed_at": _safe_str(data.get("completed_at")).strip(),
     }
 
 
@@ -441,6 +447,49 @@ def append_image_request(
 
     visual_state["image_requests"] = requests
     return simulation_state
+
+
+# ---- Phase 12.10 — Request update helpers for worker ----
+
+
+def update_image_request(
+    simulation_state: Dict[str, Any],
+    *,
+    request_id: str,
+    patch: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Update an existing image request by ID with the given patch fields."""
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    requests = _safe_list(visual_state.get("image_requests"))
+
+    updated = []
+    for item in requests:
+        item_dict = _safe_dict(item)
+        if _safe_str(item_dict.get("request_id")).strip() == _safe_str(request_id).strip():
+            merged = dict(item_dict)
+            merged.update(_safe_dict(patch))
+            updated.append(_normalize_image_request(merged))
+        else:
+            updated.append(_normalize_image_request(item_dict))
+
+    visual_state["image_requests"] = updated[-_MAX_IMAGE_REQUESTS:]
+    return simulation_state
+
+
+def get_pending_image_requests(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return a list of pending image requests."""
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    requests = _safe_list(visual_state.get("image_requests"))
+    out = []
+    for item in requests:
+        item_dict = _safe_dict(item)
+        if _first_non_empty(item_dict.get("status"), "pending") == "pending":
+            out.append(_normalize_image_request(item_dict))
+    return out
 
 
 # ---- Phase 12.3 — Asset registry + continuity mutators ----

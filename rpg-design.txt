@@ -1,350 +1,330 @@
-👉 Phase 14.1 + 14.2 + 15.0 — full apply-this-patch spec (same style)
+👉 Phase 12.10 — full apply-this-patch spec (Option B: background worker image executor)
 
-This builds on your current state:
+This phase adds the missing piece to your visual system:
 
-bounded memory lanes now exist and are surfaced in API/UI
-session lifecycle exists
-wizard/template/pack bootstrap exists
-package/content-pack systems are integrated into presentation flow
-wizard/sessions/memory tabs are wired into the renderer and template containers exist
+pending portrait / scene requests already exist
+visual assets / results / moderation / fallback already exist
+what’s missing is the executor that processes pending requests in the background-like worker loop and writes results back into canonical visual state.
 
-This combined phase does three things:
+This spec is designed to preserve your architecture:
 
-14.1 — Actor memory integration into dialogue / NPC reasoning surfaces
-14.2 — World memory / rumor propagation integration
-15.0 — Production hardening / durable saves / migration safety
-
-The focus is to move from “memory exists” to “memory matters,” then harden the whole system so it survives real use.
-
+simulation remains authoritative
+visual generation remains external / presentation-only
+worker is provider-agnostic
+request/result lifecycle stays deterministic at the state-contract level
+actual image generation stays isolated behind adapters
 High-level outcome
 
 After this patch, the project will support:
 
-14.1
-actor-specific memory state
-per-actor short-term / long-term memory
-dialogue payloads that expose memory context for characters/NPCs
-inspector and GM trace visibility for actor memory
-14.2
-shared world memory / rumor memory entries with propagation metadata
-world inspector surface for rumors
-deterministic rumor append/normalization rules
-route helpers for world-memory updates and reads
-15.0
-durable session save/load to disk-backed JSON snapshots
-snapshot manifest versioning
-migration hook layer for old saves
-package/session compatibility guardrails
-archive/list/load/save behavior no longer process-memory only
+a provider abstraction for image generation
+a worker that scans pending image requests
+request execution for:
+character_portrait
+scene_illustration
+result persistence back into visual state
+retry / failure / blocked handling
+optional filesystem-backed generated asset saving
+no need to manually call /result routes for normal operation
 Design rules
-Actor memory rule
+Worker rule
 
-Actor memory is scoped, bounded, and observational.
-It should influence presentation/reasoning surfaces, but not silently mutate simulation truth outside explicit reducers/routes.
+The worker is not part of simulation truth.
 
-World memory rule
+It consumes pending visual requests and writes presentation assets.
 
-World memory is shared/public-ish memory, including rumors, public facts, and propagated incidents.
-It is not a substitute for actor memory.
+Provider rule
 
-Production-hardening rule
+Providers must be interchangeable:
 
-Durable saves must:
+OpenAI image API
+local Stable Diffusion / Comfy
+mock provider
+future hosted providers
+State rule
 
-be versioned
-be migration-safe
-normalize input on load
-never trust raw disk payloads
-remain bounded
-Phase 14.1 — Actor Memory Integration
-Goal
+Worker must only operate through:
 
-Add actor-specific memory lanes and surface them in:
+normalized request records
+normalized result records
+asset registry writes
 
-character UI
-character inspector
-dialogue presentation
-GM trace
+No hidden side effects outside the visual/session layers.
 
-This phase does not require a full NPC cognition engine rewrite. It creates the deterministic memory substrate that later reasoning systems can consume.
+Reliability rule
 
-Part 1/18 — create actor memory module
-Create file: src/app/rpg/memory/actor_memory_state.py
-from __future__ import annotations
+Failures must be explicit:
 
-from typing import Any, Dict, List
+pending
+complete
+failed
+blocked
 
+Retries must be bounded.
 
-_MAX_ACTOR_SHORT_TERM = 10
-_MAX_ACTOR_LONG_TERM = 20
-_MAX_ACTORS = 64
+Part 1/20 — extend visual request schema with attempts / timestamps
+Edit file: src/app/rpg/presentation/visual_state.py
 
+Inside _normalize_image_request(...), extend the normalized shape.
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+Replace the return block with:
 
+diff --git a/src/app/rpg/presentation/visual_state.py b/src/app/rpg/presentation/visual_state.py
+index CURRENT..PHASE1210REQ 100644
+--- a/src/app/rpg/presentation/visual_state.py
++++ b/src/app/rpg/presentation/visual_state.py
+@@ -120,14 +120,20 @@ def _normalize_image_request(value: Any) -> Dict[str, Any]:
+     return {
+         "request_id": _safe_str(data.get("request_id")).strip(),
+         "kind": kind,
+         "target_id": _safe_str(data.get("target_id")).strip(),
+         "prompt": _safe_str(data.get("prompt")).strip(),
+         "seed": _safe_int(data.get("seed"), None),
+         "style": _safe_str(data.get("style")).strip(),
+         "model": _safe_str(data.get("model")).strip(),
+         "status": status,
++        "attempts": max(0, _safe_int(data.get("attempts"), 0) or 0),
++        "max_attempts": max(1, _safe_int(data.get("max_attempts"), 3) or 3),
++        "error": _safe_str(data.get("error")).strip(),
++        "created_at": _safe_str(data.get("created_at")).strip(),
++        "updated_at": _safe_str(data.get("updated_at")).strip(),
++        "completed_at": _safe_str(data.get("completed_at")).strip(),
+     }
+Part 2/20 — add request update helpers
+Edit file: src/app/rpg/presentation/visual_state.py
 
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
+Add below append_image_request(...):
 
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    return value if isinstance(value, int) else default
-
-
-def _normalize_entry(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    return {
-        "id": _safe_str(data.get("id")).strip(),
-        "summary": _safe_str(data.get("summary")).strip(),
-        "kind": _safe_str(data.get("kind")).strip() or "fact",
-        "tick": _safe_int(data.get("tick"), 0),
-        "source": _safe_str(data.get("source")).strip(),
-    }
-
-
-def _normalize_actor_memory(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    return {
-        "short_term": [
-            _normalize_entry(item)
-            for item in _safe_list(data.get("short_term"))
-            if isinstance(item, dict)
-        ][-_MAX_ACTOR_SHORT_TERM:],
-        "long_term": [
-            _normalize_entry(item)
-            for item in _safe_list(data.get("long_term"))
-            if isinstance(item, dict)
-        ][-_MAX_ACTOR_LONG_TERM:],
-    }
-
-
-def ensure_actor_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(simulation_state, dict):
-        simulation_state = {}
-
-    memory_state = simulation_state.get("memory_state")
-    if not isinstance(memory_state, dict):
-        memory_state = {}
-        simulation_state["memory_state"] = memory_state
-
-    actor_memory_in = memory_state.get("actor_memory")
-    if not isinstance(actor_memory_in, dict):
-        actor_memory_in = {}
-
-    actor_memory_out: Dict[str, Any] = {}
-    for actor_id in sorted(actor_memory_in.keys(), key=lambda v: _safe_str(v)):
-        actor_memory_out[_safe_str(actor_id)] = _normalize_actor_memory(actor_memory_in.get(actor_id))
-
-    limited_items = list(actor_memory_out.items())[:_MAX_ACTORS]
-    memory_state["actor_memory"] = dict(limited_items)
-    return simulation_state
-
-
-def append_actor_short_term_memory(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    entry: Dict[str, Any],
-) -> Dict[str, Any]:
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-
-    actor_state = _normalize_actor_memory(actor_memory.get(actor_id))
-    items = _safe_list(actor_state.get("short_term"))
-    items.append(_normalize_entry(entry))
-    actor_state["short_term"] = items[-_MAX_ACTOR_SHORT_TERM:]
-    actor_memory[_safe_str(actor_id)] = actor_state
-    memory_state["actor_memory"] = dict(sorted(actor_memory.items(), key=lambda kv: _safe_str(kv[0])))[:_MAX_ACTORS]
-    return simulation_state
-
-
-def append_actor_long_term_memory(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    entry: Dict[str, Any],
-) -> Dict[str, Any]:
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-
-    actor_state = _normalize_actor_memory(actor_memory.get(actor_id))
-    items = _safe_list(actor_state.get("long_term"))
-    items.append(_normalize_entry(entry))
-    actor_state["long_term"] = items[-_MAX_ACTOR_LONG_TERM:]
-    actor_memory[_safe_str(actor_id)] = actor_state
-    memory_state["actor_memory"] = dict(sorted(actor_memory.items(), key=lambda kv: _safe_str(kv[0])))[:_MAX_ACTORS]
-    return simulation_state
-
-
-def get_actor_memory(
-    simulation_state: Dict[str, Any],
-    actor_id: str,
-) -> Dict[str, Any]:
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-    return _normalize_actor_memory(actor_memory.get(actor_id))
-Part 2/18 — export actor memory module
-Edit file: src/app/rpg/memory/__init__.py
-
-Add:
-
-+from app.rpg.memory.actor_memory_state import (
-+    append_actor_long_term_memory,
-+    append_actor_short_term_memory,
-+    ensure_actor_memory_state,
-+    get_actor_memory,
-+)
-
-And append to __all__:
-
-+    "append_actor_long_term_memory",
-+    "append_actor_short_term_memory",
-+    "ensure_actor_memory_state",
-+    "get_actor_memory",
-Part 3/18 — wire actor memory into character builder
-Edit file: src/app/rpg/ui/character_builder.py
-
-Add import near top:
-
-+from app.rpg.memory.actor_memory_state import get_actor_memory
-
-Add helper below existing appearance/memory helpers:
-
-+def _normalize_actor_memory_block(
++def update_image_request(
 +    simulation_state: Dict[str, Any],
-+    actor_id: str,
++    *,
++    request_id: str,
++    patch: Dict[str, Any],
 +) -> Dict[str, Any]:
-+    memory = get_actor_memory(simulation_state, actor_id)
-+    return {
-+        "short_term": memory.get("short_term", []),
-+        "long_term": memory.get("long_term", []),
-+    }
-
-Inside build_character_ui_entry(...), add:
-
-+    actor_memory = _normalize_actor_memory_block(simulation_state, actor_id)
-
-and in returned object add:
-
-+        "actor_memory": actor_memory,
-
-Inside build_character_inspector_entry(...), add a memory section under inspector:
-
-+        "memory": _normalize_actor_memory_block(simulation_state, actor_id),
-
-So inspector payload now includes actor memory alongside inventory/goals/beliefs.
-
-Part 4/18 — actor memory routes
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add imports:
-
-+from app.rpg.memory.actor_memory_state import (
-+    append_actor_long_term_memory,
-+    append_actor_short_term_memory,
-+    ensure_actor_memory_state,
-+    get_actor_memory,
-+)
-
-Add routes:
-
-+@rpg_presentation_bp.post("/api/rpg/memory/actor/get")
-+def get_rpg_actor_memory():
-+    """Return actor-specific memory lanes."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    actor_id = _safe_str(data.get("actor_id")).strip()
++    simulation_state = ensure_visual_state(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++    requests = _safe_list(visual_state.get("image_requests"))
 +
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_memory_state(simulation_state)
-+    simulation_state = ensure_actor_memory_state(simulation_state)
++    updated = []
++    for item in requests:
++        item_dict = _safe_dict(item)
++        if _safe_str(item_dict.get("request_id")).strip() == _safe_str(request_id).strip():
++            merged = dict(item_dict)
++            merged.update(_safe_dict(patch))
++            updated.append(_normalize_image_request(merged))
++        else:
++            updated.append(_normalize_image_request(item_dict))
 +
-+    return jsonify({
-+        "ok": True,
-+        "actor_id": actor_id,
-+        "actor_memory": get_actor_memory(simulation_state, actor_id),
-+    })
++    visual_state["image_requests"] = updated[-_MAX_IMAGE_REQUESTS:]
++    return simulation_state
 +
 +
-+@rpg_presentation_bp.post("/api/rpg/memory/actor/add")
-+def add_rpg_actor_memory():
-+    """Append actor-specific memory entry."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    actor_id = _safe_str(data.get("actor_id")).strip()
-+    lane = _safe_str(data.get("lane")).strip() or "short_term"
-+    entry = _safe_dict(data.get("entry"))
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_memory_state(simulation_state)
-+    simulation_state = ensure_actor_memory_state(simulation_state)
-+
-+    if lane == "long_term":
-+        simulation_state = append_actor_long_term_memory(simulation_state, actor_id=actor_id, entry=entry)
-+    else:
-+        simulation_state = append_actor_short_term_memory(simulation_state, actor_id=actor_id, entry=entry)
-+
-+    return jsonify({
-+        "ok": True,
-+        "actor_id": actor_id,
-+        "actor_memory": get_actor_memory(simulation_state, actor_id),
-+    })
-Part 5/18 — surface actor memory in GM trace
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-In presentation_gm_trace(), after ensure_memory_state(simulation_state), add:
-
-+    simulation_state = ensure_actor_memory_state(simulation_state)
-
-Then add actor memory to the trace:
-
-+            "actor_memory": get_actor_memory(simulation_state, actor_id),
-
-Resulting trace includes:
-
-character
-inspector
-appearance_events
-visual_assets
-image_requests
-actor_memory
-Phase 14.2 — World Memory / Rumor Propagation
-Goal
-
-Turn world memory into an actual rumor/public-memory substrate rather than a generic list.
-
-Part 6/18 — create world memory module
-Create file: src/app/rpg/memory/world_memory_state.py
++def get_pending_image_requests(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    simulation_state = ensure_visual_state(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++    requests = _safe_list(visual_state.get("image_requests"))
++    out = []
++    for item in requests:
++        item_dict = _safe_dict(item)
++        if _first_non_empty(item_dict.get("status"), "pending") == "pending":
++            out.append(_normalize_image_request(item_dict))
++    return out
+Part 3/20 — create provider interface
+Create file: src/app/rpg/visual/providers/base.py
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class ImageGenerationResult:
+    ok: bool
+    status: str
+    image_bytes: bytes | None = None
+    mime_type: str = "image/png"
+    error: str = ""
+    revised_prompt: str = ""
+    moderation_status: str = "approved"
+    moderation_reason: str = ""
+
+
+class BaseImageProvider:
+    provider_name = "base"
+
+    def generate(
+        self,
+        *,
+        prompt: str,
+        seed: Optional[int],
+        style: str,
+        model: str,
+        kind: str,
+        target_id: str,
+    ) -> ImageGenerationResult:
+        raise NotImplementedError
+Part 4/20 — create mock provider (required for deterministic local development)
+Create file: src/app/rpg/visual/providers/mock_provider.py
+from __future__ import annotations
+
+from pathlib import Path
+
+from .base import BaseImageProvider, ImageGenerationResult
+
+
+class MockImageProvider(BaseImageProvider):
+    provider_name = "mock"
+
+    def generate(
+        self,
+        *,
+        prompt: str,
+        seed: int | None,
+        style: str,
+        model: str,
+        kind: str,
+        target_id: str,
+    ) -> ImageGenerationResult:
+        # Deterministic placeholder generation: returns bundled placeholder bytes if available.
+        candidate_paths = [
+            Path("src/static/img/rpg_placeholder.png"),
+            Path("src/static/img/placeholder.png"),
+        ]
+        for path in candidate_paths:
+            if path.exists():
+                return ImageGenerationResult(
+                    ok=True,
+                    status="complete",
+                    image_bytes=path.read_bytes(),
+                    mime_type="image/png",
+                    revised_prompt=prompt,
+                    moderation_status="approved",
+                    moderation_reason="",
+                )
+
+        return ImageGenerationResult(
+            ok=False,
+            status="failed",
+            error="mock_placeholder_not_found",
+            moderation_status="approved",
+            moderation_reason="",
+        )
+Part 5/20 — create OpenAI provider stub
+Create file: src/app/rpg/visual/providers/openai_provider.py
+from __future__ import annotations
+
+import os
+
+from .base import BaseImageProvider, ImageGenerationResult
+
+
+class OpenAIImageProvider(BaseImageProvider):
+    provider_name = "openai"
+
+    def generate(
+        self,
+        *,
+        prompt: str,
+        seed: int | None,
+        style: str,
+        model: str,
+        kind: str,
+        target_id: str,
+    ) -> ImageGenerationResult:
+        """
+        Provider stub.
+        Integrate your actual OpenAI image call here.
+        Expected behavior:
+        - submit prompt/model/style
+        - retrieve image bytes
+        - return ImageGenerationResult
+        """
+        api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        if not api_key:
+            return ImageGenerationResult(
+                ok=False,
+                status="failed",
+                error="openai_api_key_missing",
+                moderation_status="approved",
+                moderation_reason="",
+            )
+
+        return ImageGenerationResult(
+            ok=False,
+            status="failed",
+            error="openai_provider_not_implemented",
+            moderation_status="approved",
+            moderation_reason="",
+        )
+Part 6/20 — provider registry
+Create file: src/app/rpg/visual/providers/__init__.py
+from __future__ import annotations
+
+import os
+
+from .base import BaseImageProvider
+from .mock_provider import MockImageProvider
+from .openai_provider import OpenAIImageProvider
+
+
+def get_image_provider() -> BaseImageProvider:
+    provider = os.getenv("RPG_IMAGE_PROVIDER", "mock").strip().lower()
+    if provider == "openai":
+        return OpenAIImageProvider()
+    return MockImageProvider()
+Part 7/20 — asset file store
+Create file: src/app/rpg/visual/asset_store.py
+from __future__ import annotations
+
+from pathlib import Path
+
+
+_ASSET_DIR = Path("data/rpg_generated_assets")
+
+
+def ensure_asset_dir() -> Path:
+    _ASSET_DIR.mkdir(parents=True, exist_ok=True)
+    return _ASSET_DIR
+
+
+def build_asset_filename(asset_id: str, mime_type: str) -> str:
+    ext = ".png"
+    if mime_type == "image/jpeg":
+        ext = ".jpg"
+    safe_id = "".join(ch for ch in str(asset_id) if ch.isalnum() or ch in {"-", "_", ":"})
+    return f"{safe_id}{ext}"
+
+
+def save_asset_bytes(asset_id: str, image_bytes: bytes, mime_type: str) -> str:
+    directory = ensure_asset_dir()
+    filename = build_asset_filename(asset_id, mime_type)
+    path = directory / filename
+    path.write_bytes(image_bytes)
+    return str(path)
+Part 8/20 — worker executor
+Create file: src/app/rpg/visual/worker.py
+from __future__ import annotations
+
+from datetime import datetime
 from typing import Any, Dict, List
 
-
-_MAX_RUMORS = 32
+from app.rpg.presentation.visual_state import (
+    append_scene_illustration,
+    append_visual_asset,
+    build_visual_asset_record,
+    ensure_visual_state,
+    get_pending_image_requests,
+    update_image_request,
+    upsert_character_visual_identity,
+)
+from app.rpg.visual.asset_store import save_asset_bytes
+from app.rpg.visual.providers import get_image_provider
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:
@@ -355,423 +335,350 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
-def _safe_int(value: Any, default: int = 0) -> int:
-    return value if isinstance(value, int) else default
+def _now_iso() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
-def _normalize_rumor(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    return {
-        "id": _safe_str(data.get("id")).strip(),
-        "summary": _safe_str(data.get("summary")).strip(),
-        "origin": _safe_str(data.get("origin")).strip(),
-        "location": _safe_str(data.get("location")).strip(),
-        "tick": _safe_int(data.get("tick"), 0),
-        "reach": _safe_int(data.get("reach"), 0),
-    }
+def _complete_character_portrait(
+    simulation_state: Dict[str, Any],
+    *,
+    request: Dict[str, Any],
+    asset_id: str,
+    image_path: str,
+    status: str,
+) -> Dict[str, Any]:
+    target_id = _safe_str(request.get("target_id")).strip()
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    identities = _safe_dict(visual_state.get("character_visual_identities"))
+    identity = _safe_dict(identities.get(target_id))
+
+    identity["portrait_url"] = image_path
+    identity["portrait_asset_id"] = asset_id
+    identity["status"] = status
+
+    return upsert_character_visual_identity(
+        simulation_state,
+        actor_id=target_id,
+        identity=identity,
+    )
 
 
-def ensure_world_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(simulation_state, dict):
-        simulation_state = {}
+def _complete_scene_illustration(
+    simulation_state: Dict[str, Any],
+    *,
+    request: Dict[str, Any],
+    asset_id: str,
+    image_path: str,
+    status: str,
+) -> Dict[str, Any]:
+    return append_scene_illustration(
+        simulation_state,
+        {
+            "scene_id": _safe_str(request.get("target_id")).strip(),
+            "event_id": _safe_str(request.get("request_id")).strip(),
+            "title": _safe_str(request.get("target_id")).strip(),
+            "image_url": image_path,
+            "asset_id": asset_id,
+            "seed": request.get("seed"),
+            "style": _safe_str(request.get("style")).strip(),
+            "prompt": _safe_str(request.get("prompt")).strip(),
+            "model": _safe_str(request.get("model")).strip(),
+            "status": status,
+        },
+    )
 
-    memory_state = simulation_state.get("memory_state")
-    if not isinstance(memory_state, dict):
-        memory_state = {}
-        simulation_state["memory_state"] = memory_state
 
-    rumors = [
-        _normalize_rumor(item)
-        for item in _safe_list(memory_state.get("rumors"))
-        if isinstance(item, dict)
-    ][-_MAX_RUMORS:]
+def process_pending_image_requests(
+    simulation_state: Dict[str, Any],
+    *,
+    limit: int = 8,
+) -> Dict[str, Any]:
+    simulation_state = ensure_visual_state(_safe_dict(simulation_state))
+    provider = get_image_provider()
+    pending = get_pending_image_requests(simulation_state)[: max(1, int(limit))]
 
-    rumors = sorted(
-        rumors,
-        key=lambda item: (
-            item.get("tick", 0),
-            _safe_str(item.get("summary")).lower(),
-            _safe_str(item.get("id")),
-        ),
-    )[-_MAX_RUMORS:]
+    for request in pending:
+        request_id = _safe_str(request.get("request_id")).strip()
+        attempts = request.get("attempts") if isinstance(request.get("attempts"), int) else 0
+        max_attempts = request.get("max_attempts") if isinstance(request.get("max_attempts"), int) else 3
 
-    memory_state["rumors"] = rumors
+        simulation_state = update_image_request(
+            simulation_state,
+            request_id=request_id,
+            patch={
+                "attempts": attempts + 1,
+                "updated_at": _now_iso(),
+            },
+        )
+
+        result = provider.generate(
+            prompt=_safe_str(request.get("prompt")).strip(),
+            seed=request.get("seed") if isinstance(request.get("seed"), int) else None,
+            style=_safe_str(request.get("style")).strip(),
+            model=_safe_str(request.get("model")).strip(),
+            kind=_safe_str(request.get("kind")).strip(),
+            target_id=_safe_str(request.get("target_id")).strip(),
+        )
+
+        if not result.ok:
+            final_status = "failed"
+            if attempts + 1 >= max_attempts:
+                final_status = "failed"
+            simulation_state = update_image_request(
+                simulation_state,
+                request_id=request_id,
+                patch={
+                    "status": final_status,
+                    "error": _safe_str(result.error).strip(),
+                    "updated_at": _now_iso(),
+                    "completed_at": _now_iso() if final_status in {"failed", "blocked"} else "",
+                },
+            )
+            continue
+
+        version = 1
+        asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
+        image_path = save_asset_bytes(asset_id, result.image_bytes or b"", result.mime_type)
+
+        simulation_state = append_visual_asset(
+            simulation_state,
+            build_visual_asset_record(
+                kind=_safe_str(request.get("kind")).strip(),
+                target_id=_safe_str(request.get("target_id")).strip(),
+                version=version,
+                seed=request.get("seed") if isinstance(request.get("seed"), int) else None,
+                style=_safe_str(request.get("style")).strip(),
+                model=_safe_str(request.get("model")).strip(),
+                prompt=_safe_str(request.get("prompt")).strip(),
+                url=image_path,
+                local_path=image_path,
+                status="complete",
+                created_from_request_id=request_id,
+                moderation_status=result.moderation_status,
+                moderation_reason=result.moderation_reason,
+            ),
+        )
+
+        if _safe_str(request.get("kind")).strip() == "character_portrait":
+            simulation_state = _complete_character_portrait(
+                simulation_state,
+                request=request,
+                asset_id=asset_id,
+                image_path=image_path,
+                status="complete",
+            )
+        else:
+            simulation_state = _complete_scene_illustration(
+                simulation_state,
+                request=request,
+                asset_id=asset_id,
+                image_path=image_path,
+                status="complete",
+            )
+
+        simulation_state = update_image_request(
+            simulation_state,
+            request_id=request_id,
+            patch={
+                "status": "complete",
+                "error": "",
+                "updated_at": _now_iso(),
+                "completed_at": _now_iso(),
+            },
+        )
+
     return simulation_state
-
-
-def append_rumor(simulation_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = ensure_world_memory_state(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    rumors = _safe_list(memory_state.get("rumors"))
-    rumors.append(_normalize_rumor(rumor))
-    memory_state["rumors"] = sorted(
-        [item for item in rumors if isinstance(item, dict)],
-        key=lambda item: (
-            item.get("tick", 0),
-            _safe_str(item.get("summary")).lower(),
-            _safe_str(item.get("id")),
-        ),
-    )[-_MAX_RUMORS:]
-    return simulation_state
-Part 7/18 — export world memory module
-Edit file: src/app/rpg/memory/__init__.py
-
-Add:
-
-+from app.rpg.memory.world_memory_state import (
-+    append_rumor,
-+    ensure_world_memory_state,
-+)
-
-And append to __all__:
-
-+    "append_rumor",
-+    "ensure_world_memory_state",
-Part 8/18 — world memory routes
+Part 9/20 — worker route
 Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add imports:
-
-+from app.rpg.memory.world_memory_state import (
-+    append_rumor,
-+    ensure_world_memory_state,
-+)
-
-Add routes:
-
-+@rpg_presentation_bp.post("/api/rpg/world_memory/get")
-+def get_rpg_world_memory():
-+    """Return world memory / rumor state."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_memory_state(simulation_state)
-+    simulation_state = ensure_world_memory_state(simulation_state)
-+
-+    return jsonify({
-+        "ok": True,
-+        "rumors": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("rumors")),
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/world_memory/add_rumor")
-+def add_rpg_world_rumor():
-+    """Append shared world rumor/public-memory entry."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    rumor = _safe_dict(data.get("rumor"))
-+
-+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_memory_state(simulation_state)
-+    simulation_state = ensure_world_memory_state(simulation_state)
-+    simulation_state = append_rumor(simulation_state, rumor)
-+
-+    return jsonify({
-+        "ok": True,
-+        "rumors": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("rumors")),
-+    })
-Part 9/18 — surface rumors in world builder
-Edit file: src/app/rpg/ui/world_builder.py
 
 Add import:
 
-+from app.rpg.memory.world_memory_state import ensure_world_memory_state
++from app.rpg.visual.worker import process_pending_image_requests
 
-In build_world_inspector_state(...), before reading world state, add:
+Add route:
 
-+    simulation_state = ensure_world_memory_state(simulation_state)
-
-Then add rumors to returned payload:
-
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+    rumors = [
-+        _safe_dict(item)
-+        for item in _safe_list(memory_state.get("rumors"))
-+        if isinstance(item, dict)
-+    ][:8]
-
-and in returned dict:
-
-+        "rumors": rumors,
-Part 10/18 — world rumor renderer
-Edit file: src/static/rpg/rpgPresentationRenderer.js
-
-Inside renderWorldInspector(worldInspectorState), before final container render, add a rumor section.
-
-For example, in the main world inspector output append:
-
-+  const rumors = Array.isArray(worldInspectorState?.rumors) ? worldInspectorState.rumors : [];
-+  const rumorsHtml = rumors.length
-+    ? rumors.map((r) => `<li>${escapeHtml(r.summary || "")}</li>`).join("")
-+    : "";
-
-Then include:
-
-+      <div class="inspector-section">
-+        <h5>Rumors</h5>
-+        ${rumorsHtml ? `<ul class="inspector-list">${rumorsHtml}</ul>` : '<div class="inspector-empty">None</div>'}
-+      </div>
-
-in both location/faction/world summary view as appropriate.
-
-Phase 15.0 — Production hardening / durable persistence / migration
-Goal
-
-Move session persistence from process memory to disk-backed snapshots with schema versioning and migrations.
-
-Part 11/18 — durable save store
-Create file: src/app/rpg/session/durable_store.py
-from __future__ import annotations
-
-import json
-from pathlib import Path
-from typing import Any, Dict, List
-
-from app.rpg.session.session_store import _safe_dict, _safe_list, _normalize_session
-
-
-_SESSION_DIR = Path("data/rpg_sessions")
-_SAVE_VERSION = "1.0"
-
-
-def ensure_session_dir() -> Path:
-    _SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    return _SESSION_DIR
-
-
-def _session_path(session_id: str) -> Path:
-    safe_id = "".join(ch for ch in str(session_id) if ch.isalnum() or ch in {"-", "_", ":"})
-    return ensure_session_dir() / f"{safe_id}.json"
-
-
-def save_session_to_disk(session: Dict[str, Any]) -> Dict[str, Any]:
-    session = _normalize_session(session)
-    manifest = _safe_dict(session.get("manifest"))
-    payload = {
-        "save_version": _SAVE_VERSION,
-        "session": session,
-    }
-    path = _session_path(manifest.get("id", "session"))
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    return session
-
-
-def load_session_from_disk(session_id: str) -> Dict[str, Any] | None:
-    path = _session_path(session_id)
-    if not path.exists():
-        return None
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    session = _safe_dict(payload.get("session"))
-    return _normalize_session(session)
-
-
-def list_sessions_from_disk() -> List[Dict[str, Any]]:
-    ensure_session_dir()
-    sessions: List[Dict[str, Any]] = []
-    for path in sorted(_SESSION_DIR.glob("*.json")):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            session = _normalize_session(_safe_dict(payload.get("session")))
-            sessions.append(session)
-        except Exception:
-            continue
-    return sessions
-Part 12/18 — migration layer
-Create file: src/app/rpg/session/migrations.py
-from __future__ import annotations
-
-from typing import Any, Dict
-
-
-_CURRENT_SAVE_VERSION = "1.0"
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    payload = _safe_dict(payload)
-    version = payload.get("save_version")
-    if version == _CURRENT_SAVE_VERSION:
-        return payload
-
-    # Placeholder migration path for older/unversioned saves
-    return {
-        "save_version": _CURRENT_SAVE_VERSION,
-        "session": _safe_dict(payload.get("session")),
-    }
-Part 13/18 — durable session routes
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add imports:
-
-+from app.rpg.session.durable_store import (
-+    list_sessions_from_disk,
-+    load_session_from_disk,
-+    save_session_to_disk,
-+)
-
-Then update routes:
-
-In save_rpg_session(), after in-memory save, also persist:
-+    save_session_to_disk(session)
-In list_rpg_sessions(), merge or prefer disk-backed sessions:
--    return jsonify({
--        "ok": True,
--        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
--    })
-+    disk_sessions = list_sessions_from_disk()
++@rpg_presentation_bp.post("/api/rpg/visual/process_requests")
++def process_rpg_visual_requests():
++    """Process pending visual generation requests through provider worker."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    limit = data.get("limit") if isinstance(data.get("limit"), int) else 8
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_visual_state(simulation_state)
++    simulation_state = process_pending_image_requests(simulation_state, limit=limit)
++
 +    return jsonify({
 +        "ok": True,
-+        "sessions": disk_sessions or list_sessions(_RPG_SESSION_ROOT_STATE),
++        "visual_state": _extract_visual_state(simulation_state),
 +    })
-In load_rpg_session(), prefer disk-backed load:
--    session = get_session(_RPG_SESSION_ROOT_STATE, session_id)
-+    session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
+Part 10/20 — create simple background runner (manual thread)
+Create file: src/app/rpg/visual/background_runner.py
+from __future__ import annotations
 
-This keeps the old in-memory behavior as fallback but introduces durability.
-
-Part 14/18 — session UI can show durable sessions
-
-No major renderer change required if payload already includes sessions, but optionally add a “source” marker later.
-
-Part 15/18 — tests for actor/world memory and durable store
-Create file: src/tests/unit/rpg/test_actor_memory_state.py
-from app.rpg.memory.actor_memory_state import (
-    append_actor_long_term_memory,
-    append_actor_short_term_memory,
-    ensure_actor_memory_state,
-    get_actor_memory,
-)
+import threading
+import time
+from typing import Callable
 
 
-def test_ensure_actor_memory_state():
-    result = ensure_actor_memory_state({})
-    assert "memory_state" in result
-    assert "actor_memory" in result["memory_state"]
+class VisualWorkerRunner:
+    def __init__(self, tick_fn: Callable[[], None], interval_sec: float = 5.0):
+        self._tick_fn = tick_fn
+        self._interval_sec = max(1.0, float(interval_sec))
+        self._thread = None
+        self._stop = False
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+
+        self._stop = False
+
+        def _run():
+            while not self._stop:
+                try:
+                    self._tick_fn()
+                except Exception:
+                    pass
+                time.sleep(self._interval_sec)
+
+        self._thread = threading.Thread(target=_run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop = True
+
+This is optional infrastructure. You can wire it later in app startup if desired.
+
+Part 11/20 — surface processing metadata in frontend (optional)
+Edit file: src/static/rpg/rpgPresentationRenderer.js
+
+In renderGMInspector(payload), add counts from visual state:
+
++  const visualState = payload?.visual_state || {};
++  const pendingRequests = Array.isArray(visualState.image_requests)
++    ? visualState.image_requests.filter((r) => (r?.status || "") === "pending").length
++    : 0;
+
+Then add:
+
++        <div class="visual-asset-meta">pending visual jobs: ${escapeHtml(pendingRequests)}</div>
+
+to the GM Overview counts block.
+
+Part 12/20 — unit tests for provider worker
+Create file: src/tests/unit/rpg/test_visual_worker.py
+from app.rpg.presentation.visual_state import append_image_request
+from app.rpg.visual.worker import process_pending_image_requests
 
 
-def test_append_actor_short_term_memory():
-    result = append_actor_short_term_memory({}, actor_id="npc:test", entry={"id": "m1", "summary": "met player"})
-    memory = get_actor_memory(result, "npc:test")
-    assert len(memory["short_term"]) == 1
+def test_process_pending_image_requests_mock_provider():
+    simulation_state = {"presentation_state": {"visual_state": {}}}
+    simulation_state = append_image_request(
+        simulation_state,
+        {
+            "request_id": "portrait:npc:test:1",
+            "kind": "character_portrait",
+            "target_id": "npc:test",
+            "prompt": "A stern guard captain",
+            "seed": 123,
+            "style": "rpg-portrait",
+            "model": "default",
+            "status": "pending",
+        },
+    )
 
-
-def test_append_actor_long_term_memory():
-    result = append_actor_long_term_memory({}, actor_id="npc:test", entry={"id": "m1", "summary": "owes favor"})
-    memory = get_actor_memory(result, "npc:test")
-    assert len(memory["long_term"]) == 1
-Create file: src/tests/unit/rpg/test_world_memory_state.py
-from app.rpg.memory.world_memory_state import (
-    append_rumor,
-    ensure_world_memory_state,
-)
-
-
-def test_ensure_world_memory_state():
-    result = ensure_world_memory_state({})
-    assert "memory_state" in result
-    assert "rumors" in result["memory_state"]
-
-
-def test_append_rumor():
-    result = append_rumor({}, {"id": "r1", "summary": "bandits on the road"})
-    assert len(result["memory_state"]["rumors"]) == 1
-Create file: src/tests/unit/rpg/test_durable_store.py
-from app.rpg.session.durable_store import save_session_to_disk, load_session_from_disk
-
-
-def test_save_and_load_session_to_disk():
-    session = {"manifest": {"id": "disk_test", "title": "Disk Test"}, "state": {}}
-    save_session_to_disk(session)
-    loaded = load_session_from_disk("disk_test")
-    assert loaded is not None
-    assert loaded["manifest"]["id"] == "disk_test"
-Part 16/18 — functional tests
+    out = process_pending_image_requests(simulation_state, limit=4)
+    visual_state = out["presentation_state"]["visual_state"]
+    assert "image_requests" in visual_state
+    assert len(visual_state["image_requests"]) >= 1
+Part 13/20 — route tests
 Edit file: src/tests/functional/test_character_ui_functional.py
 
 Append:
 
-+def test_actor_memory_add_and_get_routes(client):
-+    add_resp = client.post(
-+        "/api/rpg/memory/actor/add",
-+        json={
-+            "setup_payload": {},
-+            "actor_id": "npc:test",
-+            "lane": "short_term",
-+            "entry": {"id": "m1", "summary": "met player"},
-+        },
++def test_visual_process_requests_route_returns_visual_state(client):
++    response = client.post(
++        "/api/rpg/visual/process_requests",
++        json={"setup_payload": {}, "limit": 2},
 +    )
-+    assert add_resp.status_code == 200
-+
-+    get_resp = client.post(
-+        "/api/rpg/memory/actor/get",
-+        json={"setup_payload": {}, "actor_id": "npc:test"},
-+    )
-+    assert get_resp.status_code == 200
-+    payload = get_resp.get_json()
++    assert response.status_code == 200
++    payload = response.get_json()
 +    assert payload["ok"] is True
-+    assert "actor_memory" in payload
-+
-+
-+def test_world_memory_add_and_get_routes(client):
-+    add_resp = client.post(
-+        "/api/rpg/world_memory/add_rumor",
-+        json={
-+            "setup_payload": {},
-+            "rumor": {"id": "r1", "summary": "bandits on the road"},
-+        },
-+    )
-+    assert add_resp.status_code == 200
-+
-+    get_resp = client.post(
-+        "/api/rpg/world_memory/get",
-+        json={"setup_payload": {}},
-+    )
-+    assert get_resp.status_code == 200
-+    payload = get_resp.get_json()
-+    assert payload["ok"] is True
-+    assert "rumors" in payload
-Part 17/18 — expose memory in normal presentation payloads (recommended)
++    assert "visual_state" in payload
+Part 14/20 — fix request creation timestamps
 Edit file: src/app/rpg/api/rpg_presentation_routes.py
 
-In:
+In both:
 
-presentation_scene()
-presentation_dialogue()
-presentation_narrative_recap()
+request_character_portrait()
+request_scene_illustration()
 
-after ensure_visual_state(simulation_state) and ensure_content_pack_state(simulation_state), add:
+add these fields to appended request payloads:
 
-+    simulation_state = ensure_memory_state(simulation_state)
-+    simulation_state = ensure_actor_memory_state(simulation_state)
-+    simulation_state = ensure_world_memory_state(simulation_state)
++            "attempts": 0,
++            "max_attempts": 3,
++            "error": "",
++            "created_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
++            "updated_at": "",
++            "completed_at": "",
 
-Then add to returned response:
+You will need:
 
-+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
++from datetime import datetime
 
-This lets the memory tab render without separate fetches.
+near the top of the file.
 
-Part 18/18 — acceptance criteria
-Phase 14.1 is complete when:
-actor memory module exists
-actor memory get/add routes exist
-actor memory is surfaced in character UI/inspector/GM trace
-actor memory tests pass
-Phase 14.2 is complete when:
-world memory/rumor module exists
-rumor add/get routes exist
-world inspector surfaces rumors
-rumor tests pass
-Phase 15.0 is complete when:
-durable disk-backed session save/load exists
-migration layer exists
-session routes use durable store
-durable-store tests pass
+Part 15/20 — make worker preserve character portrait version
+Edit file: src/app/rpg/visual/worker.py
+
+Before building asset_id, derive version from current identity if present:
+
++        version = 1
++        if _safe_str(request.get("kind")).strip() == "character_portrait":
++            presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++            visual_state = _safe_dict(presentation_state.get("visual_state"))
++            identities = _safe_dict(visual_state.get("character_visual_identities"))
++            identity = _safe_dict(identities.get(_safe_str(request.get("target_id")).strip()))
++            if isinstance(identity.get("version"), int) and identity.get("version") > 0:
++                version = identity.get("version")
+
+Then use that version for asset_id and build_visual_asset_record(...).
+
+Part 16/20 — optional provider wiring note
+
+To switch providers:
+
+set RPG_IMAGE_PROVIDER=mock for placeholder generation
+set RPG_IMAGE_PROVIDER=openai after implementing the OpenAI provider
+Part 17/20 — acceptance criteria
+Phase 12.10 is complete when:
+provider abstraction exists
+mock provider exists
+worker executor exists
+pending requests can be processed into visual assets/results
+/api/rpg/visual/process_requests exists
+Option B is satisfied when:
+processing is decoupled from request creation
+background runner exists or manual worker route can be polled
+request lifecycle supports retries/failure timestamps
+Part 18/20 — next likely phases
+
+After this, the next strongest follow-up is:
+
+12.11 — provider-specific OpenAI image implementation
+12.12 — local SD / Comfy adapter
+12.13 — worker scheduling / persistent job queue
+12.14 — image cache dedupe + asset cleanup
+Part 19/20 — recommended implementation order
+land provider interface + mock provider
+land worker executor + process route
+land request timestamp/attempt metadata
+verify portrait request → process → asset save → UI render
+add real provider implementation
+Part 20/20 — note on current project state
+
+Right now your project already has the correct image architecture, just missing execution. This phase fills that exact gap cleanly and with minimal disruption to the rest of the engine.

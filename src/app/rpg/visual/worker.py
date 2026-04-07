@@ -1,0 +1,230 @@
+"""Phase 12.10 — Worker executor for pending image requests."""
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Dict, List
+
+from app.rpg.presentation.visual_state import (
+    append_scene_illustration,
+    append_visual_asset,
+    build_visual_asset_record,
+    ensure_visual_state,
+    get_pending_image_requests,
+    update_image_request,
+    upsert_character_visual_identity,
+)
+from app.rpg.visual.asset_store import save_asset_bytes
+from app.rpg.visual.providers import get_image_provider
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _now_iso() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _complete_character_portrait(
+    simulation_state: Dict[str, Any],
+    *,
+    request: Dict[str, Any],
+    asset_id: str,
+    image_path: str,
+    status: str,
+) -> Dict[str, Any]:
+    """Write completed portrait result back to character visual identity."""
+    target_id = _safe_str(request.get("target_id")).strip()
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    identities = _safe_dict(visual_state.get("character_visual_identities"))
+    identity = _safe_dict(identities.get(target_id))
+
+    identity["portrait_url"] = image_path
+    identity["portrait_asset_id"] = asset_id
+    identity["status"] = status
+
+    return upsert_character_visual_identity(
+        simulation_state,
+        actor_id=target_id,
+        identity=identity,
+    )
+
+
+def _complete_scene_illustration(
+    simulation_state: Dict[str, Any],
+    *,
+    request: Dict[str, Any],
+    asset_id: str,
+    image_path: str,
+    status: str,
+) -> Dict[str, Any]:
+    """Write completed scene illustration result back to visual state."""
+    return append_scene_illustration(
+        simulation_state,
+        {
+            "scene_id": _safe_str(request.get("target_id")).strip(),
+            "event_id": _safe_str(request.get("request_id")).strip(),
+            "title": _safe_str(request.get("target_id")).strip(),
+            "image_url": image_path,
+            "asset_id": asset_id,
+            "seed": request.get("seed"),
+            "style": _safe_str(request.get("style")).strip(),
+            "prompt": _safe_str(request.get("prompt")).strip(),
+            "model": _safe_str(request.get("model")).strip(),
+            "status": status,
+        },
+    )
+
+
+def process_pending_image_requests(
+    simulation_state: Dict[str, Any],
+    *,
+    limit: int = 8,
+) -> Dict[str, Any]:
+    """Process pending image requests through the configured provider."""
+    simulation_state = ensure_visual_state(_safe_dict(simulation_state))
+    provider = get_image_provider()
+    pending = get_pending_image_requests(simulation_state)[: max(1, int(limit))]
+
+    for request in pending:
+        request_id = _safe_str(request.get("request_id")).strip()
+        attempts = request.get("attempts") if isinstance(request.get("attempts"), int) else 0
+        max_attempts = request.get("max_attempts") if isinstance(request.get("max_attempts"), int) else 3
+        current_status = _safe_str(request.get("status")).strip()
+        now = _now_iso()
+
+        # Skip already-terminal requests
+        if current_status in {"complete", "failed", "blocked"}:
+            continue
+
+        # Enforce max_attempts: if already exhausted, mark terminal and skip
+        if attempts >= max_attempts:
+            simulation_state = update_image_request(
+                simulation_state,
+                request_id=request_id,
+                patch={
+                    "status": "failed",
+                    "error": "max_attempts_exceeded",
+                    "updated_at": now,
+                    "completed_at": now,
+                },
+            )
+            continue
+
+        # Bump attempt count
+        simulation_state = update_image_request(
+            simulation_state,
+            request_id=request_id,
+            patch={
+                "attempts": attempts + 1,
+                "updated_at": now,
+            },
+        )
+
+        result = provider.generate(
+            prompt=_safe_str(request.get("prompt")).strip(),
+            seed=request.get("seed") if isinstance(request.get("seed"), int) else None,
+            style=_safe_str(request.get("style")).strip(),
+            model=_safe_str(request.get("model")).strip(),
+            kind=_safe_str(request.get("kind")).strip(),
+            target_id=_safe_str(request.get("target_id")).strip(),
+        )
+
+        if not result.ok:
+            # Distinguish retryable vs terminal failure
+            error_text = _safe_str(result.error).strip().lower()
+            is_retryable = not any(
+                tag in error_text
+                for tag in ("blocked", "moderation", "invalid", "rejected", "unauthorized")
+            )
+            if attempts + 1 >= max_attempts:
+                final_status = "failed"
+            elif is_retryable:
+                final_status = "pending"  # Stay pending for retry
+            else:
+                final_status = "blocked"
+            simulation_state = update_image_request(
+                simulation_state,
+                request_id=request_id,
+                patch={
+                    "status": final_status,
+                    "error": _safe_str(result.error).strip(),
+                    "updated_at": now,
+                    "completed_at": now if final_status in {"failed", "blocked"} else "",
+                },
+            )
+            continue
+
+        # Derive version from current identity if present (Part 15)
+        version = 1
+        if _safe_str(request.get("kind")).strip() == "character_portrait":
+            presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+            visual_state = _safe_dict(presentation_state.get("visual_state"))
+            identities = _safe_dict(visual_state.get("character_visual_identities"))
+            identity = _safe_dict(identities.get(_safe_str(request.get("target_id")).strip()))
+            if isinstance(identity.get("version"), int) and identity.get("version") > 0:
+                version = identity.get("version")
+
+        asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
+        image_path = save_asset_bytes(asset_id, result.image_bytes or b"", result.mime_type)
+
+        # Register the asset
+        simulation_state = append_visual_asset(
+            simulation_state,
+            build_visual_asset_record(
+                kind=_safe_str(request.get("kind")).strip(),
+                target_id=_safe_str(request.get("target_id")).strip(),
+                version=version,
+                seed=request.get("seed") if isinstance(request.get("seed"), int) else None,
+                style=_safe_str(request.get("style")).strip(),
+                model=_safe_str(request.get("model")).strip(),
+                prompt=_safe_str(request.get("prompt")).strip(),
+                url=image_path,
+                local_path=image_path,
+                status="complete",
+                created_from_request_id=request_id,
+                moderation_status=result.moderation_status,
+                moderation_reason=result.moderation_reason,
+            ),
+        )
+
+        # Complete the appropriate target
+        if _safe_str(request.get("kind")).strip() == "character_portrait":
+            simulation_state = _complete_character_portrait(
+                simulation_state,
+                request=request,
+                asset_id=asset_id,
+                image_path=image_path,
+                status="complete",
+            )
+        else:
+            simulation_state = _complete_scene_illustration(
+                simulation_state,
+                request=request,
+                asset_id=asset_id,
+                image_path=image_path,
+                status="complete",
+            )
+
+        # Mark request complete
+        simulation_state = update_image_request(
+            simulation_state,
+            request_id=request_id,
+            patch={
+                "status": "complete",
+                "error": "",
+                "updated_at": now,
+                "completed_at": now,
+            },
+        )
+
+    return simulation_state

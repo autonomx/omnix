@@ -72,11 +72,16 @@ from app.rpg.creator.pack_authoring import (
     build_pack_draft_preview,
     validate_pack_draft,
 )
+from datetime import datetime
+
 from app.rpg.templates.campaign_templates import (
     build_campaign_template,
     build_template_start_payload,
     list_campaign_templates,
 )
+
+# Phase 12.10 — Visual worker executor
+from app.rpg.visual.worker import process_pending_image_requests
 
 # Phase 13.4 — New Adventure Wizard UI
 from app.rpg.setup.wizard_state import (
@@ -100,6 +105,28 @@ from app.rpg.memory.memory_state import (
     append_short_term_memory,
     append_world_memory,
     ensure_memory_state,
+)
+
+# Phase 14.3 — Memory → Dialogue Injection
+from app.rpg.memory.dialogue_memory_context import (
+    build_dialogue_memory_context,
+    build_llm_memory_prompt_block,
+)
+
+# Phase 14.4 — Memory Decay / Reinforcement
+from app.rpg.memory.memory_decay import apply_memory_decay
+
+# Phase 15.0 — Durable persistence
+from app.rpg.session.durable_store import (
+    list_sessions_from_disk,
+    load_session_from_disk,
+    save_session_to_disk,
+)
+
+# Phase 15.1 — Session ↔ Package Unification
+from app.rpg.packaging.session_package_bridge import (
+    package_to_session,
+    session_to_package,
 )
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
@@ -397,6 +424,7 @@ def presentation_scene():
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
         "world_inspector_state": _extract_world_inspector_state(simulation_state),
         "visual_state": _extract_visual_state(simulation_state),
+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
     }
     return jsonify(_add_content_pack_data(response, simulation_state))
 
@@ -450,6 +478,37 @@ def presentation_dialogue():
             "player_overlay": inspector_overlay_payload.get("player_overlay", {}),
         }
 
+    # Phase 14.3 — integrate memory context into dialogue response
+    # Ensure memory state is fully initialized before building memory context
+    simulation_state = ensure_memory_state(simulation_state)
+    simulation_state = ensure_actor_memory_state(simulation_state)
+    simulation_state = ensure_world_memory_state(simulation_state)
+
+    actor_ids = []
+
+    # Prefer current speaker/turn actor from payload if available
+    speaker = payload.get("speaker") if isinstance(payload, dict) else None
+    if isinstance(speaker, dict):
+        speaker_id = _safe_str(speaker.get("actor_id")).strip()
+        if speaker_id:
+            actor_ids.append(speaker_id)
+
+    # Fall back to visible characters from canonical character UI state
+    character_ui_state = _extract_character_ui_state(simulation_state)
+    characters = character_ui_state.get("characters") if isinstance(character_ui_state, dict) else []
+    if isinstance(characters, list):
+        for character in characters:
+            if not isinstance(character, dict):
+                continue
+            actor_id = _safe_str(character.get("id")).strip()
+            if actor_id and actor_id not in actor_ids:
+                actor_ids.append(actor_id)
+            if len(actor_ids) >= 6:
+                break
+
+    dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_ids)
+    memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
+
     response = {
         "ok": True,
         "presentation": payload,
@@ -457,6 +516,9 @@ def presentation_dialogue():
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
         "world_inspector_state": _extract_world_inspector_state(simulation_state),
         "visual_state": _extract_visual_state(simulation_state),
+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
+        "dialogue_memory_context": dialogue_memory_context,
+        "llm_memory_prompt_block": memory_prompt_block,
     }
     return jsonify(_add_content_pack_data(response, simulation_state))
 
@@ -577,6 +639,7 @@ def presentation_narrative_recap():
         "character_inspector_state": _extract_character_inspector_state(simulation_state),
         "world_inspector_state": _extract_world_inspector_state(simulation_state),
         "visual_state": _extract_visual_state(simulation_state),
+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
     }
     return jsonify(_add_content_pack_data(response, simulation_state))
 
@@ -759,6 +822,7 @@ def request_character_portrait():
     )
 
     request_id = f"portrait:{actor_id}:{identity['version']}"
+    now_ts = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     simulation_state = append_image_request(
         simulation_state,
         {
@@ -770,6 +834,12 @@ def request_character_portrait():
             "style": identity.get("style", ""),
             "model": identity.get("model", ""),
             "status": "pending" if prompt_check.get("ok") else "blocked",
+            "attempts": 0,
+            "max_attempts": 3,
+            "error": "",
+            "created_at": now_ts,
+            "updated_at": "",
+            "completed_at": "",
         },
     )
 
@@ -912,6 +982,7 @@ def request_scene_illustration():
     prompt_check = validate_visual_prompt(prompt)
 
     request_id = f"scene:{resolved_target}:{seed}"
+    now_ts = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     simulation_state = append_image_request(
         simulation_state,
         {
@@ -923,6 +994,12 @@ def request_scene_illustration():
             "style": scene_style,
             "model": scene_model,
             "status": "pending" if prompt_check.get("ok") else "blocked",
+            "attempts": 0,
+            "max_attempts": 3,
+            "error": "",
+            "created_at": now_ts,
+            "updated_at": "",
+            "completed_at": "",
         },
     )
 
@@ -1028,6 +1105,34 @@ def presentation_visual_assets():
         "visual_assets": visual_state.get("visual_assets", []),
         "appearance_profiles": visual_state.get("appearance_profiles", {}),
         "appearance_events": visual_state.get("appearance_events", {}),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 12.10 — Visual worker executor route
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/visual/process_requests")
+def process_rpg_visual_requests():
+    """Process pending visual generation requests through provider worker."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    limit = data.get("limit") if isinstance(data.get("limit"), int) else 8
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_visual_state(simulation_state)
+    simulation_state = process_pending_image_requests(simulation_state, limit=limit)
+
+    # Persist updated state back to setup_payload (CRITICAL for state continuity)
+    if isinstance(setup_payload, dict):
+        setup_payload["simulation_state"] = simulation_state
+
+    return jsonify({
+        "ok": True,
+        "simulation_state": simulation_state,
+        "visual_state": _extract_visual_state(simulation_state),
     })
 
 
@@ -1442,11 +1547,12 @@ _RPG_SESSION_ROOT_STATE: Dict[str, Any] = {"sessions": []}
 
 @rpg_presentation_bp.post("/api/rpg/session/save")
 def save_rpg_session():
-    """Save normalized RPG session snapshot into in-memory registry."""
+    """Save normalized RPG session snapshot into in-memory registry and disk."""
     global _RPG_SESSION_ROOT_STATE
     data = request.get_json(silent=True) or {}
     session = _safe_dict(data.get("session"))
     _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
+    save_session_to_disk(session)
     return jsonify({
         "ok": True,
         "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
@@ -1455,22 +1561,23 @@ def save_rpg_session():
 
 @rpg_presentation_bp.post("/api/rpg/session/list")
 def list_rpg_sessions():
-    """List saved RPG sessions."""
+    """List saved RPG sessions from disk, falling back to in-memory."""
     global _RPG_SESSION_ROOT_STATE
     _RPG_SESSION_ROOT_STATE = ensure_session_registry(_RPG_SESSION_ROOT_STATE)
+    disk_sessions = list_sessions_from_disk()
     return jsonify({
         "ok": True,
-        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
+        "sessions": disk_sessions or list_sessions(_RPG_SESSION_ROOT_STATE),
     })
 
 
 @rpg_presentation_bp.post("/api/rpg/session/load")
 def load_rpg_session():
-    """Load a saved RPG session by id."""
+    """Load a saved RPG session by id from disk or in-memory."""
     global _RPG_SESSION_ROOT_STATE
     data = request.get_json(silent=True) or {}
     session_id = _safe_str(data.get("session_id")).strip()
-    session = get_session(_RPG_SESSION_ROOT_STATE, session_id)
+    session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
     if not session:
         return jsonify({"ok": False, "error": "session_not_found"}), 404
     return jsonify({
@@ -1551,3 +1658,96 @@ def _add_content_pack_data(response_dict: Dict[str, Any], simulation_state: Dict
         "created_by": "",
     }
     return response_dict
+
+
+# ---------------------------------------------------------------------------
+# Phase 14.3 — Memory → Dialogue Injection routes
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/memory/dialogue_context")
+def get_rpg_memory_dialogue_context():
+    """Return dialogue memory context for given actors."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    actor_ids = data.get("actor_ids") if isinstance(data.get("actor_ids"), list) else []
+    actor_ids = [_safe_str(aid).strip() for aid in actor_ids if _safe_str(aid).strip()][:6]
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_memory_state(simulation_state)
+    simulation_state = ensure_actor_memory_state(simulation_state)
+    simulation_state = ensure_world_memory_state(simulation_state)
+
+    memory_context = build_dialogue_memory_context(simulation_state, actor_ids)
+    memory_prompt_block = build_llm_memory_prompt_block(memory_context)
+
+    return jsonify({
+        "ok": True,
+        "dialogue_memory_context": memory_context,
+        "llm_memory_prompt_block": memory_prompt_block,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 14.4 — Memory Decay / Reinforcement route
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/memory/decay")
+def decay_rpg_memory():
+    """Apply deterministic decay/reinforcement pass to memory state."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    current_tick = data.get("current_tick") if isinstance(data.get("current_tick"), int) else 0
+
+    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+    simulation_state = ensure_player_party(simulation_state)
+    simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = ensure_memory_state(simulation_state)
+    simulation_state = ensure_actor_memory_state(simulation_state)
+    simulation_state = ensure_world_memory_state(simulation_state)
+    simulation_state = apply_memory_decay(simulation_state, current_tick=current_tick)
+
+    return jsonify({
+        "ok": True,
+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase 15.1 — Session ↔ Package Unification routes
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/session/export_package")
+def export_session_as_package():
+    """Export a saved session as portable package."""
+    data = request.get_json(silent=True) or {}
+    session_id = _safe_str(data.get("session_id")).strip()
+    session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
+    if not session:
+        return jsonify({"ok": False, "error": "session_not_found"}), 404
+
+    package_data = session_to_package(session)
+    return jsonify({
+        "ok": True,
+        "package": package_data,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/session/import_package")
+def import_package_as_session():
+    """Import portable package as new saved session."""
+    global _RPG_SESSION_ROOT_STATE
+    data = request.get_json(silent=True) or {}
+    package_data = _safe_dict(data.get("package"))
+    session_id = _safe_str(data.get("session_id")).strip() or "imported_session"
+    title = _safe_str(data.get("title")).strip() or "Imported Session"
+
+    session = package_to_session(package_data, session_id=session_id, title=title)
+    _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
+    save_session_to_disk(session)
+
+    return jsonify({
+        "ok": True,
+        "session": session,
+    })

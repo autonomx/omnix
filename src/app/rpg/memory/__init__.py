@@ -98,6 +98,17 @@ from app.rpg.memory.world_memory_state import (
     ensure_world_memory_state,
 )
 
+# Phase 14.3 — Memory → Dialogue Injection
+from app.rpg.memory.dialogue_memory_context import (
+    build_actor_dialogue_memory_context,
+    build_dialogue_memory_context,
+    build_llm_memory_prompt_block,
+    build_world_dialogue_memory_context,
+)
+
+# Phase 14.4 — Memory Decay / Reinforcement
+from app.rpg.memory.memory_decay import apply_memory_decay
+
 
 def update_memory(session, events):
     """Update session memory with new events.
@@ -180,4 +191,11 @@ __all__ = [
     # Phase 14.2
     "append_rumor",
     "ensure_world_memory_state",
+    # Phase 14.3
+    "build_actor_dialogue_memory_context",
+    "build_dialogue_memory_context",
+    "build_llm_memory_prompt_block",
+    "build_world_dialogue_memory_context",
+    # Phase 14.4
+    "apply_memory_decay",
 ]
