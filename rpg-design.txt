@@ -1,573 +1,268 @@
-Phase 12.12 — local SD / Comfy adapter
-File: src/app/rpg/visual/providers/comfy_provider.py
+1) Harden the queue model
+File: src/app/rpg/visual/job_queue.py
 
-Create new file:
+Replace the file with this version:
 
-diff --git a/src/app/rpg/visual/providers/comfy_provider.py b/src/app/rpg/visual/providers/comfy_provider.py
-new file mode 100644
-index 0000000..1111111
---- /dev/null
-+++ b/src/app/rpg/visual/providers/comfy_provider.py
-@@ -0,0 +1,257 @@
-+"""Phase 12.12 — Local SD / ComfyUI image provider."""
-+from __future__ import annotations
-+
-+import json
-+import os
-+import time
-+import urllib.error
-+import urllib.request
-+from typing import Any, Dict
-+
-+from .base import BaseImageProvider, ImageGenerationResult
-+
-+
-+_DEFAULT_COMFY_BASE_URL = "http://127.0.0.1:8188"
-+_DEFAULT_TIMEOUT_SEC = 180
-+_DEFAULT_POLL_INTERVAL_SEC = 1.0
-+_DEFAULT_MAX_POLLS = 120
-+
-+
-+def _safe_str(value: Any) -> str:
-+    if value is None:
-+        return ""
-+    if isinstance(value, str):
-+        return value
-+    return str(value)
-+
-+
-+def _safe_int(value: Any, default: int) -> int:
-+    try:
-+        return int(value)
-+    except Exception:
-+        return default
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _style_hint(kind: str, style: str) -> str:
-+    kind = _safe_str(kind).strip()
-+    style = _safe_str(style).strip()
-+    parts = []
-+    if style:
-+        parts.append(f"Visual style: {style}.")
-+    if kind == "character_portrait":
-+        parts.append("Framing: character portrait, single primary subject, readable facial detail.")
-+    elif kind == "scene_illustration":
-+        parts.append("Framing: environmental scene illustration with clear composition.")
-+    return " ".join(parts).strip()
-+
-+
-+def _build_prompt(prompt: str, *, kind: str, style: str, target_id: str) -> str:
-+    prompt = _safe_str(prompt).strip()
-+    target_id = _safe_str(target_id).strip()
-+    suffix = _style_hint(kind, style)
-+    parts = [part for part in [prompt, suffix, f"Target ID: {target_id}." if target_id else ""] if part]
-+    return "\n\n".join(parts).strip()
-+
-+
-+def _json_request(url: str, payload: Dict[str, Any], timeout: int) -> Dict[str, Any]:
-+    req = urllib.request.Request(
-+        url,
-+        data=json.dumps(payload).encode("utf-8"),
-+        headers={"Content-Type": "application/json"},
-+        method="POST",
-+    )
-+    with urllib.request.urlopen(req, timeout=timeout) as response:
-+        return json.loads(response.read().decode("utf-8"))
-+
-+
-+def _get_json(url: str, timeout: int) -> Dict[str, Any]:
-+    with urllib.request.urlopen(url, timeout=timeout) as response:
-+        return json.loads(response.read().decode("utf-8"))
-+
-+
-+def _get_bytes(url: str, timeout: int) -> bytes:
-+    with urllib.request.urlopen(url, timeout=timeout) as response:
-+        return response.read()
-+
-+
-+def _default_prompt_graph(prompt: str, *, seed: int, width: int, height: int) -> Dict[str, Any]:
-+    """Simple ComfyUI API-format graph.
-+
-+    This assumes a common node layout. If the user maintains a custom workflow,
-+    they can override via COMFY_PROMPT_GRAPH_JSON.
-+    """
-+    return {
-+        "3": {
-+            "class_type": "KSampler",
-+            "inputs": {
-+                "seed": seed,
-+                "steps": 24,
-+                "cfg": 7,
-+                "sampler_name": "euler",
-+                "scheduler": "normal",
-+                "denoise": 1,
-+                "model": ["4", 0],
-+                "positive": ["6", 0],
-+                "negative": ["7", 0],
-+                "latent_image": ["5", 0],
-+            },
-+        },
-+        "4": {
-+            "class_type": "CheckpointLoaderSimple",
-+            "inputs": {
-+                "ckpt_name": os.getenv("COMFY_CHECKPOINT_NAME", "v1-5-pruned-emaonly.safetensors"),
-+            },
-+        },
-+        "5": {
-+            "class_type": "EmptyLatentImage",
-+            "inputs": {
-+                "width": width,
-+                "height": height,
-+                "batch_size": 1,
-+            },
-+        },
-+        "6": {
-+            "class_type": "CLIPTextEncode",
-+            "inputs": {
-+                "text": prompt,
-+                "clip": ["4", 1],
-+            },
-+        },
-+        "7": {
-+            "class_type": "CLIPTextEncode",
-+            "inputs": {
-+                "text": "blurry, distorted, malformed hands, extra limbs, unreadable face, cropped",
-+                "clip": ["4", 1],
-+            },
-+        },
-+        "8": {
-+            "class_type": "VAEDecode",
-+            "inputs": {
-+                "samples": ["3", 0],
-+                "vae": ["4", 2],
-+            },
-+        },
-+        "9": {
-+            "class_type": "SaveImage",
-+            "inputs": {
-+                "filename_prefix": "rpg",
-+                "images": ["8", 0],
-+            },
-+        },
-+    }
-+
-+
-+class ComfyImageProvider(BaseImageProvider):
-+    """Local ComfyUI-backed image provider."""
-+    provider_name = "comfy"
-+
-+    def generate(
-+        self,
-+        *,
-+        prompt: str,
-+        seed: int | None,
-+        style: str,
-+        model: str,
-+        kind: str,
-+        target_id: str,
-+    ) -> ImageGenerationResult:
-+        base_url = _safe_str(os.getenv("COMFY_BASE_URL", _DEFAULT_COMFY_BASE_URL)).strip().rstrip("/")
-+        timeout = _safe_int(os.getenv("COMFY_TIMEOUT_SEC"), _DEFAULT_TIMEOUT_SEC)
-+        poll_interval = float(os.getenv("COMFY_POLL_INTERVAL_SEC", str(_DEFAULT_POLL_INTERVAL_SEC)))
-+        max_polls = _safe_int(os.getenv("COMFY_MAX_POLLS"), _DEFAULT_MAX_POLLS)
-+
-+        width = 768 if _safe_str(kind).strip() == "character_portrait" else 1024
-+        height = 1024 if _safe_str(kind).strip() == "character_portrait" else 768
-+        final_prompt = _build_prompt(prompt, kind=kind, style=style, target_id=target_id)
-+        final_seed = seed if isinstance(seed, int) else 0
-+
-+        graph_override = _safe_str(os.getenv("COMFY_PROMPT_GRAPH_JSON")).strip()
-+        if graph_override:
-+            try:
-+                workflow = json.loads(graph_override)
-+            except Exception:
-+                return ImageGenerationResult(
-+                    ok=False,
-+                    status="failed",
-+                    error="comfy_invalid_prompt_graph_json",
-+                    moderation_status="approved",
-+                    moderation_reason="",
-+                )
-+        else:
-+            workflow = _default_prompt_graph(final_prompt, seed=final_seed, width=width, height=height)
-+
-+        try:
-+            queued = _json_request(
-+                f"{base_url}/prompt",
-+                {"prompt": workflow},
-+                timeout=timeout,
-+            )
-+        except urllib.error.URLError:
-+            return ImageGenerationResult(
-+                ok=False,
-+                status="failed",
-+                error="comfy_network_error",
-+                moderation_status="approved",
-+                moderation_reason="",
-+            )
-+        except Exception:
-+            return ImageGenerationResult(
-+                ok=False,
-+                status="failed",
-+                error="comfy_submit_failed",
-+                moderation_status="approved",
-+                moderation_reason="",
-+            )
-+
-+        prompt_id = _safe_str(queued.get("prompt_id")).strip()
-+        if not prompt_id:
-+            return ImageGenerationResult(
-+                ok=False,
-+                status="failed",
-+                error="comfy_missing_prompt_id",
-+                moderation_status="approved",
-+                moderation_reason="",
-+            )
-+
-+        for _ in range(max_polls):
-+            try:
-+                history = _get_json(f"{base_url}/history/{prompt_id}", timeout=timeout)
-+            except urllib.error.URLError:
-+                return ImageGenerationResult(
-+                    ok=False,
-+                    status="failed",
-+                    error="comfy_history_network_error",
-+                    moderation_status="approved",
-+                    moderation_reason="",
-+                )
-+            except Exception:
-+                history = {}
-+
-+            prompt_history = _safe_dict(history.get(prompt_id))
-+            outputs = _safe_dict(prompt_history.get("outputs"))
-+            for node_output in outputs.values():
-+                node_output = _safe_dict(node_output)
-+                images = node_output.get("images")
-+                if isinstance(images, list) and images:
-+                    image0 = _safe_dict(images[0])
-+                    filename = _safe_str(image0.get("filename")).strip()
-+                    subfolder = _safe_str(image0.get("subfolder")).strip()
-+                    img_type = _safe_str(image0.get("type")).strip() or "output"
-+                    if filename:
-+                        try:
-+                            query = f"filename={filename}&subfolder={subfolder}&type={img_type}"
-+                            image_bytes = _get_bytes(f"{base_url}/view?{query}", timeout=timeout)
-+                        except urllib.error.URLError:
-+                            return ImageGenerationResult(
-+                                ok=False,
-+                                status="failed",
-+                                error="comfy_image_fetch_network_error",
-+                                moderation_status="approved",
-+                                moderation_reason="",
-+                            )
-+                        except Exception:
-+                            return ImageGenerationResult(
-+                                ok=False,
-+                                status="failed",
-+                                error="comfy_image_fetch_failed",
-+                                moderation_status="approved",
-+                                moderation_reason="",
-+                            )
-+
-+                        return ImageGenerationResult(
-+                            ok=True,
-+                            status="complete",
-+                            image_bytes=image_bytes,
-+                            mime_type="image/png",
-+                            revised_prompt=final_prompt,
-+                            moderation_status="approved",
-+                            moderation_reason="",
-+                        )
-+
-+            time.sleep(poll_interval)
-+
-+        return ImageGenerationResult(
-+            ok=False,
-+            status="failed",
-+            error="comfy_timeout",
-+            moderation_status="approved",
-+            moderation_reason="",
-+        )
-File: src/app/rpg/visual/providers/__init__.py
-
-Replace with:
-
-diff --git a/src/app/rpg/visual/providers/__init__.py b/src/app/rpg/visual/providers/__init__.py
-index 55f804a..2f0b761 100644
---- a/src/app/rpg/visual/providers/__init__.py
-+++ b/src/app/rpg/visual/providers/__init__.py
-@@ -1,12 +1,16 @@
--"""Phase 12.10 / 12.11 — Visual provider registry."""
-+"""Phase 12.10 / 12.12 — Visual provider registry."""
+diff --git a/src/app/rpg/visual/job_queue.py b/src/app/rpg/visual/job_queue.py
+index 1111111..2222222 100644
+--- a/src/app/rpg/visual/job_queue.py
++++ b/src/app/rpg/visual/job_queue.py
+@@ -1,215 +1,309 @@
+ """Phase 12.13 — File-backed visual job queue."""
  from __future__ import annotations
  
+ import json
  import os
- 
- from .base import BaseImageProvider
-+from .comfy_provider import ComfyImageProvider
- from .mock_provider import MockImageProvider
- from .openai_provider import OpenAIImageProvider
+ import uuid
+ from datetime import datetime, timedelta, timezone
+ from typing import Any, Dict, List
  
  
- def get_image_provider() -> BaseImageProvider:
-     """Return the configured image provider."""
-     provider = os.getenv("RPG_IMAGE_PROVIDER", "mock").strip().lower()
-+    if provider == "comfy":
-+        return ComfyImageProvider()
-     if provider == "openai":
-         return OpenAIImageProvider()
-     return MockImageProvider()
-New file: src/tests/unit/rpg/test_phase1212_comfy_provider.py
-diff --git a/src/tests/unit/rpg/test_phase1212_comfy_provider.py b/src/tests/unit/rpg/test_phase1212_comfy_provider.py
-new file mode 100644
-index 0000000..2222222
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase1212_comfy_provider.py
-@@ -0,0 +1,113 @@
-+"""Phase 12.12 — ComfyUI provider unit tests."""
-+import json
-+
-+from app.rpg.visual.providers.comfy_provider import ComfyImageProvider
-+
-+
-+def test_comfy_provider_returns_missing_prompt_id_as_failure(monkeypatch):
-+    monkeypatch.setenv("COMFY_BASE_URL", "http://comfy.local")
-+
-+    def _fake_urlopen(request_or_url, timeout=180):
-+        class _Response:
-+            def __enter__(self):
-+                return self
-+            def __exit__(self, exc_type, exc, tb):
-+                return False
-+            def read(self):
-+                return json.dumps({}).encode("utf-8")
-+        return _Response()
-+
-+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
-+
-+    provider = ComfyImageProvider()
-+    result = provider.generate(
-+        prompt="portrait",
-+        seed=123,
-+        style="rpg-portrait",
-+        model="local",
-+        kind="character_portrait",
-+        target_id="npc:test",
-+    )
-+
-+    assert result.ok is False
-+    assert result.error == "comfy_missing_prompt_id"
-+
-+
-+def test_comfy_provider_successfully_polls_and_fetches_image(monkeypatch):
-+    monkeypatch.setenv("COMFY_BASE_URL", "http://comfy.local")
-+    calls = []
-+
-+    def _fake_urlopen(request_or_url, timeout=180):
-+        target = getattr(request_or_url, "full_url", request_or_url)
-+        calls.append(target)
-+
-+        class _Response:
-+            def __init__(self, payload=None, raw_bytes=None):
-+                self._payload = payload
-+                self._raw_bytes = raw_bytes
-+            def __enter__(self):
-+                return self
-+            def __exit__(self, exc_type, exc, tb):
-+                return False
-+            def read(self):
-+                if self._raw_bytes is not None:
-+                    return self._raw_bytes
-+                return json.dumps(self._payload).encode("utf-8")
-+
-+        if str(target).endswith("/prompt"):
-+            return _Response(payload={"prompt_id": "abc123"})
-+        if str(target).endswith("/history/abc123"):
-+            return _Response(
-+                payload={
-+                    "abc123": {
-+                        "outputs": {
-+                            "9": {
-+                                "images": [
-+                                    {"filename": "rpg_0001.png", "subfolder": "", "type": "output"}
-+                                ]
-+                            }
-+                        }
-+                    }
-+                }
-+            )
-+        if "/view?" in str(target):
-+            return _Response(raw_bytes=b"pngbytes")
-+        raise AssertionError(f"Unexpected URL: {target}")
-+
-+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
-+    monkeypatch.setattr("time.sleep", lambda *_args, **_kwargs: None)
-+
-+    provider = ComfyImageProvider()
-+    result = provider.generate(
-+        prompt="portrait",
-+        seed=123,
-+        style="rpg-portrait",
-+        model="local",
-+        kind="character_portrait",
-+        target_id="npc:test",
-+    )
-+
-+    assert result.ok is True
-+    assert result.status == "complete"
-+    assert result.image_bytes == b"pngbytes"
-+    assert result.revised_prompt != ""
-+
-+
-+def test_comfy_provider_invalid_graph_override_fails(monkeypatch):
-+    monkeypatch.setenv("COMFY_PROMPT_GRAPH_JSON", "{bad json")
-+    provider = ComfyImageProvider()
-+
-+    result = provider.generate(
-+        prompt="portrait",
-+        seed=123,
-+        style="rpg-portrait",
-+        model="local",
-+        kind="character_portrait",
-+        target_id="npc:test",
-+    )
-+
-+    assert result.ok is False
-+    assert result.error == "comfy_invalid_prompt_graph_json"
-Phase 12.13 — worker scheduling / persistent job queue
-
-This phase should stay explicit and inspectable. The cleanest approach is a small file-backed queue with leases, without making provider output part of simulation truth. Your current worker is already request-based and bounded, so this is the right place to add a durable scheduler layer.
-
-New file: src/app/rpg/visual/job_queue.py
-diff --git a/src/app/rpg/visual/job_queue.py b/src/app/rpg/visual/job_queue.py
-new file mode 100644
-index 0000000..3333333
---- /dev/null
-+++ b/src/app/rpg/visual/job_queue.py
-@@ -0,0 +1,215 @@
-+"""Phase 12.13 — File-backed visual job queue."""
-+from __future__ import annotations
-+
-+import json
-+import os
-+import uuid
-+from datetime import datetime, timedelta, timezone
-+from typing import Any, Dict, List
-+
-+
-+_QUEUE_DIR_ENV = "RPG_VISUAL_QUEUE_DIR"
-+_DEFAULT_QUEUE_DIR = "data/rpg/visual_queue"
-+_QUEUE_FILE = "queue.json"
-+
-+
-+def _utc_now() -> datetime:
-+    return datetime.now(timezone.utc)
-+
-+
-+def _utc_now_iso() -> str:
-+    return _utc_now().isoformat()
-+
-+
-+def _safe_str(value: Any) -> str:
-+    if value is None:
-+        return ""
-+    if isinstance(value, str):
-+        return value
-+    return str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _queue_dir() -> str:
-+    return os.getenv(_QUEUE_DIR_ENV, _DEFAULT_QUEUE_DIR).strip() or _DEFAULT_QUEUE_DIR
-+
-+
-+def _queue_path() -> str:
-+    return os.path.join(_queue_dir(), _QUEUE_FILE)
-+
-+
-+def _ensure_queue_dir() -> None:
-+    os.makedirs(_queue_dir(), exist_ok=True)
-+
-+
-+def _read_queue() -> Dict[str, Any]:
-+    _ensure_queue_dir()
-+    path = _queue_path()
-+    if not os.path.exists(path):
-+        return {"jobs": []}
+ _QUEUE_DIR_ENV = "RPG_VISUAL_QUEUE_DIR"
+ _DEFAULT_QUEUE_DIR = "data/rpg/visual_queue"
+ _QUEUE_FILE = "queue.json"
+ 
+ 
+ def _utc_now() -> datetime:
+     return datetime.now(timezone.utc)
+ 
+ 
+ def _utc_now_iso() -> str:
+     return _utc_now().isoformat()
+ 
+ 
+ def _safe_str(value: Any) -> str:
+     if value is None:
+         return ""
+     if isinstance(value, str):
+         return value
+     return str(value)
+ 
+ 
+ def _safe_dict(value: Any) -> Dict[str, Any]:
+     return value if isinstance(value, dict) else {}
+ 
+ 
+ def _safe_list(value: Any) -> List[Any]:
+     return value if isinstance(value, list) else []
+ 
+ 
+ def _queue_dir() -> str:
+     return os.getenv(_QUEUE_DIR_ENV, _DEFAULT_QUEUE_DIR).strip() or _DEFAULT_QUEUE_DIR
+ 
+ 
+ def _queue_path() -> str:
+     return os.path.join(_queue_dir(), _QUEUE_FILE)
+ 
+ 
+ def _ensure_queue_dir() -> None:
+     os.makedirs(_queue_dir(), exist_ok=True)
+ 
+ 
+ def _read_queue() -> Dict[str, Any]:
+     _ensure_queue_dir()
+     path = _queue_path()
+     if not os.path.exists(path):
+         return {"jobs": []}
+     try:
+         with open(path, "r", encoding="utf-8") as f:
+             data = json.load(f)
+     except Exception:
+         return {"jobs": []}
+     jobs = _safe_list(data.get("jobs"))
+     return {"jobs": [_normalize_job(job) for job in jobs]}
+ 
+ 
+ def _write_queue(data: Dict[str, Any]) -> None:
+     _ensure_queue_dir()
+     path = _queue_path()
+     tmp = f"{path}.tmp"
+     with open(tmp, "w", encoding="utf-8") as f:
+         json.dump(data, f, indent=2, sort_keys=True)
+     os.replace(tmp, path)
+ 
+ 
++def _parse_iso(value: str) -> datetime | None:
++    value = _safe_str(value).strip()
++    if not value:
++        return None
 +    try:
-+        with open(path, "r", encoding="utf-8") as f:
-+            data = json.load(f)
++        return datetime.fromisoformat(value)
 +    except Exception:
-+        return {"jobs": []}
-+    jobs = _safe_list(data.get("jobs"))
-+    return {"jobs": [_normalize_job(job) for job in jobs]}
++        return None
 +
 +
-+def _write_queue(data: Dict[str, Any]) -> None:
-+    _ensure_queue_dir()
-+    path = _queue_path()
-+    tmp = f"{path}.tmp"
-+    with open(tmp, "w", encoding="utf-8") as f:
-+        json.dump(data, f, indent=2, sort_keys=True)
-+    os.replace(tmp, path)
++def _lease_is_valid(job: Dict[str, Any], *, now: datetime | None = None) -> bool:
++    now = now or _utc_now()
++    if _safe_str(job.get("status")).strip() != "leased":
++        return False
++    lease_expires_at = _parse_iso(_safe_str(job.get("lease_expires_at")).strip())
++    if lease_expires_at is None:
++        return False
++    return lease_expires_at > now
 +
 +
-+def _normalize_job(value: Any) -> Dict[str, Any]:
-+    data = _safe_dict(value)
-+    return {
-+        "job_id": _safe_str(data.get("job_id")).strip() or f"job:{uuid.uuid4().hex}",
-+        "request_id": _safe_str(data.get("request_id")).strip(),
-+        "session_id": _safe_str(data.get("session_id")).strip(),
-+        "status": _safe_str(data.get("status")).strip() or "queued",
-+        "lease_token": _safe_str(data.get("lease_token")).strip(),
-+        "lease_expires_at": _safe_str(data.get("lease_expires_at")).strip(),
-+        "created_at": _safe_str(data.get("created_at")).strip() or _utc_now_iso(),
-+        "updated_at": _safe_str(data.get("updated_at")).strip() or _utc_now_iso(),
-+        "completed_at": _safe_str(data.get("completed_at")).strip(),
-+        "error": _safe_str(data.get("error")).strip(),
-+    }
+ def _normalize_job(value: Any) -> Dict[str, Any]:
+     data = _safe_dict(value)
+     return {
+         "job_id": _safe_str(data.get("job_id")).strip() or f"job:{uuid.uuid4().hex}",
+         "request_id": _safe_str(data.get("request_id")).strip(),
+         "session_id": _safe_str(data.get("session_id")).strip(),
+         "status": _safe_str(data.get("status")).strip() or "queued",
+         "lease_token": _safe_str(data.get("lease_token")).strip(),
+         "lease_expires_at": _safe_str(data.get("lease_expires_at")).strip(),
+         "created_at": _safe_str(data.get("created_at")).strip() or _utc_now_iso(),
+         "updated_at": _safe_str(data.get("updated_at")).strip() or _utc_now_iso(),
+         "completed_at": _safe_str(data.get("completed_at")).strip(),
+         "error": _safe_str(data.get("error")).strip(),
++        "attempts": int(data.get("attempts") or 0),
+     }
+ 
+ 
++def _job_sort_key(job: Dict[str, Any]) -> tuple[str, str]:
++    return (_safe_str(job.get("created_at")).strip(), _safe_str(job.get("job_id")).strip())
 +
 +
-+def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
++def _dedupe_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    """Keep at most one active job per (session_id, request_id).
++
++    Prefer leased(valid) > queued > leased(stale) > complete/failed.
++    """
++    now = _utc_now()
++    grouped: Dict[tuple[str, str], List[Dict[str, Any]]] = {}
++    for job in jobs:
++        job = _normalize_job(job)
++        key = (_safe_str(job.get("session_id")).strip(), _safe_str(job.get("request_id")).strip())
++        grouped.setdefault(key, []).append(job)
++
++    out: List[Dict[str, Any]] = []
++    for _key, bucket in grouped.items():
++        bucket = [_normalize_job(item) for item in bucket]
++
++        def _rank(item: Dict[str, Any]) -> tuple[int, str, str]:
++            status = _safe_str(item.get("status")).strip()
++            if status == "leased" and _lease_is_valid(item, now=now):
++                return (0, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
++            if status == "queued":
++                return (1, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
++            if status == "leased":
++                return (2, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
++            return (3, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
++
++        bucket.sort(key=_rank)
++        winner = bucket[0]
++        out.append(winner)
++
++        # Preserve completed/failed history only when it is not shadowing an active job.
++        winner_status = _safe_str(winner.get("status")).strip()
++        if winner_status in {"complete", "failed"}:
++            for extra in bucket[1:]:
++                if _safe_str(extra.get("status")).strip() in {"complete", "failed"}:
++                    out.append(extra)
++
++    out.sort(key=_job_sort_key)
++    return out
++
++
++def normalize_visual_queue() -> Dict[str, Any]:
++    """Rewrite queue into canonical deduped form and reclaim stale leases."""
 +    state = _read_queue()
-+    jobs = _safe_list(state.get("jobs"))
-+    session_id = _safe_str(session_id).strip()
-+    request_id = _safe_str(request_id).strip()
++    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
++    now = _utc_now()
 +
-+    for existing in jobs:
-+        existing = _normalize_job(existing)
-+        if existing["session_id"] == session_id and existing["request_id"] == request_id and existing["status"] in {"queued", "leased"}:
-+            return existing
++    repaired: List[Dict[str, Any]] = []
++    for job in jobs:
++        job = _normalize_job(job)
++        if _safe_str(job.get("status")).strip() == "leased" and not _lease_is_valid(job, now=now):
++            job["status"] = "queued"
++            job["lease_token"] = ""
++            job["lease_expires_at"] = ""
++            job["updated_at"] = now.isoformat()
++        repaired.append(job)
 +
-+    job = _normalize_job(
-+        {
-+            "job_id": f"job:{uuid.uuid4().hex}",
-+            "session_id": session_id,
-+            "request_id": request_id,
-+            "status": "queued",
-+            "created_at": _utc_now_iso(),
-+            "updated_at": _utc_now_iso(),
-+        }
-+    )
-+    jobs.append(job)
-+    jobs.sort(key=lambda item: (item.get("created_at") or "", item.get("job_id") or ""))
-+    state["jobs"] = jobs
++    repaired = _dedupe_jobs(repaired)
++    state["jobs"] = repaired
 +    _write_queue(state)
-+    return job
++    return {"jobs": repaired, "total": len(repaired)}
 +
 +
-+def claim_next_visual_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
+ def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
+-    state = _read_queue()
+-    jobs = _safe_list(state.get("jobs"))
++    state = _read_queue()
++    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
+     session_id = _safe_str(session_id).strip()
+     request_id = _safe_str(request_id).strip()
++    now = _utc_now()
++    now_iso = now.isoformat()
++
++    # Reclaim stale leased jobs first.
++    for idx, existing in enumerate(jobs):
++        if (
++            _safe_str(existing.get("session_id")).strip() == session_id
++            and _safe_str(existing.get("request_id")).strip() == request_id
++            and _safe_str(existing.get("status")).strip() == "leased"
++            and not _lease_is_valid(existing, now=now)
++        ):
++            existing["status"] = "queued"
++            existing["lease_token"] = ""
++            existing["lease_expires_at"] = ""
++            existing["updated_at"] = now_iso
++            jobs[idx] = existing
+ 
+     for existing in jobs:
+-        existing = _normalize_job(existing)
+-        if existing["session_id"] == session_id and existing["request_id"] == request_id and existing["status"] in {"queued", "leased"}:
++        if (
++            _safe_str(existing.get("session_id")).strip() == session_id
++            and _safe_str(existing.get("request_id")).strip() == request_id
++            and _safe_str(existing.get("status")).strip() in {"queued", "leased"}
++        ):
++            state["jobs"] = _dedupe_jobs(jobs)
++            _write_queue(state)
+             return existing
+ 
+     job = _normalize_job(
+         {
+             "job_id": f"job:{uuid.uuid4().hex}",
+             "session_id": session_id,
+             "request_id": request_id,
+             "status": "queued",
+-            "created_at": _utc_now_iso(),
+-            "updated_at": _utc_now_iso(),
++            "created_at": now_iso,
++            "updated_at": now_iso,
++            "attempts": 0,
+         }
+     )
+     jobs.append(job)
+-    jobs.sort(key=lambda item: (item.get("created_at") or "", item.get("job_id") or ""))
+-    state["jobs"] = jobs
++    state["jobs"] = _dedupe_jobs(jobs)
+     _write_queue(state)
+     return job
+ 
+ 
+ def claim_next_visual_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
+-    state = _read_queue()
+-    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
+-    now = _utc_now()
+-    now_iso = now.isoformat()
+-
+-    selected = None
+-    for idx, job in enumerate(jobs):
+-        lease_expires_at = _safe_str(job.get("lease_expires_at")).strip()
+-        lease_valid = False
+-        if lease_expires_at:
+-            try:
+-                lease_valid = datetime.fromisoformat(lease_expires_at) > now
+-            except Exception:
+-                lease_valid = False
+-
+-        if job["status"] == "queued" or (job["status"] == "leased" and not lease_valid):
+-            selected = idx
+-            break
++    normalize_visual_queue()
 +    state = _read_queue()
 +    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
 +    now = _utc_now()
@@ -575,305 +270,122 @@ index 0000000..3333333
 +
 +    selected = None
 +    for idx, job in enumerate(jobs):
-+        lease_expires_at = _safe_str(job.get("lease_expires_at")).strip()
-+        lease_valid = False
-+        if lease_expires_at:
-+            try:
-+                lease_valid = datetime.fromisoformat(lease_expires_at) > now
-+            except Exception:
-+                lease_valid = False
-+
-+        if job["status"] == "queued" or (job["status"] == "leased" and not lease_valid):
++        if _safe_str(job.get("status")).strip() == "queued":
 +            selected = idx
 +            break
-+
-+    if selected is None:
-+        return {}
-+
-+    job = jobs[selected]
-+    lease_token = f"lease:{uuid.uuid4().hex}"
-+    job["status"] = "leased"
-+    job["lease_token"] = lease_token
-+    job["lease_expires_at"] = (now + timedelta(seconds=max(30, int(lease_seconds)))).isoformat()
-+    job["updated_at"] = now_iso
-+    jobs[selected] = job
-+    state["jobs"] = jobs
-+    _write_queue(state)
-+    return job
-+
-+
-+def complete_visual_job(*, job_id: str, lease_token: str, error: str = "") -> Dict[str, Any]:
+ 
+     if selected is None:
+         return {}
+ 
+     job = jobs[selected]
+     lease_token = f"lease:{uuid.uuid4().hex}"
+     job["status"] = "leased"
+     job["lease_token"] = lease_token
+     job["lease_expires_at"] = (now + timedelta(seconds=max(30, int(lease_seconds)))).isoformat()
+     job["updated_at"] = now_iso
++    job["attempts"] = int(job.get("attempts") or 0) + 1
+     jobs[selected] = job
+     state["jobs"] = jobs
+     _write_queue(state)
+     return job
+ 
+ 
+ def complete_visual_job(*, job_id: str, lease_token: str, error: str = "") -> Dict[str, Any]:
+     state = _read_queue()
+     jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
+     now_iso = _utc_now_iso()
+ 
+     for idx, job in enumerate(jobs):
+         if job["job_id"] != _safe_str(job_id).strip():
+             continue
+         if job["lease_token"] != _safe_str(lease_token).strip():
+             return {}
+         job["status"] = "failed" if _safe_str(error).strip() else "complete"
+         job["error"] = _safe_str(error).strip()
+         job["lease_token"] = ""
+         job["lease_expires_at"] = ""
+         job["updated_at"] = now_iso
+         job["completed_at"] = now_iso
+         jobs[idx] = job
+-        state["jobs"] = jobs
++        state["jobs"] = _dedupe_jobs(jobs)
+         _write_queue(state)
+         return job
+     return {}
+ 
+ 
+ def release_visual_job(*, job_id: str, lease_token: str, error: str = "") -> Dict[str, Any]:
+     state = _read_queue()
+     jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
+     now_iso = _utc_now_iso()
+     for idx, job in enumerate(jobs):
+         if job["job_id"] != _safe_str(job_id).strip():
+             continue
+         if job["lease_token"] != _safe_str(lease_token).strip():
+             return {}
+         job["status"] = "queued"
+         job["error"] = _safe_str(error).strip()
+         job["lease_token"] = ""
+         job["lease_expires_at"] = ""
+         job["updated_at"] = now_iso
+         jobs[idx] = job
+-        state["jobs"] = jobs
++        state["jobs"] = _dedupe_jobs(jobs)
+         _write_queue(state)
+         return job
+     return {}
+ 
+ 
+ def list_visual_jobs() -> List[Dict[str, Any]]:
+-    state = _read_queue()
++    normalize_visual_queue()
++    state = _read_queue()
+     return [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
+ 
+ 
+ def prune_completed_visual_jobs(*, keep_last: int = 200) -> Dict[str, Any]:
+-    state = _read_queue()
+-    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
++    normalize_visual_queue()
 +    state = _read_queue()
 +    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-+    now_iso = _utc_now_iso()
-+
-+    for idx, job in enumerate(jobs):
-+        if job["job_id"] != _safe_str(job_id).strip():
-+            continue
-+        if job["lease_token"] != _safe_str(lease_token).strip():
-+            return {}
-+        job["status"] = "failed" if _safe_str(error).strip() else "complete"
-+        job["error"] = _safe_str(error).strip()
-+        job["lease_token"] = ""
-+        job["lease_expires_at"] = ""
-+        job["updated_at"] = now_iso
-+        job["completed_at"] = now_iso
-+        jobs[idx] = job
-+        state["jobs"] = jobs
-+        _write_queue(state)
-+        return job
-+    return {}
-+
-+
-+def release_visual_job(*, job_id: str, lease_token: str, error: str = "") -> Dict[str, Any]:
-+    state = _read_queue()
-+    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-+    now_iso = _utc_now_iso()
-+    for idx, job in enumerate(jobs):
-+        if job["job_id"] != _safe_str(job_id).strip():
-+            continue
-+        if job["lease_token"] != _safe_str(lease_token).strip():
-+            return {}
-+        job["status"] = "queued"
-+        job["error"] = _safe_str(error).strip()
-+        job["lease_token"] = ""
-+        job["lease_expires_at"] = ""
-+        job["updated_at"] = now_iso
-+        jobs[idx] = job
-+        state["jobs"] = jobs
-+        _write_queue(state)
-+        return job
-+    return {}
-+
-+
-+def list_visual_jobs() -> List[Dict[str, Any]]:
-+    state = _read_queue()
-+    return [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-+
-+
-+def prune_completed_visual_jobs(*, keep_last: int = 200) -> Dict[str, Any]:
-+    state = _read_queue()
-+    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-+    active = [job for job in jobs if job["status"] not in {"complete", "failed"}]
-+    finished = [job for job in jobs if job["status"] in {"complete", "failed"}]
-+    finished.sort(key=lambda item: (item.get("completed_at") or "", item.get("job_id") or ""))
-+    finished = finished[-max(0, int(keep_last)):]
-+    new_jobs = active + finished
-+    new_jobs.sort(key=lambda item: (item.get("created_at") or "", item.get("job_id") or ""))
-+    state["jobs"] = new_jobs
-+    _write_queue(state)
-+    return {"kept": len(new_jobs), "active": len(active), "finished_kept": len(finished)}
-New file: src/app/rpg/visual/queue_runner.py
+     active = [job for job in jobs if job["status"] not in {"complete", "failed"}]
+     finished = [job for job in jobs if job["status"] in {"complete", "failed"}]
+     finished.sort(key=lambda item: (item.get("completed_at") or "", item.get("job_id") or ""))
+     finished = finished[-max(0, int(keep_last)):]
+     new_jobs = active + finished
+     new_jobs.sort(key=lambda item: (item.get("created_at") or "", item.get("job_id") or ""))
+     state["jobs"] = new_jobs
+     _write_queue(state)
+     return {"kept": len(new_jobs), "active": len(active), "finished_kept": len(finished)}
+2) Make queue runner canonical and request-state-aware
+File: src/app/rpg/visual/queue_runner.py
+
+Replace the file with:
+
 diff --git a/src/app/rpg/visual/queue_runner.py b/src/app/rpg/visual/queue_runner.py
-new file mode 100644
-index 0000000..4444444
---- /dev/null
+index 1111111..3333333 100644
+--- a/src/app/rpg/visual/queue_runner.py
 +++ b/src/app/rpg/visual/queue_runner.py
-@@ -0,0 +1,124 @@
-+"""Phase 12.13 — Visual queue runner."""
-+from __future__ import annotations
-+
+@@ -1,27 +1,99 @@
+-"""Phase 12.13 — Queue runner for visual jobs."""
++"""Phase 12.13.5 — Queue runner for visual jobs."""
+ from __future__ import annotations
+ 
+-import os
+-
+-from .job_queue import claim_next_visual_job, complete_visual_job, release_visual_job
+-from .worker import run_one_visual_job
 +from typing import Any, Dict
 +
 +from app.rpg.session.durable_store import load_session, save_session
-+from .job_queue import claim_next_visual_job, complete_visual_job, list_visual_jobs, release_visual_job
-+from .worker import process_pending_image_requests
++from app.rpg.visual.worker import process_pending_image_requests
 +
-+
-+def _safe_str(value: Any) -> str:
-+    if value is None:
-+        return ""
-+    if isinstance(value, str):
-+        return value
-+    return str(value)
-+
-+
-+def run_one_visual_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
-+    job = claim_next_visual_job(lease_seconds=lease_seconds)
-+    if not job:
-+        return {"ok": True, "processed": False, "reason": "no_jobs"}
-+
-+    session_id = _safe_str(job.get("session_id")).strip()
-+    job_id = _safe_str(job.get("job_id")).strip()
-+    lease_token = _safe_str(job.get("lease_token")).strip()
-+
-+    try:
-+        session_data = load_session(session_id)
-+        simulation_state = session_data.get("simulation_state") or {}
-+        simulation_state = process_pending_image_requests(simulation_state, limit=1)
-+        session_data["simulation_state"] = simulation_state
-+        save_session(session_id, session_data)
-+        complete_visual_job(job_id=job_id, lease_token=lease_token, error="")
-+        return {"ok": True, "processed": True, "job_id": job_id, "session_id": session_id}
-+    except Exception as exc:
-+        release_visual_job(job_id=job_id, lease_token=lease_token, error=_safe_str(exc).strip()[:500])
-+        return {
-+            "ok": False,
-+            "processed": False,
-+            "job_id": job_id,
-+            "session_id": session_id,
-+            "error": _safe_str(exc).strip()[:500],
-+        }
-+
-+
-+def get_visual_queue_stats() -> Dict[str, Any]:
-+    jobs = list_visual_jobs()
-+    out = {"queued": 0, "leased": 0, "complete": 0, "failed": 0, "total": len(jobs)}
-+    for job in jobs:
-+        status = _safe_str(job.get("status")).strip()
-+        if status in out:
-+            out[status] += 1
-+    return out
-File: src/app/rpg/api/rpg_presentation_routes.py
-
-Add imports near the top:
-
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 1111111..5555555 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1,6 +1,10 @@
- from __future__ import annotations
- 
- from flask import Blueprint, jsonify, request
-+
-+from app.rpg.visual.job_queue import enqueue_visual_job, list_visual_jobs, prune_completed_visual_jobs
-+from app.rpg.visual.queue_runner import get_visual_queue_stats, run_one_visual_job
-+from app.rpg.visual.asset_store import cleanup_unused_assets
- 
- # existing imports...
-
-Add routes:
-
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 5555555..6666666 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -900,3 +900,91 @@ def some_existing_route():
-     return jsonify({...})
-+
-+
-+@bp.post("/api/rpg/visual/queue/enqueue")
-+def queue_visual_job_route():
-+    payload = request.get_json(force=True, silent=True) or {}
-+    session_id = str(payload.get("session_id") or "").strip()
-+    request_id = str(payload.get("request_id") or "").strip()
-+    if not session_id or not request_id:
-+        return jsonify({"ok": False, "error": "session_id_and_request_id_required"}), 400
-+    job = enqueue_visual_job(session_id=session_id, request_id=request_id)
-+    return jsonify({"ok": True, "job": job})
-+
-+
-+@bp.post("/api/rpg/visual/queue/run_once")
-+def run_visual_queue_once_route():
-+    payload = request.get_json(force=True, silent=True) or {}
-+    lease_seconds = int(payload.get("lease_seconds") or 300)
-+    result = run_one_visual_job(lease_seconds=lease_seconds)
-+    code = 200 if result.get("ok") else 500
-+    return jsonify(result), code
-+
-+
-+@bp.get("/api/rpg/visual/queue/stats")
-+def visual_queue_stats_route():
-+    return jsonify({"ok": True, "stats": get_visual_queue_stats(), "jobs": list_visual_jobs()})
-+
-+
-+@bp.post("/api/rpg/visual/queue/prune")
-+def prune_visual_queue_route():
-+    payload = request.get_json(force=True, silent=True) or {}
-+    keep_last = int(payload.get("keep_last") or 200)
-+    result = prune_completed_visual_jobs(keep_last=keep_last)
-+    return jsonify({"ok": True, "result": result, "jobs": list_visual_jobs()})
-+
-+
-+@bp.post("/api/rpg/visual/assets/cleanup")
-+def cleanup_visual_assets_route():
-+    payload = request.get_json(force=True, silent=True) or {}
-+    session_id = str(payload.get("session_id") or "").strip()
-+    if not session_id:
-+        return jsonify({"ok": False, "error": "session_id_required"}), 400
-+
-+    from app.rpg.session.durable_store import load_session, save_session
-+
-+    session_data = load_session(session_id)
-+    simulation_state = session_data.get("simulation_state") or {}
-+    result = cleanup_unused_assets(simulation_state)
-+    session_data["simulation_state"] = result["simulation_state"]
-+    save_session(session_id, session_data)
-+    return jsonify(
-+        {
-+            "ok": True,
-+            "deleted_asset_ids": result["deleted_asset_ids"],
-+            "deleted_files": result["deleted_files"],
-+        }
-+    )
-New file: src/tests/unit/rpg/test_phase1213_visual_queue.py
-diff --git a/src/tests/unit/rpg/test_phase1213_visual_queue.py b/src/tests/unit/rpg/test_phase1213_visual_queue.py
-new file mode 100644
-index 0000000..7777777
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase1213_visual_queue.py
-@@ -0,0 +1,84 @@
-+"""Phase 12.13 — Visual queue tests."""
-+from app.rpg.visual.job_queue import (
++from .job_queue import (
 +    claim_next_visual_job,
 +    complete_visual_job,
-+    enqueue_visual_job,
-+    list_visual_jobs,
++    release_visual_job,
 +)
-+
-+
-+def test_enqueue_dedupes_same_active_job(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+    job1 = enqueue_visual_job(session_id="s1", request_id="r1")
-+    job2 = enqueue_visual_job(session_id="s1", request_id="r1")
-+    assert job1["request_id"] == job2["request_id"]
-+    jobs = list_visual_jobs()
-+    assert len(jobs) == 1
-+
-+
-+def test_claim_and_complete_job(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    claimed = claim_next_visual_job(lease_seconds=60)
-+    assert claimed["status"] == "leased"
-+    assert claimed["lease_token"] != ""
-+    completed = complete_visual_job(job_id=claimed["job_id"], lease_token=claimed["lease_token"])
-+    assert completed["status"] == "complete"
-+
-+
-+def test_stale_leased_job_can_be_reclaimed(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    claimed = claim_next_visual_job(lease_seconds=0)
-+    assert claimed["job_id"] != ""
-+    reclaimed = claim_next_visual_job(lease_seconds=60)
-+    assert reclaimed["job_id"] == claimed["job_id"]
-+    assert reclaimed["lease_token"] != claimed["lease_token"]
-Phase 12.14 — image cache dedupe + asset cleanup
-
-This should happen in the asset store, not in presentation builders. Presentation artifacts remain explicit and inspectable, while dedupe and cleanup are storage mechanics. That keeps your architecture clean.
-
-File: src/app/rpg/visual/asset_store.py
-
-Replace or patch to this implementation shape:
-
-diff --git a/src/app/rpg/visual/asset_store.py b/src/app/rpg/visual/asset_store.py
-index 1111111..8888888 100644
---- a/src/app/rpg/visual/asset_store.py
-+++ b/src/app/rpg/visual/asset_store.py
-@@ -1,40 +1,206 @@
- from __future__ import annotations
- 
-+import hashlib
-+import json
- import os
-+from typing import Any, Dict, List, Set
- 
- 
--_ASSET_DIR = "data/rpg/assets"
-+_ASSET_DIR = "data/rpg/assets"
-+_MANIFEST = "manifest.json"
 +
 +
 +def _safe_str(value: Any) -> str:
@@ -888,274 +400,397 @@ index 1111111..8888888 100644
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
- 
- 
- def _ensure_asset_dir() -> str:
-     os.makedirs(_ASSET_DIR, exist_ok=True)
-     return _ASSET_DIR
- 
- 
--def save_asset_bytes(asset_id: str, image_bytes: bytes, mime_type: str) -> str:
-+def _manifest_path() -> str:
-     _ensure_asset_dir()
--    ext = ".png"
--    if mime_type == "image/jpeg":
--        ext = ".jpg"
--    path = os.path.join(_ASSET_DIR, f"{asset_id}{ext}")
--    with open(path, "wb") as f:
--        f.write(image_bytes)
--    return path
-+    return os.path.join(_ASSET_DIR, _MANIFEST)
-+
-+
-+def _read_manifest() -> Dict[str, Any]:
-+    path = _manifest_path()
-+    if not os.path.exists(path):
-+        return {"by_hash": {}, "by_asset_id": {}}
-+    try:
-+        with open(path, "r", encoding="utf-8") as f:
-+            data = json.load(f)
-+    except Exception:
-+        return {"by_hash": {}, "by_asset_id": {}}
-+    return {
-+        "by_hash": _safe_dict(data.get("by_hash")),
-+        "by_asset_id": _safe_dict(data.get("by_asset_id")),
-+    }
-+
-+
-+def _write_manifest(data: Dict[str, Any]) -> None:
-+    path = _manifest_path()
-+    tmp = f"{path}.tmp"
-+    with open(tmp, "w", encoding="utf-8") as f:
-+        json.dump(data, f, indent=2, sort_keys=True)
-+    os.replace(tmp, path)
-+
-+
-+def _ext_for_mime(mime_type: str) -> str:
-+    mime_type = _safe_str(mime_type).strip().lower()
-+    if mime_type == "image/jpeg":
-+        return ".jpg"
-+    if mime_type == "image/webp":
-+        return ".webp"
-+    return ".png"
-+
-+
-+def _sha256_hex(data: bytes) -> str:
-+    return hashlib.sha256(data).hexdigest()
-+
-+
-+def save_asset_bytes(asset_id: str, image_bytes: bytes, mime_type: str) -> str:
-+    _ensure_asset_dir()
-+    asset_id = _safe_str(asset_id).strip()
-+    image_bytes = image_bytes or b""
-+    mime_type = _safe_str(mime_type).strip() or "image/png"
-+
-+    manifest = _read_manifest()
-+    by_hash = _safe_dict(manifest.get("by_hash"))
-+    by_asset_id = _safe_dict(manifest.get("by_asset_id"))
-+
-+    content_hash = _sha256_hex(image_bytes)
-+    ext = _ext_for_mime(mime_type)
-+
-+    existing = _safe_dict(by_hash.get(content_hash))
-+    path = _safe_str(existing.get("path")).strip()
-+
-+    if not path:
-+        path = os.path.join(_ASSET_DIR, f"{content_hash}{ext}")
-+        with open(path, "wb") as f:
-+            f.write(image_bytes)
-+        by_hash[content_hash] = {
-+            "path": path,
-+            "mime_type": mime_type,
-+            "hash": content_hash,
-+        }
-+
-+    by_asset_id[asset_id] = {
-+        "asset_id": asset_id,
-+        "path": path,
-+        "mime_type": mime_type,
-+        "hash": content_hash,
-+    }
-+    manifest["by_hash"] = by_hash
-+    manifest["by_asset_id"] = by_asset_id
-+    _write_manifest(manifest)
-+    return path
-+
-+
-+def get_asset_manifest() -> Dict[str, Any]:
-+    return _read_manifest()
-+
-+
-+def cleanup_unused_assets(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def _find_request(simulation_state: Dict[str, Any], request_id: str) -> Dict[str, Any]:
 +    simulation_state = _safe_dict(simulation_state)
 +    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
 +    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    visual_assets = [_safe_dict(item) for item in _safe_list(visual_state.get("visual_assets"))]
-+
-+    live_asset_ids: Set[str] = set()
-+    live_paths: Set[str] = set()
-+    for asset in visual_assets:
-+        asset_id = _safe_str(asset.get("asset_id")).strip()
-+        path = _safe_str(asset.get("local_path") or asset.get("url")).strip()
-+        if asset_id:
-+            live_asset_ids.add(asset_id)
-+        if path:
-+            live_paths.add(path)
-+
-+    manifest = _read_manifest()
-+    by_hash = _safe_dict(manifest.get("by_hash"))
-+    by_asset_id = _safe_dict(manifest.get("by_asset_id"))
-+
-+    deleted_asset_ids: List[str] = []
-+    deleted_files: List[str] = []
-+
-+    # Remove stale asset-id pointers first.
-+    new_by_asset_id = {}
-+    live_hashes: Set[str] = set()
-+    for asset_id, item in by_asset_id.items():
++    requests = visual_state.get("image_requests")
++    if not isinstance(requests, list):
++        return {}
++    for item in requests:
 +        item = _safe_dict(item)
-+        if asset_id in live_asset_ids:
-+            new_by_asset_id[asset_id] = item
-+            asset_hash = _safe_str(item.get("hash")).strip()
-+            if asset_hash:
-+                live_hashes.add(asset_hash)
-+        else:
-+            deleted_asset_ids.append(asset_id)
++        if _safe_str(item.get("request_id")).strip() == _safe_str(request_id).strip():
++            return item
++    return {}
+ 
+ 
+ def run_one_queued_job(*, lease_seconds: int = 300) -> dict:
+-    """Claim the next queued visual job, run it, and mark complete/failed."""
++    """Claim the next queued visual job, run canonical processing, then settle queue state."""
+     job = claim_next_visual_job(lease_seconds=lease_seconds)
+     if not job:
+-        return {"ok": False, "error": "no_job_available"}
++        return {"ok": True, "processed": False, "reason": "no_job_available"}
+ 
+-    job_id = job.get("job_id", "")
+-    lease_token = job.get("lease_token", "")
+-    session_id = job.get("session_id", "")
++    job_id = _safe_str(job.get("job_id")).strip()
++    lease_token = _safe_str(job.get("lease_token")).strip()
++    session_id = _safe_str(job.get("session_id")).strip()
++    request_id = _safe_str(job.get("request_id")).strip()
+ 
+     if not job_id or not lease_token:
+         return {"ok": False, "error": "invalid_job_state"}
+ 
+     try:
+-        result = run_one_visual_job(session_id=session_id)
++        session = load_session(session_id)
++        simulation_state = _safe_dict(session.get("simulation_state"))
++        simulation_state = process_pending_image_requests(simulation_state, limit=1)
++        session["simulation_state"] = simulation_state
++        save_session(session_id, session)
+     except Exception as exc:
+-        release_visual_job(job_id=job_id, lease_token=lease_token, error=str(exc))
+-        return {"ok": False, "error": str(exc)}
++        release_visual_job(job_id=job_id, lease_token=lease_token, error=_safe_str(exc).strip()[:500])
++        return {"ok": False, "error": _safe_str(exc).strip()[:500], "processed": False}
+ 
+-    if result.get("ok"):
++    request_record = _find_request(simulation_state, request_id)
++    if not request_record:
++        release_visual_job(job_id=job_id, lease_token=lease_token, error="request_not_found_after_run")
++        return {
++            "ok": False,
++            "processed": False,
++            "error": "request_not_found_after_run",
++            "job_id": job_id,
++            "session_id": session_id,
++            "request_id": request_id,
++        }
 +
-+    # Remove orphaned content-hash files.
-+    new_by_hash = {}
-+    for content_hash, item in by_hash.items():
-+        item = _safe_dict(item)
-+        path = _safe_str(item.get("path")).strip()
-+        if content_hash in live_hashes:
-+            new_by_hash[content_hash] = item
-+            continue
-+        if path and os.path.exists(path):
-+            try:
-+                os.remove(path)
-+                deleted_files.append(path)
-+            except Exception:
-+                pass
++    request_status = _safe_str(request_record.get("status")).strip()
++    request_error = _safe_str(request_record.get("error")).strip()
 +
-+    manifest["by_hash"] = new_by_hash
-+    manifest["by_asset_id"] = new_by_asset_id
-+    _write_manifest(manifest)
-+
-+    # Also prune visual_assets array to only assets with existing local path mappings.
-+    kept_assets = []
-+    for asset in visual_assets:
-+        asset_id = _safe_str(asset.get("asset_id")).strip()
-+        if asset_id and asset_id in new_by_asset_id:
-+            kept_assets.append(asset)
-+
-+    visual_state["visual_assets"] = kept_assets
-+    presentation_state["visual_state"] = visual_state
-+    simulation_state["presentation_state"] = presentation_state
++    if request_status in {"complete", "failed", "blocked"}:
++        complete_visual_job(
++            job_id=job_id,
++            lease_token=lease_token,
++            error=request_error if request_status in {"failed", "blocked"} else "",
++        )
++    elif request_status == "pending":
++        # retryable/transient path: requeue the job
++        release_visual_job(job_id=job_id, lease_token=lease_token, error=request_error)
++    else:
++        release_visual_job(job_id=job_id, lease_token=lease_token, error=f"unexpected_request_status:{request_status}")
++        return {
++            "ok": False,
++            "processed": False,
++            "error": f"unexpected_request_status:{request_status}",
++            "job_id": job_id,
++            "session_id": session_id,
++            "request_id": request_id,
++        }
 +
 +    return {
-+        "simulation_state": simulation_state,
-+        "deleted_asset_ids": sorted(deleted_asset_ids),
-+        "deleted_files": sorted(deleted_files),
++        "ok": True,
++        "processed": True,
++        "job_id": job_id,
++        "session_id": session_id,
++        "request_id": request_id,
++        "request_status": request_status,
 +    }
-New file: src/tests/unit/rpg/test_phase1214_asset_store.py
-diff --git a/src/tests/unit/rpg/test_phase1214_asset_store.py b/src/tests/unit/rpg/test_phase1214_asset_store.py
+3) Add queue recovery helpers to the API surface
+File: src/app/rpg/api/rpg_presentation_routes.py
+
+Add imports near the queue imports:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 1111111..4444444 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from flask import jsonify, request
++from app.rpg.visual.job_queue import normalize_visual_queue
+ 
+ # existing imports...
+
+Add this route next to the other queue routes:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 4444444..5555555 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -900,6 +900,18 @@ def visual_queue_stats_route():
+     return jsonify({"ok": True, "stats": stats})
+ 
+ 
++@rpg_presentation_bp.route("/api/rpg/visual/queue/normalize", methods=["POST"])
++def normalize_visual_queue_route():
++    """Reclaim stale leases and dedupe active jobs into canonical form."""
++    result = normalize_visual_queue()
++    return jsonify(
++        {
++            "ok": True,
++            "total": result.get("total", 0),
++            "jobs": result.get("jobs", []),
++        }
++    )
++
++
+ @rpg_presentation_bp.route("/api/rpg/visual/queue/prune", methods=["POST"])
+ def prune_visual_queue_route():
+     """Prune completed/failed jobs from the queue."""
+4) Auto-enqueue on request creation
+
+Wherever you create portrait and scene image requests, add a queue enqueue after the request is appended and you know the session id.
+
+File: src/app/rpg/api/rpg_presentation_routes.py
+
+For portrait creation route, add this shape:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 5555555..6666666 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -720,6 +720,15 @@ def request_character_portrait_route():
+     simulation_state = append_image_request(simulation_state, image_request)
+     request_id = image_request.get("request_id", "")
+ 
++    session_id = str(data.get("session_id") or "").strip()
++    if session_id and request_id:
++        try:
++            from app.rpg.visual.job_queue import enqueue_visual_job
++            enqueue_visual_job(session_id=session_id, request_id=request_id)
++        except Exception:
++            # Queueing is best-effort; request remains inspectable in simulation state.
++            pass
++
+     # existing save/response logic...
+
+Do the same for scene illustration request creation:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 6666666..7777777 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -780,6 +780,15 @@ def request_scene_illustration_route():
+     simulation_state = append_image_request(simulation_state, image_request)
+     request_id = image_request.get("request_id", "")
+ 
++    session_id = str(data.get("session_id") or "").strip()
++    if session_id and request_id:
++        try:
++            from app.rpg.visual.job_queue import enqueue_visual_job
++            enqueue_visual_job(session_id=session_id, request_id=request_id)
++        except Exception:
++            # Queueing is best-effort; request remains inspectable in simulation state.
++            pass
++
+     # existing save/response logic...
+5) Add tests for stale lease reclaim, request-state-aware completion, and dedupe
+New file: src/tests/unit/rpg/test_phase12135_queue_hardening.py
+diff --git a/src/tests/unit/rpg/test_phase12135_queue_hardening.py b/src/tests/unit/rpg/test_phase12135_queue_hardening.py
 new file mode 100644
-index 0000000..9999999
+index 0000000..7777777
 --- /dev/null
-+++ b/src/tests/unit/rpg/test_phase1214_asset_store.py
-@@ -0,0 +1,74 @@
-+"""Phase 12.14 — Asset store dedupe and cleanup tests."""
-+import os
++++ b/src/tests/unit/rpg/test_phase12135_queue_hardening.py
+@@ -0,0 +1,214 @@
++"""Phase 12.13.5 — Queue hardening tests."""
++from __future__ import annotations
 +
-+from app.rpg.visual import asset_store
-+
-+
-+def test_save_asset_bytes_dedupes_identical_content(monkeypatch, tmp_path):
-+    monkeypatch.setattr(asset_store, "_ASSET_DIR", str(tmp_path))
-+    p1 = asset_store.save_asset_bytes("asset:1", b"same-bytes", "image/png")
-+    p2 = asset_store.save_asset_bytes("asset:2", b"same-bytes", "image/png")
-+    assert p1 == p2
-+
-+    manifest = asset_store.get_asset_manifest()
-+    assert len(manifest["by_hash"]) == 1
-+    assert len(manifest["by_asset_id"]) == 2
++from app.rpg.visual.job_queue import (
++    claim_next_visual_job,
++    complete_visual_job,
++    enqueue_visual_job,
++    list_visual_jobs,
++    normalize_visual_queue,
++    release_visual_job,
++)
++from app.rpg.visual.queue_runner import run_one_queued_job
 +
 +
-+def test_cleanup_unused_assets_removes_orphaned_file(monkeypatch, tmp_path):
-+    monkeypatch.setattr(asset_store, "_ASSET_DIR", str(tmp_path))
-+    path1 = asset_store.save_asset_bytes("asset:keep", b"keep-bytes", "image/png")
-+    path2 = asset_store.save_asset_bytes("asset:drop", b"drop-bytes", "image/png")
++def test_normalize_visual_queue_reclaims_stale_lease(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++    enqueue_visual_job(session_id="s1", request_id="r1")
++    claimed = claim_next_visual_job(lease_seconds=0)
++    assert claimed["status"] == "leased"
 +
-+    simulation_state = {
-+        "presentation_state": {
-+            "visual_state": {
-+                "visual_assets": [
-+                    {
-+                        "asset_id": "asset:keep",
-+                        "local_path": path1,
-+                        "url": path1,
++    out = normalize_visual_queue()
++    jobs = out["jobs"]
++    assert len(jobs) == 1
++    assert jobs[0]["status"] == "queued"
++    assert jobs[0]["lease_token"] == ""
++
++
++def test_enqueue_visual_job_dedupes_existing_active_job(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++    j1 = enqueue_visual_job(session_id="s1", request_id="r1")
++    j2 = enqueue_visual_job(session_id="s1", request_id="r1")
++    jobs = list_visual_jobs()
++    assert len(jobs) == 1
++    assert j1["request_id"] == j2["request_id"]
++
++
++def test_complete_visual_job_rejects_wrong_lease(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++    enqueue_visual_job(session_id="s1", request_id="r1")
++    claimed = claim_next_visual_job(lease_seconds=60)
++    bad = complete_visual_job(job_id=claimed["job_id"], lease_token="wrong-token")
++    assert bad == {}
++    jobs = list_visual_jobs()
++    assert jobs[0]["status"] == "leased"
++
++
++def test_release_visual_job_rejects_wrong_lease(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++    enqueue_visual_job(session_id="s1", request_id="r1")
++    claimed = claim_next_visual_job(lease_seconds=60)
++    bad = release_visual_job(job_id=claimed["job_id"], lease_token="wrong-token")
++    assert bad == {}
++    jobs = list_visual_jobs()
++    assert jobs[0]["status"] == "leased"
++
++
++def test_run_one_queued_job_completes_terminal_request(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++
++    session_store = {
++        "s1": {
++            "simulation_state": {
++                "presentation_state": {
++                    "visual_state": {
++                        "image_requests": [
++                            {
++                                "request_id": "r1",
++                                "status": "pending",
++                                "error": "",
++                            }
++                        ]
 +                    }
-+                ]
++                }
 +            }
 +        }
 +    }
 +
-+    result = asset_store.cleanup_unused_assets(simulation_state)
-+    assert "asset:drop" in result["deleted_asset_ids"]
-+    assert path2 in result["deleted_files"]
-+    assert os.path.exists(path1)
-+    assert not os.path.exists(path2)
-Optional but recommended glue patch — auto-enqueue on request creation
-
-If your current request-creation route already saves session state, this makes the queue usable immediately.
-
-File: src/app/rpg/api/rpg_presentation_routes.py
-
-In whichever route creates portrait/scene image requests, add:
-
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 6666666..aaaaaaa 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -720,6 +720,12 @@ def request_character_portrait_route():
-     # existing code that appends image request into simulation_state
-     created_request_id = image_request.get("request_id", "")
- 
-+    session_id = str(payload.get("session_id") or "").strip()
-+    if session_id and created_request_id:
-+        try:
-+            enqueue_visual_job(session_id=session_id, request_id=created_request_id)
-+        except Exception:
-+            pass
++    def _load_session(session_id):
++        return session_store[session_id]
 +
-     return jsonify(
-         {
-             "ok": True,
++    def _save_session(session_id, payload):
++        session_store[session_id] = payload
++
++    def _process_pending_image_requests(simulation_state, limit=1):
++        simulation_state["presentation_state"]["visual_state"]["image_requests"][0]["status"] = "complete"
++        return simulation_state
++
++    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
++    monkeypatch.setattr("app.rpg.visual.queue_runner.save_session", _save_session)
++    monkeypatch.setattr("app.rpg.visual.queue_runner.process_pending_image_requests", _process_pending_image_requests)
++
++    enqueue_visual_job(session_id="s1", request_id="r1")
++    result = run_one_queued_job()
++    assert result["ok"] is True
++    assert result["request_status"] == "complete"
++    jobs = list_visual_jobs()
++    assert jobs[0]["status"] == "complete"
++
++
++def test_run_one_queued_job_requeues_pending_request(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++
++    session_store = {
++        "s1": {
++            "simulation_state": {
++                "presentation_state": {
++                    "visual_state": {
++                        "image_requests": [
++                            {
++                                "request_id": "r1",
++                                "status": "pending",
++                                "error": "temporary",
++                            }
++                        ]
++                    }
++                }
++            }
++        }
++    }
++
++    def _load_session(session_id):
++        return session_store[session_id]
++
++    def _save_session(session_id, payload):
++        session_store[session_id] = payload
++
++    def _process_pending_image_requests(simulation_state, limit=1):
++        return simulation_state
++
++    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
++    monkeypatch.setattr("app.rpg.visual.queue_runner.save_session", _save_session)
++    monkeypatch.setattr("app.rpg.visual.queue_runner.process_pending_image_requests", _process_pending_image_requests)
++
++    enqueue_visual_job(session_id="s1", request_id="r1")
++    result = run_one_queued_job()
++    assert result["ok"] is True
++    assert result["request_status"] == "pending"
++    jobs = list_visual_jobs()
++    assert jobs[0]["status"] == "queued"
++
++
++def test_run_one_queued_job_releases_on_exception(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++
++    def _load_session(_session_id):
++        raise RuntimeError("boom")
++
++    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
++
++    enqueue_visual_job(session_id="s1", request_id="r1")
++    result = run_one_queued_job()
++    assert result["ok"] is False
++    jobs = list_visual_jobs()
++    assert jobs[0]["status"] == "queued"
++    assert jobs[0]["error"] == "boom"
++
++
++def test_run_one_queued_job_handles_missing_request_after_run(monkeypatch, tmp_path):
++    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++
++    session_store = {
++        "s1": {
++            "simulation_state": {
++                "presentation_state": {
++                    "visual_state": {
++                        "image_requests": []
++                    }
++                }
++            }
++        }
++    }
++
++    def _load_session(session_id):
++        return session_store[session_id]
++
++    def _save_session(session_id, payload):
++        session_store[session_id] = payload
++
++    def _process_pending_image_requests(simulation_state, limit=1):
++        return simulation_state
++
++    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
++    monkeypatch.setattr("app.rpg.visual.queue_runner.save_session", _save_session)
++    monkeypatch.setattr("app.rpg.visual.queue_runner.process_pending_image_requests", _process_pending_image_requests)
++
++    enqueue_visual_job(session_id="s1", request_id="r1")
++    result = run_one_queued_job()
++    assert result["ok"] is False
++    jobs = list_visual_jobs()
++    assert jobs[0]["status"] == "queued"
++    assert jobs[0]["error"] == "request_not_found_after_run"
+6) Optional hardening: count queue attempts separately from request attempts
 
-Do the same for scene illustration request creation.
+This is optional, but useful for ops/debugging because queue claim count and request provider-attempt count are different things.
 
-Implementation order
+No patch required unless you want it exposed in the UI.
 
-Apply in this order:
+7) What this gives you
 
-comfy_provider.py
-providers registry update
-Comfy provider tests
-job_queue.py
-queue_runner.py
-queue routes in rpg_presentation_routes.py
-asset_store.py dedupe/cleanup patch
-asset store tests
-optional auto-enqueue glue
-Expected result
+After this patch:
 
-After these patches:
-
-12.11 stays complete
-12.12 adds a real second provider with explicit seed passthrough and a uniform result contract
-12.13 adds inspectable, file-backed, lease-based job scheduling
-12.14 dedupes identical image bytes and provides safe cleanup of orphaned stored assets
-
-The most important architectural property is preserved throughout: images remain explicit presentation artifacts, and the queue/store stays bounded and inspectable rather than silently mutating simulation truth.
+stale leased jobs are reclaimed automatically
+duplicate active jobs are canonicalized away
+queue runner can survive crashes and requeue safely
+queue completion matches actual request terminal state
+request creation automatically enters the queue

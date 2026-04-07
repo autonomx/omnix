@@ -86,9 +86,14 @@ from app.rpg.visual.worker import process_pending_image_requests
 # Phase 12.12 — ComfyUI provider
 from app.rpg.visual.providers import get_image_provider
 
-# Phase 12.13 — Visual queue management
-from app.rpg.visual.job_queue import enqueue_visual_job, list_visual_jobs, prune_completed_visual_jobs
-from app.rpg.visual.queue_runner import get_visual_queue_stats, run_one_visual_job
+# Phase 12.13.5 — Visual queue management with hardening
+from app.rpg.visual.job_queue import (
+    enqueue_visual_job,
+    list_visual_jobs,
+    normalize_visual_queue,
+    prune_completed_visual_jobs,
+)
+from app.rpg.visual.queue_runner import run_one_queued_job
 
 # Phase 12.14 — Asset dedupe and cleanup
 from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
@@ -743,6 +748,7 @@ def presentation_world_inspector():
 def request_character_portrait():
     """Create/update a portrait generation request for a character."""
     data = request.get_json(silent=True) or {}
+    session_id = str(data.get("session_id") or "").strip()
     setup_payload = _safe_dict(data.get("setup_payload"))
     actor_id = _safe_str(data.get("actor_id")).strip()
     style = _safe_str(data.get("style")).strip()
@@ -853,6 +859,14 @@ def request_character_portrait():
         },
     )
 
+    # Phase 12.13.5 — Auto-enqueue on request creation
+    if session_id and request_id:
+        try:
+            enqueue_visual_job(session_id=session_id, request_id=request_id)
+        except Exception:
+            # Queueing is best-effort; request remains inspectable in simulation state.
+            pass
+
     return jsonify({
         "ok": True,
         "request_id": request_id,
@@ -959,10 +973,34 @@ def complete_character_portrait():
     })
 
 
+@rpg_presentation_bp.post("/api/rpg/visual/queue/normalize")
+def normalize_visual_queue_route():
+    """Reclaim stale leases and dedupe active jobs into canonical form."""
+    result = normalize_visual_queue()
+    return jsonify(
+        {
+            "ok": True,
+            "total": result.get("total", 0),
+            "jobs": result.get("jobs", []),
+        }
+    )
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/queue/run_one")
+def run_one_queued_job_route():
+    """Process one queued job with request-state awareness."""
+    payload = request.get_json(force=True, silent=True) or {}
+    lease_seconds = int(payload.get("lease_seconds") or 300)
+    result = run_one_queued_job(lease_seconds=lease_seconds)
+    code = 200 if result.get("ok") else 500
+    return jsonify(result), code
+
+
 @rpg_presentation_bp.post("/api/rpg/scene_illustration/request")
 def request_scene_illustration():
     """Create a scene illustration generation request."""
     data = request.get_json(silent=True) or {}
+    session_id = str(data.get("session_id") or "").strip()
     setup_payload = _safe_dict(data.get("setup_payload"))
     scene_id = _safe_str(data.get("scene_id")).strip()
     event_id = _safe_str(data.get("event_id")).strip()
@@ -1012,6 +1050,14 @@ def request_scene_illustration():
             "completed_at": "",
         },
     )
+
+    # Phase 12.13.5 — Auto-enqueue on request creation
+    if session_id and request_id:
+        try:
+            enqueue_visual_job(session_id=session_id, request_id=request_id)
+        except Exception:
+            # Queueing is best-effort; request remains inspectable in simulation state.
+            pass
 
     return jsonify({
         "ok": True,
