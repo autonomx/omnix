@@ -18,9 +18,9 @@
  *   - Animated dice rolls (slot-machine number cycling)
  *   - Memory panel showing recent player memory + world events
  *
- * API contract (existing backend):
- *   POST /api/rpg/games              → { session_id, opening, world, player }
- *   POST /api/rpg/games/:id/turn     → { narration, choices?, dice_roll?,
+ * API contract (canonical session backend):
+ *   POST /api/rpg/adventure/start    → { session_id, opening, world, player }
+ *   POST /api/rpg/session/turn       → { narration, choices?, dice_roll?,
  *                                        events?, fail_state?,
  *                                        npcs?, rolls?, map?,
  *                                        memory?, world_events? }
@@ -140,10 +140,10 @@
     function escapeHtml(str) {
         if (!str) return '';
         return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>')
+            .replace(/"/g, '"')
             .replace(/'/g, '&#039;');
     }
 
@@ -468,10 +468,13 @@
     async function saveVoiceAssignments() {
         if (!rpgState.sessionId) return;
         try {
-            await fetch('/api/rpg/games/' + encodeURIComponent(rpgState.sessionId) + '/voice-assignments', {
-                method: 'PUT',
+            await fetch('/api/rpg/session/update', {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(rpgState.voice_assignments),
+                body: JSON.stringify({
+                    session_id: rpgState.sessionId,
+                    voice_assignments: rpgState.voice_assignments || {},
+                }),
             });
         } catch (e) {}
     }
@@ -523,18 +526,25 @@
         var loadContainer = document.createElement('div');
         loadContainer.style.maxHeight = '200px';
         loadContainer.style.overflowY = 'auto';
-        fetch('/api/rpg/games').then(r => r.json()).then(data => {
-            if (data.games && data.games.length) {
-                data.games.forEach(game => {
-                    if (!game.id) return; // Skip invalid games
+        fetch('/api/rpg/session/list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        }).then(r => r.json()).then(data => {
+            var sessions = Array.isArray(data.sessions) ? data.sessions : [];
+            if (!sessions.length) {
+                loadContainer.innerHTML = '<p>No saved games</p>';
+            } else {
+                sessions.forEach(function(session) {
+                    var manifest = session.manifest || {};
                     var item = document.createElement('div');
                     item.className = 'game-item';
-                    item.innerHTML = '<span>' + (game.title || 'Untitled') + ' (' + (game.updated_at || 'Unknown') + ')</span>';
+                    item.innerHTML = '<span>' + (manifest.title || 'Untitled') + ' (' + (manifest.updated_at || 'Unknown') + ')</span>';
                     var loadBtn = document.createElement('button');
                     loadBtn.className = 'btn btn-secondary';
                     loadBtn.textContent = 'Load';
                     loadBtn.addEventListener('click', function() {
-                        loadGame(game.id);
+                        loadGame(manifest.id);
                         panel.classList.remove('active');
                     });
                     var deleteBtn = document.createElement('button');
@@ -542,15 +552,13 @@
                     deleteBtn.textContent = 'Delete';
                     deleteBtn.addEventListener('click', function() {
                         if (confirm('Delete this game?')) {
-                            deleteGame(game.id);
+                            deleteGame(manifest.id);
                         }
                     });
                     item.appendChild(loadBtn);
                     item.appendChild(deleteBtn);
                     loadContainer.appendChild(item);
                 });
-            } else {
-                loadContainer.innerHTML = '<p>No saved games</p>';
             }
         }).catch(() => {
             loadContainer.innerHTML = '<p>Failed to load games</p>';
@@ -566,7 +574,7 @@
             exportBtn.className = 'btn btn-secondary';
             exportBtn.textContent = 'Export Game';
             exportBtn.addEventListener('click', function() {
-                apiGetGame(rpgState.sessionId).then(game => {
+                apiGetGame(rpgState.sessionId).then(function(game) {
                     var blob = new Blob([JSON.stringify(game, null, 2)], {type: 'application/json'});
                     var url = URL.createObjectURL(blob);
                     var a = document.createElement('a');
@@ -586,7 +594,7 @@
             input.placeholder = 'Enter game title';
             input.style.width = '100%';
             input.style.marginBottom = '5px';
-            apiGetGame(rpgState.sessionId).then(game => {
+            apiGetGame(rpgState.sessionId).then(function(game) {
                 input.value = game.title || '';
             }).catch(() => {});
             var saveTitleBtn = document.createElement('button');
@@ -594,10 +602,10 @@
             saveTitleBtn.textContent = 'Save Title';
             saveTitleBtn.addEventListener('click', async function() {
                 try {
-                    await fetch('/api/rpg/games/' + encodeURIComponent(rpgState.sessionId), {
-                        method: 'PUT',
+                    await fetch('/api/rpg/session/update', {
+                        method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title: input.value }),
+                        body: JSON.stringify({ session_id: rpgState.sessionId, title: input.value }),
                     });
                     alert('Title saved');
                 } catch (e) {
@@ -643,7 +651,11 @@
             return;
         }
         try {
-            await fetch('/api/rpg/games/' + encodeURIComponent(gameId), { method: 'DELETE' });
+            await fetch('/api/rpg/session/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: gameId }),
+            });
             // Refresh the list
             showSettingsPanel();
         } catch (e) {
@@ -663,7 +675,7 @@
 
     async function apiCreateGame(payload) {
         var body = payload || {};
-        var res = await fetch('/api/rpg/games', {
+        var res = await fetch('/api/rpg/adventure/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -673,78 +685,29 @@
     }
 
     /**
-     * Create a game via the SSE streaming endpoint.  Progress events
-     * drive the loading bar in real-time.  Falls back to the standard
-     * apiCreateGame if the streaming endpoint is unavailable.
+     * Create a game via the canonical adventure start endpoint.
      */
     async function apiCreateGameStream(payload) {
-        var body = payload || {};
-        try {
-            var res = await fetch('/api/rpg/games/stream', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            if (!res.ok) throw new Error('Stream endpoint returned ' + res.status);
-
-            var reader = res.body.getReader();
-            var decoder = new TextDecoder();
-            var result = null;
-            var buffer = '';
-
-            while (true) {
-                var chunk = await reader.read();
-                if (chunk.done) break;
-                buffer += decoder.decode(chunk.value, { stream: true });
-
-                var lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i].trim();
-                    if (!line.startsWith('data:')) continue;
-                    var jsonStr = line.substring(5).trim();
-                    if (!jsonStr) continue;
-                    try {
-                        var data = JSON.parse(jsonStr);
-                    } catch (e) { continue; }
-
-                    if (data.error) throw new Error(data.error);
-
-                    if (data.stage && data.progress) {
-                        // Stop the fake fallback timer — real events are arriving
-                        if (loadingInterval) {
-                            clearInterval(loadingInterval);
-                            loadingInterval = null;
-                        }
-                        updateProgress(data.stage, data.progress);
-                    }
-
-                    if (data.result) {
-                        result = data.result;
-                    }
-                }
-            }
-
-            if (!result) throw new Error('Stream ended without result');
-            return result;
-        } catch (err) {
-            // Fallback to standard endpoint
-            return apiCreateGame(body);
-        }
+        // Canonical creator start is already synchronous JSON.
+        return apiCreateGame(payload || {});
     }
 
     async function apiGetGame(sessionId) {
-        var res = await fetch('/api/rpg/games/' + encodeURIComponent(sessionId));
+        var res = await fetch('/api/rpg/session/get', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId }),
+        });
         if (!res.ok) throw new Error('Failed to get game');
-        return res.json();
+        var data = await res.json();
+        return data.game || data;
     }
 
     async function apiSendTurn(sessionId, input) {
-        var res = await fetch('/api/rpg/games/' + encodeURIComponent(sessionId) + '/turn', {
+        var res = await fetch('/api/rpg/session/turn', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input: input }),
+            body: JSON.stringify({ session_id: sessionId, input: input }),
         });
         if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
         return res.json();
@@ -757,11 +720,11 @@
      */
     async function apiSendTurnStream(sessionId, input, onToken) {
         var res = await fetch(
-            '/api/rpg/games/' + encodeURIComponent(sessionId) + '/turn/stream',
+            '/api/rpg/session/turn/stream',
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ input: input }),
+                body: JSON.stringify({ session_id: sessionId, input: input }),
             }
         );
         if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
@@ -1409,7 +1372,11 @@
         if (rpgState.player) {
             renderPlayerPanel(rpgState.player);
         } else if (rpgState.sessionId) {
-            fetch('/api/rpg/games/' + encodeURIComponent(rpgState.sessionId) + '/player')
+            fetch('/api/rpg/session/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: rpgState.sessionId }),
+            })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     if (data.player) {

@@ -35,7 +35,8 @@ from ..creator.regeneration import (
 from ..creator.schema import AdventureSetup
 from ..creator.validation import validate_adventure_setup_payload
 from ..creator.world_player_actions import apply_player_action
-from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_start_result
+from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_session_to_frontend
+from ..session.runtime import build_session_from_start_result, save_runtime_session
 
 # ---------------------------------------------------------------------------
 # Response version constants — bump when the contract changes
@@ -242,12 +243,19 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _safe_dict(value: Any) -> dict[str, Any]:
+    """Return *value* if it is already a dict, otherwise ``{}``."""
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
 def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
     """Create a brand-new adventure using the structured creator pipeline.
 
     Instantiates a minimal ``GameLoop`` (with explicit null dependencies), runs
-    ``start_new_adventure()``, then adapts the result into the session shape
-    expected by the frontend.
+    ``start_new_adventure()``, then persists the canonical session and adapts
+    the result into the session shape expected by the frontend.
     """
     from ..core.game_loop import GameLoop
 
@@ -275,9 +283,15 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
     if not result.get("ok"):
         return {"success": False, "error": "Adventure start failed", "details": result}
 
-    adapted = adapt_start_result(result)
+    session = build_session_from_start_result(data, result)
+    session = save_runtime_session(session)
+
+    adapted = adapt_session_to_frontend(session)
     adapted["preview_response_version"] = ADVENTURE_PREVIEW_RESPONSE_VERSION
     adapted["start_response_version"] = ADVENTURE_START_RESPONSE_VERSION
+    adapted["session_manifest"] = _safe_dict(session.get("manifest"))
+    adapted["persisted"] = True
+
     return adapted
 
 

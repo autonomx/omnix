@@ -19,7 +19,6 @@ def create_app() -> Flask:
     from app.llamacpp import llamacpp_bp
     from app.llm import llm_bp
     from app.podcast import podcast_bp
-    from app.rpg.routes import rpg_bp
     from app.rpg.creator_routes import creator_bp
     from app.rpg.api.rpg_debug_routes import rpg_debug_bp
     from app.rpg.api.rpg_player_routes import rpg_player_bp
@@ -27,6 +26,7 @@ def create_app() -> Flask:
     from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
     from app.rpg.api.rpg_package_routes import rpg_package_bp
     from app.rpg.api.rpg_inspection_routes import rpg_inspection_bp
+    from app.rpg.api.rpg_session_routes import rpg_session_bp
     from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
     from app.services import services_bp
     from app.voice_studio import voice_studio_bp
@@ -59,7 +59,6 @@ def create_app() -> Flask:
     app.register_blueprint(llm_bp)
     app.register_blueprint(llamacpp_bp)
     app.register_blueprint(voice_studio_bp)
-    app.register_blueprint(rpg_bp)
     app.register_blueprint(creator_bp)
     app.register_blueprint(rpg_debug_bp)
     app.register_blueprint(rpg_player_bp)
@@ -67,6 +66,7 @@ def create_app() -> Flask:
     app.register_blueprint(rpg_encounter_bp)
     app.register_blueprint(rpg_package_bp)
     app.register_blueprint(rpg_inspection_bp)
+    app.register_blueprint(rpg_session_bp)
     app.register_blueprint(rpg_presentation_bp)
 
     return app

@@ -49,6 +49,7 @@ from app.rpg.pipeline import create_new_game, delete_game, execute_turn, list_ga
 from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
 from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
 from app.rpg.api.rpg_game_routes import rpg_game_bp
+from app.rpg.api.rpg_session_routes import rpg_session_bp
 
 # ============== CONFIG ==============
 HOST = "0.0.0.0"
@@ -475,6 +476,9 @@ app.include_router(rpg_presentation_bp)
 
 # Register RPG game routes
 app.include_router(rpg_game_bp)
+
+# Register RPG session routes (canonical turn execution)
+app.include_router(rpg_session_bp)
 
 
 @app.get("/health")

@@ -42,14 +42,19 @@ def _normalize_session(value: Any) -> Dict[str, Any]:
     return {
         "manifest": {
             "id": _safe_str(manifest.get("id")).strip(),
+            "schema_version": int(manifest.get("schema_version") or 2),
             "title": _safe_str(manifest.get("title")).strip(),
             "status": _first_non_empty(manifest.get("status"), "active"),
             "created_at": _safe_str(manifest.get("created_at")).strip(),
             "updated_at": _safe_str(manifest.get("updated_at")).strip(),
             "source_pack_id": _safe_str(manifest.get("source_pack_id")).strip(),
             "source_template_id": _safe_str(manifest.get("source_template_id")).strip(),
+            "archived": bool(manifest.get("archived")),
         },
         "state": state,
+        "setup_payload": _safe_dict(data.get("setup_payload")),
+        "simulation_state": _safe_dict(data.get("simulation_state")),
+        "runtime_state": _safe_dict(data.get("runtime_state")),
     }
 
 

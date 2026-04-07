@@ -1,21 +1,17 @@
-"""Adapter that converts the creator/game-loop output into the frontend session shape.
+"""Frontend payload adapter for canonical RPG sessions.
 
-The new ``AdventureSetup`` → ``GameLoop.start_new_adventure()`` path returns
-``setup`` / ``generated`` / ``canon_summary`` dicts.  The frontend, however,
-expects a payload compatible with the legacy ``POST /api/rpg/games`` response
-(``opening``, ``world``, ``player``, ``npcs``, ``memory``, ``worldEvents``).
-
-This thin conversion layer bridges the gap so the UI has a stable contract
-regardless of which creation path produced the data.
+The creator/start flow now persists a canonical session immediately.
+The frontend still expects a stable bootstrap payload:
+``session_id``, ``opening``, ``world``, ``player``, ``npcs``, ``memory``,
+``worldEvents``.
 """
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Response version constants — bump when the response contract changes
+# Response version constants — bump when the contract changes
 # ---------------------------------------------------------------------------
 
 ADVENTURE_START_RESPONSE_VERSION = 1
@@ -40,95 +36,39 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
-def adapt_start_result(result: dict[str, Any]) -> dict[str, Any]:
-    """Convert ``GameLoop.start_new_adventure()`` output to frontend shape.
+def adapt_session_to_frontend(session: dict[str, Any]) -> dict[str, Any]:
+    """Convert canonical persisted session to frontend shape.
 
     Parameters
     ----------
-    result:
-        The dict returned by ``GameLoop.start_new_adventure()``.
-        Expected keys: ``ok``, ``setup``, ``generated``, ``canon_summary``.
+    session:
+        The dict returned by the canonical session store.
+        Expected keys: ``manifest``, ``runtime_state``, ``simulation_state``.
 
     Returns
     -------
     dict
-        Frontend-friendly payload with ``response_version``, ``success``,
-        ``session_id``, ``opening``, ``world``, ``player``, ``npcs``,
-        ``locations``, ``factions``, ``memory``, ``worldEvents``, and
-        ``creator`` metadata.
+        Frontend-friendly payload derived from canonical persisted session state.
     """
-    generated = _safe_dict(result.get("generated"))
-    setup = _safe_dict(result.get("setup"))
-    canon_summary = _safe_dict(result.get("canon_summary"))
-
-    seed_npcs = _safe_list(generated.get("seed_npcs"))
-    seed_locations = _safe_list(generated.get("seed_locations"))
-    seed_factions = _safe_list(generated.get("seed_factions"))
-
-    # Build the opening narration from the generated opening situation.
-    opening_situation = _safe_dict(generated.get("opening_situation"))
-    opening_parts: list[str] = []
-    if opening_situation.get("summary"):
-        opening_parts.append(opening_situation["summary"])
-    if opening_situation.get("location"):
-        opening_parts.append(f"You find yourself in {opening_situation['location']}.")
-    if opening_situation.get("present_actors"):
-        actors = ", ".join(opening_situation["present_actors"])
-        opening_parts.append(f"Present: {actors}.")
-    opening = " ".join(opening_parts) if opening_parts else "Your adventure begins…"
-
-    # World payload
-    world_frame = _safe_dict(generated.get("world_frame"))
-    world = {
-        "title": setup.get("title") or world_frame.get("title") or "",
-        "genre": setup.get("genre") or "",
-        "setting": setup.get("setting") or "",
-        "premise": setup.get("premise") or "",
-        "summary": canon_summary.get("summary") or "",
-    }
-
-    # Player stub — the creator pipeline does not define a player yet, so we
-    # return a minimal default.  Downstream systems can enrich this.
-    setup_metadata = _safe_dict(setup.get("metadata"))
-    player = {
-        "name": setup_metadata.get("player_name", "Player"),
-    }
-
-    #NPC list → lightweight cards for the frontend
-    npcs = [
-        {
-            "id": npc.get("npc_id", ""),
-            "name": npc.get("name", "Unknown"),
-            "role": npc.get("role", ""),
-            "description": npc.get("description", ""),
-            "faction_id": npc.get("faction_id"),
-            "location_id": npc.get("location_id"),
-        }
-        for npc in seed_npcs
-        if isinstance(npc, dict)
-    ]
-
-    # Memory / world events — pull from canon summary if available
-    memory = _safe_list(canon_summary.get("facts"))
-    world_events = _safe_list(generated.get("initial_threads"))
-
-    session_id = setup.get("setup_id") or str(uuid.uuid4())
+    session = _safe_dict(session)
+    manifest = _safe_dict(session.get("manifest"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    simulation_state = _safe_dict(session.get("simulation_state"))
 
     response = {
         "response_version": ADVENTURE_START_RESPONSE_VERSION,
         "success": True,
-        "session_id": session_id,
-        "opening": opening,
-        "world": world,
-        "player": player,
-        "npcs": npcs,
-        "locations": seed_locations,
-        "factions": seed_factions,
-        "memory": memory,
-        "worldEvents": world_events,
-        "creator": {
-            "setup_id": setup.get("setup_id"),
-            "template_name": setup_metadata.get("template_name"),
-        },
+        "session_id": _safe_dict(session.get("manifest")).get("id"),
+        "title": _safe_dict(session.get("manifest")).get("title"),
+        "opening": runtime_state.get("opening") or "",
+        "world": _safe_dict(runtime_state.get("world")),
+        "player": _safe_dict(simulation_state.get("player_state")),
+        "npcs": _safe_list(runtime_state.get("npcs")),
+        "memory": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("short_term")),
+        "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
+        "world_events": _safe_list(simulation_state.get("events"))[-8:],
+        "scene": _safe_dict(runtime_state.get("current_scene")),
+        "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
+        "creator": {"setup_id": manifest.get("id")},
     }
     return response
