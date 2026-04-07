@@ -30,8 +30,9 @@ def _session_path(session_id: str) -> Path:
 
 
 def save_session_to_disk(session: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize and persist session to disk-backed JSON."""
+    """Normalize, migrate, and persist session to disk-backed JSON."""
     session = _normalize_session(session)
+    session = migrate_session_payload(session)
     manifest = _safe_dict(session.get("manifest"))
     payload = {
         "save_version": _SAVE_VERSION,
@@ -65,3 +66,15 @@ def list_sessions_from_disk() -> List[Dict[str, Any]]:
         except Exception:
             continue
     return sessions
+
+
+def archive_session_on_disk(session_id: str) -> Dict[str, Any]:
+    """Archive a session on disk by setting archived=True in manifest and persisting."""
+    session = load_session_from_disk(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+    manifest = _safe_dict(session.get("manifest"))
+    manifest["archived"] = True
+    session["manifest"] = manifest
+    save_session_to_disk(session)
+    return {"ok": True, "session": session}

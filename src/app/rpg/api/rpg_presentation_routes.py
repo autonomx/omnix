@@ -122,8 +122,8 @@ from app.rpg.memory.memory_state import (
     ensure_memory_state,
 )
 
-# Phase 14.3 — Memory → Dialogue Injection
-from app.rpg.memory.dialogue_memory_context import (
+# Phase 14.3 — Memory → Dialogue Injection (canonical)
+from app.rpg.memory.dialogue_context import (
     build_dialogue_memory_context,
     build_llm_memory_prompt_block,
 )
@@ -137,12 +137,18 @@ from app.rpg.session.durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
+from app.rpg.session.migrations import migrate_session_payload
 
 # Phase 15.1 — Session ↔ Package Unification
-from app.rpg.packaging.session_package_bridge import (
-    package_to_session,
-    session_to_package,
-)
+
+# Phase 12.15 — Visual inspector
+from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
+
+# Phase 14.4 — Memory decay (canonical decay engine)
+from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+
+# Phase 15.1 — Session/package bridge (canonical)
+from app.rpg.session.package_bridge import package_to_session, session_to_package
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
@@ -1621,9 +1627,10 @@ def list_rpg_sessions():
     global _RPG_SESSION_ROOT_STATE
     _RPG_SESSION_ROOT_STATE = ensure_session_registry(_RPG_SESSION_ROOT_STATE)
     disk_sessions = list_sessions_from_disk()
+    migrated_sessions = [migrate_session_payload(s) for s in disk_sessions] if disk_sessions else []
     return jsonify({
         "ok": True,
-        "sessions": disk_sessions or list_sessions(_RPG_SESSION_ROOT_STATE),
+        "sessions": migrated_sessions or list_sessions(_RPG_SESSION_ROOT_STATE),
     })
 
 
@@ -1633,7 +1640,7 @@ def load_rpg_session():
     global _RPG_SESSION_ROOT_STATE
     data = request.get_json(silent=True) or {}
     session_id = _safe_str(data.get("session_id")).strip()
-    session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
+    session = migrate_session_payload(load_session_from_disk(session_id)) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
     if not session:
         return jsonify({"ok": False, "error": "session_not_found"}), 404
     return jsonify({
@@ -1750,23 +1757,18 @@ def get_rpg_memory_dialogue_context():
 # ---------------------------------------------------------------------------
 
 @rpg_presentation_bp.post("/api/rpg/memory/decay")
-def decay_rpg_memory():
-    """Apply deterministic decay/reinforcement pass to memory state."""
+def memory_decay():
+    """Apply canonical decay pass to memory state."""
     data = request.get_json(silent=True) or {}
     setup_payload = _safe_dict(data.get("setup_payload"))
-    current_tick = data.get("current_tick") if isinstance(data.get("current_tick"), int) else 0
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
 
-    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
-    simulation_state = ensure_player_party(simulation_state)
-    simulation_state = ensure_personality_state(simulation_state)
-    simulation_state = ensure_memory_state(simulation_state)
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    simulation_state = ensure_world_memory_state(simulation_state)
-    simulation_state = apply_memory_decay(simulation_state, current_tick=current_tick)
+    simulation_state = decay_memory_state(simulation_state)
+    setup_payload["simulation_state"] = simulation_state
 
     return jsonify({
         "ok": True,
-        "memory_state": _safe_dict(simulation_state.get("memory_state")),
+        "setup_payload": setup_payload,
     })
 
 
@@ -1876,3 +1878,57 @@ def cleanup_visual_assets_route():
             "deleted_files": result["deleted_files"],
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 12.15 — Visual Inspector / Operational Visibility
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/visual/inspector")
+def visual_inspector():
+    """Return an inspector payload for visual requests/assets/queue state."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+
+    try:
+        queue_jobs = list_visual_jobs()
+    except Exception:
+        queue_jobs = []
+
+    try:
+        asset_manifest = get_asset_manifest()
+    except Exception:
+        asset_manifest = {"assets": {}}
+
+    payload = build_visual_inspector_payload(
+        simulation_state,
+        queue_jobs=queue_jobs,
+        asset_manifest=asset_manifest,
+    )
+    return jsonify({"ok": True, "visual_inspector": payload})
+
+
+# ---------------------------------------------------------------------------
+# Phase 14.4 — Memory Decay / Reinforcement (canonical)
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/memory/reinforce")
+def reinforce_memory():
+    """Reinforce actor memory with a specific text entry."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+    actor_id = _safe_str(data.get("actor_id")).strip()
+    text = _safe_str(data.get("text")).strip()
+    amount = float(data.get("amount") or 0.2)
+
+    simulation_state = reinforce_actor_memory(simulation_state, actor_id=actor_id, text=text, amount=amount)
+    setup_payload["simulation_state"] = simulation_state
+
+    return jsonify({
+        "ok": True,
+        "setup_payload": setup_payload,
+        "actor_id": actor_id,
+        "text": text,
+    })

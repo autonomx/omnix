@@ -1,391 +1,24 @@
-1) Harden the queue model
-File: src/app/rpg/visual/job_queue.py
+Phase 12.15 — Visual inspector / operational visibility
 
-Replace the file with this version:
+Goal:
 
-diff --git a/src/app/rpg/visual/job_queue.py b/src/app/rpg/visual/job_queue.py
-index 1111111..2222222 100644
---- a/src/app/rpg/visual/job_queue.py
-+++ b/src/app/rpg/visual/job_queue.py
-@@ -1,215 +1,309 @@
- """Phase 12.13 — File-backed visual job queue."""
- from __future__ import annotations
- 
- import json
- import os
- import uuid
- from datetime import datetime, timedelta, timezone
- from typing import Any, Dict, List
- 
- 
- _QUEUE_DIR_ENV = "RPG_VISUAL_QUEUE_DIR"
- _DEFAULT_QUEUE_DIR = "data/rpg/visual_queue"
- _QUEUE_FILE = "queue.json"
- 
- 
- def _utc_now() -> datetime:
-     return datetime.now(timezone.utc)
- 
- 
- def _utc_now_iso() -> str:
-     return _utc_now().isoformat()
- 
- 
- def _safe_str(value: Any) -> str:
-     if value is None:
-         return ""
-     if isinstance(value, str):
-         return value
-     return str(value)
- 
- 
- def _safe_dict(value: Any) -> Dict[str, Any]:
-     return value if isinstance(value, dict) else {}
- 
- 
- def _safe_list(value: Any) -> List[Any]:
-     return value if isinstance(value, list) else []
- 
- 
- def _queue_dir() -> str:
-     return os.getenv(_QUEUE_DIR_ENV, _DEFAULT_QUEUE_DIR).strip() or _DEFAULT_QUEUE_DIR
- 
- 
- def _queue_path() -> str:
-     return os.path.join(_queue_dir(), _QUEUE_FILE)
- 
- 
- def _ensure_queue_dir() -> None:
-     os.makedirs(_queue_dir(), exist_ok=True)
- 
- 
- def _read_queue() -> Dict[str, Any]:
-     _ensure_queue_dir()
-     path = _queue_path()
-     if not os.path.exists(path):
-         return {"jobs": []}
-     try:
-         with open(path, "r", encoding="utf-8") as f:
-             data = json.load(f)
-     except Exception:
-         return {"jobs": []}
-     jobs = _safe_list(data.get("jobs"))
-     return {"jobs": [_normalize_job(job) for job in jobs]}
- 
- 
- def _write_queue(data: Dict[str, Any]) -> None:
-     _ensure_queue_dir()
-     path = _queue_path()
-     tmp = f"{path}.tmp"
-     with open(tmp, "w", encoding="utf-8") as f:
-         json.dump(data, f, indent=2, sort_keys=True)
-     os.replace(tmp, path)
- 
- 
-+def _parse_iso(value: str) -> datetime | None:
-+    value = _safe_str(value).strip()
-+    if not value:
-+        return None
-+    try:
-+        return datetime.fromisoformat(value)
-+    except Exception:
-+        return None
+expose queue jobs
+expose asset manifest
+expose request state
+expose operational actions: normalize queue, run one, prune, cleanup
+keep everything inspectable and explicit
+12.15.A — Add visual inspector builder
+New file: src/app/rpg/presentation/visual_inspector.py
+diff --git a/src/app/rpg/presentation/visual_inspector.py b/src/app/rpg/presentation/visual_inspector.py
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/app/rpg/presentation/visual_inspector.py
+@@ -0,0 +1,154 @@
++"""Phase 12.15 — Visual inspector builder."""
++from __future__ import annotations
 +
-+
-+def _lease_is_valid(job: Dict[str, Any], *, now: datetime | None = None) -> bool:
-+    now = now or _utc_now()
-+    if _safe_str(job.get("status")).strip() != "leased":
-+        return False
-+    lease_expires_at = _parse_iso(_safe_str(job.get("lease_expires_at")).strip())
-+    if lease_expires_at is None:
-+        return False
-+    return lease_expires_at > now
-+
-+
- def _normalize_job(value: Any) -> Dict[str, Any]:
-     data = _safe_dict(value)
-     return {
-         "job_id": _safe_str(data.get("job_id")).strip() or f"job:{uuid.uuid4().hex}",
-         "request_id": _safe_str(data.get("request_id")).strip(),
-         "session_id": _safe_str(data.get("session_id")).strip(),
-         "status": _safe_str(data.get("status")).strip() or "queued",
-         "lease_token": _safe_str(data.get("lease_token")).strip(),
-         "lease_expires_at": _safe_str(data.get("lease_expires_at")).strip(),
-         "created_at": _safe_str(data.get("created_at")).strip() or _utc_now_iso(),
-         "updated_at": _safe_str(data.get("updated_at")).strip() or _utc_now_iso(),
-         "completed_at": _safe_str(data.get("completed_at")).strip(),
-         "error": _safe_str(data.get("error")).strip(),
-+        "attempts": int(data.get("attempts") or 0),
-     }
- 
- 
-+def _job_sort_key(job: Dict[str, Any]) -> tuple[str, str]:
-+    return (_safe_str(job.get("created_at")).strip(), _safe_str(job.get("job_id")).strip())
-+
-+
-+def _dedupe_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-+    """Keep at most one active job per (session_id, request_id).
-+
-+    Prefer leased(valid) > queued > leased(stale) > complete/failed.
-+    """
-+    now = _utc_now()
-+    grouped: Dict[tuple[str, str], List[Dict[str, Any]]] = {}
-+    for job in jobs:
-+        job = _normalize_job(job)
-+        key = (_safe_str(job.get("session_id")).strip(), _safe_str(job.get("request_id")).strip())
-+        grouped.setdefault(key, []).append(job)
-+
-+    out: List[Dict[str, Any]] = []
-+    for _key, bucket in grouped.items():
-+        bucket = [_normalize_job(item) for item in bucket]
-+
-+        def _rank(item: Dict[str, Any]) -> tuple[int, str, str]:
-+            status = _safe_str(item.get("status")).strip()
-+            if status == "leased" and _lease_is_valid(item, now=now):
-+                return (0, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
-+            if status == "queued":
-+                return (1, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
-+            if status == "leased":
-+                return (2, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
-+            return (3, _safe_str(item.get("created_at")).strip(), _safe_str(item.get("job_id")).strip())
-+
-+        bucket.sort(key=_rank)
-+        winner = bucket[0]
-+        out.append(winner)
-+
-+        # Preserve completed/failed history only when it is not shadowing an active job.
-+        winner_status = _safe_str(winner.get("status")).strip()
-+        if winner_status in {"complete", "failed"}:
-+            for extra in bucket[1:]:
-+                if _safe_str(extra.get("status")).strip() in {"complete", "failed"}:
-+                    out.append(extra)
-+
-+    out.sort(key=_job_sort_key)
-+    return out
-+
-+
-+def normalize_visual_queue() -> Dict[str, Any]:
-+    """Rewrite queue into canonical deduped form and reclaim stale leases."""
-+    state = _read_queue()
-+    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-+    now = _utc_now()
-+
-+    repaired: List[Dict[str, Any]] = []
-+    for job in jobs:
-+        job = _normalize_job(job)
-+        if _safe_str(job.get("status")).strip() == "leased" and not _lease_is_valid(job, now=now):
-+            job["status"] = "queued"
-+            job["lease_token"] = ""
-+            job["lease_expires_at"] = ""
-+            job["updated_at"] = now.isoformat()
-+        repaired.append(job)
-+
-+    repaired = _dedupe_jobs(repaired)
-+    state["jobs"] = repaired
-+    _write_queue(state)
-+    return {"jobs": repaired, "total": len(repaired)}
-+
-+
- def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
--    state = _read_queue()
--    jobs = _safe_list(state.get("jobs"))
-+    state = _read_queue()
-+    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-     session_id = _safe_str(session_id).strip()
-     request_id = _safe_str(request_id).strip()
-+    now = _utc_now()
-+    now_iso = now.isoformat()
-+
-+    # Reclaim stale leased jobs first.
-+    for idx, existing in enumerate(jobs):
-+        if (
-+            _safe_str(existing.get("session_id")).strip() == session_id
-+            and _safe_str(existing.get("request_id")).strip() == request_id
-+            and _safe_str(existing.get("status")).strip() == "leased"
-+            and not _lease_is_valid(existing, now=now)
-+        ):
-+            existing["status"] = "queued"
-+            existing["lease_token"] = ""
-+            existing["lease_expires_at"] = ""
-+            existing["updated_at"] = now_iso
-+            jobs[idx] = existing
- 
-     for existing in jobs:
--        existing = _normalize_job(existing)
--        if existing["session_id"] == session_id and existing["request_id"] == request_id and existing["status"] in {"queued", "leased"}:
-+        if (
-+            _safe_str(existing.get("session_id")).strip() == session_id
-+            and _safe_str(existing.get("request_id")).strip() == request_id
-+            and _safe_str(existing.get("status")).strip() in {"queued", "leased"}
-+        ):
-+            state["jobs"] = _dedupe_jobs(jobs)
-+            _write_queue(state)
-             return existing
- 
-     job = _normalize_job(
-         {
-             "job_id": f"job:{uuid.uuid4().hex}",
-             "session_id": session_id,
-             "request_id": request_id,
-             "status": "queued",
--            "created_at": _utc_now_iso(),
--            "updated_at": _utc_now_iso(),
-+            "created_at": now_iso,
-+            "updated_at": now_iso,
-+            "attempts": 0,
-         }
-     )
-     jobs.append(job)
--    jobs.sort(key=lambda item: (item.get("created_at") or "", item.get("job_id") or ""))
--    state["jobs"] = jobs
-+    state["jobs"] = _dedupe_jobs(jobs)
-     _write_queue(state)
-     return job
- 
- 
- def claim_next_visual_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
--    state = _read_queue()
--    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
--    now = _utc_now()
--    now_iso = now.isoformat()
--
--    selected = None
--    for idx, job in enumerate(jobs):
--        lease_expires_at = _safe_str(job.get("lease_expires_at")).strip()
--        lease_valid = False
--        if lease_expires_at:
--            try:
--                lease_valid = datetime.fromisoformat(lease_expires_at) > now
--            except Exception:
--                lease_valid = False
--
--        if job["status"] == "queued" or (job["status"] == "leased" and not lease_valid):
--            selected = idx
--            break
-+    normalize_visual_queue()
-+    state = _read_queue()
-+    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-+    now = _utc_now()
-+    now_iso = now.isoformat()
-+
-+    selected = None
-+    for idx, job in enumerate(jobs):
-+        if _safe_str(job.get("status")).strip() == "queued":
-+            selected = idx
-+            break
- 
-     if selected is None:
-         return {}
- 
-     job = jobs[selected]
-     lease_token = f"lease:{uuid.uuid4().hex}"
-     job["status"] = "leased"
-     job["lease_token"] = lease_token
-     job["lease_expires_at"] = (now + timedelta(seconds=max(30, int(lease_seconds)))).isoformat()
-     job["updated_at"] = now_iso
-+    job["attempts"] = int(job.get("attempts") or 0) + 1
-     jobs[selected] = job
-     state["jobs"] = jobs
-     _write_queue(state)
-     return job
- 
- 
- def complete_visual_job(*, job_id: str, lease_token: str, error: str = "") -> Dict[str, Any]:
-     state = _read_queue()
-     jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-     now_iso = _utc_now_iso()
- 
-     for idx, job in enumerate(jobs):
-         if job["job_id"] != _safe_str(job_id).strip():
-             continue
-         if job["lease_token"] != _safe_str(lease_token).strip():
-             return {}
-         job["status"] = "failed" if _safe_str(error).strip() else "complete"
-         job["error"] = _safe_str(error).strip()
-         job["lease_token"] = ""
-         job["lease_expires_at"] = ""
-         job["updated_at"] = now_iso
-         job["completed_at"] = now_iso
-         jobs[idx] = job
--        state["jobs"] = jobs
-+        state["jobs"] = _dedupe_jobs(jobs)
-         _write_queue(state)
-         return job
-     return {}
- 
- 
- def release_visual_job(*, job_id: str, lease_token: str, error: str = "") -> Dict[str, Any]:
-     state = _read_queue()
-     jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-     now_iso = _utc_now_iso()
-     for idx, job in enumerate(jobs):
-         if job["job_id"] != _safe_str(job_id).strip():
-             continue
-         if job["lease_token"] != _safe_str(lease_token).strip():
-             return {}
-         job["status"] = "queued"
-         job["error"] = _safe_str(error).strip()
-         job["lease_token"] = ""
-         job["lease_expires_at"] = ""
-         job["updated_at"] = now_iso
-         jobs[idx] = job
--        state["jobs"] = jobs
-+        state["jobs"] = _dedupe_jobs(jobs)
-         _write_queue(state)
-         return job
-     return {}
- 
- 
- def list_visual_jobs() -> List[Dict[str, Any]]:
--    state = _read_queue()
-+    normalize_visual_queue()
-+    state = _read_queue()
-     return [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
- 
- 
- def prune_completed_visual_jobs(*, keep_last: int = 200) -> Dict[str, Any]:
--    state = _read_queue()
--    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-+    normalize_visual_queue()
-+    state = _read_queue()
-+    jobs = [_normalize_job(job) for job in _safe_list(state.get("jobs"))]
-     active = [job for job in jobs if job["status"] not in {"complete", "failed"}]
-     finished = [job for job in jobs if job["status"] in {"complete", "failed"}]
-     finished.sort(key=lambda item: (item.get("completed_at") or "", item.get("job_id") or ""))
-     finished = finished[-max(0, int(keep_last)):]
-     new_jobs = active + finished
-     new_jobs.sort(key=lambda item: (item.get("created_at") or "", item.get("job_id") or ""))
-     state["jobs"] = new_jobs
-     _write_queue(state)
-     return {"kept": len(new_jobs), "active": len(active), "finished_kept": len(finished)}
-2) Make queue runner canonical and request-state-aware
-File: src/app/rpg/visual/queue_runner.py
-
-Replace the file with:
-
-diff --git a/src/app/rpg/visual/queue_runner.py b/src/app/rpg/visual/queue_runner.py
-index 1111111..3333333 100644
---- a/src/app/rpg/visual/queue_runner.py
-+++ b/src/app/rpg/visual/queue_runner.py
-@@ -1,27 +1,99 @@
--"""Phase 12.13 — Queue runner for visual jobs."""
-+"""Phase 12.13.5 — Queue runner for visual jobs."""
- from __future__ import annotations
- 
--import os
--
--from .job_queue import claim_next_visual_job, complete_visual_job, release_visual_job
--from .worker import run_one_visual_job
-+from typing import Any, Dict
-+
-+from app.rpg.session.durable_store import load_session, save_session
-+from app.rpg.visual.worker import process_pending_image_requests
-+
-+from .job_queue import (
-+    claim_next_visual_job,
-+    complete_visual_job,
-+    release_visual_job,
-+)
++from typing import Any, Dict, List
 +
 +
 +def _safe_str(value: Any) -> str:
@@ -400,397 +33,849 @@ index 1111111..3333333 100644
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _find_request(simulation_state: Dict[str, Any], request_id: str) -> Dict[str, Any]:
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def build_visual_inspector_payload(
++    simulation_state: Dict[str, Any],
++    *,
++    queue_jobs: List[Dict[str, Any]] | None = None,
++    asset_manifest: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
 +    simulation_state = _safe_dict(simulation_state)
 +    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
 +    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+    requests = visual_state.get("image_requests")
-+    if not isinstance(requests, list):
-+        return {}
-+    for item in requests:
-+        item = _safe_dict(item)
-+        if _safe_str(item.get("request_id")).strip() == _safe_str(request_id).strip():
-+            return item
-+    return {}
- 
- 
- def run_one_queued_job(*, lease_seconds: int = 300) -> dict:
--    """Claim the next queued visual job, run it, and mark complete/failed."""
-+    """Claim the next queued visual job, run canonical processing, then settle queue state."""
-     job = claim_next_visual_job(lease_seconds=lease_seconds)
-     if not job:
--        return {"ok": False, "error": "no_job_available"}
-+        return {"ok": True, "processed": False, "reason": "no_job_available"}
- 
--    job_id = job.get("job_id", "")
--    lease_token = job.get("lease_token", "")
--    session_id = job.get("session_id", "")
-+    job_id = _safe_str(job.get("job_id")).strip()
-+    lease_token = _safe_str(job.get("lease_token")).strip()
-+    session_id = _safe_str(job.get("session_id")).strip()
-+    request_id = _safe_str(job.get("request_id")).strip()
- 
-     if not job_id or not lease_token:
-         return {"ok": False, "error": "invalid_job_state"}
- 
-     try:
--        result = run_one_visual_job(session_id=session_id)
-+        session = load_session(session_id)
-+        simulation_state = _safe_dict(session.get("simulation_state"))
-+        simulation_state = process_pending_image_requests(simulation_state, limit=1)
-+        session["simulation_state"] = simulation_state
-+        save_session(session_id, session)
-     except Exception as exc:
--        release_visual_job(job_id=job_id, lease_token=lease_token, error=str(exc))
--        return {"ok": False, "error": str(exc)}
-+        release_visual_job(job_id=job_id, lease_token=lease_token, error=_safe_str(exc).strip()[:500])
-+        return {"ok": False, "error": _safe_str(exc).strip()[:500], "processed": False}
- 
--    if result.get("ok"):
-+    request_record = _find_request(simulation_state, request_id)
-+    if not request_record:
-+        release_visual_job(job_id=job_id, lease_token=lease_token, error="request_not_found_after_run")
-+        return {
-+            "ok": False,
-+            "processed": False,
-+            "error": "request_not_found_after_run",
-+            "job_id": job_id,
-+            "session_id": session_id,
-+            "request_id": request_id,
-+        }
 +
-+    request_status = _safe_str(request_record.get("status")).strip()
-+    request_error = _safe_str(request_record.get("error")).strip()
++    image_requests = [_safe_dict(item) for item in _safe_list(visual_state.get("image_requests"))]
++    visual_assets = [_safe_dict(item) for item in _safe_list(visual_state.get("visual_assets"))]
 +
-+    if request_status in {"complete", "failed", "blocked"}:
-+        complete_visual_job(
-+            job_id=job_id,
-+            lease_token=lease_token,
-+            error=request_error if request_status in {"failed", "blocked"} else "",
++    request_rows = []
++    for item in image_requests:
++        request_rows.append(
++            {
++                "request_id": _safe_str(item.get("request_id")).strip(),
++                "kind": _safe_str(item.get("kind")).strip(),
++                "target_id": _safe_str(item.get("target_id")).strip(),
++                "status": _safe_str(item.get("status")).strip(),
++                "attempts": int(item.get("attempts") or 0),
++                "max_attempts": int(item.get("max_attempts") or 0),
++                "error": _safe_str(item.get("error")).strip(),
++                "updated_at": _safe_str(item.get("updated_at")).strip(),
++                "completed_at": _safe_str(item.get("completed_at")).strip(),
++            }
 +        )
-+    elif request_status == "pending":
-+        # retryable/transient path: requeue the job
-+        release_visual_job(job_id=job_id, lease_token=lease_token, error=request_error)
-+    else:
-+        release_visual_job(job_id=job_id, lease_token=lease_token, error=f"unexpected_request_status:{request_status}")
-+        return {
-+            "ok": False,
-+            "processed": False,
-+            "error": f"unexpected_request_status:{request_status}",
-+            "job_id": job_id,
-+            "session_id": session_id,
-+            "request_id": request_id,
-+        }
++
++    asset_rows = []
++    for item in visual_assets:
++        asset_rows.append(
++            {
++                "asset_id": _safe_str(item.get("asset_id")).strip(),
++                "kind": _safe_str(item.get("kind")).strip(),
++                "target_id": _safe_str(item.get("target_id")).strip(),
++                "status": _safe_str(item.get("status")).strip(),
++                "model": _safe_str(item.get("model")).strip(),
++                "style": _safe_str(item.get("style")).strip(),
++                "url": _safe_str(item.get("url")).strip(),
++                "local_path": _safe_str(item.get("local_path")).strip(),
++                "created_from_request_id": _safe_str(item.get("created_from_request_id")).strip(),
++            }
++        )
++
++    queue_rows = []
++    for item in _safe_list(queue_jobs):
++        item = _safe_dict(item)
++        queue_rows.append(
++            {
++                "job_id": _safe_str(item.get("job_id")).strip(),
++                "session_id": _safe_str(item.get("session_id")).strip(),
++                "request_id": _safe_str(item.get("request_id")).strip(),
++                "status": _safe_str(item.get("status")).strip(),
++                "attempts": int(item.get("attempts") or 0),
++                "lease_token": _safe_str(item.get("lease_token")).strip(),
++                "lease_expires_at": _safe_str(item.get("lease_expires_at")).strip(),
++                "updated_at": _safe_str(item.get("updated_at")).strip(),
++                "completed_at": _safe_str(item.get("completed_at")).strip(),
++                "error": _safe_str(item.get("error")).strip(),
++            }
++        )
++
++    manifest_assets = _safe_dict(_safe_dict(asset_manifest).get("assets"))
++    manifest_rows = []
++    for asset_id in sorted(manifest_assets.keys()):
++        item = _safe_dict(manifest_assets.get(asset_id))
++        manifest_rows.append(
++            {
++                "asset_id": asset_id,
++                "hash": _safe_str(item.get("hash")).strip(),
++                "filename": _safe_str(item.get("filename")).strip(),
++                "mime_type": _safe_str(item.get("mime_type")).strip(),
++                "size": int(item.get("size") or 0),
++                "kind": _safe_str(item.get("kind")).strip(),
++                "target_id": _safe_str(item.get("target_id")).strip(),
++            }
++        )
 +
 +    return {
-+        "ok": True,
-+        "processed": True,
-+        "job_id": job_id,
-+        "session_id": session_id,
-+        "request_id": request_id,
-+        "request_status": request_status,
++        "request_count": len(request_rows),
++        "asset_count": len(asset_rows),
++        "queue_job_count": len(queue_rows),
++        "manifest_asset_count": len(manifest_rows),
++        "requests": request_rows,
++        "assets": asset_rows,
++        "queue_jobs": queue_rows,
++        "asset_manifest": manifest_rows,
++        "actions": {
++            "queue_normalize_route": "/api/rpg/visual/queue/normalize",
++            "queue_run_one_route": "/api/rpg/visual/queue/run_one",
++            "queue_prune_route": "/api/rpg/visual/queue/prune",
++            "asset_cleanup_route": "/api/rpg/visual/assets/cleanup",
++        },
 +    }
-3) Add queue recovery helpers to the API surface
+12.15.B — Add visual inspector route
 File: src/app/rpg/api/rpg_presentation_routes.py
 
-Add imports near the queue imports:
+Add imports near other presentation imports:
 
 diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 1111111..4444444 100644
+index 8011545..9111545 100644
 --- a/src/app/rpg/api/rpg_presentation_routes.py
 +++ b/src/app/rpg/api/rpg_presentation_routes.py
 @@ -1,6 +1,7 @@
  from __future__ import annotations
  
  from flask import jsonify, request
-+from app.rpg.visual.job_queue import normalize_visual_queue
- 
- # existing imports...
++from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
 
-Add this route next to the other queue routes:
+Add route:
 
 diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 4444444..5555555 100644
+index 9111545..a111545 100644
 --- a/src/app/rpg/api/rpg_presentation_routes.py
 +++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -900,6 +900,18 @@ def visual_queue_stats_route():
-     return jsonify({"ok": True, "stats": stats})
+@@ -700,6 +700,28 @@ def presentation_world_inspector():
+     return jsonify(payload)
  
  
-+@rpg_presentation_bp.route("/api/rpg/visual/queue/normalize", methods=["POST"])
-+def normalize_visual_queue_route():
-+    """Reclaim stale leases and dedupe active jobs into canonical form."""
-+    result = normalize_visual_queue()
++@rpg_presentation_bp.route("/api/rpg/visual/inspector", methods=["POST"])
++def visual_inspector():
++    """Return an inspector payload for visual requests/assets/queue state."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
++
++    try:
++        queue_jobs = list_visual_jobs()
++    except Exception:
++        queue_jobs = []
++
++    try:
++        asset_manifest = get_asset_manifest()
++    except Exception:
++        asset_manifest = {"assets": {}}
++
++    payload = build_visual_inspector_payload(
++        simulation_state,
++        queue_jobs=queue_jobs,
++        asset_manifest=asset_manifest,
++    )
++    return jsonify({"ok": True, "visual_inspector": payload})
++
++
+ @rpg_presentation_bp.post("/api/rpg/character_portrait/request")
+ def request_character_portrait():
+12.15.C — Add test
+New file: src/tests/unit/rpg/test_phase1215_visual_inspector.py
+diff --git a/src/tests/unit/rpg/test_phase1215_visual_inspector.py b/src/tests/unit/rpg/test_phase1215_visual_inspector.py
+new file mode 100644
+index 0000000..1215000
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase1215_visual_inspector.py
+@@ -0,0 +1,56 @@
++from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
++
++
++def test_build_visual_inspector_payload_surfaces_requests_assets_queue_and_manifest():
++    simulation_state = {
++        "presentation_state": {
++            "visual_state": {
++                "image_requests": [
++                    {
++                        "request_id": "req:1",
++                        "kind": "character_portrait",
++                        "target_id": "npc:a",
++                        "status": "pending",
++                        "attempts": 1,
++                        "max_attempts": 3,
++                    }
++                ],
++                "visual_assets": [
++                    {
++                        "asset_id": "asset:1",
++                        "kind": "character_portrait",
++                        "target_id": "npc:a",
++                        "status": "complete",
++                        "url": "/tmp/a.png",
++                    }
++                ],
++            }
++        }
++    }
++    queue_jobs = [{"job_id": "job:1", "session_id": "s1", "request_id": "req:1", "status": "queued"}]
++    asset_manifest = {
++        "assets": {
++            "asset:1": {
++                "hash": "abc",
++                "filename": "abc.png",
++                "mime_type": "image/png",
++                "size": 42,
++            }
++        }
++    }
++
++    payload = build_visual_inspector_payload(
++        simulation_state,
++        queue_jobs=queue_jobs,
++        asset_manifest=asset_manifest,
++    )
++
++    assert payload["request_count"] == 1
++    assert payload["asset_count"] == 1
++    assert payload["queue_job_count"] == 1
++    assert payload["manifest_asset_count"] == 1
+Phase 14.3 — Memory → dialogue injection hardening
+
+Goal:
+
+finalize actor memory context
+finalize world rumor context
+assemble LLM memory prompt block
+wire to dialogue response
+expose GM-visible debug state
+14.3.A — Add dialogue memory builder
+New file: src/app/rpg/memory/dialogue_context.py
+diff --git a/src/app/rpg/memory/dialogue_context.py b/src/app/rpg/memory/dialogue_context.py
+new file mode 100644
+index 0000000..1430000
+--- /dev/null
++++ b/src/app/rpg/memory/dialogue_context.py
+@@ -0,0 +1,194 @@
++"""Phase 14.3 — Dialogue memory context builder."""
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++
++def _safe_str(value: Any) -> str:
++    if value is None:
++        return ""
++    if isinstance(value, str):
++        return value
++    return str(value)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _score_memory(item: Dict[str, Any]) -> tuple[float, str]:
++    item = _safe_dict(item)
++    strength = float(item.get("strength") or 0.0)
++    updated_at = _safe_str(item.get("updated_at")).strip()
++    return (-strength, updated_at)
++
++
++def build_actor_memory_context(simulation_state: Dict[str, Any], actor_id: str, *, limit: int = 5) -> List[Dict[str, Any]]:
++    simulation_state = _safe_dict(simulation_state)
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++    actor_memory = _safe_dict(_safe_dict(memory_state.get("actor_memory")).get(actor_id))
++    entries = [_safe_dict(item) for item in _safe_list(actor_memory.get("entries"))]
++    entries.sort(key=_score_memory)
++    return entries[: max(0, int(limit))]
++
++
++def build_world_rumor_context(simulation_state: Dict[str, Any], *, limit: int = 5) -> List[Dict[str, Any]]:
++    simulation_state = _safe_dict(simulation_state)
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++    world_memory = _safe_dict(memory_state.get("world_memory"))
++    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
++    rumors.sort(key=_score_memory)
++    return rumors[: max(0, int(limit))]
++
++
++def build_dialogue_memory_context(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
++    actor_context = build_actor_memory_context(simulation_state, actor_id, limit=5)
++    rumor_context = build_world_rumor_context(simulation_state, limit=5)
++    return {
++        "actor_id": _safe_str(actor_id).strip(),
++        "actor_memory": actor_context,
++        "world_rumors": rumor_context,
++    }
++
++
++def build_llm_memory_prompt_block(dialogue_memory_context: Dict[str, Any]) -> str:
++    dialogue_memory_context = _safe_dict(dialogue_memory_context)
++    actor_memory = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("actor_memory"))]
++    world_rumors = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("world_rumors"))]
++
++    lines: List[str] = []
++    lines.append("[MEMORY CONTEXT]")
++    if actor_memory:
++        lines.append("Actor memories:")
++        for item in actor_memory:
++            text = _safe_str(item.get("text")).strip()
++            if text:
++                lines.append(f"- {text}")
++    if world_rumors:
++        lines.append("World rumors:")
++        for item in world_rumors:
++            text = _safe_str(item.get("text")).strip()
++            if text:
++                lines.append(f"- {text}")
++    if len(lines) == 1:
++        lines.append("- none")
++    return "\n".join(lines)
+14.3.B — Wire dialogue route
+File: src/app/rpg/api/rpg_presentation_routes.py
+
+Add imports:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index a111545..b111545 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1,6 +1,10 @@
+ from __future__ import annotations
+ 
+ from flask import jsonify, request
++from app.rpg.memory.dialogue_context import (
++    build_dialogue_memory_context,
++    build_llm_memory_prompt_block,
++)
+
+Inside your dialogue route, after you have simulation_state and actor/speaker identity, add:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index b111545..c111545 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -560,6 +560,18 @@ def presentation_dialogue():
+     actor_id = _safe_str(data.get("actor_id") or data.get("speaker")).strip()
+ 
++    dialogue_memory_context = build_dialogue_memory_context(
++        simulation_state,
++        actor_id=actor_id,
++    )
++    llm_memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
++
+     payload = {
+         "ok": True,
++        "dialogue_memory_context": dialogue_memory_context,
++        "llm_memory_prompt_block": llm_memory_prompt_block,
++        "gm_memory_visibility": {
++            "actor_id": actor_id,
++            "actor_memory_count": len(dialogue_memory_context.get("actor_memory", [])),
++            "world_rumor_count": len(dialogue_memory_context.get("world_rumors", [])),
++        },
+         # existing response payload...
+     }
+14.3.C — Add tests
+New file: src/tests/unit/rpg/test_phase143_dialogue_context.py
+diff --git a/src/tests/unit/rpg/test_phase143_dialogue_context.py b/src/tests/unit/rpg/test_phase143_dialogue_context.py
+new file mode 100644
+index 0000000..1431000
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase143_dialogue_context.py
+@@ -0,0 +1,47 @@
++from app.rpg.memory.dialogue_context import (
++    build_dialogue_memory_context,
++    build_llm_memory_prompt_block,
++)
++
++
++def test_build_dialogue_memory_context_and_prompt_block():
++    simulation_state = {
++        "memory_state": {
++            "actor_memory": {
++                "npc:a": {
++                    "entries": [
++                        {"text": "The player spared me.", "strength": 0.9},
++                        {"text": "I distrust the guard captain.", "strength": 0.6},
++                    ]
++                }
++            },
++            "world_memory": {
++                "rumors": [
++                    {"text": "A relic was seen near the old bridge.", "strength": 0.8}
++                ]
++            },
++        }
++    }
++
++    context = build_dialogue_memory_context(simulation_state, "npc:a")
++    prompt = build_llm_memory_prompt_block(context)
++
++    assert len(context["actor_memory"]) == 2
++    assert len(context["world_rumors"]) == 1
++    assert "The player spared me." in prompt
++    assert "A relic was seen near the old bridge." in prompt
+Phase 14.4 — Memory decay / reinforcement
+
+Goal:
+
+deterministic decay
+deterministic reinforcement
+rumor cooling
+decay route
+inspectable before/after state
+14.4.A — Add decay engine
+New file: src/app/rpg/memory/decay.py
+diff --git a/src/app/rpg/memory/decay.py b/src/app/rpg/memory/decay.py
+new file mode 100644
+index 0000000..1440000
+--- /dev/null
++++ b/src/app/rpg/memory/decay.py
+@@ -0,0 +1,173 @@
++"""Phase 14.4 — Deterministic memory decay / reinforcement."""
++from __future__ import annotations
++
++from typing import Any, Dict, List
++
++
++def _safe_str(value: Any) -> str:
++    if value is None:
++        return ""
++    if isinstance(value, str):
++        return value
++    return str(value)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _clamp(value: float, lo: float, hi: float) -> float:
++    return max(lo, min(hi, value))
++
++
++def decay_memory_state(simulation_state: Dict[str, Any], *, decay_step: float = 0.05) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++
++    actor_memory = _safe_dict(memory_state.get("actor_memory"))
++    for actor_id, actor_bucket in list(actor_memory.items()):
++        actor_bucket = _safe_dict(actor_bucket)
++        entries = [_safe_dict(item) for item in _safe_list(actor_bucket.get("entries"))]
++        new_entries = []
++        for item in entries:
++            strength = _clamp(float(item.get("strength") or 0.0) - decay_step, 0.0, 1.0)
++            item["strength"] = strength
++            if strength > 0.0:
++                new_entries.append(item)
++        actor_bucket["entries"] = new_entries
++        actor_memory[actor_id] = actor_bucket
++
++    world_memory = _safe_dict(memory_state.get("world_memory"))
++    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
++    new_rumors = []
++    for item in rumors:
++        strength = _clamp(float(item.get("strength") or 0.0) - decay_step, 0.0, 1.0)
++        reach = max(0, int(item.get("reach") or 0) - 1)
++        item["strength"] = strength
++        item["reach"] = reach
++        if strength > 0.0 or reach > 0:
++            new_rumors.append(item)
++    world_memory["rumors"] = new_rumors
++
++    memory_state["actor_memory"] = actor_memory
++    memory_state["world_memory"] = world_memory
++    simulation_state["memory_state"] = memory_state
++    return simulation_state
++
++
++def reinforce_actor_memory(
++    simulation_state: Dict[str, Any],
++    *,
++    actor_id: str,
++    text: str,
++    amount: float = 0.2,
++) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++    actor_memory = _safe_dict(memory_state.get("actor_memory"))
++    actor_bucket = _safe_dict(actor_memory.get(actor_id))
++    entries = [_safe_dict(item) for item in _safe_list(actor_bucket.get("entries"))]
++
++    normalized_text = _safe_str(text).strip()
++    found = False
++    for item in entries:
++        if _safe_str(item.get("text")).strip() == normalized_text:
++            item["strength"] = _clamp(float(item.get("strength") or 0.0) + amount, 0.0, 1.0)
++            found = True
++            break
++    if not found and normalized_text:
++        entries.append({"text": normalized_text, "strength": _clamp(amount, 0.0, 1.0)})
++
++    entries.sort(key=lambda item: (-float(item.get("strength") or 0.0), _safe_str(item.get("text")).strip()))
++    actor_bucket["entries"] = entries[:50]
++    actor_memory[actor_id] = actor_bucket
++    memory_state["actor_memory"] = actor_memory
++    simulation_state["memory_state"] = memory_state
++    return simulation_state
+14.4.B — Add memory decay route
+File: src/app/rpg/api/rpg_presentation_routes.py
+
+Add import:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index c111545..d111545 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from flask import jsonify, request
++from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+
+Add routes:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index d111545..e111545 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -620,6 +620,41 @@ def presentation_dialogue():
+     return jsonify(payload)
+ 
+ 
++@rpg_presentation_bp.route("/api/rpg/memory/decay", methods=["POST"])
++def memory_decay_route():
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
++    before = _safe_dict(simulation_state.get("memory_state"))
++    simulation_state = decay_memory_state(simulation_state)
++    after = _safe_dict(simulation_state.get("memory_state"))
++    setup_payload["simulation_state"] = simulation_state
 +    return jsonify(
 +        {
 +            "ok": True,
-+            "total": result.get("total", 0),
-+            "jobs": result.get("jobs", []),
++            "setup_payload": setup_payload,
++            "memory_before": before,
++            "memory_after": after,
 +        }
 +    )
 +
 +
- @rpg_presentation_bp.route("/api/rpg/visual/queue/prune", methods=["POST"])
- def prune_visual_queue_route():
-     """Prune completed/failed jobs from the queue."""
-4) Auto-enqueue on request creation
-
-Wherever you create portrait and scene image requests, add a queue enqueue after the request is appended and you know the session id.
-
-File: src/app/rpg/api/rpg_presentation_routes.py
-
-For portrait creation route, add this shape:
-
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 5555555..6666666 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -720,6 +720,15 @@ def request_character_portrait_route():
-     simulation_state = append_image_request(simulation_state, image_request)
-     request_id = image_request.get("request_id", "")
- 
-+    session_id = str(data.get("session_id") or "").strip()
-+    if session_id and request_id:
-+        try:
-+            from app.rpg.visual.job_queue import enqueue_visual_job
-+            enqueue_visual_job(session_id=session_id, request_id=request_id)
-+        except Exception:
-+            # Queueing is best-effort; request remains inspectable in simulation state.
-+            pass
++@rpg_presentation_bp.route("/api/rpg/memory/reinforce", methods=["POST"])
++def memory_reinforce_route():
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
++    actor_id = _safe_str(data.get("actor_id")).strip()
++    text = _safe_str(data.get("text")).strip()
++    simulation_state = reinforce_actor_memory(simulation_state, actor_id=actor_id, text=text)
++    setup_payload["simulation_state"] = simulation_state
++    return jsonify(
++        {
++            "ok": True,
++            "setup_payload": setup_payload,
++            "actor_id": actor_id,
++            "text": text,
++        }
++    )
 +
-     # existing save/response logic...
-
-Do the same for scene illustration request creation:
-
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 6666666..7777777 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -780,6 +780,15 @@ def request_scene_illustration_route():
-     simulation_state = append_image_request(simulation_state, image_request)
-     request_id = image_request.get("request_id", "")
- 
-+    session_id = str(data.get("session_id") or "").strip()
-+    if session_id and request_id:
-+        try:
-+            from app.rpg.visual.job_queue import enqueue_visual_job
-+            enqueue_visual_job(session_id=session_id, request_id=request_id)
-+        except Exception:
-+            # Queueing is best-effort; request remains inspectable in simulation state.
-+            pass
 +
-     # existing save/response logic...
-5) Add tests for stale lease reclaim, request-state-aware completion, and dedupe
-New file: src/tests/unit/rpg/test_phase12135_queue_hardening.py
-diff --git a/src/tests/unit/rpg/test_phase12135_queue_hardening.py b/src/tests/unit/rpg/test_phase12135_queue_hardening.py
+ @rpg_presentation_bp.post("/api/rpg/character_portrait/request")
+ def request_character_portrait():
+14.4.C — Add tests
+New file: src/tests/unit/rpg/test_phase144_memory_decay.py
+diff --git a/src/tests/unit/rpg/test_phase144_memory_decay.py b/src/tests/unit/rpg/test_phase144_memory_decay.py
 new file mode 100644
-index 0000000..7777777
+index 0000000..1441000
 --- /dev/null
-+++ b/src/tests/unit/rpg/test_phase12135_queue_hardening.py
-@@ -0,0 +1,214 @@
-+"""Phase 12.13.5 — Queue hardening tests."""
++++ b/src/tests/unit/rpg/test_phase144_memory_decay.py
+@@ -0,0 +1,44 @@
++from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
++
++
++def test_decay_memory_state_reduces_strength_and_rumor_reach():
++    simulation_state = {
++        "memory_state": {
++            "actor_memory": {"npc:a": {"entries": [{"text": "A", "strength": 0.5}]}},
++            "world_memory": {"rumors": [{"text": "R", "strength": 0.5, "reach": 2}]},
++        }
++    }
++    out = decay_memory_state(simulation_state, decay_step=0.1)
++    actor_entry = out["memory_state"]["actor_memory"]["npc:a"]["entries"][0]
++    rumor = out["memory_state"]["world_memory"]["rumors"][0]
++    assert actor_entry["strength"] == 0.4
++    assert rumor["strength"] == 0.4
++    assert rumor["reach"] == 1
++
++
++def test_reinforce_actor_memory_dedupes_and_caps():
++    simulation_state = {
++        "memory_state": {
++            "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.6}]}}
++        }
++    }
++    out = reinforce_actor_memory(
++        simulation_state,
++        actor_id="npc:a",
++        text="Known fact",
++        amount=0.3,
++    )
++    entries = out["memory_state"]["actor_memory"]["npc:a"]["entries"]
++    assert len(entries) == 1
++    assert entries[0]["strength"] == 0.9
+Phase 15.0 — Durable persistence hardening
+
+Goal:
+
+durable save/load/list polish
+real migration layer
+archive durability
+tests for visual + memory state
+15.0.A — Add migration layer
+New file: src/app/rpg/session/migrations.py
+diff --git a/src/app/rpg/session/migrations.py b/src/app/rpg/session/migrations.py
+new file mode 100644
+index 0000000..1500000
+--- /dev/null
++++ b/src/app/rpg/session/migrations.py
+@@ -0,0 +1,88 @@
++"""Phase 15.0 — Durable session migrations."""
 +from __future__ import annotations
 +
-+from app.rpg.visual.job_queue import (
-+    claim_next_visual_job,
-+    complete_visual_job,
-+    enqueue_visual_job,
-+    list_visual_jobs,
-+    normalize_visual_queue,
-+    release_visual_job,
-+)
-+from app.rpg.visual.queue_runner import run_one_queued_job
++from typing import Any, Dict
 +
 +
-+def test_normalize_visual_queue_reclaims_stale_lease(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    claimed = claim_next_visual_job(lease_seconds=0)
-+    assert claimed["status"] == "leased"
-+
-+    out = normalize_visual_queue()
-+    jobs = out["jobs"]
-+    assert len(jobs) == 1
-+    assert jobs[0]["status"] == "queued"
-+    assert jobs[0]["lease_token"] == ""
++CURRENT_SESSION_SCHEMA_VERSION = 2
 +
 +
-+def test_enqueue_visual_job_dedupes_existing_active_job(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+    j1 = enqueue_visual_job(session_id="s1", request_id="r1")
-+    j2 = enqueue_visual_job(session_id="s1", request_id="r1")
-+    jobs = list_visual_jobs()
-+    assert len(jobs) == 1
-+    assert j1["request_id"] == j2["request_id"]
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
 +
 +
-+def test_complete_visual_job_rejects_wrong_lease(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    claimed = claim_next_visual_job(lease_seconds=60)
-+    bad = complete_visual_job(job_id=claimed["job_id"], lease_token="wrong-token")
-+    assert bad == {}
-+    jobs = list_visual_jobs()
-+    assert jobs[0]["status"] == "leased"
++def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
++    payload = _safe_dict(payload)
++    manifest = _safe_dict(payload.get("manifest"))
++    version = int(manifest.get("schema_version") or 1)
++
++    if version < 2:
++        simulation_state = _safe_dict(payload.get("simulation_state"))
++        simulation_state.setdefault("presentation_state", {})
++        simulation_state.setdefault("memory_state", {})
++        payload["simulation_state"] = simulation_state
++        manifest["schema_version"] = 2
++        payload["manifest"] = manifest
++
++    return payload
+15.0.B — Wire migration into durable store
+File: src/app/rpg/session/durable_store.py
+
+Add import:
+
+diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
+index 1111111..1500111 100644
+--- a/src/app/rpg/session/durable_store.py
++++ b/src/app/rpg/session/durable_store.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++from app.rpg.session.migrations import migrate_session_payload
+
+Apply migration on load:
+
+diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
+index 1500111..1500222 100644
+--- a/src/app/rpg/session/durable_store.py
++++ b/src/app/rpg/session/durable_store.py
+@@ -80,6 +80,7 @@ def load_session_from_disk(session_id: str) -> Dict[str, Any]:
+     with open(path, "r", encoding="utf-8") as f:
+         payload = json.load(f)
++    payload = migrate_session_payload(payload)
+     return payload
+
+Apply migration on save:
+
+diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
+index 1500222..1500333 100644
+--- a/src/app/rpg/session/durable_store.py
++++ b/src/app/rpg/session/durable_store.py
+@@ -120,6 +120,7 @@ def save_session_to_disk(session: Dict[str, Any]) -> Dict[str, Any]:
+     session = _normalize_session(session)
++    session = migrate_session_payload(session)
+     with open(tmp_path, "w", encoding="utf-8") as f:
+         json.dump(session, f, indent=2, sort_keys=True)
+15.0.C — Add archive durability helper
+File: src/app/rpg/session/durable_store.py
+diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
+index 1500333..1500444 100644
+--- a/src/app/rpg/session/durable_store.py
++++ b/src/app/rpg/session/durable_store.py
+@@ -160,3 +160,20 @@ def list_sessions_from_disk() -> List[Dict[str, Any]]:
+     return out
 +
 +
-+def test_release_visual_job_rejects_wrong_lease(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    claimed = claim_next_visual_job(lease_seconds=60)
-+    bad = release_visual_job(job_id=claimed["job_id"], lease_token="wrong-token")
-+    assert bad == {}
-+    jobs = list_visual_jobs()
-+    assert jobs[0]["status"] == "leased"
++def archive_session_on_disk(session_id: str) -> Dict[str, Any]:
++    session = load_session_from_disk(session_id)
++    manifest = _safe_dict(session.get("manifest"))
++    manifest["archived"] = True
++    session["manifest"] = manifest
++    return save_session_to_disk(session)
+15.0.D — Add tests
+New file: src/tests/unit/rpg/test_phase150_durable_migrations.py
+diff --git a/src/tests/unit/rpg/test_phase150_durable_migrations.py b/src/tests/unit/rpg/test_phase150_durable_migrations.py
+new file mode 100644
+index 0000000..1501000
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase150_durable_migrations.py
+@@ -0,0 +1,31 @@
++from app.rpg.session.migrations import migrate_session_payload
 +
 +
-+def test_run_one_queued_job_completes_terminal_request(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++def test_migrate_session_payload_upgrades_schema_and_adds_state_roots():
++    payload = {"manifest": {"id": "s1", "schema_version": 1}, "simulation_state": {}}
++    out = migrate_session_payload(payload)
++    assert out["manifest"]["schema_version"] == 2
++    assert "presentation_state" in out["simulation_state"]
++    assert "memory_state" in out["simulation_state"]
+Phase 15.1 — Session ↔ package unification
+
+Goal:
+
+export session as package
+import package as session
+preserve installed packs / visual / memory metadata
+round-trip tests
+15.1.A — Add session/package bridge
+New file: src/app/rpg/session/package_bridge.py
+diff --git a/src/app/rpg/session/package_bridge.py b/src/app/rpg/session/package_bridge.py
+new file mode 100644
+index 0000000..1510000
+--- /dev/null
++++ b/src/app/rpg/session/package_bridge.py
+@@ -0,0 +1,90 @@
++"""Phase 15.1 — Session/package bridge."""
++from __future__ import annotations
 +
-+    session_store = {
-+        "s1": {
-+            "simulation_state": {
-+                "presentation_state": {
-+                    "visual_state": {
-+                        "image_requests": [
-+                            {
-+                                "request_id": "r1",
-+                                "status": "pending",
-+                                "error": "",
-+                            }
-+                        ]
-+                    }
-+                }
-+            }
-+        }
++from typing import Any, Dict
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def session_to_package(session: Dict[str, Any]) -> Dict[str, Any]:
++    session = _safe_dict(session)
++    manifest = _safe_dict(session.get("manifest"))
++    simulation_state = _safe_dict(session.get("simulation_state"))
++    return {
++        "package_manifest": {
++            "source_session_id": manifest.get("id"),
++            "title": manifest.get("title"),
++        },
++        "session_manifest": manifest,
++        "simulation_state": simulation_state,
++        "installed_packs": session.get("installed_packs", []),
 +    }
 +
-+    def _load_session(session_id):
-+        return session_store[session_id]
 +
-+    def _save_session(session_id, payload):
-+        session_store[session_id] = payload
-+
-+    def _process_pending_image_requests(simulation_state, limit=1):
-+        simulation_state["presentation_state"]["visual_state"]["image_requests"][0]["status"] = "complete"
-+        return simulation_state
-+
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.save_session", _save_session)
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.process_pending_image_requests", _process_pending_image_requests)
-+
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    result = run_one_queued_job()
-+    assert result["ok"] is True
-+    assert result["request_status"] == "complete"
-+    jobs = list_visual_jobs()
-+    assert jobs[0]["status"] == "complete"
-+
-+
-+def test_run_one_queued_job_requeues_pending_request(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+
-+    session_store = {
-+        "s1": {
-+            "simulation_state": {
-+                "presentation_state": {
-+                    "visual_state": {
-+                        "image_requests": [
-+                            {
-+                                "request_id": "r1",
-+                                "status": "pending",
-+                                "error": "temporary",
-+                            }
-+                        ]
-+                    }
-+                }
-+            }
-+        }
++def package_to_session(package_payload: Dict[str, Any]) -> Dict[str, Any]:
++    package_payload = _safe_dict(package_payload)
++    session_manifest = _safe_dict(package_payload.get("session_manifest"))
++    simulation_state = _safe_dict(package_payload.get("simulation_state"))
++    return {
++        "manifest": session_manifest,
++        "simulation_state": simulation_state,
++        "installed_packs": package_payload.get("installed_packs", []),
 +    }
-+
-+    def _load_session(session_id):
-+        return session_store[session_id]
-+
-+    def _save_session(session_id, payload):
-+        session_store[session_id] = payload
-+
-+    def _process_pending_image_requests(simulation_state, limit=1):
-+        return simulation_state
-+
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.save_session", _save_session)
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.process_pending_image_requests", _process_pending_image_requests)
-+
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    result = run_one_queued_job()
-+    assert result["ok"] is True
-+    assert result["request_status"] == "pending"
-+    jobs = list_visual_jobs()
-+    assert jobs[0]["status"] == "queued"
-+
-+
-+def test_run_one_queued_job_releases_on_exception(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-+
-+    def _load_session(_session_id):
-+        raise RuntimeError("boom")
-+
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
-+
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    result = run_one_queued_job()
-+    assert result["ok"] is False
-+    jobs = list_visual_jobs()
-+    assert jobs[0]["status"] == "queued"
-+    assert jobs[0]["error"] == "boom"
+15.1.B — Add API routes
+File: src/app/rpg/api/rpg_presentation_routes.py
+
+Add import:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index e111545..f111545 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from flask import jsonify, request
++from app.rpg.session.package_bridge import package_to_session, session_to_package
+
+Add routes:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index f111545..f211545 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1080,6 +1080,34 @@ def request_scene_illustration():
+     return jsonify({...})
+ 
+ 
++@rpg_presentation_bp.route("/api/rpg/session/export_package", methods=["POST"])
++def export_session_package_route():
++    data = request.get_json(silent=True) or {}
++    session = _safe_dict(data.get("session"))
++    package_payload = session_to_package(session)
++    return jsonify({"ok": True, "package": package_payload})
 +
 +
-+def test_run_one_queued_job_handles_missing_request_after_run(monkeypatch, tmp_path):
-+    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
++@rpg_presentation_bp.route("/api/rpg/session/import_package", methods=["POST"])
++def import_session_package_route():
++    data = request.get_json(silent=True) or {}
++    package_payload = _safe_dict(data.get("package"))
++    session = package_to_session(package_payload)
++    return jsonify({"ok": True, "session": session})
+15.1.C — Add tests
+New file: src/tests/unit/rpg/test_phase151_session_package_bridge.py
+diff --git a/src/tests/unit/rpg/test_phase151_session_package_bridge.py b/src/tests/unit/rpg/test_phase151_session_package_bridge.py
+new file mode 100644
+index 0000000..1511000
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase151_session_package_bridge.py
+@@ -0,0 +1,38 @@
++from app.rpg.session.package_bridge import package_to_session, session_to_package
 +
-+    session_store = {
-+        "s1": {
-+            "simulation_state": {
-+                "presentation_state": {
-+                    "visual_state": {
-+                        "image_requests": []
-+                    }
-+                }
-+            }
-+        }
++
++def test_session_package_round_trip_preserves_manifest_state_and_packs():
++    session = {
++        "manifest": {"id": "s1", "title": "Campaign A"},
++        "simulation_state": {"presentation_state": {}, "memory_state": {}},
++        "installed_packs": ["core", "portraits"],
 +    }
++    package_payload = session_to_package(session)
++    restored = package_to_session(package_payload)
 +
-+    def _load_session(session_id):
-+        return session_store[session_id]
-+
-+    def _save_session(session_id, payload):
-+        session_store[session_id] = payload
-+
-+    def _process_pending_image_requests(simulation_state, limit=1):
-+        return simulation_state
-+
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.load_session", _load_session)
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.save_session", _save_session)
-+    monkeypatch.setattr("app.rpg.visual.queue_runner.process_pending_image_requests", _process_pending_image_requests)
-+
-+    enqueue_visual_job(session_id="s1", request_id="r1")
-+    result = run_one_queued_job()
-+    assert result["ok"] is False
-+    jobs = list_visual_jobs()
-+    assert jobs[0]["status"] == "queued"
-+    assert jobs[0]["error"] == "request_not_found_after_run"
-6) Optional hardening: count queue attempts separately from request attempts
++    assert restored["manifest"]["id"] == "s1"
++    assert restored["installed_packs"] == ["core", "portraits"]
++    assert "presentation_state" in restored["simulation_state"]
++    assert "memory_state" in restored["simulation_state"]
+Recommended implementation order
 
-This is optional, but useful for ops/debugging because queue claim count and request provider-attempt count are different things.
+Do it in this order:
 
-No patch required unless you want it exposed in the UI.
+12.15
+14.3
+14.4
+15.0
+15.1
 
-7) What this gives you
+That gives you:
 
-After this patch:
-
-stale leased jobs are reclaimed automatically
-duplicate active jobs are canonicalized away
-queue runner can survive crashes and requeue safely
-queue completion matches actual request terminal state
-request creation automatically enters the queue
+visibility first
+then memory-in-dialogue behavior
+then decay/reinforcement behavior
+then durability
+then portability
