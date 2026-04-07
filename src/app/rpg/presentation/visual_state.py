@@ -127,7 +127,7 @@ def _normalize_image_request(value: Any) -> Dict[str, Any]:
         kind = "character_portrait"
 
     status = _first_non_empty(data.get("status"), "pending")
-    if status not in {"pending", "complete", "failed"}:
+    if status not in {"pending", "complete", "failed", "blocked"}:
         status = "pending"
 
     return {

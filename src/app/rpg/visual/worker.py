@@ -106,18 +106,23 @@ def process_pending_image_requests(
         if current_status in {"complete", "failed", "blocked"}:
             continue
 
-        # Enforce max_attempts: if already exhausted, mark terminal and skip
+        # Requests already at or beyond max_attempts must not call the provider again.
         if attempts >= max_attempts:
             simulation_state = update_image_request(
                 simulation_state,
                 request_id=request_id,
                 patch={
                     "status": "failed",
-                    "error": "max_attempts_exceeded",
+                    "attempts": attempts,
+                    "error": _safe_str(request.get("error")).strip(),
                     "updated_at": now,
                     "completed_at": now,
                 },
             )
+            if _safe_str(request.get("kind")).strip() == "scene_illustration":
+                simulation_state = _complete_scene_illustration(
+                    simulation_state, request=request, asset_id="", image_path="", status="failed"
+                )
             continue
 
         # Bump attempt count
@@ -140,28 +145,77 @@ def process_pending_image_requests(
         )
 
         if not result.ok:
-            # Distinguish retryable vs terminal failure
+            moderation_status = _safe_str(result.moderation_status).strip()
+            # Blocked/ moderated content: immediately terminal, no retry
+            is_moderation_terminal = moderation_status == "blocked"
+
+            # Retryable errors: network issues, HTTP 5xx, rate limits
             error_text = _safe_str(result.error).strip().lower()
-            is_retryable = not any(
+            is_retryable = not is_moderation_terminal and not any(
                 tag in error_text
-                for tag in ("blocked", "moderation", "invalid", "rejected", "unauthorized")
+                for tag in ("invalid", "rejected", "unauthorized", "not_implemented", "no_api_key")
             )
-            if attempts + 1 >= max_attempts:
-                final_status = "failed"
-            elif is_retryable:
-                final_status = "pending"  # Stay pending for retry
+
+            new_attempts = int(request.get("attempts") or 0) + 1
+
+            if is_moderation_terminal:
+                # Moderation-blocked: immediately terminal
+                simulation_state = update_image_request(
+                    simulation_state,
+                    request_id=request_id,
+                    patch={
+                        "status": "blocked",
+                        "attempts": new_attempts,
+                        "error": _safe_str(result.error).strip(),
+                        "updated_at": now,
+                        "completed_at": now,
+                    },
+                )
+                # Record scene completion only for moderated block
+                if _safe_str(request.get("kind")).strip() == "scene_illustration":
+                    simulation_state = _complete_scene_illustration(
+                        simulation_state,
+                        request=request,
+                        asset_id="",
+                        image_path="",
+                        status="blocked",
+                    )
+                continue
+
+            if new_attempts >= max_attempts:
+                # Exhausted retries → terminal failure
+                simulation_state = update_image_request(
+                    simulation_state,
+                    request_id=request_id,
+                    patch={
+                        "status": "failed",
+                        "attempts": new_attempts,
+                        "error": _safe_str(result.error).strip(),
+                        "updated_at": now,
+                        "completed_at": now,
+                    },
+                )
+                # Only complete scene on final exhaustion
+                if _safe_str(request.get("kind")).strip() == "scene_illustration":
+                    simulation_state = _complete_scene_illustration(
+                        simulation_state,
+                        request=request,
+                        asset_id="",
+                        image_path="",
+                        status="failed",
+                    )
             else:
-                final_status = "blocked"
-            simulation_state = update_image_request(
-                simulation_state,
-                request_id=request_id,
-                patch={
-                    "status": final_status,
-                    "error": _safe_str(result.error).strip(),
-                    "updated_at": now,
-                    "completed_at": now if final_status in {"failed", "blocked"} else "",
-                },
-            )
+                # Still have retries left — stay pending
+                simulation_state = update_image_request(
+                    simulation_state,
+                    request_id=request_id,
+                    patch={
+                        "status": "pending",
+                        "attempts": new_attempts,
+                        "error": _safe_str(result.error).strip(),
+                        "updated_at": now,
+                    },
+                )
             continue
 
         # Derive version from current identity if present (Part 15)
@@ -173,6 +227,8 @@ def process_pending_image_requests(
             identity = _safe_dict(identities.get(_safe_str(request.get("target_id")).strip()))
             if isinstance(identity.get("version"), int) and identity.get("version") > 0:
                 version = identity.get("version")
+
+        final_prompt = _safe_str(result.revised_prompt).strip() or _safe_str(request.get("prompt")).strip()
 
         asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
         image_path = save_asset_bytes(asset_id, result.image_bytes or b"", result.mime_type)
@@ -187,7 +243,7 @@ def process_pending_image_requests(
                 seed=request.get("seed") if isinstance(request.get("seed"), int) else None,
                 style=_safe_str(request.get("style")).strip(),
                 model=_safe_str(request.get("model")).strip(),
-                prompt=_safe_str(request.get("prompt")).strip(),
+                prompt=final_prompt,
                 url=image_path,
                 local_path=image_path,
                 status="complete",
@@ -207,9 +263,11 @@ def process_pending_image_requests(
                 status="complete",
             )
         else:
+            scene_request = dict(request)
+            scene_request["prompt"] = final_prompt
             simulation_state = _complete_scene_illustration(
                 simulation_state,
-                request=request,
+                request=scene_request,
                 asset_id=asset_id,
                 image_path=image_path,
                 status="complete",

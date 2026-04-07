@@ -1,4 +1,4 @@
-"""Phase 12.10 — Visual provider registry."""
+"""Phase 12.10 / 12.11 — Visual provider registry."""
 from __future__ import annotations
 
 import os
