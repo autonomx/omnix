@@ -37,6 +37,23 @@ from .player_party import (
     build_player_party_view,
 )
 
+# Phase 18.3A — Progression
+from .player_progression_state import (
+    ensure_player_progression_state,
+    allocate_starting_stats,
+    award_player_xp,
+    award_skill_xp,
+    resolve_level_ups,
+    resolve_skill_level_ups,
+    get_stat_modifier,
+    get_skill_level,
+)
+from .player_creation import (
+    build_default_stat_allocation,
+    validate_stat_allocation,
+    apply_character_creation,
+)
+
 __all__ = [
     "AgencySystem",
     "PlayerChoice",
@@ -65,4 +82,16 @@ __all__ = [
     # Phase 9.2
     "ensure_player_party",
     "build_player_party_view",
+    # Phase 18.3A
+    "ensure_player_progression_state",
+    "allocate_starting_stats",
+    "award_player_xp",
+    "award_skill_xp",
+    "resolve_level_ups",
+    "resolve_skill_level_ups",
+    "get_stat_modifier",
+    "get_skill_level",
+    "build_default_stat_allocation",
+    "validate_stat_allocation",
+    "apply_character_creation",
 ]

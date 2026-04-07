@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from .player_progression_state import ensure_player_progression_state
+
 
 _MAX_SCENE_HISTORY = 50
 
@@ -68,6 +70,14 @@ def ensure_player_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
         "companions": [],
         "max_size": 3,
     })
+
+    # Phase 18.3A — progression, equipment, and action fields
+    player_state = ensure_player_progression_state(player_state)
+    player_state.setdefault("nearby_npc_ids", [])
+    player_state.setdefault("equipped_weapon_slot", "")
+    player_state.setdefault("equipped_armor_slots", [])
+    player_state.setdefault("available_checks", [])
+    simulation_state["player_state"] = player_state
     return simulation_state
 
 

@@ -42,13 +42,25 @@ def _normalize_stack(item: Dict[str, Any]) -> Dict[str, Any]:
     qty = max(1, _safe_int(item.get("qty"), 1))
     item_def = get_item_definition(item_id)
 
-    return {
+    result = {
         "item_id": item_id,
         "qty": qty,
         "name": _safe_str(item.get("name") or item_def.get("name")),
         "category": _safe_str(item.get("category") or item_def.get("category")),
         "tags": [str(tag) for tag in _safe_list(item.get("tags") or item_def.get("tags"))[:8]],
+        "description": _safe_str(item.get("description") or item_def.get("description", "")),
+        "value": _safe_int(item.get("value") or item_def.get("value"), 0),
+        "durability": _safe_int(item.get("durability") or item_def.get("durability"), 100),
     }
+    # Preserve instance_id for non-stackable items
+    if item.get("instance_id"):
+        result["instance_id"] = _safe_str(item["instance_id"])
+    # Preserve combat_stats if present
+    for field in ("combat_stats", "equipment", "quality"):
+        val = item.get(field) or item_def.get(field)
+        if isinstance(val, dict):
+            result[field] = dict(val)
+    return result
 
 
 def normalize_inventory_state(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -182,3 +194,67 @@ def build_inventory_summary(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
         "total_item_qty": total_item_qty,
         "last_loot_count": len(_safe_list(inventory_state.get("last_loot"))),
     }
+
+
+def equip_inventory_item(inventory_state: Dict[str, Any], item_id: str, slot: str = "") -> Dict[str, Any]:
+    """Equip an item from inventory into an equipment slot."""
+    inventory_state = normalize_inventory_state(inventory_state)
+    item_id = _safe_str(item_id)
+    items = _safe_list(inventory_state.get("items"))
+    found = None
+    for item in items:
+        if isinstance(item, dict) and _safe_str(item.get("item_id")) == item_id:
+            found = dict(item)
+            break
+    if not found:
+        return inventory_state
+    equip_data = _safe_dict(found.get("equipment"))
+    target_slot = _safe_str(slot) or _safe_str(equip_data.get("slot")) or "main_hand"
+    equipment = dict(inventory_state.get("equipment") or {})
+    equipment[target_slot] = _normalize_stack(found)
+    inventory_state["equipment"] = equipment
+    return inventory_state
+
+
+def unequip_inventory_slot(inventory_state: Dict[str, Any], slot: str) -> Dict[str, Any]:
+    """Remove equipped item from a slot."""
+    inventory_state = normalize_inventory_state(inventory_state)
+    slot = _safe_str(slot)
+    equipment = dict(inventory_state.get("equipment") or {})
+    if slot in equipment:
+        del equipment[slot]
+    inventory_state["equipment"] = equipment
+    return inventory_state
+
+
+def find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+    """Find and return an item from inventory by item_id, or empty dict."""
+    inventory_state = normalize_inventory_state(inventory_state)
+    item_id = _safe_str(item_id)
+    for item in _safe_list(inventory_state.get("items")):
+        if isinstance(item, dict) and _safe_str(item.get("item_id")) == item_id:
+            return _normalize_stack(item)
+    return {}
+
+
+def get_equipped_weapon(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the equipped weapon from main_hand slot, or empty dict."""
+    inventory_state = normalize_inventory_state(inventory_state)
+    equipment = _safe_dict(inventory_state.get("equipment"))
+    main_hand = _safe_dict(equipment.get("main_hand"))
+    if main_hand.get("item_id"):
+        return main_hand
+    return {}
+
+
+def get_equipped_armor(inventory_state: Dict[str, Any]) -> list:
+    """Return list of equipped armor items from all armor slots."""
+    inventory_state = normalize_inventory_state(inventory_state)
+    equipment = _safe_dict(inventory_state.get("equipment"))
+    armor_items = []
+    for slot_name, slot_item in equipment.items():
+        if isinstance(slot_item, dict) and slot_name != "main_hand":
+            cs = _safe_dict(slot_item.get("combat_stats"))
+            if _safe_int(cs.get("defense_bonus")) > 0 or _safe_int(cs.get("block_bonus")) > 0:
+                armor_items.append(dict(slot_item))
+    return armor_items
