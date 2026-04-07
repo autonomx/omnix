@@ -65,6 +65,11 @@ def build_dialogue_memory_context(simulation_state: Dict[str, Any], actor_id: st
     else:
         actor_ids = []
 
+    # Determine primary actor_id for backward compat
+    resolved_actor_id = _safe_str(actor_id).strip() if actor_id else ""
+    if not resolved_actor_id and actor_ids:
+        resolved_actor_id = _safe_str(actor_ids[0]).strip()
+
     simulation_state = _safe_dict(simulation_state)
     memory_state = _safe_dict(simulation_state.get("memory_state"))
     actor_memory_all = _safe_dict(memory_state.get("actor_memory"))
@@ -87,7 +92,7 @@ def build_dialogue_memory_context(simulation_state: Dict[str, Any], actor_id: st
     rumor_context = build_world_rumor_context(simulation_state)
 
     return {
-        "actor_id": _safe_str(actor_id).strip() if actor_id else (_safe_str(actor_ids[0]).strip() if actor_ids else ""),
+        "actor_id": resolved_actor_id,
         "actor_ids": [_safe_str(a).strip() for a in actor_ids if _safe_str(a).strip()],
         "actor_memory": collected_actor_memory,
         "world_rumors": rumor_context,

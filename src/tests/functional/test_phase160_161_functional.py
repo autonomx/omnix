@@ -107,3 +107,6 @@ def test_prompt_includes_both_memory_and_rumors():
     prompt = build_llm_memory_prompt_block(ctx)
     assert "Actor memories" in prompt
     assert "World rumors" in prompt
+    # Verify actual content from test data appears
+    assert "Fought the dragon" in prompt
+    assert "King is ill" in prompt
