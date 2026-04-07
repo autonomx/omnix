@@ -12,10 +12,10 @@ Run with: python -m pytest src/tests/regression/test_phase25_snapshots_regressio
 import unittest
 from unittest.mock import MagicMock
 
-from src.app.rpg.core.event_bus import Event, EventBus
-from src.app.rpg.core.replay_engine import ReplayEngine, ReplayConfig
-from src.app.rpg.core.game_loop import GameLoop
-from src.app.rpg.core.snapshot_manager import SnapshotManager
+from app.rpg.core.event_bus import Event, EventBus
+from app.rpg.core.replay_engine import ReplayEngine, ReplayConfig
+from app.rpg.core.game_loop import GameLoop
+from app.rpg.core.snapshot_manager import SnapshotManager
 
 
 class TestEventBusBackwardsCompatibility(unittest.TestCase):

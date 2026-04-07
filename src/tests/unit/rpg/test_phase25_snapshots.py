@@ -15,10 +15,10 @@ import unittest
 from unittest.mock import MagicMock
 from dataclasses import dataclass
 
-from src.app.rpg.core.event_bus import Event, EventBus
-from src.app.rpg.core.snapshot_manager import SnapshotManager, Snapshot
-from src.app.rpg.core.replay_engine import ReplayEngine, ReplayConfig
-from src.app.rpg.core.game_loop import GameLoop
+from app.rpg.core.event_bus import Event, EventBus
+from app.rpg.core.snapshot_manager import SnapshotManager, Snapshot
+from app.rpg.core.replay_engine import ReplayEngine, ReplayConfig
+from app.rpg.core.game_loop import GameLoop
 
 
 # ============================================================

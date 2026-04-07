@@ -9,8 +9,8 @@ This module tests the complete quest system workflow:
 """
 
 import pytest
-from src.app.rpg.quest.quest_engine import QuestEngine
-from src.app.rpg.quest.quest_models import Quest, QuestStage, QuestObjective
+from app.rpg.quest.quest_engine import QuestEngine
+from app.rpg.quest.quest_models import Quest, QuestStage, QuestObjective
 
 
 # ==================== Multi-Stage Quest Progression ====================
