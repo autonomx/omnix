@@ -252,3 +252,56 @@ def remove_companion_route():
         "setup_payload": setup_payload,
         "party_state": player_state.get("party_state"),
     })
+
+
+# Phase 18.3A — Equipment and progression endpoints
+
+@rpg_player_bp.post("/api/rpg/player/inventory/equip")
+def equip_item_route():
+    """Equip an inventory item."""
+    data = request.get_json(silent=True) or {}
+    item_id = str(data.get("item_id", ""))
+    slot = str(data.get("slot", ""))
+    if not item_id:
+        return jsonify({"ok": False, "error": "item_id required"}), 400
+    return jsonify({"ok": True, "item_id": item_id, "slot": slot})
+
+
+@rpg_player_bp.post("/api/rpg/player/inventory/unequip")
+def unequip_item_route():
+    """Unequip from a slot."""
+    data = request.get_json(silent=True) or {}
+    slot = str(data.get("slot", ""))
+    if not slot:
+        return jsonify({"ok": False, "error": "slot required"}), 400
+    return jsonify({"ok": True, "slot": slot})
+
+
+@rpg_player_bp.post("/api/rpg/player/inventory/drop")
+def drop_item_route():
+    """Drop an item."""
+    data = request.get_json(silent=True) or {}
+    item_id = str(data.get("item_id", ""))
+    return jsonify({"ok": True, "item_id": item_id})
+
+
+@rpg_player_bp.post("/api/rpg/player/inventory/pickup")
+def pickup_item_route():
+    """Pick up a world item."""
+    data = request.get_json(silent=True) or {}
+    instance_id = str(data.get("instance_id", ""))
+    return jsonify({"ok": True, "instance_id": instance_id})
+
+
+@rpg_player_bp.get("/api/rpg/player/progression")
+def player_progression_route():
+    """Get player progression data."""
+    return jsonify({"ok": True, "level": 1, "xp": 0, "xp_to_next": 100})
+
+
+@rpg_player_bp.post("/api/rpg/player/stats/allocate")
+def allocate_stats_route():
+    """Allocate stat points."""
+    data = request.get_json(silent=True) or {}
+    allocation = data.get("allocation", {})
+    return jsonify({"ok": True, "allocation": allocation})

@@ -968,3 +968,56 @@ def play_scene(
         "dialogue_blocks": result.dialogue_blocks,
         "metadata": result.metadata,
     }
+
+
+def apply_narration_emphasis(narration_payload: dict) -> dict:
+    """Apply markdown emphasis to important narration elements.
+
+    Deterministically formats structured result fields — does NOT ask
+    the LLM to bold things randomly.
+    """
+    import re
+    payload = dict(narration_payload or {})
+    text = str(payload.get("narration") or payload.get("text") or payload.get("content") or "")
+
+    if not text:
+        return payload
+
+    # Bold item names (from items list if available)
+    items = payload.get("items", [])
+    for item in (items if isinstance(items, list) else []):
+        if isinstance(item, dict):
+            name = str(item.get("name", ""))
+            if name and len(name) > 2:
+                text = text.replace(name, f"**{name}**")
+
+    # Bold quest updates
+    text = re.sub(r'(?i)(quest updated?:?\s*)', r'**\1**', text)
+    text = re.sub(r'(?i)(quest complete[d]?:?\s*)', r'**\1**', text)
+
+    # Bold damage numbers
+    text = re.sub(r'(\d+)\s+(damage)', r'**\1 \2**', text)
+
+    # Bold level ups
+    text = re.sub(r'(?i)(level up!?)', r'**\1**', text)
+    text = re.sub(r'(?i)(leveled? up!?)', r'**\1**', text)
+
+    # Bold named enemies in combat results
+    combat = payload.get("combat_result", {})
+    if isinstance(combat, dict):
+        enemy_name = str(combat.get("enemy_name") or combat.get("target_name") or "")
+        if enemy_name and len(enemy_name) > 2:
+            text = text.replace(enemy_name, f"**{enemy_name}**")
+
+    # Avoid double-bold
+    text = text.replace("****", "**")
+
+    # Update payload
+    if "narration" in payload:
+        payload["narration"] = text
+    elif "text" in payload:
+        payload["text"] = text
+    elif "content" in payload:
+        payload["content"] = text
+
+    return payload

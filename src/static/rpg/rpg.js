@@ -1172,6 +1172,37 @@
         });
     }
 
+    function buildTurnSummaryBanner(update) {
+        if (!update) return '';
+        var parts = [];
+        if (update.combat_result) {
+            var cr = update.combat_result;
+            parts.push(cr.outcome === 'hit' || cr.outcome === 'crit' ?
+                '⚔️ ' + (cr.outcome || '').toUpperCase() + ': ' + (cr.damage || 0) + ' damage' :
+                '🛡️ ' + (cr.outcome || 'miss').toUpperCase());
+        }
+        if (update.xp_result && update.xp_result.amount) {
+            parts.push('✨ +' + update.xp_result.amount + ' XP');
+        }
+        if (update.skill_xp_result) {
+            for (var skill in (update.skill_xp_result || {})) {
+                if (update.skill_xp_result[skill] > 0) {
+                    parts.push('📈 +' + update.skill_xp_result[skill] + ' ' + skill + ' XP');
+                }
+            }
+        }
+        if (update.level_up) {
+            parts.push('🎉 Level Up! → Level ' + (update.player_level || '?'));
+        }
+        if (update.skill_level_ups && update.skill_level_ups.length) {
+            for (var i = 0; i < update.skill_level_ups.length; i++) {
+                var s = update.skill_level_ups[i];
+                parts.push('📊 ' + s.skill_id + ' → Level ' + s.new_level);
+            }
+        }
+        return parts.length > 0 ? '<div class="turn-summary-banner">' + parts.join(' | ') + '</div>' : '';
+    }
+
     // ─── Rendering: Dice Roll (single, animated) ──────────────────────────────
 
     function renderSingleDice(roll) {
@@ -1288,6 +1319,35 @@
     }
 
     // ─── Rendering: Memory Panel ───────────────────────────────────────────────
+
+    function summarizeMemoryEntries(entries) {
+        if (!entries || !entries.length) return [];
+        return entries.slice(0, 5).map(function (e) {
+            return {
+                text: (e.text || '').length > 80 ? (e.text || '').substring(0, 77) + '...' : (e.text || ''),
+                strength: e.strength || 0,
+                source: e.source || '',
+            };
+        });
+    }
+
+    function dedupeMemoryEntries(entries) {
+        if (!entries || !entries.length) return [];
+        var seen = {};
+        return entries.filter(function (e) {
+            var key = e.text || '';
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
+    }
+
+    function toggleMemoryPanel() {
+        var panel = el('rpgMemoryPanelWrapper');
+        if (panel) {
+            panel.classList.toggle('collapsed');
+        }
+    }
 
     /** Safely convert a memory/event value to a display string. */
     function _toDisplayString(val) {

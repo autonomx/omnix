@@ -16,6 +16,7 @@ from .personality_state import (
 from .speaker_cards import (
     build_speaker_cards,
     build_party_speaker_cards,
+    build_nearby_npc_cards,
 )
 from .scene_presentation import (
     build_scene_presentation_payload,
@@ -67,6 +68,7 @@ __all__ = [
     "build_personality_summary",
     "build_speaker_cards",
     "build_party_speaker_cards",
+    "build_nearby_npc_cards",
     "build_scene_presentation_payload",
     "build_dialogue_presentation_payload",
     "build_dialogue_llm_payload",
