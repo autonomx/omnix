@@ -27,6 +27,8 @@ from app.rpg.creator.world_simulation import (
     step_simulation_state,
     summarize_simulation_step,
 )
+from app.rpg.action_resolver import resolve_player_action
+from app.rpg.items.world_items import ensure_world_item_state
 from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
 from app.rpg.memory.dialogue_context import (
     build_dialogue_memory_context,
@@ -35,6 +37,8 @@ from app.rpg.memory.dialogue_context import (
 from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.player import ensure_player_party, ensure_player_state
+from app.rpg.player.player_progression_state import ensure_player_progression_state
+from app.rpg.player.player_xp_rules import compute_action_skill_xp, compute_stat_influence_bonus
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.presentation import (
     build_runtime_presentation_payload,
@@ -125,6 +129,13 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
     simulation_state = ensure_world_memory_state(simulation_state)
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
+
+    # Phase 18.3A — ensure progression and world items
+    player_state = simulation_state.get("player_state", {})
+    player_state = ensure_player_progression_state(player_state)
+    simulation_state["player_state"] = player_state
+    simulation_state = ensure_world_item_state(simulation_state)
+
     return simulation_state
 
 
@@ -205,6 +216,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     npcs = _safe_list(runtime_state.get("npcs"))
     opening = _safe_str(runtime_state.get("opening"))
     turn_result = _safe_dict(runtime_state.get("last_turn_result"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
 
     return {
         "success": True,
@@ -212,7 +224,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "title": _safe_str(manifest.get("title")),
         "opening": opening,
         "world": world,
-        "player": _safe_dict(simulation_state.get("player_state")),
+        "player": player_state,
         "npcs": npcs,
         "memory": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("short_term")),
         "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
@@ -221,6 +233,13 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "scene": _safe_dict(runtime_state.get("current_scene")),
         "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
         "last_turn_result": turn_result,
+        # Phase 18.3A — enriched player data
+        "player_stats": _safe_dict(player_state.get("stats")),
+        "player_skills": _safe_dict(player_state.get("skills")),
+        "player_level": int(player_state.get("level", 1) or 1),
+        "player_xp": int(player_state.get("xp", 0) or 0),
+        "player_xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
+        "nearby_npcs": _safe_list(player_state.get("nearby_npc_ids")),
     }
 
 
@@ -280,6 +299,50 @@ def derive_player_action(simulation_state: Dict[str, Any], player_input: str) ->
     return {}
 
 
+def derive_action_candidates(simulation_state, player_input):
+    """Derive structured action candidates from player input."""
+    candidates = []
+    text = str(player_input.get("text", "") if isinstance(player_input, dict) else player_input).lower()
+
+    # Combat
+    if any(w in text for w in ["attack", "hit", "strike", "fight", "slash", "shoot"]):
+        candidates.append({"action_type": "attack_melee", "priority": 10})
+    if any(w in text for w in ["shoot", "fire", "aim"]):
+        candidates.append({"action_type": "attack_ranged", "priority": 10})
+    # Defense
+    if any(w in text for w in ["block", "defend", "shield"]):
+        candidates.append({"action_type": "block", "priority": 8})
+    if any(w in text for w in ["dodge", "evade", "roll"]):
+        candidates.append({"action_type": "dodge", "priority": 8})
+    # Social
+    if any(w in text for w in ["persuade", "convince", "talk", "negotiate"]):
+        candidates.append({"action_type": "persuade", "priority": 7})
+    if any(w in text for w in ["threaten", "intimidate", "scare"]):
+        candidates.append({"action_type": "intimidate", "priority": 7})
+    # Stealth/investigation
+    if any(w in text for w in ["sneak", "hide", "stealth"]):
+        candidates.append({"action_type": "sneak", "priority": 6})
+    if any(w in text for w in ["investigate", "search", "examine", "look"]):
+        candidates.append({"action_type": "investigate", "priority": 5})
+    if any(w in text for w in ["hack", "crack", "decrypt"]):
+        candidates.append({"action_type": "hack", "priority": 6})
+    if any(w in text for w in ["cast", "spell", "magic"]):
+        candidates.append({"action_type": "cast_spell", "priority": 7})
+    # Items
+    if any(w in text for w in ["pick up", "pickup", "grab", "take", "loot"]):
+        candidates.append({"action_type": "pickup_item", "priority": 5})
+    if any(w in text for w in ["equip", "wear", "wield"]):
+        candidates.append({"action_type": "equip_item", "priority": 5})
+    if any(w in text for w in ["use", "drink", "eat", "consume"]):
+        candidates.append({"action_type": "use_item", "priority": 5})
+
+    if not candidates:
+        candidates.append({"action_type": "investigate", "priority": 1})
+
+    candidates.sort(key=lambda c: c.get("priority", 0), reverse=True)
+    return candidates
+
+
 def _fallback_scene(simulation_state: Dict[str, Any], player_input: str) -> Dict[str, Any]:
     return {
         "scene_id": f"scene:tick:{int(simulation_state.get('tick', 0) or 0)}",
@@ -302,13 +365,16 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
         simulation_state,
         actor_id="player",
     )
+    # Phase 18.3A — extract player state for XP/progression fields
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    last_turn = _safe_dict(runtime_state.get("last_turn_result"))
     return {
         "success": True,
         "session_id": _safe_str(_safe_dict(session.get("manifest")).get("id")),
         "narration": _safe_str(narration_result.get("narrative") or current_scene.get("summary")),
         "choices": _safe_list(narration_result.get("choices")),
         "npcs": _safe_list(runtime_state.get("npcs")),
-        "player": _safe_dict(simulation_state.get("player_state")),
+        "player": player_state,
         "memory": _safe_list(memory_context.get("items")),
         "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
         "world_events": _safe_list(simulation_state.get("events"))[-8:],
@@ -323,6 +389,12 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
         "dialogue_blocks": _safe_list(narration_result.get("dialogue_blocks")),
         "metadata": _safe_dict(narration_result.get("metadata")),
         "turn": int(runtime_state.get("tick", 0) or 0),
+        # Phase 18.3A — XP and progression in turn response
+        "player_level": int(player_state.get("level", 1) or 1),
+        "player_xp": int(player_state.get("xp", 0) or 0),
+        "player_skills": _safe_dict(player_state.get("skills")),
+        "level_up": bool(last_turn.get("level_up")),
+        "skill_level_ups": _safe_list(last_turn.get("skill_level_ups")),
     }
 
 
@@ -376,6 +448,38 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     )
     summary = summarize_simulation_step(step_result)
 
+    # Phase 18.3A — XP and skill progression from resolved action
+    action_candidates = derive_action_candidates(after_state, player_input)
+    action_result = {}
+    if action_candidates:
+        top_candidate = action_candidates[0]
+        action_result = resolve_player_action(after_state, top_candidate)
+    skill_xp_awards = compute_action_skill_xp(action_result) if action_result else {}
+    stat_bonus = compute_stat_influence_bonus(
+        _safe_dict(after_state.get("player_state")), action_result,
+    ) if action_result else 0
+    total_xp = sum(skill_xp_awards.values()) + stat_bonus
+    level_up = False
+    skill_level_ups = []
+
+    if total_xp > 0 or skill_xp_awards:
+        from app.rpg.player.player_progression_state import (
+            award_player_xp,
+            award_skill_xp,
+            resolve_level_ups,
+            resolve_skill_level_ups,
+        )
+        ps = _safe_dict(after_state.get("player_state"))
+        old_level = int(ps.get("level", 1) or 1)
+        if total_xp > 0:
+            ps = award_player_xp(ps, total_xp)
+        for sid, amt in skill_xp_awards.items():
+            ps = award_skill_xp(ps, sid, amt)
+        ps, did_level = resolve_level_ups(ps)
+        level_up = did_level
+        ps, skill_level_ups = resolve_skill_level_ups(ps)
+        after_state["player_state"] = ps
+
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
     runtime_state["current_scene"] = current_scene
     runtime_state["last_turn_result"] = {
@@ -385,6 +489,11 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "narration": _safe_str(narration_result.get("narrative")),
         "llm_live": bool(llm_gateway),
         "llm_attempted": bool(llm_gateway),
+        # Phase 18.3A — XP and progression in turn result
+        "xp_awarded": total_xp,
+        "skill_xp_awards": skill_xp_awards,
+        "level_up": level_up,
+        "skill_level_ups": skill_level_ups,
     }
     turn_history = _safe_list(runtime_state.get("turn_history"))
     turn_history.append(_copy_dict(runtime_state["last_turn_result"]))

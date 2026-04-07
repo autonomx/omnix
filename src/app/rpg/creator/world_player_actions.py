@@ -368,3 +368,31 @@ def _faction_status(pressure: int) -> str:
     if pressure <= 2:
         return "watchful"
     return "strained"
+
+
+def enrich_action_metadata(action: dict) -> dict:
+    """Add difficulty_tier, skill_id, xp_category, target_difficulty to action."""
+    action = dict(action or {})
+    action_type = str(action.get("action_type") or action.get("type") or "")
+
+    _SKILL_MAP = {
+        "attack_melee": "swordsmanship", "attack_ranged": "archery",
+        "persuade": "persuasion", "intimidate": "intimidation",
+        "sneak": "stealth", "investigate": "investigation",
+        "hack": "hacking", "cast_spell": "magic",
+        "block": "defense", "dodge": "defense", "parry": "swordsmanship",
+    }
+    _XP_CATEGORY = {
+        "attack_melee": "combat", "attack_ranged": "combat",
+        "block": "combat", "dodge": "combat", "parry": "combat",
+        "persuade": "diplomacy", "intimidate": "diplomacy", "deceive": "diplomacy",
+        "sneak": "stealth", "investigate": "exploration",
+        "hack": "exploration", "cast_spell": "magic",
+    }
+
+    action.setdefault("difficulty_tier", 1)
+    action.setdefault("skill_id", _SKILL_MAP.get(action_type, "investigation"))
+    action.setdefault("xp_category", _XP_CATEGORY.get(action_type, "general"))
+    action.setdefault("target_difficulty", "normal")
+
+    return action

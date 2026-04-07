@@ -506,3 +506,40 @@ class ConsequenceEngine:
         if quest_type not in self.CONSEQUENCE_MAP:
             self.CONSEQUENCE_MAP[quest_type] = {}
         self.CONSEQUENCE_MAP[quest_type].update(consequences)
+
+
+def build_reward_events(consequence_result: dict) -> list:
+    """Build structured reward events from a consequence result."""
+    events = []
+    result = dict(consequence_result or {})
+
+    if result.get("quest_completed"):
+        events.append({
+            "type": "xp_award",
+            "source": "quest_completion",
+            "quest_id": str(result.get("quest_id", "")),
+        })
+        events.append({
+            "type": "reputation_reward",
+            "faction_id": str(result.get("faction_id", "")),
+            "delta": int(result.get("reputation_delta", 5)),
+        })
+
+    if result.get("item_rewards"):
+        for item in (result.get("item_rewards") or []):
+            if isinstance(item, dict):
+                events.append({
+                    "type": "item_reward",
+                    "item_id": str(item.get("item_id", "")),
+                    "qty": max(1, int(item.get("qty", 1))),
+                })
+
+    if result.get("skill_xp_awards"):
+        for skill_id, amount in (result.get("skill_xp_awards") or {}).items():
+            events.append({
+                "type": "skill_xp_award",
+                "skill_id": str(skill_id),
+                "amount": int(amount),
+            })
+
+    return events
