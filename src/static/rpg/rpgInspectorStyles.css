@@ -778,3 +778,133 @@
   color: var(--rpg-accent, #6366f1);
   margin-left: 6px;
 }
+
+/* ---- Phase 18.1.F — UX polish / guardrails ---- */
+
+.rpg-inspector-section {
+  margin: 16px 0;
+}
+
+.rpg-inspector-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.rpg-inspector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.rpg-inspector-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(255,255,255,0.03);
+}
+
+.rpg-inspector-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.rpg-inspector-card-subtitle {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-bottom: 8px;
+}
+
+.rpg-inspector-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.rpg-inspector-entry {
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255,255,255,0.04);
+}
+
+.rpg-inspector-entry-text {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rpg-inspector-entry-meta {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.rpg-inspector-empty {
+  font-size: 12px;
+  opacity: 0.7;
+  padding: 8px 0;
+}
+
+.rpg-inspector-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rpg-inspector-kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.rpg-inspector-kv-key {
+  opacity: 0.7;
+}
+
+.rpg-inspector-kv-value {
+  font-weight: 600;
+}
+
+.rpg-gm-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.rpg-gm-action-btn {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: inherit;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.rpg-gm-action-btn:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.rpg-gm-ops-meta {
+  margin-top: 10px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.rpg-inspector-loading {
+  font-size: 12px;
+  opacity: 0.8;
+  padding: 12px 0;
+}
+
+.rpg-inspector-error {
+  border: 1px solid rgba(255, 120, 120, 0.25);
+  background: rgba(255, 120, 120, 0.08);
+  color: inherit;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-size: 12px;
+}

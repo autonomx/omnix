@@ -9,14 +9,6 @@
  * Phase 12.7 — Tabbed inspector layout + navigation.
  * Phase 12.8 — GM Inspector panel.
  */
-function escapeHtml(str) {
-  return String(str || "")
-    .replace(/\u0026/g, "\u0026amp;")
-    .replace(/\u003c/g, "\u0026lt;")
-    .replace(/\u003e/g, "\u0026gt;")
-    .replace(/"/g, "\u0026quot;")
-    .replace(/'/g, "\u0026#039;");
-}
 
 let selectedCharacterId = "";
 
@@ -380,7 +372,7 @@ function renderStyleTags(tags) {
   if (!list.length) return "";
   return `
     <div class="rpg-speaker-tags">
-      ${list.map((tag) => `\u003cspan class="rpg-speaker-tag">${escapeHtml(tag)}\u003c/span>`).join("")}
+      ${list.map((tag) => `<span class="rpg-speaker-tag">${escapeHtml(tag)}</span>`).join("")}
     </div>
   `;
 }
@@ -391,12 +383,12 @@ export function renderSpeakerCards(cards) {
     <div class="rpg-speaker-card-list">
       ${list.map((card) => `
         <div class="rpg-speaker-card" data-speaker-id="${escapeHtml(card.speaker_id)}">
-          <div class="rpg-speaker-card-name">${escapeHtml(card.name || card.speaker_id)}\u003c/div>
-          <div class="rpg-speaker-card-kind">${escapeHtml(card.kind || "")}\u003c/div>
+          <div class="rpg-speaker-card-name">${escapeHtml(card.name || card.speaker_id)}</div>
+          <div class="rpg-speaker-card-kind">${escapeHtml(card.kind || "")}</div>
           ${renderStyleTags(card.style_tags)}
-        \u003c/div>
+        </div>
       `).join("")}
-    \u003c/div>
+    </div>
   `;
 }
 
@@ -410,28 +402,28 @@ export function renderScenePresentation(presentation) {
       <div class="rpg-presentation-header">
         <h3>Scene Presentation</h3>
         <div class="rpg-presentation-meta">
-          <span>${escapeHtml(payload.scene_id || "")}\u003c/span>
-          <span>${escapeHtml(payload.tone || "")}\u003c/span>
-        \u003c/div>
-      \u003c/div>
+          <span>${escapeHtml(payload.scene_id || "")}</span>
+          <span>${escapeHtml(payload.tone || "")}</span>
+        </div>
+      </div>
       ${renderSpeakerCards(payload.speaker_cards || [])}
       <div class="rpg-presentation-section">
         <h4>Companion Interjections</h4>
         ${
           interjections.length
-            ? interjections.map((it) => `\u003cdiv class="codex-item">${escapeHtml(it.summary || "")}\u003c/div>`).join("")
-            : `\u003cdiv class="codex-item">No interjections\u003c/div>`
+            ? interjections.map((it) => `<div class="codex-item">${escapeHtml(it.summary || "")}</div>`).join("")
+            : `<div class="codex-item">No interjections</div>`
         }
-      \u003c/div>
+      </div>
       <div class="rpg-presentation-section">
         <h4>Companion Reactions</h4>
         ${
           reactions.length
-            ? reactions.map((it) => `\u003cdiv class="codex-item">${escapeHtml(it.summary || "")}\u003c/div>`).join("")
-            : `\u003cdiv class="codex-item">No reactions\u003c/div>`
+            ? reactions.map((it) => `<div class="codex-item">${escapeHtml(it.summary || "")}</div>`).join("")
+            : `<div class="codex-item">No reactions</div>`
         }
-      \u003c/div>
-    \u003c/div>
+      </div>
+    </div>
   `;
 }
 
@@ -442,12 +434,12 @@ export function renderDialoguePresentation(presentation) {
       <div class="rpg-presentation-header">
         <h3>Dialogue Presentation</h3>
         <div class="rpg-presentation-meta">
-          <span>${escapeHtml(payload.dialogue_id || "")}\u003c/span>
-          <span>${escapeHtml(payload.speaker_id || "")}\u003c/span>
-        \u003c/div>
-      \u003c/div>
+          <span>${escapeHtml(payload.dialogue_id || "")}</span>
+          <span>${escapeHtml(payload.speaker_id || "")}</span>
+        </div>
+      </div>
       ${renderSpeakerCards(payload.speaker_cards || [])}
-    \u003c/div>
+    </div>
   `;
 }
 
@@ -943,3 +935,247 @@ export function renderMemory(payload) {
   `;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 18.1.B — Memory inspector UI helpers
+// ---------------------------------------------------------------------------
+
+function _safeText(value) {
+  return value == null ? "" : String(value);
+}
+
+function escapeHtml(value) {
+  const str = value == null ? "" : String(value);
+  const amp = "\u0026amp;";
+  const lt = "\u0026lt;";
+  const gt = "\u0026gt;";
+  const quot = "\u0026quot;";
+  const apos = "\u0026#39;";
+  return str
+    .replace(/\u0026/g, amp)
+    .replace(/\u003c/g, lt)
+    .replace(/\u003e/g, gt)
+    .replace(/"/g, quot)
+    .replace(/'/g, apos);
+}
+
+export function renderInspectorError(label, error) {
+  return `<div class="rpg-inspector-error">${escapeHtml(label)}: ${escapeHtml(error || "unknown_error")}</div>`;
+}
+
+function _renderInspectorEmpty(message) {
+  return `<div class="rpg-inspector-empty">${escapeHtml(message || "No data")}</div>`;
+}
+
+function _renderKeyValueList(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return _renderInspectorEmpty("No items");
+  }
+  return `
+    <div class="rpg-inspector-kv-list">
+      ${rows.map(row => `
+        <div class="rpg-inspector-kv-row">
+          <div class="rpg-inspector-kv-key">${escapeHtml(row.key)}</div>
+          <div class="rpg-inspector-kv-value">${escapeHtml(row.value)}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+export function renderMemoryInspector(memoryInspector) {
+  const payload = memoryInspector || {};
+  const actorMemory = Array.isArray(payload.actor_memory) ? payload.actor_memory : [];
+  const worldRumors = Array.isArray(payload.world_rumors) ? payload.world_rumors : [];
+
+  const actorHtml = actorMemory.length
+    ? actorMemory.map(actor => {
+        const entries = Array.isArray(actor.entries) ? actor.entries : [];
+        return `
+          <div class="rpg-inspector-card">
+            <div class="rpg-inspector-card-title">${escapeHtml(actor.actor_id || "unknown_actor")}</div>
+            <div class="rpg-inspector-card-subtitle">${escapeHtml(`Entries: ${actor.entry_count || entries.length || 0}`)}</div>
+            <div class="rpg-inspector-entry-list">
+              ${entries.length ? entries.map(entry => `
+                <div class="rpg-inspector-entry">
+                  <div class="rpg-inspector-entry-text">${escapeHtml(entry.text || "")}</div>
+                  <div class="rpg-inspector-entry-meta">
+                    ${escapeHtml(`strength=${entry.strength ?? 0}`)}
+                  </div>
+                </div>
+              `).join("") : _renderInspectorEmpty("No entries")}
+            </div>
+          </div>
+        `;
+      }).join("")
+    : _renderInspectorEmpty("No actor memory");
+
+  const rumorHtml = worldRumors.length
+    ? `
+      <div class="rpg-inspector-card">
+        <div class="rpg-inspector-card-title">World Rumors</div>
+        <div class="rpg-inspector-entry-list">
+          ${worldRumors.map(rumor => `
+            <div class="rpg-inspector-entry">
+              <div class="rpg-inspector-entry-text">${escapeHtml(rumor.text || "")}</div>
+              <div class="rpg-inspector-entry-meta">
+                ${escapeHtml(`strength=${rumor.strength ?? 0}, reach=${rumor.reach ?? 0}`)}
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `
+    : _renderInspectorEmpty("No world rumors");
+
+  return `
+    <div class="rpg-inspector-section">
+      <div class="rpg-inspector-section-title">Memory Inspector</div>
+      <div class="rpg-inspector-grid">
+        <div>${actorHtml}</div>
+        <div>${rumorHtml}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 18.1.C — Visual inspector UI
+// ---------------------------------------------------------------------------
+
+export function renderVisualInspector(visualInspector) {
+  const payload = visualInspector || {};
+  const requests = Array.isArray(payload.requests)
+    ? payload.requests
+    : Array.isArray(payload.image_requests)
+      ? payload.image_requests
+      : [];
+  const assets = Array.isArray(payload.assets)
+    ? payload.assets
+    : Array.isArray(payload.visual_assets)
+      ? payload.visual_assets
+      : [];
+  const queueJobs = Array.isArray(payload.queue_jobs) ? payload.queue_jobs : [];
+  const manifestAssets = Array.isArray(payload.asset_manifest)
+    ? payload.asset_manifest
+    : payload.asset_manifest && payload.asset_manifest.assets && typeof payload.asset_manifest.assets === "object"
+      ? Object.values(payload.asset_manifest.assets)
+      : [];
+
+  const summary = _renderKeyValueList([
+    { key: "Requests", value: String(payload.request_count || 0) },
+    { key: "Assets", value: String(payload.asset_count || 0) },
+    { key: "Queue Jobs", value: String(payload.queue_job_count || 0) },
+    { key: "Manifest Assets", value: String(payload.manifest_asset_count || 0) },
+  ]);
+
+  const requestHtml = requests.length
+    ? requests.map(item => `
+      <div class="rpg-inspector-entry">
+        <div class="rpg-inspector-entry-text">${escapeHtml(item.request_id || "")}</div>
+        <div class="rpg-inspector-entry-meta">${escapeHtml(`${item.kind || ""} \u2022 ${item.target_id || ""} \u2022 ${item.status || ""}`)}</div>
+      </div>
+    `).join("")
+    : _renderInspectorEmpty("No visual requests");
+
+  const assetHtml = assets.length
+    ? assets.map(item => `
+      <div class="rpg-inspector-entry">
+        <div class="rpg-inspector-entry-text">${escapeHtml(item.asset_id || "")}</div>
+        <div class="rpg-inspector-entry-meta">${escapeHtml(`${item.kind || ""} \u2022 ${item.target_id || ""} \u2022 ${item.status || ""}`)}</div>
+      </div>
+    `).join("")
+    : _renderInspectorEmpty("No visual assets");
+
+  const queueHtml = queueJobs.length
+    ? queueJobs.map(item => `
+      <div class="rpg-inspector-entry">
+        <div class="rpg-inspector-entry-text">${escapeHtml(item.job_id || "")}</div>
+        <div class="rpg-inspector-entry-meta">${escapeHtml(`${item.request_id || ""} \u2022 ${item.status || ""} \u2022 attempts=${item.attempts ?? 0}`)}</div>
+      </div>
+    `).join("")
+    : _renderInspectorEmpty("No queue jobs");
+
+  const manifestHtml = manifestAssets.length
+    ? manifestAssets.map(item => `
+      <div class="rpg-inspector-entry">
+        <div class="rpg-inspector-entry-text">${escapeHtml(item.asset_id || "")}</div>
+        <div class="rpg-inspector-entry-meta">${escapeHtml(`${item.filename || ""} \u2022 ${item.mime_type || ""} \u2022 ${item.kind || ""}`)}</div>
+      </div>
+    `).join("")
+    : _renderInspectorEmpty("No manifest assets");
+
+  return `
+    <div class="rpg-inspector-section">
+      <div class="rpg-inspector-section-title">Visual Inspector</div>
+      ${summary}
+      <div class="rpg-inspector-grid">
+        <div class="rpg-inspector-card">
+          <div class="rpg-inspector-card-title">Requests</div>
+          <div class="rpg-inspector-entry-list">${requestHtml}</div>
+        </div>
+        <div class="rpg-inspector-card">
+          <div class="rpg-inspector-card-title">Assets</div>
+          <div class="rpg-inspector-entry-list">${assetHtml}</div>
+        </div>
+        <div class="rpg-inspector-card">
+          <div class="rpg-inspector-card-title">Queue</div>
+          <div class="rpg-inspector-entry-list">${queueHtml}</div>
+        </div>
+        <div class="rpg-inspector-card">
+          <div class="rpg-inspector-card-title">Manifest</div>
+          <div class="rpg-inspector-entry-list">${manifestHtml}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 18.1.E — Session/package panel renderer
+// ---------------------------------------------------------------------------
+
+export function renderSessionPackagePanel(sessionData, packageData) {
+  const sessionManifest = (sessionData && sessionData.manifest) || {};
+  const installedPacks = Array.isArray(sessionData && sessionData.installed_packs)
+    ? sessionData.installed_packs
+    : Array.isArray(sessionData && sessionData.installedPacks)
+      ? sessionData.installedPacks
+      : [];
+  const packageManifest = (packageData && packageData.package_manifest) || {};
+
+  const packListHtml = installedPacks.length
+    ? installedPacks.map(pack => `<div class="rpg-inspector-entry-text">${escapeHtml(pack)}</div>`).join("")
+    : _renderInspectorEmpty("No installed packs");
+
+  return `
+    <div class="rpg-inspector-section">
+      <div class="rpg-inspector-section-title">Session / Package</div>
+      <div class="rpg-inspector-grid">
+        <div class="rpg-inspector-card">
+          <div class="rpg-inspector-card-title">Session Manifest</div>
+          ${_renderKeyValueList([
+            { key: "ID", value: sessionManifest.id || "" },
+            { key: "Title", value: sessionManifest.title || "" },
+            { key: "Schema", value: String(sessionManifest.schema_version || "") },
+            { key: "Archived", value: String(!!sessionManifest.archived) },
+          ])}
+        </div>
+        <div class="rpg-inspector-card">
+          <div class="rpg-inspector-card-title">Installed Packs</div>
+          <div class="rpg-inspector-entry-list">
+            ${packListHtml}
+          </div>
+        </div>
+        <div class="rpg-inspector-card">
+          <div class="rpg-inspector-card-title">Last Export</div>
+          ${_renderKeyValueList([
+            { key: "Package Kind", value: packageManifest.package_kind || "" },
+            { key: "Schema", value: String(packageManifest.schema_version || "") },
+            { key: "Source Session", value: packageManifest.source_session_id || "" },
+            { key: "Title", value: packageManifest.title || "" },
+          ])}
+        </div>
+      </div>
+    </div>
+  `;
+}

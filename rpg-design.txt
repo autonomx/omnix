@@ -1,852 +1,681 @@
-Use this implementation order exactly:
-
-15.2 — session/package round-trip hardening
-15.3 — session lifecycle unification
-16.0 + 16.1 together — dialogue system maturity + memory lifecycle automation
-16.2 + 18.0 together — memory inspector/codex + unified GM tooling
-
-Do not skip ahead. Each later phase assumes the prior one is already landed and passing tests. That ordering matches the current project state: persistence/package hardening first, then canonical session service, then mature dialogue/memory behavior, then inspector/tooling on top.
-
-Below is the full patch plan, written for a coding LLM.
-
-Phase 15.2 — Full patch
-Session/package round-trip hardening
-Purpose
-
-Make session export/import safe and canonical:
-
-validate imported packages
-normalize exported payloads deterministically
-exclude ephemeral runtime-only state
-preserve persistent visual + memory state
-add round-trip tests
-File 1: src/app/rpg/session/package_bridge.py
-Replace file with:
-"""Phase 15.2 — Session/package bridge with validation and normalization."""
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_PACKAGE_SCHEMA_VERSION = 1
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _normalize_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
-    manifest = _safe_dict(manifest)
-    return {
-        "id": _safe_str(manifest.get("id")).strip() or "session:unknown",
-        "title": _safe_str(manifest.get("title")).strip(),
-        "schema_version": int(manifest.get("schema_version") or 2),
-        "archived": bool(manifest.get("archived", False)),
-    }
-
-
-def _normalize_visual_state_for_export(visual_state: Dict[str, Any]) -> Dict[str, Any]:
-    visual_state = _safe_dict(visual_state)
-
-    image_requests = []
-    for item in _safe_list(visual_state.get("image_requests")):
-        item = _safe_dict(item)
-        image_requests.append(
-            {
-                "request_id": _safe_str(item.get("request_id")).strip(),
-                "kind": _safe_str(item.get("kind")).strip(),
-                "target_id": _safe_str(item.get("target_id")).strip(),
-                "status": _safe_str(item.get("status")).strip(),
-                "attempts": int(item.get("attempts") or 0),
-                "max_attempts": int(item.get("max_attempts") or 0),
-                "error": _safe_str(item.get("error")).strip(),
-                "updated_at": _safe_str(item.get("updated_at")).strip(),
-                "completed_at": _safe_str(item.get("completed_at")).strip(),
-            }
-        )
-
-    visual_assets = []
-    for item in _safe_list(visual_state.get("visual_assets")):
-        item = _safe_dict(item)
-        visual_assets.append(
-            {
-                "asset_id": _safe_str(item.get("asset_id")).strip(),
-                "kind": _safe_str(item.get("kind")).strip(),
-                "target_id": _safe_str(item.get("target_id")).strip(),
-                "status": _safe_str(item.get("status")).strip(),
-                "model": _safe_str(item.get("model")).strip(),
-                "style": _safe_str(item.get("style")).strip(),
-                "url": _safe_str(item.get("url")).strip(),
-                "local_path": _safe_str(item.get("local_path")).strip(),
-                "created_from_request_id": _safe_str(item.get("created_from_request_id")).strip(),
-            }
-        )
-
-    image_requests.sort(key=lambda x: (x["request_id"], x["kind"], x["target_id"]))
-    visual_assets.sort(key=lambda x: (x["asset_id"], x["kind"], x["target_id"]))
-
-    # Intentionally do not export queue/job state here.
-    return {
-        "image_requests": image_requests[:100],
-        "visual_assets": visual_assets[:200],
-    }
-
-
-def _normalize_memory_state_for_export(memory_state: Dict[str, Any]) -> Dict[str, Any]:
-    memory_state = _safe_dict(memory_state)
-
-    actor_memory_in = _safe_dict(memory_state.get("actor_memory"))
-    actor_memory_out: Dict[str, Any] = {}
-    for actor_id in sorted(actor_memory_in.keys()):
-        bucket = _safe_dict(actor_memory_in.get(actor_id))
-        entries = []
-        for item in _safe_list(bucket.get("entries")):
-            item = _safe_dict(item)
-            entries.append(
-                {
-                    "text": _safe_str(item.get("text")).strip(),
-                    "strength": float(item.get("strength") or 0.0),
-                    "updated_at": _safe_str(item.get("updated_at")).strip(),
-                }
-            )
-        entries.sort(key=lambda item: (-item["strength"], item["updated_at"], item["text"]))
-        actor_memory_out[actor_id] = {"entries": entries[:50]}
-
-    world_memory_in = _safe_dict(memory_state.get("world_memory"))
-    rumors = []
-    for item in _safe_list(world_memory_in.get("rumors")):
-        item = _safe_dict(item)
-        rumors.append(
-            {
-                "text": _safe_str(item.get("text")).strip(),
-                "strength": float(item.get("strength") or 0.0),
-                "reach": int(item.get("reach") or 0),
-                "updated_at": _safe_str(item.get("updated_at")).strip(),
-            }
-        )
-    rumors.sort(key=lambda item: (-item["strength"], -item["reach"], item["updated_at"], item["text"]))
-
-    return {
-        "actor_memory": actor_memory_out,
-        "world_memory": {
-            "rumors": rumors[:50],
-        },
-    }
-
-
-def _normalize_simulation_state_for_export(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-
-    presentation_state["visual_state"] = _normalize_visual_state_for_export(
-        _safe_dict(presentation_state.get("visual_state"))
-    )
-
-    return {
-        **simulation_state,
-        "presentation_state": presentation_state,
-        "memory_state": _normalize_memory_state_for_export(memory_state),
-    }
-
-
-def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-    package_payload = _safe_dict(package_payload)
-    package_manifest = _safe_dict(package_payload.get("package_manifest"))
-    session_manifest = _safe_dict(package_payload.get("session_manifest"))
-    simulation_state = _safe_dict(package_payload.get("simulation_state"))
-    installed_packs = _safe_list(package_payload.get("installed_packs"))
-
-    errors: List[str] = []
-
-    schema_version = int(package_manifest.get("schema_version") or 0)
-    if schema_version != _PACKAGE_SCHEMA_VERSION:
-        errors.append("unsupported_package_schema_version")
-
-    if not _safe_str(session_manifest.get("id")).strip():
-        errors.append("missing_session_manifest_id")
-
-    if not isinstance(simulation_state, dict):
-        errors.append("invalid_simulation_state")
-
-    if not isinstance(installed_packs, list):
-        errors.append("invalid_installed_packs")
-
-    return {
-        "ok": len(errors) == 0,
-        "errors": errors,
-    }
-
-
-def session_to_package(session: Dict[str, Any]) -> Dict[str, Any]:
-    session = _safe_dict(session)
-    manifest = _normalize_manifest(_safe_dict(session.get("manifest")))
-    simulation_state = _normalize_simulation_state_for_export(_safe_dict(session.get("simulation_state")))
-    installed_packs = sorted(_safe_list(session.get("installed_packs")), key=lambda x: _safe_str(x).strip())
-
-    return {
-        "package_manifest": {
-            "package_kind": "rpg_session_export",
-            "schema_version": _PACKAGE_SCHEMA_VERSION,
-            "source_session_id": manifest.get("id"),
-            "title": manifest.get("title"),
-        },
-        "session_manifest": manifest,
-        "simulation_state": simulation_state,
-        "installed_packs": installed_packs,
-    }
-
-
-def package_to_session(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-    package_payload = _safe_dict(package_payload)
-    validation = validate_package_payload(package_payload)
-    if not validation["ok"]:
-        return {
-            "ok": False,
-            "errors": validation["errors"],
-        }
-
-    session_manifest = _normalize_manifest(_safe_dict(package_payload.get("session_manifest")))
-    simulation_state = _normalize_simulation_state_for_export(_safe_dict(package_payload.get("simulation_state")))
-    installed_packs = sorted(_safe_list(package_payload.get("installed_packs")), key=lambda x: _safe_str(x).strip())
-
-    return {
-        "ok": True,
-        "session": {
-            "manifest": session_manifest,
-            "simulation_state": simulation_state,
-            "installed_packs": installed_packs,
-            "import_metadata": {
-                "package_manifest": _safe_dict(package_payload.get("package_manifest")),
-            },
-        },
-    }
-File 2: src/app/rpg/api/rpg_presentation_routes.py
-Update package import/export routes to use validation result
-
-Find the canonical package bridge import and keep it.
-
-Replace export/import route bodies with:
-
-@rpg_presentation_bp.post("/api/rpg/session/export_package")
-def export_session_package():
-    """Export current session as portable package."""
-    data = request.get_json(silent=True) or {}
-    session = _safe_dict(data.get("session"))
-    package_payload = session_to_package(session)
-    return jsonify({"ok": True, "package": package_payload})
-
-
-@rpg_presentation_bp.post("/api/rpg/session/import_package")
-def import_session_package():
-    """Import portable package as session."""
-    data = request.get_json(silent=True) or {}
-    package_payload = _safe_dict(data.get("package"))
-    result = package_to_session(package_payload)
-    if not result.get("ok"):
-        return jsonify(result), 400
-    return jsonify(result)
-File 3: src/tests/unit/rpg/test_phase151_session_package_bridge.py
-Replace with:
-from app.rpg.session.package_bridge import package_to_session, session_to_package, validate_package_payload
-
-
-def test_session_package_round_trip_preserves_manifest_state_and_packs():
-    session = {
-        "manifest": {"id": "s1", "title": "Campaign A", "schema_version": 2},
-        "simulation_state": {
-            "presentation_state": {
-                "visual_state": {
-                    "image_requests": [{"request_id": "req:1", "kind": "character_portrait", "target_id": "npc:a"}],
-                    "visual_assets": [{"asset_id": "asset:1", "kind": "character_portrait", "target_id": "npc:a"}],
-                }
-            },
-            "memory_state": {
-                "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.7}]}},
-                "world_memory": {"rumors": [{"text": "Bridge rumor", "strength": 0.8, "reach": 2}]},
-            },
-        },
-        "installed_packs": ["portraits", "core"],
-    }
-
-    package_payload = session_to_package(session)
-    restored = package_to_session(package_payload)
-
-    assert restored["ok"] is True
-    restored_session = restored["session"]
-    assert restored_session["manifest"]["id"] == "s1"
-    assert restored_session["installed_packs"] == ["core", "portraits"]
-    assert "presentation_state" in restored_session["simulation_state"]
-    assert "memory_state" in restored_session["simulation_state"]
-
-
-def test_validate_package_payload_rejects_missing_session_manifest():
-    package_payload = {
-        "package_manifest": {"schema_version": 1},
-        "simulation_state": {},
-        "installed_packs": [],
-    }
-    result = validate_package_payload(package_payload)
-    assert result["ok"] is False
-    assert "missing_session_manifest_id" in result["errors"]
-
-
-def test_export_does_not_include_queue_runtime_state():
-    session = {
-        "manifest": {"id": "s1", "title": "Campaign A", "schema_version": 2},
-        "simulation_state": {
-            "presentation_state": {
-                "visual_state": {
-                    "image_requests": [{"request_id": "req:1"}],
-                    "visual_assets": [{"asset_id": "asset:1"}],
-                    "queue_jobs": [{"job_id": "job:1", "lease_token": "secret"}],
-                }
-            },
-            "memory_state": {},
-        },
-        "installed_packs": [],
-    }
-    package_payload = session_to_package(session)
-    visual_state = package_payload["simulation_state"]["presentation_state"]["visual_state"]
-    assert "queue_jobs" not in visual_state
-Phase 15.3 — Full patch
-Session lifecycle unification
-Purpose
-
-Create one canonical service for create/load/save/list/archive/import/export.
-
-File 1: src/app/rpg/session/service.py
-New file:
-"""Phase 15.3 — Canonical session service."""
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-from app.rpg.session.durable_store import (
-    archive_session_on_disk,
-    list_sessions_from_disk,
-    load_session_from_disk,
-    save_session_to_disk,
-)
-from app.rpg.session.migrations import migrate_session_payload
-from app.rpg.session.package_bridge import package_to_session, session_to_package
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
-    session = _safe_dict(session)
-    session = migrate_session_payload(session)
-    manifest = _safe_dict(session.get("manifest"))
-    session["manifest"] = manifest
-    session.setdefault("installed_packs", [])
-    return session
-
-
-def save_session(session: Dict[str, Any]) -> Dict[str, Any]:
-    session = create_or_normalize_session(session)
-    return save_session_to_disk(session)
-
-
-def load_session(session_id: str) -> Dict[str, Any]:
-    session = load_session_from_disk(session_id)
-    return create_or_normalize_session(session)
-
-
-def list_sessions() -> List[Dict[str, Any]]:
-    sessions = list_sessions_from_disk()
-    return [create_or_normalize_session(item) for item in sessions]
-
-
-def archive_session(session_id: str) -> Dict[str, Any]:
-    return archive_session_on_disk(session_id)
-
-
-def export_session_as_package(session: Dict[str, Any]) -> Dict[str, Any]:
-    session = create_or_normalize_session(session)
-    return session_to_package(session)
-
-
-def import_session_from_package(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-    result = package_to_session(package_payload)
-    if not result.get("ok"):
-        return result
-    session = create_or_normalize_session(_safe_dict(result.get("session")))
-    return {"ok": True, "session": session}
-File 2: src/app/rpg/api/rpg_presentation_routes.py
-Replace route-level session/package direct calls with service calls
-
-Add import:
-
-from app.rpg.session.service import (
-    archive_session,
-    export_session_as_package,
-    import_session_from_package,
-    list_sessions as list_canonical_sessions,
-    load_session as load_canonical_session,
-    save_session as save_canonical_session,
-)
-
-Then update canonical session routes to use the service.
-
-Example route bodies:
-
-@rpg_presentation_bp.post("/api/rpg/session/export_package")
-def export_session_package():
-    data = request.get_json(silent=True) or {}
-    session = _safe_dict(data.get("session"))
-    package_payload = export_session_as_package(session)
-    return jsonify({"ok": True, "package": package_payload})
-
-
-@rpg_presentation_bp.post("/api/rpg/session/import_package")
-def import_session_package():
-    data = request.get_json(silent=True) or {}
-    package_payload = _safe_dict(data.get("package"))
-    result = import_session_from_package(package_payload)
-    if not result.get("ok"):
-        return jsonify(result), 400
-    return jsonify(result)
-
-Update list/load/archive routes similarly.
-
-File 3: src/tests/unit/rpg/test_phase153_session_service.py
-New file:
-from app.rpg.session.service import create_or_normalize_session, export_session_as_package
-
-
-def test_create_or_normalize_session_adds_defaults():
-    session = {"manifest": {"id": "s1"}, "simulation_state": {}}
-    out = create_or_normalize_session(session)
-    assert out["manifest"]["id"] == "s1"
-    assert "installed_packs" in out
-    assert "presentation_state" in out["simulation_state"]
-    assert "memory_state" in out["simulation_state"]
-
-
-def test_export_session_as_package_uses_canonical_normalization():
-    session = {"manifest": {"id": "s1"}, "simulation_state": {}}
-    package_payload = export_session_as_package(session)
-    assert package_payload["session_manifest"]["id"] == "s1"
-Phase 16.0 + 16.1 — Full patch together
-Dialogue system maturity + memory lifecycle automation
-Purpose
-
-Make dialogue prompt shaping canonical and make reinforce/decay happen from real gameplay hooks.
-
-File 1: src/app/rpg/memory/dialogue_context.py
-Replace with hardened version:
-"""Phase 16.0 — Canonical dialogue memory shaping."""
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_MAX_CONTEXT_ITEMS = 5
-_MAX_LINE_LEN = 240
-_MAX_PROMPT_LEN = 2000
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _score_memory(item: Dict[str, Any]) -> tuple[float, str, str]:
-    item = _safe_dict(item)
-    strength = float(item.get("strength") or 0.0)
-    updated_at = _safe_str(item.get("updated_at")).strip()
-    text = _safe_str(item.get("text")).strip()
-    return (-strength, updated_at, text)
-
-
-def build_actor_memory_context(simulation_state: Dict[str, Any], actor_id: str, *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
-    simulation_state = _safe_dict(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    actor_memory = _safe_dict(_safe_dict(memory_state.get("actor_memory")).get(actor_id))
-    entries = [_safe_dict(item) for item in _safe_list(actor_memory.get("entries"))]
-    entries.sort(key=_score_memory)
-    return entries[: max(0, int(limit))]
-
-
-def build_world_rumor_context(simulation_state: Dict[str, Any], *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
-    simulation_state = _safe_dict(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-    world_memory = _safe_dict(memory_state.get("world_memory"))
-    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
-    rumors.sort(key=_score_memory)
-    return rumors[: max(0, int(limit))]
-
-
-def build_dialogue_memory_context(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
-    actor_context = build_actor_memory_context(simulation_state, actor_id)
-    rumor_context = build_world_rumor_context(simulation_state)
-    return {
-        "actor_id": _safe_str(actor_id).strip(),
-        "actor_memory": actor_context,
-        "world_rumors": rumor_context,
-    }
-
-
-def build_llm_memory_prompt_block(dialogue_memory_context: Dict[str, Any]) -> str:
-    dialogue_memory_context = _safe_dict(dialogue_memory_context)
-    actor_memory = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("actor_memory"))]
-    world_rumors = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("world_rumors"))]
-
-    lines: List[str] = ["[MEMORY CONTEXT]"]
-
-    if actor_memory:
-        lines.append("Actor memories:")
-        for item in actor_memory:
-            text = _safe_str(item.get("text")).strip()[:_MAX_LINE_LEN]
-            if text:
-                lines.append(f"- {text}")
-
-    if world_rumors:
-        lines.append("World rumors:")
-        for item in world_rumors:
-            text = _safe_str(item.get("text")).strip()[:_MAX_LINE_LEN]
-            if text:
-                lines.append(f"- {text}")
-
-    if len(lines) == 1:
-        lines.append("- none")
-
-    prompt = "\n".join(lines[:16])
-    return prompt[:_MAX_PROMPT_LEN]
-File 2: src/app/rpg/memory/lifecycle.py
-New file:
-"""Phase 16.1 — Memory lifecycle automation."""
-from __future__ import annotations
-
-from typing import Any, Dict
-
-from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def apply_dialogue_memory_hooks(
-    simulation_state: Dict[str, Any],
-    *,
-    actor_id: str,
-    player_text: str = "",
-    reinforce_text: str = "",
-) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-
-    # Deterministic decay on each dialogue lifecycle hook.
-    simulation_state = decay_memory_state(simulation_state, decay_step=0.02)
-
-    normalized_reinforce = _safe_str(reinforce_text).strip() or _safe_str(player_text).strip()
-    if actor_id and normalized_reinforce:
-        simulation_state = reinforce_actor_memory(
-            simulation_state,
-            actor_id=actor_id,
-            text=normalized_reinforce[:240],
-            amount=0.1,
-        )
-
-    return simulation_state
-File 3: src/app/rpg/api/rpg_presentation_routes.py
-Add imports:
-from app.rpg.memory.dialogue_context import build_dialogue_memory_context, build_llm_memory_prompt_block
-from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
-Update main dialogue route
-
-Inside the main gameplay dialogue route:
-
-actor_id = _safe_str(data.get("actor_id") or data.get("speaker")).strip()
-player_text = _safe_str(data.get("text") or data.get("message")).strip()
-
-simulation_state = apply_dialogue_memory_hooks(
-    simulation_state,
-    actor_id=actor_id,
-    player_text=player_text,
-)
-
-dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_id=actor_id)
-llm_memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
-
-And add to payload:
-
-"dialogue_memory_context": dialogue_memory_context,
-"llm_memory_prompt_block": llm_memory_prompt_block,
-"gm_memory_visibility": {
-    "actor_id": actor_id,
-    "actor_memory_count": len(dialogue_memory_context.get("actor_memory", [])),
-    "world_rumor_count": len(dialogue_memory_context.get("world_rumors", [])),
-},
-
-Also make sure the updated simulation_state is written back into setup_payload if that route returns setup state.
-
-File 4: src/tests/unit/rpg/test_phase160_161_dialogue_memory.py
-New file:
-from app.rpg.memory.dialogue_context import build_dialogue_memory_context, build_llm_memory_prompt_block
-from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
-
-
-def test_dialogue_memory_prompt_is_bounded_and_deterministic():
-    simulation_state = {
-        "memory_state": {
-            "actor_memory": {
-                "npc:a": {
-                    "entries": [
-                        {"text": "B", "strength": 0.5},
-                        {"text": "A", "strength": 0.5},
-                    ]
-                }
-            },
-            "world_memory": {"rumors": []},
-        }
-    }
-    context = build_dialogue_memory_context(simulation_state, "npc:a")
-    prompt = build_llm_memory_prompt_block(context)
-    assert context["actor_memory"][0]["text"] == "A"
-    assert len(prompt) <= 2000
-
-
-def test_apply_dialogue_memory_hooks_decays_and_reinforces():
-    simulation_state = {
-        "memory_state": {
-            "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.5}]}},
-            "world_memory": {"rumors": []},
-        }
-    }
-    out = apply_dialogue_memory_hooks(
-        simulation_state,
-        actor_id="npc:a",
-        player_text="hello there",
-    )
-    entries = out["memory_state"]["actor_memory"]["npc:a"]["entries"]
-    assert len(entries) >= 1
-Phase 16.2 + 18.0 — Full patch together
-Memory inspector / codex + unified GM tooling
-Purpose
-
-Expose memory and operations like the visual system already does, then unify them into one GM tooling surface.
-
-File 1: src/app/rpg/presentation/memory_inspector.py
-New file:
-"""Phase 16.2 — Memory inspector builder."""
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def build_memory_inspector_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    memory_state = _safe_dict(simulation_state.get("memory_state"))
-
-    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-    actor_rows = []
-    for actor_id in sorted(actor_memory.keys()):
-        bucket = _safe_dict(actor_memory.get(actor_id))
-        entries = [_safe_dict(item) for item in _safe_list(bucket.get("entries"))]
-        entries.sort(key=lambda item: (-float(item.get("strength") or 0.0), _safe_str(item.get("text")).strip()))
-        actor_rows.append(
-            {
-                "actor_id": actor_id,
-                "entry_count": len(entries),
-                "entries": entries[:20],
-            }
-        )
-
-    world_memory = _safe_dict(memory_state.get("world_memory"))
-    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
-    rumors.sort(key=lambda item: (-float(item.get("strength") or 0.0), -int(item.get("reach") or 0), _safe_str(item.get("text")).strip()))
-
-    return {
-        "actor_memory": actor_rows,
-        "world_rumors": rumors[:50],
-        "actions": {
-            "reinforce_route": "/api/rpg/memory/reinforce",
-            "decay_route": "/api/rpg/memory/decay",
-        },
-    }
-File 2: src/app/rpg/presentation/gm_tooling.py
-New file:
-"""Phase 18.0 — Unified GM tooling payload."""
-from __future__ import annotations
-
-from typing import Any, Dict
-
-from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
-from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def build_gm_tooling_payload(
-    simulation_state: Dict[str, Any],
-    *,
-    queue_jobs: list | None = None,
-    asset_manifest: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    return {
-        "visuals": build_visual_inspector_payload(
-            simulation_state,
-            queue_jobs=queue_jobs or [],
-            asset_manifest=asset_manifest or {"assets": {}},
-        ),
-        "memory": build_memory_inspector_payload(simulation_state),
-        "operations": {
-            "visual_inspector_route": "/api/rpg/visual/inspector",
-            "memory_reinforce_route": "/api/rpg/memory/reinforce",
-            "memory_decay_route": "/api/rpg/memory/decay",
-            "queue_normalize_route": "/api/rpg/visual/queue/normalize",
-            "queue_run_one_route": "/api/rpg/visual/queue/run_one",
-            "queue_prune_route": "/api/rpg/visual/queue/prune",
-            "asset_cleanup_route": "/api/rpg/visual/assets/cleanup",
-            "session_export_route": "/api/rpg/session/export_package",
-            "session_import_route": "/api/rpg/session/import_package",
-        },
-    }
-File 3: src/app/rpg/api/rpg_presentation_routes.py
-Add imports:
-from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
-from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
-Add routes:
-@rpg_presentation_bp.post("/api/rpg/memory/inspector")
-def memory_inspector():
-    data = request.get_json(silent=True) or {}
-    setup_payload = _safe_dict(data.get("setup_payload"))
-    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
-    payload = build_memory_inspector_payload(simulation_state)
-    return jsonify({"ok": True, "memory_inspector": payload})
-
-
-@rpg_presentation_bp.post("/api/rpg/gm/tooling")
-def gm_tooling():
-    data = request.get_json(silent=True) or {}
-    setup_payload = _safe_dict(data.get("setup_payload"))
-    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
-
-    try:
-        queue_jobs = list_visual_jobs()
-    except Exception:
-        queue_jobs = []
-
-    try:
-        asset_manifest = get_asset_manifest()
-    except Exception:
-        asset_manifest = {"assets": {}}
-
-    payload = build_gm_tooling_payload(
-        simulation_state,
-        queue_jobs=queue_jobs,
-        asset_manifest=asset_manifest,
-    )
-    return jsonify({"ok": True, "gm_tooling": payload})
-File 4: src/tests/unit/rpg/test_phase162_memory_inspector.py
-New file:
-from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
-
-
-def test_build_memory_inspector_payload_surfaces_actor_memory_and_rumors():
-    simulation_state = {
-        "memory_state": {
-            "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.7}]}},
-            "world_memory": {"rumors": [{"text": "Bridge rumor", "strength": 0.8, "reach": 2}]},
-        }
-    }
-    payload = build_memory_inspector_payload(simulation_state)
-    assert len(payload["actor_memory"]) == 1
-    assert len(payload["world_rumors"]) == 1
-File 5: src/tests/unit/rpg/test_phase180_gm_tooling.py
-New file:
-from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
-
-
-def test_build_gm_tooling_payload_contains_visual_memory_and_operations():
-    simulation_state = {
-        "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
-        "memory_state": {"actor_memory": {}, "world_memory": {"rumors": []}},
-    }
-    payload = build_gm_tooling_payload(simulation_state, queue_jobs=[], asset_manifest={"assets": {}})
-    assert "visuals" in payload
-    assert "memory" in payload
-    assert "operations" in payload
-Instructions to the coding LLM
+Apply this next as Phase 17.0 — integrity validation + fail-fast enforcement.
 
 Implement in this exact order:
 
-Order
-15.2
-15.3
-16.0 + 16.1 together
-16.2 + 18.0 together
-Rules
-Do not start a later phase until earlier phase files and tests pass.
-Preserve current canonical modules:
-app.rpg.session.package_bridge
-app.rpg.session.migrations
-app.rpg.memory.dialogue_context
-app.rpg.memory.decay
-app.rpg.presentation.visual_inspector
-Do not reintroduce “simple” or “bridge-only” alternative APIs if canonical ones already exist.
-Keep all new payloads bounded and deterministically ordered.
-Do not export ephemeral visual queue runtime state in packages.
-Keep memory and visual state under simulation_state; do not create parallel truth sources.
-Add/extend unit tests for every phase before moving to the next one.
-Acceptance checkpoints
-15.2: package import rejects malformed payloads; round-trip tests pass
-15.3: session routes use canonical service layer
-16.0/16.1: main dialogue route uses canonical memory shaping and lifecycle hooks
-16.2/18.0: memory inspector and GM tooling routes return unified payloads
+17.0.A — core validator module
+17.0.B — session/package validation hooks
+17.0.C — visual integrity validation
+17.0.D — memory integrity validation
+17.0.E — API fail-fast enforcement
+17.0.F — tests
 
-This is the right next block because your recent fixes brought persistence, package bridge, visual inspector, and memory routes into a much more canonical state, so now the work should be about hardening and unifying, not adding more side paths.
+This phase sits directly on top of the current state:
+
+canonical package bridge and session service
+dialogue memory shaping/lifecycle hooks
+visual inspector and GM tooling
+queue/asset pipeline already explicit and bounded.
+Phase 17.0.A — Core validator module
+New file: src/app/rpg/validation/integrity.py
+diff --git a/src/app/rpg/validation/integrity.py b/src/app/rpg/validation/integrity.py
+new file mode 100644
+index 0000000..1700000
+--- /dev/null
++++ b/src/app/rpg/validation/integrity.py
+@@ -0,0 +1,338 @@
++"""Phase 17.0 — Integrity validation and fail-fast enforcement."""
++from __future__ import annotations
++
++from typing import Any, Dict, List, Set
++
++
++MAX_VISUAL_REQUESTS = 100
++MAX_VISUAL_ASSETS = 200
++MAX_ACTOR_MEMORY_ENTRIES = 50
++MAX_WORLD_RUMORS = 50
++
++
++def _safe_str(value: Any) -> str:
++    if value is None:
++        return ""
++    if isinstance(value, str):
++        return value
++    return str(value)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _err(code: str, detail: str = "") -> Dict[str, Any]:
++    return {"code": code, "detail": detail}
++
++
++def validate_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
++    visual_state = _safe_dict(presentation_state.get("visual_state"))
++
++    image_requests = _safe_list(visual_state.get("image_requests"))
++    visual_assets = _safe_list(visual_state.get("visual_assets"))
++
++    errors: List[Dict[str, Any]] = []
++    warnings: List[Dict[str, Any]] = []
++
++    if len(image_requests) > MAX_VISUAL_REQUESTS:
++        errors.append(_err("visual_requests_over_cap", f"{len(image_requests)} > {MAX_VISUAL_REQUESTS}"))
++    if len(visual_assets) > MAX_VISUAL_ASSETS:
++        errors.append(_err("visual_assets_over_cap", f"{len(visual_assets)} > {MAX_VISUAL_ASSETS}"))
++
++    seen_request_ids: Set[str] = set()
++    for idx, item in enumerate(image_requests):
++        item = _safe_dict(item)
++        request_id = _safe_str(item.get("request_id")).strip()
++        status = _safe_str(item.get("status")).strip()
++        if not request_id:
++            errors.append(_err("visual_request_missing_id", f"index={idx}"))
++        elif request_id in seen_request_ids:
++            errors.append(_err("visual_request_duplicate_id", request_id))
++        else:
++            seen_request_ids.add(request_id)
++
++        if status and status not in {"pending", "complete", "failed", "blocked"}:
++            errors.append(_err("visual_request_invalid_status", f"{request_id}:{status}"))
++
++    seen_asset_ids: Set[str] = set()
++    for idx, item in enumerate(visual_assets):
++        item = _safe_dict(item)
++        asset_id = _safe_str(item.get("asset_id")).strip()
++        status = _safe_str(item.get("status")).strip()
++        if not asset_id:
++            errors.append(_err("visual_asset_missing_id", f"index={idx}"))
++        elif asset_id in seen_asset_ids:
++            errors.append(_err("visual_asset_duplicate_id", asset_id))
++        else:
++            seen_asset_ids.add(asset_id)
++
++        if status and status not in {"complete", "failed", "blocked", "pending"}:
++            errors.append(_err("visual_asset_invalid_status", f"{asset_id}:{status}"))
++
++        created_from = _safe_str(item.get("created_from_request_id")).strip()
++        if created_from and created_from not in seen_request_ids:
++            warnings.append(_err("visual_asset_request_reference_missing", f"{asset_id}:{created_from}"))
++
++    return {
++        "ok": len(errors) == 0,
++        "errors": errors,
++        "warnings": warnings,
++        "counts": {
++            "image_requests": len(image_requests),
++            "visual_assets": len(visual_assets),
++        },
++    }
++
++
++def validate_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++
++    actor_memory = _safe_dict(memory_state.get("actor_memory"))
++    world_memory = _safe_dict(memory_state.get("world_memory"))
++    rumors = _safe_list(world_memory.get("rumors"))
++
++    errors: List[Dict[str, Any]] = []
++    warnings: List[Dict[str, Any]] = []
++
++    for actor_id in sorted(actor_memory.keys()):
++        bucket = _safe_dict(actor_memory.get(actor_id))
++        entries = _safe_list(bucket.get("entries"))
++        if len(entries) > MAX_ACTOR_MEMORY_ENTRIES:
++            errors.append(_err("actor_memory_over_cap", f"{actor_id}:{len(entries)}"))
++
++        seen_texts: Set[str] = set()
++        for entry in entries:
++            entry = _safe_dict(entry)
++            text = _safe_str(entry.get("text")).strip()
++            strength = float(entry.get("strength") or 0.0)
++            if not text:
++                errors.append(_err("actor_memory_missing_text", actor_id))
++            if strength < 0.0 or strength > 1.0:
++                errors.append(_err("actor_memory_strength_out_of_bounds", f"{actor_id}:{strength}"))
++            if text in seen_texts:
++                warnings.append(_err("actor_memory_duplicate_text", f"{actor_id}:{text}"))
++            else:
++                seen_texts.add(text)
++
++    if len(rumors) > MAX_WORLD_RUMORS:
++        errors.append(_err("world_rumors_over_cap", f"{len(rumors)}"))
++
++    seen_rumor_texts: Set[str] = set()
++    for rumor in rumors:
++        rumor = _safe_dict(rumor)
++        text = _safe_str(rumor.get("text")).strip()
++        strength = float(rumor.get("strength") or 0.0)
++        reach = int(rumor.get("reach") or 0)
++        if not text:
++            errors.append(_err("world_rumor_missing_text"))
++        if strength < 0.0 or strength > 1.0:
++            errors.append(_err("world_rumor_strength_out_of_bounds", f"{strength}"))
++        if reach < 0:
++            errors.append(_err("world_rumor_negative_reach", f"{reach}"))
++        if text in seen_rumor_texts:
++            warnings.append(_err("world_rumor_duplicate_text", text))
++        else:
++            seen_rumor_texts.add(text)
++
++    return {
++        "ok": len(errors) == 0,
++        "errors": errors,
++        "warnings": warnings,
++        "counts": {
++            "actors": len(actor_memory),
++            "rumors": len(rumors),
++        },
++    }
++
++
++def validate_session_manifest(session: Dict[str, Any]) -> Dict[str, Any]:
++    session = _safe_dict(session)
++    manifest = _safe_dict(session.get("manifest"))
++    errors: List[Dict[str, Any]] = []
++
++    session_id = _safe_str(manifest.get("id")).strip()
++    schema_version = int(manifest.get("schema_version") or 0)
++
++    if not session_id:
++        errors.append(_err("manifest_missing_id"))
++    if schema_version <= 0:
++        errors.append(_err("manifest_invalid_schema_version", str(schema_version)))
++
++    return {
++        "ok": len(errors) == 0,
++        "errors": errors,
++        "warnings": [],
++        "counts": {},
++    }
++
++
++def validate_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    visual = validate_visual_state(simulation_state)
++    memory = validate_memory_state(simulation_state)
++    errors = list(visual["errors"]) + list(memory["errors"])
++    warnings = list(visual["warnings"]) + list(memory["warnings"])
++    return {
++        "ok": len(errors) == 0,
++        "errors": errors,
++        "warnings": warnings,
++        "counts": {
++            "visual_requests": visual["counts"]["image_requests"],
++            "visual_assets": visual["counts"]["visual_assets"],
++            "memory_actors": memory["counts"]["actors"],
++            "memory_rumors": memory["counts"]["rumors"],
++        },
++    }
++
++
++def validate_session_integrity(session: Dict[str, Any]) -> Dict[str, Any]:
++    session = _safe_dict(session)
++    manifest_result = validate_session_manifest(session)
++    simulation_result = validate_simulation_state(_safe_dict(session.get("simulation_state")))
++
++    errors = list(manifest_result["errors"]) + list(simulation_result["errors"])
++    warnings = list(manifest_result["warnings"]) + list(simulation_result["warnings"])
++
++    return {
++        "ok": len(errors) == 0,
++        "errors": errors,
++        "warnings": warnings,
++        "counts": simulation_result["counts"],
++    }
++
++
++def validate_package_integrity(package_payload: Dict[str, Any]) -> Dict[str, Any]:
++    package_payload = _safe_dict(package_payload)
++    session_manifest = _safe_dict(package_payload.get("session_manifest"))
++    simulation_state = _safe_dict(package_payload.get("simulation_state"))
++
++    session_like = {
++        "manifest": session_manifest,
++        "simulation_state": simulation_state,
++    }
++    return validate_session_integrity(session_like)
++
++
++def assert_session_integrity(session: Dict[str, Any]) -> Dict[str, Any]:
++    result = validate_session_integrity(session)
++    if not result["ok"]:
++        raise ValueError(f"session_integrity_failed:{result['errors']}")
++    return result
++
++
++def assert_package_integrity(package_payload: Dict[str, Any]) -> Dict[str, Any]:
++    result = validate_package_integrity(package_payload)
++    if not result["ok"]:
++        raise ValueError(f"package_integrity_failed:{result['errors']}")
++    return result
+Phase 17.0.B — Session/package validation hooks
+File: src/app/rpg/session/service.py
+
+Add validator imports:
+
+diff --git a/src/app/rpg/session/service.py b/src/app/rpg/session/service.py
+index 1111111..2222222 100644
+--- a/src/app/rpg/session/service.py
++++ b/src/app/rpg/session/service.py
+@@ -1,6 +1,11 @@
+ """Phase 15.3 — Canonical session service."""
+ from __future__ import annotations
+ 
+ from typing import Any, Dict, List
++from app.rpg.validation.integrity import (
++    assert_package_integrity,
++    assert_session_integrity,
++    validate_session_integrity,
++)
+ 
+ from app.rpg.session.durable_store import (
+     archive_session_on_disk,
+
+Patch functions:
+
+diff --git a/src/app/rpg/session/service.py b/src/app/rpg/session/service.py
+index 2222222..3333333 100644
+--- a/src/app/rpg/session/service.py
++++ b/src/app/rpg/session/service.py
+@@ -14,6 +14,7 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
+     session = migrate_session_payload(session)
+     manifest = _safe_dict(session.get("manifest"))
+     session["manifest"] = manifest
+     session.setdefault("installed_packs", [])
++    session.setdefault("simulation_state", {})
+     return session
+ 
+ 
+ def save_session(session: Dict[str, Any]) -> Dict[str, Any]:
+     session = create_or_normalize_session(session)
++    assert_session_integrity(session)
+     return save_session_to_disk(session)
+@@ -25,6 +26,7 @@ def load_session(session_id: str) -> Dict[str, Any]:
+     session = load_session_from_disk(session_id)
+     if session is None:
+         return None
++    assert_session_integrity(session)
+     return create_or_normalize_session(session)
+@@ -32,12 +34,20 @@ def list_sessions() -> List[Dict[str, Any]]:
+     sessions = list_sessions_from_disk()
+-    return [create_or_normalize_session(item) for item in sessions]
++    out = []
++    for item in sessions:
++        item = create_or_normalize_session(item)
++        if validate_session_integrity(item)["ok"]:
++            out.append(item)
++    return out
+ 
+ 
+ def archive_session(session_id: str) -> Dict[str, Any]:
+     return archive_session_on_disk(session_id)
+ 
+ 
+ def export_session_as_package(session: Dict[str, Any]) -> Dict[str, Any]:
+     session = create_or_normalize_session(session)
++    assert_session_integrity(session)
+     return session_to_package(session)
+ 
+ 
+ def import_session_from_package(package_payload: Dict[str, Any]) -> Dict[str, Any]:
++    assert_package_integrity(package_payload)
+     result = package_to_session(package_payload)
+     if not result.get("ok"):
+         return result
+     session = create_or_normalize_session(_safe_dict(result.get("session")))
++    assert_session_integrity(session)
+     return {"ok": True, "session": session}
+Phase 17.0.C — Visual integrity validation in package bridge
+File: src/app/rpg/session/package_bridge.py
+
+Add import:
+
+diff --git a/src/app/rpg/session/package_bridge.py b/src/app/rpg/session/package_bridge.py
+index 3333333..4444444 100644
+--- a/src/app/rpg/session/package_bridge.py
++++ b/src/app/rpg/session/package_bridge.py
+@@ -1,6 +1,7 @@
+ """Phase 15.2 — Session/package bridge with validation and normalization."""
+ from __future__ import annotations
+ 
+ from typing import Any, Dict, List
++from app.rpg.validation.integrity import validate_package_integrity
+
+Strengthen validation:
+
+diff --git a/src/app/rpg/session/package_bridge.py b/src/app/rpg/session/package_bridge.py
+index 4444444..5555555 100644
+--- a/src/app/rpg/session/package_bridge.py
++++ b/src/app/rpg/session/package_bridge.py
+@@ -109,6 +109,7 @@ def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
+     installed_packs = _safe_list(package_payload.get("installed_packs"))
+ 
+     errors: List[str] = []
++    warnings: List[str] = []
+ 
+     schema_version = int(package_manifest.get("schema_version") or 0)
+     if schema_version != _PACKAGE_SCHEMA_VERSION:
+@@ -121,9 +122,22 @@ def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
+     if not isinstance(installed_packs, list):
+         errors.append("invalid_installed_packs")
+ 
++    integrity = validate_package_integrity(package_payload)
++    if not integrity["ok"]:
++        errors.extend([item.get("code", "package_integrity_error") for item in integrity["errors"]])
++    warnings.extend([item.get("code", "package_integrity_warning") for item in integrity["warnings"]])
++
+     return {
+         "ok": len(errors) == 0,
+         "errors": errors,
++        "warnings": warnings,
+     }
+Phase 17.0.D — Memory integrity validation at lifecycle boundary
+File: src/app/rpg/memory/lifecycle.py
+
+Add import:
+
+diff --git a/src/app/rpg/memory/lifecycle.py b/src/app/rpg/memory/lifecycle.py
+index 1111111..2222222 100644
+--- a/src/app/rpg/memory/lifecycle.py
++++ b/src/app/rpg/memory/lifecycle.py
+@@ -1,6 +1,7 @@
+ """Phase 16.1 — Memory lifecycle automation."""
+ from __future__ import annotations
+ from typing import Any, Dict
++from app.rpg.validation.integrity import validate_memory_state
+ from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+
+Patch function:
+
+diff --git a/src/app/rpg/memory/lifecycle.py b/src/app/rpg/memory/lifecycle.py
+index 2222222..3333333 100644
+--- a/src/app/rpg/memory/lifecycle.py
++++ b/src/app/rpg/memory/lifecycle.py
+@@ -24,4 +24,10 @@ def apply_dialogue_memory_hooks(
+             text=normalized_reinforce[:240],
+             amount=0.1,
+         )
++
++    validation = validate_memory_state(simulation_state)
++    if not validation["ok"]:
++        raise ValueError(f"memory_integrity_failed:{validation['errors']}")
++
+     return simulation_state
+Phase 17.0.E — API fail-fast enforcement + inspector endpoint
+File: src/app/rpg/api/rpg_presentation_routes.py
+
+Add imports:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 5555555..6666666 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1,6 +1,12 @@
+ from __future__ import annotations
+ 
+ from flask import jsonify, request
++from app.rpg.validation.integrity import (
++    validate_memory_state,
++    validate_package_integrity,
++    validate_session_integrity,
++    validate_visual_state,
++)
+
+Add integrity inspector route:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 6666666..7777777 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1900,3 +1900,37 @@ def gm_tooling():
+     )
+     return jsonify({"ok": True, "gm_tooling": payload})
++
++
++@rpg_presentation_bp.post("/api/rpg/integrity/inspect")
++def integrity_inspect():
++    """Return session/package/simulation integrity diagnostics."""
++    data = request.get_json(silent=True) or {}
++    session = _safe_dict(data.get("session"))
++    package_payload = _safe_dict(data.get("package"))
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
++
++    session_result = validate_session_integrity(session) if session else {"ok": True, "errors": [], "warnings": [], "counts": {}}
++    package_result = validate_package_integrity(package_payload) if package_payload else {"ok": True, "errors": [], "warnings": [], "counts": {}}
++    visual_result = validate_visual_state(simulation_state)
++    memory_result = validate_memory_state(simulation_state)
++
++    return jsonify(
++        {
++            "ok": True,
++            "integrity": {
++                "session": session_result,
++                "package": package_result,
++                "visual": visual_result,
++                "memory": memory_result,
++            },
++        }
++    )
+
+Fail fast in import/export routes:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 7777777..8888888 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -1700,12 +1700,22 @@ def export_session_package():
+     """Export current session as portable package."""
+     data = request.get_json(silent=True) or {}
+     session = _safe_dict(data.get("session"))
+-    package_payload = export_session_as_package(session)
++    try:
++        package_payload = export_session_as_package(session)
++    except Exception as exc:
++        return jsonify({"ok": False, "error": _safe_str(exc)}), 400
+     return jsonify({"ok": True, "package": package_payload})
+@@ -1715,8 +1725,12 @@ def import_session_package():
+     """Import portable package as session."""
+     data = request.get_json(silent=True) or {}
+     package_payload = _safe_dict(data.get("package"))
+-    result = import_session_from_package(package_payload)
+-    if not result.get("ok"):
++    try:
++        result = import_session_from_package(package_payload)
++    except Exception as exc:
++        return jsonify({"ok": False, "error": _safe_str(exc)}), 400
++
++    if not result.get("ok"):
+         return jsonify(result), 400
+     return jsonify(result)
+
+Optionally fail fast in dialogue route after hooks:
+
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+index 8888888..9999999 100644
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@ -560,6 +560,12 @@ def presentation_dialogue():
+     simulation_state = apply_dialogue_memory_hooks(
+         simulation_state,
+         actor_id=primary_actor_id,
+         player_text=player_text,
+     )
++    memory_check = validate_memory_state(simulation_state)
++    if not memory_check["ok"]:
++        return jsonify({"ok": False, "error": "memory_integrity_failed", "details": memory_check["errors"]}), 400
+Phase 17.0.F — Tests
+New file: src/tests/unit/rpg/test_phase170_integrity_validation.py
+diff --git a/src/tests/unit/rpg/test_phase170_integrity_validation.py b/src/tests/unit/rpg/test_phase170_integrity_validation.py
+new file mode 100644
+index 0000000..1701000
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase170_integrity_validation.py
+@@ -0,0 +1,103 @@
++from app.rpg.validation.integrity import (
++    validate_memory_state,
++    validate_package_integrity,
++    validate_session_integrity,
++    validate_visual_state,
++)
++
++
++def test_validate_visual_state_rejects_duplicate_request_ids():
++    simulation_state = {
++        "presentation_state": {
++            "visual_state": {
++                "image_requests": [
++                    {"request_id": "r1", "status": "pending"},
++                    {"request_id": "r1", "status": "pending"},
++                ],
++                "visual_assets": [],
++            }
++        }
++    }
++    result = validate_visual_state(simulation_state)
++    assert result["ok"] is False
++    assert any(e["code"] == "visual_request_duplicate_id" for e in result["errors"])
++
++
++def test_validate_memory_state_rejects_strength_out_of_bounds():
++    simulation_state = {
++        "memory_state": {
++            "actor_memory": {
++                "npc:a": {"entries": [{"text": "fact", "strength": 2.0}]}
++            },
++            "world_memory": {"rumors": []},
++        }
++    }
++    result = validate_memory_state(simulation_state)
++    assert result["ok"] is False
++    assert any(e["code"] == "actor_memory_strength_out_of_bounds" for e in result["errors"])
++
++
++def test_validate_session_integrity_requires_manifest_id():
++    session = {"manifest": {}, "simulation_state": {}}
++    result = validate_session_integrity(session)
++    assert result["ok"] is False
++    assert any(e["code"] == "manifest_missing_id" for e in result["errors"])
++
++
++def test_validate_package_integrity_checks_session_like_structure():
++    package_payload = {
++        "session_manifest": {"id": "s1", "schema_version": 2},
++        "simulation_state": {
++            "memory_state": {"actor_memory": {}, "world_memory": {"rumors": []}},
++            "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
++        },
++    }
++    result = validate_package_integrity(package_payload)
++    assert result["ok"] is True
+New file: src/tests/unit/rpg/test_phase170_service_failfast.py
+diff --git a/src/tests/unit/rpg/test_phase170_service_failfast.py b/src/tests/unit/rpg/test_phase170_service_failfast.py
+new file mode 100644
+index 0000000..1702000
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase170_service_failfast.py
+@@ -0,0 +1,49 @@
++import pytest
++
++from app.rpg.session.service import export_session_as_package, import_session_from_package
++
++
++def test_export_session_as_package_failfast_on_invalid_memory():
++    session = {
++        "manifest": {"id": "s1", "schema_version": 2},
++        "simulation_state": {
++            "memory_state": {
++                "actor_memory": {"npc:a": {"entries": [{"text": "fact", "strength": 99.0}]}},
++                "world_memory": {"rumors": []},
++            },
++            "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
++        },
++    }
++    with pytest.raises(ValueError):
++        export_session_as_package(session)
++
++
++def test_import_session_from_package_failfast_on_invalid_package():
++    package_payload = {
++        "package_manifest": {"schema_version": 1},
++        "session_manifest": {"id": ""},
++        "simulation_state": {},
++        "installed_packs": [],
++    }
++    with pytest.raises(ValueError):
++        import_session_from_package(package_payload)
+New file: src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py
+diff --git a/src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py b/src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py
+new file mode 100644
+index 0000000..1703000
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py
+@@ -0,0 +1,26 @@
++import pytest
++
++from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
++
++
++def test_apply_dialogue_memory_hooks_raises_on_invalid_state():
++    simulation_state = {
++        "memory_state": {
++            "actor_memory": {
++                "npc:a": {"entries": [{"text": "", "strength": 5.0}]}
++            },
++            "world_memory": {"rumors": []},
++        }
++    }
++    with pytest.raises(ValueError):
++        apply_dialogue_memory_hooks(simulation_state, actor_id="npc:a", player_text="hello")
+Coding LLM instructions
+
+Implement in this exact order:
+
+17.0.A
+
+Create src/app/rpg/validation/integrity.py
+
+17.0.B
+
+Wire fail-fast validation into src/app/rpg/session/service.py
+
+17.0.C
+
+Strengthen package bridge validation
+
+17.0.D
+
+Validate memory lifecycle boundaries
+
+17.0.E
+
+Add API fail-fast enforcement and integrity inspector route
+
+17.0.F
+
+Add unit tests
+
+Guardrails
+Do not silently trim invalid state in this phase
+Fail fast on invalid persistent/session/package state
+Warnings are allowed for non-fatal linkage problems; errors must block save/export/import
+Keep validation read-only
+Do not mutate simulation state inside validators
+Preserve current canonical modules and routes
+Acceptance criteria
+invalid session state blocks save/export
+invalid package blocks import
+invalid memory state blocks dialogue lifecycle hooks
+integrity inspector route returns structured diagnostics
+tests cover duplicate ids, bounds violations, and fail-fast service behavior
+
+This is the right next phase because the system is now broad enough that protecting its invariants matters more than adding more capability. The recent integration passes made visuals, memory, package portability, and GM tooling all interact, so fail-fast validation is the right stabilizing step.
