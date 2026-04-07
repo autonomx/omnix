@@ -765,6 +765,61 @@
         return finalData;
     }
 
+    /** Send a turn with a structured action payload (non-streaming). */
+    async function apiSendTurnWithAction(sessionId, input, action) {
+        var res = await fetch('/api/rpg/session/turn', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, input: input, action: action }),
+        });
+        if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
+        return res.json();
+    }
+
+    /** Send a turn with a structured action payload (streaming). */
+    async function apiSendTurnStreamWithAction(sessionId, input, action, onToken) {
+        var res = await fetch('/api/rpg/session/turn/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, input: input, action: action }),
+        });
+        if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
+
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var buf = '';
+        var finalData = null;
+
+        while (true) {
+            var readResult = await reader.read();
+            if (readResult.done) break;
+            buf += decoder.decode(readResult.value, { stream: true });
+
+            var parts = buf.split('\n\n');
+            buf = parts.pop();
+
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i];
+                if (part.startsWith('data: ')) {
+                    try {
+                        var evt = JSON.parse(part.slice(6));
+                        if (evt.type === 'token' && onToken) {
+                            onToken(evt.text);
+                        } else if (evt.type === 'done') {
+                            finalData = evt;
+                        } else if (evt.type === 'error') {
+                            throw new Error(evt.error || 'Stream error');
+                        }
+                    } catch (parseErr) {
+                        // ignore malformed SSE line
+                    }
+                }
+            }
+        }
+
+        return finalData;
+    }
+
     // ─── Response transform ────────────────────────────────────────────────────
 
     function transformResponse(data) {
@@ -805,7 +860,7 @@
 
     // ─── Input handler ─────────────────────────────────────────────────────────
 
-    async function handleRPGInput(input) {
+    async function handleRPGInput(input, structuredAction) {
         if (!input || rpgState.isLoading) return;
 
         appendMessage({ type: 'player', content: input });
@@ -833,10 +888,18 @@
         /**
          * Send a turn via streaming, falling back to the regular endpoint if
          * the stream returns no data (e.g. on older servers without the endpoint).
+         * Supports optional structured action payload for structured commands.
          */
         async function doSendTurn(sid) {
-            var d = await apiSendTurnStream(sid, input, onToken);
-            if (!d) d = await apiSendTurn(sid, input);
+            var d;
+            // If we have a structured action, try streaming with it
+            if (structuredAction) {
+                d = await apiSendTurnStreamWithAction(sid, input, structuredAction, onToken);
+                if (!d) d = await apiSendTurnWithAction(sid, input, structuredAction);
+            } else {
+                d = await apiSendTurnStream(sid, input, onToken);
+                if (!d) d = await apiSendTurn(sid, input);
+            }
             return d;
         }
 
@@ -1014,9 +1077,18 @@
         rpgState.choices.forEach(function (choice) {
             var btn = document.createElement('button');
             btn.className = 'rpg-choice-btn';
-            btn.textContent = choice;
+            // Handle both string choices and object choices (e.g. {text, action, data})
+            var choiceText = (typeof choice === 'string') ? choice : (choice && choice.text) || JSON.stringify(choice);
+            btn.textContent = choiceText;
             btn.addEventListener('click', function () {
-                if (!rpgState.isLoading) handleRPGInput(choice);
+                if (!rpgState.isLoading) {
+                    // If choice is an object with an action, send it as structured action
+                    if (typeof choice === 'object' && choice !== null && choice.action) {
+                        handleRPGInput(choiceText, choice);
+                    } else {
+                        handleRPGInput(choiceText);
+                    }
+                }
             });
             panel.appendChild(btn);
         });
@@ -1217,6 +1289,17 @@
 
     // ─── Rendering: Memory Panel ───────────────────────────────────────────────
 
+    /** Safely convert a memory/event value to a display string. */
+    function _toDisplayString(val) {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string') return val;
+        // If it's an object, try common text fields
+        if (typeof val === 'object') {
+            return val.text || val.description || val.summary || val.content || JSON.stringify(val);
+        }
+        return String(val);
+    }
+
     function renderMemory() {
         var panelWrapper = el('rpgMemoryPanelWrapper');
         var memList      = el('rpgMemoryList');
@@ -1234,16 +1317,16 @@
         panelWrapper.style.display = 'block';
 
         if (memList && hasMemory) {
-            // Show last 5 memory entries
+            // Show last 5 memory entries — handle both strings and objects
             memList.innerHTML = rpgState.memory.slice(-5).map(function (m) {
-                return '<li class="rpg-memory-item">' + escapeHtml(m) + '</li>';
+                return '<li class="rpg-memory-item">' + escapeHtml(_toDisplayString(m)) + '</li>';
             }).join('');
         }
 
         if (eventsList && hasEvents) {
-            // Show last 5 world events
+            // Show last 5 world events — handle both strings and objects
             eventsList.innerHTML = rpgState.worldEvents.slice(-5).map(function (e) {
-                return '<li class="rpg-memory-item rpg-memory-item--event">' + escapeHtml(e) + '</li>';
+                return '<li class="rpg-memory-item rpg-memory-item--event">' + escapeHtml(_toDisplayString(e)) + '</li>';
             }).join('');
         }
     }

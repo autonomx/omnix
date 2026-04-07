@@ -35,6 +35,7 @@ from app.rpg.memory.dialogue_context import (
 from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.player import ensure_player_party, ensure_player_state
+from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.presentation import (
     build_runtime_presentation_payload,
     build_scene_presentation_payload,
@@ -365,9 +366,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     scenes = generate_scenes_from_simulation(after_state)
     current_scene = _safe_dict(scenes[0]) if scenes else _fallback_scene(after_state, player_input)
 
+    llm_gateway = build_app_llm_gateway()
+
     narration_result = narrate_scene(
         current_scene,
         {"simulation_state": after_state, "player_input": player_input},
+        llm_gateway=llm_gateway,
         tone="dramatic",
     )
     summary = summarize_simulation_step(step_result)
@@ -379,6 +383,8 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "action": action,
         "summary": summary[:8],
         "narration": _safe_str(narration_result.get("narrative")),
+        "llm_live": bool(llm_gateway),
+        "llm_attempted": bool(llm_gateway),
     }
     turn_history = _safe_list(runtime_state.get("turn_history"))
     turn_history.append(_copy_dict(runtime_state["last_turn_result"]))

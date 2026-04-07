@@ -26,6 +26,16 @@ from app.rpg.player import build_encounter_view
 logger = logging.getLogger(__name__)
 
 
+def _llm_text(llm_gateway, prompt, *, context=None):
+    """Call the LLM gateway and return the response as a clean string."""
+    response = llm_gateway.call("generate", prompt, context=context or {})
+    if response is None:
+        return ""
+    if isinstance(response, str):
+        return response
+    return str(response)
+
+
 # ---------------------------------------------------------------------------
 # Phase 6.5 — social context helpers
 # ---------------------------------------------------------------------------
@@ -579,6 +589,8 @@ class SceneNarrator:
         self.llm_gateway = llm_gateway
         self.default_tone = default_tone
         self.simulate_mode = simulate_mode
+        self.live_mode = bool(llm_gateway) and not simulate_mode
+        self._last_llm_success = False
 
     def narrate_scene(
         self,
@@ -649,6 +661,8 @@ class SceneNarrator:
             "faction_positions": dict(scene.get("faction_positions") or {}),
         }
 
+        llm_success = getattr(self, "_last_llm_success", False)
+
         return NarrativeResult(
             narrative=narrative,
             choices=choices,
@@ -657,10 +671,13 @@ class SceneNarrator:
             metadata={
                 "tone": tone,
                 "scene_id": scene.get("id"),
-        "npc_count": len(npc_reactions),
-        "choice_count": len(choices),
-        "player_view": player_view,
-        "sandbox_summary": scene.get("sandbox_summary", {}),
+                "npc_count": len(npc_reactions),
+                "choice_count": len(choices),
+                "llm_live": bool(self.live_mode and llm_success),
+                "llm_attempted": bool(self.live_mode),
+                "llm_fallback_used": not llm_success,
+                "player_view": player_view,
+                "sandbox_summary": scene.get("sandbox_summary", {}),
             },
         )
 
@@ -671,17 +688,31 @@ class SceneNarrator:
         tone: str,
     ) -> str:
         """Generate narrative text for a scene."""
-        if self.simulate_mode or self.llm_gateway is None:
+        # Inject player_input from state into scene so simulation fallback sees it
+        scene = dict(scene or {})
+        if "player_input" not in scene and state:
+            pi = state.get("player_input", "")
+            if pi:
+                scene["player_input"] = str(pi)
+
+        if not self.live_mode:
             return self._simulate_narrative(scene, tone)
 
         try:
             prompt = build_scene_prompt(scene, state, tone=tone)
-            response = self.llm_gateway.call("generate", prompt, context={"scene": scene})
-            parsed = parse_scene_response(response if isinstance(response, str) else str(response))
-            return parsed["narrative"]
+            response = _llm_text(self.llm_gateway, prompt, context={"scene": scene})
+            parsed = parse_scene_response(response)
+            narrative = parsed.get("narrative") or ""
+
+            if narrative:
+                self._last_llm_success = True
+                return narrative
         except Exception:
-            logger.exception("Failed to generate narrative, falling back to simulation")
-            return self._simulate_narrative(scene, tone)
+            pass
+
+        # fallback
+        self._last_llm_success = False
+        return self._simulate_narrative(scene, tone)
 
     def _generate_npc_reactions(
         self,
@@ -708,16 +739,19 @@ class SceneNarrator:
             npc_id = actor.get("id", "unknown")
             npc_name = actor.get("name", "Unknown")
 
-            if self.simulate_mode or self.llm_gateway is None:
+            if not self.live_mode:
                 reaction = self._simulate_npc_reaction(npc_name)
             else:
                 try:
                     prompt = build_npc_reaction_prompt(actor, scene, narrative, state=state)
-                    response = self.llm_gateway.call("generate", prompt, context={"npc": npc_id})
-                    reaction = parse_npc_reaction(response if isinstance(response, str) else str(response),
-                                                  npc_id=npc_id, npc_name=npc_name)
+                    response = _llm_text(self.llm_gateway, prompt, context={"npc": npc_id})
+                    reaction = parse_npc_reaction(response, npc_id=npc_id, npc_name=npc_name)
+                    if reaction and reaction.reaction:
+                        self._last_llm_success = True
+                    else:
+                        raise ValueError("empty reaction")
                 except Exception:
-                    logger.exception("Failed to generate NPC reaction for %s", npc_name)
+                    self._last_llm_success = False
                     reaction = self._simulate_npc_reaction(npc_name)
 
             reactions.append(reaction)
@@ -733,17 +767,21 @@ class SceneNarrator:
         source = scene.get("id", scene.get("source", ""))
         action_hooks = scene.get("action_hooks", None)
 
-        if self.simulate_mode or self.llm_gateway is None:
+        if not self.live_mode:
             return self._simulate_choices(scene, source)
 
         try:
             prompt = build_choice_prompt(scene, narrative, action_hooks=action_hooks)
-            response = self.llm_gateway.call("generate", prompt, context={"scene": scene.get("id")})
-            parsed = parse_choices(response if isinstance(response, str) else str(response), source=source)
-            return parsed
+            response = _llm_text(self.llm_gateway, prompt, context={"scene": scene.get("id")})
+            parsed = parse_choices(response, source=source)
+            if parsed:
+                self._last_llm_success = True
+                return parsed
         except Exception:
-            logger.exception("Failed to generate choices, falling back to defaults")
-            return self._simulate_choices(scene, source)
+            pass
+
+        self._last_llm_success = False
+        return self._simulate_choices(scene, source)
 
     # ------------------------------------------------------------------
     # Simulation fallbacks (no LLM required)
@@ -751,22 +789,59 @@ class SceneNarrator:
 
     @staticmethod
     def _simulate_narrative(scene: Dict[str, Any], tone: str) -> str:
-        """Generate simulated narrative text without LLM."""
+        """Generate simulated narrative text without LLM.
+
+        Incorporates player input and scene actors for varied responses.
+        """
         title = scene.get("title", "The Scene")
         summary = scene.get("summary", "Events unfold around you.")
         stakes = scene.get("stakes", "much is at stake")
-        actors = scene.get("actors", [])
-        actor_names = []
-        if isinstance(actors, list):
-            actor_names = [str(a) for a in actors[:3]]
-        elif isinstance(actors, dict):
-            actor_names = list(actors.keys())[:3]
+        player_input = scene.get("player_input", "")
+        actors_data = scene.get("actors", [])
 
-        actor_text = f"{' and '.join(actor_names)} stand before you" if actor_names else "You stand alone"
+        # Extract NPC names from actor dicts
+        npc_names = []
+        if isinstance(actors_data, list):
+            for a in actors_data[:5]:
+                if isinstance(a, dict):
+                    name = a.get("name", a.get("id", ""))
+                    if name:
+                        npc_names.append(str(name))
+                else:
+                    npc_names.append(str(a))
+        elif isinstance(actors_data, dict):
+            npc_names = list(actors_data.keys())[:5]
+
+        npc_text = f"{', '.join(npc_names)} {'are' if len(npc_names) != 1 else 'is'} {'present' if npc_names else 'absent'}" if npc_names else "You are alone for now"
+
+        # Acknowledge player's action
+        action_text = ""
+        if player_input:
+            action_lower = player_input.lower().strip()
+            if any(w in action_lower for w in ("look", "observe", "see", "examine", "search")):
+                action_text = "You carefully observe your surroundings. "
+            elif any(w in action_lower for w in ("talk", "speak", "ask", "question", "whisper", "say")):
+                npc = npc_names[0] if npc_names else "those nearby"
+                action_text = f"You try to speak with {npc}. "
+            elif any(w in action_lower for w in ("attack", "hit", "strike", "kill", "fight")):
+                npc = npc_names[0] if npc_names else "your target"
+                action_text = f"You lash out toward {npc}. "
+            elif any(w in action_lower for w in ("move", "go", "walk", "run", "leave", "head")):
+                loc = scene.get("location", "another area")
+                action_text = f"You start to move toward {loc}. "
+            elif any(w in action_lower for w in ("take", "grab", "pick up", "use")):
+                action_text = "You reach for something. "
+            else:
+                action_text = f"Your words echo: \"{player_input[:80]}\". "
+        else:
+            action_text = "You hesitate, weighing your options. "
+
+        title_scene = f"{title}\n\n" if title != "The Scene" else ""
+
         return (
-            f"{title}\n\n"
+            f"{title_scene}{action_text}"
             f"{summary}\n\n"
-            f"{actor_text}, the weight of the moment pressing down. "
+            f"{npc_text}, the weight of the moment pressing down. "
             f"The stakes are clear: {stakes}. "
             f"The air is thick with {tone} tension as the scene unfolds."
         )
@@ -801,7 +876,44 @@ class SceneNarrator:
 
     @staticmethod
     def _simulate_choices(scene: Dict[str, Any], source: str = "") -> List[Dict[str, Any]]:
-        """Generate simulated choices without LLM."""
+        """Generate simulated choices without LLM.
+
+        Adapts choices based on player input for more relevant options.
+        """
+        player_input = scene.get("player_input", "").lower().strip() if isinstance(scene.get("player_input", ""), str) else ""
+
+        # Base choice pool — rotate based on what player did
+        if player_input:
+            if any(w in player_input for w in ("talk", "speak", "ask", "question")):
+                # After talking, offer follow-up options
+                return [
+                    {"id": "choice_1", "text": "Press for more information", "type": "dialogue", "action": {"type": "escalate_conflict", "target_id": source}},
+                    {"id": "choice_2", "text": "Change the subject", "type": "dialogue", "action": {"type": "intervene_thread", "target_id": source}},
+                    {"id": "choice_3", "text": "Step back and consider", "type": "observe", "action": {"type": "observe_situation", "target_id": source}},
+                ]
+            elif any(w in player_input for w in ("look", "observe", "see", "examine", "search")):
+                # After observing, offer action options
+                return [
+                    {"id": "choice_1", "text": "Act on what you've learned", "type": "action", "action": {"type": "intervene_thread", "target_id": source}},
+                    {"id": "choice_2", "text": "Investigate further", "type": "observe", "action": {"type": "observe_situation", "target_id": source}},
+                    {"id": "choice_3", "text": "Share your findings", "type": "dialogue", "action": {"type": "escalate_conflict", "target_id": source}},
+                ]
+            elif any(w in player_input for w in ("attack", "hit", "strike", "kill", "fight", "draw")):
+                # After combat action, offer escalation
+                return [
+                    {"id": "choice_1", "text": "Press the attack", "type": "action", "action": {"type": "escalate_conflict", "target_id": source}},
+                    {"id": "choice_2", "text": "Stand down", "type": "observe", "action": {"type": "intervene_thread", "target_id": source}},
+                    {"id": "choice_3", "text": "Call for parley", "type": "dialogue", "action": {"type": "intervene_thread", "target_id": source}},
+                ]
+            elif any(w in player_input for w in ("move", "go", "walk", "run", "leave", "head")):
+                # After movement
+                return [
+                    {"id": "choice_1", "text": "Continue forward", "type": "action", "action": {"type": "intervene_thread", "target_id": source}},
+                    {"id": "choice_2", "text": "Reassess your route", "type": "observe", "action": {"type": "observe_situation", "target_id": source}},
+                    {"id": "choice_3", "text": "Return to where you started", "type": "action", "action": {"type": "intervene_thread", "target_id": source}},
+                ]
+
+        # Default varied choices
         return [
             {"id": "choice_1", "text": "Take decisive action", "type": "action", "action": {"type": "intervene_thread", "target_id": source}},
             {"id": "choice_2", "text": "Observe the situation carefully", "type": "observe", "action": {"type": "observe_situation", "target_id": source}},
@@ -836,7 +948,7 @@ def play_scene(
     narrator = SceneNarrator(
         llm_gateway=llm_gateway,
         default_tone=tone,
-        simulate_mode=(llm_gateway is None),
+        simulate_mode=not bool(llm_gateway),
     )
     result = narrator.narrate_scene(scene, state, tone=tone)
 
