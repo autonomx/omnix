@@ -150,6 +150,16 @@ from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
 # Phase 15.2 — Session/package bridge with validation and normalization
 from app.rpg.session.package_bridge import package_to_session, session_to_package, validate_package_payload
 
+# Phase 15.3 — Canonical session service
+from app.rpg.session.service import (
+    archive_session as archive_canonical_session,
+    export_session_as_package,
+    import_session_from_package,
+    list_sessions as list_canonical_sessions,
+    load_session as load_canonical_session,
+    save_session as save_canonical_session,
+)
+
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
 
@@ -1773,11 +1783,11 @@ def memory_decay():
 
 
 # ---------------------------------------------------------------------------
-# Phase 15.2 — Session ↔ Package Unification routes
+# Phase 15.3 — Session ↔ Package Unification routes (service layer)
 # ---------------------------------------------------------------------------
 
 @rpg_presentation_bp.post("/api/rpg/session/export_package")
-def export_session_as_package():
+def export_session_as_package_route():
     """Export current session as portable package."""
     data = request.get_json(silent=True) or {}
     session = _safe_dict(data.get("session"))
@@ -1789,7 +1799,7 @@ def export_session_as_package():
     if not session:
         return jsonify({"ok": False, "error": "session_not_found"}), 404
 
-    package_payload = session_to_package(session)
+    package_payload = export_session_as_package(session)
     return jsonify({"ok": True, "package": package_payload})
 
 
@@ -1799,7 +1809,7 @@ def import_package_as_session():
     global _RPG_SESSION_ROOT_STATE
     data = request.get_json(silent=True) or {}
     package_payload = _safe_dict(data.get("package"))
-    result = package_to_session(package_payload)
+    result = import_session_from_package(package_payload)
     if not result.get("ok"):
         return jsonify(result), 400
     session = _safe_dict(result.get("session"))
