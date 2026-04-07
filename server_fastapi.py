@@ -44,8 +44,10 @@ from app.providers.faster_qwen3_tts_provider import (
 
 # RPG imports
 from app.rpg.models import GameSession
-from app.rpg.persistence import delete_game, list_games, load_game, save_game
-from app.rpg.pipeline import create_new_game, execute_turn, replay_turn
+from app.rpg.persistence import CURRENT_RPG_SCHEMA_VERSION, migrate_package_to_current
+from app.rpg.pipeline import create_new_game, delete_game, execute_turn, list_games, load_game, replay_turn
+from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
+from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
 
 # ============== CONFIG ==============
 HOST = "0.0.0.0"
@@ -463,6 +465,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register RPG adventure routes
+app.include_router(rpg_adventure_bp)
+
+# Register RPG presentation routes
+app.include_router(rpg_presentation_bp)
 
 
 @app.get("/health")
