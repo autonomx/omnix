@@ -90,7 +90,7 @@ class TestGetStatModifier:
         assert get_stat_modifier(8) == -1
 
     def test_modifier_5(self):
-        assert get_stat_modifier(5) == -2  # (5-10)//2 = -2 (floored)
+        assert get_stat_modifier(5) == -3  # (5-10)//2 = -3 (floor division)
 
 
 class TestGetSkillLevel:
