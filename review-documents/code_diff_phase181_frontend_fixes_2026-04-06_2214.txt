@@ -1,0 +1,309 @@
+===============================================================================
+Phase 18.1 — Frontend Inspector Fixes
+Date: 2026-04-06
+Summary: 4 files changed, adding escapeHtml, error/loading helpers,
+         payload-shape tolerance, and source-level tests
+===============================================================================
+
+FILE 1: src/static/rpg/rpgPresentationRenderer.js
+───────────────────────────────────────────────────────────────────────────────
+
+[CHANGE 1.1 — Added escapeHtml and error rendering helpers]
+Location: After _safeText() function (~line 950)
+
++ function escapeHtml(value) {
++   const str = value == null ? "" : String(value);
++   const amp = "\u0026amp;";
++   const lt = "\u0026lt;";
++   const gt = "\u0026gt;";
++   const quot = "\u0026quot;";
++   const apos = "\u0026#39;";
++   return str
++     .replace(/\u0026/g, amp)
++     .replace(/\u003c/g, lt)
++     .replace(/\u003e/g, gt)
++     .replace(/"/g, quot)
++     .replace(/'/g, apos);
++ }
++
++ export function renderInspectorError(label, error) {
++   return `<div class="rpg-inspector-error">${escapeHtml(label)}: ${escapeHtml(error || "unknown_error")}</div>`;
++ }
+
+Purpose: Defines escapeHtml() which was previously undefined but called
+         by _renderInspectorEmpty, _renderKeyValueList, and inspector
+         renderers. Exports renderInspectorError() for dialogue renderer.
+
+───────────────────────────────────────────────────────────────────────────────
+
+[CHANGE 1.2 — Made renderVisualInspector tolerant to alternate payload shapes]
+Location: renderVisualInspector() function (~line 1034)
+
+  export function renderVisualInspector(visualInspector) {
+    const payload = visualInspector || {};
+-   const requests = Array.isArray(payload.requests) ? payload.requests : [];
+-   const assets = Array.isArray(payload.assets) ? payload.assets : [];
++   const requests = Array.isArray(payload.requests)
++     ? payload.requests
++     : Array.isArray(payload.image_requests)
++       ? payload.image_requests
++       : [];
++   const assets = Array.isArray(payload.assets)
++     ? payload.assets
++     : Array.isArray(payload.visual_assets)
++       ? payload.visual_assets
++       : [];
+    const queueJobs = Array.isArray(payload.queue_jobs) ? payload.queue_jobs : [];
+-   const manifestAssets = Array.isArray(payload.asset_manifest) ? payload.asset_manifest : [];
++   const manifestAssets = Array.isArray(payload.asset_manifest)
++     ? payload.asset_manifest
++     : payload.asset_manifest && payload.asset_manifest.assets && typeof payload.asset_manifest.assets === "object"
++       ? Object.values(payload.asset_manifest.assets)
++       : [];
+
+Purpose: Handles backend payload-shape differences. Accepts:
+         - requests OR image_requests
+         - assets OR visual_assets
+         - asset_manifest array OR asset_manifest.assets object
+
+===============================================================================
+
+FILE 2: src/static/rpg/rpgDialogueRenderer.js
+───────────────────────────────────────────────────────────────────────────────
+
+[CHANGE 2.1 — Added renderInspectorError to imports]
+Location: import from rpgPresentationRenderer.js (~line 103)
+
+  import {
++   renderInspectorError,
+    renderMemoryInspector,
+    renderSessionPackagePanel,
+    renderVisualInspector,
+  } from "./rpgPresentationRenderer.js";
+
+===============================================================================
+
+[CHANGE 2.2 — Added loading/error UI to refreshInspectorPanels]
+Location: refreshInspectorPanels() function (~line 109)
+
+  export async function refreshInspectorPanels({ setupPayload, sessionData, packageData, rootEl }) {
++   if (rootEl) {
++     rootEl.innerHTML = `<div class="rpg-inspector-loading">Loading&hellip;</div>`;
++   }
++
+    const [visualRes, memoryRes, gmRes] = await Promise.all([
+      fetchVisualInspector(setupPayload),
+      fetchMemoryInspector(setupPayload),
+      fetchGmTooling(setupPayload),
+    ]);
+
+    rootEl.innerHTML = [
++     visualRes && visualRes.ok === false
++       ? renderInspectorError("Visual", visualRes.error)
++       : "",
+      renderVisualInspector(visualRes.visual_inspector || {}),
++     memoryRes && memoryRes.ok === false
++       ? renderInspectorError("Memory", memoryRes.error)
++       : "",
+      renderMemoryInspector(memoryRes.memory_inspector || {}),
++     gmRes && gmRes.ok === false
++       ? renderInspectorError("GM", gmRes.error)
++       : "",
+      renderGmOperationsPanel(gmRes.gm_tooling || {}),
+      renderSessionPackagePanel(sessionData || {}, packageData || {}),
+    ].join("");
+  }
+
+Purpose: Shows "Loading..." state immediately, then surfaces backend
+         errors per-panel instead of rendering empty/silent failure.
+
+===============================================================================
+
+FILE 3: src/static/rpg/rpgInspectorStyles.css
+───────────────────────────────────────────────────────────────────────────────
+
+[CHANGE 3.1 — Added loading and error state styles]
+Location: End of file (~line 894)
+
++ .rpg-inspector-loading {
++   font-size: 12px;
++   opacity: 0.8;
++   padding: 12px 0;
++ }
++
++ .rpg-inspector-error {
++   border: 1px solid rgba(255, 120, 120, 0.25);
++   background: rgba(255, 120, 120, 0.08);
++   color: inherit;
++   border-radius: 8px;
++   padding: 10px 12px;
++   margin: 8px 0;
++   font-size: 12px;
++ }
+
+Purpose: Visual styling for the loading indicator and error banners
+         with a subtle red warning appearance.
+
+===============================================================================
+
+FILE 4: src/tests/unit/rpg/test_phase181_frontend_tooling_renderers.py
+───────────────────────────────────────────────────────────────────────────────
+
+[CHANGE 4.1 — Replaced placeholder tests with source-level assertions]
+
+- """
+- Phase 18.1 — Frontend tooling integration tests.
+-
+- Tests for renderer function availability and output correctness.
+- """
+-
+-
+- def test_phase181_frontend_tooling_placeholder():
+-     assert True
+-
+-
+- class TestPhase181AMemoryInspectorRenderer:
+-     """Tests for renderMemoryInspector function output structure."""
+-
+-     def test_renders_empty_state(self):
+-         """renderMemoryInspector should handle empty input gracefully."""
+-         assert True
+-
+-     def test_renders_actor_memory_entries(self):
+-         """renderMemoryInspector should render actor memory entries."""
+-         assert True
+-
+-     def test_renders_world_rumors(self):
+-         """renderMemoryInspector should render world rumors."""
+-         assert True
+-
+-     def test_escapes_html_content(self):
+-         """renderMemoryInspector should escape HTML content."""
+-         assert True
+-
+-
+- class TestPhase181CVisualInspectorRenderer:
+-     """Tests for renderVisualInspector function output structure."""
+-
+-     def test_renders_empty_state(self):
+-         """renderVisualInspector should handle empty input gracefully."""
+-         assert True
+-
+-     def test_renders_requests_list(self):
+-         """renderVisualInspector should render visual requests."""
+-         assert True
+-
+-     def test_renders_assets_list(self):
+-         """renderVisualInspector should render visual assets."""
+-         assert True
+-
+-     def test_renders_queue_jobs(self):
+-         """renderVisualInspector should render queue jobs."""
+-         assert True
+-
+-     def test_renders_manifest_assets(self):
+-         """renderVisualInspector should render manifest assets."""
+-         assert True
+-
+-
+- class TestPhase181DGmOperationsPanel:
+-     """Tests for renderGmOperationsPanel function output structure."""
+-
+-     def test_renders_all_operation_buttons(self):
+-         """renderGmOperationsPanel should render all GM operation buttons."""
+-         assert True
+-
+-     def test_renders_route_metadata(self):
+-         """renderGmOperationsPanel should render route metadata."""
+-         assert True
+-
+-     def test_handles_empty_operations(self):
+-         """renderGmOperationsPanel should handle missing operations."""
+-         assert True
+-
+-
+- class TestPhase181ESessionPackagePanel:
+-     """Tests for renderSessionPackagePanel function."""
+-
+-     def test_renders_session_manifest(self):
+-         """renderSessionPackagePanel should render session manifest info."""
+-         assert True
+-
+-     def test_renders_installed_packs(self):
+-         """renderSessionPackagePanel should render installed packs."""
+-         assert True
+-
+-     def test_renders_last_export_info(self):
+-         """renderSessionPackagePanel should render last export info."""
+-         assert True
+-
+-     def test_handles_missing_package_data(self):
+-         """renderSessionPackagePanel should handle missing package data."""
+-         assert True
+-
+-
+- class TestPhase181FUxGuardrails:
+-     """Tests for CSS and UX guardrails."""
+-
+-     def test_css_styles_are_available(self):
+-         """Inspector CSS styles should be available in the stylesheet."""
+-         assert True
+-
+-     def test_entry_list_has_max_height(self):
+-         """Entry lists should have a bounded max-height for scrolling."""
+-         assert True
+-
+-     def test_gm_buttons_are_present(self):
+-         """GM action buttons should be properly styled."""
+-         assert True
++ from pathlib import Path
++
++
++ def _read(path: str) -> str:
++     return Path(path).read_text(encoding="utf-8")
++
++
++ def test_presentation_renderer_defines_escape_html_and_inspector_renderers():
++     src = _read("src/static/rpg/rpgPresentationRenderer.js")
++     assert "function escapeHtml" in src
++     assert "export function renderMemoryInspector" in src
++     assert "export function renderVisualInspector" in src
++     assert "export function renderSessionPackagePanel" in src
++
++
++ def test_dialogue_renderer_wires_loading_and_error_states():
++     src = _read("src/static/rpg/rpgDialogueRenderer.js")
++     assert "rpg-inspector-loading" in src
++     assert "renderInspectorError" in src
++     assert 'data-action="queue-normalize"' in src or '"queue-normalize"' in src
++
++
++ def test_inspector_styles_define_bounded_entry_lists_and_error_state():
++     src = _read("src/static/rpg/rpgInspectorStyles.css")
++     assert ".rpg-inspector-entry-list" in src
++     assert "max-height: 320px" in src
++     assert ".rpg-inspector-error" in src
+
+Purpose: Replaces 106 lines of placeholder assert-True tests with 32
+         lines of meaningful source-level assertions that verify:
+         - escapeHtml function exists
+         - inspector renderer exports exist
+         - loading/error wiring is present
+         - CSS classes and bounded entry lists exist
+
+===============================================================================
+
+VERIFICATION: All 3 tests pass
+
+  src\tests\unit\rpg\test_phase181_frontend_tooling_renderers.py::
+    test_presentation_renderer_defines_escape_html_and_inspector_renderers PASSED
+  src\tests\unit\rpg\test_phase181_frontend_tooling_renderers.py::
+    test_dialogue_renderer_wires_loading_and_error_states PASSED
+  src\tests\unit\rpg\test_phase181_frontend_tooling_renderers.py::
+    test_inspector_styles_define_bounded_entry_lists_and_error_state PASSED
+
+  ============================== 3 passed in 0.10s ==============================
+
+===============================================================================
+END OF DIFF
+===============================================================================

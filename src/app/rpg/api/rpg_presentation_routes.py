@@ -169,6 +169,15 @@ from app.rpg.session.service import (
     save_session as save_canonical_session,
 )
 
+# Phase 17.0 — Integrity validation
+from app.rpg.validation.integrity import (
+    validate_memory_state,
+    validate_package_integrity,
+    validate_session_integrity,
+    validate_simulation_state,
+    validate_visual_state,
+)
+
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
 
@@ -2005,3 +2014,36 @@ def reinforce_memory():
         "actor_id": actor_id,
         "text": text,
     })
+
+
+# ---------------------------------------------------------------------------
+# Phase 17.0 — Integrity inspector + fail-fast enforcement
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/integrity/inspect")
+def integrity_inspect():
+    """Return session/package/simulation integrity diagnostics."""
+    data = request.get_json(silent=True) or {}
+    session = _safe_dict(data.get("session"))
+    package_payload = _safe_dict(data.get("package"))
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+
+    session_result = validate_session_integrity(session) if session else {"ok": True, "errors": [], "warnings": [], "counts": {}}
+    package_result = validate_package_integrity(package_payload) if package_payload else {"ok": True, "errors": [], "warnings": [], "counts": {}}
+    simulation_result = validate_simulation_state(simulation_state)
+    visual_result = validate_visual_state(simulation_state)
+    memory_result = validate_memory_state(simulation_state)
+
+    return jsonify(
+        {
+            "ok": True,
+            "integrity": {
+                "session": session_result,
+                "package": package_result,
+                "simulation": simulation_result,
+                "visual": visual_result,
+                "memory": memory_result,
+            },
+        }
+    )

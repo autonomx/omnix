@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+from app.rpg.validation.integrity import validate_memory_state
 
 
 def _safe_str(value: Any) -> str:
@@ -38,5 +39,10 @@ def apply_dialogue_memory_hooks(
             text=normalized_reinforce[:240],
             amount=0.1,
         )
+
+    validation = validate_memory_state(simulation_state)
+    # Fix #4: only fail on hard errors, not warnings (avoid mid-dialogue crash)
+    if validation["errors"]:
+        raise ValueError(f"memory_integrity_failed:{validation['errors']}")
 
     return simulation_state

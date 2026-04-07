@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.validation.integrity import validate_package_integrity
+
 
 _PACKAGE_SCHEMA_VERSION = 1
 
@@ -146,6 +148,7 @@ def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
     installed_packs = _safe_list(package_payload.get("installed_packs"))
 
     errors: List[str] = []
+    warnings: List[str] = []
 
     schema_version = int(package_manifest.get("schema_version") or 0)
     if schema_version != _PACKAGE_SCHEMA_VERSION:
@@ -160,9 +163,16 @@ def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(installed_packs, list):
         errors.append("invalid_installed_packs")
 
+    integrity = validate_package_integrity(package_payload)
+    if not integrity["ok"]:
+        errors.extend([item.get("code", "package_integrity_error") for item in integrity["errors"]])
+    warnings.extend([item.get("code", "package_integrity_warning") for item in integrity["warnings"]])
+
     return {
         "ok": len(errors) == 0,
         "errors": errors,
+        "warnings": warnings,
+        "error_type": "package_validation_failed" if errors else "",
     }
 
 
