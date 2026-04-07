@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.app.rpg.ai.dialogue.dialogue_manager import DialogueManager
-from src.app.rpg.ai.dialogue.dialogue_response_parser import parse_dialogue_response
+from app.rpg.ai.dialogue.dialogue_manager import DialogueManager
+from app.rpg.ai.dialogue.dialogue_response_parser import parse_dialogue_response
 
 
 def _make_player_state():

@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
-from rpg.ai.goap.planner import plan, goal_satisfied
+from rpg.ai.goap.planner import plan, _goal_satisfied as goal_satisfied
 from rpg.ai.goap.actions import Action, default_actions
 
 

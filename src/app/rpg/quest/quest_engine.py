@@ -18,11 +18,11 @@ from .quest_director import QuestDirector
 from .quest_templates import get_arc_type_for_quest
 
 # Choice and Consequence System
-from src.app.rpg.choice.choice_engine import ChoiceEngine
-from src.app.rpg.choice.consequence_engine import ConsequenceEngine
-from src.app.rpg.choice.world_mutator import WorldMutator
-from src.app.rpg.choice.belief_updater import BeliefUpdater
-from src.app.rpg.choice.timeline_recorder import TimelineRecorder
+from app.rpg.choice.choice_engine import ChoiceEngine
+from app.rpg.choice.consequence_engine import ConsequenceEngine
+from app.rpg.choice.world_mutator import WorldMutator
+from app.rpg.choice.belief_updater import BeliefUpdater
+from app.rpg.choice.timeline_recorder import TimelineRecorder
 
 
 class QuestEngine:

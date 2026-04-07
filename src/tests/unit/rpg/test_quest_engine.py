@@ -13,18 +13,18 @@ This module tests individual components of the quest system:
 import pytest
 from typing import Dict, Any
 
-from src.app.rpg.quest.quest_models import Quest, QuestStage, QuestObjective
-from src.app.rpg.quest.quest_templates import (
+from app.rpg.quest.quest_models import Quest, QuestStage, QuestObjective
+from app.rpg.quest.quest_templates import (
     QUEST_ARCS,
     get_arc_template,
     get_arc_type_for_quest,
 )
-from src.app.rpg.quest.quest_arc_engine import QuestArcBuilder
-from src.app.rpg.quest.quest_state_machine import QuestStateMachine
-from src.app.rpg.quest.quest_director import QuestDirector
-from src.app.rpg.quest.quest_detector import QuestDetector
-from src.app.rpg.quest.quest_tracker import QuestTracker
-from src.app.rpg.quest.quest_engine import QuestEngine
+from app.rpg.quest.quest_arc_engine import QuestArcBuilder
+from app.rpg.quest.quest_state_machine import QuestStateMachine
+from app.rpg.quest.quest_director import QuestDirector
+from app.rpg.quest.quest_detector import QuestDetector
+from app.rpg.quest.quest_tracker import QuestTracker
+from app.rpg.quest.quest_engine import QuestEngine
 
 
 # ==================== Quest Models Tests ====================

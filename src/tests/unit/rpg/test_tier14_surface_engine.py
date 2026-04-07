@@ -18,14 +18,14 @@ import pytest
 
 # Tier 14: Narrative Surface Engine
 try:
-    from src.app.rpg.narrative.surface_engine import NarrativeSurfaceEngine
+    from app.rpg.narrative.surface_engine import NarrativeSurfaceEngine
 except ModuleNotFoundError:
     sys.path.insert(0, "src")
     from app.rpg.narrative.surface_engine import NarrativeSurfaceEngine
 
 # Tier 14: Event Adapter (new)
 try:
-    from src.app.rpg.narrative.event_adapter import (
+    from app.rpg.narrative.event_adapter import (
         normalize_event,
         normalize_batch,
         enrich_event,

@@ -14,14 +14,14 @@ Consequence Engine:
 import pytest
 from typing import Any, Dict, List
 
-from src.app.rpg.choice.choice_models import PlayerChoice, ConsequenceRecord, TimelineEntry
-from src.app.rpg.choice.choice_engine import ChoiceEngine
-from src.app.rpg.choice.consequence_engine import ConsequenceEngine
-from src.app.rpg.choice.world_mutator import WorldMutator
-from src.app.rpg.choice.belief_updater import BeliefUpdater
-from src.app.rpg.choice.timeline_recorder import TimelineRecorder
-from src.app.rpg.quest.quest_engine import QuestEngine
-from src.app.rpg.quest.quest_models import Quest, QuestStage, QuestObjective
+from app.rpg.choice.choice_models import PlayerChoice, ConsequenceRecord, TimelineEntry
+from app.rpg.choice.choice_engine import ChoiceEngine
+from app.rpg.choice.consequence_engine import ConsequenceEngine
+from app.rpg.choice.world_mutator import WorldMutator
+from app.rpg.choice.belief_updater import BeliefUpdater
+from app.rpg.choice.timeline_recorder import TimelineRecorder
+from app.rpg.quest.quest_engine import QuestEngine
+from app.rpg.quest.quest_models import Quest, QuestStage, QuestObjective
 
 
 # ==================== Choice Models Tests ====================
