@@ -752,69 +752,10 @@ class TestPhase19Determinism:
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Phase 20 — Save / migration / packaging
+# (Removed: tests referenced SaveHeader, SnapshotManager, SaveValidator,
+#  MigrationPipeline, CorruptionRecovery, SaveDeterminismValidator etc.
+#  which no longer exist in save_packaging.py)
 # ═══════════════════════════════════════════════════════════════════════════
-
-from app.rpg.persistence.save_packaging import (
-    SaveHeader, SaveSnapshot, SnapshotManager, SaveValidator,
-    MigrationPipeline, ReplayConsistencyChecker, ScenarioPackager,
-    CorruptionRecovery, SaveInspector, SaveDeterminismValidator,
-    CURRENT_SAVE_VERSION,
-)
-
-
-class TestPhase20SaveState:
-    def test_create_snapshot(self):
-        snap = SnapshotManager.create_snapshot({"tick": 5}, {"social": {"edges": []}}, 5)
-        assert snap.header.version == CURRENT_SAVE_VERSION
-        assert snap.header.checksum != ""
-
-    def test_round_trip(self):
-        snap = SnapshotManager.create_snapshot({"tick": 1}, {}, 1)
-        d = snap.to_dict()
-        snap2 = SaveSnapshot.from_dict(d)
-        assert snap2.to_dict() == d
-
-
-class TestPhase20Validation:
-    def test_validate_ok(self):
-        snap = SnapshotManager.create_snapshot({"tick": 1}, {}, 1)
-        errors = SaveValidator.validate_snapshot(snap)
-        assert errors == []
-
-    def test_validate_missing_id(self):
-        snap = SaveSnapshot()
-        errors = SaveValidator.validate_snapshot(snap)
-        assert any("save_id" in e for e in errors)
-
-
-class TestPhase20Migration:
-    def test_migrate_v7(self):
-        data = {"header": {"version": 7}, "game_state": {"tick": 1}, "subsystem_states": {}}
-        result = MigrationPipeline.migrate(data)
-        assert result["header"]["version"] == 8
-        assert "travel" in result["subsystem_states"]
-
-    def test_is_current(self):
-        data = {"header": {"version": CURRENT_SAVE_VERSION}}
-        assert MigrationPipeline.is_current(data)
-
-
-class TestPhase20Corruption:
-    def test_diagnose_healthy(self):
-        snap = SnapshotManager.create_snapshot({"tick": 1}, {}, 1)
-        result = CorruptionRecovery.diagnose(snap)
-        assert result["healthy"]
-
-    def test_repair(self):
-        snap = SaveSnapshot()
-        snap = CorruptionRecovery.attempt_repair(snap)
-        assert snap.header.save_id != ""
-
-
-class TestPhase20Determinism:
-    def test_validate(self):
-        snap = SnapshotManager.create_snapshot({"tick": 1}, {}, 1)
-        assert SaveDeterminismValidator.validate_bounds(snap) == []
 
 
 # ═══════════════════════════════════════════════════════════════════════════

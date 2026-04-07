@@ -40,7 +40,7 @@ from app.rpg.ai.llm_mind.npc_memory import NPCMemory
 from app.rpg.ai.llm_mind.belief_model import BeliefModel
 from app.rpg.ai.llm_mind.goal_engine import GoalEngine
 from app.rpg.ai.llm_mind.npc_decision import NPCDecision
-from app.rpg.ai.llm_mind.npc_decision_validator import NPCDecisionValidator, _ALLOWED_INTENTS, _ALLOWED_ACTION_TYPES
+from app.rpg.ai.llm_mind.npc_decision_validator import NPCDecisionValidator, _ALLOWED_INTENTS, _ALLOWED_ACTIONS
 from app.rpg.ai.llm_mind.npc_mind import NPCMind
 
 
@@ -317,7 +317,7 @@ class TestBoundaryInvariants:
         for inp in garbage_inputs:
             result = v.validate(inp)
             assert result["intent"] in _ALLOWED_INTENTS
-            assert result["action_type"] in _ALLOWED_ACTION_TYPES
+            assert result["action_type"] in _ALLOWED_ACTIONS
             assert isinstance(result["npc_id"], str)
             assert isinstance(result["tick"], int)
             assert isinstance(result["urgency"], float)
@@ -328,7 +328,7 @@ class TestBoundaryInvariants:
         v = NPCDecisionValidator()
         validated = v.validate(d.to_dict())
         assert validated["intent"] in _ALLOWED_INTENTS
-        assert validated["action_type"] in _ALLOWED_ACTION_TYPES
+        assert validated["action_type"] in _ALLOWED_ACTIONS
 
     def test_npc_mind_state_consistency(self):
         """After any operation, NPCMind state must remain self-consistent."""
