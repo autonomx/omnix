@@ -1,681 +1,846 @@
-Apply this next as Phase 17.0 — integrity validation + fail-fast enforcement.
+Phase 18.3A — Core RPG Mechanics Grounding
+Goal
 
-Implement in this exact order:
+Move the active canonical session path from:
 
-17.0.A — core validator module
-17.0.B — session/package validation hooks
-17.0.C — visual integrity validation
-17.0.D — memory integrity validation
-17.0.E — API fail-fast enforcement
-17.0.F — tests
+narrative/world-sim first
+partial RPG systems
+UI fields that exist without real mechanics
 
-This phase sits directly on top of the current state:
+to:
 
-canonical package bridge and session service
-dialogue memory shaping/lifecycle hooks
-visual inspector and GM tooling
-queue/asset pipeline already explicit and bounded.
-Phase 17.0.A — Core validator module
-New file: src/app/rpg/validation/integrity.py
-diff --git a/src/app/rpg/validation/integrity.py b/src/app/rpg/validation/integrity.py
-new file mode 100644
-index 0000000..1700000
---- /dev/null
-+++ b/src/app/rpg/validation/integrity.py
-@@ -0,0 +1,338 @@
-+"""Phase 17.0 — Integrity validation and fail-fast enforcement."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List, Set
-+
-+
-+MAX_VISUAL_REQUESTS = 100
-+MAX_VISUAL_ASSETS = 200
-+MAX_ACTOR_MEMORY_ENTRIES = 50
-+MAX_WORLD_RUMORS = 50
-+
-+
-+def _safe_str(value: Any) -> str:
-+    if value is None:
-+        return ""
-+    if isinstance(value, str):
-+        return value
-+    return str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _err(code: str, detail: str = "") -> Dict[str, Any]:
-+    return {"code": code, "detail": detail}
-+
-+
-+def validate_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+
-+    image_requests = _safe_list(visual_state.get("image_requests"))
-+    visual_assets = _safe_list(visual_state.get("visual_assets"))
-+
-+    errors: List[Dict[str, Any]] = []
-+    warnings: List[Dict[str, Any]] = []
-+
-+    if len(image_requests) > MAX_VISUAL_REQUESTS:
-+        errors.append(_err("visual_requests_over_cap", f"{len(image_requests)} > {MAX_VISUAL_REQUESTS}"))
-+    if len(visual_assets) > MAX_VISUAL_ASSETS:
-+        errors.append(_err("visual_assets_over_cap", f"{len(visual_assets)} > {MAX_VISUAL_ASSETS}"))
-+
-+    seen_request_ids: Set[str] = set()
-+    for idx, item in enumerate(image_requests):
-+        item = _safe_dict(item)
-+        request_id = _safe_str(item.get("request_id")).strip()
-+        status = _safe_str(item.get("status")).strip()
-+        if not request_id:
-+            errors.append(_err("visual_request_missing_id", f"index={idx}"))
-+        elif request_id in seen_request_ids:
-+            errors.append(_err("visual_request_duplicate_id", request_id))
-+        else:
-+            seen_request_ids.add(request_id)
-+
-+        if status and status not in {"pending", "complete", "failed", "blocked"}:
-+            errors.append(_err("visual_request_invalid_status", f"{request_id}:{status}"))
-+
-+    seen_asset_ids: Set[str] = set()
-+    for idx, item in enumerate(visual_assets):
-+        item = _safe_dict(item)
-+        asset_id = _safe_str(item.get("asset_id")).strip()
-+        status = _safe_str(item.get("status")).strip()
-+        if not asset_id:
-+            errors.append(_err("visual_asset_missing_id", f"index={idx}"))
-+        elif asset_id in seen_asset_ids:
-+            errors.append(_err("visual_asset_duplicate_id", asset_id))
-+        else:
-+            seen_asset_ids.add(asset_id)
-+
-+        if status and status not in {"complete", "failed", "blocked", "pending"}:
-+            errors.append(_err("visual_asset_invalid_status", f"{asset_id}:{status}"))
-+
-+        created_from = _safe_str(item.get("created_from_request_id")).strip()
-+        if created_from and created_from not in seen_request_ids:
-+            warnings.append(_err("visual_asset_request_reference_missing", f"{asset_id}:{created_from}"))
-+
-+    return {
-+        "ok": len(errors) == 0,
-+        "errors": errors,
-+        "warnings": warnings,
-+        "counts": {
-+            "image_requests": len(image_requests),
-+            "visual_assets": len(visual_assets),
-+        },
-+    }
-+
-+
-+def validate_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+
-+    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-+    world_memory = _safe_dict(memory_state.get("world_memory"))
-+    rumors = _safe_list(world_memory.get("rumors"))
-+
-+    errors: List[Dict[str, Any]] = []
-+    warnings: List[Dict[str, Any]] = []
-+
-+    for actor_id in sorted(actor_memory.keys()):
-+        bucket = _safe_dict(actor_memory.get(actor_id))
-+        entries = _safe_list(bucket.get("entries"))
-+        if len(entries) > MAX_ACTOR_MEMORY_ENTRIES:
-+            errors.append(_err("actor_memory_over_cap", f"{actor_id}:{len(entries)}"))
-+
-+        seen_texts: Set[str] = set()
-+        for entry in entries:
-+            entry = _safe_dict(entry)
-+            text = _safe_str(entry.get("text")).strip()
-+            strength = float(entry.get("strength") or 0.0)
-+            if not text:
-+                errors.append(_err("actor_memory_missing_text", actor_id))
-+            if strength < 0.0 or strength > 1.0:
-+                errors.append(_err("actor_memory_strength_out_of_bounds", f"{actor_id}:{strength}"))
-+            if text in seen_texts:
-+                warnings.append(_err("actor_memory_duplicate_text", f"{actor_id}:{text}"))
-+            else:
-+                seen_texts.add(text)
-+
-+    if len(rumors) > MAX_WORLD_RUMORS:
-+        errors.append(_err("world_rumors_over_cap", f"{len(rumors)}"))
-+
-+    seen_rumor_texts: Set[str] = set()
-+    for rumor in rumors:
-+        rumor = _safe_dict(rumor)
-+        text = _safe_str(rumor.get("text")).strip()
-+        strength = float(rumor.get("strength") or 0.0)
-+        reach = int(rumor.get("reach") or 0)
-+        if not text:
-+            errors.append(_err("world_rumor_missing_text"))
-+        if strength < 0.0 or strength > 1.0:
-+            errors.append(_err("world_rumor_strength_out_of_bounds", f"{strength}"))
-+        if reach < 0:
-+            errors.append(_err("world_rumor_negative_reach", f"{reach}"))
-+        if text in seen_rumor_texts:
-+            warnings.append(_err("world_rumor_duplicate_text", text))
-+        else:
-+            seen_rumor_texts.add(text)
-+
-+    return {
-+        "ok": len(errors) == 0,
-+        "errors": errors,
-+        "warnings": warnings,
-+        "counts": {
-+            "actors": len(actor_memory),
-+            "rumors": len(rumors),
-+        },
-+    }
-+
-+
-+def validate_session_manifest(session: Dict[str, Any]) -> Dict[str, Any]:
-+    session = _safe_dict(session)
-+    manifest = _safe_dict(session.get("manifest"))
-+    errors: List[Dict[str, Any]] = []
-+
-+    session_id = _safe_str(manifest.get("id")).strip()
-+    schema_version = int(manifest.get("schema_version") or 0)
-+
-+    if not session_id:
-+        errors.append(_err("manifest_missing_id"))
-+    if schema_version <= 0:
-+        errors.append(_err("manifest_invalid_schema_version", str(schema_version)))
-+
-+    return {
-+        "ok": len(errors) == 0,
-+        "errors": errors,
-+        "warnings": [],
-+        "counts": {},
-+    }
-+
-+
-+def validate_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    visual = validate_visual_state(simulation_state)
-+    memory = validate_memory_state(simulation_state)
-+    errors = list(visual["errors"]) + list(memory["errors"])
-+    warnings = list(visual["warnings"]) + list(memory["warnings"])
-+    return {
-+        "ok": len(errors) == 0,
-+        "errors": errors,
-+        "warnings": warnings,
-+        "counts": {
-+            "visual_requests": visual["counts"]["image_requests"],
-+            "visual_assets": visual["counts"]["visual_assets"],
-+            "memory_actors": memory["counts"]["actors"],
-+            "memory_rumors": memory["counts"]["rumors"],
-+        },
-+    }
-+
-+
-+def validate_session_integrity(session: Dict[str, Any]) -> Dict[str, Any]:
-+    session = _safe_dict(session)
-+    manifest_result = validate_session_manifest(session)
-+    simulation_result = validate_simulation_state(_safe_dict(session.get("simulation_state")))
-+
-+    errors = list(manifest_result["errors"]) + list(simulation_result["errors"])
-+    warnings = list(manifest_result["warnings"]) + list(simulation_result["warnings"])
-+
-+    return {
-+        "ok": len(errors) == 0,
-+        "errors": errors,
-+        "warnings": warnings,
-+        "counts": simulation_result["counts"],
-+    }
-+
-+
-+def validate_package_integrity(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-+    package_payload = _safe_dict(package_payload)
-+    session_manifest = _safe_dict(package_payload.get("session_manifest"))
-+    simulation_state = _safe_dict(package_payload.get("simulation_state"))
-+
-+    session_like = {
-+        "manifest": session_manifest,
-+        "simulation_state": simulation_state,
-+    }
-+    return validate_session_integrity(session_like)
-+
-+
-+def assert_session_integrity(session: Dict[str, Any]) -> Dict[str, Any]:
-+    result = validate_session_integrity(session)
-+    if not result["ok"]:
-+        raise ValueError(f"session_integrity_failed:{result['errors']}")
-+    return result
-+
-+
-+def assert_package_integrity(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-+    result = validate_package_integrity(package_payload)
-+    if not result["ok"]:
-+        raise ValueError(f"package_integrity_failed:{result['errors']}")
-+    return result
-Phase 17.0.B — Session/package validation hooks
-File: src/app/rpg/session/service.py
+stat-driven decisions on every player action
+deterministic combat/action resolution
+weapon and gear stats
+inventory-grounded world actions
+XP / level-up / skill progression
+dynamic NPC presence cards
+compact memory UX
+fast-scan narration emphasis
+1. Stats affect every player decision
+New file
+src/app/rpg/player/player_progression_state.py
 
-Add validator imports:
+Add a new authoritative player progression/state module.
 
-diff --git a/src/app/rpg/session/service.py b/src/app/rpg/session/service.py
-index 1111111..2222222 100644
---- a/src/app/rpg/session/service.py
-+++ b/src/app/rpg/session/service.py
-@@ -1,6 +1,11 @@
- """Phase 15.3 — Canonical session service."""
- from __future__ import annotations
- 
- from typing import Any, Dict, List
-+from app.rpg.validation.integrity import (
-+    assert_package_integrity,
-+    assert_session_integrity,
-+    validate_session_integrity,
-+)
- 
- from app.rpg.session.durable_store import (
-     archive_session_on_disk,
+Responsibilities
+initialize canonical player progression
+normalize stats / skills / xp / level / stat points
+expose helpers for stat growth and skill growth
+Add
+ensure_player_progression_state(player_state: Dict[str, Any]) -> Dict[str, Any]
+allocate_starting_stats(player_state: Dict[str, Any], allocation: Dict[str, int]) -> Dict[str, Any]
+get_stat_modifier(value: int) -> int
+get_skill_level(player_state: Dict[str, Any], skill_id: str) -> int
+award_player_xp(player_state: Dict[str, Any], amount: int, source: str = "") -> Dict[str, Any]
+award_skill_xp(player_state: Dict[str, Any], skill_id: str, amount: int, source: str = "") -> Dict[str, Any]
+resolve_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]
+resolve_skill_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]
+Canonical player_state additions
 
-Patch functions:
+Add these defaults:
 
-diff --git a/src/app/rpg/session/service.py b/src/app/rpg/session/service.py
-index 2222222..3333333 100644
---- a/src/app/rpg/session/service.py
-+++ b/src/app/rpg/session/service.py
-@@ -14,6 +14,7 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
-     session = migrate_session_payload(session)
-     manifest = _safe_dict(session.get("manifest"))
-     session["manifest"] = manifest
-     session.setdefault("installed_packs", [])
-+    session.setdefault("simulation_state", {})
-     return session
- 
- 
- def save_session(session: Dict[str, Any]) -> Dict[str, Any]:
-     session = create_or_normalize_session(session)
-+    assert_session_integrity(session)
-     return save_session_to_disk(session)
-@@ -25,6 +26,7 @@ def load_session(session_id: str) -> Dict[str, Any]:
-     session = load_session_from_disk(session_id)
-     if session is None:
-         return None
-+    assert_session_integrity(session)
-     return create_or_normalize_session(session)
-@@ -32,12 +34,20 @@ def list_sessions() -> List[Dict[str, Any]]:
-     sessions = list_sessions_from_disk()
--    return [create_or_normalize_session(item) for item in sessions]
-+    out = []
-+    for item in sessions:
-+        item = create_or_normalize_session(item)
-+        if validate_session_integrity(item)["ok"]:
-+            out.append(item)
-+    return out
- 
- 
- def archive_session(session_id: str) -> Dict[str, Any]:
-     return archive_session_on_disk(session_id)
- 
- 
- def export_session_as_package(session: Dict[str, Any]) -> Dict[str, Any]:
-     session = create_or_normalize_session(session)
-+    assert_session_integrity(session)
-     return session_to_package(session)
- 
- 
- def import_session_from_package(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-+    assert_package_integrity(package_payload)
-     result = package_to_session(package_payload)
-     if not result.get("ok"):
-         return result
-     session = create_or_normalize_session(_safe_dict(result.get("session")))
-+    assert_session_integrity(session)
-     return {"ok": True, "session": session}
-Phase 17.0.C — Visual integrity validation in package bridge
-File: src/app/rpg/session/package_bridge.py
+player_state.setdefault("name", "Player")
+player_state.setdefault("class_id", "")
+player_state.setdefault("background_id", "")
+player_state.setdefault("species_id", "")
+player_state.setdefault("level", 1)
+player_state.setdefault("xp", 0)
+player_state.setdefault("xp_to_next", 100)
+player_state.setdefault("unspent_points", 0)
+player_state.setdefault("unspent_skill_points", 0)
+player_state.setdefault("combat_rating", 0)
+player_state.setdefault("stats", {
+    "strength": 5,
+    "dexterity": 5,
+    "constitution": 5,
+    "intelligence": 5,
+    "wisdom": 5,
+    "charisma": 5,
+})
+player_state.setdefault("skills", {
+    "swordsmanship": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "archery": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "firearms": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "defense": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "stealth": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "persuasion": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "intimidation": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "investigation": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "magic": {"level": 0, "xp": 0, "xp_to_next": 25},
+    "hacking": {"level": 0, "xp": 0, "xp_to_next": 25},
+})
+player_state.setdefault("perk_flags", [])
+player_state.setdefault("progression_log", [])
+Rules
+bounded progression log: max 50
+deterministic leveling
+no random level-up choices unless fully recorded
+Modify
+src/app/rpg/player/player_scene_state.py
+Change
 
-Add import:
+Inside ensure_player_state(...):
 
-diff --git a/src/app/rpg/session/package_bridge.py b/src/app/rpg/session/package_bridge.py
-index 3333333..4444444 100644
---- a/src/app/rpg/session/package_bridge.py
-+++ b/src/app/rpg/session/package_bridge.py
-@@ -1,6 +1,7 @@
- """Phase 15.2 — Session/package bridge with validation and normalization."""
- from __future__ import annotations
- 
- from typing import Any, Dict, List
-+from app.rpg.validation.integrity import validate_package_integrity
+import ensure_player_progression_state
+call it after player_state creation
+add nearby_npc_ids, equipped_weapon_slot, equipped_armor_slots, available_checks
+Also add
+player_state["available_checks"] = []
+player_state["nearby_npc_ids"] = []
+Purpose
 
-Strengthen validation:
+Make progression part of canonical player state, not optional UI decoration.
 
-diff --git a/src/app/rpg/session/package_bridge.py b/src/app/rpg/session/package_bridge.py
-index 4444444..5555555 100644
---- a/src/app/rpg/session/package_bridge.py
-+++ b/src/app/rpg/session/package_bridge.py
-@@ -109,6 +109,7 @@ def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-     installed_packs = _safe_list(package_payload.get("installed_packs"))
- 
-     errors: List[str] = []
-+    warnings: List[str] = []
- 
-     schema_version = int(package_manifest.get("schema_version") or 0)
-     if schema_version != _PACKAGE_SCHEMA_VERSION:
-@@ -121,9 +122,22 @@ def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-     if not isinstance(installed_packs, list):
-         errors.append("invalid_installed_packs")
- 
-+    integrity = validate_package_integrity(package_payload)
-+    if not integrity["ok"]:
-+        errors.extend([item.get("code", "package_integrity_error") for item in integrity["errors"]])
-+    warnings.extend([item.get("code", "package_integrity_warning") for item in integrity["warnings"]])
-+
-     return {
-         "ok": len(errors) == 0,
-         "errors": errors,
-+        "warnings": warnings,
-     }
-Phase 17.0.D — Memory integrity validation at lifecycle boundary
-File: src/app/rpg/memory/lifecycle.py
+Modify
+src/app/rpg/player/__init__.py
 
-Add import:
+Export:
 
-diff --git a/src/app/rpg/memory/lifecycle.py b/src/app/rpg/memory/lifecycle.py
-index 1111111..2222222 100644
---- a/src/app/rpg/memory/lifecycle.py
-+++ b/src/app/rpg/memory/lifecycle.py
-@@ -1,6 +1,7 @@
- """Phase 16.1 — Memory lifecycle automation."""
- from __future__ import annotations
- from typing import Any, Dict
-+from app.rpg.validation.integrity import validate_memory_state
- from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+ensure_player_progression_state
+allocate_starting_stats
+award_player_xp
+award_skill_xp
+resolve_level_ups
+resolve_skill_level_ups
+get_stat_modifier
+New file
+src/app/rpg/player/player_creation.py
+Responsibilities
+create stat allocation contract at adventure start
+apply setup-selected archetype/background bonuses
+validate point-buy or standard spread
+Add
+build_default_stat_allocation(template: Dict[str, Any]) -> Dict[str, int]
+validate_stat_allocation(allocation: Dict[str, int], total_points: int = 12) -> Dict[str, Any]
+apply_character_creation(player_state: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]
+Notes
+user said stats should affect every decision
+this is where creation-time allocation becomes canonical
+2. Combat and actions: stats + skills + weapon stats
+Modify
+src/app/rpg/action_resolver.py
 
-Patch function:
+This file already points in the right direction. Turn it into the main deterministic resolution engine.
 
-diff --git a/src/app/rpg/memory/lifecycle.py b/src/app/rpg/memory/lifecycle.py
-index 2222222..3333333 100644
---- a/src/app/rpg/memory/lifecycle.py
-+++ b/src/app/rpg/memory/lifecycle.py
-@@ -24,4 +24,10 @@ def apply_dialogue_memory_hooks(
-             text=normalized_reinforce[:240],
-             amount=0.1,
-         )
-+
-+    validation = validate_memory_state(simulation_state)
-+    if not validation["ok"]:
-+        raise ValueError(f"memory_integrity_failed:{validation['errors']}")
-+
-     return simulation_state
-Phase 17.0.E — API fail-fast enforcement + inspector endpoint
-File: src/app/rpg/api/rpg_presentation_routes.py
+Replace current simplified logic with:
+New concepts
+action profile
+weapon profile
+armor / defense profile
+roll formula
+hit / miss / crit / graze
+stat + skill modifiers
+item modifiers
+enemy defense / dodge
+contextual bonuses from memory / faction / scene tags
+Add / change
+expand _ACTION_PROFILES
+support:
+attack_melee
+attack_ranged
+block
+dodge
+parry
+persuade
+intimidate
+deceive
+sneak
+investigate
+hack
+cast_spell
+use_item
+pickup_item
+equip_item
+unequip_item
+New functions
+resolve_player_action(simulation_state: Dict[str, Any], action: Dict[str, Any], seed: Optional[int] = None) -> Dict[str, Any]
+resolve_attack_roll(attacker: Dict[str, Any], defender: Dict[str, Any], weapon: Dict[str, Any], seed: Optional[int] = None) -> Dict[str, Any]
+resolve_noncombat_check(player_state: Dict[str, Any], action_type: str, difficulty: str, seed: Optional[int] = None) -> Dict[str, Any]
+compute_weapon_damage(weapon_state: Dict[str, Any], attacker_state: Dict[str, Any], outcome: Dict[str, Any]) -> int
+compute_defense_rating(actor_state: Dict[str, Any]) -> int
+select_equipped_weapon(player_state: Dict[str, Any]) -> Dict[str, Any]
+Damage formula
 
-Add imports:
+Use deterministic formula like:
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 5555555..6666666 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1,6 +1,12 @@
- from __future__ import annotations
- 
- from flask import jsonify, request
-+from app.rpg.validation.integrity import (
-+    validate_memory_state,
-+    validate_package_integrity,
-+    validate_session_integrity,
-+    validate_visual_state,
-+)
+base_damage = weapon.damage
+stat_bonus = strength_mod or dexterity_mod depending on weapon
+skill_bonus = skill_level // 2
+quality_bonus = weapon.quality_tier
+crit_bonus = weapon.crit_bonus if crit else 0
+final_damage = max(0, base_damage + stat_bonus + skill_bonus + quality_bonus + crit_bonus - target_armor)
+Important
 
-Add integrity inspector route:
+The LLM must not decide whether an attack lands.
+It may decide:
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 6666666..7777777 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1900,3 +1900,37 @@ def gm_tooling():
-     )
-     return jsonify({"ok": True, "gm_tooling": payload})
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/integrity/inspect")
-+def integrity_inspect():
-+    """Return session/package/simulation integrity diagnostics."""
-+    data = request.get_json(silent=True) or {}
-+    session = _safe_dict(data.get("session"))
-+    package_payload = _safe_dict(data.get("package"))
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
-+
-+    session_result = validate_session_integrity(session) if session else {"ok": True, "errors": [], "warnings": [], "counts": {}}
-+    package_result = validate_package_integrity(package_payload) if package_payload else {"ok": True, "errors": [], "warnings": [], "counts": {}}
-+    visual_result = validate_visual_state(simulation_state)
-+    memory_result = validate_memory_state(simulation_state)
-+
-+    return jsonify(
-+        {
-+            "ok": True,
-+            "integrity": {
-+                "session": session_result,
-+                "package": package_result,
-+                "visual": visual_result,
-+                "memory": memory_result,
-+            },
-+        }
-+    )
+weapon archetype suggestion at generation time
+item flavor/stats when an item is created
+optional move suggestions
 
-Fail fast in import/export routes:
+But the authoritative action outcome must be deterministic engine logic.
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 7777777..8888888 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1700,12 +1700,22 @@ def export_session_package():
-     """Export current session as portable package."""
-     data = request.get_json(silent=True) or {}
-     session = _safe_dict(data.get("session"))
--    package_payload = export_session_as_package(session)
-+    try:
-+        package_payload = export_session_as_package(session)
-+    except Exception as exc:
-+        return jsonify({"ok": False, "error": _safe_str(exc)}), 400
-     return jsonify({"ok": True, "package": package_payload})
-@@ -1715,8 +1725,12 @@ def import_session_package():
-     """Import portable package as session."""
-     data = request.get_json(silent=True) or {}
-     package_payload = _safe_dict(data.get("package"))
--    result = import_session_from_package(package_payload)
--    if not result.get("ok"):
-+    try:
-+        result = import_session_from_package(package_payload)
-+    except Exception as exc:
-+        return jsonify({"ok": False, "error": _safe_str(exc)}), 400
-+
-+    if not result.get("ok"):
-         return jsonify(result), 400
-     return jsonify(result)
+New file
+src/app/rpg/items/item_stats.py
+Responsibilities
 
-Optionally fail fast in dialogue route after hooks:
+Normalize item combat/equipment stats.
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 8888888..9999999 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -560,6 +560,12 @@ def presentation_dialogue():
-     simulation_state = apply_dialogue_memory_hooks(
-         simulation_state,
-         actor_id=primary_actor_id,
-         player_text=player_text,
-     )
-+    memory_check = validate_memory_state(simulation_state)
-+    if not memory_check["ok"]:
-+        return jsonify({"ok": False, "error": "memory_integrity_failed", "details": memory_check["errors"]}), 400
-Phase 17.0.F — Tests
-New file: src/tests/unit/rpg/test_phase170_integrity_validation.py
-diff --git a/src/tests/unit/rpg/test_phase170_integrity_validation.py b/src/tests/unit/rpg/test_phase170_integrity_validation.py
-new file mode 100644
-index 0000000..1701000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase170_integrity_validation.py
-@@ -0,0 +1,103 @@
-+from app.rpg.validation.integrity import (
-+    validate_memory_state,
-+    validate_package_integrity,
-+    validate_session_integrity,
-+    validate_visual_state,
-+)
-+
-+
-+def test_validate_visual_state_rejects_duplicate_request_ids():
-+    simulation_state = {
-+        "presentation_state": {
-+            "visual_state": {
-+                "image_requests": [
-+                    {"request_id": "r1", "status": "pending"},
-+                    {"request_id": "r1", "status": "pending"},
-+                ],
-+                "visual_assets": [],
-+            }
-+        }
-+    }
-+    result = validate_visual_state(simulation_state)
-+    assert result["ok"] is False
-+    assert any(e["code"] == "visual_request_duplicate_id" for e in result["errors"])
-+
-+
-+def test_validate_memory_state_rejects_strength_out_of_bounds():
-+    simulation_state = {
-+        "memory_state": {
-+            "actor_memory": {
-+                "npc:a": {"entries": [{"text": "fact", "strength": 2.0}]}
-+            },
-+            "world_memory": {"rumors": []},
-+        }
-+    }
-+    result = validate_memory_state(simulation_state)
-+    assert result["ok"] is False
-+    assert any(e["code"] == "actor_memory_strength_out_of_bounds" for e in result["errors"])
-+
-+
-+def test_validate_session_integrity_requires_manifest_id():
-+    session = {"manifest": {}, "simulation_state": {}}
-+    result = validate_session_integrity(session)
-+    assert result["ok"] is False
-+    assert any(e["code"] == "manifest_missing_id" for e in result["errors"])
-+
-+
-+def test_validate_package_integrity_checks_session_like_structure():
-+    package_payload = {
-+        "session_manifest": {"id": "s1", "schema_version": 2},
-+        "simulation_state": {
-+            "memory_state": {"actor_memory": {}, "world_memory": {"rumors": []}},
-+            "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
-+        },
-+    }
-+    result = validate_package_integrity(package_payload)
-+    assert result["ok"] is True
-New file: src/tests/unit/rpg/test_phase170_service_failfast.py
-diff --git a/src/tests/unit/rpg/test_phase170_service_failfast.py b/src/tests/unit/rpg/test_phase170_service_failfast.py
-new file mode 100644
-index 0000000..1702000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase170_service_failfast.py
-@@ -0,0 +1,49 @@
-+import pytest
-+
-+from app.rpg.session.service import export_session_as_package, import_session_from_package
-+
-+
-+def test_export_session_as_package_failfast_on_invalid_memory():
-+    session = {
-+        "manifest": {"id": "s1", "schema_version": 2},
-+        "simulation_state": {
-+            "memory_state": {
-+                "actor_memory": {"npc:a": {"entries": [{"text": "fact", "strength": 99.0}]}},
-+                "world_memory": {"rumors": []},
-+            },
-+            "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
-+        },
-+    }
-+    with pytest.raises(ValueError):
-+        export_session_as_package(session)
-+
-+
-+def test_import_session_from_package_failfast_on_invalid_package():
-+    package_payload = {
-+        "package_manifest": {"schema_version": 1},
-+        "session_manifest": {"id": ""},
-+        "simulation_state": {},
-+        "installed_packs": [],
-+    }
-+    with pytest.raises(ValueError):
-+        import_session_from_package(package_payload)
-New file: src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py
-diff --git a/src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py b/src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py
-new file mode 100644
-index 0000000..1703000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase170_memory_lifecycle_failfast.py
-@@ -0,0 +1,26 @@
-+import pytest
-+
-+from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
-+
-+
-+def test_apply_dialogue_memory_hooks_raises_on_invalid_state():
-+    simulation_state = {
-+        "memory_state": {
-+            "actor_memory": {
-+                "npc:a": {"entries": [{"text": "", "strength": 5.0}]}
-+            },
-+            "world_memory": {"rumors": []},
-+        }
-+    }
-+    with pytest.raises(ValueError):
-+        apply_dialogue_memory_hooks(simulation_state, actor_id="npc:a", player_text="hello")
-Coding LLM instructions
+Add schema helpers
+normalize_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]
+is_weapon(item_def: Dict[str, Any]) -> bool
+is_armor(item_def: Dict[str, Any]) -> bool
+is_shield(item_def: Dict[str, Any]) -> bool
+get_weapon_skill(item_def: Dict[str, Any]) -> str
+get_weapon_attack_stat(item_def: Dict[str, Any]) -> str
+Canonical item stat schema
 
-Implement in this exact order:
+Every item may now include:
 
-17.0.A
+"combat_stats": {
+    "weapon_type": "sword",
+    "attack_stat": "strength",
+    "skill_id": "swordsmanship",
+    "damage": 12,
+    "accuracy": 3,
+    "crit_chance": 5,
+    "crit_bonus": 6,
+    "range": 1,
+    "armor_penetration": 0,
+    "defense_bonus": 0,
+    "block_bonus": 0,
+    "speed_bonus": 0,
+}
+"equipment": {
+    "slot": "main_hand",
+    "two_handed": False,
+}
+"quality": {
+    "tier": 0,
+    "rarity": "common",
+}
 
-Create src/app/rpg/validation/integrity.py
+This supports your examples:
 
-17.0.B
+rusty sword damage 12
+iron sword damage 28
+cyberpunk pistol / rifle / smartgun etc.
+Modify
+src/app/rpg/items/item_registry.py
 
-Wire fail-fast validation into src/app/rpg/session/service.py
+This file is too static and too small right now.
 
-17.0.C
+Change
+keep deterministic static definitions for baseline items
+add support for richer item definitions with combat_stats, equipment, quality, value, durability, tags
+Add starter examples
+rusty_sword
+iron_sword
+wooden_shield
+iron_shield
+short_bow
+pistol_9mm
+combat_knife
+Also add
+normalize_item_definition(item_def: Dict[str, Any]) -> Dict[str, Any]
+Important design choice
 
-Strengthen package bridge validation
+User wants AI to decide item stats because genres vary.
+So do not make the registry the only source of truth.
+Instead:
 
-17.0.D
+static registry = safe baseline
+LLM-generated item definitions are allowed
+but must be normalized and bounded before entering simulation state
+New file
+src/app/rpg/items/generated_item_builder.py
+Responsibilities
 
-Validate memory lifecycle boundaries
+Allow LLM/item generator to propose dynamic item stats, but normalize and clamp them.
 
-17.0.E
+Add
+build_item_definition_from_llm(payload: Dict[str, Any]) -> Dict[str, Any]
+clamp_generated_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]
+derive_item_power_band(world_tier: int, rarity: str) -> Dict[str, int]
+Rules
+generated stats must be bounded by campaign/world tier
+item id deterministic from content hash
+record generated_by = "llm" and stat_origin = "generated"
+no silent acceptance of malformed item definitions
 
-Add API fail-fast enforcement and integrity inspector route
+This is how you let AI “decide all this” without losing determinism.
 
-17.0.F
+Modify
+src/app/rpg/items/inventory_state.py
+Expand stack schema
 
-Add unit tests
+Currently items are mostly item_id, qty, name/category/tags.
 
-Guardrails
-Do not silently trim invalid state in this phase
-Fail fast on invalid persistent/session/package state
-Warnings are allowed for non-fatal linkage problems; errors must block save/export/import
-Keep validation read-only
-Do not mutate simulation state inside validators
-Preserve current canonical modules and routes
-Acceptance criteria
-invalid session state blocks save/export
-invalid package blocks import
-invalid memory state blocks dialogue lifecycle hooks
-integrity inspector route returns structured diagnostics
-tests cover duplicate ids, bounds violations, and fail-fast service behavior
+Change normalized inventory stack to include:
 
-This is the right next phase because the system is now broad enough that protecting its invariants matters more than adding more capability. The recent integration passes made visuals, memory, package portability, and GM tooling all interact, so fail-fast validation is the right stabilizing step.
+item_id
+qty
+name
+category
+tags
+description
+combat_stats
+equipment
+quality
+value
+instance_id for non-stackable items
+durability
+equipped flag only in views, not canonical item stack
+Add helpers
+equip_inventory_item(inventory_state: Dict[str, Any], item_id: str, slot: str = "") -> Dict[str, Any]
+unequip_inventory_slot(inventory_state: Dict[str, Any], slot: str) -> Dict[str, Any]
+find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]
+get_equipped_weapon(inventory_state: Dict[str, Any]) -> Dict[str, Any]
+get_equipped_armor(inventory_state: Dict[str, Any]) -> List[Dict[str, Any]]
+Notes
+stackable consumables remain stackable
+weapons/armor should generally be instance records or qty 1 only
+New file
+src/app/rpg/items/world_items.py
+Responsibilities
+
+Ground loot and objects in scene/world state.
+
+Add
+ensure_world_item_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
+spawn_world_item(simulation_state: Dict[str, Any], location_id: str, item_def: Dict[str, Any]) -> Dict[str, Any]
+pickup_world_item(simulation_state: Dict[str, Any], item_instance_id: str) -> Dict[str, Any]
+drop_world_item(simulation_state: Dict[str, Any], item_id: str, qty: int = 1) -> Dict[str, Any]
+list_scene_items(simulation_state: Dict[str, Any], location_id: str) -> List[Dict[str, Any]]
+Canonical simulation subtree
+simulation_state["world_items"] = {
+    "by_location": {
+        "loc:market": [ ... ],
+    }
+}
+
+This is what fixes:
+
+narration says you pick up shield
+shield actually enters inventory
+Modify
+src/app/rpg/items/item_effects.py
+Change
+
+Current apply_item_use only consumes an item and returns effect metadata.
+
+Add actual effect mutation:
+
+restore hp / mana / stamina
+apply buff
+cleanse condition
+equip item if usable gear action
+emit effect log entry
+Add
+support effect.type == "restore_resource"
+support effect.type == "grant_status"
+support effect.type == "equip"
+support effect.type == "spawn_loot"
+Modify
+src/app/rpg/encounter/resolver.py
+
+Keep it as encounter-mode orchestrator, but stop treating it as the main combat calculator.
+
+Change
+route combat actions into action_resolver.resolve_player_action(...)
+route NPC attacks into same deterministic resolution function
+keep mode / encounter state transitions here
+no direct arbitrary damage changes here
+Add
+resolve_combat_round(...)
+include:
+attack result
+damage dealt
+defender hp after hit
+conditions applied
+xp hooks if encounter resolves
+Modify
+src/app/rpg/encounter/encounter_resolver.py
+
+This older file has flat “attack does 2 hp” logic.
+Deprecate it from active path or rewrite it as a compatibility wrapper over action_resolver.
+
+Add header
+“legacy dict resolver wrapper”
+redirect all damage resolution into action_resolver
+3. Inventory/world consistency
+Modify
+src/app/rpg/session/runtime.py
+
+This is the most important file in the active path.
+
+Expand _ensure_simulation_state(...)
+
+Also call:
+
+ensure_player_inventory(...)
+ensure_world_item_state(...)
+ensure_player_progression_state(...)
+Replace current simple derive_player_action(...)
+
+It currently only recognizes thread/faction world actions.
+
+Expand it to derive:
+
+combat actions
+dialogue checks
+pickup/drop/equip/use item actions
+investigation / stealth / hacking / spellcasting
+quest turn-in
+loot action
+Add
+derive_action_candidates(simulation_state, player_input) -> List[Dict[str, Any]]
+score_action_candidates_with_llm(...) -> Dict[str, Any] optional bias-only
+resolve_player_turn_action(...) -> Dict[str, Any]
+New active turn flow
+
+Inside apply_turn(...):
+
+load session
+normalize state
+derive structured action
+resolve deterministic action
+mutate inventory / world item state / actor hp / statuses
+award player xp + skill xp
+step world simulation
+generate scene
+build nearby NPC list
+narrate resolved outcome
+save
+Add returned fields
+
+Return in payload:
+
+player.available_checks
+player.stats
+player.skills
+player.equipment
+player.nearby_npc_ids
+scene.items
+scene.nearby_npcs
+combat_result
+xp_result
+skill_xp_result
+
+This is the central wiring file.
+
+Modify
+src/app/rpg/creator/world_scene_generator.py
+Add
+
+When generating scenes, include:
+
+present_npc_ids
+items
+available_actions
+available_checks
+
+Make scene generator derive:
+
+nearby NPCs from location / encounter / active scene
+visible scene items from world_items.by_location[location_id]
+4. XP / level-up / skill progression
+New file
+src/app/rpg/player/player_xp_rules.py
+Responsibilities
+
+Compute xp from combat, quests, discoveries, diplomacy.
+
+Add
+compute_enemy_difficulty_xp(enemy_state: Dict[str, Any]) -> int
+compute_quest_xp(quest_state: Dict[str, Any]) -> int
+compute_action_skill_xp(action_result: Dict[str, Any]) -> Dict[str, int]
+compute_stat_influence_bonus(player_state: Dict[str, Any], action_result: Dict[str, Any]) -> int
+Rules
+
+User wants:
+
+xp affected by stats
+xp affected by enemy difficulty
+quest xp
+skills gain xp from use
+AI decides this
+
+So:
+
+AI may assign:
+enemy difficulty tier
+quest reward tier
+item/world tier
+but XP formulas stay deterministic after those tags are in state
+
+For example:
+
+enemy_xp = 20 + difficulty_tier * 15
+quest_xp = 50 + quest_rank * 25
+skill_xp = 2 + action_difficulty_bonus + success_bonus
+Important
+
+Do not let LLM directly mutate xp totals on the fly.
+Let it assign bounded tags:
+
+difficulty_tier
+quest_rank
+skill_family
+rarity
+
+Then formula handles the rest.
+
+Modify
+src/app/rpg/choice/consequence_engine.py
+Add
+
+Quest completion and major resolution should emit structured reward events:
+
+xp_award
+item_reward
+reputation_reward
+skill_xp_award
+Modify
+src/app/rpg/creator/world_player_actions.py
+Add metadata to actions
+
+Every resolved player action should carry:
+
+difficulty_tier
+skill_id
+xp_category
+target_difficulty
+
+This will let runtime award both player xp and skill xp consistently.
+
+Modify
+src/app/rpg/api/rpg_session_routes.py
+Add payload support
+
+Return xp_result and level_up_result in turn responses.
+
+Non-stream and stream final done event should include:
+
+player.level
+player.xp
+player.skills
+level_up
+skill_level_ups
+5. NPC cards should be dynamic based on nearby NPCs
+Modify
+src/app/rpg/presentation/speaker_cards.py
+Expand
+
+Current card generation is too narrow.
+
+Add:
+
+build_nearby_npc_cards(simulation_state: Dict[str, Any], scene: Dict[str, Any]) -> List[Dict[str, Any]]
+
+Each card should include:
+
+npc_id
+name
+role
+faction
+portrait
+attitude_to_player
+status_summary
+location_name
+is_present
+relationship_tags
+Data source
+
+Use:
+
+scene present_npc_ids
+player nearby_npc_ids
+visual portrait state if available
+Modify
+src/app/rpg/presentation/__init__.py
+
+Export:
+
+build_nearby_npc_cards
+Modify
+src/app/rpg/session/runtime.py
+
+When building frontend payload:
+
+replace generic session npcs list for active scene panel with:
+nearby_npcs
+known_npcs
+
+Keep both:
+
+nearby_npcs for scene cards
+npcs or known_npcs for codex/global registry
+Modify
+src/static/rpg/rpg.js
+Change
+add nearby_npcs to state
+renderNPCs() should render nearby_npcs for the main panel
+add optional “known NPCs” codex panel elsewhere if needed
+New rule
+
+Cards should appear/disappear as nearby list changes after each turn.
+
+6. Memory UX cleanup
+Modify
+src/static/rpg/rpg.js
+Change memory panel behavior
+default collapsed
+add toggle button
+only show top 3–5 meaningful entries by default
+full list only in expanded view
+compress repeated duplicates
+Add helpers
+summarizeMemoryEntries(entries)
+dedupeMemoryEntries(entries)
+toggleMemoryPanel()
+Change display labels
+
+Instead of raw strings like:
+
+Maintain awareness of player
+Faction loyalty baseline
+
+render more human-readable labels:
+
+“This faction is wary of you.”
+“NPC remembers your last threat.”
+“You recently sided with the smugglers.”
+Modify
+src/app/rpg/presentation/memory_inspector.py
+Add
+build_memory_ui_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]
+
+Return:
+
+important_memory
+recent_memory
+recent_world_events
+
+This should feed the compact panel.
+
+Modify
+src/app/rpg/session/runtime.py
+
+Return:
+
+memory_summary
+memory_expanded
+
+instead of only a flat memory list
+
+Keep raw memory for debug routes, not the main player panel.
+
+7. Setup seeds vs world growth
+Modify
+src/app/rpg/creator/startup_pipeline.py
+Clarify
+
+Mark initial NPCs / factions / locations as:
+
+seed_origin = "startup"
+Add world expansion caps
+
+Add setup metadata:
+
+allow_dynamic_npc_generation
+allow_dynamic_location_generation
+allow_dynamic_faction_generation
+world_growth_budget
+New file
+src/app/rpg/creator/world_expansion.py
+Responsibilities
+
+Allow controlled dynamic creation of new entities after startup.
+
+Add
+maybe_spawn_dynamic_npc(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]
+maybe_spawn_dynamic_location(...)
+maybe_spawn_dynamic_faction(...)
+Rules
+bounded counts
+deterministic ids
+all generated entities recorded in simulation state
+optional LLM-generated flavor, normalized before commit
+
+This addresses your concern that the world should not be permanently capped to the initial 3 NPCs / few locations.
+
+Modify
+src/app/rpg/creator/world_simulation.py
+Add
+
+After major thread/incident progression:
+
+evaluate controlled world expansion hooks
+add new NPC/location/faction if budget allows
+8. Bold important parts of LLM response for fast scanning
+Modify
+src/app/rpg/ai/world_scene_narrator.py
+Add
+
+A post-processing function:
+
+apply_narration_emphasis(narration_payload: Dict[str, Any]) -> Dict[str, Any]
+
+It should wrap markdown emphasis around:
+
+item pickups
+quest updates
+named locations
+named enemies
+damage numbers / combat results
+rewards / level-ups
+irreversible consequences
+
+Examples:
+
+**Iron Sword**
+**Quest Updated:** The Black Ledger
+You deal **28 damage**
+**Level Up!**
+Important
+
+Do not ask the LLM to “just bold things randomly.”
+Use structured result fields from simulation and deterministically format them.
+
+Modify
+src/static/rpg/rpg.js
+
+Since it already uses markdown rendering when available, keep that path and make sure:
+
+important narration is passed through markdown safely
+bold text remains visible in message rendering
+combat result blocks get a compact summary header above long narration
+Add
+buildTurnSummaryBanner(update)
+show concise summary above long narration:
+hit/miss
+damage
+xp gained
+skill xp gained
+item gained/lost
+quest update
+
+This solves your “too much text, I want to scan quickly” request better than bolding alone.
+
+9. API/UI contract cleanup for these changes
+Modify
+src/app/rpg/services/adventure_response_adapter.py
+
+Include in bootstrap payload:
+
+player.stats
+player.skills
+player.level
+player.xp
+player.xp_to_next
+player.unspent_points
+player.inventory_state
+player.equipment
+nearby_npcs
+memory_summary
+Modify
+src/app/rpg/api/rpg_player_routes.py
+
+This file is still Flask-style and also too setup-payload-centric.
+
+Expand or migrate endpoints to canonical session-aware handlers:
+/api/rpg/player/inventory/equip
+/api/rpg/player/inventory/unequip
+/api/rpg/player/inventory/drop
+/api/rpg/player/inventory/pickup
+/api/rpg/player/progression
+/api/rpg/player/stats/allocate
+
+If you are fully moving to FastAPI, convert this module too.
+
+10. Tests to add
+New tests
+tests/rpg/test_player_progression_state.py
+stat allocation valid/invalid
+level-up thresholds
+skill xp growth
+bounded progression log
+tests/rpg/test_action_resolver_combat.py
+melee hit/miss
+weapon damage differences
+strength affects melee damage
+dexterity affects ranged accuracy
+armor reduces damage
+shields affect block/defense
+tests/rpg/test_inventory_world_grounding.py
+pickup adds world item to inventory
+drop removes from inventory and spawns in location
+equip/unequip updates equipment
+narration payload matches item state
+tests/rpg/test_session_turn_progression.py
+action awards player xp
+action awards skill xp
+level-up appears in turn payload
+nearby NPC cards change with scene presence
+tests/rpg/test_memory_ui_payload.py
+compact memory summary returned
+duplicates collapsed
+expanded memory still accessible
+tests/rpg/test_world_expansion.py
+startup seeds preserved
+dynamic growth bounded
+deterministic generated ids
+Recommended implementation order
+
+Do these in this order:
+
+Pass 1 — foundations
+player_progression_state.py
+player_scene_state.py
+item_stats.py
+item_registry.py
+inventory_state.py
+Pass 2 — authoritative mechanics
+action_resolver.py
+world_items.py
+item_effects.py
+encounter/resolver.py
+encounter/encounter_resolver.py
+Pass 3 — active path wiring
+session/runtime.py
+world_scene_generator.py
+player_xp_rules.py
+world_player_actions.py
+rpg_session_routes.py
+Pass 4 — presentation/UI
+speaker_cards.py
+memory_inspector.py
+adventure_response_adapter.py
+rpg.js
+world_scene_narrator.py
+Pass 5 — world growth + tests
+startup_pipeline.py
+world_expansion.py
+world_simulation.py
+all tests
+Critical design rules for the coding LLM
+
+Use these rules while implementing:
+
+Simulation decides outcomes.
+LLM may suggest item/archetype metadata, but never hit/miss/damage/xp totals.
+Every narrated item interaction must match state.
+No “you draw a sword” unless sword exists in inventory/equipment.
+Every player action must map to stats and a skill family.
+Even dialogue, stealth, hacking, investigation.
+Skill progression is use-based.
+Archery improves through bow use; persuasion improves through persuasion checks.
+Generated item stats must be normalized and bounded.
+Let AI flavor items, not break power scaling.
+XP comes from structured sources only.
+Enemy difficulty, quest rank, discovery rank, action difficulty.
+Nearby NPCs are scene-scoped.
+Known NPC registry is separate from active nearby cards.
+Memory is compact in player UI, full in inspector.
