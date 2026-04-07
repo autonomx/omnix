@@ -147,8 +147,8 @@ from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
 # Phase 14.4 — Memory decay (canonical decay engine)
 from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
 
-# Phase 15.1 — Session/package bridge (canonical)
-from app.rpg.session.package_bridge import package_to_session, session_to_package
+# Phase 15.2 — Session/package bridge with validation and normalization
+from app.rpg.session.package_bridge import package_to_session, session_to_package, validate_package_payload
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
@@ -1773,42 +1773,39 @@ def memory_decay():
 
 
 # ---------------------------------------------------------------------------
-# Phase 15.1 — Session ↔ Package Unification routes
+# Phase 15.2 — Session ↔ Package Unification routes
 # ---------------------------------------------------------------------------
 
 @rpg_presentation_bp.post("/api/rpg/session/export_package")
 def export_session_as_package():
-    """Export a saved session as portable package."""
+    """Export current session as portable package."""
     data = request.get_json(silent=True) or {}
-    session_id = _safe_str(data.get("session_id")).strip()
-    session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
+    session = _safe_dict(data.get("session"))
+    # Also support loading by session_id for backward compatibility
+    if not session:
+        session_id = _safe_str(data.get("session_id")).strip()
+        if session_id:
+            session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
     if not session:
         return jsonify({"ok": False, "error": "session_not_found"}), 404
 
-    package_data = session_to_package(session)
-    return jsonify({
-        "ok": True,
-        "package": package_data,
-    })
+    package_payload = session_to_package(session)
+    return jsonify({"ok": True, "package": package_payload})
 
 
 @rpg_presentation_bp.post("/api/rpg/session/import_package")
 def import_package_as_session():
-    """Import portable package as new saved session."""
+    """Import portable package as session."""
     global _RPG_SESSION_ROOT_STATE
     data = request.get_json(silent=True) or {}
-    package_data = _safe_dict(data.get("package"))
-    session_id = _safe_str(data.get("session_id")).strip() or "imported_session"
-    title = _safe_str(data.get("title")).strip() or "Imported Session"
-
-    session = package_to_session(package_data, session_id=session_id, title=title)
+    package_payload = _safe_dict(data.get("package"))
+    result = package_to_session(package_payload)
+    if not result.get("ok"):
+        return jsonify(result), 400
+    session = _safe_dict(result.get("session"))
     _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
     save_session_to_disk(session)
-
-    return jsonify({
-        "ok": True,
-        "session": session,
-    })
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
