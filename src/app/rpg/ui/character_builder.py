@@ -202,6 +202,20 @@ def _normalize_card_meta(entry: Dict[str, Any], profile: Dict[str, Any]) -> Dict
     }
 
 
+def _normalize_actor_memory_block(
+    simulation_state: Dict[str, Any],
+    actor_id: str,
+) -> Dict[str, Any]:
+    """Extract actor-specific memory for character UI/inspector."""
+    from app.rpg.memory.actor_memory_state import get_actor_memory
+
+    memory = get_actor_memory(simulation_state, actor_id)
+    return {
+        "short_term": memory.get("short_term", []),
+        "long_term": memory.get("long_term", []),
+    }
+
+
 def _normalize_appearance(
     simulation_state: Dict[str, Any],
     actor_id: str,
@@ -296,7 +310,10 @@ def build_character_ui_entry(
     This is a read-only, deterministic projection from simulation state
     and presentation entry data. No mutation occurs.
     """
+    from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
+
     simulation_state = _safe_dict(simulation_state)
+    simulation_state = ensure_actor_memory_state(simulation_state)
     presentation_entry = _safe_dict(presentation_entry)
 
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
@@ -326,6 +343,7 @@ def build_character_ui_entry(
         "personality": profile,
         "visual_identity": _normalize_visual_identity(simulation_state, actor_id, presentation_entry, profile),
         "appearance": appearance,
+        "actor_memory": _normalize_actor_memory_block(simulation_state, actor_id),
         "card": card_meta,
         "meta": {
             "present": bool(presentation_entry.get("present", True)),
@@ -560,6 +578,10 @@ def build_character_inspector_entry(
     fallback_index: int = 0,
 ) -> Dict[str, Any]:
     """Build a canonical character UI entry with inspector details appended."""
+    from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
+
+    simulation_state = _safe_dict(simulation_state)
+    simulation_state = ensure_actor_memory_state(simulation_state)
     base = build_character_ui_entry(simulation_state, presentation_entry, fallback_index)
     actor_id = _safe_str(base.get("id"))
 
@@ -577,6 +599,7 @@ def build_character_inspector_entry(
             "beliefs": beliefs,
             "active_quests": active_quests,
             "relationship_summary": _normalize_relationship_summary(relationships),
+            "memory": _normalize_actor_memory_block(simulation_state, actor_id),
         },
     }
 

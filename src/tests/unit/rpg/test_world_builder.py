@@ -17,7 +17,7 @@ from app.rpg.ui.world_builder import (
 def test_build_world_inspector_state_empty():
     """Empty simulation state returns empty world inspector state."""
     result = build_world_inspector_state({})
-    assert result["summary"] == {}
+    assert result["summary"] == {"current_location": "", "current_region": "", "threat_level": None}
     assert result["threads"] == []
     assert result["thread_count"] == 0
     assert result["factions"] == {"factions": [], "count": 0}

@@ -84,6 +84,20 @@ from app.rpg.memory.memory_state import (
     ensure_memory_state,
 )
 
+# Phase 14.1 — Actor Memory Integration
+from app.rpg.memory.actor_memory_state import (
+    append_actor_long_term_memory,
+    append_actor_short_term_memory,
+    ensure_actor_memory_state,
+    get_actor_memory,
+)
+
+# Phase 14.2 — World Memory / Rumor Propagation
+from app.rpg.memory.world_memory_state import (
+    append_rumor,
+    ensure_world_memory_state,
+)
+
 
 def update_memory(session, events):
     """Update session memory with new events.
@@ -158,4 +172,12 @@ __all__ = [
     "append_short_term_memory",
     "append_world_memory",
     "ensure_memory_state",
+    # Phase 14.1
+    "append_actor_long_term_memory",
+    "append_actor_short_term_memory",
+    "ensure_actor_memory_state",
+    "get_actor_memory",
+    # Phase 14.2
+    "append_rumor",
+    "ensure_world_memory_state",
 ]

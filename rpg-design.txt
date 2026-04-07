@@ -1,87 +1,83 @@
-👉 Phase 13.4 + 13.5 + 14.0 — full apply-this-patch spec (same style)
+👉 Phase 14.1 + 14.2 + 15.0 — full apply-this-patch spec (same style)
 
-This combines:
+This builds on your current state:
 
-13.4 — New Adventure Wizard UI
-13.5 — Session lifecycle + persistence
-14.0 — Memory system (short-term → long-term → world memory)
+bounded memory lanes now exist and are surfaced in API/UI
+session lifecycle exists
+wizard/template/pack bootstrap exists
+package/content-pack systems are integrated into presentation flow
+wizard/sessions/memory tabs are wired into the renderer and template containers exist
 
-It builds on your current state:
+This combined phase does three things:
 
-content packs
-templates
-package import/export
-creator draft tooling
-tabbed inspector + GM view
-deterministic presentation/visual layer
-start-from-pack and template bootstrap flows
+14.1 — Actor memory integration into dialogue / NPC reasoning surfaces
+14.2 — World memory / rumor propagation integration
+15.0 — Production hardening / durable saves / migration safety
 
-This phase turns the system into an actual playable product flow:
+The focus is to move from “memory exists” to “memory matters,” then harden the whole system so it survives real use.
 
-users can start a new adventure through a guided wizard
-sessions can be created, saved, loaded, listed, archived
-memory becomes a first-class engine layer instead of ad hoc history
 High-level outcome
 
 After this patch, the project will support:
 
-13.4
-a real New Adventure Wizard UI
-wizard steps for:
-mode
-scenario/template/pack
-world/lore summary
-character seeds
-visual defaults
-final bootstrap preview
-deterministic setup payload creation from wizard state
-13.5
-session registry
-create/list/load/save/archive session routes
-bounded session metadata state
-package export hooked to a session
-session lifecycle separated from live transient UI state
-14.0
-short-term conversational memory
-long-term actor memory
-shared world memory / rumor memory
-deterministic bounded memory state
-memory surfaced in character/world inspectors and GM trace
+14.1
+actor-specific memory state
+per-actor short-term / long-term memory
+dialogue payloads that expose memory context for characters/NPCs
+inspector and GM trace visibility for actor memory
+14.2
+shared world memory / rumor memory entries with propagation metadata
+world inspector surface for rumors
+deterministic rumor append/normalization rules
+route helpers for world-memory updates and reads
+15.0
+durable session save/load to disk-backed JSON snapshots
+snapshot manifest versioning
+migration hook layer for old saves
+package/session compatibility guardrails
+archive/list/load/save behavior no longer process-memory only
 Design rules
-Wizard rule
+Actor memory rule
 
-The wizard is a setup composer, not the simulation itself.
+Actor memory is scoped, bounded, and observational.
+It should influence presentation/reasoning surfaces, but not silently mutate simulation truth outside explicit reducers/routes.
 
-Session rule
+World memory rule
 
-A session record stores:
+World memory is shared/public-ish memory, including rumors, public facts, and propagated incidents.
+It is not a substitute for actor memory.
 
-metadata
-normalized state snapshot
-lifecycle timestamps/status
-optional source pack/template references
+Production-hardening rule
 
-No hidden background mutation.
+Durable saves must:
 
-Memory rule
+be versioned
+be migration-safe
+normalize input on load
+never trust raw disk payloads
+remain bounded
+Phase 14.1 — Actor Memory Integration
+Goal
 
-Memory is stateful but bounded:
+Add actor-specific memory lanes and surface them in:
 
-short-term memory is recent/contextual
-long-term memory is distilled/important
-world memory is shared public/rumor style memory
+character UI
+character inspector
+dialogue presentation
+GM trace
 
-Memory must never grow unbounded.
+This phase does not require a full NPC cognition engine rewrite. It creates the deterministic memory substrate that later reasoning systems can consume.
 
-Phase 13.4 — New Adventure Wizard UI
-Part 1/18 — wizard state module
-Create file: src/app/rpg/setup/wizard_state.py
+Part 1/18 — create actor memory module
+Create file: src/app/rpg/memory/actor_memory_state.py
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
 
-_MAX_WIZARD_CHARACTERS = 16
+_MAX_ACTOR_SHORT_TERM = 10
+_MAX_ACTOR_LONG_TERM = 20
+_MAX_ACTORS = 64
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -100,590 +96,196 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
-def _first_non_empty(*values: Any) -> str:
-    for value in values:
-        text = _safe_str(value).strip()
-        if text:
-            return text
-    return ""
+def _safe_int(value: Any, default: int = 0) -> int:
+    return value if isinstance(value, int) else default
 
 
-def _normalize_character_seed(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    canonical_seed = _safe_dict(data.get("canonical_seed"))
-    personality_seed = _safe_dict(data.get("personality_seed"))
-    appearance_seed = _safe_dict(data.get("appearance_seed"))
-    visual_seed = _safe_dict(data.get("visual_seed"))
-
-    return {
-        "canonical_seed": canonical_seed,
-        "personality_seed": personality_seed,
-        "appearance_seed": appearance_seed,
-        "visual_seed": visual_seed,
-    }
-
-
-def normalize_wizard_state(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    return {
-        "step": _first_non_empty(data.get("step"), "mode"),
-        "mode": _first_non_empty(data.get("mode"), "blank"),
-        "selected_pack": _safe_dict(data.get("selected_pack")),
-        "selected_template": _safe_dict(data.get("selected_template")),
-        "title": _safe_str(data.get("title")).strip(),
-        "summary": _safe_str(data.get("summary")).strip(),
-        "opening": _safe_str(data.get("opening")).strip(),
-        "world_seed": _safe_dict(data.get("world_seed")),
-        "character_seeds": [
-            _normalize_character_seed(item)
-            for item in _safe_list(data.get("character_seeds"))
-            if isinstance(item, dict)
-        ][:_MAX_WIZARD_CHARACTERS],
-        "visual_defaults": _safe_dict(data.get("visual_defaults")),
-    }
-
-
-def build_wizard_preview_payload(wizard_state: Dict[str, Any]) -> Dict[str, Any]:
-    wizard_state = normalize_wizard_state(wizard_state)
-    return {
-        "title": wizard_state.get("title", ""),
-        "summary": wizard_state.get("summary", ""),
-        "opening": wizard_state.get("opening", ""),
-        "character_count": len(wizard_state.get("character_seeds", [])),
-        "world_seed": wizard_state.get("world_seed", {}),
-        "visual_defaults": wizard_state.get("visual_defaults", {}),
-        "mode": wizard_state.get("mode", "blank"),
-    }
-
-
-def build_wizard_setup_payload(wizard_state: Dict[str, Any]) -> Dict[str, Any]:
-    wizard_state = normalize_wizard_state(wizard_state)
-
-    simulation_state = {
-        "presentation_state": {
-            "visual_state": {
-                "defaults": _safe_dict(wizard_state.get("visual_defaults")),
-            }
-        },
-        "world_state": {
-            "scenario_title": _safe_str(wizard_state.get("title")).strip(),
-            "scenario_summary": _safe_str(wizard_state.get("summary")).strip(),
-            "opening": _safe_str(wizard_state.get("opening")).strip(),
-            "world_seed": _safe_dict(wizard_state.get("world_seed")),
-        },
-        "setup_state": {
-            "character_seeds": _safe_list(wizard_state.get("character_seeds")),
-            "selected_pack": _safe_dict(wizard_state.get("selected_pack")),
-            "selected_template": _safe_dict(wizard_state.get("selected_template")),
-            "mode": _safe_str(wizard_state.get("mode")).strip(),
-        },
-    }
-
-    return {
-        "simulation_state": simulation_state,
-        "wizard_state": wizard_state,
-    }
-Part 2/18 — export wizard module
-Create file: src/app/rpg/setup/__init__.py
-from .wizard_state import (
-    build_wizard_preview_payload,
-    build_wizard_setup_payload,
-    normalize_wizard_state,
-)
-
-__all__ = [
-    "build_wizard_preview_payload",
-    "build_wizard_setup_payload",
-    "normalize_wizard_state",
-]
-Part 3/18 — wizard routes
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add imports:
-
-+from app.rpg.setup.wizard_state import (
-+    build_wizard_preview_payload,
-+    build_wizard_setup_payload,
-+    normalize_wizard_state,
-+)
-
-Add routes:
-
-+@rpg_presentation_bp.post("/api/rpg/wizard/preview")
-+def preview_rpg_wizard():
-+    """Preview wizard-composed adventure bootstrap."""
-+    data = request.get_json(silent=True) or {}
-+    wizard_state = normalize_wizard_state(data.get("wizard_state"))
-+    return jsonify({
-+        "ok": True,
-+        "preview": build_wizard_preview_payload(wizard_state),
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/wizard/build")
-+def build_rpg_wizard_setup():
-+    """Build normalized setup payload from wizard state."""
-+    data = request.get_json(silent=True) or {}
-+    wizard_state = normalize_wizard_state(data.get("wizard_state"))
-+    setup_payload = build_wizard_setup_payload(wizard_state)
-+
-+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
-+    simulation_state = ensure_player_state(simulation_state)
-+    simulation_state = ensure_player_party(simulation_state)
-+    simulation_state = ensure_personality_state(simulation_state)
-+    simulation_state = ensure_visual_state(simulation_state)
-+    setup_payload["simulation_state"] = simulation_state
-+
-+    return jsonify({
-+        "ok": True,
-+        "setup_payload": setup_payload,
-+    })
-Part 4/18 — wizard UI renderer
-Edit file: src/static/rpg/rpgPresentationRenderer.js
-
-Add helpers:
-
-+function getWizardContainer() {
-+  return document.getElementById("rpg-wizard");
-+}
-+
-+export function renderAdventureWizard(payload) {
-+  const container = getWizardContainer();
-+  if (!container) return;
-+
-+  const wizardState = payload?.wizard_state || null;
-+  if (!wizardState || typeof wizardState !== "object") {
-+    container.innerHTML = `<div class="inspector-empty">No wizard active.</div>`;
-+    return;
-+  }
-+
-+  const preview = payload?.wizard_preview || {};
-+
-+  container.innerHTML = `
-+    <div class="inspector-panel">
-+      <div class="inspector-header">New Adventure Wizard</div>
-+      <div class="inspector-section"><h5>Step</h5><div>${escapeHtml(wizardState.step || "mode")}</div></div>
-+      <div class="inspector-section"><h5>Mode</h5><div>${escapeHtml(wizardState.mode || "blank")}</div></div>
-+      <div class="inspector-section"><h5>Title</h5><div>${escapeHtml(preview.title || wizardState.title || "—")}</div></div>
-+      <div class="inspector-section"><h5>Summary</h5><div>${escapeHtml(preview.summary || wizardState.summary || "—")}</div></div>
-+      <div class="inspector-section"><h5>Characters</h5><div>${escapeHtml(preview.character_count ?? 0)}</div></div>
-+    </div>
-+  `;
-+}
-
-Then in renderPresentation(payload), add:
-
-+  if (payload?.wizard_state && typeof payload.wizard_state === "object") {
-+    renderAdventureWizard(payload);
-+  }
-Part 5/18 — wizard template container
-Edit file: src/templates/index.html
-
-Add:
-
-+<div id="rpg-wizard-section" style="display:none;">
-+    <div id="rpg-wizard"></div>
-+</div>
-Part 6/18 — wizard styles
-Edit file: src/static/rpg/rpgInspectorStyles.css
-
-Append:
-
-+.wizard-card {
-+  border: 1px solid var(--rpg-border-color, #555);
-+  border-radius: 8px;
-+  padding: 12px;
-+  margin-bottom: 10px;
-+  background: var(--rpg-surface-dark, #1a1a2e);
-+}
-Phase 13.5 — Session lifecycle + persistence
-Part 7/18 — session state module
-Create file: src/app/rpg/session/session_store.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_MAX_SESSIONS = 64
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _first_non_empty(*values: Any) -> str:
-    for value in values:
-        text = _safe_str(value).strip()
-        if text:
-            return text
-    return ""
-
-
-def _normalize_session(value: Any) -> Dict[str, Any]:
-    data = _safe_dict(value)
-    manifest = _safe_dict(data.get("manifest"))
-    state = _safe_dict(data.get("state"))
-    return {
-        "manifest": {
-            "id": _safe_str(manifest.get("id")).strip(),
-            "title": _safe_str(manifest.get("title")).strip(),
-            "status": _first_non_empty(manifest.get("status"), "active"),
-            "created_at": _safe_str(manifest.get("created_at")).strip(),
-            "updated_at": _safe_str(manifest.get("updated_at")).strip(),
-            "source_pack_id": _safe_str(manifest.get("source_pack_id")).strip(),
-            "source_template_id": _safe_str(manifest.get("source_template_id")).strip(),
-        },
-        "state": state,
-    }
-
-
-def ensure_session_registry(root_state: Dict[str, Any]) -> Dict[str, Any]:
-    root_state = _safe_dict(root_state)
-    sessions = [
-        _normalize_session(item)
-        for item in _safe_list(root_state.get("sessions"))
-        if isinstance(item, dict)
-    ]
-    sessions = sorted(
-        sessions,
-        key=lambda item: (
-            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
-            _safe_str(_safe_dict(item.get("manifest")).get("id")),
-        ),
-    )[:_MAX_SESSIONS]
-    root_state["sessions"] = sessions
-    return root_state
-
-
-def list_sessions(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    root_state = ensure_session_registry(root_state)
-    return _safe_list(root_state.get("sessions"))
-
-
-def save_session(root_state: Dict[str, Any], session: Dict[str, Any]) -> Dict[str, Any]:
-    root_state = ensure_session_registry(root_state)
-    sessions = _safe_list(root_state.get("sessions"))
-    normalized = _normalize_session(session)
-
-    session_id = _safe_str(_safe_dict(normalized.get("manifest")).get("id"))
-    sessions = [
-        item for item in sessions
-        if _safe_str(_safe_dict(item.get("manifest")).get("id")) != session_id
-    ]
-    sessions.append(normalized)
-    root_state["sessions"] = sorted(
-        sessions,
-        key=lambda item: (
-            _safe_str(_safe_dict(item.get("manifest")).get("title")).lower(),
-            _safe_str(_safe_dict(item.get("manifest")).get("id")),
-        ),
-    )[:_MAX_SESSIONS]
-    return root_state
-
-
-def get_session(root_state: Dict[str, Any], session_id: str) -> Dict[str, Any] | None:
-    for session in list_sessions(root_state):
-        if _safe_str(_safe_dict(session.get("manifest")).get("id")) == _safe_str(session_id):
-            return session
-    return None
-
-
-def archive_session(root_state: Dict[str, Any], session_id: str) -> Dict[str, Any]:
-    root_state = ensure_session_registry(root_state)
-    sessions = []
-    for session in _safe_list(root_state.get("sessions")):
-        session = _normalize_session(session)
-        manifest = _safe_dict(session.get("manifest"))
-        if _safe_str(manifest.get("id")) == _safe_str(session_id):
-            manifest["status"] = "archived"
-            session["manifest"] = manifest
-        sessions.append(session)
-    root_state["sessions"] = sessions[:_MAX_SESSIONS]
-    return root_state
-Part 8/18 — export session module
-Create file: src/app/rpg/session/__init__.py
-from .session_store import (
-    archive_session,
-    ensure_session_registry,
-    get_session,
-    list_sessions,
-    save_session,
-)
-
-__all__ = [
-    "archive_session",
-    "ensure_session_registry",
-    "get_session",
-    "list_sessions",
-    "save_session",
-]
-Part 9/18 — session routes
-Edit file: src/app/rpg/api/rpg_presentation_routes.py
-
-Add imports:
-
-+from app.rpg.session.session_store import (
-+    archive_session,
-+    ensure_session_registry,
-+    get_session,
-+    list_sessions,
-+    save_session,
-+)
-
-Add routes:
-
-+_RPG_SESSION_ROOT_STATE: Dict[str, Any] = {"sessions": []}
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/session/save")
-+def save_rpg_session():
-+    """Save normalized RPG session snapshot into in-memory registry."""
-+    global _RPG_SESSION_ROOT_STATE
-+    data = request.get_json(silent=True) or {}
-+    session = _safe_dict(data.get("session"))
-+    _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
-+    return jsonify({
-+        "ok": True,
-+        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/session/list")
-+def list_rpg_sessions():
-+    """List saved RPG sessions."""
-+    global _RPG_SESSION_ROOT_STATE
-+    _RPG_SESSION_ROOT_STATE = ensure_session_registry(_RPG_SESSION_ROOT_STATE)
-+    return jsonify({
-+        "ok": True,
-+        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/session/load")
-+def load_rpg_session():
-+    """Load a saved RPG session by id."""
-+    global _RPG_SESSION_ROOT_STATE
-+    data = request.get_json(silent=True) or {}
-+    session_id = _safe_str(data.get("session_id")).strip()
-+    session = get_session(_RPG_SESSION_ROOT_STATE, session_id)
-+    if not session:
-+        return jsonify({"ok": False, "error": "session_not_found"}), 404
-+    return jsonify({
-+        "ok": True,
-+        "session": session,
-+    })
-+
-+
-+@rpg_presentation_bp.post("/api/rpg/session/archive")
-+def archive_rpg_session():
-+    """Archive a saved RPG session."""
-+    global _RPG_SESSION_ROOT_STATE
-+    data = request.get_json(silent=True) or {}
-+    session_id = _safe_str(data.get("session_id")).strip()
-+    _RPG_SESSION_ROOT_STATE = archive_session(_RPG_SESSION_ROOT_STATE, session_id)
-+    return jsonify({
-+        "ok": True,
-+        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
-+    })
-Part 10/18 — session UI renderer
-Edit file: src/static/rpg/rpgPresentationRenderer.js
-
-Add:
-
-+function getSessionContainer() {
-+  return document.getElementById("rpg-sessions");
-+}
-+
-+export function renderSessions(payload) {
-+  const container = getSessionContainer();
-+  if (!container) return;
-+
-+  const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
-+  if (!sessions.length) {
-+    container.innerHTML = `<div class="inspector-empty">No sessions.</div>`;
-+    return;
-+  }
-+
-+  container.innerHTML = sessions.map((session) => {
-+    const manifest = session?.manifest || {};
-+    return `
-+      <div class="content-pack-card">
-+        <div class="content-pack-title">${escapeHtml(manifest.title || manifest.id || "Session")}</div>
-+        <div class="pack-meta">${escapeHtml(manifest.status || "active")}</div>
-+      </div>
-+    `;
-+  }).join("");
-+}
-
-In renderPresentation(payload), add:
-
-+  if (Array.isArray(payload?.sessions)) {
-+    renderSessions(payload);
-+  }
-Part 11/18 — session template container
-Edit file: src/templates/index.html
-
-Add:
-
-+<div id="rpg-session-section" style="display:none;">
-+    <div id="rpg-sessions"></div>
-+</div>
-Phase 14.0 — Memory system
-Part 12/18 — memory module
-Create file: src/app/rpg/memory/memory_state.py
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-_MAX_SHORT_TERM = 12
-_MAX_LONG_TERM = 24
-_MAX_WORLD_MEMORY = 32
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-def _normalize_memory_entry(value: Any) -> Dict[str, Any]:
+def _normalize_entry(value: Any) -> Dict[str, Any]:
     data = _safe_dict(value)
     return {
         "id": _safe_str(data.get("id")).strip(),
         "summary": _safe_str(data.get("summary")).strip(),
         "kind": _safe_str(data.get("kind")).strip() or "fact",
-        "tick": int(data.get("tick")) if isinstance(data.get("tick"), int) else 0,
+        "tick": _safe_int(data.get("tick"), 0),
+        "source": _safe_str(data.get("source")).strip(),
     }
 
 
-def ensure_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
+def _normalize_actor_memory(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    return {
+        "short_term": [
+            _normalize_entry(item)
+            for item in _safe_list(data.get("short_term"))
+            if isinstance(item, dict)
+        ][-_MAX_ACTOR_SHORT_TERM:],
+        "long_term": [
+            _normalize_entry(item)
+            for item in _safe_list(data.get("long_term"))
+            if isinstance(item, dict)
+        ][-_MAX_ACTOR_LONG_TERM:],
+    }
+
+
+def ensure_actor_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(simulation_state, dict):
+        simulation_state = {}
+
     memory_state = simulation_state.get("memory_state")
     if not isinstance(memory_state, dict):
         memory_state = {}
         simulation_state["memory_state"] = memory_state
 
-    short_term = [
-        _normalize_memory_entry(item)
-        for item in _safe_list(memory_state.get("short_term"))
-        if isinstance(item, dict)
-    ][-_MAX_SHORT_TERM:]
+    actor_memory_in = memory_state.get("actor_memory")
+    if not isinstance(actor_memory_in, dict):
+        actor_memory_in = {}
 
-    long_term = [
-        _normalize_memory_entry(item)
-        for item in _safe_list(memory_state.get("long_term"))
-        if isinstance(item, dict)
-    ][-_MAX_LONG_TERM:]
+    actor_memory_out: Dict[str, Any] = {}
+    for actor_id in sorted(actor_memory_in.keys(), key=lambda v: _safe_str(v)):
+        actor_memory_out[_safe_str(actor_id)] = _normalize_actor_memory(actor_memory_in.get(actor_id))
 
-    world_memory = [
-        _normalize_memory_entry(item)
-        for item in _safe_list(memory_state.get("world_memory"))
-        if isinstance(item, dict)
-    ][-_MAX_WORLD_MEMORY:]
-
-    memory_state["short_term"] = short_term
-    memory_state["long_term"] = long_term
-    memory_state["world_memory"] = world_memory
+    limited_items = list(actor_memory_out.items())[:_MAX_ACTORS]
+    memory_state["actor_memory"] = dict(limited_items)
     return simulation_state
 
 
-def append_short_term_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = ensure_memory_state(simulation_state)
+def append_actor_short_term_memory(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str,
+    entry: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = ensure_actor_memory_state(simulation_state)
     memory_state = _safe_dict(simulation_state.get("memory_state"))
-    items = _safe_list(memory_state.get("short_term"))
-    items.append(_normalize_memory_entry(entry))
-    memory_state["short_term"] = items[-_MAX_SHORT_TERM:]
+    actor_memory = _safe_dict(memory_state.get("actor_memory"))
+
+    actor_state = _normalize_actor_memory(actor_memory.get(actor_id))
+    items = _safe_list(actor_state.get("short_term"))
+    items.append(_normalize_entry(entry))
+    actor_state["short_term"] = items[-_MAX_ACTOR_SHORT_TERM:]
+    actor_memory[_safe_str(actor_id)] = actor_state
+    memory_state["actor_memory"] = dict(sorted(actor_memory.items(), key=lambda kv: _safe_str(kv[0])))[:_MAX_ACTORS]
     return simulation_state
 
 
-def append_long_term_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = ensure_memory_state(simulation_state)
+def append_actor_long_term_memory(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str,
+    entry: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = ensure_actor_memory_state(simulation_state)
     memory_state = _safe_dict(simulation_state.get("memory_state"))
-    items = _safe_list(memory_state.get("long_term"))
-    items.append(_normalize_memory_entry(entry))
-    memory_state["long_term"] = items[-_MAX_LONG_TERM:]
+    actor_memory = _safe_dict(memory_state.get("actor_memory"))
+
+    actor_state = _normalize_actor_memory(actor_memory.get(actor_id))
+    items = _safe_list(actor_state.get("long_term"))
+    items.append(_normalize_entry(entry))
+    actor_state["long_term"] = items[-_MAX_ACTOR_LONG_TERM:]
+    actor_memory[_safe_str(actor_id)] = actor_state
+    memory_state["actor_memory"] = dict(sorted(actor_memory.items(), key=lambda kv: _safe_str(kv[0])))[:_MAX_ACTORS]
     return simulation_state
 
 
-def append_world_memory(simulation_state: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = ensure_memory_state(simulation_state)
+def get_actor_memory(
+    simulation_state: Dict[str, Any],
+    actor_id: str,
+) -> Dict[str, Any]:
+    simulation_state = ensure_actor_memory_state(simulation_state)
     memory_state = _safe_dict(simulation_state.get("memory_state"))
-    items = _safe_list(memory_state.get("world_memory"))
-    items.append(_normalize_memory_entry(entry))
-    memory_state["world_memory"] = items[-_MAX_WORLD_MEMORY:]
-    return simulation_state
-Part 13/18 — export memory module
-Create file: src/app/rpg/memory/__init__.py
-from .memory_state import (
-    append_long_term_memory,
-    append_short_term_memory,
-    append_world_memory,
-    ensure_memory_state,
-)
+    actor_memory = _safe_dict(memory_state.get("actor_memory"))
+    return _normalize_actor_memory(actor_memory.get(actor_id))
+Part 2/18 — export actor memory module
+Edit file: src/app/rpg/memory/__init__.py
 
-__all__ = [
-    "append_long_term_memory",
-    "append_short_term_memory",
-    "append_world_memory",
-    "ensure_memory_state",
-]
-Part 14/18 — memory routes
+Add:
+
++from app.rpg.memory.actor_memory_state import (
++    append_actor_long_term_memory,
++    append_actor_short_term_memory,
++    ensure_actor_memory_state,
++    get_actor_memory,
++)
+
+And append to __all__:
+
++    "append_actor_long_term_memory",
++    "append_actor_short_term_memory",
++    "ensure_actor_memory_state",
++    "get_actor_memory",
+Part 3/18 — wire actor memory into character builder
+Edit file: src/app/rpg/ui/character_builder.py
+
+Add import near top:
+
++from app.rpg.memory.actor_memory_state import get_actor_memory
+
+Add helper below existing appearance/memory helpers:
+
++def _normalize_actor_memory_block(
++    simulation_state: Dict[str, Any],
++    actor_id: str,
++) -> Dict[str, Any]:
++    memory = get_actor_memory(simulation_state, actor_id)
++    return {
++        "short_term": memory.get("short_term", []),
++        "long_term": memory.get("long_term", []),
++    }
+
+Inside build_character_ui_entry(...), add:
+
++    actor_memory = _normalize_actor_memory_block(simulation_state, actor_id)
+
+and in returned object add:
+
++        "actor_memory": actor_memory,
+
+Inside build_character_inspector_entry(...), add a memory section under inspector:
+
++        "memory": _normalize_actor_memory_block(simulation_state, actor_id),
+
+So inspector payload now includes actor memory alongside inventory/goals/beliefs.
+
+Part 4/18 — actor memory routes
 Edit file: src/app/rpg/api/rpg_presentation_routes.py
 
 Add imports:
 
-+from app.rpg.memory.memory_state import (
-+    append_long_term_memory,
-+    append_short_term_memory,
-+    append_world_memory,
-+    ensure_memory_state,
++from app.rpg.memory.actor_memory_state import (
++    append_actor_long_term_memory,
++    append_actor_short_term_memory,
++    ensure_actor_memory_state,
++    get_actor_memory,
 +)
 
 Add routes:
 
-+@rpg_presentation_bp.post("/api/rpg/memory/get")
-+def get_rpg_memory():
-+    """Return normalized memory state for current simulation."""
++@rpg_presentation_bp.post("/api/rpg/memory/actor/get")
++def get_rpg_actor_memory():
++    """Return actor-specific memory lanes."""
 +    data = request.get_json(silent=True) or {}
 +    setup_payload = _safe_dict(data.get("setup_payload"))
++    actor_id = _safe_str(data.get("actor_id")).strip()
++
 +    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
 +    simulation_state = ensure_player_party(simulation_state)
 +    simulation_state = ensure_personality_state(simulation_state)
 +    simulation_state = ensure_memory_state(simulation_state)
++    simulation_state = ensure_actor_memory_state(simulation_state)
++
 +    return jsonify({
 +        "ok": True,
-+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
++        "actor_id": actor_id,
++        "actor_memory": get_actor_memory(simulation_state, actor_id),
 +    })
 +
 +
-+@rpg_presentation_bp.post("/api/rpg/memory/add")
-+def add_rpg_memory():
-+    """Append memory entry to selected memory lane."""
++@rpg_presentation_bp.post("/api/rpg/memory/actor/add")
++def add_rpg_actor_memory():
++    """Append actor-specific memory entry."""
 +    data = request.get_json(silent=True) or {}
 +    setup_payload = _safe_dict(data.get("setup_payload"))
++    actor_id = _safe_str(data.get("actor_id")).strip()
 +    lane = _safe_str(data.get("lane")).strip() or "short_term"
 +    entry = _safe_dict(data.get("entry"))
 +
@@ -691,201 +293,485 @@ Add routes:
 +    simulation_state = ensure_player_party(simulation_state)
 +    simulation_state = ensure_personality_state(simulation_state)
 +    simulation_state = ensure_memory_state(simulation_state)
++    simulation_state = ensure_actor_memory_state(simulation_state)
 +
 +    if lane == "long_term":
-+        simulation_state = append_long_term_memory(simulation_state, entry)
-+    elif lane == "world_memory":
-+        simulation_state = append_world_memory(simulation_state, entry)
++        simulation_state = append_actor_long_term_memory(simulation_state, actor_id=actor_id, entry=entry)
 +    else:
-+        simulation_state = append_short_term_memory(simulation_state, entry)
++        simulation_state = append_actor_short_term_memory(simulation_state, actor_id=actor_id, entry=entry)
 +
 +    return jsonify({
 +        "ok": True,
-+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
++        "actor_id": actor_id,
++        "actor_memory": get_actor_memory(simulation_state, actor_id),
 +    })
-Part 15/18 — memory UI renderer
+Part 5/18 — surface actor memory in GM trace
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+In presentation_gm_trace(), after ensure_memory_state(simulation_state), add:
+
++    simulation_state = ensure_actor_memory_state(simulation_state)
+
+Then add actor memory to the trace:
+
++            "actor_memory": get_actor_memory(simulation_state, actor_id),
+
+Resulting trace includes:
+
+character
+inspector
+appearance_events
+visual_assets
+image_requests
+actor_memory
+Phase 14.2 — World Memory / Rumor Propagation
+Goal
+
+Turn world memory into an actual rumor/public-memory substrate rather than a generic list.
+
+Part 6/18 — create world memory module
+Create file: src/app/rpg/memory/world_memory_state.py
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+_MAX_RUMORS = 32
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    return value if isinstance(value, int) else default
+
+
+def _normalize_rumor(value: Any) -> Dict[str, Any]:
+    data = _safe_dict(value)
+    return {
+        "id": _safe_str(data.get("id")).strip(),
+        "summary": _safe_str(data.get("summary")).strip(),
+        "origin": _safe_str(data.get("origin")).strip(),
+        "location": _safe_str(data.get("location")).strip(),
+        "tick": _safe_int(data.get("tick"), 0),
+        "reach": _safe_int(data.get("reach"), 0),
+    }
+
+
+def ensure_world_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(simulation_state, dict):
+        simulation_state = {}
+
+    memory_state = simulation_state.get("memory_state")
+    if not isinstance(memory_state, dict):
+        memory_state = {}
+        simulation_state["memory_state"] = memory_state
+
+    rumors = [
+        _normalize_rumor(item)
+        for item in _safe_list(memory_state.get("rumors"))
+        if isinstance(item, dict)
+    ][-_MAX_RUMORS:]
+
+    rumors = sorted(
+        rumors,
+        key=lambda item: (
+            item.get("tick", 0),
+            _safe_str(item.get("summary")).lower(),
+            _safe_str(item.get("id")),
+        ),
+    )[-_MAX_RUMORS:]
+
+    memory_state["rumors"] = rumors
+    return simulation_state
+
+
+def append_rumor(simulation_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = ensure_world_memory_state(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    rumors = _safe_list(memory_state.get("rumors"))
+    rumors.append(_normalize_rumor(rumor))
+    memory_state["rumors"] = sorted(
+        [item for item in rumors if isinstance(item, dict)],
+        key=lambda item: (
+            item.get("tick", 0),
+            _safe_str(item.get("summary")).lower(),
+            _safe_str(item.get("id")),
+        ),
+    )[-_MAX_RUMORS:]
+    return simulation_state
+Part 7/18 — export world memory module
+Edit file: src/app/rpg/memory/__init__.py
+
+Add:
+
++from app.rpg.memory.world_memory_state import (
++    append_rumor,
++    ensure_world_memory_state,
++)
+
+And append to __all__:
+
++    "append_rumor",
++    "ensure_world_memory_state",
+Part 8/18 — world memory routes
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+Add imports:
+
++from app.rpg.memory.world_memory_state import (
++    append_rumor,
++    ensure_world_memory_state,
++)
+
+Add routes:
+
++@rpg_presentation_bp.post("/api/rpg/world_memory/get")
++def get_rpg_world_memory():
++    """Return world memory / rumor state."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_memory_state(simulation_state)
++    simulation_state = ensure_world_memory_state(simulation_state)
++
++    return jsonify({
++        "ok": True,
++        "rumors": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("rumors")),
++    })
++
++
++@rpg_presentation_bp.post("/api/rpg/world_memory/add_rumor")
++def add_rpg_world_rumor():
++    """Append shared world rumor/public-memory entry."""
++    data = request.get_json(silent=True) or {}
++    setup_payload = _safe_dict(data.get("setup_payload"))
++    rumor = _safe_dict(data.get("rumor"))
++
++    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
++    simulation_state = ensure_player_party(simulation_state)
++    simulation_state = ensure_personality_state(simulation_state)
++    simulation_state = ensure_memory_state(simulation_state)
++    simulation_state = ensure_world_memory_state(simulation_state)
++    simulation_state = append_rumor(simulation_state, rumor)
++
++    return jsonify({
++        "ok": True,
++        "rumors": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("rumors")),
++    })
+Part 9/18 — surface rumors in world builder
+Edit file: src/app/rpg/ui/world_builder.py
+
+Add import:
+
++from app.rpg.memory.world_memory_state import ensure_world_memory_state
+
+In build_world_inspector_state(...), before reading world state, add:
+
++    simulation_state = ensure_world_memory_state(simulation_state)
+
+Then add rumors to returned payload:
+
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++    rumors = [
++        _safe_dict(item)
++        for item in _safe_list(memory_state.get("rumors"))
++        if isinstance(item, dict)
++    ][:8]
+
+and in returned dict:
+
++        "rumors": rumors,
+Part 10/18 — world rumor renderer
 Edit file: src/static/rpg/rpgPresentationRenderer.js
 
-Add:
+Inside renderWorldInspector(worldInspectorState), before final container render, add a rumor section.
 
-+function getMemoryContainer() {
-+  return document.getElementById("rpg-memory");
-+}
-+
-+export function renderMemory(payload) {
-+  const container = getMemoryContainer();
-+  if (!container) return;
-+
-+  const memoryState = payload?.memory_state || null;
-+  if (!memoryState || typeof memoryState !== "object") {
-+    container.innerHTML = `<div class="inspector-empty">No memory.</div>`;
-+    return;
-+  }
-+
-+  const renderLane = (title, items) => `
-+    <div class="inspector-section">
-+      <h5>${escapeHtml(title)}</h5>
-+      ${
-+        Array.isArray(items) && items.length
-+          ? items.map((item) => `<div class="pack-meta">${escapeHtml(item.summary || "")}</div>`).join("")
-+          : '<div class="inspector-empty">None</div>'
-+      }
-+    </div>
-+  `;
-+
-+  container.innerHTML = `
-+    <div class="inspector-panel">
-+      <div class="inspector-header">Memory</div>
-+      ${renderLane("Short Term", memoryState.short_term)}
-+      ${renderLane("Long Term", memoryState.long_term)}
-+      ${renderLane("World Memory", memoryState.world_memory)}
-+    </div>
-+  `;
-+}
+For example, in the main world inspector output append:
 
-In renderPresentation(payload), add:
++  const rumors = Array.isArray(worldInspectorState?.rumors) ? worldInspectorState.rumors : [];
++  const rumorsHtml = rumors.length
++    ? rumors.map((r) => `<li>${escapeHtml(r.summary || "")}</li>`).join("")
++    : "";
 
-+  if (payload?.memory_state && typeof payload.memory_state === "object") {
-+    renderMemory(payload);
-+  }
-Part 16/18 — memory container
-Edit file: src/templates/index.html
+Then include:
 
-Add:
++      <div class="inspector-section">
++        <h5>Rumors</h5>
++        ${rumorsHtml ? `<ul class="inspector-list">${rumorsHtml}</ul>` : '<div class="inspector-empty">None</div>'}
++      </div>
 
-+<div id="rpg-memory-section" style="display:none;">
-+    <div id="rpg-memory"></div>
-+</div>
-Part 17/18 — tests
-Create file: src/tests/unit/rpg/test_wizard_state.py
-from app.rpg.setup.wizard_state import (
-    build_wizard_preview_payload,
-    build_wizard_setup_payload,
-    normalize_wizard_state,
+in both location/faction/world summary view as appropriate.
+
+Phase 15.0 — Production hardening / durable persistence / migration
+Goal
+
+Move session persistence from process memory to disk-backed snapshots with schema versioning and migrations.
+
+Part 11/18 — durable save store
+Create file: src/app/rpg/session/durable_store.py
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Dict, List
+
+from app.rpg.session.session_store import _safe_dict, _safe_list, _normalize_session
+
+
+_SESSION_DIR = Path("data/rpg_sessions")
+_SAVE_VERSION = "1.0"
+
+
+def ensure_session_dir() -> Path:
+    _SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    return _SESSION_DIR
+
+
+def _session_path(session_id: str) -> Path:
+    safe_id = "".join(ch for ch in str(session_id) if ch.isalnum() or ch in {"-", "_", ":"})
+    return ensure_session_dir() / f"{safe_id}.json"
+
+
+def save_session_to_disk(session: Dict[str, Any]) -> Dict[str, Any]:
+    session = _normalize_session(session)
+    manifest = _safe_dict(session.get("manifest"))
+    payload = {
+        "save_version": _SAVE_VERSION,
+        "session": session,
+    }
+    path = _session_path(manifest.get("id", "session"))
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return session
+
+
+def load_session_from_disk(session_id: str) -> Dict[str, Any] | None:
+    path = _session_path(session_id)
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    session = _safe_dict(payload.get("session"))
+    return _normalize_session(session)
+
+
+def list_sessions_from_disk() -> List[Dict[str, Any]]:
+    ensure_session_dir()
+    sessions: List[Dict[str, Any]] = []
+    for path in sorted(_SESSION_DIR.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            session = _normalize_session(_safe_dict(payload.get("session")))
+            sessions.append(session)
+        except Exception:
+            continue
+    return sessions
+Part 12/18 — migration layer
+Create file: src/app/rpg/session/migrations.py
+from __future__ import annotations
+
+from typing import Any, Dict
+
+
+_CURRENT_SAVE_VERSION = "1.0"
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _safe_dict(payload)
+    version = payload.get("save_version")
+    if version == _CURRENT_SAVE_VERSION:
+        return payload
+
+    # Placeholder migration path for older/unversioned saves
+    return {
+        "save_version": _CURRENT_SAVE_VERSION,
+        "session": _safe_dict(payload.get("session")),
+    }
+Part 13/18 — durable session routes
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+Add imports:
+
++from app.rpg.session.durable_store import (
++    list_sessions_from_disk,
++    load_session_from_disk,
++    save_session_to_disk,
++)
+
+Then update routes:
+
+In save_rpg_session(), after in-memory save, also persist:
++    save_session_to_disk(session)
+In list_rpg_sessions(), merge or prefer disk-backed sessions:
+-    return jsonify({
+-        "ok": True,
+-        "sessions": list_sessions(_RPG_SESSION_ROOT_STATE),
+-    })
++    disk_sessions = list_sessions_from_disk()
++    return jsonify({
++        "ok": True,
++        "sessions": disk_sessions or list_sessions(_RPG_SESSION_ROOT_STATE),
++    })
+In load_rpg_session(), prefer disk-backed load:
+-    session = get_session(_RPG_SESSION_ROOT_STATE, session_id)
++    session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
+
+This keeps the old in-memory behavior as fallback but introduces durability.
+
+Part 14/18 — session UI can show durable sessions
+
+No major renderer change required if payload already includes sessions, but optionally add a “source” marker later.
+
+Part 15/18 — tests for actor/world memory and durable store
+Create file: src/tests/unit/rpg/test_actor_memory_state.py
+from app.rpg.memory.actor_memory_state import (
+    append_actor_long_term_memory,
+    append_actor_short_term_memory,
+    ensure_actor_memory_state,
+    get_actor_memory,
 )
 
 
-def test_normalize_wizard_state_basic():
-    result = normalize_wizard_state({"title": "Adventure"})
-    assert result["title"] == "Adventure"
-
-
-def test_build_wizard_preview_payload():
-    result = build_wizard_preview_payload({"title": "Adventure", "character_seeds": []})
-    assert result["title"] == "Adventure"
-
-
-def test_build_wizard_setup_payload():
-    result = build_wizard_setup_payload({"title": "Adventure"})
-    assert "simulation_state" in result
-Create file: src/tests/unit/rpg/test_session_store.py
-from app.rpg.session.session_store import (
-    archive_session,
-    ensure_session_registry,
-    get_session,
-    list_sessions,
-    save_session,
-)
-
-
-def test_save_and_list_session():
-    root = {"sessions": []}
-    root = save_session(root, {"manifest": {"id": "s1", "title": "Session 1"}, "state": {}})
-    sessions = list_sessions(root)
-    assert len(sessions) == 1
-
-
-def test_get_session():
-    root = {"sessions": [{"manifest": {"id": "s1", "title": "Session 1"}, "state": {}}]}
-    session = get_session(root, "s1")
-    assert session is not None
-
-
-def test_archive_session():
-    root = {"sessions": [{"manifest": {"id": "s1", "title": "Session 1"}, "state": {}}]}
-    root = archive_session(root, "s1")
-    assert root["sessions"][0]["manifest"]["status"] == "archived"
-Create file: src/tests/unit/rpg/test_memory_state.py
-from app.rpg.memory.memory_state import (
-    append_long_term_memory,
-    append_short_term_memory,
-    append_world_memory,
-    ensure_memory_state,
-)
-
-
-def test_ensure_memory_state():
-    result = ensure_memory_state({})
+def test_ensure_actor_memory_state():
+    result = ensure_actor_memory_state({})
     assert "memory_state" in result
+    assert "actor_memory" in result["memory_state"]
 
 
-def test_append_short_term_memory():
-    result = append_short_term_memory({}, {"id": "m1", "summary": "hello"})
-    assert len(result["memory_state"]["short_term"]) == 1
+def test_append_actor_short_term_memory():
+    result = append_actor_short_term_memory({}, actor_id="npc:test", entry={"id": "m1", "summary": "met player"})
+    memory = get_actor_memory(result, "npc:test")
+    assert len(memory["short_term"]) == 1
 
 
-def test_append_long_term_memory():
-    result = append_long_term_memory({}, {"id": "m1", "summary": "hello"})
-    assert len(result["memory_state"]["long_term"]) == 1
+def test_append_actor_long_term_memory():
+    result = append_actor_long_term_memory({}, actor_id="npc:test", entry={"id": "m1", "summary": "owes favor"})
+    memory = get_actor_memory(result, "npc:test")
+    assert len(memory["long_term"]) == 1
+Create file: src/tests/unit/rpg/test_world_memory_state.py
+from app.rpg.memory.world_memory_state import (
+    append_rumor,
+    ensure_world_memory_state,
+)
 
 
-def test_append_world_memory():
-    result = append_world_memory({}, {"id": "m1", "summary": "rumor"})
-    assert len(result["memory_state"]["world_memory"]) == 1
+def test_ensure_world_memory_state():
+    result = ensure_world_memory_state({})
+    assert "memory_state" in result
+    assert "rumors" in result["memory_state"]
+
+
+def test_append_rumor():
+    result = append_rumor({}, {"id": "r1", "summary": "bandits on the road"})
+    assert len(result["memory_state"]["rumors"]) == 1
+Create file: src/tests/unit/rpg/test_durable_store.py
+from app.rpg.session.durable_store import save_session_to_disk, load_session_from_disk
+
+
+def test_save_and_load_session_to_disk():
+    session = {"manifest": {"id": "disk_test", "title": "Disk Test"}, "state": {}}
+    save_session_to_disk(session)
+    loaded = load_session_from_disk("disk_test")
+    assert loaded is not None
+    assert loaded["manifest"]["id"] == "disk_test"
+Part 16/18 — functional tests
 Edit file: src/tests/functional/test_character_ui_functional.py
 
 Append:
 
-+def test_wizard_build_route_returns_setup_payload(client):
-+    response = client.post(
-+        "/api/rpg/wizard/build",
-+        json={"wizard_state": {"title": "Adventure"}},
-+    )
-+    assert response.status_code == 200
-+    payload = response.get_json()
-+    assert payload["ok"] is True
-+    assert "setup_payload" in payload
-+
-+
-+def test_session_save_and_list_routes(client):
-+    save_resp = client.post(
-+        "/api/rpg/session/save",
-+        json={"session": {"manifest": {"id": "s1", "title": "Session 1"}, "state": {}}},
-+    )
-+    assert save_resp.status_code == 200
-+
-+    list_resp = client.post("/api/rpg/session/list", json={})
-+    assert list_resp.status_code == 200
-+    payload = list_resp.get_json()
-+    assert payload["ok"] is True
-+    assert "sessions" in payload
-+
-+
-+def test_memory_add_route_returns_memory_state(client):
-+    response = client.post(
-+        "/api/rpg/memory/add",
++def test_actor_memory_add_and_get_routes(client):
++    add_resp = client.post(
++        "/api/rpg/memory/actor/add",
 +        json={
 +            "setup_payload": {},
++            "actor_id": "npc:test",
 +            "lane": "short_term",
-+            "entry": {"id": "m1", "summary": "player met captain"},
++            "entry": {"id": "m1", "summary": "met player"},
 +        },
 +    )
-+    assert response.status_code == 200
-+    payload = response.get_json()
++    assert add_resp.status_code == 200
++
++    get_resp = client.post(
++        "/api/rpg/memory/actor/get",
++        json={"setup_payload": {}, "actor_id": "npc:test"},
++    )
++    assert get_resp.status_code == 200
++    payload = get_resp.get_json()
 +    assert payload["ok"] is True
-+    assert "memory_state" in payload
++    assert "actor_memory" in payload
++
++
++def test_world_memory_add_and_get_routes(client):
++    add_resp = client.post(
++        "/api/rpg/world_memory/add_rumor",
++        json={
++            "setup_payload": {},
++            "rumor": {"id": "r1", "summary": "bandits on the road"},
++        },
++    )
++    assert add_resp.status_code == 200
++
++    get_resp = client.post(
++        "/api/rpg/world_memory/get",
++        json={"setup_payload": {}},
++    )
++    assert get_resp.status_code == 200
++    payload = get_resp.get_json()
++    assert payload["ok"] is True
++    assert "rumors" in payload
+Part 17/18 — expose memory in normal presentation payloads (recommended)
+Edit file: src/app/rpg/api/rpg_presentation_routes.py
+
+In:
+
+presentation_scene()
+presentation_dialogue()
+presentation_narrative_recap()
+
+after ensure_visual_state(simulation_state) and ensure_content_pack_state(simulation_state), add:
+
++    simulation_state = ensure_memory_state(simulation_state)
++    simulation_state = ensure_actor_memory_state(simulation_state)
++    simulation_state = ensure_world_memory_state(simulation_state)
+
+Then add to returned response:
+
++        "memory_state": _safe_dict(simulation_state.get("memory_state")),
+
+This lets the memory tab render without separate fetches.
+
 Part 18/18 — acceptance criteria
-Phase 13.4 is complete when:
-wizard preview/build routes exist
-wizard UI container/renderer exists
-wizard setup payload is normalized and deterministic
-Phase 13.5 is complete when:
-session save/list/load/archive routes exist
-session registry exists
-sessions are bounded and normalized
-Phase 14.0 is complete when:
-memory module exists
-short-term / long-term / world memory lanes exist
-memory add/get routes exist
-memory UI renderer exists
-memory tests pass
+Phase 14.1 is complete when:
+actor memory module exists
+actor memory get/add routes exist
+actor memory is surfaced in character UI/inspector/GM trace
+actor memory tests pass
+Phase 14.2 is complete when:
+world memory/rumor module exists
+rumor add/get routes exist
+world inspector surfaces rumors
+rumor tests pass
+Phase 15.0 is complete when:
+durable disk-backed session save/load exists
+migration layer exists
+session routes use durable store
+durable-store tests pass

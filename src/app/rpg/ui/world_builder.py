@@ -21,6 +21,7 @@ _MAX_FACT_MEMBERS = 8
 _MAX_LOCATION_TAGS = 8
 _MAX_LOCATION_ACTORS = 8
 _MAX_FACTION_RELATIONSHIPS = 8
+_MAX_RUMORS = 16
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -237,12 +238,49 @@ def build_location_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str
     }
 
 
+def _normalize_rumors(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract and normalize world memory rumors for the world inspector."""
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    rumors = _safe_list(memory_state.get("rumors"))
+
+    normalized: List[Dict[str, Any]] = []
+    for raw in rumors:
+        item = _safe_dict(raw)
+        rumor_id = _first_non_empty(item.get("id"), item.get("rumor_id"))
+        if not rumor_id:
+            continue
+        normalized.append(
+            {
+                "id": rumor_id,
+                "summary": _safe_str(item.get("summary")).strip(),
+                "origin": _safe_str(item.get("origin")).strip(),
+                "location": _safe_str(item.get("location")).strip(),
+                "tick": item.get("tick") if isinstance(item.get("tick"), int) else None,
+                "reach": item.get("reach") if isinstance(item.get("reach"), int) else None,
+            }
+        )
+
+    return sorted(
+        normalized,
+        key=lambda it: (
+            it.get("tick") or 0,
+            _safe_str(it.get("summary")).lower(),
+            _safe_str(it.get("id")),
+        ),
+        reverse=True,
+    )[:_MAX_RUMORS]
+
+
 def build_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     """Build complete canonical world inspector state from simulation state."""
+    from app.rpg.memory.world_memory_state import ensure_world_memory_state
+
     simulation_state = _safe_dict(simulation_state)
+    simulation_state = ensure_world_memory_state(simulation_state)
     world_state = _safe_dict(simulation_state.get("world_state"))
 
     threads = _normalize_world_threads(world_state.get("threads"))
+    rumors = _normalize_rumors(simulation_state)
 
     summary = {
         "current_location": _safe_str(world_state.get("current_location")).strip(),
@@ -256,4 +294,6 @@ def build_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, A
         "thread_count": len(threads),
         "factions": build_faction_inspector_state(simulation_state),
         "locations": build_location_inspector_state(simulation_state),
+        "rumors": rumors,
+        "rumor_count": len(rumors),
     }

@@ -34,6 +34,8 @@ from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_speaker_cards
 from app.rpg.ui.character_builder import build_character_inspector_state, build_character_ui_state
 from app.rpg.ui.world_builder import build_world_inspector_state
+from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
+from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.presentation.visual_state import (
     append_appearance_event,
     append_image_request,
@@ -252,8 +254,21 @@ def _safe_world_inspector_state(v: Any) -> Dict[str, Any]:
     }
 
 
+def _ensure_actor_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure actor memory state is initialized."""
+    simulation_state = _safe_dict(simulation_state)
+    return ensure_actor_memory_state(simulation_state)
+
+
+def _ensure_world_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure world memory state is initialized."""
+    simulation_state = _safe_dict(simulation_state)
+    return ensure_world_memory_state(simulation_state)
+
+
 def _ensure_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
+    simulation_state = _ensure_world_memory_state(simulation_state)
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):
         presentation_state = {}
@@ -343,6 +358,7 @@ def presentation_scene():
     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
     simulation_state = ensure_player_party(simulation_state)
     simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = _ensure_actor_memory_state(simulation_state)
     simulation_state = _ensure_character_ui_state(simulation_state)
     simulation_state = _ensure_character_inspector_state(simulation_state)
     simulation_state = _ensure_world_inspector_state(simulation_state)
@@ -395,6 +411,7 @@ def presentation_dialogue():
     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
     simulation_state = ensure_player_party(simulation_state)
     simulation_state = ensure_personality_state(simulation_state)
+    simulation_state = _ensure_actor_memory_state(simulation_state)
     simulation_state = _ensure_character_ui_state(simulation_state)
     simulation_state = _ensure_character_inspector_state(simulation_state)
     simulation_state = _ensure_world_inspector_state(simulation_state)
