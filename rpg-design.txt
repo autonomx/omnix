@@ -1,881 +1,852 @@
-Phase 12.15 — Visual inspector / operational visibility
+Use this implementation order exactly:
 
-Goal:
+15.2 — session/package round-trip hardening
+15.3 — session lifecycle unification
+16.0 + 16.1 together — dialogue system maturity + memory lifecycle automation
+16.2 + 18.0 together — memory inspector/codex + unified GM tooling
 
-expose queue jobs
-expose asset manifest
-expose request state
-expose operational actions: normalize queue, run one, prune, cleanup
-keep everything inspectable and explicit
-12.15.A — Add visual inspector builder
-New file: src/app/rpg/presentation/visual_inspector.py
-diff --git a/src/app/rpg/presentation/visual_inspector.py b/src/app/rpg/presentation/visual_inspector.py
-new file mode 100644
-index 0000000..1111111
---- /dev/null
-+++ b/src/app/rpg/presentation/visual_inspector.py
-@@ -0,0 +1,154 @@
-+"""Phase 12.15 — Visual inspector builder."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+
-+def _safe_str(value: Any) -> str:
-+    if value is None:
-+        return ""
-+    if isinstance(value, str):
-+        return value
-+    return str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def build_visual_inspector_payload(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    queue_jobs: List[Dict[str, Any]] | None = None,
-+    asset_manifest: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
-+    visual_state = _safe_dict(presentation_state.get("visual_state"))
-+
-+    image_requests = [_safe_dict(item) for item in _safe_list(visual_state.get("image_requests"))]
-+    visual_assets = [_safe_dict(item) for item in _safe_list(visual_state.get("visual_assets"))]
-+
-+    request_rows = []
-+    for item in image_requests:
-+        request_rows.append(
-+            {
-+                "request_id": _safe_str(item.get("request_id")).strip(),
-+                "kind": _safe_str(item.get("kind")).strip(),
-+                "target_id": _safe_str(item.get("target_id")).strip(),
-+                "status": _safe_str(item.get("status")).strip(),
-+                "attempts": int(item.get("attempts") or 0),
-+                "max_attempts": int(item.get("max_attempts") or 0),
-+                "error": _safe_str(item.get("error")).strip(),
-+                "updated_at": _safe_str(item.get("updated_at")).strip(),
-+                "completed_at": _safe_str(item.get("completed_at")).strip(),
-+            }
-+        )
-+
-+    asset_rows = []
-+    for item in visual_assets:
-+        asset_rows.append(
-+            {
-+                "asset_id": _safe_str(item.get("asset_id")).strip(),
-+                "kind": _safe_str(item.get("kind")).strip(),
-+                "target_id": _safe_str(item.get("target_id")).strip(),
-+                "status": _safe_str(item.get("status")).strip(),
-+                "model": _safe_str(item.get("model")).strip(),
-+                "style": _safe_str(item.get("style")).strip(),
-+                "url": _safe_str(item.get("url")).strip(),
-+                "local_path": _safe_str(item.get("local_path")).strip(),
-+                "created_from_request_id": _safe_str(item.get("created_from_request_id")).strip(),
-+            }
-+        )
-+
-+    queue_rows = []
-+    for item in _safe_list(queue_jobs):
-+        item = _safe_dict(item)
-+        queue_rows.append(
-+            {
-+                "job_id": _safe_str(item.get("job_id")).strip(),
-+                "session_id": _safe_str(item.get("session_id")).strip(),
-+                "request_id": _safe_str(item.get("request_id")).strip(),
-+                "status": _safe_str(item.get("status")).strip(),
-+                "attempts": int(item.get("attempts") or 0),
-+                "lease_token": _safe_str(item.get("lease_token")).strip(),
-+                "lease_expires_at": _safe_str(item.get("lease_expires_at")).strip(),
-+                "updated_at": _safe_str(item.get("updated_at")).strip(),
-+                "completed_at": _safe_str(item.get("completed_at")).strip(),
-+                "error": _safe_str(item.get("error")).strip(),
-+            }
-+        )
-+
-+    manifest_assets = _safe_dict(_safe_dict(asset_manifest).get("assets"))
-+    manifest_rows = []
-+    for asset_id in sorted(manifest_assets.keys()):
-+        item = _safe_dict(manifest_assets.get(asset_id))
-+        manifest_rows.append(
-+            {
-+                "asset_id": asset_id,
-+                "hash": _safe_str(item.get("hash")).strip(),
-+                "filename": _safe_str(item.get("filename")).strip(),
-+                "mime_type": _safe_str(item.get("mime_type")).strip(),
-+                "size": int(item.get("size") or 0),
-+                "kind": _safe_str(item.get("kind")).strip(),
-+                "target_id": _safe_str(item.get("target_id")).strip(),
-+            }
-+        )
-+
-+    return {
-+        "request_count": len(request_rows),
-+        "asset_count": len(asset_rows),
-+        "queue_job_count": len(queue_rows),
-+        "manifest_asset_count": len(manifest_rows),
-+        "requests": request_rows,
-+        "assets": asset_rows,
-+        "queue_jobs": queue_rows,
-+        "asset_manifest": manifest_rows,
-+        "actions": {
-+            "queue_normalize_route": "/api/rpg/visual/queue/normalize",
-+            "queue_run_one_route": "/api/rpg/visual/queue/run_one",
-+            "queue_prune_route": "/api/rpg/visual/queue/prune",
-+            "asset_cleanup_route": "/api/rpg/visual/assets/cleanup",
-+        },
-+    }
-12.15.B — Add visual inspector route
-File: src/app/rpg/api/rpg_presentation_routes.py
+Do not skip ahead. Each later phase assumes the prior one is already landed and passing tests. That ordering matches the current project state: persistence/package hardening first, then canonical session service, then mature dialogue/memory behavior, then inspector/tooling on top.
 
-Add imports near other presentation imports:
+Below is the full patch plan, written for a coding LLM.
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 8011545..9111545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1,6 +1,7 @@
- from __future__ import annotations
- 
- from flask import jsonify, request
-+from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
+Phase 15.2 — Full patch
+Session/package round-trip hardening
+Purpose
 
-Add route:
+Make session export/import safe and canonical:
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index 9111545..a111545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -700,6 +700,28 @@ def presentation_world_inspector():
-     return jsonify(payload)
- 
- 
-+@rpg_presentation_bp.route("/api/rpg/visual/inspector", methods=["POST"])
-+def visual_inspector():
-+    """Return an inspector payload for visual requests/assets/queue state."""
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
-+
-+    try:
-+        queue_jobs = list_visual_jobs()
-+    except Exception:
-+        queue_jobs = []
-+
-+    try:
-+        asset_manifest = get_asset_manifest()
-+    except Exception:
-+        asset_manifest = {"assets": {}}
-+
-+    payload = build_visual_inspector_payload(
-+        simulation_state,
-+        queue_jobs=queue_jobs,
-+        asset_manifest=asset_manifest,
-+    )
-+    return jsonify({"ok": True, "visual_inspector": payload})
-+
-+
- @rpg_presentation_bp.post("/api/rpg/character_portrait/request")
- def request_character_portrait():
-12.15.C — Add test
-New file: src/tests/unit/rpg/test_phase1215_visual_inspector.py
-diff --git a/src/tests/unit/rpg/test_phase1215_visual_inspector.py b/src/tests/unit/rpg/test_phase1215_visual_inspector.py
-new file mode 100644
-index 0000000..1215000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase1215_visual_inspector.py
-@@ -0,0 +1,56 @@
-+from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
-+
-+
-+def test_build_visual_inspector_payload_surfaces_requests_assets_queue_and_manifest():
-+    simulation_state = {
-+        "presentation_state": {
-+            "visual_state": {
-+                "image_requests": [
-+                    {
-+                        "request_id": "req:1",
-+                        "kind": "character_portrait",
-+                        "target_id": "npc:a",
-+                        "status": "pending",
-+                        "attempts": 1,
-+                        "max_attempts": 3,
-+                    }
-+                ],
-+                "visual_assets": [
-+                    {
-+                        "asset_id": "asset:1",
-+                        "kind": "character_portrait",
-+                        "target_id": "npc:a",
-+                        "status": "complete",
-+                        "url": "/tmp/a.png",
-+                    }
-+                ],
-+            }
-+        }
-+    }
-+    queue_jobs = [{"job_id": "job:1", "session_id": "s1", "request_id": "req:1", "status": "queued"}]
-+    asset_manifest = {
-+        "assets": {
-+            "asset:1": {
-+                "hash": "abc",
-+                "filename": "abc.png",
-+                "mime_type": "image/png",
-+                "size": 42,
-+            }
-+        }
-+    }
-+
-+    payload = build_visual_inspector_payload(
-+        simulation_state,
-+        queue_jobs=queue_jobs,
-+        asset_manifest=asset_manifest,
-+    )
-+
-+    assert payload["request_count"] == 1
-+    assert payload["asset_count"] == 1
-+    assert payload["queue_job_count"] == 1
-+    assert payload["manifest_asset_count"] == 1
-Phase 14.3 — Memory → dialogue injection hardening
+validate imported packages
+normalize exported payloads deterministically
+exclude ephemeral runtime-only state
+preserve persistent visual + memory state
+add round-trip tests
+File 1: src/app/rpg/session/package_bridge.py
+Replace file with:
+"""Phase 15.2 — Session/package bridge with validation and normalization."""
+from __future__ import annotations
 
-Goal:
+from typing import Any, Dict, List
 
-finalize actor memory context
-finalize world rumor context
-assemble LLM memory prompt block
-wire to dialogue response
-expose GM-visible debug state
-14.3.A — Add dialogue memory builder
-New file: src/app/rpg/memory/dialogue_context.py
-diff --git a/src/app/rpg/memory/dialogue_context.py b/src/app/rpg/memory/dialogue_context.py
-new file mode 100644
-index 0000000..1430000
---- /dev/null
-+++ b/src/app/rpg/memory/dialogue_context.py
-@@ -0,0 +1,194 @@
-+"""Phase 14.3 — Dialogue memory context builder."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+
-+def _safe_str(value: Any) -> str:
-+    if value is None:
-+        return ""
-+    if isinstance(value, str):
-+        return value
-+    return str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _score_memory(item: Dict[str, Any]) -> tuple[float, str]:
-+    item = _safe_dict(item)
-+    strength = float(item.get("strength") or 0.0)
-+    updated_at = _safe_str(item.get("updated_at")).strip()
-+    return (-strength, updated_at)
-+
-+
-+def build_actor_memory_context(simulation_state: Dict[str, Any], actor_id: str, *, limit: int = 5) -> List[Dict[str, Any]]:
-+    simulation_state = _safe_dict(simulation_state)
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+    actor_memory = _safe_dict(_safe_dict(memory_state.get("actor_memory")).get(actor_id))
-+    entries = [_safe_dict(item) for item in _safe_list(actor_memory.get("entries"))]
-+    entries.sort(key=_score_memory)
-+    return entries[: max(0, int(limit))]
-+
-+
-+def build_world_rumor_context(simulation_state: Dict[str, Any], *, limit: int = 5) -> List[Dict[str, Any]]:
-+    simulation_state = _safe_dict(simulation_state)
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+    world_memory = _safe_dict(memory_state.get("world_memory"))
-+    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
-+    rumors.sort(key=_score_memory)
-+    return rumors[: max(0, int(limit))]
-+
-+
-+def build_dialogue_memory_context(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
-+    actor_context = build_actor_memory_context(simulation_state, actor_id, limit=5)
-+    rumor_context = build_world_rumor_context(simulation_state, limit=5)
-+    return {
-+        "actor_id": _safe_str(actor_id).strip(),
-+        "actor_memory": actor_context,
-+        "world_rumors": rumor_context,
-+    }
-+
-+
-+def build_llm_memory_prompt_block(dialogue_memory_context: Dict[str, Any]) -> str:
-+    dialogue_memory_context = _safe_dict(dialogue_memory_context)
-+    actor_memory = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("actor_memory"))]
-+    world_rumors = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("world_rumors"))]
-+
-+    lines: List[str] = []
-+    lines.append("[MEMORY CONTEXT]")
-+    if actor_memory:
-+        lines.append("Actor memories:")
-+        for item in actor_memory:
-+            text = _safe_str(item.get("text")).strip()
-+            if text:
-+                lines.append(f"- {text}")
-+    if world_rumors:
-+        lines.append("World rumors:")
-+        for item in world_rumors:
-+            text = _safe_str(item.get("text")).strip()
-+            if text:
-+                lines.append(f"- {text}")
-+    if len(lines) == 1:
-+        lines.append("- none")
-+    return "\n".join(lines)
-14.3.B — Wire dialogue route
-File: src/app/rpg/api/rpg_presentation_routes.py
 
+_PACKAGE_SCHEMA_VERSION = 1
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _normalize_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
+    manifest = _safe_dict(manifest)
+    return {
+        "id": _safe_str(manifest.get("id")).strip() or "session:unknown",
+        "title": _safe_str(manifest.get("title")).strip(),
+        "schema_version": int(manifest.get("schema_version") or 2),
+        "archived": bool(manifest.get("archived", False)),
+    }
+
+
+def _normalize_visual_state_for_export(visual_state: Dict[str, Any]) -> Dict[str, Any]:
+    visual_state = _safe_dict(visual_state)
+
+    image_requests = []
+    for item in _safe_list(visual_state.get("image_requests")):
+        item = _safe_dict(item)
+        image_requests.append(
+            {
+                "request_id": _safe_str(item.get("request_id")).strip(),
+                "kind": _safe_str(item.get("kind")).strip(),
+                "target_id": _safe_str(item.get("target_id")).strip(),
+                "status": _safe_str(item.get("status")).strip(),
+                "attempts": int(item.get("attempts") or 0),
+                "max_attempts": int(item.get("max_attempts") or 0),
+                "error": _safe_str(item.get("error")).strip(),
+                "updated_at": _safe_str(item.get("updated_at")).strip(),
+                "completed_at": _safe_str(item.get("completed_at")).strip(),
+            }
+        )
+
+    visual_assets = []
+    for item in _safe_list(visual_state.get("visual_assets")):
+        item = _safe_dict(item)
+        visual_assets.append(
+            {
+                "asset_id": _safe_str(item.get("asset_id")).strip(),
+                "kind": _safe_str(item.get("kind")).strip(),
+                "target_id": _safe_str(item.get("target_id")).strip(),
+                "status": _safe_str(item.get("status")).strip(),
+                "model": _safe_str(item.get("model")).strip(),
+                "style": _safe_str(item.get("style")).strip(),
+                "url": _safe_str(item.get("url")).strip(),
+                "local_path": _safe_str(item.get("local_path")).strip(),
+                "created_from_request_id": _safe_str(item.get("created_from_request_id")).strip(),
+            }
+        )
+
+    image_requests.sort(key=lambda x: (x["request_id"], x["kind"], x["target_id"]))
+    visual_assets.sort(key=lambda x: (x["asset_id"], x["kind"], x["target_id"]))
+
+    # Intentionally do not export queue/job state here.
+    return {
+        "image_requests": image_requests[:100],
+        "visual_assets": visual_assets[:200],
+    }
+
+
+def _normalize_memory_state_for_export(memory_state: Dict[str, Any]) -> Dict[str, Any]:
+    memory_state = _safe_dict(memory_state)
+
+    actor_memory_in = _safe_dict(memory_state.get("actor_memory"))
+    actor_memory_out: Dict[str, Any] = {}
+    for actor_id in sorted(actor_memory_in.keys()):
+        bucket = _safe_dict(actor_memory_in.get(actor_id))
+        entries = []
+        for item in _safe_list(bucket.get("entries")):
+            item = _safe_dict(item)
+            entries.append(
+                {
+                    "text": _safe_str(item.get("text")).strip(),
+                    "strength": float(item.get("strength") or 0.0),
+                    "updated_at": _safe_str(item.get("updated_at")).strip(),
+                }
+            )
+        entries.sort(key=lambda item: (-item["strength"], item["updated_at"], item["text"]))
+        actor_memory_out[actor_id] = {"entries": entries[:50]}
+
+    world_memory_in = _safe_dict(memory_state.get("world_memory"))
+    rumors = []
+    for item in _safe_list(world_memory_in.get("rumors")):
+        item = _safe_dict(item)
+        rumors.append(
+            {
+                "text": _safe_str(item.get("text")).strip(),
+                "strength": float(item.get("strength") or 0.0),
+                "reach": int(item.get("reach") or 0),
+                "updated_at": _safe_str(item.get("updated_at")).strip(),
+            }
+        )
+    rumors.sort(key=lambda item: (-item["strength"], -item["reach"], item["updated_at"], item["text"]))
+
+    return {
+        "actor_memory": actor_memory_out,
+        "world_memory": {
+            "rumors": rumors[:50],
+        },
+    }
+
+
+def _normalize_simulation_state_for_export(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+
+    presentation_state["visual_state"] = _normalize_visual_state_for_export(
+        _safe_dict(presentation_state.get("visual_state"))
+    )
+
+    return {
+        **simulation_state,
+        "presentation_state": presentation_state,
+        "memory_state": _normalize_memory_state_for_export(memory_state),
+    }
+
+
+def validate_package_payload(package_payload: Dict[str, Any]) -> Dict[str, Any]:
+    package_payload = _safe_dict(package_payload)
+    package_manifest = _safe_dict(package_payload.get("package_manifest"))
+    session_manifest = _safe_dict(package_payload.get("session_manifest"))
+    simulation_state = _safe_dict(package_payload.get("simulation_state"))
+    installed_packs = _safe_list(package_payload.get("installed_packs"))
+
+    errors: List[str] = []
+
+    schema_version = int(package_manifest.get("schema_version") or 0)
+    if schema_version != _PACKAGE_SCHEMA_VERSION:
+        errors.append("unsupported_package_schema_version")
+
+    if not _safe_str(session_manifest.get("id")).strip():
+        errors.append("missing_session_manifest_id")
+
+    if not isinstance(simulation_state, dict):
+        errors.append("invalid_simulation_state")
+
+    if not isinstance(installed_packs, list):
+        errors.append("invalid_installed_packs")
+
+    return {
+        "ok": len(errors) == 0,
+        "errors": errors,
+    }
+
+
+def session_to_package(session: Dict[str, Any]) -> Dict[str, Any]:
+    session = _safe_dict(session)
+    manifest = _normalize_manifest(_safe_dict(session.get("manifest")))
+    simulation_state = _normalize_simulation_state_for_export(_safe_dict(session.get("simulation_state")))
+    installed_packs = sorted(_safe_list(session.get("installed_packs")), key=lambda x: _safe_str(x).strip())
+
+    return {
+        "package_manifest": {
+            "package_kind": "rpg_session_export",
+            "schema_version": _PACKAGE_SCHEMA_VERSION,
+            "source_session_id": manifest.get("id"),
+            "title": manifest.get("title"),
+        },
+        "session_manifest": manifest,
+        "simulation_state": simulation_state,
+        "installed_packs": installed_packs,
+    }
+
+
+def package_to_session(package_payload: Dict[str, Any]) -> Dict[str, Any]:
+    package_payload = _safe_dict(package_payload)
+    validation = validate_package_payload(package_payload)
+    if not validation["ok"]:
+        return {
+            "ok": False,
+            "errors": validation["errors"],
+        }
+
+    session_manifest = _normalize_manifest(_safe_dict(package_payload.get("session_manifest")))
+    simulation_state = _normalize_simulation_state_for_export(_safe_dict(package_payload.get("simulation_state")))
+    installed_packs = sorted(_safe_list(package_payload.get("installed_packs")), key=lambda x: _safe_str(x).strip())
+
+    return {
+        "ok": True,
+        "session": {
+            "manifest": session_manifest,
+            "simulation_state": simulation_state,
+            "installed_packs": installed_packs,
+            "import_metadata": {
+                "package_manifest": _safe_dict(package_payload.get("package_manifest")),
+            },
+        },
+    }
+File 2: src/app/rpg/api/rpg_presentation_routes.py
+Update package import/export routes to use validation result
+
+Find the canonical package bridge import and keep it.
+
+Replace export/import route bodies with:
+
+@rpg_presentation_bp.post("/api/rpg/session/export_package")
+def export_session_package():
+    """Export current session as portable package."""
+    data = request.get_json(silent=True) or {}
+    session = _safe_dict(data.get("session"))
+    package_payload = session_to_package(session)
+    return jsonify({"ok": True, "package": package_payload})
+
+
+@rpg_presentation_bp.post("/api/rpg/session/import_package")
+def import_session_package():
+    """Import portable package as session."""
+    data = request.get_json(silent=True) or {}
+    package_payload = _safe_dict(data.get("package"))
+    result = package_to_session(package_payload)
+    if not result.get("ok"):
+        return jsonify(result), 400
+    return jsonify(result)
+File 3: src/tests/unit/rpg/test_phase151_session_package_bridge.py
+Replace with:
+from app.rpg.session.package_bridge import package_to_session, session_to_package, validate_package_payload
+
+
+def test_session_package_round_trip_preserves_manifest_state_and_packs():
+    session = {
+        "manifest": {"id": "s1", "title": "Campaign A", "schema_version": 2},
+        "simulation_state": {
+            "presentation_state": {
+                "visual_state": {
+                    "image_requests": [{"request_id": "req:1", "kind": "character_portrait", "target_id": "npc:a"}],
+                    "visual_assets": [{"asset_id": "asset:1", "kind": "character_portrait", "target_id": "npc:a"}],
+                }
+            },
+            "memory_state": {
+                "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.7}]}},
+                "world_memory": {"rumors": [{"text": "Bridge rumor", "strength": 0.8, "reach": 2}]},
+            },
+        },
+        "installed_packs": ["portraits", "core"],
+    }
+
+    package_payload = session_to_package(session)
+    restored = package_to_session(package_payload)
+
+    assert restored["ok"] is True
+    restored_session = restored["session"]
+    assert restored_session["manifest"]["id"] == "s1"
+    assert restored_session["installed_packs"] == ["core", "portraits"]
+    assert "presentation_state" in restored_session["simulation_state"]
+    assert "memory_state" in restored_session["simulation_state"]
+
+
+def test_validate_package_payload_rejects_missing_session_manifest():
+    package_payload = {
+        "package_manifest": {"schema_version": 1},
+        "simulation_state": {},
+        "installed_packs": [],
+    }
+    result = validate_package_payload(package_payload)
+    assert result["ok"] is False
+    assert "missing_session_manifest_id" in result["errors"]
+
+
+def test_export_does_not_include_queue_runtime_state():
+    session = {
+        "manifest": {"id": "s1", "title": "Campaign A", "schema_version": 2},
+        "simulation_state": {
+            "presentation_state": {
+                "visual_state": {
+                    "image_requests": [{"request_id": "req:1"}],
+                    "visual_assets": [{"asset_id": "asset:1"}],
+                    "queue_jobs": [{"job_id": "job:1", "lease_token": "secret"}],
+                }
+            },
+            "memory_state": {},
+        },
+        "installed_packs": [],
+    }
+    package_payload = session_to_package(session)
+    visual_state = package_payload["simulation_state"]["presentation_state"]["visual_state"]
+    assert "queue_jobs" not in visual_state
+Phase 15.3 — Full patch
+Session lifecycle unification
+Purpose
+
+Create one canonical service for create/load/save/list/archive/import/export.
+
+File 1: src/app/rpg/session/service.py
+New file:
+"""Phase 15.3 — Canonical session service."""
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from app.rpg.session.durable_store import (
+    archive_session_on_disk,
+    list_sessions_from_disk,
+    load_session_from_disk,
+    save_session_to_disk,
+)
+from app.rpg.session.migrations import migrate_session_payload
+from app.rpg.session.package_bridge import package_to_session, session_to_package
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    session = _safe_dict(session)
+    session = migrate_session_payload(session)
+    manifest = _safe_dict(session.get("manifest"))
+    session["manifest"] = manifest
+    session.setdefault("installed_packs", [])
+    return session
+
+
+def save_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    session = create_or_normalize_session(session)
+    return save_session_to_disk(session)
+
+
+def load_session(session_id: str) -> Dict[str, Any]:
+    session = load_session_from_disk(session_id)
+    return create_or_normalize_session(session)
+
+
+def list_sessions() -> List[Dict[str, Any]]:
+    sessions = list_sessions_from_disk()
+    return [create_or_normalize_session(item) for item in sessions]
+
+
+def archive_session(session_id: str) -> Dict[str, Any]:
+    return archive_session_on_disk(session_id)
+
+
+def export_session_as_package(session: Dict[str, Any]) -> Dict[str, Any]:
+    session = create_or_normalize_session(session)
+    return session_to_package(session)
+
+
+def import_session_from_package(package_payload: Dict[str, Any]) -> Dict[str, Any]:
+    result = package_to_session(package_payload)
+    if not result.get("ok"):
+        return result
+    session = create_or_normalize_session(_safe_dict(result.get("session")))
+    return {"ok": True, "session": session}
+File 2: src/app/rpg/api/rpg_presentation_routes.py
+Replace route-level session/package direct calls with service calls
+
+Add import:
+
+from app.rpg.session.service import (
+    archive_session,
+    export_session_as_package,
+    import_session_from_package,
+    list_sessions as list_canonical_sessions,
+    load_session as load_canonical_session,
+    save_session as save_canonical_session,
+)
+
+Then update canonical session routes to use the service.
+
+Example route bodies:
+
+@rpg_presentation_bp.post("/api/rpg/session/export_package")
+def export_session_package():
+    data = request.get_json(silent=True) or {}
+    session = _safe_dict(data.get("session"))
+    package_payload = export_session_as_package(session)
+    return jsonify({"ok": True, "package": package_payload})
+
+
+@rpg_presentation_bp.post("/api/rpg/session/import_package")
+def import_session_package():
+    data = request.get_json(silent=True) or {}
+    package_payload = _safe_dict(data.get("package"))
+    result = import_session_from_package(package_payload)
+    if not result.get("ok"):
+        return jsonify(result), 400
+    return jsonify(result)
+
+Update list/load/archive routes similarly.
+
+File 3: src/tests/unit/rpg/test_phase153_session_service.py
+New file:
+from app.rpg.session.service import create_or_normalize_session, export_session_as_package
+
+
+def test_create_or_normalize_session_adds_defaults():
+    session = {"manifest": {"id": "s1"}, "simulation_state": {}}
+    out = create_or_normalize_session(session)
+    assert out["manifest"]["id"] == "s1"
+    assert "installed_packs" in out
+    assert "presentation_state" in out["simulation_state"]
+    assert "memory_state" in out["simulation_state"]
+
+
+def test_export_session_as_package_uses_canonical_normalization():
+    session = {"manifest": {"id": "s1"}, "simulation_state": {}}
+    package_payload = export_session_as_package(session)
+    assert package_payload["session_manifest"]["id"] == "s1"
+Phase 16.0 + 16.1 — Full patch together
+Dialogue system maturity + memory lifecycle automation
+Purpose
+
+Make dialogue prompt shaping canonical and make reinforce/decay happen from real gameplay hooks.
+
+File 1: src/app/rpg/memory/dialogue_context.py
+Replace with hardened version:
+"""Phase 16.0 — Canonical dialogue memory shaping."""
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+_MAX_CONTEXT_ITEMS = 5
+_MAX_LINE_LEN = 240
+_MAX_PROMPT_LEN = 2000
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _score_memory(item: Dict[str, Any]) -> tuple[float, str, str]:
+    item = _safe_dict(item)
+    strength = float(item.get("strength") or 0.0)
+    updated_at = _safe_str(item.get("updated_at")).strip()
+    text = _safe_str(item.get("text")).strip()
+    return (-strength, updated_at, text)
+
+
+def build_actor_memory_context(simulation_state: Dict[str, Any], actor_id: str, *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    actor_memory = _safe_dict(_safe_dict(memory_state.get("actor_memory")).get(actor_id))
+    entries = [_safe_dict(item) for item in _safe_list(actor_memory.get("entries"))]
+    entries.sort(key=_score_memory)
+    return entries[: max(0, int(limit))]
+
+
+def build_world_rumor_context(simulation_state: Dict[str, Any], *, limit: int = _MAX_CONTEXT_ITEMS) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    world_memory = _safe_dict(memory_state.get("world_memory"))
+    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
+    rumors.sort(key=_score_memory)
+    return rumors[: max(0, int(limit))]
+
+
+def build_dialogue_memory_context(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+    actor_context = build_actor_memory_context(simulation_state, actor_id)
+    rumor_context = build_world_rumor_context(simulation_state)
+    return {
+        "actor_id": _safe_str(actor_id).strip(),
+        "actor_memory": actor_context,
+        "world_rumors": rumor_context,
+    }
+
+
+def build_llm_memory_prompt_block(dialogue_memory_context: Dict[str, Any]) -> str:
+    dialogue_memory_context = _safe_dict(dialogue_memory_context)
+    actor_memory = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("actor_memory"))]
+    world_rumors = [_safe_dict(item) for item in _safe_list(dialogue_memory_context.get("world_rumors"))]
+
+    lines: List[str] = ["[MEMORY CONTEXT]"]
+
+    if actor_memory:
+        lines.append("Actor memories:")
+        for item in actor_memory:
+            text = _safe_str(item.get("text")).strip()[:_MAX_LINE_LEN]
+            if text:
+                lines.append(f"- {text}")
+
+    if world_rumors:
+        lines.append("World rumors:")
+        for item in world_rumors:
+            text = _safe_str(item.get("text")).strip()[:_MAX_LINE_LEN]
+            if text:
+                lines.append(f"- {text}")
+
+    if len(lines) == 1:
+        lines.append("- none")
+
+    prompt = "\n".join(lines[:16])
+    return prompt[:_MAX_PROMPT_LEN]
+File 2: src/app/rpg/memory/lifecycle.py
+New file:
+"""Phase 16.1 — Memory lifecycle automation."""
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def apply_dialogue_memory_hooks(
+    simulation_state: Dict[str, Any],
+    *,
+    actor_id: str,
+    player_text: str = "",
+    reinforce_text: str = "",
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+
+    # Deterministic decay on each dialogue lifecycle hook.
+    simulation_state = decay_memory_state(simulation_state, decay_step=0.02)
+
+    normalized_reinforce = _safe_str(reinforce_text).strip() or _safe_str(player_text).strip()
+    if actor_id and normalized_reinforce:
+        simulation_state = reinforce_actor_memory(
+            simulation_state,
+            actor_id=actor_id,
+            text=normalized_reinforce[:240],
+            amount=0.1,
+        )
+
+    return simulation_state
+File 3: src/app/rpg/api/rpg_presentation_routes.py
 Add imports:
+from app.rpg.memory.dialogue_context import build_dialogue_memory_context, build_llm_memory_prompt_block
+from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
+Update main dialogue route
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index a111545..b111545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1,6 +1,10 @@
- from __future__ import annotations
- 
- from flask import jsonify, request
-+from app.rpg.memory.dialogue_context import (
-+    build_dialogue_memory_context,
-+    build_llm_memory_prompt_block,
-+)
+Inside the main gameplay dialogue route:
 
-Inside your dialogue route, after you have simulation_state and actor/speaker identity, add:
+actor_id = _safe_str(data.get("actor_id") or data.get("speaker")).strip()
+player_text = _safe_str(data.get("text") or data.get("message")).strip()
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index b111545..c111545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -560,6 +560,18 @@ def presentation_dialogue():
-     actor_id = _safe_str(data.get("actor_id") or data.get("speaker")).strip()
- 
-+    dialogue_memory_context = build_dialogue_memory_context(
-+        simulation_state,
-+        actor_id=actor_id,
-+    )
-+    llm_memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
-+
-     payload = {
-         "ok": True,
-+        "dialogue_memory_context": dialogue_memory_context,
-+        "llm_memory_prompt_block": llm_memory_prompt_block,
-+        "gm_memory_visibility": {
-+            "actor_id": actor_id,
-+            "actor_memory_count": len(dialogue_memory_context.get("actor_memory", [])),
-+            "world_rumor_count": len(dialogue_memory_context.get("world_rumors", [])),
-+        },
-         # existing response payload...
-     }
-14.3.C — Add tests
-New file: src/tests/unit/rpg/test_phase143_dialogue_context.py
-diff --git a/src/tests/unit/rpg/test_phase143_dialogue_context.py b/src/tests/unit/rpg/test_phase143_dialogue_context.py
-new file mode 100644
-index 0000000..1431000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase143_dialogue_context.py
-@@ -0,0 +1,47 @@
-+from app.rpg.memory.dialogue_context import (
-+    build_dialogue_memory_context,
-+    build_llm_memory_prompt_block,
-+)
-+
-+
-+def test_build_dialogue_memory_context_and_prompt_block():
-+    simulation_state = {
-+        "memory_state": {
-+            "actor_memory": {
-+                "npc:a": {
-+                    "entries": [
-+                        {"text": "The player spared me.", "strength": 0.9},
-+                        {"text": "I distrust the guard captain.", "strength": 0.6},
-+                    ]
-+                }
-+            },
-+            "world_memory": {
-+                "rumors": [
-+                    {"text": "A relic was seen near the old bridge.", "strength": 0.8}
-+                ]
-+            },
-+        }
-+    }
-+
-+    context = build_dialogue_memory_context(simulation_state, "npc:a")
-+    prompt = build_llm_memory_prompt_block(context)
-+
-+    assert len(context["actor_memory"]) == 2
-+    assert len(context["world_rumors"]) == 1
-+    assert "The player spared me." in prompt
-+    assert "A relic was seen near the old bridge." in prompt
-Phase 14.4 — Memory decay / reinforcement
+simulation_state = apply_dialogue_memory_hooks(
+    simulation_state,
+    actor_id=actor_id,
+    player_text=player_text,
+)
 
-Goal:
+dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_id=actor_id)
+llm_memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
 
-deterministic decay
-deterministic reinforcement
-rumor cooling
-decay route
-inspectable before/after state
-14.4.A — Add decay engine
-New file: src/app/rpg/memory/decay.py
-diff --git a/src/app/rpg/memory/decay.py b/src/app/rpg/memory/decay.py
-new file mode 100644
-index 0000000..1440000
---- /dev/null
-+++ b/src/app/rpg/memory/decay.py
-@@ -0,0 +1,173 @@
-+"""Phase 14.4 — Deterministic memory decay / reinforcement."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict, List
-+
-+
-+def _safe_str(value: Any) -> str:
-+    if value is None:
-+        return ""
-+    if isinstance(value, str):
-+        return value
-+    return str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _clamp(value: float, lo: float, hi: float) -> float:
-+    return max(lo, min(hi, value))
-+
-+
-+def decay_memory_state(simulation_state: Dict[str, Any], *, decay_step: float = 0.05) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+
-+    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-+    for actor_id, actor_bucket in list(actor_memory.items()):
-+        actor_bucket = _safe_dict(actor_bucket)
-+        entries = [_safe_dict(item) for item in _safe_list(actor_bucket.get("entries"))]
-+        new_entries = []
-+        for item in entries:
-+            strength = _clamp(float(item.get("strength") or 0.0) - decay_step, 0.0, 1.0)
-+            item["strength"] = strength
-+            if strength > 0.0:
-+                new_entries.append(item)
-+        actor_bucket["entries"] = new_entries
-+        actor_memory[actor_id] = actor_bucket
-+
-+    world_memory = _safe_dict(memory_state.get("world_memory"))
-+    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
-+    new_rumors = []
-+    for item in rumors:
-+        strength = _clamp(float(item.get("strength") or 0.0) - decay_step, 0.0, 1.0)
-+        reach = max(0, int(item.get("reach") or 0) - 1)
-+        item["strength"] = strength
-+        item["reach"] = reach
-+        if strength > 0.0 or reach > 0:
-+            new_rumors.append(item)
-+    world_memory["rumors"] = new_rumors
-+
-+    memory_state["actor_memory"] = actor_memory
-+    memory_state["world_memory"] = world_memory
-+    simulation_state["memory_state"] = memory_state
-+    return simulation_state
-+
-+
-+def reinforce_actor_memory(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    actor_id: str,
-+    text: str,
-+    amount: float = 0.2,
-+) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+    actor_memory = _safe_dict(memory_state.get("actor_memory"))
-+    actor_bucket = _safe_dict(actor_memory.get(actor_id))
-+    entries = [_safe_dict(item) for item in _safe_list(actor_bucket.get("entries"))]
-+
-+    normalized_text = _safe_str(text).strip()
-+    found = False
-+    for item in entries:
-+        if _safe_str(item.get("text")).strip() == normalized_text:
-+            item["strength"] = _clamp(float(item.get("strength") or 0.0) + amount, 0.0, 1.0)
-+            found = True
-+            break
-+    if not found and normalized_text:
-+        entries.append({"text": normalized_text, "strength": _clamp(amount, 0.0, 1.0)})
-+
-+    entries.sort(key=lambda item: (-float(item.get("strength") or 0.0), _safe_str(item.get("text")).strip()))
-+    actor_bucket["entries"] = entries[:50]
-+    actor_memory[actor_id] = actor_bucket
-+    memory_state["actor_memory"] = actor_memory
-+    simulation_state["memory_state"] = memory_state
-+    return simulation_state
-14.4.B — Add memory decay route
-File: src/app/rpg/api/rpg_presentation_routes.py
+And add to payload:
 
-Add import:
+"dialogue_memory_context": dialogue_memory_context,
+"llm_memory_prompt_block": llm_memory_prompt_block,
+"gm_memory_visibility": {
+    "actor_id": actor_id,
+    "actor_memory_count": len(dialogue_memory_context.get("actor_memory", [])),
+    "world_rumor_count": len(dialogue_memory_context.get("world_rumors", [])),
+},
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index c111545..d111545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1,6 +1,7 @@
- from __future__ import annotations
- 
- from flask import jsonify, request
-+from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+Also make sure the updated simulation_state is written back into setup_payload if that route returns setup state.
 
+File 4: src/tests/unit/rpg/test_phase160_161_dialogue_memory.py
+New file:
+from app.rpg.memory.dialogue_context import build_dialogue_memory_context, build_llm_memory_prompt_block
+from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
+
+
+def test_dialogue_memory_prompt_is_bounded_and_deterministic():
+    simulation_state = {
+        "memory_state": {
+            "actor_memory": {
+                "npc:a": {
+                    "entries": [
+                        {"text": "B", "strength": 0.5},
+                        {"text": "A", "strength": 0.5},
+                    ]
+                }
+            },
+            "world_memory": {"rumors": []},
+        }
+    }
+    context = build_dialogue_memory_context(simulation_state, "npc:a")
+    prompt = build_llm_memory_prompt_block(context)
+    assert context["actor_memory"][0]["text"] == "A"
+    assert len(prompt) <= 2000
+
+
+def test_apply_dialogue_memory_hooks_decays_and_reinforces():
+    simulation_state = {
+        "memory_state": {
+            "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.5}]}},
+            "world_memory": {"rumors": []},
+        }
+    }
+    out = apply_dialogue_memory_hooks(
+        simulation_state,
+        actor_id="npc:a",
+        player_text="hello there",
+    )
+    entries = out["memory_state"]["actor_memory"]["npc:a"]["entries"]
+    assert len(entries) >= 1
+Phase 16.2 + 18.0 — Full patch together
+Memory inspector / codex + unified GM tooling
+Purpose
+
+Expose memory and operations like the visual system already does, then unify them into one GM tooling surface.
+
+File 1: src/app/rpg/presentation/memory_inspector.py
+New file:
+"""Phase 16.2 — Memory inspector builder."""
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def build_memory_inspector_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+
+    actor_memory = _safe_dict(memory_state.get("actor_memory"))
+    actor_rows = []
+    for actor_id in sorted(actor_memory.keys()):
+        bucket = _safe_dict(actor_memory.get(actor_id))
+        entries = [_safe_dict(item) for item in _safe_list(bucket.get("entries"))]
+        entries.sort(key=lambda item: (-float(item.get("strength") or 0.0), _safe_str(item.get("text")).strip()))
+        actor_rows.append(
+            {
+                "actor_id": actor_id,
+                "entry_count": len(entries),
+                "entries": entries[:20],
+            }
+        )
+
+    world_memory = _safe_dict(memory_state.get("world_memory"))
+    rumors = [_safe_dict(item) for item in _safe_list(world_memory.get("rumors"))]
+    rumors.sort(key=lambda item: (-float(item.get("strength") or 0.0), -int(item.get("reach") or 0), _safe_str(item.get("text")).strip()))
+
+    return {
+        "actor_memory": actor_rows,
+        "world_rumors": rumors[:50],
+        "actions": {
+            "reinforce_route": "/api/rpg/memory/reinforce",
+            "decay_route": "/api/rpg/memory/decay",
+        },
+    }
+File 2: src/app/rpg/presentation/gm_tooling.py
+New file:
+"""Phase 18.0 — Unified GM tooling payload."""
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
+from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def build_gm_tooling_payload(
+    simulation_state: Dict[str, Any],
+    *,
+    queue_jobs: list | None = None,
+    asset_manifest: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    return {
+        "visuals": build_visual_inspector_payload(
+            simulation_state,
+            queue_jobs=queue_jobs or [],
+            asset_manifest=asset_manifest or {"assets": {}},
+        ),
+        "memory": build_memory_inspector_payload(simulation_state),
+        "operations": {
+            "visual_inspector_route": "/api/rpg/visual/inspector",
+            "memory_reinforce_route": "/api/rpg/memory/reinforce",
+            "memory_decay_route": "/api/rpg/memory/decay",
+            "queue_normalize_route": "/api/rpg/visual/queue/normalize",
+            "queue_run_one_route": "/api/rpg/visual/queue/run_one",
+            "queue_prune_route": "/api/rpg/visual/queue/prune",
+            "asset_cleanup_route": "/api/rpg/visual/assets/cleanup",
+            "session_export_route": "/api/rpg/session/export_package",
+            "session_import_route": "/api/rpg/session/import_package",
+        },
+    }
+File 3: src/app/rpg/api/rpg_presentation_routes.py
+Add imports:
+from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
+from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
 Add routes:
+@rpg_presentation_bp.post("/api/rpg/memory/inspector")
+def memory_inspector():
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+    payload = build_memory_inspector_payload(simulation_state)
+    return jsonify({"ok": True, "memory_inspector": payload})
 
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index d111545..e111545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -620,6 +620,41 @@ def presentation_dialogue():
-     return jsonify(payload)
- 
- 
-+@rpg_presentation_bp.route("/api/rpg/memory/decay", methods=["POST"])
-+def memory_decay_route():
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
-+    before = _safe_dict(simulation_state.get("memory_state"))
-+    simulation_state = decay_memory_state(simulation_state)
-+    after = _safe_dict(simulation_state.get("memory_state"))
-+    setup_payload["simulation_state"] = simulation_state
-+    return jsonify(
-+        {
-+            "ok": True,
-+            "setup_payload": setup_payload,
-+            "memory_before": before,
-+            "memory_after": after,
-+        }
-+    )
-+
-+
-+@rpg_presentation_bp.route("/api/rpg/memory/reinforce", methods=["POST"])
-+def memory_reinforce_route():
-+    data = request.get_json(silent=True) or {}
-+    setup_payload = _safe_dict(data.get("setup_payload"))
-+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
-+    actor_id = _safe_str(data.get("actor_id")).strip()
-+    text = _safe_str(data.get("text")).strip()
-+    simulation_state = reinforce_actor_memory(simulation_state, actor_id=actor_id, text=text)
-+    setup_payload["simulation_state"] = simulation_state
-+    return jsonify(
-+        {
-+            "ok": True,
-+            "setup_payload": setup_payload,
-+            "actor_id": actor_id,
-+            "text": text,
-+        }
-+    )
-+
-+
- @rpg_presentation_bp.post("/api/rpg/character_portrait/request")
- def request_character_portrait():
-14.4.C — Add tests
-New file: src/tests/unit/rpg/test_phase144_memory_decay.py
-diff --git a/src/tests/unit/rpg/test_phase144_memory_decay.py b/src/tests/unit/rpg/test_phase144_memory_decay.py
-new file mode 100644
-index 0000000..1441000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase144_memory_decay.py
-@@ -0,0 +1,44 @@
-+from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
-+
-+
-+def test_decay_memory_state_reduces_strength_and_rumor_reach():
-+    simulation_state = {
-+        "memory_state": {
-+            "actor_memory": {"npc:a": {"entries": [{"text": "A", "strength": 0.5}]}},
-+            "world_memory": {"rumors": [{"text": "R", "strength": 0.5, "reach": 2}]},
-+        }
-+    }
-+    out = decay_memory_state(simulation_state, decay_step=0.1)
-+    actor_entry = out["memory_state"]["actor_memory"]["npc:a"]["entries"][0]
-+    rumor = out["memory_state"]["world_memory"]["rumors"][0]
-+    assert actor_entry["strength"] == 0.4
-+    assert rumor["strength"] == 0.4
-+    assert rumor["reach"] == 1
-+
-+
-+def test_reinforce_actor_memory_dedupes_and_caps():
-+    simulation_state = {
-+        "memory_state": {
-+            "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.6}]}}
-+        }
-+    }
-+    out = reinforce_actor_memory(
-+        simulation_state,
-+        actor_id="npc:a",
-+        text="Known fact",
-+        amount=0.3,
-+    )
-+    entries = out["memory_state"]["actor_memory"]["npc:a"]["entries"]
-+    assert len(entries) == 1
-+    assert entries[0]["strength"] == 0.9
-Phase 15.0 — Durable persistence hardening
 
-Goal:
+@rpg_presentation_bp.post("/api/rpg/gm/tooling")
+def gm_tooling():
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
 
-durable save/load/list polish
-real migration layer
-archive durability
-tests for visual + memory state
-15.0.A — Add migration layer
-New file: src/app/rpg/session/migrations.py
-diff --git a/src/app/rpg/session/migrations.py b/src/app/rpg/session/migrations.py
-new file mode 100644
-index 0000000..1500000
---- /dev/null
-+++ b/src/app/rpg/session/migrations.py
-@@ -0,0 +1,88 @@
-+"""Phase 15.0 — Durable session migrations."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+
-+CURRENT_SESSION_SCHEMA_VERSION = 2
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-+    payload = _safe_dict(payload)
-+    manifest = _safe_dict(payload.get("manifest"))
-+    version = int(manifest.get("schema_version") or 1)
-+
-+    if version < 2:
-+        simulation_state = _safe_dict(payload.get("simulation_state"))
-+        simulation_state.setdefault("presentation_state", {})
-+        simulation_state.setdefault("memory_state", {})
-+        payload["simulation_state"] = simulation_state
-+        manifest["schema_version"] = 2
-+        payload["manifest"] = manifest
-+
-+    return payload
-15.0.B — Wire migration into durable store
-File: src/app/rpg/session/durable_store.py
+    try:
+        queue_jobs = list_visual_jobs()
+    except Exception:
+        queue_jobs = []
 
-Add import:
+    try:
+        asset_manifest = get_asset_manifest()
+    except Exception:
+        asset_manifest = {"assets": {}}
 
-diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
-index 1111111..1500111 100644
---- a/src/app/rpg/session/durable_store.py
-+++ b/src/app/rpg/session/durable_store.py
-@@ -1,5 +1,6 @@
- from __future__ import annotations
- 
-+from app.rpg.session.migrations import migrate_session_payload
+    payload = build_gm_tooling_payload(
+        simulation_state,
+        queue_jobs=queue_jobs,
+        asset_manifest=asset_manifest,
+    )
+    return jsonify({"ok": True, "gm_tooling": payload})
+File 4: src/tests/unit/rpg/test_phase162_memory_inspector.py
+New file:
+from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
 
-Apply migration on load:
 
-diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
-index 1500111..1500222 100644
---- a/src/app/rpg/session/durable_store.py
-+++ b/src/app/rpg/session/durable_store.py
-@@ -80,6 +80,7 @@ def load_session_from_disk(session_id: str) -> Dict[str, Any]:
-     with open(path, "r", encoding="utf-8") as f:
-         payload = json.load(f)
-+    payload = migrate_session_payload(payload)
-     return payload
+def test_build_memory_inspector_payload_surfaces_actor_memory_and_rumors():
+    simulation_state = {
+        "memory_state": {
+            "actor_memory": {"npc:a": {"entries": [{"text": "Known fact", "strength": 0.7}]}},
+            "world_memory": {"rumors": [{"text": "Bridge rumor", "strength": 0.8, "reach": 2}]},
+        }
+    }
+    payload = build_memory_inspector_payload(simulation_state)
+    assert len(payload["actor_memory"]) == 1
+    assert len(payload["world_rumors"]) == 1
+File 5: src/tests/unit/rpg/test_phase180_gm_tooling.py
+New file:
+from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
 
-Apply migration on save:
 
-diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
-index 1500222..1500333 100644
---- a/src/app/rpg/session/durable_store.py
-+++ b/src/app/rpg/session/durable_store.py
-@@ -120,6 +120,7 @@ def save_session_to_disk(session: Dict[str, Any]) -> Dict[str, Any]:
-     session = _normalize_session(session)
-+    session = migrate_session_payload(session)
-     with open(tmp_path, "w", encoding="utf-8") as f:
-         json.dump(session, f, indent=2, sort_keys=True)
-15.0.C — Add archive durability helper
-File: src/app/rpg/session/durable_store.py
-diff --git a/src/app/rpg/session/durable_store.py b/src/app/rpg/session/durable_store.py
-index 1500333..1500444 100644
---- a/src/app/rpg/session/durable_store.py
-+++ b/src/app/rpg/session/durable_store.py
-@@ -160,3 +160,20 @@ def list_sessions_from_disk() -> List[Dict[str, Any]]:
-     return out
-+
-+
-+def archive_session_on_disk(session_id: str) -> Dict[str, Any]:
-+    session = load_session_from_disk(session_id)
-+    manifest = _safe_dict(session.get("manifest"))
-+    manifest["archived"] = True
-+    session["manifest"] = manifest
-+    return save_session_to_disk(session)
-15.0.D — Add tests
-New file: src/tests/unit/rpg/test_phase150_durable_migrations.py
-diff --git a/src/tests/unit/rpg/test_phase150_durable_migrations.py b/src/tests/unit/rpg/test_phase150_durable_migrations.py
-new file mode 100644
-index 0000000..1501000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase150_durable_migrations.py
-@@ -0,0 +1,31 @@
-+from app.rpg.session.migrations import migrate_session_payload
-+
-+
-+def test_migrate_session_payload_upgrades_schema_and_adds_state_roots():
-+    payload = {"manifest": {"id": "s1", "schema_version": 1}, "simulation_state": {}}
-+    out = migrate_session_payload(payload)
-+    assert out["manifest"]["schema_version"] == 2
-+    assert "presentation_state" in out["simulation_state"]
-+    assert "memory_state" in out["simulation_state"]
-Phase 15.1 — Session ↔ package unification
+def test_build_gm_tooling_payload_contains_visual_memory_and_operations():
+    simulation_state = {
+        "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
+        "memory_state": {"actor_memory": {}, "world_memory": {"rumors": []}},
+    }
+    payload = build_gm_tooling_payload(simulation_state, queue_jobs=[], asset_manifest={"assets": {}})
+    assert "visuals" in payload
+    assert "memory" in payload
+    assert "operations" in payload
+Instructions to the coding LLM
 
-Goal:
+Implement in this exact order:
 
-export session as package
-import package as session
-preserve installed packs / visual / memory metadata
-round-trip tests
-15.1.A — Add session/package bridge
-New file: src/app/rpg/session/package_bridge.py
-diff --git a/src/app/rpg/session/package_bridge.py b/src/app/rpg/session/package_bridge.py
-new file mode 100644
-index 0000000..1510000
---- /dev/null
-+++ b/src/app/rpg/session/package_bridge.py
-@@ -0,0 +1,90 @@
-+"""Phase 15.1 — Session/package bridge."""
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def session_to_package(session: Dict[str, Any]) -> Dict[str, Any]:
-+    session = _safe_dict(session)
-+    manifest = _safe_dict(session.get("manifest"))
-+    simulation_state = _safe_dict(session.get("simulation_state"))
-+    return {
-+        "package_manifest": {
-+            "source_session_id": manifest.get("id"),
-+            "title": manifest.get("title"),
-+        },
-+        "session_manifest": manifest,
-+        "simulation_state": simulation_state,
-+        "installed_packs": session.get("installed_packs", []),
-+    }
-+
-+
-+def package_to_session(package_payload: Dict[str, Any]) -> Dict[str, Any]:
-+    package_payload = _safe_dict(package_payload)
-+    session_manifest = _safe_dict(package_payload.get("session_manifest"))
-+    simulation_state = _safe_dict(package_payload.get("simulation_state"))
-+    return {
-+        "manifest": session_manifest,
-+        "simulation_state": simulation_state,
-+        "installed_packs": package_payload.get("installed_packs", []),
-+    }
-15.1.B — Add API routes
-File: src/app/rpg/api/rpg_presentation_routes.py
+Order
+15.2
+15.3
+16.0 + 16.1 together
+16.2 + 18.0 together
+Rules
+Do not start a later phase until earlier phase files and tests pass.
+Preserve current canonical modules:
+app.rpg.session.package_bridge
+app.rpg.session.migrations
+app.rpg.memory.dialogue_context
+app.rpg.memory.decay
+app.rpg.presentation.visual_inspector
+Do not reintroduce “simple” or “bridge-only” alternative APIs if canonical ones already exist.
+Keep all new payloads bounded and deterministically ordered.
+Do not export ephemeral visual queue runtime state in packages.
+Keep memory and visual state under simulation_state; do not create parallel truth sources.
+Add/extend unit tests for every phase before moving to the next one.
+Acceptance checkpoints
+15.2: package import rejects malformed payloads; round-trip tests pass
+15.3: session routes use canonical service layer
+16.0/16.1: main dialogue route uses canonical memory shaping and lifecycle hooks
+16.2/18.0: memory inspector and GM tooling routes return unified payloads
 
-Add import:
-
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index e111545..f111545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1,6 +1,7 @@
- from __future__ import annotations
- 
- from flask import jsonify, request
-+from app.rpg.session.package_bridge import package_to_session, session_to_package
-
-Add routes:
-
-diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
-index f111545..f211545 100644
---- a/src/app/rpg/api/rpg_presentation_routes.py
-+++ b/src/app/rpg/api/rpg_presentation_routes.py
-@@ -1080,6 +1080,34 @@ def request_scene_illustration():
-     return jsonify({...})
- 
- 
-+@rpg_presentation_bp.route("/api/rpg/session/export_package", methods=["POST"])
-+def export_session_package_route():
-+    data = request.get_json(silent=True) or {}
-+    session = _safe_dict(data.get("session"))
-+    package_payload = session_to_package(session)
-+    return jsonify({"ok": True, "package": package_payload})
-+
-+
-+@rpg_presentation_bp.route("/api/rpg/session/import_package", methods=["POST"])
-+def import_session_package_route():
-+    data = request.get_json(silent=True) or {}
-+    package_payload = _safe_dict(data.get("package"))
-+    session = package_to_session(package_payload)
-+    return jsonify({"ok": True, "session": session})
-15.1.C — Add tests
-New file: src/tests/unit/rpg/test_phase151_session_package_bridge.py
-diff --git a/src/tests/unit/rpg/test_phase151_session_package_bridge.py b/src/tests/unit/rpg/test_phase151_session_package_bridge.py
-new file mode 100644
-index 0000000..1511000
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase151_session_package_bridge.py
-@@ -0,0 +1,38 @@
-+from app.rpg.session.package_bridge import package_to_session, session_to_package
-+
-+
-+def test_session_package_round_trip_preserves_manifest_state_and_packs():
-+    session = {
-+        "manifest": {"id": "s1", "title": "Campaign A"},
-+        "simulation_state": {"presentation_state": {}, "memory_state": {}},
-+        "installed_packs": ["core", "portraits"],
-+    }
-+    package_payload = session_to_package(session)
-+    restored = package_to_session(package_payload)
-+
-+    assert restored["manifest"]["id"] == "s1"
-+    assert restored["installed_packs"] == ["core", "portraits"]
-+    assert "presentation_state" in restored["simulation_state"]
-+    assert "memory_state" in restored["simulation_state"]
-Recommended implementation order
-
-Do it in this order:
-
-12.15
-14.3
-14.4
-15.0
-15.1
-
-That gives you:
-
-visibility first
-then memory-in-dialogue behavior
-then decay/reinforcement behavior
-then durability
-then portability
+This is the right next block because your recent fixes brought persistence, package bridge, visual inspector, and memory routes into a much more canonical state, so now the work should be about hardening and unifying, not adding more side paths.
