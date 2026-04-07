@@ -281,7 +281,7 @@ def resolve_player_action(
         if not defender.get("stats"):
             defender.setdefault("stats", {"dexterity": 10, "constitution": 10})
         if "hp" not in defender:
-            defender["hp"] = _safe_int(defender.get("hp"), 20)
+            defender["hp"] = 20
         result = resolve_attack_roll(player_state, defender, weapon, seed)
         if result["damage"] > 0 and "hp" in defender:
             apply_damage(defender, result["damage"])
