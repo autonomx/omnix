@@ -271,7 +271,7 @@ class NarrativeSurfaceEngine:
         """
         # Fix 1: Enforce normalization at the entry point
         try:
-            from src.app.rpg.narrative.event_adapter import normalize_event
+            from app.rpg.narrative.event_adapter import normalize_event
         except ModuleNotFoundError:
             from app.rpg.narrative.event_adapter import normalize_event
         event = normalize_event(event)

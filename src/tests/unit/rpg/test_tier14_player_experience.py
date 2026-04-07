@@ -22,20 +22,20 @@ import pytest
 from unittest.mock import MagicMock
 
 # Module paths
-PLAYER_EXP_MODULE = "src.app.rpg.player.player_experience"
-COGNITIVE_MODULE = "src.app.rpg.cognitive"
+PLAYER_EXP_MODULE = "app.rpg.player.player_experience"
+COGNITIVE_MODULE = "app.rpg.cognitive"
 
 
 def _import_player_experience():
     """Import player_experience module handling path issues."""
-    if "src.app.rpg.player.player_experience" in sys.modules:
-        mod = sys.modules["src.app.rpg.player.player_experience"]
+    if "app.rpg.player.player_experience" in sys.modules:
+        mod = sys.modules["app.rpg.player.player_experience"]
         # Reload to pick up any changes
         importlib.reload(mod)
         return mod
     
     try:
-        return importlib.import_module("src.app.rpg.player.player_experience")
+        return importlib.import_module("app.rpg.player.player_experience")
     except ModuleNotFoundError:
         # Fallback: add src to path
         sys.path.insert(0, "src")
@@ -43,20 +43,20 @@ def _import_player_experience():
             return importlib.import_module("app.rpg.player.player_experience")
         except ModuleNotFoundError:
             sys.path.insert(0, ".")
-            return importlib.import_module("src.app.rpg.player.player_experience")
+            return importlib.import_module("app.rpg.player.player_experience")
 
 
 def _import_cognitive():
     """Import cognitive module."""
     try:
-        return importlib.import_module("src.app.rpg.cognitive")
+        return importlib.import_module("app.rpg.cognitive")
     except ModuleNotFoundError:
         sys.path.insert(0, "src")
         try:
             return importlib.import_module("app.rpg.cognitive")
         except ModuleNotFoundError:
             sys.path.insert(0, ".")
-            return importlib.import_module("src.app.rpg.cognitive")
+            return importlib.import_module("app.rpg.cognitive")
 
 
 # Import classes
@@ -79,7 +79,7 @@ ArcMemory = cog_mod.ArcMemory
 
 # Tier 14 Fix: Import NarrativeSurfaceEngine
 try:
-    from src.app.rpg.narrative.surface_engine import NarrativeSurfaceEngine
+    from app.rpg.narrative.surface_engine import NarrativeSurfaceEngine
 except ModuleNotFoundError:
     sys.path.insert(0, "src")
     from app.rpg.narrative.surface_engine import NarrativeSurfaceEngine

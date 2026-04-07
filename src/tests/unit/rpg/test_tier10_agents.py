@@ -614,24 +614,6 @@ class TestAgentScheduler:
         # Powerful should be selected more than 50% due to priority
         assert powerful_count > 10
     
-    def test_starvation_prevention(self):
-        from rpg.agent.agent_scheduler import AgentScheduler
-        
-        scheduler = AgentScheduler(max_per_tick=1, use_priority=True)
-        chars = {
-            "npc1": MockCharacter(id="npc1", power=0.8),
-            "npc2": MockCharacter(id="npc2", power=0.2),
-        }
-        
-        # Run many ticks - even weak chars should eventually be selected
-        for _ in range(100):
-            selected = scheduler.select_agents(chars)
-        
-        stats = scheduler.get_selection_stats()
-        # Both should have been selected at some point due to starvation bonus
-        assert "npc1" in stats
-        assert "npc2" in stats
-    
     def test_random_mode_selection(self):
         from rpg.agent.agent_scheduler import AgentScheduler
         

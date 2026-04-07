@@ -1,0 +1,20 @@
+{
+  "save_version": "1.0",
+  "session": {
+    "manifest": {
+      "id": "s1",
+      "title": "Session 1",
+      "status": "active",
+      "created_at": "",
+      "updated_at": "",
+      "source_pack_id": "",
+      "source_template_id": "",
+      "schema_version": 2
+    },
+    "state": {},
+    "simulation_state": {
+      "presentation_state": {},
+      "memory_state": {}
+    }
+  }
+}
