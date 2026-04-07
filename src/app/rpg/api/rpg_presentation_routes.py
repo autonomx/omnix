@@ -128,6 +128,9 @@ from app.rpg.memory.dialogue_context import (
     build_llm_memory_prompt_block,
 )
 
+# Phase 16.1 — Memory lifecycle automation
+from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
+
 # Phase 14.4 — Memory Decay / Reinforcement
 from app.rpg.memory.memory_decay import apply_memory_decay
 
@@ -144,11 +147,27 @@ from app.rpg.session.migrations import migrate_session_payload
 # Phase 12.15 — Visual inspector
 from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
 
+# Phase 16.2 — Memory inspector
+from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
+
+# Phase 18.0 — Unified GM tooling
+from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
+
 # Phase 14.4 — Memory decay (canonical decay engine)
 from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
 
-# Phase 15.1 — Session/package bridge (canonical)
-from app.rpg.session.package_bridge import package_to_session, session_to_package
+# Phase 15.2 — Session/package bridge with validation and normalization
+from app.rpg.session.package_bridge import package_to_session, session_to_package, validate_package_payload
+
+# Phase 15.3 — Canonical session service
+from app.rpg.session.service import (
+    archive_session as archive_canonical_session,
+    export_session_as_package,
+    import_session_from_package,
+    list_sessions as list_canonical_sessions,
+    load_session as load_canonical_session,
+    save_session as save_canonical_session,
+)
 
 rpg_presentation_bp = Blueprint("rpg_presentation_bp", __name__)
 
@@ -527,7 +546,16 @@ def presentation_dialogue():
             if len(actor_ids) >= 6:
                 break
 
-    dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_ids)
+    # Phase 16.1 — apply dialogue memory lifecycle hooks
+    primary_actor_id = actor_ids[0] if actor_ids else ""
+    player_text = _safe_str(data.get("text") or data.get("message")).strip()
+    simulation_state = apply_dialogue_memory_hooks(
+        simulation_state,
+        actor_id=primary_actor_id,
+        player_text=player_text,
+    )
+
+    dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_id=primary_actor_id, actor_ids=actor_ids)
     memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
 
     response = {
@@ -540,6 +568,11 @@ def presentation_dialogue():
         "memory_state": _safe_dict(simulation_state.get("memory_state")),
         "dialogue_memory_context": dialogue_memory_context,
         "llm_memory_prompt_block": memory_prompt_block,
+        "gm_memory_visibility": {
+            "actor_id": primary_actor_id,
+            "actor_memory_count": len(dialogue_memory_context.get("actor_memory", [])),
+            "world_rumor_count": len(dialogue_memory_context.get("world_rumors", [])),
+        },
     }
     return jsonify(_add_content_pack_data(response, simulation_state))
 
@@ -1742,7 +1775,7 @@ def get_rpg_memory_dialogue_context():
     simulation_state = ensure_actor_memory_state(simulation_state)
     simulation_state = ensure_world_memory_state(simulation_state)
 
-    memory_context = build_dialogue_memory_context(simulation_state, actor_ids)
+    memory_context = build_dialogue_memory_context(simulation_state, actor_ids=actor_ids)
     memory_prompt_block = build_llm_memory_prompt_block(memory_context)
 
     return jsonify({
@@ -1773,42 +1806,39 @@ def memory_decay():
 
 
 # ---------------------------------------------------------------------------
-# Phase 15.1 — Session ↔ Package Unification routes
+# Phase 15.3 — Session ↔ Package Unification routes (service layer)
 # ---------------------------------------------------------------------------
 
 @rpg_presentation_bp.post("/api/rpg/session/export_package")
-def export_session_as_package():
-    """Export a saved session as portable package."""
+def export_session_as_package_route():
+    """Export current session as portable package."""
     data = request.get_json(silent=True) or {}
-    session_id = _safe_str(data.get("session_id")).strip()
-    session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
+    session = _safe_dict(data.get("session"))
+    # Also support loading by session_id for backward compatibility
+    if not session:
+        session_id = _safe_str(data.get("session_id")).strip()
+        if session_id:
+            session = load_session_from_disk(session_id) or get_session(_RPG_SESSION_ROOT_STATE, session_id)
     if not session:
         return jsonify({"ok": False, "error": "session_not_found"}), 404
 
-    package_data = session_to_package(session)
-    return jsonify({
-        "ok": True,
-        "package": package_data,
-    })
+    package_payload = export_session_as_package(session)
+    return jsonify({"ok": True, "package": package_payload})
 
 
 @rpg_presentation_bp.post("/api/rpg/session/import_package")
 def import_package_as_session():
-    """Import portable package as new saved session."""
+    """Import portable package as session."""
     global _RPG_SESSION_ROOT_STATE
     data = request.get_json(silent=True) or {}
-    package_data = _safe_dict(data.get("package"))
-    session_id = _safe_str(data.get("session_id")).strip() or "imported_session"
-    title = _safe_str(data.get("title")).strip() or "Imported Session"
-
-    session = package_to_session(package_data, session_id=session_id, title=title)
+    package_payload = _safe_dict(data.get("package"))
+    result = import_session_from_package(package_payload)
+    if not result.get("ok"):
+        return jsonify(result), 400
+    session = _safe_dict(result.get("session"))
     _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
     save_session_to_disk(session)
-
-    return jsonify({
-        "ok": True,
-        "session": session,
-    })
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
@@ -1907,6 +1937,49 @@ def visual_inspector():
         asset_manifest=asset_manifest,
     )
     return jsonify({"ok": True, "visual_inspector": payload})
+
+
+# ---------------------------------------------------------------------------
+# Phase 16.2 — Memory Inspector
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/memory/inspector")
+def memory_inspector():
+    """Return an inspector payload for memory state."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+    payload = build_memory_inspector_payload(simulation_state)
+    return jsonify({"ok": True, "memory_inspector": payload})
+
+
+# ---------------------------------------------------------------------------
+# Phase 18.0 — Unified GM Tooling
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/gm/tooling")
+def gm_tooling():
+    """Return unified GM tooling payload with visuals, memory, and operations."""
+    data = request.get_json(silent=True) or {}
+    setup_payload = _safe_dict(data.get("setup_payload"))
+    simulation_state = _safe_dict(setup_payload.get("simulation_state"))
+
+    try:
+        queue_jobs = list_visual_jobs()
+    except Exception:
+        queue_jobs = []
+
+    try:
+        asset_manifest = get_asset_manifest()
+    except Exception:
+        asset_manifest = {"assets": {}}
+
+    payload = build_gm_tooling_payload(
+        simulation_state,
+        queue_jobs=queue_jobs,
+        asset_manifest=asset_manifest,
+    )
+    return jsonify({"ok": True, "gm_tooling": payload})
 
 
 # ---------------------------------------------------------------------------
