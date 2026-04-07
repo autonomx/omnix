@@ -231,7 +231,13 @@ def process_pending_image_requests(
         final_prompt = _safe_str(result.revised_prompt).strip() or _safe_str(request.get("prompt")).strip()
 
         asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
-        image_path = save_asset_bytes(asset_id, result.image_bytes or b"", result.mime_type)
+        image_path = save_asset_bytes(
+            result.image_bytes or b"",
+            mime_type=result.mime_type,
+            asset_id=asset_id,
+            kind=_safe_str(request.get("kind")).strip(),
+            target_id=_safe_str(request.get("target_id")).strip(),
+        )
 
         # Register the asset
         simulation_state = append_visual_asset(

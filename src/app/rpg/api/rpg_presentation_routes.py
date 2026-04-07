@@ -83,6 +83,16 @@ from app.rpg.templates.campaign_templates import (
 # Phase 12.10 — Visual worker executor
 from app.rpg.visual.worker import process_pending_image_requests
 
+# Phase 12.12 — ComfyUI provider
+from app.rpg.visual.providers import get_image_provider
+
+# Phase 12.13 — Visual queue management
+from app.rpg.visual.job_queue import enqueue_visual_job, list_visual_jobs, prune_completed_visual_jobs
+from app.rpg.visual.queue_runner import get_visual_queue_stats, run_one_visual_job
+
+# Phase 12.14 — Asset dedupe and cleanup
+from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
+
 # Phase 13.4 — New Adventure Wizard UI
 from app.rpg.setup.wizard_state import (
     build_wizard_preview_payload,
@@ -1751,3 +1761,72 @@ def import_package_as_session():
         "ok": True,
         "session": session,
     })
+
+
+# ---------------------------------------------------------------------------
+# Phase 12.13 — Visual Queue Management routes
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/visual/queue/enqueue")
+def queue_visual_job_route():
+    """Enqueue a visual generation job for background processing."""
+    payload = request.get_json(force=True, silent=True) or {}
+    session_id = str(payload.get("session_id") or "").strip()
+    request_id = str(payload.get("request_id") or "").strip()
+    if not session_id or not request_id:
+        return jsonify({"ok": False, "error": "session_id_and_request_id_required"}), 400
+    job = enqueue_visual_job(session_id=session_id, request_id=request_id)
+    return jsonify({"ok": True, "job": job})
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/queue/run_once")
+def run_visual_queue_once_route():
+    """Process one visual job from the queue."""
+    payload = request.get_json(force=True, silent=True) or {}
+    lease_seconds = int(payload.get("lease_seconds") or 300)
+    result = run_one_visual_job(lease_seconds=lease_seconds)
+    code = 200 if result.get("ok") else 500
+    return jsonify(result), code
+
+
+@rpg_presentation_bp.get("/api/rpg/visual/queue/stats")
+def visual_queue_stats_route():
+    """Return visual queue statistics and job list."""
+    return jsonify({"ok": True, "stats": get_visual_queue_stats(), "jobs": list_visual_jobs()})
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/queue/prune")
+def prune_visual_queue_route():
+    """Prune completed jobs from the queue."""
+    payload = request.get_json(force=True, silent=True) or {}
+    keep_last = int(payload.get("keep_last") or 200)
+    result = prune_completed_visual_jobs(keep_last=keep_last)
+    return jsonify({"ok": True, "result": result, "jobs": list_visual_jobs()})
+
+
+# ---------------------------------------------------------------------------
+# Phase 12.14 — Asset cleanup route
+# ---------------------------------------------------------------------------
+
+@rpg_presentation_bp.post("/api/rpg/visual/assets/cleanup")
+def cleanup_visual_assets_route():
+    """Cleanup unused visual assets for a session."""
+    payload = request.get_json(force=True, silent=True) or {}
+    session_id = str(payload.get("session_id") or "").strip()
+    if not session_id:
+        return jsonify({"ok": False, "error": "session_id_required"}), 400
+
+    from app.rpg.session.durable_store import load_session_from_disk, save_session_to_disk
+
+    session_data = load_session_from_disk(session_id) or {}
+    simulation_state = session_data.get("simulation_state") or {}
+    result = cleanup_unused_assets(simulation_state)
+    session_data["simulation_state"] = result["simulation_state"]
+    save_session_to_disk(session_data)
+    return jsonify(
+        {
+            "ok": True,
+            "deleted_asset_ids": result["deleted_asset_ids"],
+            "deleted_files": result["deleted_files"],
+        }
+    )
