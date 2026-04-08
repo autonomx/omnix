@@ -24,6 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..services.adventure_builder_service import (
+    build_adventure_preview,
     build_template_payload,
     compare_world,
     compute_creator_health,
@@ -106,7 +107,17 @@ async def adventure_validate(request: Request):
     try:
         data = await request.json()
         result = validate_setup(data)
-        return result
+        validation = _safe_dict(result.get("validation"))
+        return {
+            "ok": not validation.get("blocking", False),
+            "errors": [
+                i for i in _safe_list(validation.get("issues"))
+                if isinstance(i, dict) and i.get("severity") == "error"
+            ],
+            "warnings": _safe_list(result.get("warnings")),
+            "notices": _safe_list(result.get("notices")),
+            "semantic_scores": _safe_dict(result.get("semantic_scores")),
+        }
     except Exception as e:
         return JSONResponse(
             {"success": False, "error": str(e)},
@@ -125,6 +136,11 @@ async def adventure_preview(request: Request):
     try:
         data = await request.json()
         result = preview_setup(data)
+        # Ensure adventure_preview is surfaced at top level
+        if "adventure_preview" not in result:
+            result["adventure_preview"] = _safe_dict(
+                build_adventure_preview(data)
+            )
         return result
     except Exception as e:
         return JSONResponse(
