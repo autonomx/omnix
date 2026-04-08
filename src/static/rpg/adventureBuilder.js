@@ -1096,7 +1096,7 @@ var AdventureBuilder = (function () {
                 var tab = btn.getAttribute('data-tab');
                 if (!state.worldInspection) state.worldInspection = {};
                 state.worldInspection.activeTab = tab;
-                #abBody('#abBody'));
+                _renderStep7_Review(overlayEl.querySelector('#abBody'));
             });
         });
     }
@@ -1448,7 +1448,7 @@ var AdventureBuilder = (function () {
             onView: function (index) {
                 wi.selectedSnapshotIndex = index;
                 wi.activeTab = 'inspector';
-                #abBody('#abBody'));
+                _renderStep7_Review(overlayEl.querySelector('#abBody'));
             },
             onCompare: function (index) {
                 var snap = (wi.snapshots || [])[index];
@@ -1460,7 +1460,7 @@ var AdventureBuilder = (function () {
                     if (res.success) {
                         wi.graphDiff = res.diff;
                         wi.activeTab = 'diff';
-                        #abBody('#abBody'));
+                        _renderStep7_Review(overlayEl.querySelector('#abBody'));
                     }
                 }).catch(function () { /* silent */ });
             }
@@ -1484,7 +1484,7 @@ var AdventureBuilder = (function () {
         if (filtersEl) {
             AdventureBuilderTimeline.renderDiffFilters(filtersEl, wi.diffFilters || { nodeType: 'all', changeType: 'all' }, function (nextFilters) {
                 state.worldInspection.diffFilters = nextFilters;
-                #abBody('#abBody'));
+                _renderStep7_Review(overlayEl.querySelector('#abBody'));
             });
         }
 
