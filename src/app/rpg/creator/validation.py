@@ -55,6 +55,10 @@ class ValidationResult:
 
 _REQUIRED_FIELDS = ("setup_id", "title", "genre", "setting", "premise")
 
+_NUMBERED_PLACEHOLDER_RE = re.compile(
+    r"^(npc|guard|merchant|enemy|faction|group)[\s_\-]*\d*$"
+)
+
 
 def validate_setup_ids(payload: dict) -> list[ValidationIssue]:
     """Check for duplicate ids among NPCs, factions, and locations."""
@@ -373,7 +377,7 @@ def _looks_generic_name(name: str) -> bool:
     if cleaned in _GENERIC_NPC_NAMES or cleaned in _GENERIC_FACTION_NAMES:
         return True
     # Check for numbered placeholders like "Guard 1", "NPC_2"
-    if re.match(r"^(npc|guard|merchant|enemy|faction|group)[\s_\-]*\d*$", cleaned):
+    if _NUMBERED_PLACEHOLDER_RE.match(cleaned):
         return True
     return False
 
@@ -421,7 +425,7 @@ def _compute_seed_cohesion(setup: dict) -> float:
     # Build a set of "core" words (skip short words)
     core_words = {w for w in core_text if len(w) > 3}
     if not core_words:
-        return 0.5  # No meaningful core words to compare
+        return 0.5  # Neutral baseline: no meaningful core words to compare against
 
     entity_texts: list[str] = []
     for npc in setup.get("npc_seeds", []):
@@ -451,6 +455,13 @@ def _compute_seed_cohesion(setup: dict) -> float:
     if total_entities == 0:
         return 0.0
     return round(entity_hits / total_entities, 3)
+
+
+def _issue_dict(path: str, code: str, message: str, severity: str = "warning") -> dict:
+    """Shorthand to build a ValidationIssue dict for semantic results."""
+    return ValidationIssue(
+        path=path, code=code, message=message, severity=severity,
+    ).to_dict()
 
 
 def validate_adventure_setup_semantics(setup: dict) -> dict:
@@ -508,26 +519,22 @@ def validate_adventure_setup_semantics(setup: dict) -> dict:
 
     # --- 1. Weak premise ---
     if premise_strength < 0.3:
-        warnings.append(ValidationIssue(
-            path="premise",
-            code="weak_premise",
-            message="Premise is thin — a richer premise helps the engine create a stronger world",
-            severity="warning",
-        ).to_dict())
+        warnings.append(_issue_dict(
+            "premise", "weak_premise",
+            "Premise is thin — a richer premise helps the engine create a stronger world",
+        ))
     if not objective or not objective.strip():
-        notices.append(ValidationIssue(
-            path="campaign_objective",
-            code="empty_objective",
-            message="No campaign objective set — the engine will infer one from the premise",
+        notices.append(_issue_dict(
+            "campaign_objective", "empty_objective",
+            "No campaign objective set — the engine will infer one from the premise",
             severity="info",
-        ).to_dict())
+        ))
     if not opening_hook or not opening_hook.strip():
-        notices.append(ValidationIssue(
-            path="opening_hook",
-            code="empty_opening_hook",
-            message="No opening hook — consider adding one to draw players in immediately",
+        notices.append(_issue_dict(
+            "opening_hook", "empty_opening_hook",
+            "No opening hook — consider adding one to draw players in immediately",
             severity="info",
-        ).to_dict())
+        ))
 
     # --- 2. No actionable opening ---
     opening_dict = {
@@ -536,12 +543,10 @@ def validate_adventure_setup_semantics(setup: dict) -> dict:
         "scene_frame": setup.get("scene_frame", ""),
     }
     if not _opening_is_actionable(opening_dict):
-        warnings.append(ValidationIssue(
-            path="opening_hook",
-            code="no_actionable_opening",
-            message="Opening lacks substance — add a hook, conflict, or scene frame so players have something to act on",
-            severity="warning",
-        ).to_dict())
+        warnings.append(_issue_dict(
+            "opening_hook", "no_actionable_opening",
+            "Opening lacks substance — add a hook, conflict, or scene frame so players have something to act on",
+        ))
 
     # --- 3. Generic factions/NPCs ---
     npc_seeds = setup.get("npc_seeds", [])
@@ -551,19 +556,16 @@ def validate_adventure_setup_semantics(setup: dict) -> dict:
     for idx, npc in enumerate(npc_seeds):
         name = npc.get("name", "")
         if _looks_generic_name(name):
-            warnings.append(ValidationIssue(
-                path=f"npc_seeds[{idx}].name",
-                code="generic_npc_name",
-                message=f"NPC name '{name}' looks generic — a unique name adds personality",
-                severity="warning",
-            ).to_dict())
+            warnings.append(_issue_dict(
+                f"npc_seeds[{idx}].name", "generic_npc_name",
+                f"NPC name '{name}' looks generic — a unique name adds personality",
+            ))
         if _entity_description_strength(npc) < 0.15:
-            notices.append(ValidationIssue(
-                path=f"npc_seeds[{idx}].description",
-                code="weak_npc_description",
-                message=f"NPC '{name}' has a thin description — more detail helps the engine portray them",
+            notices.append(_issue_dict(
+                f"npc_seeds[{idx}].description", "weak_npc_description",
+                f"NPC '{name}' has a thin description — more detail helps the engine portray them",
                 severity="info",
-            ).to_dict())
+            ))
         npc_names_seen.append(name.strip().lower())
 
     # Check for duplicate NPC labels
@@ -571,43 +573,36 @@ def validate_adventure_setup_semantics(setup: dict) -> dict:
         seen: set[str] = set()
         for idx, n in enumerate(npc_names_seen):
             if n and n in seen:
-                warnings.append(ValidationIssue(
-                    path=f"npc_seeds[{idx}].name",
-                    code="duplicate_npc_name",
-                    message=f"Multiple NPCs share the name '{npc_seeds[idx].get('name', '')}' — consider differentiating",
-                    severity="warning",
-                ).to_dict())
+                warnings.append(_issue_dict(
+                    f"npc_seeds[{idx}].name", "duplicate_npc_name",
+                    f"Multiple NPCs share the name '{npc_seeds[idx].get('name', '')}' — consider differentiating",
+                ))
             seen.add(n)
 
     faction_names_seen: list[str] = []
     for idx, faction in enumerate(factions):
         name = faction.get("name", "")
         if _looks_generic_name(name):
-            warnings.append(ValidationIssue(
-                path=f"factions[{idx}].name",
-                code="generic_faction_name",
-                message=f"Faction name '{name}' looks generic — a distinctive name makes the world richer",
-                severity="warning",
-            ).to_dict())
+            warnings.append(_issue_dict(
+                f"factions[{idx}].name", "generic_faction_name",
+                f"Faction name '{name}' looks generic — a distinctive name makes the world richer",
+            ))
         if _entity_description_strength(faction) < 0.15:
-            notices.append(ValidationIssue(
-                path=f"factions[{idx}].description",
-                code="weak_faction_description",
-                message=f"Faction '{name}' has a thin description — more detail helps define their role",
+            notices.append(_issue_dict(
+                f"factions[{idx}].description", "weak_faction_description",
+                f"Faction '{name}' has a thin description — more detail helps define their role",
                 severity="info",
-            ).to_dict())
+            ))
         faction_names_seen.append(name.strip().lower())
 
     if len(faction_names_seen) != len(set(faction_names_seen)):
         seen_f: set[str] = set()
         for idx, n in enumerate(faction_names_seen):
             if n and n in seen_f:
-                warnings.append(ValidationIssue(
-                    path=f"factions[{idx}].name",
-                    code="duplicate_faction_name",
-                    message=f"Multiple factions share the name '{factions[idx].get('name', '')}' — consider differentiating",
-                    severity="warning",
-                ).to_dict())
+                warnings.append(_issue_dict(
+                    f"factions[{idx}].name", "duplicate_faction_name",
+                    f"Multiple factions share the name '{factions[idx].get('name', '')}' — consider differentiating",
+                ))
             seen_f.add(n)
 
     # --- 4. Contradictory canon/rules ---
@@ -619,25 +614,24 @@ def validate_adventure_setup_semantics(setup: dict) -> dict:
     tone_conflict = forbidden_content & allowed_tone
     if tone_conflict:
         for item in tone_conflict:
-            warnings.append(ValidationIssue(
-                path="forbidden_content",
-                code="tone_conflict",
-                message=f"'{item}' appears in both forbidden_content and allowed_tone — this is contradictory",
-                severity="warning",
-            ).to_dict())
+            warnings.append(_issue_dict(
+                "forbidden_content", "tone_conflict",
+                f"'{item}' appears in both forbidden_content and allowed_tone — this is contradictory",
+            ))
 
-    # Check world laws vs genre rules for obvious contradictions
+    # Check world laws vs genre rules for obvious contradictions.
+    # NOTE: This uses simple substring matching after "no " negation prefixes,
+    # which can produce false positives (e.g. "no magic" vs "old magic exists").
+    # It is intentionally conservative — false positives are acceptable as
+    # non-blocking warnings, while false negatives are the greater risk.
     for law in core_world_laws:
         for rule in genre_rules:
-            # Simple negation detection
             if (law.startswith("no ") and law[3:] in rule) or \
                (rule.startswith("no ") and rule[3:] in law):
-                warnings.append(ValidationIssue(
-                    path="core_world_laws",
-                    code="law_rule_conflict",
-                    message=f"World law '{law}' may conflict with genre rule '{rule}'",
-                    severity="warning",
-                ).to_dict())
+                warnings.append(_issue_dict(
+                    "core_world_laws", "law_rule_conflict",
+                    f"World law '{law}' may conflict with genre rule '{rule}'",
+                ))
 
     # --- 5. Disconnected starting NPCs/location ---
     starting_npc_ids = set(setup.get("starting_npc_ids", []))
@@ -650,54 +644,42 @@ def validate_adventure_setup_semantics(setup: dict) -> dict:
             if npc_id in starting_npc_ids:
                 npc_loc = npc.get("location_id", "")
                 if npc_loc and npc_loc != starting_location_id:
-                    notices.append(ValidationIssue(
-                        path=f"npc_seeds[{idx}].location_id",
-                        code="starting_npc_elsewhere",
-                        message=(
-                            f"Starting NPC '{npc.get('name', npc_id)}' is assigned to "
-                            f"location '{npc_loc}', not the starting location '{starting_location_id}'"
-                        ),
+                    notices.append(_issue_dict(
+                        f"npc_seeds[{idx}].location_id", "starting_npc_elsewhere",
+                        f"Starting NPC '{npc.get('name', npc_id)}' is assigned to "
+                        f"location '{npc_loc}', not the starting location '{starting_location_id}'",
                         severity="info",
-                    ).to_dict())
+                    ))
 
     if starting_location_id and locations:
         location_ids = {loc.get("location_id") for loc in locations}
         if starting_location_id not in location_ids:
-            warnings.append(ValidationIssue(
-                path="starting_location_id",
-                code="starting_location_unreferenced",
-                message=f"Starting location '{starting_location_id}' is not in the locations list",
-                severity="warning",
-            ).to_dict())
+            warnings.append(_issue_dict(
+                "starting_location_id", "starting_location_unreferenced",
+                f"Starting location '{starting_location_id}' is not in the locations list",
+            ))
 
     # --- 6. Too many seeds / no center ---
     total_seeds = len(npc_seeds) + len(factions) + len(locations)
     if total_seeds > 15 and premise_strength < 0.4:
-        warnings.append(ValidationIssue(
-            path="premise",
-            code="seeds_without_focus",
-            message=(
-                f"{total_seeds} seeds defined but premise is weak — "
-                "consider strengthening the premise to tie everything together"
-            ),
-            severity="warning",
-        ).to_dict())
+        warnings.append(_issue_dict(
+            "premise", "seeds_without_focus",
+            f"{total_seeds} seeds defined but premise is weak — "
+            "consider strengthening the premise to tie everything together",
+        ))
 
     if total_seeds > 0 and not starter_conflict and not opening_hook:
-        notices.append(ValidationIssue(
-            path="starter_conflict",
-            code="no_central_conflict",
-            message="Seeds are defined but there is no starter conflict or opening hook to unify them",
+        notices.append(_issue_dict(
+            "starter_conflict", "no_central_conflict",
+            "Seeds are defined but there is no starter conflict or opening hook to unify them",
             severity="info",
-        ).to_dict())
+        ))
 
     if seed_cohesion < 0.2 and total_seeds > 5:
-        warnings.append(ValidationIssue(
-            path="premise",
-            code="low_cohesion",
-            message="Seeds seem disconnected from the premise — consider aligning descriptions with the central theme",
-            severity="warning",
-        ).to_dict())
+        warnings.append(_issue_dict(
+            "premise", "low_cohesion",
+            "Seeds seem disconnected from the premise — consider aligning descriptions with the central theme",
+        ))
 
     return {
         "warnings": warnings,
