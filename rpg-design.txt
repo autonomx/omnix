@@ -1,55 +1,254 @@
-Phase 18.3A — Core RPG Mechanics Grounding
-Goal
+Important correction before implementation:
 
-Move the active canonical session path from:
+The actual repo is Flask, not FastAPI.
+Keep Flask for the active app path.
+Do not do a Flask→FastAPI migration in this patch.
+Instead, add the new canonical session flow as a Flask blueprint and retire the legacy /api/rpg/games* path from active gameplay.
+Phase 18.3B / 18.4 — Canonical Session + Grounded RPG Mechanics
+Goals
 
-narrative/world-sim first
-partial RPG systems
-UI fields that exist without real mechanics
+Implement all remaining fixes and improvements:
 
-to:
+stats affect every player decision
+combat is deterministic and authoritative
+items/world/inventory are grounded
+XP + level-up + skill XP are real and used
+nearby NPC cards are scene-scoped and dynamic
+memory panel is compact/toggleable
+world can grow beyond initial seeds, within bounds
+narration is easier to scan
+canonical session routes replace legacy /api/rpg/games*
+active turn path uses mechanics first, narration second
+PART 1 — NEW CANONICAL SESSION RUNTIME
+1. NEW FILE
+src/app/rpg/session_runtime.py
 
-stat-driven decisions on every player action
-deterministic combat/action resolution
-weapon and gear stats
-inventory-grounded world actions
-XP / level-up / skill progression
-dynamic NPC presence cards
-compact memory UX
-fast-scan narration emphasis
-1. Stats affect every player decision
-New file
+Create a new canonical runtime module. This is the authoritative live gameplay path.
+
+Add these helpers
+from __future__ import annotations
+from typing import Any, Dict, List
+
+def load_runtime_session(session_id: str) -> Dict[str, Any] | None:
+    ...
+
+def save_runtime_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def build_session_from_start_result(setup_payload: Dict[str, Any], start_result: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def derive_action_candidates(simulation_state: Dict[str, Any], player_input: str) -> List[Dict[str, Any]]:
+    ...
+
+def select_primary_action(simulation_state: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+    ...
+
+def apply_resolved_action_to_state(simulation_state: Dict[str, Any], resolved: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def award_progression_for_action(simulation_state: Dict[str, Any], resolved: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def apply_turn(session_id: str, player_input: str) -> Dict[str, Any]:
+    ...
+Canonical session shape
+
+Persist this structure:
+
+{
+    "manifest": {
+        "id": "...",
+        "title": "...",
+        "status": "active",
+        "created_at": "...",
+        "updated_at": "...",
+        "schema_version": 3,
+        "archived": False,
+    },
+    "setup_payload": {...},
+    "simulation_state": {...},
+    "runtime_state": {
+        "tick": 0,
+        "opening": "",
+        "world": {},
+        "known_npcs": [],
+        "current_scene": {},
+        "last_turn_result": {},
+        "turn_history": [],
+        "voice_assignments": {},
+    },
+}
+Required turn order inside apply_turn()
+
+Replace world-first flow with this exact order:
+
+load session
+normalize state:
+ensure_player_state
+ensure_player_inventory
+ensure_player_progression_state
+ensure_world_item_state
+ensure_memory_state
+derive structured action candidates from input
+select one canonical action
+resolve action through action_resolver.resolve_player_action(...)
+apply state mutation from resolved action
+award XP + skill XP + level ups
+step world simulation
+evaluate bounded world expansion
+build scene with nearby NPCs + scene items + checks
+narrate the already-resolved result
+persist session
+return payload
+Required rule
+
+Narration must always describe what already happened in state. Never the reverse.
+
+2. NEW FILE
+src/app/rpg/api/rpg_session_routes.py
+
+Create a new Flask blueprint for canonical sessions.
+
+Add
+from flask import Blueprint, jsonify, request, Response
+import json
+
+rpg_session_bp = Blueprint("rpg_session_bp", __name__)
+Add endpoints
+POST /api/rpg/session/list
+
+Returns canonical sessions only.
+
+POST /api/rpg/session/get
+
+Input:
+
+{"session_id": "..."}
+POST /api/rpg/session/update
+
+Supports:
+
+title
+voice_assignments
+POST /api/rpg/session/delete
+
+Soft archive:
+
+set manifest.archived = True
+set manifest.status = "archived"
+POST /api/rpg/session/turn
+
+Input:
+
+{"session_id": "...", "input": "..."}
+POST /api/rpg/session/turn/stream
+
+Flask SSE endpoint.
+Keep streaming simple for now:
+
+mechanics resolve first
+narration emitted as tokenized text
+final done event contains exact same payload as non-streaming turn
+Error handling
+
+This repo is Flask, so use:
+
+return jsonify({...}), 404
+
+not FastAPI patterns.
+
+Stream event format
+
+Use:
+
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+3. MODIFY
+src/app/__init__.py
+Add
+
+Import and register the new blueprint:
+
+from app.rpg.api.rpg_session_routes import rpg_session_bp
+
+and:
+
+app.register_blueprint(rpg_session_bp)
+Keep Flask
+
+Do not remove Flask app factory.
+
+4. MODIFY
+src/app/rpg/routes.py
+
+This is the legacy path.
+
+Change
+
+Keep the file but convert all /api/rpg/games* routes into explicit deprecation responses.
+
+Every handler should return:
+return jsonify({
+    "success": False,
+    "error": "legacy_rpg_games_api_removed",
+    "recommended_create": "/api/rpg/adventure/start",
+    "recommended_turn": "/api/rpg/session/turn",
+}), 410
+Keep headers
+
+Optionally preserve:
+
+X-Omnix-RPG-Recommended-Create
+X-Omnix-RPG-Recommended-Turn
+
+Do not let the old in-memory GameSession path stay active.
+
+PART 2 — PLAYER PROGRESSION / STATS / SKILLS
+5. NEW FILE
 src/app/rpg/player/player_progression_state.py
 
-Add a new authoritative player progression/state module.
+Create authoritative progression state.
 
-Responsibilities
-initialize canonical player progression
-normalize stats / skills / xp / level / stat points
-expose helpers for stat growth and skill growth
 Add
-ensure_player_progression_state(player_state: Dict[str, Any]) -> Dict[str, Any]
-allocate_starting_stats(player_state: Dict[str, Any], allocation: Dict[str, int]) -> Dict[str, Any]
-get_stat_modifier(value: int) -> int
-get_skill_level(player_state: Dict[str, Any], skill_id: str) -> int
-award_player_xp(player_state: Dict[str, Any], amount: int, source: str = "") -> Dict[str, Any]
-award_skill_xp(player_state: Dict[str, Any], skill_id: str, amount: int, source: str = "") -> Dict[str, Any]
-resolve_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]
-resolve_skill_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]
-Canonical player_state additions
+from __future__ import annotations
+from typing import Any, Dict
 
-Add these defaults:
+def ensure_player_progression_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
-player_state.setdefault("name", "Player")
-player_state.setdefault("class_id", "")
-player_state.setdefault("background_id", "")
-player_state.setdefault("species_id", "")
+def allocate_starting_stats(player_state: Dict[str, Any], allocation: Dict[str, int]) -> Dict[str, Any]:
+    ...
+
+def get_stat_modifier(value: int) -> int:
+    ...
+
+def get_skill_level(player_state: Dict[str, Any], skill_id: str) -> int:
+    ...
+
+def award_player_xp(player_state: Dict[str, Any], amount: int, source: str = "") -> Dict[str, Any]:
+    ...
+
+def award_skill_xp(player_state: Dict[str, Any], skill_id: str, amount: int, source: str = "") -> Dict[str, Any]:
+    ...
+
+def resolve_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def resolve_skill_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+Canonical defaults
+
+Inside ensure_player_progression_state() add:
+
 player_state.setdefault("level", 1)
 player_state.setdefault("xp", 0)
 player_state.setdefault("xp_to_next", 100)
 player_state.setdefault("unspent_points", 0)
 player_state.setdefault("unspent_skill_points", 0)
-player_state.setdefault("combat_rating", 0)
 player_state.setdefault("stats", {
     "strength": 5,
     "dexterity": 5,
@@ -70,29 +269,54 @@ player_state.setdefault("skills", {
     "magic": {"level": 0, "xp": 0, "xp_to_next": 25},
     "hacking": {"level": 0, "xp": 0, "xp_to_next": 25},
 })
-player_state.setdefault("perk_flags", [])
 player_state.setdefault("progression_log", [])
+Important bug fix
+
+Do not return tuples from resolve_level_ups() or resolve_skill_level_ups().
+
+Both functions must return only player_state, with temporary fields:
+
+_level_ups
+_skill_level_ups
+
+inside player_state.
+
+6. NEW FILE
+src/app/rpg/player/player_creation.py
+Add
+from __future__ import annotations
+from typing import Any, Dict
+
+def build_default_stat_allocation(template: Dict[str, Any]) -> Dict[str, int]:
+    ...
+
+def validate_stat_allocation(allocation: Dict[str, int], total_points: int = 12) -> Dict[str, Any]:
+    ...
+
+def apply_character_creation(player_state: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 Rules
-bounded progression log: max 50
-deterministic leveling
-no random level-up choices unless fully recorded
-Modify
+standard point-buy or total budget
+hard validation
+no random allocation
+background/class/species bonuses applied deterministically
+7. MODIFY
 src/app/rpg/player/player_scene_state.py
-Change
+In ensure_player_state()
 
-Inside ensure_player_state(...):
+After building player_state, import and call:
 
-import ensure_player_progression_state
-call it after player_state creation
-add nearby_npc_ids, equipped_weapon_slot, equipped_armor_slots, available_checks
-Also add
-player_state["available_checks"] = []
-player_state["nearby_npc_ids"] = []
-Purpose
+from .player_progression_state import ensure_player_progression_state
 
-Make progression part of canonical player state, not optional UI decoration.
+and:
 
-Modify
+player_state = ensure_player_progression_state(player_state)
+Add defaults
+player_state.setdefault("nearby_npc_ids", [])
+player_state.setdefault("equipped_weapon_slot", "main_hand")
+player_state.setdefault("equipped_armor_slots", {})
+player_state.setdefault("available_checks", [])
+8. MODIFY
 src/app/rpg/player/__init__.py
 
 Export:
@@ -104,99 +328,55 @@ award_skill_xp
 resolve_level_ups
 resolve_skill_level_ups
 get_stat_modifier
-New file
-src/app/rpg/player/player_creation.py
-Responsibilities
-create stat allocation contract at adventure start
-apply setup-selected archetype/background bonuses
-validate point-buy or standard spread
+9. NEW FILE
+src/app/rpg/player/player_xp_rules.py
 Add
-build_default_stat_allocation(template: Dict[str, Any]) -> Dict[str, int]
-validate_stat_allocation(allocation: Dict[str, int], total_points: int = 12) -> Dict[str, Any]
-apply_character_creation(player_state: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]
-Notes
-user said stats should affect every decision
-this is where creation-time allocation becomes canonical
-2. Combat and actions: stats + skills + weapon stats
-Modify
-src/app/rpg/action_resolver.py
+from __future__ import annotations
+from typing import Any, Dict
 
-This file already points in the right direction. Turn it into the main deterministic resolution engine.
+def compute_enemy_difficulty_xp(enemy_state: Dict[str, Any]) -> int:
+    ...
 
-Replace current simplified logic with:
-New concepts
-action profile
-weapon profile
-armor / defense profile
-roll formula
-hit / miss / crit / graze
-stat + skill modifiers
-item modifiers
-enemy defense / dodge
-contextual bonuses from memory / faction / scene tags
-Add / change
-expand _ACTION_PROFILES
-support:
-attack_melee
-attack_ranged
-block
-dodge
-parry
-persuade
-intimidate
-deceive
-sneak
-investigate
-hack
-cast_spell
-use_item
-pickup_item
-equip_item
-unequip_item
-New functions
-resolve_player_action(simulation_state: Dict[str, Any], action: Dict[str, Any], seed: Optional[int] = None) -> Dict[str, Any]
-resolve_attack_roll(attacker: Dict[str, Any], defender: Dict[str, Any], weapon: Dict[str, Any], seed: Optional[int] = None) -> Dict[str, Any]
-resolve_noncombat_check(player_state: Dict[str, Any], action_type: str, difficulty: str, seed: Optional[int] = None) -> Dict[str, Any]
-compute_weapon_damage(weapon_state: Dict[str, Any], attacker_state: Dict[str, Any], outcome: Dict[str, Any]) -> int
-compute_defense_rating(actor_state: Dict[str, Any]) -> int
-select_equipped_weapon(player_state: Dict[str, Any]) -> Dict[str, Any]
-Damage formula
+def compute_quest_xp(quest_state: Dict[str, Any]) -> int:
+    ...
 
-Use deterministic formula like:
+def compute_action_skill_xp(action_result: Dict[str, Any]) -> Dict[str, int]:
+    ...
 
-base_damage = weapon.damage
-stat_bonus = strength_mod or dexterity_mod depending on weapon
-skill_bonus = skill_level // 2
-quality_bonus = weapon.quality_tier
-crit_bonus = weapon.crit_bonus if crit else 0
-final_damage = max(0, base_damage + stat_bonus + skill_bonus + quality_bonus + crit_bonus - target_armor)
-Important
-
-The LLM must not decide whether an attack lands.
-It may decide:
-
-weapon archetype suggestion at generation time
-item flavor/stats when an item is created
-optional move suggestions
-
-But the authoritative action outcome must be deterministic engine logic.
-
-New file
+def compute_stat_influence_bonus(player_state: Dict[str, Any], action_result: Dict[str, Any]) -> int:
+    ...
+Rules
+enemy difficulty affects XP
+quest rank affects XP
+skill use grants skill XP
+stat influence may modestly modify XP, but do not let stats multiply rewards out of bounds
+PART 3 — ITEM STATS / INVENTORY / WORLD ITEMS
+10. NEW FILE
 src/app/rpg/items/item_stats.py
-Responsibilities
+Add
+from __future__ import annotations
+from typing import Any, Dict
 
-Normalize item combat/equipment stats.
+def normalize_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
-Add schema helpers
-normalize_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]
-is_weapon(item_def: Dict[str, Any]) -> bool
-is_armor(item_def: Dict[str, Any]) -> bool
-is_shield(item_def: Dict[str, Any]) -> bool
-get_weapon_skill(item_def: Dict[str, Any]) -> str
-get_weapon_attack_stat(item_def: Dict[str, Any]) -> str
-Canonical item stat schema
+def is_weapon(item_def: Dict[str, Any]) -> bool:
+    ...
 
-Every item may now include:
+def is_armor(item_def: Dict[str, Any]) -> bool:
+    ...
+
+def is_shield(item_def: Dict[str, Any]) -> bool:
+    ...
+
+def get_weapon_skill(item_def: Dict[str, Any]) -> str:
+    ...
+
+def get_weapon_attack_stat(item_def: Dict[str, Any]) -> str:
+    ...
+Canonical item stats
+
+Every item may include:
 
 "combat_stats": {
     "weapon_type": "sword",
@@ -211,30 +391,44 @@ Every item may now include:
     "defense_bonus": 0,
     "block_bonus": 0,
     "speed_bonus": 0,
-}
+},
 "equipment": {
     "slot": "main_hand",
     "two_handed": False,
-}
+},
 "quality": {
     "tier": 0,
     "rarity": "common",
 }
+11. NEW FILE
+src/app/rpg/items/generated_item_builder.py
+Add
+from __future__ import annotations
+from typing import Any, Dict
 
-This supports your examples:
+def build_item_definition_from_llm(payload: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
-rusty sword damage 12
-iron sword damage 28
-cyberpunk pistol / rifle / smartgun etc.
-Modify
+def clamp_generated_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def derive_item_power_band(world_tier: int, rarity: str) -> Dict[str, int]:
+    ...
+Rule
+
+LLM may suggest item definitions, but this module must:
+
+normalize
+clamp
+bound by world tier + rarity
+produce deterministic item IDs
+reject malformed definitions
+12. MODIFY
 src/app/rpg/items/item_registry.py
+Expand registry
 
-This file is too static and too small right now.
+Add baseline items:
 
-Change
-keep deterministic static definitions for baseline items
-add support for richer item definitions with combat_stats, equipment, quality, value, durability, tags
-Add starter examples
 rusty_sword
 iron_sword
 wooden_shield
@@ -242,302 +436,285 @@ iron_shield
 short_bow
 pistol_9mm
 combat_knife
-Also add
-normalize_item_definition(item_def: Dict[str, Any]) -> Dict[str, Any]
-Important design choice
-
-User wants AI to decide item stats because genres vary.
-So do not make the registry the only source of truth.
-Instead:
-
-static registry = safe baseline
-LLM-generated item definitions are allowed
-but must be normalized and bounded before entering simulation state
-New file
-src/app/rpg/items/generated_item_builder.py
-Responsibilities
-
-Allow LLM/item generator to propose dynamic item stats, but normalize and clamp them.
-
 Add
-build_item_definition_from_llm(payload: Dict[str, Any]) -> Dict[str, Any]
-clamp_generated_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]
-derive_item_power_band(world_tier: int, rarity: str) -> Dict[str, int]
-Rules
-generated stats must be bounded by campaign/world tier
-item id deterministic from content hash
-record generated_by = "llm" and stat_origin = "generated"
-no silent acceptance of malformed item definitions
+def normalize_item_definition(item_def: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+Rule
 
-This is how you let AI “decide all this” without losing determinism.
+Use static registry for safe defaults.
+Allow generated items via generated_item_builder.py.
 
-Modify
+13. MODIFY
 src/app/rpg/items/inventory_state.py
-Expand stack schema
+Expand normalized stack schema
 
-Currently items are mostly item_id, qty, name/category/tags.
+Replace minimal stack with:
 
-Change normalized inventory stack to include:
-
-item_id
-qty
-name
-category
-tags
-description
-combat_stats
-equipment
-quality
-value
-instance_id for non-stackable items
-durability
-equipped flag only in views, not canonical item stack
+{
+    "item_id": "...",
+    "qty": 1,
+    "name": "...",
+    "category": "...",
+    "tags": [...],
+    "description": "...",
+    "combat_stats": {...},
+    "equipment": {...},
+    "quality": {...},
+    "value": 0,
+    "instance_id": "...",
+    "durability": 100,
+}
 Add helpers
-equip_inventory_item(inventory_state: Dict[str, Any], item_id: str, slot: str = "") -> Dict[str, Any]
-unequip_inventory_slot(inventory_state: Dict[str, Any], slot: str) -> Dict[str, Any]
-find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]
-get_equipped_weapon(inventory_state: Dict[str, Any]) -> Dict[str, Any]
-get_equipped_armor(inventory_state: Dict[str, Any]) -> List[Dict[str, Any]]
-Notes
-stackable consumables remain stackable
-weapons/armor should generally be instance records or qty 1 only
-New file
+def equip_inventory_item(inventory_state: Dict[str, Any], item_id: str, slot: str = "") -> Dict[str, Any]:
+    ...
+
+def unequip_inventory_slot(inventory_state: Dict[str, Any], slot: str) -> Dict[str, Any]:
+    ...
+
+def find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+    ...
+
+def get_equipped_weapon(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def get_equipped_armor(inventory_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    ...
+Required behavior
+consumables can stack
+weapons/armor should be qty 1 / instance-based
+equipment slots are authoritative
+14. NEW FILE
 src/app/rpg/items/world_items.py
-Responsibilities
-
-Ground loot and objects in scene/world state.
-
 Add
-ensure_world_item_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
-spawn_world_item(simulation_state: Dict[str, Any], location_id: str, item_def: Dict[str, Any]) -> Dict[str, Any]
-pickup_world_item(simulation_state: Dict[str, Any], item_instance_id: str) -> Dict[str, Any]
-drop_world_item(simulation_state: Dict[str, Any], item_id: str, qty: int = 1) -> Dict[str, Any]
-list_scene_items(simulation_state: Dict[str, Any], location_id: str) -> List[Dict[str, Any]]
-Canonical simulation subtree
+from __future__ import annotations
+from typing import Any, Dict, List
+
+def ensure_world_item_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def spawn_world_item(simulation_state: Dict[str, Any], location_id: str, item_def: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+
+def pickup_world_item(simulation_state: Dict[str, Any], item_instance_id: str) -> Dict[str, Any]:
+    ...
+
+def drop_world_item(simulation_state: Dict[str, Any], item_id: str, qty: int = 1) -> Dict[str, Any]:
+    ...
+
+def list_scene_items(simulation_state: Dict[str, Any], location_id: str) -> List[Dict[str, Any]]:
+    ...
+Canonical subtree
 simulation_state["world_items"] = {
     "by_location": {
-        "loc:market": [ ... ],
+        "loc:market": [...]
     }
 }
 
-This is what fixes:
+This is the grounding layer for pickup/drop/loot.
 
-narration says you pick up shield
-shield actually enters inventory
-Modify
+15. MODIFY
 src/app/rpg/items/item_effects.py
-Change
+Expand apply_item_use()
 
-Current apply_item_use only consumes an item and returns effect metadata.
+Currently it only consumes and returns metadata.
 
-Add actual effect mutation:
+Change it to actually mutate state for:
 
-restore hp / mana / stamina
-apply buff
-cleanse condition
-equip item if usable gear action
-emit effect log entry
+restore_resource
+grant_status
+spawn_loot
+equip
+Add support
+health
+mana
+stamina
+temporary buffs
+
+Return:
+
+{
+    "simulation_state": ...,
+    "result": {
+        "ok": True,
+        "item_id": "...",
+        "effect": {...},
+        "resources_changed": {...},
+        "statuses_applied": [...],
+    }
+}
+PART 4 — AUTHORITATIVE ACTION / COMBAT RESOLUTION
+16. MODIFY
+src/app/rpg/action_resolver.py
+
+This file must become the authoritative action engine.
+
+Replace the current minimal resolve_action() implementation with these concepts
+Action profiles
+
+Support:
+
+attack_melee
+attack_ranged
+block
+dodge
+parry
+persuade
+intimidate
+deceive
+sneak
+investigate
+hack
+cast_spell
+use_item
+pickup_item
+drop_item
+equip_item
+unequip_item
 Add
-support effect.type == "restore_resource"
-support effect.type == "grant_status"
-support effect.type == "equip"
-support effect.type == "spawn_loot"
-Modify
+def resolve_player_action(simulation_state: Dict[str, Any], action: Dict[str, Any], seed: int | None = None) -> Dict[str, Any]:
+    ...
+
+def resolve_attack_roll(attacker: Dict[str, Any], defender: Dict[str, Any], weapon: Dict[str, Any], seed: int | None = None) -> Dict[str, Any]:
+    ...
+
+def resolve_noncombat_check(player_state: Dict[str, Any], action_type: str, difficulty: str, seed: int | None = None) -> Dict[str, Any]:
+    ...
+
+def compute_weapon_damage(weapon_state: Dict[str, Any], attacker_state: Dict[str, Any], outcome: Dict[str, Any]) -> int:
+    ...
+
+def compute_defense_rating(actor_state: Dict[str, Any]) -> int:
+    ...
+
+def select_equipped_weapon(player_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+Damage formula
+
+Implement:
+
+base_damage = weapon_damage
+stat_bonus = relevant_stat_modifier
+skill_bonus = skill_level // 2
+quality_bonus = quality_tier
+crit_bonus = weapon_crit_bonus if crit else 0
+final_damage = max(0, base_damage + stat_bonus + skill_bonus + quality_bonus + crit_bonus - armor_value)
+Important rule
+
+The LLM may influence:
+
+item flavor
+difficulty tags
+world flavor
+move suggestions
+
+The LLM must not decide:
+
+hit / miss
+damage
+XP total
+skill XP total
+stat check success/failure
+17. MODIFY
 src/app/rpg/encounter/resolver.py
 
-Keep it as encounter-mode orchestrator, but stop treating it as the main combat calculator.
+Use action_resolver.resolve_player_action(...) for all combat math.
 
-Change
-route combat actions into action_resolver.resolve_player_action(...)
-route NPC attacks into same deterministic resolution function
-keep mode / encounter state transitions here
-no direct arbitrary damage changes here
 Add
-resolve_combat_round(...)
-include:
-attack result
-damage dealt
-defender hp after hit
-conditions applied
-xp hooks if encounter resolves
-Modify
+def resolve_combat_round(encounter_state: Dict[str, Any], simulation_state: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+Keep here
+encounter mode
+initiative / pacing / objective state
+victory / defeat / escape resolution
+Remove from here
+arbitrary damage logic
+duplicate hit logic
+18. MODIFY
 src/app/rpg/encounter/encounter_resolver.py
 
-This older file has flat “attack does 2 hp” logic.
-Deprecate it from active path or rewrite it as a compatibility wrapper over action_resolver.
+Mark as legacy wrapper.
 
-Add header
-“legacy dict resolver wrapper”
-redirect all damage resolution into action_resolver
-3. Inventory/world consistency
-Modify
-src/app/rpg/session/runtime.py
+Change
 
-This is the most important file in the active path.
+Any attack logic in this file should delegate to action_resolver.
 
-Expand _ensure_simulation_state(...)
+Do not keep flat 2 hp legacy damage rules alive.
 
-Also call:
-
-ensure_player_inventory(...)
-ensure_world_item_state(...)
-ensure_player_progression_state(...)
-Replace current simple derive_player_action(...)
-
-It currently only recognizes thread/faction world actions.
-
-Expand it to derive:
-
-combat actions
-dialogue checks
-pickup/drop/equip/use item actions
-investigation / stealth / hacking / spellcasting
-quest turn-in
-loot action
-Add
-derive_action_candidates(simulation_state, player_input) -> List[Dict[str, Any]]
-score_action_candidates_with_llm(...) -> Dict[str, Any] optional bias-only
-resolve_player_turn_action(...) -> Dict[str, Any]
-New active turn flow
-
-Inside apply_turn(...):
-
-load session
-normalize state
-derive structured action
-resolve deterministic action
-mutate inventory / world item state / actor hp / statuses
-award player xp + skill xp
-step world simulation
-generate scene
-build nearby NPC list
-narrate resolved outcome
-save
-Add returned fields
-
-Return in payload:
-
-player.available_checks
-player.stats
-player.skills
-player.equipment
-player.nearby_npc_ids
-scene.items
-scene.nearby_npcs
-combat_result
-xp_result
-skill_xp_result
-
-This is the central wiring file.
-
-Modify
-src/app/rpg/creator/world_scene_generator.py
-Add
-
-When generating scenes, include:
-
-present_npc_ids
-items
-available_actions
-available_checks
-
-Make scene generator derive:
-
-nearby NPCs from location / encounter / active scene
-visible scene items from world_items.by_location[location_id]
-4. XP / level-up / skill progression
-New file
-src/app/rpg/player/player_xp_rules.py
-Responsibilities
-
-Compute xp from combat, quests, discoveries, diplomacy.
-
-Add
-compute_enemy_difficulty_xp(enemy_state: Dict[str, Any]) -> int
-compute_quest_xp(quest_state: Dict[str, Any]) -> int
-compute_action_skill_xp(action_result: Dict[str, Any]) -> Dict[str, int]
-compute_stat_influence_bonus(player_state: Dict[str, Any], action_result: Dict[str, Any]) -> int
-Rules
-
-User wants:
-
-xp affected by stats
-xp affected by enemy difficulty
-quest xp
-skills gain xp from use
-AI decides this
-
-So:
-
-AI may assign:
-enemy difficulty tier
-quest reward tier
-item/world tier
-but XP formulas stay deterministic after those tags are in state
-
-For example:
-
-enemy_xp = 20 + difficulty_tier * 15
-quest_xp = 50 + quest_rank * 25
-skill_xp = 2 + action_difficulty_bonus + success_bonus
-Important
-
-Do not let LLM directly mutate xp totals on the fly.
-Let it assign bounded tags:
-
-difficulty_tier
-quest_rank
-skill_family
-rarity
-
-Then formula handles the rest.
-
-Modify
-src/app/rpg/choice/consequence_engine.py
-Add
-
-Quest completion and major resolution should emit structured reward events:
-
-xp_award
-item_reward
-reputation_reward
-skill_xp_award
-Modify
+PART 5 — WORLD / XP / CONSEQUENCES
+19. MODIFY
 src/app/rpg/creator/world_player_actions.py
-Add metadata to actions
+Add metadata enrichment
 
-Every resolved player action should carry:
+Every player action must carry:
 
 difficulty_tier
 skill_id
 xp_category
 target_difficulty
+Add helper
+def enrich_action_metadata(action: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+20. MODIFY
+src/app/rpg/choice/consequence_engine.py
+Add
+def build_reward_events(context: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
-This will let runtime award both player xp and skill xp consistently.
+Return structured:
 
-Modify
-src/app/rpg/api/rpg_session_routes.py
-Add payload support
+xp_award
+skill_xp_award
+item_reward
+reputation_reward
+21. NEW FILE
+src/app/rpg/creator/world_expansion.py
+Add
+from __future__ import annotations
+from typing import Any, Dict
 
-Return xp_result and level_up_result in turn responses.
+def maybe_spawn_dynamic_npc(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
-Non-stream and stream final done event should include:
+def maybe_spawn_dynamic_location(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
-player.level
-player.xp
-player.skills
-level_up
-skill_level_ups
-5. NPC cards should be dynamic based on nearby NPCs
-Modify
+def maybe_spawn_dynamic_faction(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+Rules
+bounded world growth
+deterministic IDs
+optional LLM flavor, normalized before commit
+no unbounded entity spawning
+22. MODIFY
+src/app/rpg/creator/startup_pipeline.py
+Add
+
+Mark initial entities:
+
+entity["seed_origin"] = "startup"
+Add setup metadata
+metadata["allow_dynamic_npc_generation"] = True
+metadata["allow_dynamic_location_generation"] = True
+metadata["allow_dynamic_faction_generation"] = False
+metadata["world_growth_budget"] = {
+    "npcs": 12,
+    "locations": 6,
+    "factions": 4,
+}
+23. MODIFY
+src/app/rpg/creator/world_simulation.py
+Add
+
+After major incidents / escalations:
+
+call bounded world expansion hooks
+record generated entities into canonical registries
+PART 6 — PRESENTATION / NPC CARDS / MEMORY / EMPHASIS
+24. MODIFY
 src/app/rpg/presentation/speaker_cards.py
-Expand
-
-Current card generation is too narrow.
-
-Add:
-
-build_nearby_npc_cards(simulation_state: Dict[str, Any], scene: Dict[str, Any]) -> List[Dict[str, Any]]
+Add
+def build_nearby_npc_cards(simulation_state: Dict[str, Any], scene: Dict[str, Any]) -> list[dict]:
+    ...
 
 Each card should include:
 
@@ -551,152 +728,41 @@ status_summary
 location_name
 is_present
 relationship_tags
-Data source
-
-Use:
-
-scene present_npc_ids
-player nearby_npc_ids
-visual portrait state if available
-Modify
+25. MODIFY
 src/app/rpg/presentation/__init__.py
 
 Export:
 
 build_nearby_npc_cards
-Modify
-src/app/rpg/session/runtime.py
-
-When building frontend payload:
-
-replace generic session npcs list for active scene panel with:
-nearby_npcs
-known_npcs
-
-Keep both:
-
-nearby_npcs for scene cards
-npcs or known_npcs for codex/global registry
-Modify
-src/static/rpg/rpg.js
-Change
-add nearby_npcs to state
-renderNPCs() should render nearby_npcs for the main panel
-add optional “known NPCs” codex panel elsewhere if needed
-New rule
-
-Cards should appear/disappear as nearby list changes after each turn.
-
-6. Memory UX cleanup
-Modify
-src/static/rpg/rpg.js
-Change memory panel behavior
-default collapsed
-add toggle button
-only show top 3–5 meaningful entries by default
-full list only in expanded view
-compress repeated duplicates
-Add helpers
-summarizeMemoryEntries(entries)
-dedupeMemoryEntries(entries)
-toggleMemoryPanel()
-Change display labels
-
-Instead of raw strings like:
-
-Maintain awareness of player
-Faction loyalty baseline
-
-render more human-readable labels:
-
-“This faction is wary of you.”
-“NPC remembers your last threat.”
-“You recently sided with the smugglers.”
-Modify
+26. MODIFY
 src/app/rpg/presentation/memory_inspector.py
 Add
-build_memory_ui_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]
+def build_memory_ui_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    ...
 
 Return:
 
 important_memory
 recent_memory
 recent_world_events
+expanded_memory
+Rule
 
-This should feed the compact panel.
+Compact summary for main UI, full detail for inspector/debug.
 
-Modify
-src/app/rpg/session/runtime.py
-
-Return:
-
-memory_summary
-memory_expanded
-
-instead of only a flat memory list
-
-Keep raw memory for debug routes, not the main player panel.
-
-7. Setup seeds vs world growth
-Modify
-src/app/rpg/creator/startup_pipeline.py
-Clarify
-
-Mark initial NPCs / factions / locations as:
-
-seed_origin = "startup"
-Add world expansion caps
-
-Add setup metadata:
-
-allow_dynamic_npc_generation
-allow_dynamic_location_generation
-allow_dynamic_faction_generation
-world_growth_budget
-New file
-src/app/rpg/creator/world_expansion.py
-Responsibilities
-
-Allow controlled dynamic creation of new entities after startup.
-
-Add
-maybe_spawn_dynamic_npc(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]
-maybe_spawn_dynamic_location(...)
-maybe_spawn_dynamic_faction(...)
-Rules
-bounded counts
-deterministic ids
-all generated entities recorded in simulation state
-optional LLM-generated flavor, normalized before commit
-
-This addresses your concern that the world should not be permanently capped to the initial 3 NPCs / few locations.
-
-Modify
-src/app/rpg/creator/world_simulation.py
-Add
-
-After major thread/incident progression:
-
-evaluate controlled world expansion hooks
-add new NPC/location/faction if budget allows
-8. Bold important parts of LLM response for fast scanning
-Modify
+27. MODIFY
 src/app/rpg/ai/world_scene_narrator.py
 Add
-
-A post-processing function:
-
-apply_narration_emphasis(narration_payload: Dict[str, Any]) -> Dict[str, Any]
-
-It should wrap markdown emphasis around:
-
+def apply_narration_emphasis(narration_payload: Dict[str, Any]) -> Dict[str, Any]:
+    ...
+Deterministically bold:
 item pickups
 quest updates
 named locations
 named enemies
-damage numbers / combat results
-rewards / level-ups
-irreversible consequences
+damage numbers
+rewards
+level-ups
 
 Examples:
 
@@ -704,143 +770,315 @@ Examples:
 **Quest Updated:** The Black Ledger
 You deal **28 damage**
 **Level Up!**
-Important
 
-Do not ask the LLM to “just bold things randomly.”
-Use structured result fields from simulation and deterministically format them.
+Do not rely on random LLM emphasis.
 
-Modify
-src/static/rpg/rpg.js
+PART 7 — CREATOR / BOOTSTRAP / PLAYER ROUTES
+28. MODIFY
+src/app/rpg/services/adventure_builder_service.py
 
-Since it already uses markdown rendering when available, keep that path and make sure:
+At adventure start:
 
-important narration is passed through markdown safely
-bold text remains visible in message rendering
-combat result blocks get a compact summary header above long narration
-Add
-buildTurnSummaryBanner(update)
-show concise summary above long narration:
-hit/miss
-damage
-xp gained
-skill xp gained
-item gained/lost
-quest update
+build canonical session from setup + generated result
+persist it
+return canonical bootstrap payload
+Required behavior
 
-This solves your “too much text, I want to scan quickly” request better than bolding alone.
+POST /api/rpg/adventure/start should return:
 
-9. API/UI contract cleanup for these changes
-Modify
+session_id
+opening
+world
+player
+nearby_npcs
+known_npcs
+memory_summary
+scene
+presentation
+
+This should become the only recommended create path.
+
+29. MODIFY
 src/app/rpg/services/adventure_response_adapter.py
 
-Include in bootstrap payload:
+Expand payload to include:
 
 player.stats
 player.skills
 player.level
 player.xp
 player.xp_to_next
-player.unspent_points
 player.inventory_state
 player.equipment
 nearby_npcs
+known_npcs
+scene.items
 memory_summary
-Modify
+30. MODIFY
 src/app/rpg/api/rpg_player_routes.py
 
-This file is still Flask-style and also too setup-payload-centric.
+This file currently uses setup_payload input and is not canonical-session aware.
 
-Expand or migrate endpoints to canonical session-aware handlers:
-/api/rpg/player/inventory/equip
-/api/rpg/player/inventory/unequip
-/api/rpg/player/inventory/drop
-/api/rpg/player/inventory/pickup
-/api/rpg/player/progression
-/api/rpg/player/stats/allocate
+Keep the blueprint as Flask, but add session-aware endpoints:
+POST /api/rpg/player/inventory/equip
 
-If you are fully moving to FastAPI, convert this module too.
+Input:
 
-10. Tests to add
-New tests
-tests/rpg/test_player_progression_state.py
+{"session_id": "...", "item_id": "...", "slot": "main_hand"}
+POST /api/rpg/player/inventory/unequip
+POST /api/rpg/player/inventory/drop
+POST /api/rpg/player/inventory/pickup
+POST /api/rpg/player/progression
+POST /api/rpg/player/stats/allocate
+
+Each endpoint should:
+
+load canonical session
+mutate simulation_state
+persist session
+return updated player/inventory/progression payload
+
+Do not keep item/progression logic trapped inside ad hoc setup_payload POST bodies.
+
+PART 8 — FRONTEND CUTOVER
+31. MODIFY
+src/static/rpg/rpg.js
+
+This file still points at the legacy /api/rpg/games* API.
+
+Replace all endpoints
+Create
+
+From:
+
+POST /api/rpg/games
+POST /api/rpg/games/stream
+
+To:
+
+POST /api/rpg/adventure/start
+Load/list/delete
+
+From:
+
+GET /api/rpg/games
+GET /api/rpg/games/:id
+DELETE /api/rpg/games/:id
+
+To:
+
+POST /api/rpg/session/list
+POST /api/rpg/session/get
+POST /api/rpg/session/delete
+Turn
+
+From:
+
+POST /api/rpg/games/:id/turn
+POST /api/rpg/games/:id/turn/stream
+
+To:
+
+POST /api/rpg/session/turn
+POST /api/rpg/session/turn/stream
+Add state fields
+
+Add to rpgState:
+
+nearby_npcs: [],
+known_npcs: [],
+memory_summary: { important_memory: [], recent_memory: [], recent_world_events: [] },
+scene_items: [],
+xp_result: null,
+skill_xp_result: null,
+level_up: [],
+skill_level_ups: [],
+turn_summary: null,
+Change render behavior
+NPC panel
+
+Render nearby_npcs, not global session NPCs.
+
+Memory panel
+collapsed by default
+toggle button
+use summarized memory, not raw long list
+dedupe repeated items
+Add helpers
+function summarizeMemoryEntries(entries) { ... }
+function dedupeMemoryEntries(entries) { ... }
+function toggleMemoryPanel() { ... }
+function buildTurnSummaryBanner(update) { ... }
+Turn summary banner
+
+Render a compact summary above long narration:
+
+hit/miss
+damage
+xp gained
+skill xp gained
+item gained/lost
+quest updated
+level up
+Keep Markdown rendering
+
+Since narration already uses marked if available, preserve that path so bold emphasis works.
+
+PART 9 — ACTIVE TURN CONTRACT
+32. MODIFY
+src/app/rpg/session_runtime.py
+src/app/rpg/api/rpg_session_routes.py
+src/static/rpg/rpg.js
+
+Use one strict payload shape for:
+
+bootstrap/start
+session get
+turn
+stream final done
+Required payload shape
+{
+    "success": True,
+    "session_id": "...",
+    "title": "...",
+    "opening": "...",
+    "narration": "...",
+    "player": {
+        "stats": {...},
+        "skills": {...},
+        "level": 1,
+        "xp": 0,
+        "xp_to_next": 100,
+        "inventory_state": {...},
+        "equipment": {...},
+        "nearby_npc_ids": [...],
+        "available_checks": [...],
+    },
+    "nearby_npcs": [...],
+    "known_npcs": [...],
+    "scene": {
+        "scene_id": "...",
+        "items": [...],
+        "available_checks": [...],
+        "present_npc_ids": [...],
+    },
+    "memory_summary": {
+        "important_memory": [...],
+        "recent_memory": [...],
+        "recent_world_events": [...],
+    },
+    "combat_result": {...},
+    "xp_result": {...},
+    "skill_xp_result": {...},
+    "level_up": [...],
+    "skill_level_ups": [...],
+    "presentation": {...},
+}
+PART 10 — TESTS
+33. NEW TEST FILES
+
+Create these tests under src/tests/unit / src/tests/functional / src/tests/regression according to existing layout.
+
+test_phase183b_player_progression.py
 stat allocation valid/invalid
 level-up thresholds
-skill xp growth
-bounded progression log
-tests/rpg/test_action_resolver_combat.py
+skill XP growth
+no tuple unpack contract
+test_phase183b_action_resolver.py
 melee hit/miss
 weapon damage differences
-strength affects melee damage
-dexterity affects ranged accuracy
+stat affects damage
 armor reduces damage
-shields affect block/defense
-tests/rpg/test_inventory_world_grounding.py
-pickup adds world item to inventory
-drop removes from inventory and spawns in location
-equip/unequip updates equipment
-narration payload matches item state
-tests/rpg/test_session_turn_progression.py
-action awards player xp
-action awards skill xp
-level-up appears in turn payload
-nearby NPC cards change with scene presence
-tests/rpg/test_memory_ui_payload.py
-compact memory summary returned
+shield affects defense
+deterministic outcomes with same seed
+test_phase183b_item_actions.py
+pickup mutates world + inventory
+equip mutates equipment
+use item mutates resources/status
+drop mutates inventory + world
+test_phase183b_runtime_authority.py
+state mutates before narration
+XP tied to resolved action
+skill XP tied to action use
+level-up results appear in payload
+test_phase183b_session_routes.py
+/api/rpg/session/list
+/api/rpg/session/get
+/api/rpg/session/turn
+/api/rpg/session/turn/stream
+legacy /api/rpg/games* returns 410
+test_phase183b_nearby_npcs.py
+nearby NPCs change with scene
+known NPC registry remains separate
+test_phase183b_memory_payload.py
+memory summary compact
 duplicates collapsed
-expanded memory still accessible
-tests/rpg/test_world_expansion.py
+expanded memory still available in inspector path
+test_phase183b_world_expansion.py
 startup seeds preserved
-dynamic growth bounded
-deterministic generated ids
-Recommended implementation order
+dynamic expansion bounded
+deterministic IDs
+IMPLEMENTATION ORDER
 
-Do these in this order:
+Apply in this exact order:
 
-Pass 1 — foundations
-player_progression_state.py
-player_scene_state.py
-item_stats.py
-item_registry.py
-inventory_state.py
-Pass 2 — authoritative mechanics
-action_resolver.py
-world_items.py
-item_effects.py
-encounter/resolver.py
-encounter/encounter_resolver.py
-Pass 3 — active path wiring
-session/runtime.py
-world_scene_generator.py
-player_xp_rules.py
-world_player_actions.py
-rpg_session_routes.py
-Pass 4 — presentation/UI
-speaker_cards.py
-memory_inspector.py
-adventure_response_adapter.py
-rpg.js
-world_scene_narrator.py
-Pass 5 — world growth + tests
-startup_pipeline.py
-world_expansion.py
-world_simulation.py
-all tests
-Critical design rules for the coding LLM
-
-Use these rules while implementing:
-
-Simulation decides outcomes.
-LLM may suggest item/archetype metadata, but never hit/miss/damage/xp totals.
-Every narrated item interaction must match state.
-No “you draw a sword” unless sword exists in inventory/equipment.
-Every player action must map to stats and a skill family.
-Even dialogue, stealth, hacking, investigation.
-Skill progression is use-based.
-Archery improves through bow use; persuasion improves through persuasion checks.
-Generated item stats must be normalized and bounded.
-Let AI flavor items, not break power scaling.
-XP comes from structured sources only.
-Enemy difficulty, quest rank, discovery rank, action difficulty.
+Pass 1 — canonical session backbone
+create session_runtime.py
+create api/rpg_session_routes.py
+register blueprint in src/app/__init__.py
+deprecate legacy routes.py
+cut over rpg.js endpoints
+Pass 2 — player progression + inventory primitives
+add player_progression_state.py
+add player_creation.py
+patch player_scene_state.py
+add player_xp_rules.py
+add item_stats.py
+add generated_item_builder.py
+patch item_registry.py
+patch inventory_state.py
+add world_items.py
+patch item_effects.py
+Pass 3 — authoritative mechanics
+rewrite action_resolver.py
+patch encounter/resolver.py
+patch encounter/encounter_resolver.py
+Pass 4 — active path wiring
+patch adventure_builder_service.py
+patch adventure_response_adapter.py
+patch creator/world_player_actions.py
+patch choice/consequence_engine.py
+patch creator/world_simulation.py
+add creator/world_expansion.py
+patch creator/startup_pipeline.py
+Pass 5 — presentation/UI
+patch presentation/speaker_cards.py
+patch presentation/memory_inspector.py
+patch presentation/__init__.py
+patch ai/world_scene_narrator.py
+patch api/rpg_player_routes.py
+finish rpg.js
+Pass 6 — tests
+add all new tests
+run full suite
+manually verify new adventure → turn → combat → loot → reload → continue
+CRITICAL DESIGN RULES FOR THE CODING LLM
+Keep Flask.
+This repo’s active app path is Flask. Do not convert to FastAPI in this patch.
+Simulation resolves actions.
+LLM may flavor or propose bounded metadata; it never decides authoritative outcomes.
+All item narration must match item state.
+No fake pickup/equip/use text.
+Stats affect every action family.
+Combat, stealth, persuasion, intimidation, investigation, hacking, magic.
+XP and skill XP are deterministic.
+Enemy difficulty / quest rank / action difficulty may be tagged by AI or setup, but reward formulas are engine-side.
 Nearby NPCs are scene-scoped.
-Known NPC registry is separate from active nearby cards.
-Memory is compact in player UI, full in inspector.
+Known NPCs are separate.
+Memory is compact in main UI.
+Full memory stays in inspector/debug tools.
+Legacy /api/rpg/games* must stop being the gameplay path.
+Leave it only as explicit 410 deprecation responses.
+No tuple-return progression helpers.
+Return player_state only.
+Tests must prove active-path integration, not just isolated modules.
