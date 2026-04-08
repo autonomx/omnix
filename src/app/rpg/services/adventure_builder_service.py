@@ -14,6 +14,7 @@ from typing import Any
 from ..creator.defaults import (
     apply_adventure_defaults,
     build_setup_template,
+    infer_default_opening,
     list_setup_templates,
 )
 from ..creator.regeneration import (
@@ -110,6 +111,17 @@ def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
                 "npcs": counts.get("npcs", 0),
             },
             "warnings": warnings,
+            "player_role": preview.get("player_role") or "",
+            "player_archetype": preview.get("player_archetype") or "",
+            "player_background": preview.get("player_background") or "",
+            "campaign_objective": preview.get("campaign_objective") or "",
+            "opening_hook": preview.get("opening_hook") or "",
+            "starter_conflict": preview.get("starter_conflict") or "",
+            "core_world_laws": _safe_list(preview.get("core_world_laws")),
+            "genre_rules": _safe_list(preview.get("genre_rules")),
+            "desired_content_mix": _safe_dict(preview.get("desired_content_mix")),
+            "starting_gear": _safe_list(preview.get("starting_gear")),
+            "starting_resources": _safe_dict(preview.get("starting_resources")),
         },
         "resolved_context": {
             "location_id": resolved_context.get("location_id"),
@@ -117,6 +129,41 @@ def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
             "npc_ids": _safe_list(resolved_context.get("npc_ids")),
             "npc_names": _safe_list(resolved_context.get("npc_names")),
         },
+        "opening_preview": _safe_dict(prepared.get("opening_preview")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase A/B — Opening context builder
+# ---------------------------------------------------------------------------
+
+
+def build_opening_context(setup: dict[str, Any]) -> dict[str, Any]:
+    """Build a rich opening context dict from an adventure setup payload.
+
+    Combines explicit ``opening`` data with inferred defaults so every
+    opening field is populated.
+
+    Returns
+    -------
+    dict
+        Keys: ``location_id``, ``present_npc_ids``, ``scene_frame``,
+        ``immediate_problem``, ``player_involvement_reason``,
+        ``first_choices``, ``tension_level``, ``time_of_day``, ``weather``.
+    """
+    opening = setup.get("opening") or {}
+    inferred = infer_default_opening(setup)
+
+    return {
+        "location_id": opening.get("location_id") or inferred.get("location_id", ""),
+        "present_npc_ids": opening.get("present_npc_ids") or inferred.get("present_npc_ids", []),
+        "scene_frame": opening.get("scene_frame") or inferred.get("scene_frame", ""),
+        "immediate_problem": opening.get("immediate_problem") or inferred.get("immediate_problem", ""),
+        "player_involvement_reason": opening.get("player_involvement_reason") or inferred.get("player_involvement_reason", ""),
+        "first_choices": opening.get("first_choices") or inferred.get("first_choices", []),
+        "tension_level": opening.get("tension_level") or inferred.get("tension_level", "medium"),
+        "time_of_day": opening.get("time_of_day") or inferred.get("time_of_day", "evening"),
+        "weather": opening.get("weather") or inferred.get("weather", "clear"),
     }
 
 
@@ -224,6 +271,10 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
         "npcs": len(setup.npc_seeds),
     }
 
+    # Phase A — build opening context
+    setup_dict = setup.to_dict()
+    opening_ctx = build_opening_context(setup_dict)
+
     prepared = {
         "ok": True,
         "validation": validation.to_dict(),
@@ -234,8 +285,20 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
             "premise": setup.premise,
             "counts": counts,
             "warnings": [],
+            "player_role": setup.player_role,
+            "player_archetype": setup.player_archetype,
+            "player_background": setup.player_background,
+            "campaign_objective": setup.campaign_objective,
+            "opening_hook": setup.opening_hook,
+            "starter_conflict": setup.starter_conflict,
+            "core_world_laws": list(setup.core_world_laws),
+            "genre_rules": list(setup.genre_rules),
+            "desired_content_mix": dict(setup.desired_content_mix),
+            "starting_gear": list(setup.starting_gear),
+            "starting_resources": dict(setup.starting_resources),
         },
         "resolved_context": resolved_context,
+        "opening_preview": opening_ctx,
     }
 
     return _build_preview_contract(prepared)
@@ -294,6 +357,7 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
     adapted["start_response_version"] = ADVENTURE_START_RESPONSE_VERSION
     adapted["session_manifest"] = _safe_dict(session.get("manifest"))
     adapted["persisted"] = True
+    adapted["opening_context"] = build_opening_context(data)
 
     return adapted
 
@@ -852,6 +916,10 @@ def _build_preview_contract_from_payload(payload: dict[str, Any]) -> dict[str, A
         "npcs": len(setup.npc_seeds),
     }
 
+    # Phase A — build opening context
+    setup_dict = setup.to_dict()
+    opening_ctx = build_opening_context(setup_dict)
+
     return {
         "ok": True,
         "validation": {"issues": [], "blocking": False, "hints": []},
@@ -862,8 +930,20 @@ def _build_preview_contract_from_payload(payload: dict[str, Any]) -> dict[str, A
             "premise": setup.premise,
             "counts": counts,
             "warnings": [],
+            "player_role": setup.player_role,
+            "player_archetype": setup.player_archetype,
+            "player_background": setup.player_background,
+            "campaign_objective": setup.campaign_objective,
+            "opening_hook": setup.opening_hook,
+            "starter_conflict": setup.starter_conflict,
+            "core_world_laws": list(setup.core_world_laws),
+            "genre_rules": list(setup.genre_rules),
+            "desired_content_mix": dict(setup.desired_content_mix),
+            "starting_gear": list(setup.starting_gear),
+            "starting_resources": dict(setup.starting_resources),
         },
         "resolved_context": resolved_context,
+        "opening_preview": opening_ctx,
     }
 
 
