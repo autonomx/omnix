@@ -237,6 +237,15 @@ def find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[s
     return {}
 
 
+def get_inventory_item_for_drop(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+    inventory_state = normalize_inventory_state(inventory_state)
+    for item in _safe_list(inventory_state.get("items")):
+        item = _safe_dict(item)
+        if _safe_str(item.get("item_id")) == _safe_str(item_id):
+            return dict(item)
+    return {}
+
+
 def get_equipped_weapon(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
     """Return the equipped weapon from main_hand slot, or empty dict."""
     inventory_state = normalize_inventory_state(inventory_state)

@@ -19,10 +19,7 @@ from app.rpg.session.runtime import (
 
 rpg_session_bp = Blueprint("rpg_session_bp", __name__)
 
-_DEPRECATION_HEADERS = {
-    "X-Omnix-RPG-Recommended-Create": "/api/rpg/adventure/start",
-    "X-Omnix-RPG-Recommended-Turn": "/api/rpg/session/turn",
-}
+
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -59,10 +56,11 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     player_state = _safe_dict(sim.get("player_state"))
     stats = _safe_dict(player_state.get("stats"))
     skills = _safe_dict(player_state.get("skills"))
-    equipment = _safe_dict(player_state.get("equipment"))
     inventory_state = _safe_dict(player_state.get("inventory_state"))
+    equipment = _safe_dict(inventory_state.get("equipment"))
 
-    scene_state = _safe_dict(sim.get("current_scene"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    scene_state = _safe_dict(runtime_state.get("current_scene"))
     memory = _safe_dict(sim.get("memory"))
 
     payload: Dict[str, Any] = {
@@ -103,7 +101,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "combat_result": raw_payload.get("combat_result"),
         "xp_result": raw_payload.get("xp_result"),
         "skill_xp_result": raw_payload.get("skill_xp_result"),
-        "level_up": raw_payload.get("level_up", False),
+        "level_up": _safe_list(raw_payload.get("level_up")),
         "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
         # Presentation
         "presentation": _safe_dict(raw_payload.get("presentation")),
@@ -118,7 +116,7 @@ def list_rpg_sessions():
 
     sessions = list_sessions() or []
     resp = jsonify({"ok": True, "sessions": sessions})
-    resp.headers.update(_DEPRECATION_HEADERS)
+
     return resp
 
 
@@ -133,7 +131,7 @@ def get_rpg_session():
     payload["ok"] = True
     payload["game"] = payload
     resp = jsonify(payload)
-    resp.headers.update(_DEPRECATION_HEADERS)
+
     return resp
 
 
@@ -162,7 +160,7 @@ def update_rpg_session():
     payload = build_frontend_bootstrap_payload(session)
     payload["ok"] = True
     resp = jsonify(payload)
-    resp.headers.update(_DEPRECATION_HEADERS)
+
     return resp
 
 
@@ -179,7 +177,7 @@ def delete_rpg_session():
     session["manifest"] = manifest
     save_runtime_session(session)
     resp = jsonify({"ok": True})
-    resp.headers.update(_DEPRECATION_HEADERS)
+
     return resp
 
 
@@ -203,7 +201,7 @@ def execute_rpg_session_turn():
 
     payload = _build_turn_payload(result)
     resp = jsonify(payload)
-    resp.headers.update(_DEPRECATION_HEADERS)
+
     return resp
 
 
@@ -217,7 +215,6 @@ def execute_rpg_session_turn_stream():
     sse_headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
-        **_DEPRECATION_HEADERS,
     }
 
     if not session_id:

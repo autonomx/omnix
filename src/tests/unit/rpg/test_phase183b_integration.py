@@ -292,6 +292,24 @@ class TestItemActions:
         assert len(items) >= 1
         assert items[0]["item_id"] == "gold_coin"
 
+    def test_drop_preserves_item_metadata(self):
+        sim = self.ensure_world({})
+        dropped = {
+            "item_id": "iron_sword",
+            "name": "Iron Sword",
+            "qty": 1,
+            "equipment": {"slot": "main_hand"},
+            "combat_stats": {"damage": 28, "weapon_type": "sword"},
+            "quality": {"tier": 1, "rarity": "common"},
+        }
+        result = self.drop_item(sim, dropped, "tavern", qty=1)
+        sim2 = result["simulation_state"]
+        items = self.list_items(sim2, "tavern")
+        assert items[0]["item_id"] == "iron_sword"
+        assert items[0]["name"] == "Iron Sword"
+        assert items[0]["combat_stats"]["damage"] == 28
+        assert items[0]["equipment"]["slot"] == "main_hand"
+
     def test_world_item_pickup(self):
         sim = self.ensure_world({})
         sim = self.spawn_item(sim, "tavern", {"item_id": "healing_potion", "instance_id": "wi_abc"})
@@ -433,6 +451,19 @@ class TestNearbyNPCCards:
         cards = self.build(sim, {})
         assert len(cards) == 1
         assert cards[0]["npc_id"] == "npc_c"
+
+    def test_cards_are_objects_not_ids(self):
+        sim = {
+            "npcs": {
+                "npc_a": {"name": "Alice", "role": "merchant"},
+            },
+        }
+        scene = {"present_npc_ids": ["npc_a"]}
+        cards = self.build(sim, scene)
+        assert isinstance(cards, list)
+        assert isinstance(cards[0], dict)
+        assert "name" in cards[0]
+        assert not isinstance(cards[0], str)
 
 
 # ---------------------------------------------------------------------------
@@ -588,6 +619,7 @@ class TestResponseAdapterPayloadShape:
         assert "equipment" in player
         assert "nearby_npc_ids" in player
         assert "available_checks" in player
+        assert player["equipment"] == player["inventory_state"].get("equipment", {})
 
     def test_scene_has_canonical_fields(self):
         result = self.adapt(self._make_session())

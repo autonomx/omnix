@@ -20,6 +20,28 @@ def _safe_int(v: Any, default: int = 0) -> int:
         return default
 
 
+def _safe_list(v: Any) -> List[Any]:
+    return list(v) if isinstance(v, list) else []
+
+
+def _copy_item_record(item: Dict[str, Any]) -> Dict[str, Any]:
+    item = _safe_dict(item)
+    return {
+        "item_id": _safe_str(item.get("item_id")),
+        "qty": _safe_int(item.get("qty"), 1) or 1,
+        "name": _safe_str(item.get("name")),
+        "category": _safe_str(item.get("category")),
+        "tags": _safe_list(item.get("tags")),
+        "description": _safe_str(item.get("description")),
+        "combat_stats": _safe_dict(item.get("combat_stats")),
+        "equipment": _safe_dict(item.get("equipment")),
+        "quality": _safe_dict(item.get("quality")),
+        "value": _safe_int(item.get("value"), 0),
+        "instance_id": _safe_str(item.get("instance_id")),
+        "durability": _safe_int(item.get("durability"), 100),
+    }
+
+
 def ensure_world_item_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     """Ensure simulation_state has a well-formed world_items subtree."""
     simulation_state = dict(simulation_state or {})
@@ -58,34 +80,87 @@ def pickup_world_item(
     simulation_state: Dict[str, Any],
     item_instance_id: str,
 ) -> Dict[str, Any]:
-    """Remove an item from world and return it. Sets _picked_up_item on simulation_state."""
     simulation_state = ensure_world_item_state(simulation_state)
-    item_instance_id = _safe_str(item_instance_id)
-    by_loc = simulation_state["world_items"]["by_location"]
-    picked = None
-    for loc_id, items in by_loc.items():
-        for i, item in enumerate(list(items)):
-            if isinstance(item, dict) and _safe_str(item.get("instance_id")) == item_instance_id:
-                picked = item
-                items.pop(i)
-                break
-        if picked:
-            break
-    simulation_state["_picked_up_item"] = picked or {}
-    return simulation_state
+    by_location = _safe_dict(_safe_dict(simulation_state.get("world_items")).get("by_location"))
+
+    picked_item: Dict[str, Any] = {}
+    found_location_id = ""
+
+    for location_id, items in by_location.items():
+        normalized_items = []
+        for item in _safe_list(items):
+            item = _safe_dict(item)
+            if _safe_str(item.get("instance_id")) == item_instance_id:
+                picked_item = item
+                found_location_id = location_id
+                continue
+            normalized_items.append(item)
+        by_location[location_id] = normalized_items
+
+    simulation_state["world_items"] = {"by_location": by_location}
+
+    if not picked_item:
+        return {
+            "simulation_state": simulation_state,
+            "picked_up_item": {},
+            "result": {
+                "ok": False,
+                "reason": "item_not_found",
+                "instance_id": item_instance_id,
+            },
+        }
+
+    return {
+        "simulation_state": simulation_state,
+        "picked_up_item": picked_item,
+        "result": {
+            "ok": True,
+            "action_type": "pickup_item",
+            "instance_id": item_instance_id,
+            "item_id": _safe_str(picked_item.get("item_id")),
+            "location_id": found_location_id,
+        },
+    }
 
 
 def drop_world_item(
     simulation_state: Dict[str, Any],
-    item_id: str,
-    location_id: str = "",
+    item_or_item_id: Any,
+    location_id: str,
     qty: int = 1,
 ) -> Dict[str, Any]:
-    """Drop an item into a world location."""
     simulation_state = ensure_world_item_state(simulation_state)
-    location_id = _safe_str(location_id) or _safe_str(_safe_dict(simulation_state.get("player_state")).get("current_scene_id")) or "unknown"
-    item_def = {"item_id": _safe_str(item_id), "qty": max(1, _safe_int(qty))}
-    return spawn_world_item(simulation_state, location_id, item_def)
+    world_items = _safe_dict(simulation_state.get("world_items"))
+    by_location = _safe_dict(world_items.get("by_location"))
+    items = _safe_list(by_location.get(location_id))
+
+    if isinstance(item_or_item_id, dict):
+        dropped_item = _copy_item_record(item_or_item_id)
+        dropped_item["qty"] = int(qty or dropped_item.get("qty", 1) or 1)
+        dropped_item["instance_id"] = _safe_str(dropped_item.get("instance_id")) or f"wi:{location_id}:{_safe_str(dropped_item.get('item_id'))}:{len(items)}"
+        item_id = _safe_str(dropped_item.get("item_id"))
+    else:
+        item_id = _safe_str(item_or_item_id)
+        dropped_item = {
+            "item_id": item_id,
+            "qty": int(qty or 1),
+            "instance_id": f"wi:{location_id}:{item_id}:{len(items)}",
+        }
+    items.append(dropped_item)
+    by_location[location_id] = items
+    simulation_state["world_items"] = {"by_location": by_location}
+
+    return {
+        "simulation_state": simulation_state,
+        "result": {
+            "ok": True,
+            "action_type": "drop_item",
+            "item_id": item_id,
+            "location_id": location_id,
+            "qty": int(qty or 1),
+            "dropped_item": dropped_item,
+        },
+    }
 
 
 def list_scene_items(

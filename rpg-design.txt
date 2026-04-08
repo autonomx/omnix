@@ -1,1084 +1,366 @@
-Important correction before implementation:
-
-The actual repo is Flask, not FastAPI.
-Keep Flask for the active app path.
-Do not do a Flask→FastAPI migration in this patch.
-Instead, add the new canonical session flow as a Flask blueprint and retire the legacy /api/rpg/games* path from active gameplay.
-Phase 18.3B / 18.4 — Canonical Session + Grounded RPG Mechanics
-Goals
-
-Implement all remaining fixes and improvements:
-
-stats affect every player decision
-combat is deterministic and authoritative
-items/world/inventory are grounded
-XP + level-up + skill XP are real and used
-nearby NPC cards are scene-scoped and dynamic
-memory panel is compact/toggleable
-world can grow beyond initial seeds, within bounds
-narration is easier to scan
-canonical session routes replace legacy /api/rpg/games*
-active turn path uses mechanics first, narration second
-PART 1 — NEW CANONICAL SESSION RUNTIME
-1. NEW FILE
-src/app/rpg/session_runtime.py
-
-Create a new canonical runtime module. This is the authoritative live gameplay path.
-
-Add these helpers
-from __future__ import annotations
-from typing import Any, Dict, List
-
-def load_runtime_session(session_id: str) -> Dict[str, Any] | None:
-    ...
-
-def save_runtime_session(session: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def build_session_from_start_result(setup_payload: Dict[str, Any], start_result: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def derive_action_candidates(simulation_state: Dict[str, Any], player_input: str) -> List[Dict[str, Any]]:
-    ...
-
-def select_primary_action(simulation_state: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
-    ...
-
-def apply_resolved_action_to_state(simulation_state: Dict[str, Any], resolved: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def award_progression_for_action(simulation_state: Dict[str, Any], resolved: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def apply_turn(session_id: str, player_input: str) -> Dict[str, Any]:
-    ...
-Canonical session shape
-
-Persist this structure:
-
-{
-    "manifest": {
-        "id": "...",
-        "title": "...",
-        "status": "active",
-        "created_at": "...",
-        "updated_at": "...",
-        "schema_version": 3,
-        "archived": False,
-    },
-    "setup_payload": {...},
-    "simulation_state": {...},
-    "runtime_state": {
-        "tick": 0,
-        "opening": "",
-        "world": {},
-        "known_npcs": [],
-        "current_scene": {},
-        "last_turn_result": {},
-        "turn_history": [],
-        "voice_assignments": {},
-    },
-}
-Required turn order inside apply_turn()
-
-Replace world-first flow with this exact order:
-
-load session
-normalize state:
-ensure_player_state
-ensure_player_inventory
-ensure_player_progression_state
-ensure_world_item_state
-ensure_memory_state
-derive structured action candidates from input
-select one canonical action
-resolve action through action_resolver.resolve_player_action(...)
-apply state mutation from resolved action
-award XP + skill XP + level ups
-step world simulation
-evaluate bounded world expansion
-build scene with nearby NPCs + scene items + checks
-narrate the already-resolved result
-persist session
-return payload
-Required rule
-
-Narration must always describe what already happened in state. Never the reverse.
-
-2. NEW FILE
-src/app/rpg/api/rpg_session_routes.py
-
-Create a new Flask blueprint for canonical sessions.
-
-Add
-from flask import Blueprint, jsonify, request, Response
-import json
-
-rpg_session_bp = Blueprint("rpg_session_bp", __name__)
-Add endpoints
-POST /api/rpg/session/list
-
-Returns canonical sessions only.
-
-POST /api/rpg/session/get
-
-Input:
-
-{"session_id": "..."}
-POST /api/rpg/session/update
-
-Supports:
-
-title
-voice_assignments
-POST /api/rpg/session/delete
-
-Soft archive:
-
-set manifest.archived = True
-set manifest.status = "archived"
-POST /api/rpg/session/turn
-
-Input:
-
-{"session_id": "...", "input": "..."}
-POST /api/rpg/session/turn/stream
-
-Flask SSE endpoint.
-Keep streaming simple for now:
-
-mechanics resolve first
-narration emitted as tokenized text
-final done event contains exact same payload as non-streaming turn
-Error handling
-
-This repo is Flask, so use:
-
-return jsonify({...}), 404
-
-not FastAPI patterns.
-
-Stream event format
-
-Use:
-
-def _sse(data: dict) -> str:
-    return f"data: {json.dumps(data)}\n\n"
-3. MODIFY
-src/app/__init__.py
-Add
-
-Import and register the new blueprint:
-
-from app.rpg.api.rpg_session_routes import rpg_session_bp
-
-and:
-
-app.register_blueprint(rpg_session_bp)
-Keep Flask
-
-Do not remove Flask app factory.
-
-4. MODIFY
-src/app/rpg/routes.py
-
-This is the legacy path.
-
-Change
-
-Keep the file but convert all /api/rpg/games* routes into explicit deprecation responses.
-
-Every handler should return:
-return jsonify({
-    "success": False,
-    "error": "legacy_rpg_games_api_removed",
-    "recommended_create": "/api/rpg/adventure/start",
-    "recommended_turn": "/api/rpg/session/turn",
-}), 410
-Keep headers
-
-Optionally preserve:
-
-X-Omnix-RPG-Recommended-Create
-X-Omnix-RPG-Recommended-Turn
-
-Do not let the old in-memory GameSession path stay active.
-
-PART 2 — PLAYER PROGRESSION / STATS / SKILLS
-5. NEW FILE
-src/app/rpg/player/player_progression_state.py
-
-Create authoritative progression state.
-
-Add
-from __future__ import annotations
-from typing import Any, Dict
-
-def ensure_player_progression_state(player_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def allocate_starting_stats(player_state: Dict[str, Any], allocation: Dict[str, int]) -> Dict[str, Any]:
-    ...
-
-def get_stat_modifier(value: int) -> int:
-    ...
-
-def get_skill_level(player_state: Dict[str, Any], skill_id: str) -> int:
-    ...
-
-def award_player_xp(player_state: Dict[str, Any], amount: int, source: str = "") -> Dict[str, Any]:
-    ...
-
-def award_skill_xp(player_state: Dict[str, Any], skill_id: str, amount: int, source: str = "") -> Dict[str, Any]:
-    ...
-
-def resolve_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def resolve_skill_level_ups(player_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-Canonical defaults
-
-Inside ensure_player_progression_state() add:
-
-player_state.setdefault("level", 1)
-player_state.setdefault("xp", 0)
-player_state.setdefault("xp_to_next", 100)
-player_state.setdefault("unspent_points", 0)
-player_state.setdefault("unspent_skill_points", 0)
-player_state.setdefault("stats", {
-    "strength": 5,
-    "dexterity": 5,
-    "constitution": 5,
-    "intelligence": 5,
-    "wisdom": 5,
-    "charisma": 5,
-})
-player_state.setdefault("skills", {
-    "swordsmanship": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "archery": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "firearms": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "defense": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "stealth": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "persuasion": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "intimidation": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "investigation": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "magic": {"level": 0, "xp": 0, "xp_to_next": 25},
-    "hacking": {"level": 0, "xp": 0, "xp_to_next": 25},
-})
-player_state.setdefault("progression_log", [])
-Important bug fix
-
-Do not return tuples from resolve_level_ups() or resolve_skill_level_ups().
-
-Both functions must return only player_state, with temporary fields:
-
-_level_ups
-_skill_level_ups
-
-inside player_state.
-
-6. NEW FILE
-src/app/rpg/player/player_creation.py
-Add
-from __future__ import annotations
-from typing import Any, Dict
-
-def build_default_stat_allocation(template: Dict[str, Any]) -> Dict[str, int]:
-    ...
-
-def validate_stat_allocation(allocation: Dict[str, int], total_points: int = 12) -> Dict[str, Any]:
-    ...
-
-def apply_character_creation(player_state: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-Rules
-standard point-buy or total budget
-hard validation
-no random allocation
-background/class/species bonuses applied deterministically
-7. MODIFY
-src/app/rpg/player/player_scene_state.py
-In ensure_player_state()
-
-After building player_state, import and call:
-
-from .player_progression_state import ensure_player_progression_state
-
-and:
-
-player_state = ensure_player_progression_state(player_state)
-Add defaults
-player_state.setdefault("nearby_npc_ids", [])
-player_state.setdefault("equipped_weapon_slot", "main_hand")
-player_state.setdefault("equipped_armor_slots", {})
-player_state.setdefault("available_checks", [])
-8. MODIFY
-src/app/rpg/player/__init__.py
-
-Export:
-
-ensure_player_progression_state
-allocate_starting_stats
-award_player_xp
-award_skill_xp
-resolve_level_ups
-resolve_skill_level_ups
-get_stat_modifier
-9. NEW FILE
-src/app/rpg/player/player_xp_rules.py
-Add
-from __future__ import annotations
-from typing import Any, Dict
-
-def compute_enemy_difficulty_xp(enemy_state: Dict[str, Any]) -> int:
-    ...
-
-def compute_quest_xp(quest_state: Dict[str, Any]) -> int:
-    ...
-
-def compute_action_skill_xp(action_result: Dict[str, Any]) -> Dict[str, int]:
-    ...
-
-def compute_stat_influence_bonus(player_state: Dict[str, Any], action_result: Dict[str, Any]) -> int:
-    ...
-Rules
-enemy difficulty affects XP
-quest rank affects XP
-skill use grants skill XP
-stat influence may modestly modify XP, but do not let stats multiply rewards out of bounds
-PART 3 — ITEM STATS / INVENTORY / WORLD ITEMS
-10. NEW FILE
-src/app/rpg/items/item_stats.py
-Add
-from __future__ import annotations
-from typing import Any, Dict
-
-def normalize_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def is_weapon(item_def: Dict[str, Any]) -> bool:
-    ...
-
-def is_armor(item_def: Dict[str, Any]) -> bool:
-    ...
-
-def is_shield(item_def: Dict[str, Any]) -> bool:
-    ...
-
-def get_weapon_skill(item_def: Dict[str, Any]) -> str:
-    ...
-
-def get_weapon_attack_stat(item_def: Dict[str, Any]) -> str:
-    ...
-Canonical item stats
-
-Every item may include:
-
-"combat_stats": {
-    "weapon_type": "sword",
-    "attack_stat": "strength",
-    "skill_id": "swordsmanship",
-    "damage": 12,
-    "accuracy": 3,
-    "crit_chance": 5,
-    "crit_bonus": 6,
-    "range": 1,
-    "armor_penetration": 0,
-    "defense_bonus": 0,
-    "block_bonus": 0,
-    "speed_bonus": 0,
-},
-"equipment": {
-    "slot": "main_hand",
-    "two_handed": False,
-},
-"quality": {
-    "tier": 0,
-    "rarity": "common",
-}
-11. NEW FILE
-src/app/rpg/items/generated_item_builder.py
-Add
-from __future__ import annotations
-from typing import Any, Dict
-
-def build_item_definition_from_llm(payload: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def clamp_generated_item_stats(item_def: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def derive_item_power_band(world_tier: int, rarity: str) -> Dict[str, int]:
-    ...
-Rule
-
-LLM may suggest item definitions, but this module must:
-
-normalize
-clamp
-bound by world tier + rarity
-produce deterministic item IDs
-reject malformed definitions
-12. MODIFY
-src/app/rpg/items/item_registry.py
-Expand registry
-
-Add baseline items:
-
-rusty_sword
-iron_sword
-wooden_shield
-iron_shield
-short_bow
-pistol_9mm
-combat_knife
-Add
-def normalize_item_definition(item_def: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-Rule
-
-Use static registry for safe defaults.
-Allow generated items via generated_item_builder.py.
-
-13. MODIFY
-src/app/rpg/items/inventory_state.py
-Expand normalized stack schema
-
-Replace minimal stack with:
-
-{
-    "item_id": "...",
-    "qty": 1,
-    "name": "...",
-    "category": "...",
-    "tags": [...],
-    "description": "...",
-    "combat_stats": {...},
-    "equipment": {...},
-    "quality": {...},
-    "value": 0,
-    "instance_id": "...",
-    "durability": 100,
-}
-Add helpers
-def equip_inventory_item(inventory_state: Dict[str, Any], item_id: str, slot: str = "") -> Dict[str, Any]:
-    ...
-
-def unequip_inventory_slot(inventory_state: Dict[str, Any], slot: str) -> Dict[str, Any]:
-    ...
-
-def find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
-    ...
-
-def get_equipped_weapon(inventory_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def get_equipped_armor(inventory_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    ...
-Required behavior
-consumables can stack
-weapons/armor should be qty 1 / instance-based
-equipment slots are authoritative
-14. NEW FILE
+1) Fix drop_world_item() to preserve full item records
+File: src/app/rpg/items/world_items.py
+diff --git a/src/app/rpg/items/world_items.py b/src/app/rpg/items/world_items.py
+index 0be75c1..6a1c4d2 100644
+--- a/src/app/rpg/items/world_items.py
++++ b/src/app/rpg/items/world_items.py
+@@ -1,6 +1,6 @@
+ from __future__ import annotations
+ from typing import Any, Dict, List
+ 
+@@
+ def _safe_list(v: Any) -> List[Any]:
+     return list(v) if isinstance(v, list) else []
+ 
++def _copy_item_record(item: Dict[str, Any]) -> Dict[str, Any]:
++    item = _safe_dict(item)
++    return {
++        "item_id": _safe_str(item.get("item_id")),
++        "qty": _safe_int(item.get("qty"), 1) or 1,
++        "name": _safe_str(item.get("name")),
++        "category": _safe_str(item.get("category")),
++        "tags": _safe_list(item.get("tags")),
++        "description": _safe_str(item.get("description")),
++        "combat_stats": _safe_dict(item.get("combat_stats")),
++        "equipment": _safe_dict(item.get("equipment")),
++        "quality": _safe_dict(item.get("quality")),
++        "value": _safe_int(item.get("value"), 0),
++        "instance_id": _safe_str(item.get("instance_id")),
++        "durability": _safe_int(item.get("durability"), 100),
++    }
++
+@@
+-def drop_world_item(
+-    simulation_state: Dict[str, Any],
+-    item_id: str,
+-    location_id: str,
+-    qty: int = 1,
+-) -> Dict[str, Any]:
++def drop_world_item(
++    simulation_state: Dict[str, Any],
++    item_or_item_id: Any,
++    location_id: str,
++    qty: int = 1,
++) -> Dict[str, Any]:
+     simulation_state = ensure_world_item_state(simulation_state)
+     world_items = _safe_dict(simulation_state.get("world_items"))
+     by_location = _safe_dict(world_items.get("by_location"))
+     items = _safe_list(by_location.get(location_id))
+-
+-    dropped_item = {
+-        "item_id": item_id,
+-        "qty": int(qty or 1),
+-        "instance_id": f"wi:{location_id}:{item_id}:{len(items)}",
+-    }
++    if isinstance(item_or_item_id, dict):
++        dropped_item = _copy_item_record(item_or_item_id)
++        dropped_item["qty"] = int(qty or dropped_item.get("qty", 1) or 1)
++        dropped_item["instance_id"] = _safe_str(dropped_item.get("instance_id")) or f"wi:{location_id}:{_safe_str(dropped_item.get('item_id'))}:{len(items)}"
++        item_id = _safe_str(dropped_item.get("item_id"))
++    else:
++        item_id = _safe_str(item_or_item_id)
++        dropped_item = {
++            "item_id": item_id,
++            "qty": int(qty or 1),
++            "instance_id": f"wi:{location_id}:{item_id}:{len(items)}",
++        }
+     items.append(dropped_item)
+     by_location[location_id] = items
+     simulation_state["world_items"] = {"by_location": by_location}
+@@
+         "result": {
+             "ok": True,
+             "action_type": "drop_item",
+             "item_id": item_id,
+             "location_id": location_id,
+             "qty": int(qty or 1),
+             "dropped_item": dropped_item,
+         },
+     }
+2) Add inventory helper to fetch the full item being dropped
+File: src/app/rpg/items/inventory_state.py
+diff --git a/src/app/rpg/items/inventory_state.py b/src/app/rpg/items/inventory_state.py
+index <old>..<new> 100644
+--- a/src/app/rpg/items/inventory_state.py
++++ b/src/app/rpg/items/inventory_state.py
+@@
+ def find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
+     ...
+ 
++def get_inventory_item_for_drop(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
++    inventory_state = normalize_inventory_state(inventory_state)
++    for item in _safe_list(inventory_state.get("items")):
++        item = _safe_dict(item)
++        if _safe_str(item.get("item_id")) == _safe_str(item_id):
++            return dict(item)
++    return {}
+
+If you maintain __all__ exports, add get_inventory_item_for_drop.
+
+3) Fix drop route to pass full item record, not just item_id
+File: src/app/rpg/api/rpg_player_routes.py
+diff --git a/src/app/rpg/api/rpg_player_routes.py b/src/app/rpg/api/rpg_player_routes.py
+index bae7e0d..f09b9f1 100644
+--- a/src/app/rpg/api/rpg_player_routes.py
++++ b/src/app/rpg/api/rpg_player_routes.py
+@@ -1,6 +1,6 @@
+@@
+-    from app.rpg.items.inventory_state import remove_inventory_item
++    from app.rpg.items.inventory_state import remove_inventory_item, get_inventory_item_for_drop
+     from app.rpg.items.world_items import drop_world_item
+@@
+         if session and isinstance(session, dict):
+             sim = dict(session.get("simulation_state") or {})
+             runtime_state = dict(session.get("runtime_state") or {})
+             ps = dict(sim.get("player_state") or {})
+             inv = dict(ps.get("inventory_state") or {})
++            dropped_item = get_inventory_item_for_drop(inv, item_id)
+             inv = remove_inventory_item(inv, item_id, qty=1)
+             ps["inventory_state"] = inv
+             sim["player_state"] = ps
+@@
+-            drop_result = drop_world_item(sim, item_id, location_id, qty=1)
++            drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": 1}
++            drop_result = drop_world_item(sim, drop_payload, location_id, qty=1)
+             sim = dict(drop_result.get("simulation_state") or sim)
+             session["simulation_state"] = sim
+             save_runtime_session(session)
+             return jsonify({
+                 "ok": True,
+                 "item_id": item_id,
+                 "location_id": location_id,
+                 "result": dict(drop_result.get("result") or {}),
+-                "equipment": dict(dict(ps.get("inventory_state") or {}).get("equipment") or {}),
++                "equipment": dict(dict(inv or {}).get("equipment") or {}),
+             })
+4) Fix runtime.py drop action to pass full item record
+File: src/app/rpg/session/runtime.py
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+index 41cbf98..8c0d6e4 100644
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@ -28,6 +28,7 @@ from app.rpg.items.inventory_state import (
+     equip_inventory_item,
+     unequip_inventory_slot,
+     remove_inventory_item,
++    get_inventory_item_for_drop,
+ )
+@@
+ def _drop_item_action(
+     simulation_state: Dict[str, Any],
+     runtime_state: Dict[str, Any],
+@@
+     qty = int(action.get("qty", 1) or 1)
+     player_state = _safe_dict(simulation_state.get("player_state"))
+     inventory_state = _safe_dict(player_state.get("inventory_state"))
++    dropped_item = get_inventory_item_for_drop(inventory_state, item_id)
+     inventory_state = remove_inventory_item(inventory_state, item_id, qty=qty)
+     player_state["inventory_state"] = inventory_state
+     simulation_state["player_state"] = player_state
+ 
+     location_id = _get_player_location_id(simulation_state, runtime_state)
+-    result = drop_world_item(simulation_state, item_id, location_id, qty=qty)
++    drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": qty}
++    result = drop_world_item(simulation_state, drop_payload, location_id, qty=qty)
+     next_state = _safe_dict(result.get("simulation_state"))
+     return {
+         "simulation_state": next_state,
+         "result": _safe_dict(result.get("result")),
+     }
+5) Remove duplicate equipment truth from canonical state
+
+Right now _ensure_simulation_state() still mirrors equipment into player_state["equipment"], while the canonical source is player_state["inventory_state"]["equipment"]. That should stop.
+
+File: src/app/rpg/session/runtime.py
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+index 41cbf98..3c7cafe 100644
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@ -168,7 +168,6 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+     player_state = ensure_player_progression_state(player_state)
+     inventory_state = _safe_dict(player_state.get("inventory_state"))
+     player_state["inventory_state"] = inventory_state
+-    player_state["equipment"] = _extract_equipment(player_state)
+     simulation_state["player_state"] = player_state
+     return simulation_state
+Also patch any remaining payload builder that reads player_state["equipment"]
+
+You already fixed most of these, but do a repo-wide search and replace any remaining canonical reads:
+
+player_state.get("equipment")
+with:
+_safe_dict(_safe_dict(player_state.get("inventory_state")).get("equipment"))
+6) Clean dead code after the new apply_turn() return
+
+The latest review showed old tail code still left after the new return in apply_turn(). Remove it entirely so the function has one flow and one end.
+
+File: src/app/rpg/session/runtime.py
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+index 41cbf98..2be6d30 100644
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@ -730,20 +730,3 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None = None) -> Dict[str, Any]:
+             "presentation": build_runtime_presentation_payload(after_state),
+         },
+     }
+-    turn_history = _safe_list(runtime_state.get("turn_history"))
+-    ...
+-    # DELETE ALL REMAINING OLD/UNREACHABLE APPLY_TURN TAIL CODE BELOW THE NEW RETURN
+-    # The function must end immediately after the return above.
+
+Do this as a real deletion, not a comment.
+
+7) Keep level_up shape consistent as a list everywhere
+
+You already fixed this in build_frontend_bootstrap_payload(). Do the same check in _build_turn_payload() and any other response adapters.
+
+File: src/app/rpg/api/rpg_session_routes.py
+diff --git a/src/app/rpg/api/rpg_session_routes.py b/src/app/rpg/api/rpg_session_routes.py
+index 21766d9..7fcb0b1 100644
+--- a/src/app/rpg/api/rpg_session_routes.py
++++ b/src/app/rpg/api/rpg_session_routes.py
+@@ -90,7 +90,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+         "combat_result": raw_payload.get("combat_result"),
+         "xp_result": raw_payload.get("xp_result"),
+         "skill_xp_result": raw_payload.get("skill_xp_result"),
+-        "level_up": raw_payload.get("level_up", False),
++        "level_up": _safe_list(raw_payload.get("level_up")),
+         "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
+         "presentation": _safe_dict(raw_payload.get("presentation")),
+     }
+8) Decide whether stat_bonus is informational or applied XP
+
+Right now _award_progression() reports stat_bonus in xp_result, but does not appear to add it to awarded XP. That is misleading. Either apply it or rename it. The cleaner fix is to apply it, bounded.
+
+File: src/app/rpg/session/runtime.py
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+index 41cbf98..9e4b1a6 100644
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@ -285,10 +285,12 @@ def _award_progression(
+ ) -> Dict[str, Any]:
+     player_state = _safe_dict(simulation_state.get("player_state"))
+     action_xp = int(_safe_dict(resolved_result.get("xp_result")).get("player_xp", 0) or 0)
++    stat_bonus = int(compute_stat_influence_bonus(player_state, resolved_result) or 0)
++    total_player_xp = max(0, action_xp + stat_bonus)
+     skill_xp_awards = _safe_dict(_safe_dict(resolved_result.get("skill_xp_result")).get("awards"))
+ 
+-    if action_xp > 0:
+-        player_state = award_player_xp(player_state, action_xp, source=_safe_str(resolved_result.get("action_type")))
++    if total_player_xp > 0:
++        player_state = award_player_xp(player_state, total_player_xp, source=_safe_str(resolved_result.get("action_type")))
+@@
+         "xp_result": {
+-            "player_xp": action_xp,
+-            "stat_bonus": compute_stat_influence_bonus(player_state, resolved_result),
++            "player_xp": total_player_xp,
++            "base_player_xp": action_xp,
++            "stat_bonus": stat_bonus,
+         },
+
+If you do not want stats to modify XP, then instead remove stat_bonus from xp_result.
+
+9) Add one real unmocked combat integration test
+
+The current combat test monkeypatches resolve_player_action(), so it proves payload wiring, not real combat mechanics. Add one unmocked test that goes through the real resolver.
+
+File: src/tests/unit/rpg/test_phase183c_runtime_authority.py
+
+Append:
+
+diff --git a/src/tests/unit/rpg/test_phase183c_runtime_authority.py b/src/tests/unit/rpg/test_phase183c_runtime_authority.py
+index <new>..<newer> 100644
+--- a/src/tests/unit/rpg/test_phase183c_runtime_authority.py
++++ b/src/tests/unit/rpg/test_phase183c_runtime_authority.py
+@@
+ def test_attack_turn_surfaces_combat_result(runtime_module, monkeypatch):
+     ...
+     assert payload["skill_xp_result"]["awards"]["swordsmanship"] == 3
++
++
++def test_attack_turn_uses_real_resolver(runtime_module, monkeypatch):
++    session = _base_session()
++
++    monkeypatch.setattr(runtime_module, "load_runtime_session", lambda session_id: session)
++    monkeypatch.setattr(runtime_module, "save_runtime_session", lambda s: s)
++    monkeypatch.setattr(
++        runtime_module,
++        "step_simulation_state",
++        lambda setup: {"next_setup": setup, "after_state": setup.get("metadata", {}).get("simulation_state", {})},
++    )
++    monkeypatch.setattr(
++        runtime_module,
++        "generate_scenes_from_simulation",
++        lambda state: [runtime_module._safe_dict(session["runtime_state"]["current_scene"])],
++    )
++    monkeypatch.setattr(runtime_module, "summarize_simulation_step", lambda step: ["combat resolved"])
++    monkeypatch.setattr(
++        runtime_module,
++        "narrate_scene",
++        lambda scene, ctx, tone="dramatic": {"narrative": "Combat resolves."},
++    )
++
++    # Equip the sword first
++    session["simulation_state"]["player_state"]["inventory_state"]["equipment"] = {
++        "main_hand": session["simulation_state"]["player_state"]["inventory_state"]["items"][0]
++    }
++
++    result = runtime_module.apply_turn(
++        "sess_test_authority",
++        "attack the bandit",
++        action={"action_type": "attack_melee", "target": session["simulation_state"]["npcs"]["npc_bandit"]},
++    )
++
++    assert result["ok"] is True
++    payload = result["payload"]
++    assert isinstance(payload["combat_result"], dict)
++    assert payload["combat_result"].get("outcome") in ("hit", "miss", "crit", "graze", None)
+
+This is still lightweight, but it stops fully mocking the resolver.
+
+10) Tighten existing integration assertions around full item drop fidelity
+File: src/tests/unit/rpg/test_phase183b_integration.py
+
+Add:
+
+diff --git a/src/tests/unit/rpg/test_phase183b_integration.py b/src/tests/unit/rpg/test_phase183b_integration.py
+index 7390990..c2d4d88 100644
+--- a/src/tests/unit/rpg/test_phase183b_integration.py
++++ b/src/tests/unit/rpg/test_phase183b_integration.py
+@@
+ class TestItemActions:
+@@
+     def test_world_item_spawn_and_list(self):
+         ...
+ 
++    def test_drop_preserves_item_metadata(self):
++        sim = self.ensure_world({})
++        dropped = {
++            "item_id": "iron_sword",
++            "name": "Iron Sword",
++            "qty": 1,
++            "equipment": {"slot": "main_hand"},
++            "combat_stats": {"damage": 28, "weapon_type": "sword"},
++            "quality": {"tier": 1, "rarity": "common"},
++        }
++        result = self.drop_item(sim, dropped, "tavern", qty=1)
++        sim2 = result["simulation_state"]
++        items = self.list_items(sim2, "tavern")
++        assert items[0]["item_id"] == "iron_sword"
++        assert items[0]["name"] == "Iron Sword"
++        assert items[0]["combat_stats"]["damage"] == 28
++        assert items[0]["equipment"]["slot"] == "main_hand"
+Order to apply
 src/app/rpg/items/world_items.py
-Add
-from __future__ import annotations
-from typing import Any, Dict, List
-
-def ensure_world_item_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def spawn_world_item(simulation_state: Dict[str, Any], location_id: str, item_def: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def pickup_world_item(simulation_state: Dict[str, Any], item_instance_id: str) -> Dict[str, Any]:
-    ...
-
-def drop_world_item(simulation_state: Dict[str, Any], item_id: str, qty: int = 1) -> Dict[str, Any]:
-    ...
-
-def list_scene_items(simulation_state: Dict[str, Any], location_id: str) -> List[Dict[str, Any]]:
-    ...
-Canonical subtree
-simulation_state["world_items"] = {
-    "by_location": {
-        "loc:market": [...]
-    }
-}
-
-This is the grounding layer for pickup/drop/loot.
-
-15. MODIFY
-src/app/rpg/items/item_effects.py
-Expand apply_item_use()
-
-Currently it only consumes and returns metadata.
-
-Change it to actually mutate state for:
-
-restore_resource
-grant_status
-spawn_loot
-equip
-Add support
-health
-mana
-stamina
-temporary buffs
-
-Return:
-
-{
-    "simulation_state": ...,
-    "result": {
-        "ok": True,
-        "item_id": "...",
-        "effect": {...},
-        "resources_changed": {...},
-        "statuses_applied": [...],
-    }
-}
-PART 4 — AUTHORITATIVE ACTION / COMBAT RESOLUTION
-16. MODIFY
-src/app/rpg/action_resolver.py
-
-This file must become the authoritative action engine.
-
-Replace the current minimal resolve_action() implementation with these concepts
-Action profiles
-
-Support:
-
-attack_melee
-attack_ranged
-block
-dodge
-parry
-persuade
-intimidate
-deceive
-sneak
-investigate
-hack
-cast_spell
-use_item
-pickup_item
-drop_item
-equip_item
-unequip_item
-Add
-def resolve_player_action(simulation_state: Dict[str, Any], action: Dict[str, Any], seed: int | None = None) -> Dict[str, Any]:
-    ...
-
-def resolve_attack_roll(attacker: Dict[str, Any], defender: Dict[str, Any], weapon: Dict[str, Any], seed: int | None = None) -> Dict[str, Any]:
-    ...
-
-def resolve_noncombat_check(player_state: Dict[str, Any], action_type: str, difficulty: str, seed: int | None = None) -> Dict[str, Any]:
-    ...
-
-def compute_weapon_damage(weapon_state: Dict[str, Any], attacker_state: Dict[str, Any], outcome: Dict[str, Any]) -> int:
-    ...
-
-def compute_defense_rating(actor_state: Dict[str, Any]) -> int:
-    ...
-
-def select_equipped_weapon(player_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-Damage formula
-
-Implement:
-
-base_damage = weapon_damage
-stat_bonus = relevant_stat_modifier
-skill_bonus = skill_level // 2
-quality_bonus = quality_tier
-crit_bonus = weapon_crit_bonus if crit else 0
-final_damage = max(0, base_damage + stat_bonus + skill_bonus + quality_bonus + crit_bonus - armor_value)
-Important rule
-
-The LLM may influence:
-
-item flavor
-difficulty tags
-world flavor
-move suggestions
-
-The LLM must not decide:
-
-hit / miss
-damage
-XP total
-skill XP total
-stat check success/failure
-17. MODIFY
-src/app/rpg/encounter/resolver.py
-
-Use action_resolver.resolve_player_action(...) for all combat math.
-
-Add
-def resolve_combat_round(encounter_state: Dict[str, Any], simulation_state: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-Keep here
-encounter mode
-initiative / pacing / objective state
-victory / defeat / escape resolution
-Remove from here
-arbitrary damage logic
-duplicate hit logic
-18. MODIFY
-src/app/rpg/encounter/encounter_resolver.py
-
-Mark as legacy wrapper.
-
-Change
-
-Any attack logic in this file should delegate to action_resolver.
-
-Do not keep flat 2 hp legacy damage rules alive.
-
-PART 5 — WORLD / XP / CONSEQUENCES
-19. MODIFY
-src/app/rpg/creator/world_player_actions.py
-Add metadata enrichment
-
-Every player action must carry:
-
-difficulty_tier
-skill_id
-xp_category
-target_difficulty
-Add helper
-def enrich_action_metadata(action: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-20. MODIFY
-src/app/rpg/choice/consequence_engine.py
-Add
-def build_reward_events(context: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-Return structured:
-
-xp_award
-skill_xp_award
-item_reward
-reputation_reward
-21. NEW FILE
-src/app/rpg/creator/world_expansion.py
-Add
-from __future__ import annotations
-from typing import Any, Dict
-
-def maybe_spawn_dynamic_npc(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def maybe_spawn_dynamic_location(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-def maybe_spawn_dynamic_faction(simulation_state: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-Rules
-bounded world growth
-deterministic IDs
-optional LLM flavor, normalized before commit
-no unbounded entity spawning
-22. MODIFY
-src/app/rpg/creator/startup_pipeline.py
-Add
-
-Mark initial entities:
-
-entity["seed_origin"] = "startup"
-Add setup metadata
-metadata["allow_dynamic_npc_generation"] = True
-metadata["allow_dynamic_location_generation"] = True
-metadata["allow_dynamic_faction_generation"] = False
-metadata["world_growth_budget"] = {
-    "npcs": 12,
-    "locations": 6,
-    "factions": 4,
-}
-23. MODIFY
-src/app/rpg/creator/world_simulation.py
-Add
-
-After major incidents / escalations:
-
-call bounded world expansion hooks
-record generated entities into canonical registries
-PART 6 — PRESENTATION / NPC CARDS / MEMORY / EMPHASIS
-24. MODIFY
-src/app/rpg/presentation/speaker_cards.py
-Add
-def build_nearby_npc_cards(simulation_state: Dict[str, Any], scene: Dict[str, Any]) -> list[dict]:
-    ...
-
-Each card should include:
-
-npc_id
-name
-role
-faction
-portrait
-attitude_to_player
-status_summary
-location_name
-is_present
-relationship_tags
-25. MODIFY
-src/app/rpg/presentation/__init__.py
-
-Export:
-
-build_nearby_npc_cards
-26. MODIFY
-src/app/rpg/presentation/memory_inspector.py
-Add
-def build_memory_ui_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-
-Return:
-
-important_memory
-recent_memory
-recent_world_events
-expanded_memory
-Rule
-
-Compact summary for main UI, full detail for inspector/debug.
-
-27. MODIFY
-src/app/rpg/ai/world_scene_narrator.py
-Add
-def apply_narration_emphasis(narration_payload: Dict[str, Any]) -> Dict[str, Any]:
-    ...
-Deterministically bold:
-item pickups
-quest updates
-named locations
-named enemies
-damage numbers
-rewards
-level-ups
-
-Examples:
-
-**Iron Sword**
-**Quest Updated:** The Black Ledger
-You deal **28 damage**
-**Level Up!**
-
-Do not rely on random LLM emphasis.
-
-PART 7 — CREATOR / BOOTSTRAP / PLAYER ROUTES
-28. MODIFY
-src/app/rpg/services/adventure_builder_service.py
-
-At adventure start:
-
-build canonical session from setup + generated result
-persist it
-return canonical bootstrap payload
-Required behavior
-
-POST /api/rpg/adventure/start should return:
-
-session_id
-opening
-world
-player
-nearby_npcs
-known_npcs
-memory_summary
-scene
-presentation
-
-This should become the only recommended create path.
-
-29. MODIFY
-src/app/rpg/services/adventure_response_adapter.py
-
-Expand payload to include:
-
-player.stats
-player.skills
-player.level
-player.xp
-player.xp_to_next
-player.inventory_state
-player.equipment
-nearby_npcs
-known_npcs
-scene.items
-memory_summary
-30. MODIFY
+src/app/rpg/items/inventory_state.py
 src/app/rpg/api/rpg_player_routes.py
-
-This file currently uses setup_payload input and is not canonical-session aware.
-
-Keep the blueprint as Flask, but add session-aware endpoints:
-POST /api/rpg/player/inventory/equip
-
-Input:
-
-{"session_id": "...", "item_id": "...", "slot": "main_hand"}
-POST /api/rpg/player/inventory/unequip
-POST /api/rpg/player/inventory/drop
-POST /api/rpg/player/inventory/pickup
-POST /api/rpg/player/progression
-POST /api/rpg/player/stats/allocate
-
-Each endpoint should:
-
-load canonical session
-mutate simulation_state
-persist session
-return updated player/inventory/progression payload
-
-Do not keep item/progression logic trapped inside ad hoc setup_payload POST bodies.
-
-PART 8 — FRONTEND CUTOVER
-31. MODIFY
-src/static/rpg/rpg.js
-
-This file still points at the legacy /api/rpg/games* API.
-
-Replace all endpoints
-Create
-
-From:
-
-POST /api/rpg/games
-POST /api/rpg/games/stream
-
-To:
-
-POST /api/rpg/adventure/start
-Load/list/delete
-
-From:
-
-GET /api/rpg/games
-GET /api/rpg/games/:id
-DELETE /api/rpg/games/:id
-
-To:
-
-POST /api/rpg/session/list
-POST /api/rpg/session/get
-POST /api/rpg/session/delete
-Turn
-
-From:
-
-POST /api/rpg/games/:id/turn
-POST /api/rpg/games/:id/turn/stream
-
-To:
-
-POST /api/rpg/session/turn
-POST /api/rpg/session/turn/stream
-Add state fields
-
-Add to rpgState:
-
-nearby_npcs: [],
-known_npcs: [],
-memory_summary: { important_memory: [], recent_memory: [], recent_world_events: [] },
-scene_items: [],
-xp_result: null,
-skill_xp_result: null,
-level_up: [],
-skill_level_ups: [],
-turn_summary: null,
-Change render behavior
-NPC panel
-
-Render nearby_npcs, not global session NPCs.
-
-Memory panel
-collapsed by default
-toggle button
-use summarized memory, not raw long list
-dedupe repeated items
-Add helpers
-function summarizeMemoryEntries(entries) { ... }
-function dedupeMemoryEntries(entries) { ... }
-function toggleMemoryPanel() { ... }
-function buildTurnSummaryBanner(update) { ... }
-Turn summary banner
-
-Render a compact summary above long narration:
-
-hit/miss
-damage
-xp gained
-skill xp gained
-item gained/lost
-quest updated
-level up
-Keep Markdown rendering
-
-Since narration already uses marked if available, preserve that path so bold emphasis works.
-
-PART 9 — ACTIVE TURN CONTRACT
-32. MODIFY
-src/app/rpg/session_runtime.py
+src/app/rpg/session/runtime.py
 src/app/rpg/api/rpg_session_routes.py
-src/static/rpg/rpg.js
-
-Use one strict payload shape for:
-
-bootstrap/start
-session get
-turn
-stream final done
-Required payload shape
-{
-    "success": True,
-    "session_id": "...",
-    "title": "...",
-    "opening": "...",
-    "narration": "...",
-    "player": {
-        "stats": {...},
-        "skills": {...},
-        "level": 1,
-        "xp": 0,
-        "xp_to_next": 100,
-        "inventory_state": {...},
-        "equipment": {...},
-        "nearby_npc_ids": [...],
-        "available_checks": [...],
-    },
-    "nearby_npcs": [...],
-    "known_npcs": [...],
-    "scene": {
-        "scene_id": "...",
-        "items": [...],
-        "available_checks": [...],
-        "present_npc_ids": [...],
-    },
-    "memory_summary": {
-        "important_memory": [...],
-        "recent_memory": [...],
-        "recent_world_events": [...],
-    },
-    "combat_result": {...},
-    "xp_result": {...},
-    "skill_xp_result": {...},
-    "level_up": [...],
-    "skill_level_ups": [...],
-    "presentation": {...},
-}
-PART 10 — TESTS
-33. NEW TEST FILES
-
-Create these tests under src/tests/unit / src/tests/functional / src/tests/regression according to existing layout.
-
-test_phase183b_player_progression.py
-stat allocation valid/invalid
-level-up thresholds
-skill XP growth
-no tuple unpack contract
-test_phase183b_action_resolver.py
-melee hit/miss
-weapon damage differences
-stat affects damage
-armor reduces damage
-shield affects defense
-deterministic outcomes with same seed
-test_phase183b_item_actions.py
-pickup mutates world + inventory
-equip mutates equipment
-use item mutates resources/status
-drop mutates inventory + world
-test_phase183b_runtime_authority.py
-state mutates before narration
-XP tied to resolved action
-skill XP tied to action use
-level-up results appear in payload
-test_phase183b_session_routes.py
-/api/rpg/session/list
-/api/rpg/session/get
-/api/rpg/session/turn
-/api/rpg/session/turn/stream
-legacy /api/rpg/games* returns 410
-test_phase183b_nearby_npcs.py
-nearby NPCs change with scene
-known NPC registry remains separate
-test_phase183b_memory_payload.py
-memory summary compact
-duplicates collapsed
-expanded memory still available in inspector path
-test_phase183b_world_expansion.py
-startup seeds preserved
-dynamic expansion bounded
-deterministic IDs
-IMPLEMENTATION ORDER
-
-Apply in this exact order:
-
-Pass 1 — canonical session backbone
-create session_runtime.py
-create api/rpg_session_routes.py
-register blueprint in src/app/__init__.py
-deprecate legacy routes.py
-cut over rpg.js endpoints
-Pass 2 — player progression + inventory primitives
-add player_progression_state.py
-add player_creation.py
-patch player_scene_state.py
-add player_xp_rules.py
-add item_stats.py
-add generated_item_builder.py
-patch item_registry.py
-patch inventory_state.py
-add world_items.py
-patch item_effects.py
-Pass 3 — authoritative mechanics
-rewrite action_resolver.py
-patch encounter/resolver.py
-patch encounter/encounter_resolver.py
-Pass 4 — active path wiring
-patch adventure_builder_service.py
-patch adventure_response_adapter.py
-patch creator/world_player_actions.py
-patch choice/consequence_engine.py
-patch creator/world_simulation.py
-add creator/world_expansion.py
-patch creator/startup_pipeline.py
-Pass 5 — presentation/UI
-patch presentation/speaker_cards.py
-patch presentation/memory_inspector.py
-patch presentation/__init__.py
-patch ai/world_scene_narrator.py
-patch api/rpg_player_routes.py
-finish rpg.js
-Pass 6 — tests
-add all new tests
-run full suite
-manually verify new adventure → turn → combat → loot → reload → continue
-CRITICAL DESIGN RULES FOR THE CODING LLM
-Keep Flask.
-This repo’s active app path is Flask. Do not convert to FastAPI in this patch.
-Simulation resolves actions.
-LLM may flavor or propose bounded metadata; it never decides authoritative outcomes.
-All item narration must match item state.
-No fake pickup/equip/use text.
-Stats affect every action family.
-Combat, stealth, persuasion, intimidation, investigation, hacking, magic.
-XP and skill XP are deterministic.
-Enemy difficulty / quest rank / action difficulty may be tagged by AI or setup, but reward formulas are engine-side.
-Nearby NPCs are scene-scoped.
-Known NPCs are separate.
-Memory is compact in main UI.
-Full memory stays in inspector/debug tools.
-Legacy /api/rpg/games* must stop being the gameplay path.
-Leave it only as explicit 410 deprecation responses.
-No tuple-return progression helpers.
-Return player_state only.
-Tests must prove active-path integration, not just isolated modules.
+src/tests/unit/rpg/test_phase183c_runtime_authority.py
+src/tests/unit/rpg/test_phase183b_integration.py
+Done when
+dropped items preserve their full metadata
+equipment is canonical only in inventory_state["equipment"]
+apply_turn() has one clean return path
+level_up is always a list
+unmocked combat path test passes through canonical turn flow

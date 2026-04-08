@@ -318,7 +318,7 @@ def unequip_item_route():
 @rpg_player_bp.post("/api/rpg/player/inventory/drop")
 def drop_item_route():
     """Drop an item from inventory into the world."""
-    from app.rpg.items.inventory_state import remove_inventory_item
+    from app.rpg.items.inventory_state import remove_inventory_item, get_inventory_item_for_drop
     from app.rpg.items.world_items import drop_world_item
     from app.rpg.session.runtime import load_runtime_session, save_runtime_session
 
@@ -333,16 +333,31 @@ def drop_item_route():
         session = load_runtime_session(session_id)
         if session and isinstance(session, dict):
             sim = dict(session.get("simulation_state") or {})
+            runtime_state = dict(session.get("runtime_state") or {})
             ps = dict(sim.get("player_state") or {})
             inv = dict(ps.get("inventory_state") or {})
+            dropped_item = get_inventory_item_for_drop(inv, item_id)
             inv = remove_inventory_item(inv, item_id, qty=1)
             ps["inventory_state"] = inv
             sim["player_state"] = ps
-            location_id = str(ps.get("current_scene_id", ""))
-            sim = drop_world_item(sim, item_id, location_id)
+
+            location_id = (
+                str(ps.get("location_id", "")).strip()
+                or str(dict(runtime_state.get("current_scene") or {}).get("location_id", "")).strip()
+                or str(dict(runtime_state.get("current_scene") or {}).get("scene_id", "")).strip()
+            )
+            drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": 1}
+            drop_result = drop_world_item(sim, drop_payload, location_id, qty=1)
+            sim = dict(drop_result.get("simulation_state") or sim)
             session["simulation_state"] = sim
             save_runtime_session(session)
-            return jsonify({"ok": True, "item_id": item_id})
+            return jsonify({
+                "ok": True,
+                "item_id": item_id,
+                "location_id": location_id,
+                "result": dict(drop_result.get("result") or {}),
+                "equipment": dict(dict(inv or {}).get("equipment") or {}),
+            })
 
     return jsonify({"ok": True, "item_id": item_id})
 
@@ -365,9 +380,10 @@ def pickup_item_route():
         session = load_runtime_session(session_id)
         if session and isinstance(session, dict):
             sim = dict(session.get("simulation_state") or {})
-            sim = pickup_world_item(sim, instance_id)
-            picked = sim.pop("_picked_up_item", {})
-            if picked and isinstance(picked, dict) and picked.get("item_id"):
+            pickup_result = pickup_world_item(sim, instance_id)
+            sim = dict(pickup_result.get("simulation_state") or sim)
+            picked = dict(pickup_result.get("picked_up_item") or {})
+            if picked and picked.get("item_id"):
                 ps = dict(sim.get("player_state") or {})
                 inv = dict(ps.get("inventory_state") or {})
                 inv = add_inventory_items(inv, [picked])
@@ -375,9 +391,19 @@ def pickup_item_route():
                 sim["player_state"] = ps
                 session["simulation_state"] = sim
                 save_runtime_session(session)
-                return jsonify({"ok": True, "instance_id": instance_id, "item": picked})
-            else:
-                return jsonify({"ok": False, "error": "item_not_found", "instance_id": instance_id})
+                return jsonify({
+                    "ok": True,
+                    "instance_id": instance_id,
+                    "item": picked,
+                    "result": dict(pickup_result.get("result") or {}),
+                    "equipment": dict(inv.get("equipment") or {}),
+                })
+            return jsonify({
+                "ok": False,
+                "error": "item_not_found",
+                "instance_id": instance_id,
+                "result": dict(pickup_result.get("result") or {}),
+            }), 404
 
     return jsonify({"ok": True, "instance_id": instance_id})
 
@@ -395,6 +421,7 @@ def player_progression_route():
         if session and isinstance(session, dict):
             sim = dict(session.get("simulation_state") or {})
             ps = dict(sim.get("player_state") or {})
+            inventory_state = dict(ps.get("inventory_state") or {})
             return jsonify({
                 "ok": True,
                 "level": int(ps.get("level", 1) or 1),
@@ -405,6 +432,8 @@ def player_progression_route():
                 "stats": dict(ps.get("stats") or {}),
                 "skills": dict(ps.get("skills") or {}),
                 "perk_flags": list(ps.get("perk_flags") or []),
+                "inventory_state": inventory_state,
+                "equipment": dict(inventory_state.get("equipment") or {}),
             })
 
     return jsonify({"ok": True, "level": 1, "xp": 0, "xp_to_next": 100})

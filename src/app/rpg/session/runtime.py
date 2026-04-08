@@ -28,7 +28,20 @@ from app.rpg.creator.world_simulation import (
     summarize_simulation_step,
 )
 from app.rpg.action_resolver import resolve_player_action
-from app.rpg.items.world_items import ensure_world_item_state
+from app.rpg.items.inventory_state import (
+    add_inventory_items,
+    equip_inventory_item,
+    unequip_inventory_slot,
+    remove_inventory_item,
+    get_inventory_item_for_drop,
+)
+from app.rpg.items.item_effects import apply_item_use
+from app.rpg.items.world_items import (
+    ensure_world_item_state,
+    pickup_world_item,
+    drop_world_item,
+    list_scene_items,
+)
 from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
 from app.rpg.memory.dialogue_context import (
     build_dialogue_memory_context,
@@ -37,7 +50,13 @@ from app.rpg.memory.dialogue_context import (
 from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.player import ensure_player_party, ensure_player_state
-from app.rpg.player.player_progression_state import ensure_player_progression_state
+from app.rpg.player.player_progression_state import (
+    ensure_player_progression_state,
+    award_player_xp,
+    award_skill_xp,
+    resolve_level_ups,
+    resolve_skill_level_ups,
+)
 from app.rpg.player.player_xp_rules import compute_action_skill_xp, compute_stat_influence_bonus
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.presentation import (
@@ -122,6 +141,25 @@ def _build_npc_cards(generated: Dict[str, Any]) -> List[Dict[str, Any]]:
     return cards
 
 
+def _get_player_location_id(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> str:
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    return (
+        _safe_str(player_state.get("location_id")).strip()
+        or _safe_str(current_scene.get("location_id")).strip()
+        or _safe_str(current_scene.get("scene_id")).strip()
+    )
+
+
+def _extract_equipment(player_state: Dict[str, Any]) -> Dict[str, Any]:
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    return _safe_dict(inventory_state.get("equipment"))
+
+
+def select_primary_action(simulation_state: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any] | None:
+    return candidates[0] if candidates else None
+
+
 def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _copy_dict(simulation_state)
     simulation_state = ensure_player_state(simulation_state)
@@ -131,14 +169,183 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
     simulation_state = ensure_world_memory_state(simulation_state)
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
-
-    # Phase 18.3A — ensure progression and world items
-    player_state = simulation_state.get("player_state", {})
-    player_state = ensure_player_progression_state(player_state)
-    simulation_state["player_state"] = player_state
     simulation_state = ensure_world_item_state(simulation_state)
 
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    player_state = ensure_player_progression_state(player_state)
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    player_state["inventory_state"] = inventory_state
+    simulation_state["player_state"] = player_state
     return simulation_state
+
+
+def _pickup_item_action(
+    simulation_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    instance_id = _safe_str(action.get("instance_id")).strip()
+    result = pickup_world_item(simulation_state, instance_id)
+    next_state = _safe_dict(result.get("simulation_state"))
+    picked_item = _safe_dict(result.get("picked_up_item"))
+    if picked_item.get("item_id"):
+        player_state = _safe_dict(next_state.get("player_state"))
+        inventory_state = _safe_dict(player_state.get("inventory_state"))
+        inventory_state = add_inventory_items(inventory_state, [picked_item])
+        player_state["inventory_state"] = inventory_state
+        next_state["player_state"] = player_state
+    return {
+        "simulation_state": next_state,
+        "result": _safe_dict(result.get("result")),
+        "picked_up_item": picked_item,
+    }
+
+
+def _drop_item_action(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    item_id = _safe_str(action.get("item_id")).strip()
+    qty = int(action.get("qty", 1) or 1)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    dropped_item = get_inventory_item_for_drop(inventory_state, item_id)
+    inventory_state = remove_inventory_item(inventory_state, item_id, qty=qty)
+    player_state["inventory_state"] = inventory_state
+    simulation_state["player_state"] = player_state
+
+    location_id = _get_player_location_id(simulation_state, runtime_state)
+    drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": qty}
+    result = drop_world_item(simulation_state, drop_payload, location_id, qty=qty)
+    next_state = _safe_dict(result.get("simulation_state"))
+    return {
+        "simulation_state": next_state,
+        "result": _safe_dict(result.get("result")),
+    }
+
+
+def _equip_item_action(
+    simulation_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    item_id = _safe_str(action.get("item_id")).strip()
+    slot = _safe_str(action.get("slot")).strip()
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    inventory_state = equip_inventory_item(inventory_state, item_id, slot)
+    player_state["inventory_state"] = inventory_state
+    simulation_state["player_state"] = player_state
+    return {
+        "simulation_state": simulation_state,
+        "result": {
+            "ok": True,
+            "action_type": "equip_item",
+            "item_id": item_id,
+            "slot": slot or _safe_str(_safe_dict(_extract_equipment(player_state)).get("main_hand")),
+            "equipment": _safe_dict(inventory_state.get("equipment")),
+        },
+    }
+
+
+def _unequip_item_action(
+    simulation_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    slot = _safe_str(action.get("slot")).strip()
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    inventory_state = unequip_inventory_slot(inventory_state, slot)
+    player_state["inventory_state"] = inventory_state
+    simulation_state["player_state"] = player_state
+    return {
+        "simulation_state": simulation_state,
+        "result": {
+            "ok": True,
+            "action_type": "unequip_item",
+            "slot": slot,
+            "equipment": _safe_dict(inventory_state.get("equipment")),
+        },
+    }
+
+
+def _use_item_action(
+    simulation_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    item_id = _safe_str(action.get("item_id")).strip()
+    result = apply_item_use(simulation_state, item_id)
+    return {
+        "simulation_state": _safe_dict(result.get("simulation_state")),
+        "result": _safe_dict(result.get("result")),
+    }
+
+
+def _apply_authoritative_action(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    action_type = _safe_str(action.get("action_type")).strip()
+
+    if action_type == "pickup_item":
+        return _pickup_item_action(simulation_state, action)
+    if action_type == "drop_item":
+        return _drop_item_action(simulation_state, runtime_state, action)
+    if action_type == "equip_item":
+        return _equip_item_action(simulation_state, action)
+    if action_type == "unequip_item":
+        return _unequip_item_action(simulation_state, action)
+    if action_type == "use_item":
+        return _use_item_action(simulation_state, action)
+
+    resolved = resolve_player_action(simulation_state, action)
+    next_state = _safe_dict(resolved.get("simulation_state")) or simulation_state
+    return {
+        "simulation_state": next_state,
+        "result": _safe_dict(resolved.get("result")),
+    }
+
+
+def _award_progression(
+    simulation_state: Dict[str, Any],
+    resolved_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    action_xp = int(_safe_dict(resolved_result.get("xp_result")).get("player_xp", 0) or 0)
+    stat_bonus = int(compute_stat_influence_bonus(player_state, resolved_result) or 0)
+    total_player_xp = max(0, action_xp + stat_bonus)
+    skill_xp_awards = _safe_dict(_safe_dict(resolved_result.get("skill_xp_result")).get("awards"))
+
+    if total_player_xp > 0:
+        player_state = award_player_xp(player_state, total_player_xp, source=_safe_str(resolved_result.get("action_type")))
+
+    computed_skill_awards = compute_action_skill_xp(resolved_result)
+    for skill_id, amount in computed_skill_awards.items():
+        skill_xp_awards[skill_id] = int(skill_xp_awards.get(skill_id, 0) or 0) + int(amount or 0)
+
+    for skill_id, amount in skill_xp_awards.items():
+        if int(amount or 0) > 0:
+            player_state = award_skill_xp(player_state, skill_id, int(amount), source=_safe_str(resolved_result.get("action_type")))
+
+    player_state = resolve_level_ups(player_state)
+    level_ups = list(player_state.pop("_level_ups", []) or [])
+    player_state = resolve_skill_level_ups(player_state)
+    skill_level_ups = list(player_state.pop("_skill_level_ups", []) or [])
+
+    simulation_state["player_state"] = player_state
+    return {
+        "simulation_state": simulation_state,
+        "xp_result": {
+            "player_xp": total_player_xp,
+            "base_player_xp": action_xp,
+            "stat_bonus": stat_bonus,
+        },
+        "skill_xp_result": {
+            "awards": skill_xp_awards,
+        },
+        "level_up": level_ups,
+        "skill_level_ups": skill_level_ups,
+    }
 
 
 def _initial_scene_state(generated: Dict[str, Any]) -> Dict[str, Any]:
@@ -223,11 +430,10 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     current_scene = _safe_dict(runtime_state.get("current_scene"))
     narration = _safe_str(turn_result.get("narration")) or opening
 
-    # Build nearby NPC cards
-    try:
-        nearby_npcs = build_nearby_npc_cards(simulation_state, current_scene)
-    except Exception:
-        nearby_npcs = _safe_list(player_state.get("nearby_npc_ids"))
+    nearby_npcs = build_nearby_npc_cards(simulation_state, current_scene)
+
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    equipment = _safe_dict(inventory_state.get("equipment"))
 
     return {
         "success": True,
@@ -241,8 +447,8 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
             "level": int(player_state.get("level", 1) or 1),
             "xp": int(player_state.get("xp", 0) or 0),
             "xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
-            "inventory_state": _safe_dict(player_state.get("inventory_state")),
-            "equipment": _safe_dict(player_state.get("equipment")),
+            "inventory_state": inventory_state,
+            "equipment": equipment,
             "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
             "available_checks": _safe_list(player_state.get("available_checks")),
         },
@@ -258,7 +464,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "combat_result": _safe_dict(turn_result.get("combat_result")),
         "xp_result": _safe_dict(turn_result.get("xp_result")),
         "skill_xp_result": _safe_dict(turn_result.get("skill_xp_result")),
-        "level_up": turn_result.get("level_up"),
+        "level_up": _safe_list(turn_result.get("level_up")),
         "skill_level_ups": _safe_list(turn_result.get("skill_level_ups")),
         "presentation": build_runtime_presentation_payload(simulation_state),
     }
@@ -440,88 +646,69 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     setup = apply_adventure_defaults(_copy_dict(session.get("setup_payload")))
     simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
 
-    action = _safe_dict(action)
     if not action:
-        action = derive_player_action(simulation_state, player_input)
+        candidates = derive_action_candidates(simulation_state, player_input)
+        action = select_primary_action(simulation_state, candidates)
+
+    action = _safe_dict(action)
+    action_type = _safe_str(action.get("action_type")).strip()
+
+    authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
+    after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
+    resolved_result = _safe_dict(authoritative.get("result"))
+    resolved_result.setdefault("action_type", action_type)
+
+    progression = _award_progression(after_action_state, resolved_result)
+    after_progression_state = _ensure_simulation_state(_safe_dict(progression.get("simulation_state")))
 
     metadata = _safe_dict(setup.get("metadata"))
-    metadata["simulation_state"] = simulation_state
+    metadata["simulation_state"] = after_progression_state
     setup["metadata"] = metadata
 
-    if action:
-        applied_state = apply_player_action(simulation_state, action)
-        metadata["simulation_state"] = applied_state
-        setup["metadata"] = metadata
-
     step_result = step_simulation_state(setup)
-    next_setup = _safe_dict(step_result.get("next_setup"))
+    next_setup = _safe_dict(step_result.get("next_setup")) or setup
     after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
+
     scenes = generate_scenes_from_simulation(after_state)
     current_scene = _safe_dict(scenes[0]) if scenes else _fallback_scene(after_state, player_input)
 
-    llm_gateway = build_app_llm_gateway()
+    player_state = _safe_dict(after_state.get("player_state"))
+    current_location_id = _get_player_location_id(after_state, runtime_state)
+    current_scene["items"] = list_scene_items(after_state, current_location_id)
+    current_scene["nearby_npcs"] = build_nearby_npc_cards(after_state, current_scene)
 
-    narration_result = narrate_scene(
-        current_scene,
-        {"simulation_state": after_state, "player_input": player_input},
-        llm_gateway=llm_gateway,
-        tone="dramatic",
-    )
+    narration_context = {
+        "simulation_state": after_state,
+        "player_input": player_input,
+        "resolved_result": resolved_result,
+        "xp_result": _safe_dict(progression.get("xp_result")),
+        "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
+        "level_up": _safe_list(progression.get("level_up")),
+        "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
+    }
+
+    narration_result = narrate_scene(current_scene, narration_context, tone="dramatic")
     summary = summarize_simulation_step(step_result)
-
-    # Phase 18.3A — XP and skill progression from resolved action
-    action_candidates = derive_action_candidates(after_state, player_input)
-    action_result = {}
-    if action_candidates:
-        top_candidate = action_candidates[0]
-        action_result = resolve_player_action(after_state, top_candidate)
-    skill_xp_awards = compute_action_skill_xp(action_result) if action_result else {}
-    stat_bonus = compute_stat_influence_bonus(
-        _safe_dict(after_state.get("player_state")), action_result,
-    ) if action_result else 0
-    total_xp = sum(skill_xp_awards.values()) + stat_bonus
-    level_up = False
-    skill_level_ups = []
-
-    if total_xp > 0 or skill_xp_awards:
-        from app.rpg.player.player_progression_state import (
-            award_player_xp,
-            award_skill_xp,
-            resolve_level_ups,
-            resolve_skill_level_ups,
-        )
-        ps = _safe_dict(after_state.get("player_state"))
-        old_level = int(ps.get("level", 1) or 1)
-        if total_xp > 0:
-            ps = award_player_xp(ps, total_xp)
-        for sid, amt in skill_xp_awards.items():
-            ps = award_skill_xp(ps, sid, amt)
-        ps = resolve_level_ups(ps)
-        level_up = bool(ps.get("_level_ups"))
-        ps = resolve_skill_level_ups(ps)
-        skill_level_ups = list(ps.get("_skill_level_ups") or [])
-        after_state["player_state"] = ps
 
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
     runtime_state["current_scene"] = current_scene
     runtime_state["last_turn_result"] = {
         "player_input": player_input,
         "action": action,
+        "resolved_result": resolved_result,
+        "combat_result": _safe_dict(resolved_result.get("combat_result")),
+        "xp_result": _safe_dict(progression.get("xp_result")),
+        "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
+        "level_up": _safe_list(progression.get("level_up")),
+        "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
         "summary": summary[:8],
         "narration": _safe_str(narration_result.get("narrative")),
-        "llm_live": bool(llm_gateway),
-        "llm_attempted": bool(llm_gateway),
-        # Phase 18.3A — XP and progression in turn result
-        "xp_awarded": total_xp,
-        "skill_xp_awards": skill_xp_awards,
-        "level_up": level_up,
-        "skill_level_ups": skill_level_ups,
     }
     turn_history = _safe_list(runtime_state.get("turn_history"))
     turn_history.append(_copy_dict(runtime_state["last_turn_result"]))
     runtime_state["turn_history"] = turn_history[-_MAX_HISTORY:]
 
-    session["setup_payload"] = next_setup or setup
+    session["setup_payload"] = next_setup
     session["simulation_state"] = after_state
     session["runtime_state"] = runtime_state
     manifest["updated_at"] = _utc_now_iso()
@@ -531,5 +718,14 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     return {
         "ok": True,
         "session": session,
-        "payload": _build_turn_payload(session, narration_result, summary),
+        "payload": {
+            **build_frontend_bootstrap_payload(session),
+            "narration": _safe_str(narration_result.get("narrative")),
+            "combat_result": _safe_dict(resolved_result.get("combat_result")),
+            "xp_result": _safe_dict(progression.get("xp_result")),
+            "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
+            "level_up": _safe_list(progression.get("level_up")),
+            "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
+            "presentation": build_runtime_presentation_payload(after_state),
+        },
     }
