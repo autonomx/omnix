@@ -1,529 +1,859 @@
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@ -44,6 +44,7 @@ from app.rpg.items.world_items import (
-     pickup_world_item,
- )
- from app.rpg.llm_app_gateway import build_app_llm_gateway
- from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
- from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
-@@ -731,17 +732,41 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
-         player_input = _structured_action_prompt(action)
-     player_input = player_input or action_type.replace("_", " ").strip() or "Wait"
- 
-     llm_gateway = build_app_llm_gateway()
--    advisory = get_action_advisory(
--        llm_gateway=llm_gateway,
--        player_input=player_input,
--        simulation_state=simulation_state,
--        runtime_state=runtime_state,
--        candidate_action=action,
--    )
-+    advisory = {}
-+    runtime_state.setdefault("llm_records", [])
-+    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
-+    current_tick = int(runtime_state.get("tick", 0) or 0)
-+
-+    if mode == "live":
-+        advisory = get_action_advisory(
-+            llm_gateway=llm_gateway,
-+            player_input=player_input,
-+            simulation_state=simulation_state,
-+            runtime_state=runtime_state,
-+            candidate_action=action,
-+        )
-+        runtime_state["llm_records"].append({
-+            "type": "action_advisory",
-+            "tick": current_tick,
-+            "player_input": player_input,
-+            "candidate_action": {
-+                "action_type": _safe_str(action.get("action_type")),
-+                "target_id": _safe_str(action.get("target_id")),
-+                "npc_id": _safe_str(action.get("npc_id")),
-+                "item_id": _safe_str(action.get("item_id")),
-+            },
-+            "output": _safe_dict(advisory),
-+        })
-+    else:
-+        for record in _safe_list(runtime_state.get("llm_records")):
-+            record = _safe_dict(record)
-+            if record.get("type") == "action_advisory" and int(record.get("tick", -1) or -1) == current_tick:
-+                advisory = _safe_dict(record.get("output"))
-+                break
-+
-     if advisory:
-         action = merge_action_advisory(action, advisory)
-         action_type = _safe_str(action.get("action_type")).strip()
- 
-     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
-     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
-@@ -765,8 +790,14 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
-         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
-     }
- 
--    narration_result = narrate_scene(current_scene, narration_context, tone="dramatic")
-+    narration_result = narrate_scene(
-+        current_scene,
-+        narration_context,
-+        llm_gateway=llm_gateway,
-+        tone="dramatic",
-+    )
-     summary = summarize_simulation_step(step_result)
- 
-     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
-@@ -805,6 +836,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
-             "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
-             "level_up": _safe_list(progression.get("level_up")),
-             "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
-             "action_metadata": _safe_dict(action.get("metadata")),
-+            "structured_narration": _safe_dict(narration_result.get("structured_narration")),
-             "presentation": build_runtime_presentation_payload(after_state),
-         },
-     }
-diff --git a/src/app/rpg/api/rpg_session_routes.py b/src/app/rpg/api/rpg_session_routes.py
---- a/src/app/rpg/api/rpg_session_routes.py
-+++ b/src/app/rpg/api/rpg_session_routes.py
-@@ -137,6 +137,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
-         "level_up": _safe_list(raw_payload.get("level_up")),
-         "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
-         "action_metadata": _safe_dict(raw_payload.get("action_metadata")),
-+        "structured_narration": _safe_dict(raw_payload.get("structured_narration")),
-         # Presentation
-         "presentation": _safe_dict(raw_payload.get("presentation")),
-     }
-diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
---- a/src/app/rpg/ai/world_scene_narrator.py
-+++ b/src/app/rpg/ai/world_scene_narrator.py
-@@ -1,6 +1,7 @@
- from __future__ import annotations
- 
- import json
-+import re
- from typing import Any, Dict, List
- 
-@@
- def _safe_str(value: Any) -> str:
-     return str(value) if value is not None else ""
-@@
- def _safe_list(value: Any) -> List[Any]:
-     return list(value) if isinstance(value, list) else []
-+
-+
-+def _titleize_action(action_type: str) -> str:
-+    value = _safe_str(action_type).strip().replace("_", " ")
-+    return value[:1].upper() + value[1:] if value else "Action"
-+
-+
-+def _first_nonempty(*values: Any) -> str:
-+    for value in values:
-+        text = _safe_str(value).strip()
-+        if text:
-+            return text
-+    return ""
-+
-+
-+def _extract_text_lines(text: str) -> List[str]:
-+    lines = []
-+    for part in _safe_str(text).splitlines():
-+        part = part.strip()
-+        if part:
-+            lines.append(part)
-+    return lines
-+
-+
-+def _pick_npc_reply_text(narrative: str) -> str:
-+    lines = _extract_text_lines(narrative)
-+    if not lines:
-+        return ""
-+    for line in lines:
-+        if '"' in line or "says" in line.lower() or "replies" in line.lower():
-+            return line
-+    return lines[0]
-+
-+
-+def _build_scene_summary(scene: Dict[str, Any], llm_narrative: str) -> str:
-+    scene = _safe_dict(scene)
-+    title = _safe_str(scene.get("title")).strip()
-+    location_name = _first_nonempty(
-+        scene.get("location_name"),
-+        scene.get("location_id"),
-+        scene.get("scene_id"),
-+    )
-+    summary = _safe_str(scene.get("summary")).strip()
-+
-+    if summary:
-+        if title:
-+            return f"You are in {title}. {summary}"
-+        return summary
-+
-+    llm_lines = _extract_text_lines(llm_narrative)
-+    if llm_lines:
-+        return llm_lines[0]
-+
-+    if title and location_name:
-+        return f"You are in {title} at {location_name}."
-+    if title:
-+        return f"You are in {title}."
-+    if location_name:
-+        return f"You are at {location_name}."
-+    return "The scene settles around you."
-+
-+
-+def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
-+    narration_context = _safe_dict(narration_context)
-+    resolved = _safe_dict(narration_context.get("resolved_result"))
-+    combat = _safe_dict(resolved.get("combat_result"))
-+    action_type = _safe_str(narration_context.get("action_type")).strip()
-+    action_label = _titleize_action(action_type)
-+
-+    outcome = _safe_str(combat.get("outcome")).strip().lower()
-+    target_name = _first_nonempty(
-+        combat.get("target_name"),
-+        resolved.get("target_name"),
-+        resolved.get("npc_name"),
-+        resolved.get("target_id"),
-+    )
-+    damage = int(combat.get("damage", resolved.get("damage", 0)) or 0)
-+
-+    if outcome in ("hit", "crit", "graze", "miss"):
-+        if outcome == "miss":
-+            if target_name:
-+                return f"**{action_label}:** You miss **{target_name}**."
-+            return f"**{action_label}:** You miss."
-+        if target_name:
-+            return f"**{action_label}:** {outcome.title()} on **{target_name}** for **{damage} damage**."
-+        return f"**{action_label}:** {outcome.title()} for **{damage} damage**."
-+
-+    if resolved.get("ok") is False:
-+        message = _first_nonempty(resolved.get("message"), resolved.get("reason"))
-+        if message:
-+            return f"**{action_label}:** {message}"
-+        return f"**{action_label}:** The attempt fails."
-+
-+    message = _first_nonempty(
-+        resolved.get("message"),
-+        resolved.get("summary"),
-+        resolved.get("result_text"),
-+    )
-+    if message:
-+        return f"**{action_label}:** {message}"
-+
-+    return f"**{action_label}:** You act."
-+
-+
-+def _build_npc_reply_block(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> str:
-+    narration_context = _safe_dict(narration_context)
-+    resolved = _safe_dict(narration_context.get("resolved_result"))
-+
-+    reply = _first_nonempty(
-+        resolved.get("npc_reply"),
-+        resolved.get("reply"),
-+        resolved.get("dialogue"),
-+        resolved.get("spoken_response"),
-+    )
-+    if reply:
-+        return reply
-+
-+    target_name = _first_nonempty(
-+        resolved.get("target_name"),
-+        resolved.get("npc_name"),
-+        resolved.get("target_id"),
-+    )
-+    picked = _pick_npc_reply_text(llm_narrative)
-+    if picked:
-+        if target_name and target_name.lower() not in picked.lower():
-+            return f"**{target_name}:** {picked}"
-+        return picked
-+    return ""
-+
-+
-+def _build_rewards_block(narration_context: Dict[str, Any]) -> str:
-+    narration_context = _safe_dict(narration_context)
-+    xp_result = _safe_dict(narration_context.get("xp_result"))
-+    skill_xp_result = _safe_dict(narration_context.get("skill_xp_result"))
-+    level_up = _safe_list(narration_context.get("level_up"))
-+    skill_level_ups = _safe_list(narration_context.get("skill_level_ups"))
-+    resolved = _safe_dict(narration_context.get("resolved_result"))
-+
-+    parts: List[str] = []
-+
-+    player_xp = int(xp_result.get("player_xp", 0) or 0)
-+    if player_xp > 0:
-+        parts.append(f"**+{player_xp} XP**")
-+
-+    awards = _safe_dict(skill_xp_result.get("awards"))
-+    skill_parts = []
-+    for skill_id in sorted(awards.keys()):
-+        amount = int(awards.get(skill_id, 0) or 0)
-+        if amount > 0:
-+            skill_parts.append(f"**+{amount} {skill_id} XP**")
-+    if skill_parts:
-+        parts.append(", ".join(skill_parts))
-+
-+    item_name = _first_nonempty(
-+        resolved.get("item_name"),
-+        _safe_dict(resolved.get("dropped_item")).get("name"),
-+        _safe_dict(resolved.get("picked_up_item")).get("name"),
-+        _safe_dict(resolved.get("item")).get("name"),
-+    )
-+    if item_name:
-+        parts.append(f"**Item:** {item_name}")
-+
-+    if level_up:
-+        parts.append("**Level Up!**")
-+
-+    if skill_level_ups:
-+        labels = []
-+        for entry in skill_level_ups:
-+            entry = _safe_dict(entry)
-+            skill_id = _first_nonempty(entry.get("skill_id"), entry.get("name"))
-+            if skill_id:
-+                labels.append(skill_id)
-+        if labels:
-+            parts.append("**Skill Up:** " + ", ".join(labels))
-+
-+    return " · ".join(parts)
-+
-+
-+def _collect_emphasis_markers(scene: Dict[str, Any], narration_context: Dict[str, Any], blocks: Dict[str, str]) -> List[str]:
-+    scene = _safe_dict(scene)
-+    narration_context = _safe_dict(narration_context)
-+    resolved = _safe_dict(narration_context.get("resolved_result"))
-+    xp_result = _safe_dict(narration_context.get("xp_result"))
-+    markers: List[str] = []
-+
-+    for value in [
-+        scene.get("title"),
-+        scene.get("location_name"),
-+        resolved.get("target_name"),
-+        resolved.get("npc_name"),
-+        _safe_dict(resolved.get("item")).get("name"),
-+        _safe_dict(resolved.get("picked_up_item")).get("name"),
-+        _safe_dict(resolved.get("dropped_item")).get("name"),
-+    ]:
-+        text = _safe_str(value).strip()
-+        if text:
-+            markers.append(text)
-+
-+    damage = int(_safe_dict(resolved.get("combat_result")).get("damage", resolved.get("damage", 0)) or 0)
-+    if damage > 0:
-+        markers.append(f"{damage} damage")
-+
-+    player_xp = int(xp_result.get("player_xp", 0) or 0)
-+    if player_xp > 0:
-+        markers.append(f"+{player_xp} XP")
-+
-+    if _safe_list(narration_context.get("level_up")):
-+        markers.append("Level Up!")
-+
-+    deduped: List[str] = []
-+    seen = set()
-+    for marker in markers:
-+        key = marker.lower()
-+        if key not in seen:
-+            seen.add(key)
-+            deduped.append(marker)
-+    return deduped
-+
-+
-+def apply_narration_emphasis(text: str, emphasis_markers: List[str]) -> str:
-+    rendered = _safe_str(text)
-+    for marker in sorted(_safe_list(emphasis_markers), key=len, reverse=True):
-+        marker = _safe_str(marker).strip()
-+        if not marker:
-+            continue
-+        pattern = re.escape(marker)
-+        rendered = re.sub(pattern, f"**{marker}**", rendered)
-+    rendered = rendered.replace("****", "**")
-+    return rendered
-+
-+
-+def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> Dict[str, Any]:
-+    scene_summary = _build_scene_summary(scene, llm_narrative)
-+    action_result_line = _build_action_result_line(narration_context)
-+    npc_reply_block = _build_npc_reply_block(scene, narration_context, llm_narrative)
-+    rewards_block = _build_rewards_block(narration_context)
-+
-+    blocks = {
-+        "scene_summary": scene_summary,
-+        "action_result_line": action_result_line,
-+        "npc_reply_block": npc_reply_block,
-+        "rewards_block": rewards_block,
-+    }
-+    emphasis_markers = _collect_emphasis_markers(scene, narration_context, blocks)
-+
-+    ordered = [
-+        scene_summary,
-+        action_result_line,
-+        f"**Reply:** {npc_reply_block}" if npc_reply_block else "",
-+        f"**Rewards:** {rewards_block}" if rewards_block else "",
-+    ]
-+    markdown = "\n\n".join([part for part in ordered if _safe_str(part).strip()])
-+    markdown = apply_narration_emphasis(markdown, emphasis_markers)
-+
-+    return {
-+        "scene_summary": apply_narration_emphasis(scene_summary, emphasis_markers),
-+        "action_result_line": apply_narration_emphasis(action_result_line, emphasis_markers),
-+        "npc_reply_block": apply_narration_emphasis(npc_reply_block, emphasis_markers),
-+        "rewards_block": apply_narration_emphasis(rewards_block, emphasis_markers),
-+        "emphasis_markers": emphasis_markers,
-+        "markdown": markdown,
-+    }
-@@
- def narrate_scene(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_gateway: Any | None = None, tone: str = "dramatic") -> Dict[str, Any]:
-     scene = _safe_dict(scene)
-     narration_context = _safe_dict(narration_context)
-@@
--    if llm_gateway:
--        narrative = _generate_live_narrative(scene, narration_context, llm_gateway=llm_gateway, tone=tone)
--    else:
--        narrative = _simulate_narrative(scene, narration_context, tone=tone)
--
--    return {
--        "narrative": narrative,
--    }
-+    if llm_gateway:
-+        llm_narrative = _generate_live_narrative(scene, narration_context, llm_gateway=llm_gateway, tone=tone)
-+    else:
-+        llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
-+
-+    structured = build_structured_narration(scene, narration_context, llm_narrative)
-+
-+    return {
-+        "narrative": _safe_str(structured.get("markdown")),
-+        "structured_narration": structured,
-+        "raw_llm_narrative": llm_narrative,
-+    }
-diff --git a/src/static/rpg/rpg.js b/src/static/rpg/rpg.js
---- a/src/static/rpg/rpg.js
-+++ b/src/static/rpg/rpg.js
-@@ -118,6 +118,29 @@
-         return String(value || '');
-     }
- 
-+    function buildStructuredNarrationMarkdown(update) {
-+        var sn = (update && update.structured_narration) || {};
-+        if (!sn || typeof sn !== 'object') return '';
-+        var parts = [];
-+        if (sn.scene_summary) {
-+            parts.push(sn.scene_summary);
-+        }
-+        if (sn.action_result_line) {
-+            parts.push(sn.action_result_line);
-+        }
-+        if (sn.npc_reply_block) {
-+            parts.push('**Reply:** ' + sn.npc_reply_block);
-+        }
-+        if (sn.rewards_block) {
-+            parts.push('**Rewards:** ' + sn.rewards_block);
-+        }
-+        return parts.join('\n\n').trim();
-+    }
-+
-+    function getNarrationMarkdown(update) {
-+        var structured = buildStructuredNarrationMarkdown(update);
-+        return structured || String((update && update.narration) || '');
-+    }
-+
-@@ -842,7 +865,7 @@
-         var narrationEl = panel.querySelector('.rpg-narration');
-         if (narrationEl) {
--            var narration = String(update.narration || '');
-+            var narration = getNarrationMarkdown(update);
-             if (window.marked && typeof window.marked.parse === 'function') {
-                 narrationEl.innerHTML = window.marked.parse(narration);
-             } else {
-diff --git a/src/tests/unit/rpg/test_phase184b_structured_narration.py b/src/tests/unit/rpg/test_phase184b_structured_narration.py
-new file mode 100644
---- /dev/null
-+++ b/src/tests/unit/rpg/test_phase184b_structured_narration.py
-@@ -0,0 +1,89 @@
-+from app.rpg.ai.world_scene_narrator import build_structured_narration
-+
-+
-+def test_build_structured_narration_includes_required_blocks():
-+    scene = {
-+        "scene_id": "scene:tavern",
-+        "title": "The Rusty Flagon Tavern",
-+        "location_name": "Rusty Flagon",
-+        "summary": "Patrons glance over as tension gathers near the hearth.",
-+    }
-+    narration_context = {
-+        "action_type": "persuade",
-+        "resolved_result": {
-+            "ok": True,
-+            "target_name": "Sara",
-+            "message": "You get Sara's attention.",
-+            "npc_reply": '"All right," Sara says. "I will listen."',
-+        },
-+        "xp_result": {"player_xp": 12},
-+        "skill_xp_result": {"awards": {"persuasion": 3}},
-+        "level_up": [],
-+        "skill_level_ups": [],
-+    }
-+    result = build_structured_narration(scene, narration_context, "Sara watches you carefully.")
-+
-+    assert result["scene_summary"]
-+    assert result["action_result_line"]
-+    assert result["npc_reply_block"]
-+    assert result["rewards_block"]
-+    assert isinstance(result["emphasis_markers"], list)
-+    assert "**+12 XP**" in result["rewards_block"] or "+12 XP" in result["rewards_block"]
-+
-+
-+def test_build_structured_narration_marks_damage_and_level_up():
-+    scene = {
-+        "scene_id": "scene:road",
-+        "title": "Old North Road",
-+        "location_name": "Old North Road",
-+    }
-+    narration_context = {
-+        "action_type": "attack_melee",
-+        "resolved_result": {
-+            "ok": True,
-+            "target_name": "Bandit",
-+            "combat_result": {
-+                "outcome": "hit",
-+                "damage": 18,
-+                "target_name": "Bandit",
-+            },
-+        },
-+        "xp_result": {"player_xp": 20},
-+        "skill_xp_result": {"awards": {"swordsmanship": 4}},
-+        "level_up": [{"level": 2}],
-+        "skill_level_ups": [{"skill_id": "swordsmanship"}],
-+    }
-+    result = build_structured_narration(scene, narration_context, "")
-+
-+    assert "18 damage" in result["markdown"]
-+    assert "Level Up!" in result["markdown"]
-+    assert result["action_result_line"]
-+
-+
-+def test_build_structured_narration_falls_back_without_npc_reply():
-+    scene = {
-+        "scene_id": "scene:market",
-+        "title": "Market Square",
-+    }
-+    narration_context = {
-+        "action_type": "investigate",
-+        "resolved_result": {
-+            "ok": True,
-+            "message": "You find fresh boot prints near the cart.",
-+        },
-+        "xp_result": {"player_xp": 5},
-+        "skill_xp_result": {"awards": {"investigation": 2}},
-+        "level_up": [],
-+        "skill_level_ups": [],
-+    }
-+    result = build_structured_narration(scene, narration_context, "Vendors keep their distance as you inspect the square.")
-+
-+    assert result["scene_summary"]
-+    assert result["action_result_line"]
-+    assert result["markdown"]
+Goal
 
-Run these after applying:
+Transform the RPG from:
 
-pytest -q src/tests/unit/rpg/test_phase183c_runtime_authority.py
-pytest -q src/tests/unit/rpg/test_phase184_llm_action_intelligence.py
-pytest -q src/tests/unit/rpg/test_phase184b_structured_narration.py
+player input → one response
+
+into:
+
+persistent living world
+NPCs act and talk without player initiation
+world events occur while the player is idle
+ambient narration and interruptions arrive out of turn
+all of it remains deterministic, bounded, replay-safe, and server-authoritative
+Non-negotiable architecture rules
+
+The coding LLM must preserve these rules throughout all phases:
+
+1. Server authoritative only
+The frontend must never invent ambient events.
+The frontend may only:
+subscribe
+request idle advancement
+render authoritative payloads
+2. Deterministic and replay-safe
+Ambient updates must come from canonical session state.
+No JS timer randomness may affect truth.
+Any nondeterministic LLM output used for ambient text must remain presentation-only and be capture/replay safe.
+3. Presentation must not mutate simulation truth
+The sim decides what happened.
+Narration/dialogue decides how it is expressed.
+4. Bounded state only
+
+Hard caps required for:
+
+ambient queue
+unread queue
+pending interruptions
+cooldown maps
+catch-up summaries
+recent delivered event ids
+5. Fail hard on missing required replay data
+
+If any ambient presentation path depends on capture data during replay:
+
+no silent fallback
+return structured failure
+expose diagnostics
+Current reality in this codebase
+
+From the current uploaded tree:
+
+src/app/rpg/session/runtime.py
+canonical turn execution exists
+world/sim updates are tied to player turn flow
+no true idle tick product layer yet
+src/app/rpg/api/rpg_session_routes.py
+only one-shot turn routes exist
+/api/rpg/session/turn/stream streams a single narration response, then closes
+src/static/rpg/rpg.js
+only per-turn streaming exists
+no persistent session SSE
+no ambient heartbeat loop
+no unread/interruption model
+src/app/rpg/creator/world_simulation.py
+already has deterministic simulation stepping and NPC/world event machinery
+this is the correct backbone for a living world
+src/app/rpg/ai/world_scene_narrator.py
+already does turn narration shaping
+should be extended, not made authoritative
+
+So the correct implementation is a runtime/session/product-layer expansion, not a rewrite of the simulation core.
+
+Full ordered implementation plan
+Phase 0 — Contracts, schema, guardrails
+Purpose
+
+Define the runtime/session contract before touching endpoints or frontend.
+
+Files
+src/app/rpg/session/runtime.py
+src/app/rpg/api/rpg_session_routes.py
+src/app/rpg/session/service.py
+optionally src/app/rpg/persistence/save_schema.py if session schema versioning is centralized
+Add / change
+0.1 Add runtime schema version bump
+
+Increase canonical session/runtime schema version.
+
+Add migration-safe defaults for new runtime fields.
+
+0.2 Add new runtime_state keys
+
+Under session["runtime_state"], add:
+
+{
+    "ambient_queue": [],
+    "ambient_seq": 0,
+    "last_idle_tick_at": "",
+    "last_player_turn_at": "",
+    "idle_streak": 0,
+    "ambient_cooldowns": {},
+    "recent_ambient_ids": [],
+    "pending_interrupt": None,
+    "subscription_state": {
+        "last_polled_seq": 0,
+    },
+    "ambient_metrics": {
+        "emitted": 0,
+        "suppressed": 0,
+        "coalesced": 0,
+    },
+}
+0.3 Add hard caps
+
+Define constants in runtime.py:
+
+_MAX_AMBIENT_QUEUE = 32
+_MAX_RECENT_AMBIENT_IDS = 64
+_MAX_AMBIENT_COOLDOWNS = 64
+_MAX_IDLE_TICKS_PER_REQUEST = 6
+_MAX_RESUME_CATCHUP_TICKS = 12
+_MAX_AMBIENT_BATCH_PER_DELIVERY = 8
+0.4 Add ambient update contract
+
+Every ambient update must use a stable structure:
+
+{
+    "ambient_id": "ambient:12",
+    "seq": 12,
+    "tick": 7,
+    "kind": "npc_to_player" | "npc_to_npc" | "world_event" | "arrival" | "departure" | "combat_start" | "warning" | "system_summary",
+    "priority": 0.0,
+    "interrupt": False,
+    "speaker_id": "",
+    "speaker_name": "",
+    "target_id": "",
+    "target_name": "",
+    "scene_id": "",
+    "location_id": "",
+    "text": "",
+    "structured": {},
+    "source_event_ids": [],
+    "source": "simulation" | "narrator" | "dialogue",
+    "created_at": "",
+}
+Acceptance criteria
+loading old sessions does not crash
+new runtime fields are always present
+queue/cooldown fields are bounded and normalized
+Phase 1 — Runtime idle tick engine
+Purpose
+
+Add canonical idle advancement separate from player turns.
+
+Files
+src/app/rpg/session/runtime.py
+Add
+1.1 New entry point: apply_idle_tick()
+
+Add:
+
+def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, Any]:
+
+Responsibilities:
+
+load canonical session
+ensure normalized simulation/runtime state
+advance simulation by exactly one deterministic idle step
+build ambient updates from new state
+enqueue ambient updates
+persist session
+return structured result
+1.2 New entry point: apply_idle_ticks()
+
+Add:
+
+def apply_idle_ticks(session_id: str, count: int, *, reason: str = "heartbeat") -> Dict[str, Any]:
+
+Responsibilities:
+
+clamp count to _MAX_IDLE_TICKS_PER_REQUEST
+call apply_idle_tick repeatedly
+coalesce results
+persist once at end if possible
+return emitted updates and latest session snapshot
+1.3 Add idle-aware simulation step wrapper
+
+Create helper:
+
+def _advance_simulation_for_idle(session: Dict[str, Any], *, reason: str) -> Dict[str, Any]:
+
+This should:
+
+step simulation using existing step_simulation_state(...)
+not require player input
+preserve canonical tick order
+record summary metadata for later presentation shaping
+1.4 Idle bookkeeping
+
+On each idle tick:
+
+increment idle_streak
+set last_idle_tick_at
+do not overwrite player-turn-only fields
+preserve turn history semantics
+Acceptance criteria
+session can advance with no player input
+repeated idle ticks change canonical state deterministically
+no frontend dependency is required for truth
+Phase 2 — Ambient extraction layer
+Purpose
+
+Convert raw simulation changes into player-facing ambient updates.
+
+Files
+src/app/rpg/session/runtime.py
+optionally new helper file:
+src/app/rpg/session/ambient_builder.py
+Add
+2.1 Build ambient extraction helper
+
+Add:
+
+def build_ambient_updates(
+    before_state: Dict[str, Any],
+    after_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+
+This should inspect:
+
+new events
+new consequences
+NPC decisions
+current scene / nearby NPCs / player location
+incident changes
+faction pressure changes
+encounter state changes
+arrivals / departures
+2.2 Add salience scoring
+
+Add deterministic salience scoring helper:
+
+def score_ambient_salience(update: Dict[str, Any], context: Dict[str, Any]) -> float:
+
+Score based on:
+
+same location as player
+directly targets player
+urgent/hostile
+tied to known NPC
+tied to active thread/faction pressure
+scene transition / encounter start
+repetition penalty
+2.3 Add visibility filter
+
+Add:
+
+def is_player_visible_update(update: Dict[str, Any], session: Dict[str, Any]) -> bool:
+
+Rules:
+
+same location or nearby relevance
+player-known or immediately observable
+not buried internal bookkeeping
+no hidden omniscient sim leaks
+2.4 Add coalescing
+
+Merge repetitive updates in same tick:
+
+several low-priority world shifts → one summary
+multiple idle NPC chatter candidates → cap to one or two
+Acceptance criteria
+ambient updates are relevant, not spammy
+internal sim details are not dumped raw into player feed
+same idle tick cannot flood the queue
+Phase 3 — Ambient queue + delivery semantics
+Purpose
+
+Persist ambient updates separately from turn payloads.
+
+Files
+src/app/rpg/session/runtime.py
+Add
+3.1 Queue append helper
+def enqueue_ambient_updates(runtime_state: Dict[str, Any], updates: List[Dict[str, Any]]) -> Dict[str, Any]:
+
+Responsibilities:
+
+assign seq from ambient_seq
+assign ambient_id
+append to queue
+trim queue to _MAX_AMBIENT_QUEUE
+update metrics
+trim recent_ambient_ids
+3.2 Delivery helper
+def get_pending_ambient_updates(session: Dict[str, Any], after_seq: int = 0, limit: int = 8) -> List[Dict[str, Any]]:
+
+Return pending queue items by sequence.
+
+3.3 Optional acknowledge helper
+def acknowledge_ambient_updates(session: Dict[str, Any], up_to_seq: int) -> Dict[str, Any]:
+
+Only add this if you want ack semantics.
+Otherwise queue can remain bounded rolling history.
+
+Acceptance criteria
+ambient updates survive refresh/reload
+queue remains bounded
+polling/SSE can read updates incrementally
+Phase 4 — NPC ambient dialogue engine
+Purpose
+
+Let NPCs speak without player initiation.
+
+Files
+new: src/app/rpg/ai/ambient_dialogue.py
+src/app/rpg/ai/world_scene_narrator.py
+src/app/rpg/session/runtime.py
+Add
+4.1 New module: ambient_dialogue.py
+
+Functions:
+
+def build_ambient_dialogue_candidates(simulation_state, runtime_state, player_context) -> List[Dict[str, Any]]
+def select_ambient_dialogue_candidate(candidates, runtime_state) -> Dict[str, Any] | None
+def build_ambient_dialogue_request(candidate, session_context) -> Dict[str, Any]
+
+Candidate types:
+
+npc_to_player
+npc_to_npc
+npc_reaction
+companion_comment
+warning
+demand
+taunt
+gossip
+4.2 Cooldown policy
+
+In runtime:
+
+per-speaker cooldown
+per-kind cooldown
+anti-repeat same line source
+anti-spam if player is in active encounter unless urgent
+
+Example cooldown keys:
+
+speaker:{npc_id}
+kind:npc_to_player
+pair:{speaker}:{target}
+4.3 Deterministic selection
+
+Selection must use:
+
+sorted candidate ordering
+stable salience score
+stable tie-breaker by ids
+no uncontrolled randomness
+Acceptance criteria
+NPCs can speak first
+NPCs can speak to each other
+same NPC does not spam every tick
+selection is deterministic
+Phase 5 — Ambient narration mode in narrator
+Purpose
+
+Extend narrator so it can phrase world-originated updates.
+
+Files
+src/app/rpg/ai/world_scene_narrator.py
+Add
+5.1 New ambient narration entry point
+
+Add a new function, do not overload player-turn semantics too much:
+
+def narrate_ambient_update(
+    *,
+    ambient_update: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    current_scene: Dict[str, Any],
+    llm_gateway=None,
+) -> Dict[str, Any]:
+
+Return:
+
+{
+    "text": "...",
+    "speaker_turns": [...],
+    "used_app_llm": bool,
+    "raw_llm_narrative": "...",
+    "structured": {...},
+}
+5.2 Modes
+
+Support at least:
+
+concise world event narration
+NPC direct speech
+NPC-to-NPC exchange
+interruptive line
+summarized catch-up narration
+5.3 Safe fallback
+
+If LLM unavailable:
+
+deterministic templated narration must still work
+Acceptance criteria
+ambient updates can be rendered even without LLM
+LLM only styles phrasing, not world truth
+output stays bounded and structured
+Phase 6 — Idle interruption policy
+Purpose
+
+Support “NPC talks to me out of turn” without chaos.
+
+Files
+src/app/rpg/session/runtime.py
+optionally new helper:
+src/app/rpg/session/ambient_policy.py
+Add
+6.1 Interruption policy helper
+def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> bool:
+
+Interrupt when:
+
+direct address to player
+urgent threat
+encounter start
+arrival of important NPC
+escalation tied to active thread
+companion urgent warning
+
+Do not interrupt when:
+
+low salience gossip
+repetitive chatter
+player just received interruption recently
+6.2 Pending interrupt state
+
+Store only one pending interrupt at a time or small bounded set.
+
+6.3 Typing-aware frontend display contract
+
+If player is actively typing:
+
+queue update as unread
+optionally display subtle badge instead of hard insertion for low-priority items
+urgent items may still insert immediately
+Acceptance criteria
+interruptions feel alive, not annoying
+player is not constantly buried in chatter
+Phase 7 — Session API expansion
+Purpose
+
+Expose persistent ambient transport.
+
+Files
+src/app/rpg/api/rpg_session_routes.py
+Add endpoints
+7.1 Persistent session stream
+
+Add:
+
+@rpg_session_bp.get("/api/rpg/session/stream")
+async def stream_rpg_session(request: Request):
+
+Query params:
+
+session_id
+after_seq optional
+
+Behavior:
+
+open long-lived SSE
+send initial backlog after after_seq
+send heartbeat events
+optionally emit ambient updates as they appear
+
+If true live push is hard right now, still implement SSE with:
+
+immediate backlog flush
+heartbeat pings
+frontend reconnection loop
+7.2 Idle tick endpoint
+
+Add:
+
+@rpg_session_bp.post("/api/rpg/session/idle_tick")
+async def idle_tick_rpg_session(request: Request):
+
+Request:
+
+{ "session_id": "...", "count": 1, "reason": "heartbeat" }
+
+Response:
+
+{
+  "ok": true,
+  "updates": [...],
+  "latest_seq": 42
+}
+7.3 Poll endpoint
+
+Add:
+
+@rpg_session_bp.post("/api/rpg/session/poll")
+async def poll_rpg_session(request: Request):
+
+Request:
+
+{ "session_id": "...", "after_seq": 41, "limit": 8 }
+
+Response:
+
+{ "ok": true, "updates": [...], "latest_seq": 42 }
+7.4 Include ambient metadata in existing turn payload
+
+Extend _build_turn_payload(...) to include:
+
+ambient_updates
+latest_ambient_seq
+maybe unread_ambient_count
+Acceptance criteria
+frontend can receive ambient updates without submitting turns
+SSE and poll fallback both work
+turn responses remain backward-compatible
+Phase 8 — Frontend persistent subscription + heartbeat
+Purpose
+
+Actually make the world feel alive in the browser.
+
+Files
+src/static/rpg/rpg.js
+Add
+8.1 Persistent session connection state
+
+Add state keys:
+
+sessionStream: null,
+ambientSeq: 0,
+unreadAmbient: 0,
+isTyping: false,
+heartbeatTimer: null,
+pollTimer: null,
+ambientFeedBuffer: [],
+8.2 Persistent SSE connect/disconnect
+
+On session bootstrap/load:
+
+open /api/rpg/session/stream?session_id=...&after_seq=...
+reconnect with backoff on drop
+update ambientSeq
+8.3 Heartbeat idle advancement
+
+Every 4–6 seconds while session is active:
+
+POST /api/rpg/session/idle_tick
+count based on elapsed time, but server clamps
+only while tab is visible and RPG session is active
+
+Important:
+
+client requests advancement
+server decides actual authoritative progression
+8.4 Poll fallback
+
+If SSE unavailable:
+
+poll /api/rpg/session/poll every few seconds
+Acceptance criteria
+ambient updates appear while player is idle
+page reload preserves seq and backlog
+reconnect does not duplicate old messages excessively
+Phase 9 — Frontend ambient feed rendering
+Purpose
+
+Render out-of-turn content distinctly from player-turn narration.
+
+Files
+src/static/rpg/rpg.js
+optionally src/static/rpg/rpgDialogueRenderer.js
+CSS file used by RPG UI
+Add
+9.1 New message types
+
+Feed message types:
+
+ambient_world
+ambient_npc_to_player
+ambient_npc_to_npc
+ambient_warning
+ambient_arrival
+ambient_system_summary
+9.2 Render helpers
+
+Add:
+
+function appendAmbientUpdate(update) { ... }
+function renderAmbientCard(update) { ... }
+function maybeQueueAmbientAsUnread(update) { ... }
+9.3 Typing-aware behavior
+
+If user is typing:
+
+urgent update inserts now
+low-priority update increments unread badge and queues for later flush
+9.4 Visual distinction
+
+Ambient cards should look different from direct turn responses.
+
+Acceptance criteria
+player can tell “this happened on its own”
+out-of-turn NPC speech feels intentional
+UI stays readable
+Phase 10 — Professional scene feed / UX polish
+Purpose
+
+Make the alive-world feeling strong, not messy.
+
+Files
+src/static/rpg/rpg.js
+CSS files for RPG UI
+Add
+unread ambient badge
+subtle “world moves around you” indicators
+section dividers for ambient vs direct response
+companion/NPC chips
+collapse repeated low-priority world events into a summary card
+Acceptance criteria
+feed is legible during long sessions
+ambient events don’t bury player agency
+Phase 11 — Resume / offline catch-up
+Purpose
+
+Handle “even when I’m not typing” across tab pause/reload.
+
+Files
+src/app/rpg/session/runtime.py
+src/app/rpg/api/rpg_session_routes.py
+src/static/rpg/rpg.js
+Add
+11.1 Resume catch-up policy
+
+On session load/resume:
+
+compute elapsed real time
+convert to capped idle ticks
+advance at most _MAX_RESUME_CATCHUP_TICKS
+summarize excess into one catch-up ambient summary instead of replaying everything
+11.2 Catch-up summary update kind
+
+Add:
+
+kind: "system_summary"
+
+Example:
+
+“While you were distracted, raised voices spread through the square and Bran moved toward the north gate.”
+Acceptance criteria
+resume feels alive
+session does not explode into hundreds of queued micro-events
+Phase 12 — Persistence and migration hardening
+Purpose
+
+Ensure save/load stays clean.
+
+Files
+src/app/rpg/session/service.py
+src/app/rpg/persistence/...
+session schema modules
+Add
+migration defaults for new runtime keys
+trimming during save
+normalization during load
+ensure ambient queue serializes cleanly
+Acceptance criteria
+old saves load
+new saves remain bounded
+no corruption from missing new keys
+Phase 13 — Replay/capture safety for ambient narration
+Purpose
+
+Keep LLM/presentation safe under replay.
+
+Files
+src/app/rpg/session/runtime.py
+src/app/rpg/ai/world_scene_narrator.py
+any replay/capture modules already in your codebase
+Add
+ambient narration capture records
+replay consumption path
+fail-fast if replay mode expects captured ambient text and it is missing
+Acceptance criteria
+replay reproduces ambient feed behavior
+no hidden live calls during replay
+Phase 14 — Tests
+Purpose
+
+Lock behavior down.
+
+Add tests
+14.1 Runtime tests
+
+Create files like:
+
+tests/rpg/test_runtime_idle_tick.py
+tests/rpg/test_runtime_ambient_queue.py
+tests/rpg/test_runtime_ambient_policy.py
+
+Test:
+
+idle tick advances state without player action
+queue is bounded
+salience filtering works
+cooldowns suppress spam
+same input state yields same ambient update ordering
+14.2 Route tests
+tests/rpg/test_session_idle_tick_route.py
+tests/rpg/test_session_poll_route.py
+tests/rpg/test_session_stream_route.py
+
+Test:
+
+missing session_id errors
+seq filtering works
+polling returns only new updates
+SSE payload structure is stable
+14.3 Frontend tests if present
+
+If you already have JS test infra:
+
+unread behavior while typing
+urgent interrupt insertion
+seq advancement / reconnect behavior
+14.4 Save/load tests
+old session migrates
+ambient queue survives reload
+resume catch-up is capped
+File-by-file implementation map
+Must change
+src/app/rpg/session/runtime.py
+src/app/rpg/api/rpg_session_routes.py
+src/static/rpg/rpg.js
+src/app/rpg/ai/world_scene_narrator.py
+Strongly recommended new files
+src/app/rpg/ai/ambient_dialogue.py
+src/app/rpg/session/ambient_builder.py
+src/app/rpg/session/ambient_policy.py
+Possibly touched
+src/app/rpg/session/service.py
+src/app/rpg/persistence/save_schema.py
+RPG UI CSS files
+Recommended implementation order for coding LLM
+
+Use this exact order.
+
+Pass 1 — Backend runtime foundation
+Phase 0
+Phase 1
+Phase 2
+Phase 3
+
+Do not touch frontend yet.
+
+Pass 2 — Ambient content generation
+Phase 4
+Phase 5
+Phase 6
+
+Still backend only.
+
+Pass 3 — API transport
+Phase 7
+
+Ensure poll works before SSE polish if needed.
+
+Pass 4 — Frontend live world UX
+Phase 8
+Phase 9
+Phase 10
+Pass 5 — Durability and replay
+Phase 11
+Phase 12
+Phase 13
+Pass 6 — Tests
+Phase 14
+What the coding LLM must not do
+
+It must not:
+
+let JS timers create world truth
+let the narrator invent canonical world changes
+let ambient speech mutate simulation state directly
+create unbounded ambient history
+create duplicate feed insertion on reconnect
+silently fallback to live narration during replay if capture is required
+Minimal viable ambient behaviors for first full ship
+
+Even if the coding LLM does everything in one pass, the first live behaviors should be limited to these:
+
+nearby NPC talks to player
+nearby NPC talks to another nearby NPC
+visible world event narration
+important arrival/departure
+encounter/escalation warning
+companion commentary
+
+That is enough to make the world feel alive.
+
+Delivery format I’d ask the coding LLM for
+
+Ask it to implement in this output structure:
+
+Part 1
+
+Runtime/session schema and idle tick engine
+
+Part 2
+
+Ambient builder + queue + policy
+
+Part 3
+
+Ambient dialogue + narrator ambient mode
+
+Part 4
+
+Session routes: idle tick, poll, persistent stream
+
+Part 5
+
+Frontend persistent subscription + heartbeat + ambient rendering
+
+Part 6
+
+Resume/catch-up + persistence/migration + replay safety
+
+Part 7
+
+Tests
+
+That gives you a clean review sequence while still being “one go”.
+
+Acceptance checklist for the finished implementation
+
+You should be able to verify all of these manually:
+
+start a session and do nothing for 15–20 seconds
+ambient updates appear without player input
+nearby NPCs can speak first
+NPCs can speak to each other
+player can receive a direct interruption
+refresh page, no lost canonical ambient history
+reconnect does not duplicate everything
+idle for a while, return, receive a bounded summary/catch-up
+replay/capture mode does not silently go live
+feed remains readable and bounded
