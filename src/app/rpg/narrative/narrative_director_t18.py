@@ -11,13 +11,14 @@ into story. It does NOT control NPCs directly. It nudges the system via:
 """
 
 from __future__ import annotations
+
 from typing import Any, Dict
 
-from .story_state import StoryState
-from .tension_engine import TensionEngine
 from .arc_manager import ArcManager
 from .event_injector import EventInjector
 from .pacing_controller import PacingController
+from .story_state import StoryState
+from .tension_engine import TensionEngine
 
 
 class NarrativeDirector:

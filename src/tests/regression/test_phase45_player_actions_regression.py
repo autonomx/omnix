@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -191,7 +190,9 @@ class TestPlayerActionRegression:
 
     def test_service_endpoint_importable(self):
         """The service endpoint should be importable without errors."""
-        from app.rpg.services.adventure_builder_service import apply_player_action_endpoint
+        from app.rpg.services.adventure_builder_service import (
+            apply_player_action_endpoint,
+        )
         assert callable(apply_player_action_endpoint)
 
     def test_creator_routes_include_simulation_action(self):

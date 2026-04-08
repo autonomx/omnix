@@ -13,7 +13,6 @@ from typing import Any, Dict
 
 from .player_scene_state import ensure_player_state
 
-
 _MAX_BUCKET = 200
 
 

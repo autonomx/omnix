@@ -33,7 +33,6 @@ from __future__ import annotations
 import re
 from typing import List
 
-
 # Word count targets for different tension levels
 FAST_PACE_MAX = 60       # High tension (>0.7): short, punchy
 MEDIUM_PACE_MAX = 100    # Mid tension (0.3-0.7): moderate

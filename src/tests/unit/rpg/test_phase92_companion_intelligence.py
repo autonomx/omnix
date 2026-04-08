@@ -1,20 +1,20 @@
 """Unit tests for Phase 9.2 — Companion Intelligence Layer."""
 import pytest
 
+from app.rpg.party.companion_ai import choose_companion_action, run_companion_turns
 from app.rpg.party.party_state import (
-    ensure_party_state,
     add_companion,
+    build_party_summary,
+    clear_companion_equipment,
+    ensure_party_state,
+    get_active_companions,
+    remove_companion,
+    set_companion_equipment,
+    set_companion_status,
     update_companion_hp,
     update_companion_loyalty,
     update_companion_morale,
-    set_companion_status,
-    set_companion_equipment,
-    clear_companion_equipment,
-    build_party_summary,
-    remove_companion,
-    get_active_companions,
 )
-from app.rpg.party.companion_ai import choose_companion_action, run_companion_turns
 
 
 def _base_companion_state():

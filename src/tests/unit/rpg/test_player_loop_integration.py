@@ -14,22 +14,22 @@ Test Coverage:
 
 from __future__ import annotations
 
-import pytest
-import sys
 import os
+import sys
 from unittest.mock import MagicMock
+
+import pytest
 
 # Add src/app to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
 # Import narrative components
-from rpg.narrative.narrative_event import NarrativeEvent
-from rpg.narrative.narrative_director import NarrativeDirector
-from rpg.narrative.scene_manager import SceneManager
-from rpg.narrative.narrative_generator import NarrativeGenerator
-
 # Import player loop
 from rpg.core.player_loop import PlayerLoop
+from rpg.narrative.narrative_director import NarrativeDirector
+from rpg.narrative.narrative_event import NarrativeEvent
+from rpg.narrative.narrative_generator import NarrativeGenerator
+from rpg.narrative.scene_manager import SceneManager
 
 
 class TestNarrativeEvent:

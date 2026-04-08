@@ -17,10 +17,10 @@ Grounding includes:
     - Recent events
 """
 
-from app.rpg.spatial import euclidean_distance
 from app.rpg.memory.relationships import (
     get_all_relationship_summaries,
 )
+from app.rpg.spatial import euclidean_distance
 
 
 def _has_line_of_sight(pos_a, pos_b, session):

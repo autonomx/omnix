@@ -1,13 +1,13 @@
 import random
 
 from app.rpg.ai.goap import Action
-from app.rpg.ai.goap.planner import plan as goap_plan
 from app.rpg.ai.goap.actions import default_actions as goap_default_actions
+from app.rpg.ai.goap.planner import plan as goap_plan
 from app.rpg.ai.goap.state_builder import build_world_state, select_goal
 from app.rpg.ai.memory_context import build_memory_context, summarize_relationships
-from app.rpg.spatial import distance, astar
 from app.rpg.emotion import decay_emotions
 from app.rpg.simulation import find_npc
+from app.rpg.spatial import astar, distance
 
 
 def move_toward(npc, session):

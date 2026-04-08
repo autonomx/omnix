@@ -4,16 +4,15 @@ from flask import Blueprint, jsonify, request
 
 from app.rpg.analytics import (
     build_tick_diff,
+    build_timeline_row_diff,
     build_timeline_summary,
     get_timeline_tick,
-    build_timeline_row_diff,
-    inspect_npc_reasoning,
-    gm_force_npc_goal,
-    gm_force_faction_trend,
     gm_append_debug_note,
+    gm_force_faction_trend,
+    gm_force_npc_goal,
+    inspect_npc_reasoning,
 )
 from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION
-
 
 rpg_inspection_bp = Blueprint("rpg_inspection_bp", __name__)
 

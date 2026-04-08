@@ -43,7 +43,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 # Goal priority weights (higher = more urgent)
 GOAL_PRIORITY = {
     "survive": 10.0,

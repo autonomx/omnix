@@ -7,6 +7,7 @@ Ensures that the UX polish changes don't break existing inspector functionality:
 - State reset properly clears new fields
 """
 import os
+
 import pytest
 
 

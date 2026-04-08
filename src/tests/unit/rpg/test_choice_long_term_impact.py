@@ -10,8 +10,8 @@ These tests verify the 5 critical bugfixes:
 
 from __future__ import annotations
 
-from app.rpg.quest.quest_engine import QuestEngine
 from app.rpg.choice.choice_models import PlayerChoice
+from app.rpg.quest.quest_engine import QuestEngine
 
 
 class TestChoiceLongTermImpact:

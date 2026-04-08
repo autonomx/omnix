@@ -62,34 +62,35 @@ Usage:
 
 from __future__ import annotations
 
-# Tier 11 exports
-from .intent_enrichment import IntentEnrichment
-from .identity import IdentitySystem
 from .coalition import CoalitionSystem
-from .learning import LearningSystem
+from .coalition_lock import CoalitionLock, CoalitionLockManager
 from .cognitive_layer import CognitiveLayer
 
 # Tier 12 exports
 from .decision_resolver import DecisionResolver
-from .coalition_lock import CoalitionLockManager, CoalitionLock
-from .narrative_gravity import NarrativeGravity, StorylineState, StorylineWeight
-
-# Tier 13 exports
-from .resolution_engine import ResolutionEngine, ResolutionResult
 from .emotion_modifier import (
-    EmotionModifier,
-    EmotionalState,
     DecisionModification,
+    EmotionalState,
+    EmotionModifier,
     apply_personality_bias,
     inject_variance,
 )
+from .identity import IdentitySystem
+
+# Tier 11 exports
+from .intent_enrichment import IntentEnrichment
+from .learning import LearningSystem
+from .narrative_gravity import NarrativeGravity, StorylineState, StorylineWeight
 from .narrative_memory import (
-    NarrativeMemory,
     ArcMemory,
     EmotionalResidue,
-    relevance_score,
+    NarrativeMemory,
     filter_memories_by_relevance,
+    relevance_score,
 )
+
+# Tier 13 exports
+from .resolution_engine import ResolutionEngine, ResolutionResult
 
 __all__ = [
     # Tier 11

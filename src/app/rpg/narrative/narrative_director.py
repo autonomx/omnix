@@ -29,7 +29,6 @@ from typing import Any, Dict, List
 
 from .narrative_event import NarrativeEvent
 
-
 # Event type importance modifiers
 IMPORTANCE_MODIFIERS: Dict[str, float] = {
     "combat": 0.3,

@@ -13,12 +13,12 @@ from __future__ import annotations
 import pytest
 
 from app.rpg.sandbox import (
-    project_outcomes_from_state,
-    update_location_trends,
-    update_thread_trends,
-    update_faction_trends,
-    update_rumor_feedback,
     build_world_consequences,
+    project_outcomes_from_state,
+    update_faction_trends,
+    update_location_trends,
+    update_rumor_feedback,
+    update_thread_trends,
 )
 
 

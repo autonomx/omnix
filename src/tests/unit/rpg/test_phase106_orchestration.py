@@ -1,34 +1,33 @@
 """Phase 10.6 — Unit tests for orchestration layer."""
 import pytest
 
-from app.rpg.orchestration.state import (
-    ensure_llm_orchestration_state,
-    get_llm_orchestration_state,
-    build_llm_request_id,
-    begin_llm_request,
-    append_llm_stream_event,
-    finalize_llm_request,
-    fail_llm_request,
-    _dedupe_and_sort_stream_events,
-    _normalize_request,
+from app.rpg.orchestration.controller import _request_id_counter
+from app.rpg.orchestration.fallback import (
+    build_llm_fallback_result,
+    should_allow_llm_fallback,
 )
-from app.rpg.orchestration.request_builder import build_llm_request_payload
 from app.rpg.orchestration.provider_interface import (
-    get_llm_provider_mode,
-    set_llm_provider_mode,
     build_disabled_provider_result,
     build_replay_provider_result,
+    get_llm_provider_mode,
+    set_llm_provider_mode,
 )
 from app.rpg.orchestration.replay import (
     find_replayable_llm_request,
     require_replayable_llm_request,
 )
-from app.rpg.orchestration.fallback import (
-    should_allow_llm_fallback,
-    build_llm_fallback_result,
+from app.rpg.orchestration.request_builder import build_llm_request_payload
+from app.rpg.orchestration.state import (
+    _dedupe_and_sort_stream_events,
+    _normalize_request,
+    append_llm_stream_event,
+    begin_llm_request,
+    build_llm_request_id,
+    ensure_llm_orchestration_state,
+    fail_llm_request,
+    finalize_llm_request,
+    get_llm_orchestration_state,
 )
-from app.rpg.orchestration.controller import _request_id_counter
-
 
 # --- Tests ---
 

@@ -4,6 +4,7 @@ TIER 18: Narrative Intelligence - Meta-AI Story Director
 """
 
 from __future__ import annotations
+
 from typing import Any, Dict, List, Optional
 
 

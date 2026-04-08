@@ -9,19 +9,20 @@ Integration tests for the full Tier 13 pipeline:
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock
-import random
 import os
+import random
 import sys
+from unittest.mock import MagicMock
+
+import pytest
 
 # Add src to path if needed
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from rpg.cognitive.resolution_engine import ResolutionEngine, ResolutionResult
-from rpg.cognitive.emotion_modifier import EmotionModifier, EmotionalState
-from rpg.cognitive.narrative_memory import NarrativeMemory
+from rpg.cognitive.emotion_modifier import EmotionalState, EmotionModifier
 from rpg.cognitive.narrative_gravity import NarrativeGravity, StorylineState
+from rpg.cognitive.narrative_memory import NarrativeMemory
+from rpg.cognitive.resolution_engine import ResolutionEngine, ResolutionResult
 
 
 class TestTier13Integration:
@@ -346,14 +347,14 @@ class TestFunctionalRegression:
     def test_tier13_imports(self):
         """Test all Tier 13 modules can be imported."""
         from rpg.cognitive import (
+            ArcMemory,
+            DecisionModification,
+            EmotionalResidue,
+            EmotionalState,
+            EmotionModifier,
+            NarrativeMemory,
             ResolutionEngine,
             ResolutionResult,
-            EmotionModifier,
-            EmotionalState,
-            DecisionModification,
-            NarrativeMemory,
-            ArcMemory,
-            EmotionalResidue,
         )
         # No exceptions = success
     
@@ -376,8 +377,8 @@ class TestFunctionalRegression:
     def test_tier12_still_works(self):
         """Test Tier 12 components still function after Tier 13 additions."""
         from rpg.cognitive import (
-            DecisionResolver,
             CoalitionLockManager,
+            DecisionResolver,
             NarrativeGravity,
         )
         
@@ -399,9 +400,9 @@ class TestFunctionalRegression:
     def test_tier11_still_works(self):
         """Test Tier 11 components still function."""
         from rpg.cognitive import (
-            IntentEnrichment,
-            IdentitySystem,
             CoalitionSystem,
+            IdentitySystem,
+            IntentEnrichment,
             LearningSystem,
         )
         

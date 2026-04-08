@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-
 _MAX_RUNTIME_TURNS = 20
 _MAX_TURN_CHUNKS = 12
 _MAX_STREAM_CHUNKS = 40

@@ -23,14 +23,15 @@ Architecture:
                                    PacingController → Output Control
 """
 
-from .narrative_event import NarrativeEvent
-from .narrative_director import NarrativeDirector
-from .scene_manager import Scene, SceneManager
-from .narrative_generator import NarrativeGenerator
-from .story_arc import StoryArc, StoryArcManager
 from .ai_director import AIDirector
 from .dialogue_engine import DialogueEngine
-from .pacing_controller import PacingController, NarrativeBeat
+from .narrative_director import NarrativeDirector
+from .narrative_event import NarrativeEvent
+from .narrative_generator import NarrativeGenerator
+from .pacing_controller import NarrativeBeat, PacingController
+from .scene_manager import Scene, SceneManager
+from .story_arc import StoryArc, StoryArcManager
+
 # Tier 14 Fix: Narrative Surface Engine for player-facing output
 from .surface_engine import NarrativeSurfaceEngine
 
@@ -51,11 +52,11 @@ __all__ = [
 ]
 
 # Tier 18: Narrative Director (Meta-AI Story Director)
-from .story_state import StoryState
-from .tension_engine import TensionEngine
 from .arc_manager import ArcManager
 from .event_injector import EventInjector
 from .narrative_director_t18 import NarrativeDirector as T18NarrativeDirector
+from .story_state import StoryState
+from .tension_engine import TensionEngine
 
 __all__.extend([
     "StoryState", "TensionEngine", "ArcManager", "EventInjector", "T18NarrativeDirector",

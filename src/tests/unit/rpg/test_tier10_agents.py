@@ -10,10 +10,11 @@ Tests for:
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
 import pytest
 
 # Add project path
@@ -70,7 +71,7 @@ class TestAgentBrain:
         assert result is None
     
     def test_idle_when_no_matching_goals(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_IDLE
+        from rpg.agent.agent_brain import INTENTION_IDLE, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(id="npc1", goals=["random_unknown_goal"])
@@ -81,7 +82,7 @@ class TestAgentBrain:
         assert result["type"] in (INTENTION_IDLE, "expand_influence")
     
     def test_power_goal_generates_expand_influence(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_EXPAND_INFLUENCE
+        from rpg.agent.agent_brain import INTENTION_EXPAND_INFLUENCE, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(
@@ -95,7 +96,7 @@ class TestAgentBrain:
         assert result["type"] == INTENTION_EXPAND_INFLUENCE
     
     def test_attack_goal_generates_attack_target(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_ATTACK_TARGET
+        from rpg.agent.agent_brain import INTENTION_ATTACK_TARGET, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(
@@ -109,7 +110,7 @@ class TestAgentBrain:
         assert result["type"] == INTENTION_ATTACK_TARGET
     
     def test_revenge_goal_generates_attack_target(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_ATTACK_TARGET
+        from rpg.agent.agent_brain import INTENTION_ATTACK_TARGET, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(
@@ -122,7 +123,7 @@ class TestAgentBrain:
         assert result["type"] == INTENTION_ATTACK_TARGET
     
     def test_help_goal_generates_deliver_aid(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_DELIVER_AID
+        from rpg.agent.agent_brain import INTENTION_DELIVER_AID, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(
@@ -135,7 +136,7 @@ class TestAgentBrain:
         assert result["type"] == INTENTION_DELIVER_AID
     
     def test_gather_goal_generates_gather_resources(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_GATHER_RESOURCES
+        from rpg.agent.agent_brain import INTENTION_GATHER_RESOURCES, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(
@@ -148,7 +149,7 @@ class TestAgentBrain:
         assert result["type"] == INTENTION_GATHER_RESOURCES
     
     def test_negotiate_goal_generates_negotiate(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_NEGOTIATE
+        from rpg.agent.agent_brain import INTENTION_NEGOTIATE, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(
@@ -161,7 +162,7 @@ class TestAgentBrain:
         assert result["type"] == INTENTION_NEGOTIATE
     
     def test_low_power_triggers_survival(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_GATHER_RESOURCES
+        from rpg.agent.agent_brain import INTENTION_GATHER_RESOURCES, AgentBrain
         
         brain = AgentBrain()
         char = MockCharacter(
@@ -192,7 +193,7 @@ class TestAgentBrain:
         assert "reasoning" in result
     
     def test_beliefs_modulate_priority(self):
-        from rpg.agent.agent_brain import AgentBrain, INTENTION_EXPAND_INFLUENCE
+        from rpg.agent.agent_brain import INTENTION_EXPAND_INFLUENCE, AgentBrain
         
         brain = AgentBrain()
         

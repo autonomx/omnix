@@ -3,28 +3,27 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from app.rpg.creator.world_debug import (
+    explain_faction,
+    explain_npc,
     summarize_npc_minds,
     summarize_social_state,
     summarize_world_pressures,
-    explain_npc,
-    explain_faction,
 )
 from app.rpg.creator.world_gm_tools import (
-    inject_event,
-    seed_rumor,
     force_alliance,
     force_faction_position,
     force_npc_belief,
+    inject_event,
+    seed_rumor,
     step_ticks,
 )
 from app.rpg.creator.world_replay import (
-    list_snapshots,
     get_snapshot,
+    list_snapshots,
     rollback_to_snapshot,
     summarize_timeline,
 )
 from app.rpg.creator.world_simulation import step_simulation_state
-
 
 rpg_debug_bp = Blueprint("rpg_debug_bp", __name__)
 

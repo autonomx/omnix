@@ -11,16 +11,17 @@ and creator/GM layers. It is responsible for:
 
 from __future__ import annotations
 
-from .option_engine import OptionEngine
 from .controller import GameplayControlController
 from .framing import FramingEngine
 from .models import (
     ChoiceOption,
     ChoiceSet,
+    FramingState,
     OptionConstraint,
     PacingState,
-    FramingState,
 )
+from .option_engine import OptionEngine
+
 __all__ = [
     "ChoiceOption",
     "ChoiceSet",

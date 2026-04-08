@@ -8,8 +8,8 @@ Tests:
 
 from __future__ import annotations
 
-import sys
 import pathlib
+import sys
 import unittest
 from copy import deepcopy
 from unittest.mock import MagicMock

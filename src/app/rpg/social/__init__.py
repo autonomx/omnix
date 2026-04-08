@@ -8,11 +8,11 @@ Provides deterministic social systems for NPCs and factions:
 - group_decision: Faction stance aggregation
 """
 
-from .reputation_graph import ReputationGraph
 from .alliance_system import AllianceSystem
 from .betrayal_propagation import BetrayalPropagation
-from .rumor_system import RumorSystem
 from .group_decision import GroupDecisionEngine
+from .reputation_graph import ReputationGraph
+from .rumor_system import RumorSystem
 
 __all__ = [
     "ReputationGraph",

@@ -6,22 +6,21 @@ EncounterPresenter, JournalBuilder, and CampaignMemoryCore.
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from app.rpg.encounter.controller import EncounterController
-from app.rpg.encounter.resolver import EncounterResolver
-from app.rpg.encounter.presenter import EncounterPresenter
 from app.rpg.encounter.models import (
+    SUPPORTED_ENCOUNTER_MODES,
     EncounterResolution,
     EncounterState,
-    SUPPORTED_ENCOUNTER_MODES,
 )
-from app.rpg.memory.journal_builder import JournalBuilder
+from app.rpg.encounter.presenter import EncounterPresenter
+from app.rpg.encounter.resolver import EncounterResolver
 from app.rpg.memory.core import CampaignMemoryCore
-
+from app.rpg.memory.journal_builder import JournalBuilder
 
 # ======================================================================
 # Test helpers / fixtures

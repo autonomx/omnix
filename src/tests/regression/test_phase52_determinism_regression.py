@@ -10,21 +10,19 @@ Tests cover:
 - Memory stability under long-running scenarios
 """
 
+import os
+import sys
 import unittest
 from collections import deque
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
-import sys
-import os
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-from app.rpg.core.event_bus import Event, EventBus, EventContext
 from app.rpg.core.clock import DeterministicClock
-from app.rpg.core.replay_engine import ReplayEngine, ReplayConfig
 from app.rpg.core.determinism import DeterminismConfig
-
+from app.rpg.core.event_bus import Event, EventBus, EventContext
+from app.rpg.core.replay_engine import ReplayConfig, ReplayEngine
 
 # ---------------------------------------------------------------------------
 # Backward Compatibility Tests

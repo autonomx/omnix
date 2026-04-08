@@ -24,13 +24,15 @@ import pytest
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app"))
 
-from rpg.cognitive.decision_resolver import DecisionResolver, DEFAULT_WEIGHTS
-from rpg.cognitive.coalition_lock import CoalitionLockManager, CoalitionLock
+from rpg.cognitive.coalition_lock import CoalitionLock, CoalitionLockManager
+from rpg.cognitive.decision_resolver import DEFAULT_WEIGHTS, DecisionResolver
 from rpg.cognitive.narrative_gravity import (
-    NarrativeGravity, StorylineState, StorylineWeight, MAX_ACTIVE_STORYLINES,
-    CONCLUSION_TICK_THRESHOLD
+    CONCLUSION_TICK_THRESHOLD,
+    MAX_ACTIVE_STORYLINES,
+    NarrativeGravity,
+    StorylineState,
+    StorylineWeight,
 )
-
 
 # ============================================================================
 # Helper Functions

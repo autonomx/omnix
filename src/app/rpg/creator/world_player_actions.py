@@ -25,7 +25,6 @@ from typing import Any
 # Phase 8: player-facing action summaries
 from app.rpg.player import ensure_player_state
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

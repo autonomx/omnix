@@ -31,9 +31,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from .intent_enrichment import IntentEnrichment
-from .identity import IdentitySystem
 from .coalition import CoalitionSystem
+from .identity import IdentitySystem
+from .intent_enrichment import IntentEnrichment
 from .learning import LearningSystem
 
 logger = logging.getLogger(__name__)

@@ -4,12 +4,12 @@ Tests integration of product layer presentation builders with route patterns.
 """
 import pytest
 
-from app.rpg.presentation.setup_flow import build_setup_flow_payload
-from app.rpg.presentation.intro_scene import build_intro_scene_payload
 from app.rpg.presentation.dialogue_ux import build_dialogue_ux_payload
+from app.rpg.presentation.intro_scene import build_intro_scene_payload
+from app.rpg.presentation.narrative_recap import build_narrative_recap_payload
 from app.rpg.presentation.player_inspector import build_player_inspector_overlay_payload
 from app.rpg.presentation.save_load_ux import build_save_load_ux_payload
-from app.rpg.presentation.narrative_recap import build_narrative_recap_payload
+from app.rpg.presentation.setup_flow import build_setup_flow_payload
 
 
 class TestProductLayerFunctionalA1SetupBootstrap:

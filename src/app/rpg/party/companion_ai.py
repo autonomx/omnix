@@ -9,9 +9,13 @@ Fixes applied:
 - Fix #9: Phase tracking for companion phase
 - Fix #11: Morale is integrated into AI decision logic
 """
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
-from .party_state import get_active_companions, _normalize_companion, _is_companion_downed
+from .party_state import (
+    _is_companion_downed,
+    _normalize_companion,
+    get_active_companions,
+)
 
 
 def _safe_dict(v):

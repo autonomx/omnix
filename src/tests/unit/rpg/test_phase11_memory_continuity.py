@@ -21,26 +21,25 @@ for _mod_name, _rel_path in [
         sys.modules[_mod_name] = _m
 
 from app.rpg.memory.continuity import (
-    MemoryState,
-    ConversationMemory,
+    MAX_LONG_TERM,
+    MAX_RUMORS,
+    MAX_SHORT_TERM,
+    MAX_WORLD_PER_ENTITY,
     ActorMemory,
-    WorldMemory,
-    MemoryCompressor,
+    ConversationMemory,
     DialogueMemoryRetriever,
+    MemoryCompressor,
+    MemoryContinuitySystem,
+    MemoryDeterminismValidator,
     MemoryInfluenceEngine,
     MemoryInspector,
-    MemoryDeterminismValidator,
-    MemoryContinuitySystem,
-    MAX_SHORT_TERM,
-    MAX_LONG_TERM,
-    MAX_WORLD_PER_ENTITY,
-    MAX_RUMORS,
+    MemoryState,
+    WorldMemory,
     _clamp,
-    _safe_str,
     _safe_float,
     _safe_int,
+    _safe_str,
 )
-
 
 # ── 11.0 MemoryState ────────────────────────────────────────────────────
 

@@ -1,5 +1,6 @@
 """Phase 18.3A — Item combat/equipment stat normalization."""
 from __future__ import annotations
+
 from typing import Any, Dict
 
 _DEFAULT_COMBAT_STATS = {

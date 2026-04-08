@@ -1,9 +1,9 @@
 """Tests for Critical Patches — ActionResolver, StoryArc, NPCState, Resources, ProbabilisticExecutor."""
 
-import pytest
 import random
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ============================================================
 # PATCH 1: Action Resolver Tests
@@ -55,7 +55,7 @@ class TestActionResolver:
         
     def test_resolve_priority_strategy(self):
         """Highest priority strategy should keep highest priority action."""
-        from rpg.core.action_resolver import ResolutionStrategy, ActionResolver
+        from rpg.core.action_resolver import ActionResolver, ResolutionStrategy
         resolver = ActionResolver(strategy=ResolutionStrategy.HIGHEST_PRIORITY)
         # Use exclusive actions to test priority resolution
         actions = [
@@ -68,7 +68,7 @@ class TestActionResolver:
         
     def test_resolve_director_override(self):
         """Director actions should always win."""
-        from rpg.core.action_resolver import ResolutionStrategy, ActionResolver
+        from rpg.core.action_resolver import ActionResolver, ResolutionStrategy
         resolver = ActionResolver(strategy=ResolutionStrategy.DIRECTOR_OVERRIDE)
         # Use exclusive actions to test director override
         actions = [
@@ -374,7 +374,7 @@ class TestResourceSystem:
     """Test resource management."""
     
     def setup_method(self):
-        from rpg.world.resource_system import ResourcePool, ResourceManager
+        from rpg.world.resource_system import ResourceManager, ResourcePool
         self.pool = ResourcePool("player", initial_stamina=100)
         
     def test_consume_stamina(self):

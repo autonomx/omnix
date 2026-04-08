@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.party import ensure_party_state, add_companion, remove_companion, get_active_companions
+from app.rpg.party import (
+    add_companion,
+    ensure_party_state,
+    get_active_companions,
+    remove_companion,
+)
 from app.rpg.party.companion_ai import run_companion_turns
 from app.rpg.persistence.migrations.v4_to_v5 import migrate_v4_to_v5
 

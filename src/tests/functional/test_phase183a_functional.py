@@ -1,37 +1,38 @@
 """Phase 18.3A — Functional tests for end-to-end flows."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import pytest
 
-from app.rpg.player.player_progression_state import (
-    ensure_player_progression_state,
-    award_player_xp,
-    award_skill_xp,
-    resolve_level_ups,
-)
-from app.rpg.player.player_creation import apply_character_creation
 from app.rpg.action_resolver import resolve_player_action
-from app.rpg.player.player_xp_rules import (
-    compute_action_skill_xp,
-    compute_enemy_difficulty_xp,
-)
-from app.rpg.items.world_items import (
-    ensure_world_item_state,
-    spawn_world_item,
-    pickup_world_item,
-    list_scene_items,
+from app.rpg.creator.world_expansion import (
+    maybe_spawn_dynamic_location,
+    maybe_spawn_dynamic_npc,
 )
 from app.rpg.items.inventory_state import (
-    normalize_inventory_state,
     add_inventory_items,
     equip_inventory_item,
     get_equipped_weapon,
+    normalize_inventory_state,
 )
-from app.rpg.creator.world_expansion import (
-    maybe_spawn_dynamic_npc,
-    maybe_spawn_dynamic_location,
+from app.rpg.items.world_items import (
+    ensure_world_item_state,
+    list_scene_items,
+    pickup_world_item,
+    spawn_world_item,
+)
+from app.rpg.player.player_creation import apply_character_creation
+from app.rpg.player.player_progression_state import (
+    award_player_xp,
+    award_skill_xp,
+    ensure_player_progression_state,
+    resolve_level_ups,
+)
+from app.rpg.player.player_xp_rules import (
+    compute_action_skill_xp,
+    compute_enemy_difficulty_xp,
 )
 from app.rpg.presentation.memory_inspector import build_memory_ui_summary
 from app.rpg.presentation.speaker_cards import build_nearby_npc_cards

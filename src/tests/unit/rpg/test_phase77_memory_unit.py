@@ -12,34 +12,32 @@ Tests for:
 
 from __future__ import annotations
 
-from app.rpg.memory.models import (
-    JournalEntry,
-    RecapSnapshot,
-    CodexEntry,
-    CampaignMemorySnapshot,
-)
-from app.rpg.memory.journal_builder import JournalBuilder
-from app.rpg.memory.recap_builder import RecapBuilder
-from app.rpg.memory.codex_builder import CodexBuilder
-from app.rpg.memory.campaign_memory_builder import CampaignMemoryBuilder
-from app.rpg.memory.presenters import MemoryPresenter
-from app.rpg.memory.core import CampaignMemoryCore
-
 from app.rpg.coherence.core import CoherenceCore
 from app.rpg.coherence.models import (
-    FactRecord,
-    ThreadRecord,
     CommitmentRecord,
     ConsequenceRecord,
+    FactRecord,
+    ThreadRecord,
 )
+from app.rpg.creator.canon import CreatorCanonFact, CreatorCanonState
+from app.rpg.memory.campaign_memory_builder import CampaignMemoryBuilder
+from app.rpg.memory.codex_builder import CodexBuilder
+from app.rpg.memory.core import CampaignMemoryCore
+from app.rpg.memory.journal_builder import JournalBuilder
+from app.rpg.memory.models import (
+    CampaignMemorySnapshot,
+    CodexEntry,
+    JournalEntry,
+    RecapSnapshot,
+)
+from app.rpg.memory.presenters import MemoryPresenter
+from app.rpg.memory.recap_builder import RecapBuilder
 from app.rpg.social_state.core import SocialStateCore
 from app.rpg.social_state.models import (
-    RumorRecord,
-    RelationshipStateRecord,
     AllianceRecord,
+    RelationshipStateRecord,
+    RumorRecord,
 )
-from app.rpg.creator.canon import CreatorCanonState, CreatorCanonFact
-
 
 # ---------------------------------------------------------------------------
 # Helpers

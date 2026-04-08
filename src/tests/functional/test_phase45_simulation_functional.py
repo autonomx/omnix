@@ -10,22 +10,21 @@ integration between:
 - GameLoop planner integration hooks
 """
 
-import unittest
-from unittest.mock import MagicMock, patch
-from typing import Any, Dict, List, Optional
-
-import sys
 import os
+import sys
+import unittest
+from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock, patch
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
+from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator
+from app.rpg.ai.planner.candidate_generator import ActionOption, CandidateGenerator
+from app.rpg.ai.planner.npc_planner import NPCPlanner, PlanningConfig
 from app.rpg.core.event_bus import Event, EventBus
 from app.rpg.core.game_loop import GameLoop
-from app.rpg.simulation.sandbox import SimulationSandbox, SimulationResult
-from app.rpg.simulation.future_simulator import FutureSimulator, CandidateScore
-from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator
-from app.rpg.ai.planner.npc_planner import NPCPlanner, PlanningConfig
-from app.rpg.ai.planner.candidate_generator import CandidateGenerator, ActionOption
-
+from app.rpg.simulation.future_simulator import CandidateScore, FutureSimulator
+from app.rpg.simulation.sandbox import SimulationResult, SimulationSandbox
 
 # ---------------------------------------------------------------------------
 # Helpers

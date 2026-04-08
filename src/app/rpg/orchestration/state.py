@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-
 _MAX_ACTIVE_REQUESTS = 4
 _MAX_COMPLETED_REQUESTS = 20
 _MAX_REQUEST_STREAM_EVENTS = 40

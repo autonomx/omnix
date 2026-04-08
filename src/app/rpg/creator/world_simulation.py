@@ -27,7 +27,25 @@ import hashlib
 import json
 from typing import Any
 
-from .world_events import generate_world_events, generate_consequences
+from app.rpg.ai.llm_mind import NPCMind
+from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
+from app.rpg.sandbox import (
+    build_world_consequences,
+    project_outcomes_from_state,
+    update_faction_trends,
+    update_location_trends,
+    update_rumor_feedback,
+    update_thread_trends,
+)
+from app.rpg.social import (
+    AllianceSystem,
+    BetrayalPropagation,
+    GroupDecisionEngine,
+    ReputationGraph,
+    RumorSystem,
+)
+
+from .world_debug import summarize_tick_changes
 from .world_effects import (
     apply_effects_to_simulation_state,
     build_effects_from_consequences,
@@ -35,6 +53,7 @@ from .world_effects import (
     decay_active_effects,
     merge_active_effects,
 )
+from .world_events import generate_consequences, generate_world_events
 from .world_incidents import (
     compute_incident_diff,
     compute_policy_reaction_diff,
@@ -43,25 +62,6 @@ from .world_incidents import (
     merge_incidents,
     spawn_incidents_from_state_diff,
 )
-from app.rpg.ai.llm_mind import NPCMind
-from .world_debug import summarize_tick_changes
-from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
-from app.rpg.social import (
-    ReputationGraph,
-    AllianceSystem,
-    BetrayalPropagation,
-    RumorSystem,
-    GroupDecisionEngine,
-)
-from app.rpg.sandbox import (
-    project_outcomes_from_state,
-    update_location_trends,
-    update_thread_trends,
-    update_faction_trends,
-    update_rumor_feedback,
-    build_world_consequences,
-)
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -990,7 +990,7 @@ def summarize_simulation_step(
 
 def evaluate_world_expansion(simulation_state: dict, step_result: dict) -> dict:
     """Evaluate and apply controlled world expansion after major events."""
-    from .world_expansion import maybe_spawn_dynamic_npc, maybe_spawn_dynamic_location
+    from .world_expansion import maybe_spawn_dynamic_location, maybe_spawn_dynamic_npc
 
     sim = dict(simulation_state or {})
     step = dict(step_result or {})

@@ -15,11 +15,14 @@ Integration with Core:
 - NEVER mutates real game state during planning
 """
 
-from .npc_planner import NPCPlanner, PlanningConfig
-from .candidate_generator import CandidateGenerator
+import os
+
 # Re-export original Planner for backward compatibility
 import sys
-import os
+
+from .candidate_generator import CandidateGenerator
+from .npc_planner import NPCPlanner, PlanningConfig
+
 _planner_py_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "planner.py")
 if os.path.exists(_planner_py_path):
     import importlib.util

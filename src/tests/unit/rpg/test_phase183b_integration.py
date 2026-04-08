@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Import helpers (importlib-based to avoid conftest cross-package issues)
 # ---------------------------------------------------------------------------
@@ -46,14 +45,14 @@ class TestPlayerProgressionState:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from app.rpg.player.player_progression_state import (
-            ensure_player_progression_state,
             allocate_starting_stats,
             award_player_xp,
             award_skill_xp,
+            ensure_player_progression_state,
+            get_skill_level,
+            get_stat_modifier,
             resolve_level_ups,
             resolve_skill_level_ups,
-            get_stat_modifier,
-            get_skill_level,
         )
         self.ensure = ensure_player_progression_state
         self.allocate = allocate_starting_stats
@@ -141,13 +140,13 @@ class TestActionResolver:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from app.rpg.action_resolver import (
-            resolve_player_action,
-            resolve_attack_roll,
-            resolve_noncombat_check,
-            select_equipped_weapon,
+            apply_damage,
             compute_defense_rating,
             compute_weapon_damage,
-            apply_damage,
+            resolve_attack_roll,
+            resolve_noncombat_check,
+            resolve_player_action,
+            select_equipped_weapon,
         )
         self.resolve = resolve_player_action
         self.attack = resolve_attack_roll
@@ -224,21 +223,21 @@ class TestItemActions:
     def _setup(self):
         from app.rpg.items.inventory_state import (
             add_inventory_items,
-            remove_inventory_item,
             equip_inventory_item,
-            unequip_inventory_slot,
             find_inventory_item,
-            get_equipped_weapon,
             get_equipped_armor,
+            get_equipped_weapon,
             normalize_inventory_state,
+            remove_inventory_item,
+            unequip_inventory_slot,
         )
-        from app.rpg.items.item_effects import apply_item_use, apply_item_effects
+        from app.rpg.items.item_effects import apply_item_effects, apply_item_use
         from app.rpg.items.world_items import (
-            spawn_world_item,
-            pickup_world_item,
             drop_world_item,
-            list_scene_items,
             ensure_world_item_state,
+            list_scene_items,
+            pickup_world_item,
+            spawn_world_item,
         )
         self.add_items = add_inventory_items
         self.remove_item = remove_inventory_item
@@ -520,9 +519,9 @@ class TestWorldExpansion:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from app.rpg.creator.world_expansion import (
-            maybe_spawn_dynamic_npc,
-            maybe_spawn_dynamic_location,
             maybe_spawn_dynamic_faction,
+            maybe_spawn_dynamic_location,
+            maybe_spawn_dynamic_npc,
         )
         self.spawn_npc = maybe_spawn_dynamic_npc
         self.spawn_location = maybe_spawn_dynamic_location
@@ -567,7 +566,9 @@ class TestResponseAdapterPayloadShape:
 
     @pytest.fixture(autouse=True)
     def _setup(self):
-        from app.rpg.services.adventure_response_adapter import adapt_session_to_frontend
+        from app.rpg.services.adventure_response_adapter import (
+            adapt_session_to_frontend,
+        )
         self.adapt = adapt_session_to_frontend
 
     def _make_session(self):
@@ -784,9 +785,9 @@ class TestPlayerCreation:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from app.rpg.player.player_creation import (
+            apply_character_creation,
             build_default_stat_allocation,
             validate_stat_allocation,
-            apply_character_creation,
         )
         self.build_default = build_default_stat_allocation
         self.validate = validate_stat_allocation
@@ -826,9 +827,9 @@ class TestXPRules:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from app.rpg.player.player_xp_rules import (
+            compute_action_skill_xp,
             compute_enemy_difficulty_xp,
             compute_quest_xp,
-            compute_action_skill_xp,
             compute_stat_influence_bonus,
         )
         self.enemy_xp = compute_enemy_difficulty_xp
@@ -914,12 +915,12 @@ class TestItemStats:
     @pytest.fixture(autouse=True)
     def _setup(self):
         from app.rpg.items.item_stats import (
-            normalize_item_stats,
-            is_weapon,
+            get_weapon_attack_stat,
+            get_weapon_skill,
             is_armor,
             is_shield,
-            get_weapon_skill,
-            get_weapon_attack_stat,
+            is_weapon,
+            normalize_item_stats,
         )
         self.normalize = normalize_item_stats
         self.is_weapon = is_weapon

@@ -11,19 +11,18 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from app.rpg.player import ensure_player_state
 from app.rpg.encounter import (
-    ensure_encounter_state,
-    build_encounter_from_scene,
     EncounterResolver,
+    build_encounter_from_scene,
+    ensure_encounter_state,
 )
 from app.rpg.items import (
+    build_loot_from_encounter_state,
     ensure_inventory_state,
     record_inventory_loot,
-    build_loot_from_encounter_state,
 )
 from app.rpg.party import run_companion_turns
-
+from app.rpg.player import ensure_player_state
 
 rpg_encounter_bp = Blueprint("rpg_encounter_bp", __name__)
 resolver = EncounterResolver()

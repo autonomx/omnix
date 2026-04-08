@@ -1,6 +1,7 @@
 """Tests for the 4-layer Memory Manager system."""
 import os
 import sys
+
 import pytest
 
 sys.path.insert(
@@ -10,8 +11,8 @@ sys.path.insert(
 from rpg.memory.episodic import (
     Episode,
     EpisodeBuilder,
-    compute_event_importance,
     compute_episode_importance,
+    compute_event_importance,
 )
 from rpg.memory.memory_manager import MemoryManager
 

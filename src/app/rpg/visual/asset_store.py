@@ -8,7 +8,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-
 _ASSET_DIR = Path("data/rpg_generated_assets")
 _MANIFEST = "manifest.json"
 

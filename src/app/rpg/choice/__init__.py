@@ -22,12 +22,12 @@ The system ensures that:
     - Every choice is recorded in the permanent timeline
 """
 
-from .choice_models import PlayerChoice, ConsequenceRecord, TimelineEntry
-from .choice_engine import ChoiceEngine
-from .consequence_engine import ConsequenceEngine
-from .world_mutator import WorldMutator
 from .belief_updater import BeliefUpdater
+from .choice_engine import ChoiceEngine
+from .choice_models import ConsequenceRecord, PlayerChoice, TimelineEntry
+from .consequence_engine import ConsequenceEngine
 from .timeline_recorder import TimelineRecorder
+from .world_mutator import WorldMutator
 
 __all__ = [
     "PlayerChoice",

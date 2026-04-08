@@ -12,6 +12,8 @@ Covers:
 
 from __future__ import annotations
 
+from app.rpg.social_state.alliance_tracker import AllianceTracker
+from app.rpg.social_state.core import SocialStateCore
 from app.rpg.social_state.models import (
     AllianceRecord,
     RelationshipStateRecord,
@@ -19,13 +21,10 @@ from app.rpg.social_state.models import (
     RumorRecord,
     SocialState,
 )
-from app.rpg.social_state.reputation_graph import ReputationGraph
-from app.rpg.social_state.relationship_tracker import RelationshipTracker
-from app.rpg.social_state.rumor_log import RumorLog
-from app.rpg.social_state.alliance_tracker import AllianceTracker
-from app.rpg.social_state.core import SocialStateCore
 from app.rpg.social_state.query import SocialStateQuery
-
+from app.rpg.social_state.relationship_tracker import RelationshipTracker
+from app.rpg.social_state.reputation_graph import ReputationGraph
+from app.rpg.social_state.rumor_log import RumorLog
 
 # ---------------------------------------------------------------
 # Model roundtrip tests

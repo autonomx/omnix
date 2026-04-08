@@ -10,8 +10,8 @@ from .fallbacks import FallbackSceneBuilder
 from .manager import RecoveryManager
 from .models import (
     AmbiguityDecision,
-    RecoveryRecord,
     RecoveryReason,
+    RecoveryRecord,
     RecoveryResult,
     RecoveryState,
 )

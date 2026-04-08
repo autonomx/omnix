@@ -21,11 +21,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
 from rpg.world.faction_system import (
+    CONFLICT_THRESHOLD,
+    MORALE_ADJUSTMENT_RATE,
+    RESOURCE_GROWTH_RATE,
     Faction,
     FactionSystem,
-    CONFLICT_THRESHOLD,
-    RESOURCE_GROWTH_RATE,
-    MORALE_ADJUSTMENT_RATE,
 )
 
 

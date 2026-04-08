@@ -17,7 +17,6 @@ from .npc_actor import NPCActor, NPCGoal
 from .planner import Planner
 from .strategy_profiles import get_strategy_bias
 
-
 # Action-to-belief mapping (Patch 3)
 ACTION_BELIEF_EFFECTS: Dict[str, Dict[str, float]] = {
     "frame_player": {"player_trust": -0.2},

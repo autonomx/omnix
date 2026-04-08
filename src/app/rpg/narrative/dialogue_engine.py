@@ -31,7 +31,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 # Goal-based dialogue templates — NPCs pursue outcomes through dialogue
 GOAL_DIALOGUE_TEMPLATES: Dict[str, List[str]] = {
     "intimidate": [

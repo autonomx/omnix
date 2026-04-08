@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-
 _MAX_RECENT_ACTIONS = 5
 _MAX_TRAITS = 8
 _MAX_RELATIONSHIPS = 8

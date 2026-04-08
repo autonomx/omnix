@@ -5,10 +5,10 @@ portability, corruption recovery, inspector, determinism.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-import json
-import hashlib
 
 
 def _sf(v: Any, d: float = 0.0) -> float:

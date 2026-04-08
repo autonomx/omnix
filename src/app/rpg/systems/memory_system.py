@@ -19,12 +19,12 @@ Features:
 - Event bus → memory hooks for consistency and decoupling
 """
 
-from rpg.spatial import distance
-from rpg.utils.entity_lookup import find_npc as _find_npc
+from rpg.memory.belief_system import BeliefSystem
 from rpg.memory.relationships import (
     update_relationship_from_event,
 )
-from rpg.memory.belief_system import BeliefSystem
+from rpg.spatial import distance
+from rpg.utils.entity_lookup import find_npc as _find_npc
 
 
 def find_npc(session, npc_id):

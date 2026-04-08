@@ -1,9 +1,9 @@
 """Unit tests for Phase 21 performance fixes."""
 from app.rpg.core.performance import (
-    PerformanceMetric,
-    PerformanceState,
     VALID_METRIC_UNITS,
     PerformanceDeterminismValidator,
+    PerformanceMetric,
+    PerformanceState,
 )
 
 

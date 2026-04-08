@@ -10,7 +10,6 @@ from typing import Any
 
 from .models import EncounterResolution, EncounterState
 
-
 # Journal-worthy encounter event kinds
 _JOURNALABLE_ENCOUNTER_KINDS: frozenset[str] = frozenset({
     "encounter_started",

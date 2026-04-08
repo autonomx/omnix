@@ -3,13 +3,12 @@
 Stable public export surface for the encounter system.
 """
 
-from .encounter_state import ensure_encounter_state
-from .encounter_builder import build_encounter_from_scene
-from .encounter_resolver import EncounterResolver
-from .encounter_actions import build_player_actions
-
 # Also re-export existing modules for backward compatibility
 from .controller import EncounterController
+from .encounter_actions import build_player_actions
+from .encounter_builder import build_encounter_from_scene
+from .encounter_resolver import EncounterResolver
+from .encounter_state import ensure_encounter_state
 from .models import (
     SUPPORTED_ENCOUNTER_MODES,
     SUPPORTED_ENCOUNTER_STATUSES,

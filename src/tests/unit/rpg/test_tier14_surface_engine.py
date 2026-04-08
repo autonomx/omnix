@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import random
 import sys
+
 import pytest
 
 # Tier 14: Narrative Surface Engine
@@ -26,20 +27,20 @@ except ModuleNotFoundError:
 # Tier 14: Event Adapter (new)
 try:
     from app.rpg.narrative.event_adapter import (
-        normalize_event,
-        normalize_batch,
         enrich_event,
-        is_valid_event,
         get_event_signature,
+        is_valid_event,
+        normalize_batch,
+        normalize_event,
     )
 except ModuleNotFoundError:
     sys.path.insert(0, "src")
     from app.rpg.narrative.event_adapter import (
-        normalize_event,
-        normalize_batch,
         enrich_event,
-        is_valid_event,
         get_event_signature,
+        is_valid_event,
+        normalize_batch,
+        normalize_event,
     )
 
 

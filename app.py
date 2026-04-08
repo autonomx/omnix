@@ -41,15 +41,22 @@ from app.providers.faster_qwen3_tts_provider import (
     find_best_offset,
     soft_clip,
 )
+from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
+from app.rpg.api.rpg_game_routes import rpg_game_bp
+from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+from app.rpg.api.rpg_session_routes import rpg_session_bp
 
 # RPG imports
 from app.rpg.models import GameSession
 from app.rpg.persistence import CURRENT_RPG_SCHEMA_VERSION, migrate_package_to_current
-from app.rpg.pipeline import create_new_game, delete_game, execute_turn, list_games, load_game, replay_turn
-from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
-from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
-from app.rpg.api.rpg_game_routes import rpg_game_bp
-from app.rpg.api.rpg_session_routes import rpg_session_bp
+from app.rpg.pipeline import (
+    create_new_game,
+    delete_game,
+    execute_turn,
+    list_games,
+    load_game,
+    replay_turn,
+)
 
 # ============== CONFIG ==============
 HOST = "0.0.0.0"

@@ -35,7 +35,6 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional, Set
 
-
 # [FIX #3] Story arc saturation prevention
 MAX_ACTIVE_ARCS = 3
 MAX_ARCS_PER_ENTITY = 2

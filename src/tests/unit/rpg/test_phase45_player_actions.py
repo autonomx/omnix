@@ -6,8 +6,8 @@ Tests the consequence-based player action system.
 from __future__ import annotations
 
 import copy
-import pytest
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -166,8 +166,9 @@ class TestApplyPlayerAction:
         assert len(unknown_events) == 1
 
     def test_does_not_mutate_original_state(self, sample_sim_state):
-        from app.rpg.creator.world_player_actions import apply_player_action
         import copy
+
+        from app.rpg.creator.world_player_actions import apply_player_action
 
         original = copy.deepcopy(sample_sim_state)
         action = {"type": "intervene_thread", "target_id": "t1"}

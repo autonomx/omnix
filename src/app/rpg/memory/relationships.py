@@ -13,8 +13,7 @@ Example:
         goal = "attack_target"  # Grudge-driven behavior
 """
 
-from typing import Dict, Any, Optional, List
-
+from typing import Any, Dict, List, Optional
 
 # Default relationship attribute ranges (0.0 to 1.0)
 RELATIONSHIP_ATTRIBUTES = ["trust", "fear", "anger", "affection", "respect"]

@@ -10,9 +10,11 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from app.rpg.action_resolver import resolve_player_action
 from app.rpg.ai.world_scene_narrator import play_scene as narrate_scene
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.world_player_actions import (
@@ -27,21 +29,21 @@ from app.rpg.creator.world_simulation import (
     step_simulation_state,
     summarize_simulation_step,
 )
-from app.rpg.action_resolver import resolve_player_action
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
-    unequip_inventory_slot,
-    remove_inventory_item,
     get_inventory_item_for_drop,
+    remove_inventory_item,
+    unequip_inventory_slot,
 )
 from app.rpg.items.item_effects import apply_item_use
 from app.rpg.items.world_items import (
-    ensure_world_item_state,
-    pickup_world_item,
     drop_world_item,
+    ensure_world_item_state,
     list_scene_items,
+    pickup_world_item,
 )
+from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
 from app.rpg.memory.dialogue_context import (
     build_dialogue_memory_context,
@@ -51,14 +53,16 @@ from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.player.player_progression_state import (
-    ensure_player_progression_state,
     award_player_xp,
     award_skill_xp,
+    ensure_player_progression_state,
     resolve_level_ups,
     resolve_skill_level_ups,
 )
-from app.rpg.player.player_xp_rules import compute_action_skill_xp, compute_stat_influence_bonus
-from app.rpg.llm_app_gateway import build_app_llm_gateway
+from app.rpg.player.player_xp_rules import (
+    compute_action_skill_xp,
+    compute_stat_influence_bonus,
+)
 from app.rpg.presentation import (
     build_runtime_presentation_payload,
     build_scene_presentation_payload,
@@ -157,7 +161,74 @@ def _extract_equipment(player_state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def select_primary_action(simulation_state: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any] | None:
-    return candidates[0] if candidates else None
+    return candidates[0] if candidates else {"action_type": "investigate"}
+
+
+def _structured_action_prompt(action: Dict[str, Any]) -> str:
+    action = _safe_dict(action)
+    npc_name = _safe_str(action.get("npc_name")).strip()
+    npc_id = _safe_str(action.get("npc_id") or action.get("target_id")).strip()
+    label = npc_name or npc_id or "them"
+    action_type = _safe_str(action.get("action_type")).strip()
+    legacy_action = _safe_str(action.get("action")).strip().lower()
+
+    if legacy_action == "talk" or action_type == "persuade":
+        return f"Talk to {label}"
+    if legacy_action == "threaten" or action_type == "intimidate":
+        return f"Threaten {label}"
+    if label and action_type:
+        return f"{action_type.replace('_', ' ').title()} {label}"
+    if action_type:
+        return action_type.replace("_", " ").title()
+    return ""
+
+
+def _normalize_structured_action(action: Any, player_input: str = "") -> Dict[str, Any]:
+    normalized = _safe_dict(action)
+    if not normalized:
+        raw_input = _safe_str(player_input).strip()
+        if raw_input.startswith("{") and raw_input.endswith("}"):
+            try:
+                normalized = _safe_dict(json.loads(raw_input))
+            except Exception:
+                normalized = {}
+
+    if not normalized:
+        return {}
+
+    if normalized.get("action_type"):
+        normalized.setdefault("target_id", _safe_str(normalized.get("target_id") or normalized.get("npc_id")).strip())
+        return normalized
+
+    legacy_type = _safe_str(normalized.get("type")).strip().lower()
+    legacy_action = _safe_str(normalized.get("action")).strip().lower()
+    npc_id = _safe_str(normalized.get("npc_id")).strip()
+    npc_name = _safe_str(normalized.get("npc_name")).strip()
+
+    if legacy_type == "npc_action":
+        if legacy_action == "talk":
+            return {
+                "action_type": "persuade",
+                "npc_id": npc_id,
+                "npc_name": npc_name,
+                "target_id": npc_id,
+                "interaction": "talk",
+                "difficulty": "normal",
+            }
+        if legacy_action == "threaten":
+            return {
+                "action_type": "intimidate",
+                "npc_id": npc_id,
+                "npc_name": npc_name,
+                "target_id": npc_id,
+                "interaction": "threaten",
+                "difficulty": "normal",
+            }
+
+    normalized.setdefault("target_id", _safe_str(normalized.get("target_id") or npc_id).strip())
+    if normalized.get("type") and not normalized.get("action_type"):
+        normalized["action_type"] = _safe_str(normalized.get("type")).strip()
+    return normalized
 
 
 def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -646,12 +717,19 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     setup = apply_adventure_defaults(_copy_dict(session.get("setup_payload")))
     simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
 
+    player_input = _safe_str(player_input).strip()
+    action = _normalize_structured_action(action, player_input)
+
     if not action:
         candidates = derive_action_candidates(simulation_state, player_input)
         action = select_primary_action(simulation_state, candidates)
 
     action = _safe_dict(action)
     action_type = _safe_str(action.get("action_type")).strip()
+
+    if not player_input:
+        player_input = _structured_action_prompt(action)
+    player_input = player_input or action_type.replace("_", " ").strip() or "Wait"
 
     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
@@ -687,7 +765,8 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
     }
 
-    narration_result = narrate_scene(current_scene, narration_context, tone="dramatic")
+    llm_gateway = build_app_llm_gateway()
+    narration_result = narrate_scene(current_scene, narration_context, llm_gateway=llm_gateway, tone="dramatic")
     summary = summarize_simulation_step(step_result)
 
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)

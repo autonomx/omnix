@@ -6,19 +6,22 @@ and no phantom participants.
 
 from __future__ import annotations
 
-import pytest
 from dataclasses import dataclass, field
 from typing import Any
 
+import pytest
+
+from app.rpg.coherence.reducers import REDUCERS
+from app.rpg.group_dynamics.group_engine import (
+    SUPPORTED_GROUP_EVENT_TYPES,
+    GroupDynamicsEngine,
+)
 from app.rpg.group_dynamics.models import (
     CrowdStateView,
     InteractionParticipant,
     SecondaryReaction,
 )
-from app.rpg.group_dynamics.group_engine import GroupDynamicsEngine, SUPPORTED_GROUP_EVENT_TYPES
 from app.rpg.group_dynamics.participant_finder import ParticipantFinder
-from app.rpg.coherence.reducers import REDUCERS
-
 
 # ===========================================================================
 # Test Helpers / Fakes

@@ -28,12 +28,11 @@ import pytest
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app"))
 
-from rpg.cognitive.intent_enrichment import IntentEnrichment, ALLOWED_INTENTS
-from rpg.cognitive.identity import IdentitySystem, CharacterIdentity
-from rpg.cognitive.coalition import CoalitionSystem, Coalition
-from rpg.cognitive.learning import LearningSystem
+from rpg.cognitive.coalition import Coalition, CoalitionSystem
 from rpg.cognitive.cognitive_layer import CognitiveLayer
-
+from rpg.cognitive.identity import CharacterIdentity, IdentitySystem
+from rpg.cognitive.intent_enrichment import ALLOWED_INTENTS, IntentEnrichment
+from rpg.cognitive.learning import LearningSystem
 
 # ============================================================================
 # Mock LLM Client

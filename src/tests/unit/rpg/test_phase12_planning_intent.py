@@ -21,14 +21,28 @@ for _mod_name, _rel_path in [
         sys.modules[_mod_name] = _m
 
 from app.rpg.planning.intent_system import (
-    GoalState, PlanStep, Plan, IntentState, PlanningSystemState,
-    GoalGenerator, PlanBuilder, PlanExecutor, PlanInterruptHandler,
-    CompanionPlanner, FactionIntentCoordinator, PlannerInspector,
+    MAX_ACTIVE_GOALS,
+    MAX_COMPLETED_GOALS,
+    MAX_GLOBAL_OBJECTIVES,
+    MAX_PLAN_STEPS,
+    CompanionPlanner,
+    FactionIntentCoordinator,
+    GoalGenerator,
+    GoalState,
+    IntentState,
+    Plan,
+    PlanBuilder,
+    PlanExecutor,
+    PlanInterruptHandler,
+    PlannerInspector,
     PlanningDeterminismValidator,
-    MAX_ACTIVE_GOALS, MAX_COMPLETED_GOALS, MAX_PLAN_STEPS,
-    MAX_GLOBAL_OBJECTIVES, _clamp, _safe_str, _safe_float, _safe_int,
+    PlanningSystemState,
+    PlanStep,
+    _clamp,
+    _safe_float,
+    _safe_int,
+    _safe_str,
 )
-
 
 # ── 12.0 State foundations ──────────────────────────────────────────────
 

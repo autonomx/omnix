@@ -15,10 +15,10 @@ After this phase:
     Debugging           Hard        Precise
 """
 
-from .state_hash import compute_state_hash, stable_serialize
 from .determinism import DeterminismValidator
 from .replay_validator import ReplayValidator
 from .simulation_parity import SimulationParityValidator
+from .state_hash import compute_state_hash, stable_serialize
 
 __all__ = [
     "compute_state_hash",

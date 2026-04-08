@@ -8,15 +8,15 @@ Key rule: NPC agency emits structured events only — no direct coherence mutati
 
 from __future__ import annotations
 
+from .agency_engine import NPCAgencyEngine
+from .decision_policy import NPCDecisionPolicy
 from .models import (
     FactionAlignmentView,
     NPCDecisionContext,
     NPCDecisionResult,
     NPCRelationshipView,
 )
-from .decision_policy import NPCDecisionPolicy
 from .response_builder import NPCResponseBuilder
-from .agency_engine import NPCAgencyEngine
 
 __all__ = [
     "NPCDecisionContext",

@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict, deque
-from typing import Any, Dict, Deque, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

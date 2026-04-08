@@ -18,7 +18,6 @@ from .models import (
     EncounterState,
 )
 
-
 # Tags that signal encounter-start actions
 _ENCOUNTER_START_TAGS: dict[str, str] = {
     "attack": "combat",
@@ -426,7 +425,11 @@ class EncounterResolver:
 
     def resolve_combat_round(self, action: dict, seed: int | None = None) -> dict:
         """Resolve a combat round using the authoritative action resolver."""
-        from app.rpg.action_resolver import resolve_player_action, resolve_attack_roll, select_equipped_weapon
+        from app.rpg.action_resolver import (
+            resolve_attack_roll,
+            resolve_player_action,
+            select_equipped_weapon,
+        )
         sim = self._state if hasattr(self, '_state') else {}
         result = resolve_player_action(sim, action, seed)
         combat_result = result.get("result", {})

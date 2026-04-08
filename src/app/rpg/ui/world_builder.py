@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-
 _MAX_FACTIONS = 12
 _MAX_LOCATIONS = 16
 _MAX_WORLD_THREADS = 12

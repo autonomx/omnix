@@ -18,7 +18,6 @@ from .models import (
     WorldSimExplanation,
 )
 
-
 # Maximum items in bounded lists to avoid payload bloat
 _MAX_REASONS = 20
 _MAX_EFFECTS = 50

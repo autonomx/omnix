@@ -6,20 +6,13 @@ planner determinism, and presenter output.
 
 from __future__ import annotations
 
-import sys
-import os
 import copy
+import os
+import sys
 
 # Ensure src is on the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-from app.rpg.dialogue.models import (
-    DialogueActDecision,
-    DialogueLogEntry,
-    DialoguePresentation,
-    DialogueResponsePlan,
-    DialogueTurnContext,
-)
 from app.rpg.dialogue.acts import (
     SUPPORTED_DIALOGUE_ACTS,
     map_arc_pressure_to_reveal_level,
@@ -30,10 +23,16 @@ from app.rpg.dialogue.acts import (
     normalize_dialogue_act,
 )
 from app.rpg.dialogue.context_builder import DialogueContextBuilder
-from app.rpg.dialogue.response_planner import DialogueResponsePlanner
-from app.rpg.dialogue.presenter import DialoguePresenter
 from app.rpg.dialogue.core import DialogueCore
-
+from app.rpg.dialogue.models import (
+    DialogueActDecision,
+    DialogueLogEntry,
+    DialoguePresentation,
+    DialogueResponsePlan,
+    DialogueTurnContext,
+)
+from app.rpg.dialogue.presenter import DialoguePresenter
+from app.rpg.dialogue.response_planner import DialogueResponsePlanner
 
 # ======================================================================
 # Act mapping tests

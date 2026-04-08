@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from .models import NPCDecisionResult
 
-
 # Supported NPC response event types
 SUPPORTED_NPC_EVENT_TYPES = frozenset({
     "npc_interaction_started",

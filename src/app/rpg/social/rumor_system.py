@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 _MAX_RUMORS = 64
 _MAX_NEW_RUMORS_PER_TICK = 8
 

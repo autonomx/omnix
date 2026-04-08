@@ -7,10 +7,20 @@ Fixes applied:
 - Fix #7: Atomic effect application — compute everything first, then mutate
 - Fix #8: Downed companion guard — cannot use items on downed companions
 """
-from typing import Dict, Any
+from typing import Any, Dict
 
-from app.rpg.items import get_item_definition, remove_inventory_item, normalize_inventory_state
-from .party_state import ensure_party_state, update_companion_hp, _normalize_companion, get_companion_by_id
+from app.rpg.items import (
+    get_item_definition,
+    normalize_inventory_state,
+    remove_inventory_item,
+)
+
+from .party_state import (
+    _normalize_companion,
+    ensure_party_state,
+    get_companion_by_id,
+    update_companion_hp,
+)
 
 
 def _safe_dict(v):

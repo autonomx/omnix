@@ -30,7 +30,6 @@ from .reducers import (
     reduce_world_pressure,
 )
 
-
 # Maximum number of recent effects stored in state
 _MAX_RECENT_EFFECTS = 50
 

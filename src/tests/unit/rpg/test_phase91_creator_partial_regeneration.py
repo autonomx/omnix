@@ -244,7 +244,9 @@ class TestApplyRegeneratedSection:
     """Direct tests for the merge helper to lock exact apply semantics."""
 
     def test_apply_factions_replaces_only_factions(self):
-        from app.rpg.services.adventure_builder_service import _apply_regenerated_section
+        from app.rpg.services.adventure_builder_service import (
+            _apply_regenerated_section,
+        )
 
         payload = _minimal_setup(
             factions=[{"faction_id": "old", "name": "Old", "description": "x", "goals": []}],
@@ -259,7 +261,9 @@ class TestApplyRegeneratedSection:
         _assert_core_fields_preserved(payload, updated)
 
     def test_apply_opening_updates_metadata_and_start_state(self):
-        from app.rpg.services.adventure_builder_service import _apply_regenerated_section
+        from app.rpg.services.adventure_builder_service import (
+            _apply_regenerated_section,
+        )
 
         payload = _minimal_setup()
         regenerated = {
@@ -278,7 +282,9 @@ class TestApplyRegeneratedSection:
         _assert_core_fields_preserved(payload, updated)
 
     def test_apply_threads_stores_in_metadata(self):
-        from app.rpg.services.adventure_builder_service import _apply_regenerated_section
+        from app.rpg.services.adventure_builder_service import (
+            _apply_regenerated_section,
+        )
 
         payload = _minimal_setup(metadata={"existing_key": "keep_me"})
         regenerated = [{"thread_id": "thr_1", "title": "A dark rumor spreads"}]
@@ -290,7 +296,9 @@ class TestApplyRegeneratedSection:
         _assert_core_fields_preserved(payload, updated)
 
     def test_apply_invalid_target_raises(self):
-        from app.rpg.services.adventure_builder_service import _apply_regenerated_section
+        from app.rpg.services.adventure_builder_service import (
+            _apply_regenerated_section,
+        )
 
         with pytest.raises(ValueError):
             _apply_regenerated_section(_minimal_setup(), "bogus", [])
@@ -308,6 +316,7 @@ class TestRegenerateEndpoint:
     def client(self):
         """Return a minimal Flask test client for the regenerate endpoint."""
         from flask import Flask, jsonify, request
+
         from app.rpg.services.adventure_builder_service import regenerate_setup_section
 
         app = Flask(__name__)

@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+
 def _sf(v: Any, d: float = 0.0) -> float:
     try:
         return float(v)

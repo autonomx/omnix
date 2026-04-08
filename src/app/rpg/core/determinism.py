@@ -20,7 +20,6 @@ import random
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-
 # Bump this only when intentionally changing deterministic event identity rules.
 IDENTITY_VERSION = 1
 

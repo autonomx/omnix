@@ -5,8 +5,8 @@ from app.rpg.persistence.package_builder import build_save_package
 from app.rpg.persistence.package_loader import load_save_package
 from app.rpg.persistence.save_schema import (
     CURRENT_RPG_SCHEMA_VERSION,
-    PACKAGE_TYPE,
     ENGINE_VERSION,
+    PACKAGE_TYPE,
 )
 
 

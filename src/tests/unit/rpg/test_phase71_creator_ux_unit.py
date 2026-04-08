@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
+from app.rpg.creator.commands import GMCommandProcessor
+
 # ---------------------------------------------------------------------------
 # Imports under test
 # ---------------------------------------------------------------------------
@@ -15,6 +17,24 @@ from app.rpg.creator.defaults import (
     default_safety_constraint,
     list_setup_templates,
 )
+from app.rpg.creator.gm_state import (
+    DIRECTIVE_TYPES,
+    DangerDirective,
+    GMDirectiveState,
+    PinThreadDirective,
+    RevealDirective,
+    TargetFactionDirective,
+    TargetLocationDirective,
+    TargetNPCDirective,
+    ToneDirective,
+)
+from app.rpg.creator.presenters import CreatorStatePresenter
+from app.rpg.creator.schema import (
+    AdventureSetup,
+    ContentBalance,
+    PacingProfile,
+    SafetyConstraint,
+)
 from app.rpg.creator.validation import (
     ValidationIssue,
     ValidationResult,
@@ -24,26 +44,6 @@ from app.rpg.creator.validation import (
     validate_setup_ids,
     validate_setup_required_fields,
 )
-from app.rpg.creator.presenters import CreatorStatePresenter
-from app.rpg.creator.schema import (
-    AdventureSetup,
-    ContentBalance,
-    PacingProfile,
-    SafetyConstraint,
-)
-from app.rpg.creator.gm_state import (
-    DangerDirective,
-    GMDirectiveState,
-    PinThreadDirective,
-    RevealDirective,
-    TargetFactionDirective,
-    TargetLocationDirective,
-    TargetNPCDirective,
-    ToneDirective,
-    DIRECTIVE_TYPES,
-)
-from app.rpg.creator.commands import GMCommandProcessor
-
 
 # ===================================================================
 # helpers
@@ -1082,8 +1082,8 @@ class TestStartUpPipeline:
     """Test resolve_starting_context in startup pipeline."""
 
     def test_resolve_with_explicit_starting_ids(self):
-        from app.rpg.creator.startup_pipeline import StartupGenerationPipeline
         from app.rpg.creator.schema import AdventureSetup
+        from app.rpg.creator.startup_pipeline import StartupGenerationPipeline
 
         class DummyLLM:
             pass
@@ -1116,8 +1116,8 @@ class TestStartUpPipeline:
         assert context["npc_ids"] == ["npc2"]
 
     def test_resolve_defaults_when_missing(self):
-        from app.rpg.creator.startup_pipeline import StartupGenerationPipeline
         from app.rpg.creator.schema import AdventureSetup
+        from app.rpg.creator.startup_pipeline import StartupGenerationPipeline
 
         class DummyLLM:
             pass
@@ -1148,8 +1148,8 @@ class TestStartUpPipeline:
         assert context["npc_ids"] == ["npc1", "npc2"]
 
     def test_generate_opening_situation_uses_resolved_context(self):
-        from app.rpg.creator.startup_pipeline import StartupGenerationPipeline
         from app.rpg.creator.schema import AdventureSetup
+        from app.rpg.creator.startup_pipeline import StartupGenerationPipeline
 
         class DummyLLM:
             pass

@@ -5,8 +5,11 @@ import pytest
 from flask import Flask
 
 from app.rpg.api.rpg_player_routes import rpg_player_bp
+from app.rpg.player.player_inventory import (
+    build_player_inventory_view,
+    ensure_player_inventory,
+)
 from app.rpg.player.player_scene_state import ensure_player_state as real_ensure
-from app.rpg.player.player_inventory import ensure_player_inventory, build_player_inventory_view
 
 
 def _make_test_app():

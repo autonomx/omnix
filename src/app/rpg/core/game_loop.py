@@ -38,40 +38,40 @@ Tick Pipeline:
 """
 
 import contextvars
+import inspect
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Protocol
-import inspect
 
-from .event_bus import Event, EventBus
-from .snapshot_manager import SnapshotManager
-from .effects import EffectManager, EffectPolicy
-from .tool_runtime_boundary import ToolRuntimeRecorder
-from ..recovery.manager import RecoveryManager
-from ..execution.resolver import ActionResolver
-from ..social_state.core import SocialStateCore
-from ..memory.core import CampaignMemoryCore
-from ..memory.presenters import MemoryPresenter
 from ..arc_control.controller import ArcControlController
 from ..arc_control.presenters import ArcControlPresenter
-from ..packs.registry import PackRegistry
-from ..packs.validator import PackValidator
-from ..packs.loader import PackLoader
-from ..packs.merger import PackMerger
-from ..packs.exporter import PackExporter
-from ..packs.presenters import PackPresenter
-from ..packs.models import AdventurePack
-from ..ux.core import UXCore
+from ..debug.core import DebugCore
 from ..dialogue.core import DialogueCore
 from ..encounter.controller import EncounterController
-from ..encounter.resolver import EncounterResolver
 from ..encounter.presenter import EncounterPresenter
+from ..encounter.resolver import EncounterResolver
+from ..execution.resolver import ActionResolver
+from ..memory.core import CampaignMemoryCore
+from ..memory.presenters import MemoryPresenter
+from ..migration.models import CURRENT_SAVE_FORMAT_VERSION
+from ..migration.pack_migrator import PackMigrator
+from ..migration.save_migrator import SaveMigrator
+from ..packs.exporter import PackExporter
+from ..packs.loader import PackLoader
+from ..packs.merger import PackMerger
+from ..packs.models import AdventurePack
+from ..packs.presenters import PackPresenter
+from ..packs.registry import PackRegistry
+from ..packs.validator import PackValidator
+from ..recovery.manager import RecoveryManager
+from ..social_state.core import SocialStateCore
+from ..ux.core import UXCore
 from ..world_sim.controller import WorldSimController
 from ..world_sim.presenter import WorldSimPresenter
-from ..debug.core import DebugCore
-from ..migration.save_migrator import SaveMigrator
-from ..migration.pack_migrator import PackMigrator
-from ..migration.models import CURRENT_SAVE_FORMAT_VERSION
+from .effects import EffectManager, EffectPolicy
+from .event_bus import Event, EventBus
+from .snapshot_manager import SnapshotManager
+from .tool_runtime_boundary import ToolRuntimeRecorder
 
 
 class TickPhase(Enum):
@@ -1209,10 +1209,10 @@ class GameLoop:
     def _init_creator_systems(self) -> None:
         from ..creator import (
             CreatorCanonState,
+            GMCommandProcessor,
             GMDirectiveState,
             RecapBuilder,
             StartupGenerationPipeline,
-            GMCommandProcessor,
         )
         from ..creator.presenters import CreatorStatePresenter
 

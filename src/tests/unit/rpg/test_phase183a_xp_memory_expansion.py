@@ -1,23 +1,24 @@
 """Phase 18.3A — Unit tests for XP rules, memory UI, and world expansion."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 import pytest
 
+from app.rpg.creator.startup_pipeline import add_world_expansion_caps, mark_seed_origins
+from app.rpg.creator.world_expansion import (
+    maybe_spawn_dynamic_faction,
+    maybe_spawn_dynamic_location,
+    maybe_spawn_dynamic_npc,
+)
 from app.rpg.player.player_xp_rules import (
+    compute_action_skill_xp,
     compute_enemy_difficulty_xp,
     compute_quest_xp,
-    compute_action_skill_xp,
     compute_stat_influence_bonus,
 )
 from app.rpg.presentation.memory_inspector import build_memory_ui_summary
-from app.rpg.creator.world_expansion import (
-    maybe_spawn_dynamic_npc,
-    maybe_spawn_dynamic_location,
-    maybe_spawn_dynamic_faction,
-)
-from app.rpg.creator.startup_pipeline import mark_seed_origins, add_world_expansion_caps
 
 
 class TestXpRules:

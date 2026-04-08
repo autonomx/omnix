@@ -3,15 +3,15 @@
 Ensures determinism, save compatibility, and no unintended side effects.
 """
 from app.rpg.party.companion_narrative import (
-    choose_scene_interjections,
-    build_companion_scene_reactions,
     _pick_tone,
+    build_companion_scene_reactions,
+    choose_scene_interjections,
 )
 from app.rpg.party.party_state import (
-    ensure_party_state,
     add_companion,
-    update_companion_loyalty,
+    ensure_party_state,
     set_companion_status,
+    update_companion_loyalty,
 )
 from app.rpg.persistence.migration_manager import migrate_package_to_current
 from app.rpg.persistence.migrations.v6_to_v7 import migrate_v6_to_v7

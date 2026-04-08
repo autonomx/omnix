@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 _MAX_ACTOR_SHORT_TERM = 10
 _MAX_ACTOR_LONG_TERM = 20
 _MAX_ACTORS = 64

@@ -1,5 +1,6 @@
-from typing import Any, List 
- 
+from typing import Any, List
+
+
 class LoopDetector: 
     def detect(self, action_sequence): 
         if len(action_sequence) < 6: 

@@ -52,7 +52,6 @@ import json
 import time
 from typing import Any, Dict, List, Optional
 
-
 # ============================================================
 # Fix #4: Authority Hierarchy — Explicit priority model
 # ============================================================

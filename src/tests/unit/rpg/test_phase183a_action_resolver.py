@@ -1,17 +1,18 @@
 """Phase 18.3A — Unit tests for action resolver combat."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 import pytest
 
 from app.rpg.action_resolver import (
+    compute_defense_rating,
+    resolve_action,
     resolve_attack_roll,
     resolve_noncombat_check,
     resolve_player_action,
-    compute_defense_rating,
     select_equipped_weapon,
-    resolve_action,
 )
 
 

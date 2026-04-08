@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 _MAX_CONTEXT_ITEMS = 5
 _MAX_LINE_LEN = 240
 _MAX_PROMPT_LEN = 2000

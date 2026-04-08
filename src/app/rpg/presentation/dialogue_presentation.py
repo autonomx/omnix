@@ -11,6 +11,7 @@ from app.rpg.party import (
     build_companion_dialogue_context,
     build_companion_presence_summary,
 )
+
 from .speaker_cards import build_speaker_cards
 
 

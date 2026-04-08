@@ -8,10 +8,17 @@ generation.
 
 from __future__ import annotations
 
-import pytest
 from dataclasses import dataclass, field
 from typing import Any
 
+import pytest
+
+from app.rpg.group_dynamics.alliance_logic import AllianceLogic
+from app.rpg.group_dynamics.crowd_state import CrowdStateBuilder
+from app.rpg.group_dynamics.group_engine import (
+    SUPPORTED_GROUP_EVENT_TYPES,
+    GroupDynamicsEngine,
+)
 from app.rpg.group_dynamics.models import (
     CrowdStateView,
     InteractionParticipant,
@@ -19,12 +26,8 @@ from app.rpg.group_dynamics.models import (
     SecondaryReaction,
 )
 from app.rpg.group_dynamics.participant_finder import ParticipantFinder
-from app.rpg.group_dynamics.alliance_logic import AllianceLogic
-from app.rpg.group_dynamics.crowd_state import CrowdStateBuilder
 from app.rpg.group_dynamics.reaction_policy import GroupReactionPolicy
 from app.rpg.group_dynamics.rumor_seed_builder import RumorSeedBuilder
-from app.rpg.group_dynamics.group_engine import GroupDynamicsEngine, SUPPORTED_GROUP_EVENT_TYPES
-
 
 # ===========================================================================
 # Test Helpers / Fakes

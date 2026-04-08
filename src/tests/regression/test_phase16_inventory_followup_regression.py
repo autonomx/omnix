@@ -4,9 +4,9 @@ Tests for inventory item merging during normalization.
 """
 
 from app.rpg.items.economy import (
-    InventoryState,
-    InventoryItem,
     InventoryDeterminismValidator,
+    InventoryItem,
+    InventoryState,
 )
 
 

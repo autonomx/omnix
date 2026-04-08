@@ -35,8 +35,11 @@ from ..creator.regeneration import (
 from ..creator.schema import AdventureSetup
 from ..creator.validation import validate_adventure_setup_payload
 from ..creator.world_player_actions import apply_player_action
-from .adventure_response_adapter import ADVENTURE_START_RESPONSE_VERSION, adapt_session_to_frontend
 from ..session.runtime import build_session_from_start_result, save_runtime_session
+from .adventure_response_adapter import (
+    ADVENTURE_START_RESPONSE_VERSION,
+    adapt_session_to_frontend,
+)
 
 # ---------------------------------------------------------------------------
 # Response version constants — bump when the contract changes

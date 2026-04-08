@@ -31,7 +31,6 @@ from typing import List, Optional
 
 from .narrative_event import NarrativeEvent
 
-
 # Tension thresholds
 HIGH_TENSION_THRESHOLD = 0.7
 LOW_TENSION_THRESHOLD = 0.3

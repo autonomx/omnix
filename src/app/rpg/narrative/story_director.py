@@ -16,8 +16,8 @@ This system must NOT directly call other systems.
 Use EventBus for all cross-system communication.
 """
 
-from typing import Any, Dict, List, Optional
 import copy
+from typing import Any, Dict, List, Optional
 
 from ..core.event_bus import Event
 

@@ -11,14 +11,13 @@ Tests for:
 import unittest
 from unittest.mock import MagicMock, patch
 
+from rpg.ai.behavior_driver import BehaviorContext, BehaviorDriver
+from rpg.core.agent_scheduler import AgentScheduler, AutonomousTickManager
+from rpg.narration.narrator import NarratorAgent
+from rpg.scene.scene_manager import Scene, SceneManager
 from rpg.story.director_agent import DirectorAgent, DirectorOutput
 from rpg.tools.action_registry import ActionRegistry
-from rpg.core.agent_scheduler import AgentScheduler, AutonomousTickManager
-from rpg.ai.behavior_driver import BehaviorDriver, BehaviorContext
-from rpg.scene.scene_manager import Scene, SceneManager
 from rpg.world.world_state import WorldState
-from rpg.narration.narrator import NarratorAgent
-
 
 # =========================================================
 # PATCH 1: DirectorAgent Tests

@@ -47,7 +47,6 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
 # Leader trait templates that affect faction behavior
 LEADER_TRAITS = {
     "aggressive": {

@@ -18,8 +18,9 @@ from __future__ import annotations
 import importlib
 import random
 import sys
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 # Module paths
 PLAYER_EXP_MODULE = "app.rpg.player.player_experience"

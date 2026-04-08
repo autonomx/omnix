@@ -12,7 +12,7 @@ Regression tests for:
 import unittest
 
 from app.rpg.core.determinism import DeterminismConfig
-from app.rpg.core.llm_recording import LLMRecorder, DeterministicLLMClient
+from app.rpg.core.llm_recording import DeterministicLLMClient, LLMRecorder
 
 
 class _DummyLLM:

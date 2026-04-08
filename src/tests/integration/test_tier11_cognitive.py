@@ -26,12 +26,11 @@ import pytest
 # Add project path (integration tests are one level deeper)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "app"))
 
+from rpg.cognitive.coalition import CoalitionSystem
 from rpg.cognitive.cognitive_layer import CognitiveLayer
 from rpg.cognitive.identity import IdentitySystem
-from rpg.cognitive.coalition import CoalitionSystem
-from rpg.cognitive.learning import LearningSystem
 from rpg.cognitive.intent_enrichment import IntentEnrichment
-
+from rpg.cognitive.learning import LearningSystem
 
 # ============================================================================
 # Mock LLM Client for Integration Tests

@@ -6,8 +6,8 @@ This is a translation layer, not a mutator.
 
 from __future__ import annotations
 
-from .models import AdventurePack
 from .merger import PackMerger
+from .models import AdventurePack
 
 
 class PackLoader:

@@ -14,8 +14,9 @@ with realistic multi-tick scenarios.
 from __future__ import annotations
 
 import importlib
-import sys
 import random
+import sys
+
 import pytest
 
 # Module paths

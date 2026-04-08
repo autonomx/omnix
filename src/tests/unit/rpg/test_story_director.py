@@ -1,11 +1,12 @@
 """Unit tests for RPG story director."""
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
-from rpg.story.director import StoryDirector, StoryArc
+from rpg.story.director import StoryArc, StoryDirector
 
 
 class TestStoryArc:

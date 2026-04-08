@@ -13,20 +13,20 @@ Phase 5.4 fixes:
 3. Separate identity_payload from stored payload (no duplicate tick)
 """
 
-import unittest
 import copy
-import sys
 import os
+import sys
+import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-from app.rpg.core.event_bus import Event, EventBus, EventContext
 from app.rpg.core.clock import DeterministicClock
 from app.rpg.core.determinism import (
-    DeterminismConfig,
     IDENTITY_VERSION,
+    DeterminismConfig,
     compute_deterministic_event_id,
 )
+from app.rpg.core.event_bus import Event, EventBus, EventContext
 
 
 class TestIdentityVersioning(unittest.TestCase):

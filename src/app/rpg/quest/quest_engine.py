@@ -10,19 +10,20 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from .quest_detector import QuestDetector
-from .quest_tracker import QuestTracker
-from .quest_arc_engine import QuestArcBuilder
-from .quest_state_machine import QuestStateMachine
-from .quest_director import QuestDirector
-from .quest_templates import get_arc_type_for_quest
+from app.rpg.choice.belief_updater import BeliefUpdater
 
 # Choice and Consequence System
 from app.rpg.choice.choice_engine import ChoiceEngine
 from app.rpg.choice.consequence_engine import ConsequenceEngine
-from app.rpg.choice.world_mutator import WorldMutator
-from app.rpg.choice.belief_updater import BeliefUpdater
 from app.rpg.choice.timeline_recorder import TimelineRecorder
+from app.rpg.choice.world_mutator import WorldMutator
+
+from .quest_arc_engine import QuestArcBuilder
+from .quest_detector import QuestDetector
+from .quest_director import QuestDirector
+from .quest_state_machine import QuestStateMachine
+from .quest_templates import get_arc_type_for_quest
+from .quest_tracker import QuestTracker
 
 
 class QuestEngine:

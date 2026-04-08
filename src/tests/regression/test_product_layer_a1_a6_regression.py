@@ -5,12 +5,19 @@ and deterministic behavior across changes.
 """
 import pytest
 
-from app.rpg.presentation.setup_flow import build_setup_flow_payload, VALID_GENRES, VALID_TONES
+from app.rpg.presentation.dialogue_ux import INTENT_BUTTONS, build_dialogue_ux_payload
 from app.rpg.presentation.intro_scene import build_intro_scene_payload
-from app.rpg.presentation.dialogue_ux import build_dialogue_ux_payload, INTENT_BUTTONS
-from app.rpg.presentation.player_inspector import build_player_inspector_overlay_payload, _band
-from app.rpg.presentation.save_load_ux import build_save_load_ux_payload
 from app.rpg.presentation.narrative_recap import build_narrative_recap_payload
+from app.rpg.presentation.player_inspector import (
+    _band,
+    build_player_inspector_overlay_payload,
+)
+from app.rpg.presentation.save_load_ux import build_save_load_ux_payload
+from app.rpg.presentation.setup_flow import (
+    VALID_GENRES,
+    VALID_TONES,
+    build_setup_flow_payload,
+)
 
 
 class TestProductLayerRegressionA1SetupFlow:

@@ -8,7 +8,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
-from flask import Blueprint, Response, jsonify, request
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.rpg.session.runtime import (
     apply_turn,
@@ -17,7 +18,7 @@ from app.rpg.session.runtime import (
     save_runtime_session,
 )
 
-rpg_session_bp = Blueprint("rpg_session_bp", __name__)
+rpg_session_bp = APIRouter()
 
 
 
@@ -42,10 +43,43 @@ def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
-def _get_json() -> Dict[str, Any]:
-    """Get JSON body from Flask request, returning empty dict on failure."""
-    body = request.get_json(silent=True) or {}
-    return body if isinstance(body, dict) else {}
+def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
+    data = _safe_dict(data)
+    player_input = _safe_str(data.get("input")).strip()
+    action = _safe_dict(data.get("action"))
+
+    if not action and player_input.startswith("{") and player_input.endswith("}"):
+        try:
+            parsed = json.loads(player_input)
+            action = _safe_dict(parsed)
+        except Exception:
+            action = {}
+
+    if action and not player_input:
+        action_type = _safe_str(action.get("action_type") or action.get("action")).strip().lower()
+        npc_name = _safe_str(action.get("npc_name")).strip()
+        npc_id = _safe_str(action.get("npc_id") or action.get("target_id")).strip()
+        label = npc_name or npc_id or "them"
+        if action_type == "talk":
+            player_input = f"Talk to {label}"
+        elif action_type == "threaten":
+            player_input = f"Threaten {label}"
+        elif action_type == "persuade":
+            player_input = f"Talk to {label}"
+        elif action_type == "intimidate":
+            player_input = f"Threaten {label}"
+        else:
+            player_input = action_type.replace("_", " ").strip()
+
+    return {
+        "session_id": _safe_str(data.get("session_id")).strip(),
+        "player_input": player_input,
+        "action": action,
+    }
+
+
+
+
 
 
 def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,39 +143,36 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-@rpg_session_bp.route("/api/rpg/session/list", methods=["POST"])
+@rpg_session_bp.post("/api/rpg/session/list")
 def list_rpg_sessions():
     """List all RPG sessions for the settings panel."""
     from app.rpg.session.service import list_sessions
 
     sessions = list_sessions() or []
-    resp = jsonify({"ok": True, "sessions": sessions})
-
-    return resp
+    return {"ok": True, "sessions": sessions}
 
 
-@rpg_session_bp.route("/api/rpg/session/get", methods=["POST"])
-def get_rpg_session():
-    data = _get_json()
+@rpg_session_bp.post("/api/rpg/session/get")
+async def get_rpg_session(request: Request):
+    data = await request.json()
     session_id = _safe_str(data.get("session_id")).strip()
     session = load_runtime_session(session_id)
     if session is None:
-        return jsonify({"ok": False, "error": "session_not_found"}), 404
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
     payload = build_frontend_bootstrap_payload(session)
     payload["ok"] = True
     payload["game"] = payload
-    resp = jsonify(payload)
 
-    return resp
+    return payload
 
 
-@rpg_session_bp.route("/api/rpg/session/update", methods=["POST"])
-def update_rpg_session():
-    data = _get_json()
+@rpg_session_bp.post("/api/rpg/session/update")
+async def update_rpg_session(request: Request):
+    data = await request.json()
     session_id = _safe_str(data.get("session_id")).strip()
     session = load_runtime_session(session_id)
     if session is None:
-        return jsonify({"ok": False, "error": "session_not_found"}), 404
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
 
     manifest = _safe_dict(session.get("manifest"))
     runtime_state = _safe_dict(session.get("runtime_state"))
@@ -159,58 +190,55 @@ def update_rpg_session():
     session = save_runtime_session(session)
     payload = build_frontend_bootstrap_payload(session)
     payload["ok"] = True
-    resp = jsonify(payload)
 
-    return resp
+    return payload
 
 
-@rpg_session_bp.route("/api/rpg/session/delete", methods=["POST"])
-def delete_rpg_session():
-    data = _get_json()
+@rpg_session_bp.post("/api/rpg/session/delete")
+async def delete_rpg_session(request: Request):
+    data = await request.json()
     session_id = _safe_str(data.get("session_id")).strip()
     session = load_runtime_session(session_id)
     if session is None:
-        return jsonify({"ok": False, "error": "session_not_found"}), 404
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
     manifest = _safe_dict(session.get("manifest"))
     manifest["archived"] = True
     manifest["status"] = "archived"
     session["manifest"] = manifest
     save_runtime_session(session)
-    resp = jsonify({"ok": True})
 
-    return resp
+    return {"ok": True}
 
 
-@rpg_session_bp.route("/api/rpg/session/turn", methods=["POST"])
-def execute_rpg_session_turn():
-    data = _get_json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    player_input = _safe_str(data.get("input")).strip()
-    action = _safe_dict(data.get("action"))
+@rpg_session_bp.post("/api/rpg/session/turn")
+async def execute_rpg_session_turn(request: Request):
+    data = await request.json()
+    normalized = _normalize_turn_request(data)
+    session_id = _safe_str(normalized.get("session_id")).strip()
+    player_input = _safe_str(normalized.get("player_input")).strip()
+    action = _safe_dict(normalized.get("action"))
 
     if not session_id:
-        return jsonify({"ok": False, "error": "session_id_required"}), 400
-    if not player_input:
-        return jsonify({"ok": False, "error": "input_required"}), 400
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
 
     result = apply_turn(session_id, player_input, action=action)
     if not result.get("ok"):
         if result.get("error") == "session_not_found":
-            return jsonify({"ok": False, "error": "session_not_found"}), 404
-        return jsonify({"ok": False, "error": "turn_failed", "details": result}), 500
+            return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+        return JSONResponse({"ok": False, "error": "turn_failed", "details": result}, status_code=500)
 
     payload = _build_turn_payload(result)
-    resp = jsonify(payload)
 
-    return resp
+    return payload
 
 
-@rpg_session_bp.route("/api/rpg/session/turn/stream", methods=["POST"])
-def execute_rpg_session_turn_stream():
-    data = _get_json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    player_input = _safe_str(data.get("input")).strip()
-    action = _safe_dict(data.get("action"))
+@rpg_session_bp.post("/api/rpg/session/turn/stream")
+async def execute_rpg_session_turn_stream(request: Request):
+    data = await request.json()
+    normalized = _normalize_turn_request(data)
+    session_id = _safe_str(normalized.get("session_id")).strip()
+    player_input = _safe_str(normalized.get("player_input")).strip()
+    action = _safe_dict(normalized.get("action"))
 
     sse_headers = {
         "Cache-Control": "no-cache",
@@ -218,32 +246,18 @@ def execute_rpg_session_turn_stream():
     }
 
     if not session_id:
-        return Response(
-            _sse({"type": "error", "error": "session_id_required"}),
-            status=400,
-            mimetype="text/event-stream",
-            headers=sse_headers,
-        )
-
-    if not player_input:
-        return Response(
-            _sse({"type": "error", "error": "input_required"}),
-            status=400,
-            mimetype="text/event-stream",
-            headers=sse_headers,
-        )
+        def error_gen():
+            yield _sse({"type": "error", "error": "session_id_required"})
+        return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)
 
     result = apply_turn(session_id, player_input, action=action)
 
     if not result.get("ok"):
         err = _safe_str(result.get("error") or "turn_failed")
         status = 404 if result.get("error") == "session_not_found" else 500
-        return Response(
-            _sse({"type": "error", "error": err}),
-            status=status,
-            mimetype="text/event-stream",
-            headers=sse_headers,
-        )
+        def error_gen():
+            yield _sse({"type": "error", "error": err})
+        return StreamingResponse(error_gen(), status_code=status, media_type="text/event-stream", headers=sse_headers)
 
     payload = _build_turn_payload(result)
     narration = _safe_str(payload.get("narration"))
@@ -259,8 +273,4 @@ def execute_rpg_session_turn_stream():
         final_payload["ok"] = True
         yield _sse(final_payload)
 
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers=sse_headers,
-    )
+    return StreamingResponse(generate(), media_type="text/event-stream", headers=sse_headers)

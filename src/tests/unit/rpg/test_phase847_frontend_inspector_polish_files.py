@@ -8,6 +8,7 @@ Tests for:
 - Integration with existing inspector state
 """
 import os
+
 import pytest
 
 

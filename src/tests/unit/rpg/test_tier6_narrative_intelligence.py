@@ -8,16 +8,15 @@ Tests for:
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 # Add src/app to path (same pattern as test_tier5_experience_orchestration.py)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
+from rpg.core.player_loop import PlayerLoop
 from rpg.player.agency_system import AgencySystem, PlayerChoice
 from rpg.story.plot_engine import PlotEngine, Quest, Setup
-from rpg.core.player_loop import PlayerLoop
-
 
 # =========================================================
 # AgencySystem Tests

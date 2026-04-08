@@ -8,13 +8,14 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.rpg.party import (
-    build_companion_scene_context,
-    choose_scene_interjections,
-    build_companion_scene_reactions,
     build_companion_presence_summary,
+    build_companion_scene_context,
+    build_companion_scene_reactions,
+    choose_scene_interjections,
 )
-from .speaker_cards import build_speaker_cards
+
 from .dialogue_fallbacks import build_deterministic_scene_fallback
+from .speaker_cards import build_speaker_cards
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:

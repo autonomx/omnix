@@ -1,10 +1,11 @@
 """Narrative Decision - Isolated dataclass to avoid circular imports. TIER 19."""  
   
-from __future__ import annotations  
-from dataclasses import dataclass, field, asdict  
-from typing import Any, Dict, List  
-  
-  
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List
+
+
 def _clamp(v: float, lo: float, hi: float) -> float:  
     return max(lo, min(hi, v))  
   

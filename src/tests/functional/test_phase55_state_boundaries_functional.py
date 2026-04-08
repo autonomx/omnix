@@ -9,8 +9,8 @@ Tests for:
 import unittest
 
 from app.rpg.core.effects import EffectManager, EffectPolicy
-from app.rpg.core.game_loop import GameLoop
 from app.rpg.core.event_bus import Event, EventBus
+from app.rpg.core.game_loop import GameLoop
 from app.rpg.simulation.sandbox import SimulationSandbox
 
 

@@ -6,11 +6,12 @@ and coherence reducer behavior.
 
 from __future__ import annotations
 
-import pytest
 from typing import Any
 
-from app.rpg.execution.resolver import ActionResolver
+import pytest
+
 from app.rpg.coherence.core import CoherenceCore
+from app.rpg.execution.resolver import ActionResolver
 
 
 def _make_option(

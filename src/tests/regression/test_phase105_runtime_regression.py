@@ -1,16 +1,16 @@
 """Phase 10.5 — Regression tests for runtime layer stability."""
 import pytest
 
+from app.rpg.presentation.runtime_bridge import build_runtime_presentation_payload
 from app.rpg.runtime.dialogue_runtime import (
-    ensure_runtime_state,
-    get_runtime_dialogue_state,
-    start_runtime_sequence,
     apply_runtime_interruptions,
     begin_runtime_turn,
-    finalize_runtime_turn,
     build_runtime_style_tags,
+    ensure_runtime_state,
+    finalize_runtime_turn,
+    get_runtime_dialogue_state,
+    start_runtime_sequence,
 )
-from app.rpg.presentation.runtime_bridge import build_runtime_presentation_payload
 
 
 class TestPhase105RuntimeBoundsRegression:

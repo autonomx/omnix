@@ -17,11 +17,10 @@ import random
 from unittest.mock import MagicMock, patch
 
 import pytest
-
+from rpg.story.dynamic_quest_generator import DynamicQuestGenerator
 from rpg.world.economy_system import EconomySystem, Market
 from rpg.world.faction_system import Faction, FactionSystem
 from rpg.world.political_system import Leader, PoliticalSystem
-from rpg.story.dynamic_quest_generator import DynamicQuestGenerator
 
 
 class TestMarket:

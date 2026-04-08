@@ -20,8 +20,8 @@ This module is CRITICAL for:
 - Planning AI system (forward simulation with scoring)
 """
 
-from .sandbox import SimulationSandbox, SimulationResult
 from .future_simulator import FutureSimulator
+from .sandbox import SimulationResult, SimulationSandbox
 
 
 def apply_events(session, events):

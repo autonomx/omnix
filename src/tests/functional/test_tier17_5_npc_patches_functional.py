@@ -5,15 +5,16 @@ Tests the integration of all 5 patches working together.
 
 from __future__ import annotations
 
-import sys
 import os
-import pytest
+import sys
 from unittest.mock import MagicMock
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "app"))
 
-from rpg.ai.npc_actor import NPCActor, NPCGoal
 from rpg.ai.intent_engine import IntentEngine
+from rpg.ai.npc_actor import NPCActor, NPCGoal
 from rpg.ai.opposition_engine import OppositionEngine
 
 

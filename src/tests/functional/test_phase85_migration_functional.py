@@ -21,10 +21,9 @@ from app.rpg.migration.models import (
     MigratedPayload,
     MigrationReport,
 )
+from app.rpg.migration.pack_migrator import PackMigrator
 from app.rpg.migration.registry import MigrationRegistry
 from app.rpg.migration.save_migrator import SaveMigrator, build_default_registry
-from app.rpg.migration.pack_migrator import PackMigrator
-
 
 # ---------------------------------------------------------------------------
 # Helpers

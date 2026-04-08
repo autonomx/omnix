@@ -6,17 +6,16 @@ test_phase74_* and test_phase80_* tests.
 
 from __future__ import annotations
 
-import sys
-import os
 import copy
+import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from app.rpg.dialogue.core import DialogueCore
 from app.rpg.dialogue.acts import SUPPORTED_DIALOGUE_ACTS
-from app.rpg.execution.resolver import ActionResolver
+from app.rpg.dialogue.core import DialogueCore
 from app.rpg.execution.models import ResolvedAction
-
+from app.rpg.execution.resolver import ActionResolver
 
 # ======================================================================
 # Test helpers / mocks

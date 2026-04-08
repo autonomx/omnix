@@ -10,9 +10,9 @@ Tests end-to-end functionality of LLM recording with the branch evaluator:
 
 import unittest
 
+from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator
 from app.rpg.core.determinism import DeterminismConfig
 from app.rpg.core.llm_recording import LLMRecorder
-from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator
 
 
 class _DummyLLM:

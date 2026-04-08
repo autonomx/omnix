@@ -1,5 +1,6 @@
 """Functional tests for Phase 9.2 — Party Intelligence Layer Routes."""
 import sys
+
 import pytest
 
 
@@ -44,7 +45,7 @@ def test_build_party_summary_returns_valid_shape(minimal_player_state):
 def test_companion_loyalty_updates_persist():
     """Test loyalty delta updates correctly."""
     sys.path.insert(0, "src")
-    from app.rpg.party.party_state import update_companion_loyalty, ensure_party_state
+    from app.rpg.party.party_state import ensure_party_state, update_companion_loyalty
 
     ps = ensure_party_state({})
     ps["party_state"]["companions"] = [

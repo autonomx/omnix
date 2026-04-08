@@ -34,32 +34,31 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from rpg.narrative.narrative_event import NarrativeEvent
+# TIER 10: Autonomous NPC Agent System
+from rpg.agent.agent_system import AgentSystem
+from rpg.character.character_engine import CharacterEngine
+from rpg.memory.narrative_memory import NarrativeMemory
 from rpg.narrative.ai_director import AIDirector
+from rpg.narrative.narrative_event import NarrativeEvent
 from rpg.narrative.pacing_controller import PacingController
+from rpg.player.agency_system import AgencySystem
+from rpg.story.dynamic_quest_generator import DynamicQuestGenerator
+from rpg.story.narrative_renderer import NarrativeRenderer
 
 # TIER 6: Narrative Intelligence Systems
 from rpg.story.plot_engine import PlotEngine
-from rpg.player.agency_system import AgencySystem
-
-# TIER 7: Faction Simulation + Reputation Economy
-from rpg.world.faction_system import FactionSystem
-from rpg.world.reputation_engine import ReputationEngine
-
-# TIER 8: World Complexity Layer
-from rpg.world.economy_system import EconomySystem
-from rpg.world.political_system import PoliticalSystem
-from rpg.story.dynamic_quest_generator import DynamicQuestGenerator
 
 # TIER 9: Narrative Intelligence Layer
 from rpg.story.scene_engine import SceneEngine
-from rpg.character.character_engine import CharacterEngine
-from rpg.memory.narrative_memory import NarrativeMemory
 from rpg.story.story_arc_engine import StoryArcEngine
-from rpg.story.narrative_renderer import NarrativeRenderer
 
-# TIER 10: Autonomous NPC Agent System
-from rpg.agent.agent_system import AgentSystem
+# TIER 8: World Complexity Layer
+from rpg.world.economy_system import EconomySystem
+
+# TIER 7: Faction Simulation + Reputation Economy
+from rpg.world.faction_system import FactionSystem
+from rpg.world.political_system import PoliticalSystem
+from rpg.world.reputation_engine import ReputationEngine
 
 
 class PlayerLoop:

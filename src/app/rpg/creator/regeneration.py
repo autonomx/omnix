@@ -14,8 +14,8 @@ Phase 1.5 additions:
 
 from __future__ import annotations
 
-import logging
 import hashlib
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Literal

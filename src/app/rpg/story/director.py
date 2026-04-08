@@ -16,10 +16,9 @@ Key capabilities:
     - Event bus integration: Reacts to events directly
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from .director_types import DirectorOutput
-
 
 # Arc phase enumeration
 ARC_PHASES = ["build", "tension", "climax", "resolution"]

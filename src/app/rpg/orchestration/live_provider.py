@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-
 _MAX_PROVIDER_EXECUTIONS = 12
 _MAX_PROVIDER_EVENTS = 80
 

@@ -14,34 +14,34 @@ from typing import Any, Dict
 
 from app.rpg.runtime.dialogue_runtime import get_runtime_dialogue_state
 
-from .state import (
-    begin_llm_request,
-    append_llm_stream_event,
-    finalize_llm_request,
-    fail_llm_request,
-    get_llm_orchestration_state,
-)
-from .request_builder import build_llm_request_payload
-from .provider_interface import (
-    get_llm_provider_mode,
-    build_disabled_provider_result,
-    build_replay_provider_result,
-)
-from .replay import require_replayable_llm_request
+from .capture import persist_captured_provider_result
 from .fallback import (
-    should_allow_llm_fallback,
     build_llm_fallback_result,
+    should_allow_llm_fallback,
 )
-from .stream_adapter import apply_provider_result_to_runtime_turn
 from .live_provider import (
-    build_provider_execution_id,
-    begin_provider_execution,
     append_provider_execution_event,
-    finalize_provider_execution,
+    begin_provider_execution,
+    build_provider_execution_id,
     fail_provider_execution,
+    finalize_provider_execution,
 )
 from .provider_adapter import get_provider_adapter
-from .capture import persist_captured_provider_result
+from .provider_interface import (
+    build_disabled_provider_result,
+    build_replay_provider_result,
+    get_llm_provider_mode,
+)
+from .replay import require_replayable_llm_request
+from .request_builder import build_llm_request_payload
+from .state import (
+    append_llm_stream_event,
+    begin_llm_request,
+    fail_llm_request,
+    finalize_llm_request,
+    get_llm_orchestration_state,
+)
+from .stream_adapter import apply_provider_result_to_runtime_turn
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:

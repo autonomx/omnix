@@ -1,13 +1,17 @@
 """Narrative Brain Core - LLM-powered narrative intelligence.
 TIER 19: LLM Narrative Brain Integration"""
 from __future__ import annotations
-import json, logging
-from dataclasses import dataclass, field, asdict
+
+import json
+import logging
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
+
+from .memory_adapter import NarrativeMemoryAdapter
 from .prompt_builder import PromptBuilder
 from .response_parser import ResponseParser
-from .memory_adapter import NarrativeMemoryAdapter
 from .validator import BrainOutputValidator
+
 logger = logging.getLogger(__name__)
 def _clamp(v, lo, hi): return max(lo, min(hi, v))
 @dataclass

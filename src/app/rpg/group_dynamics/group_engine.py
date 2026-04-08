@@ -15,7 +15,6 @@ from .participant_finder import ParticipantFinder
 from .reaction_policy import GroupReactionPolicy
 from .rumor_seed_builder import RumorSeedBuilder
 
-
 # Supported group dynamics event types
 SUPPORTED_GROUP_EVENT_TYPES = frozenset({
     "npc_secondary_supported",

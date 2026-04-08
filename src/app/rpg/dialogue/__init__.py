@@ -10,13 +10,6 @@ layer that sits on top of those existing systems.
 Exports the public Phase 8.1 surface.
 """
 
-from .models import (
-    DialogueActDecision,
-    DialogueLogEntry,
-    DialoguePresentation,
-    DialogueResponsePlan,
-    DialogueTurnContext,
-)
 from .acts import (
     SUPPORTED_DIALOGUE_ACTS,
     map_arc_pressure_to_reveal_level,
@@ -27,9 +20,16 @@ from .acts import (
     normalize_dialogue_act,
 )
 from .context_builder import DialogueContextBuilder
-from .response_planner import DialogueResponsePlanner
-from .presenter import DialoguePresenter
 from .core import DialogueCore
+from .models import (
+    DialogueActDecision,
+    DialogueLogEntry,
+    DialoguePresentation,
+    DialogueResponsePlan,
+    DialogueTurnContext,
+)
+from .presenter import DialoguePresenter
+from .response_planner import DialogueResponsePlanner
 
 __all__ = [
     # Models

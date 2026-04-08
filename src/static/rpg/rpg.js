@@ -1154,17 +1154,25 @@
                     '<button class="rpg-npc-btn rpg-npc-btn--threat" data-npc-id="' + npcId + '" data-npc-name="' + npcName + '" data-action="threaten">Threaten</button>' +
                 '</div>';
 
-            // Structured NPC action: send JSON payload so the backend can evolve
-            // without fragile string parsing.
+            // Structured NPC action: send a human-readable input string plus a
+            // canonical structured action object. This avoids echoing raw JSON
+            // into narration while still giving the backend exact intent.
             card.querySelectorAll('.rpg-npc-btn').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     if (rpgState.isLoading) return;
-                    var payload = JSON.stringify({
+                    var actionVerb = btn.dataset.action === 'threaten' ? 'Threaten' : 'Talk to';
+                    var actionText = actionVerb + ' ' + btn.dataset.npcName;
+                    var structuredAction = {
                         type: 'npc_action',
                         npc_id: btn.dataset.npcId,
+                        npc_name: btn.dataset.npcName,
                         action: btn.dataset.action,
-                    });
-                    handleRPGInput(payload);
+                        action_type: btn.dataset.action === 'threaten' ? 'intimidate' : 'persuade',
+                        target_id: btn.dataset.npcId,
+                        interaction: btn.dataset.action,
+                        difficulty: 'normal'
+                    };
+                    handleRPGInput(actionText, structuredAction);
                 });
             });
 

@@ -8,9 +8,9 @@ import pytest
 from app.rpg.runtime.dialogue_runtime import (
     begin_runtime_turn,
     finalize_runtime_turn,
+    get_runtime_dialogue_state,
     mark_runtime_turn_interrupted,
     update_runtime_emotion,
-    get_runtime_dialogue_state,
 )
 
 

@@ -1,11 +1,12 @@
 """Unit Tests for Tier 21 Social Simulation Engine."""
 
 import pytest
-from app.rpg.ai.social.reputation_graph import ReputationGraph
+
 from app.rpg.ai.social.alliance_system import AllianceSystem
-from app.rpg.ai.social.rumor_system import RumorSystem, Rumor
-from app.rpg.ai.social.social_engine import SocialEngine, SocialEvent
 from app.rpg.ai.social.group_decision import GroupDecisionEngine, NPCDecision
+from app.rpg.ai.social.reputation_graph import ReputationGraph
+from app.rpg.ai.social.rumor_system import Rumor, RumorSystem
+from app.rpg.ai.social.social_engine import SocialEngine, SocialEvent
 
 
 class TestReputationGraph:

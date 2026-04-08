@@ -34,7 +34,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 # Resource types with default configurations
 RESOURCE_CONFIG = {
     "stamina": {

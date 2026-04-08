@@ -15,23 +15,22 @@ import copy
 import pytest
 
 from app.rpg.debug.core import DebugCore
-from app.rpg.debug.trace_builder import DebugTraceBuilder
-from app.rpg.debug.presenter import DebugPresenter
 from app.rpg.debug.models import (
-    DebugTrace,
-    DebugTraceNode,
-    ChoiceExplanation,
-    NPCResponseExplanation,
-    EncounterExplanation,
-    WorldSimExplanation,
-    GMInspectionBundle,
     SUPPORTED_DEBUG_NODE_TYPES,
     SUPPORTED_DEBUG_SCOPES,
+    ChoiceExplanation,
+    DebugTrace,
+    DebugTraceNode,
+    EncounterExplanation,
+    GMInspectionBundle,
+    NPCResponseExplanation,
+    WorldSimExplanation,
 )
-from app.rpg.ux.models import SceneUXPayload, ActionResultPayload, PlayerChoiceCard
+from app.rpg.debug.presenter import DebugPresenter
+from app.rpg.debug.trace_builder import DebugTraceBuilder
+from app.rpg.ux.models import ActionResultPayload, PlayerChoiceCard, SceneUXPayload
 from app.rpg.ux.payload_builder import UXPayloadBuilder
 from app.rpg.ux.presenters import UXPresenter
-
 
 # ======================================================================
 # Helpers — lightweight mock loop

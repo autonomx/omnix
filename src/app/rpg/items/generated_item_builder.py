@@ -1,5 +1,6 @@
 """Phase 18.3A — LLM-generated item normalization and clamping."""
 from __future__ import annotations
+
 import hashlib
 from typing import Any, Dict
 

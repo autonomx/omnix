@@ -31,7 +31,6 @@ import math
 import time
 from typing import Any, Dict, List, Optional
 
-
 # [FIX #4] Goal cooldown to prevent feedback loops
 GOAL_COOLDOWN_TICKS = 5
 GOAL_COOLDOWN_PENALTY = 0.2  # Utility multiplier when on cooldown

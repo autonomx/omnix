@@ -11,8 +11,8 @@ import json
 import unittest
 
 from app.rpg.ai.world_scene_narrator import (
-    SceneNarrator,
     NarrativeResult,
+    SceneNarrator,
     play_scene,
 )
 

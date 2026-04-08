@@ -13,9 +13,9 @@ def _make_test_app():
         enter_dialogue_mode,
         exit_dialogue_mode,
     )
-    from app.rpg.player.player_journal import update_journal_from_state
     from app.rpg.player.player_codex import update_codex_from_state
     from app.rpg.player.player_encounter import build_encounter_view
+    from app.rpg.player.player_journal import update_journal_from_state
 
     try:
         from app.rpg.api.rpg_player_routes import rpg_player_bp

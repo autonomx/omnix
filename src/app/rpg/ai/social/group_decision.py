@@ -1,10 +1,11 @@
 """Tier 21: Group Decision Engine for NPC collective behavior."""
 
 from __future__ import annotations
+
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
-from collections import defaultdict
 
 
 class DecisionType(Enum):

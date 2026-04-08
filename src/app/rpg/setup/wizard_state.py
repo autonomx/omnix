@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 _MAX_WIZARD_CHARACTERS = 16
 
 

@@ -7,7 +7,9 @@ Ensures world inspector features do not break existing functionality:
 """
 
 import json
+
 from flask import Flask
+
 from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
 
 

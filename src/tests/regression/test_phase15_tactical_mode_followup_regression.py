@@ -4,10 +4,10 @@ Tests for participant order preservation and active effects derivation.
 """
 
 from app.rpg.encounter.tactical_mode import (
-    EncounterTacticalState,
-    TacticalParticipant,
     CombatEffect,
     EncounterDeterminismValidator,
+    EncounterTacticalState,
+    TacticalParticipant,
 )
 
 

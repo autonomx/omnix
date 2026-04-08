@@ -1,6 +1,6 @@
 """Regression tests for Phase 16.2/18.0 — Memory inspector + GM tooling."""
-from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
 from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
+from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
 
 
 def test_regression_memory_inspector_none_state():

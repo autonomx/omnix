@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.memory.actor_memory_state import ensure_actor_memory_state, get_actor_memory
+from app.rpg.memory.actor_memory_state import (
+    ensure_actor_memory_state,
+    get_actor_memory,
+)
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
-
 
 _MAX_DIALOGUE_ACTOR_SHORT = 4
 _MAX_DIALOGUE_ACTOR_LONG = 4

@@ -6,10 +6,10 @@ multi-stage quest arcs from templates based on detected events.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
 import uuid
+from typing import Any, Dict, List
 
-from .quest_models import Quest, QuestStage, QuestObjective
+from .quest_models import Quest, QuestObjective, QuestStage
 from .quest_templates import QUEST_ARCS
 
 

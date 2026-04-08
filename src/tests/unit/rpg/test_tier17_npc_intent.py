@@ -6,25 +6,26 @@ goal generator, planner, opposition engine, and strategy profiles.
 
 from __future__ import annotations
 
-import sys
 import os
-import pytest
+import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "app"))
 
-from rpg.ai.npc_actor import NPCActor
 from rpg.ai.goal_generator import GoalGenerator
+from rpg.ai.intent_engine import IntentEngine
+from rpg.ai.npc_actor import NPCActor
+from rpg.ai.opposition_engine import OppositionEngine
 from rpg.ai.planner import Planner
 from rpg.ai.strategy_profiles import (
     STRATEGY_PROFILES,
-    get_strategy_profile,
     get_strategy_bias,
+    get_strategy_profile,
     list_strategies,
 )
-from rpg.ai.intent_engine import IntentEngine
-from rpg.ai.opposition_engine import OppositionEngine
 
 
 class TestNPCActor:

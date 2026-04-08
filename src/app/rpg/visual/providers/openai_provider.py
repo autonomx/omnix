@@ -10,7 +10,6 @@ from typing import Any, Dict
 
 from .base import BaseImageProvider, ImageGenerationResult
 
-
 _DEFAULT_MODEL = "gpt-image-1"
 _DEFAULT_SIZE = "1024x1024"
 _OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"

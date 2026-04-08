@@ -13,7 +13,6 @@ from typing import Any
 
 from .payload_builder import UXPayloadBuilder
 
-
 # Panel-id → GameLoop method-name mapping
 _PANEL_METHOD_MAP: dict[str, str] = {
     "journal": "get_journal_panel",

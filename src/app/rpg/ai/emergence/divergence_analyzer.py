@@ -1,5 +1,6 @@
-from typing import Any, Dict, List  
-  
+from typing import Any, Dict, List
+
+
 class DivergenceAnalyzer:  
     def measure_divergence(self, tracker, npc_ids):  
         npc_patterns = {}  

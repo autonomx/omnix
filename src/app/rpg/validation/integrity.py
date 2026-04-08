@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Set, Tuple
 
-
 MAX_VISUAL_REQUESTS = 100
 MAX_VISUAL_ASSETS = 200
 MAX_ACTOR_MEMORY_ENTRIES = 50

@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 
 from app.rpg.validation.integrity import validate_package_integrity
 
-
 _PACKAGE_SCHEMA_VERSION = 1
 
 

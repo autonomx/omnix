@@ -6,8 +6,8 @@ from flask import Flask
 
 def _make_test_app():
     """Create a minimal Flask test app with just the dialogue blueprint."""
-    from app.rpg.player import ensure_player_state
     from app.rpg.ai.dialogue import DialogueManager
+    from app.rpg.player import ensure_player_state
 
     try:
         from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp

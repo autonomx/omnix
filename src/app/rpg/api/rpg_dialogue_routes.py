@@ -5,7 +5,6 @@ from flask import Blueprint, jsonify, request
 from app.rpg.ai.dialogue import DialogueManager
 from app.rpg.player import ensure_player_state
 
-
 rpg_dialogue_bp = Blueprint("rpg_dialogue_bp", __name__)
 dialogue_manager = DialogueManager()
 

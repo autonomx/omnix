@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.session_store import _normalize_session, _safe_dict
 
-
 _SESSION_DIR = Path("data/rpg_sessions")
 _SAVE_VERSION = "1.0"
 

@@ -1,9 +1,9 @@
 """Regression tests for Phase 20 save packaging fixes."""
 from app.rpg.persistence.save_packaging import (
-    SaveBuilder,
-    SaveSerializer,
-    SavePackagingValidator,
     ReplayConsistencyChecker,
+    SaveBuilder,
+    SavePackagingValidator,
+    SaveSerializer,
 )
 
 

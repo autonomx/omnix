@@ -10,7 +10,6 @@ from typing import Any, Dict
 
 from .base import BaseImageProvider, ImageGenerationResult
 
-
 _DEFAULT_COMFY_BASE_URL = "http://127.0.0.1:8188"
 _DEFAULT_TIMEOUT_SEC = 180
 _DEFAULT_POLL_INTERVAL_SEC = 1.0

@@ -1,11 +1,17 @@
 """Unit tests for RPG emotion system."""
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
-from rpg.emotion import decay_emotions, apply_event_emotion, apply_event_emotion_with_relationships, is_ally
+from rpg.emotion import (
+    apply_event_emotion,
+    apply_event_emotion_with_relationships,
+    decay_emotions,
+    is_ally,
+)
 
 
 def make_npc(npc_id="npc_1"):

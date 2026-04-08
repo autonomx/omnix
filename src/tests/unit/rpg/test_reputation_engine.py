@@ -21,13 +21,13 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
 from rpg.world.reputation_engine import (
-    ReputationEngine,
-    FactionStanding,
-    ATTITUDE_HOSTILE_THRESHOLD,
-    ATTITUDE_FRIENDLY_THRESHOLD,
     ATTITUDE_ALLY_THRESHOLD,
+    ATTITUDE_FRIENDLY_THRESHOLD,
+    ATTITUDE_HOSTILE_THRESHOLD,
     MAX_REPUTATION,
     MIN_REPUTATION,
+    FactionStanding,
+    ReputationEngine,
 )
 
 

@@ -1,11 +1,11 @@
 import unittest
 
+from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator
 from app.rpg.core.determinism import DeterminismConfig
 from app.rpg.core.effects import EffectManager
-from app.rpg.core.game_loop import GameLoop
 from app.rpg.core.event_bus import EventBus
+from app.rpg.core.game_loop import GameLoop
 from app.rpg.core.llm_recording import LLMRecorder
-from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator
 
 
 class _Parser:

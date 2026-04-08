@@ -10,8 +10,8 @@ Covers:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import unittest
 
 # Ensure the src directory is on the import path
@@ -25,7 +25,6 @@ from app.rpg.creator.regeneration import (
     regenerate_multiple_items,
 )
 from app.rpg.services import adventure_builder_service as builder
-
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -396,6 +395,7 @@ class TestRegenerateMultipleItemsService(unittest.TestCase):
 def _create_test_app():
     """Create a Flask test app with the creator blueprint."""
     from flask import Flask
+
     from app.rpg.creator_routes import creator_bp
 
     app = Flask(__name__)

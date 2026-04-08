@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.compat.character_cards import export_canonical_character_card, import_external_character_card
+from app.rpg.compat.character_cards import (
+    export_canonical_character_card,
+    import_external_character_card,
+)
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.visual_state import ensure_visual_state
 from app.rpg.ui.character_builder import build_character_ui_state
 from app.rpg.ui.world_builder import build_world_inspector_state
-
 
 _PACKAGE_VERSION = "1.0"
 _MAX_PACKAGE_CHARACTERS = 64

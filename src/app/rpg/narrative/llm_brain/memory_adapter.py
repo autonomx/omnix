@@ -1,6 +1,8 @@
 """Memory Adapter - Reduces world state to token-efficient summary. TIER 19."""
 from __future__ import annotations
+
 from typing import Any, Dict, List
+
 MAX_EVENTS = 10
 class NarrativeMemoryAdapter:
     def compress(self, context: Dict[str, Any]) -> Dict[str, Any]:

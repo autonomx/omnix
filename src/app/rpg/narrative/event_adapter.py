@@ -44,7 +44,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
-
 # Field name mappings: raw_field -> canonical_field
 _FIELD_MAPPINGS: Dict[str, Dict[str, str]] = {
     # Actor fields

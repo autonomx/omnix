@@ -17,7 +17,6 @@ from .models import (
 from .query import CoherenceQueryAPI
 from .reducers import normalize_event, reduce_event
 
-
 AUTHORITY_RANK = {
     "creator_canon": 100,
     "engine_confirmed": 90,

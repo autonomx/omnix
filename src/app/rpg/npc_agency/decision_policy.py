@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from .models import NPCDecisionContext, NPCDecisionResult
 
-
 # Thresholds for deterministic decision branching
 _HOSTILITY_THRESHOLD = 0.4
 _FEAR_THRESHOLD = 0.4

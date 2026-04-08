@@ -30,7 +30,6 @@ from .models import (
 )
 from .transitions import SceneTransitionBuilder
 
-
 # Supported event types that this resolver may emit.
 SUPPORTED_EVENT_TYPES = frozenset({
     "thread_progressed",

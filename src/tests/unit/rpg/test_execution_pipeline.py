@@ -9,25 +9,24 @@ Tests cover:
     Fix #6: Structured trace logging
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+from rpg.core.action_resolver import ActionResolver
 from rpg.core.execution_pipeline import (
+    AUTHORITY_PRIORITIES,
     ExecutionPipeline,
     TurnTrace,
-    AUTHORITY_PRIORITIES,
-    get_action_priority,
-    sort_actions_by_authority,
     build_director_feedback,
-    format_feedback_for_director_prompt,
     build_director_planning_context,
-    filter_affordable_actions,
     consume_action_resources,
     create_default_pipeline,
+    filter_affordable_actions,
+    format_feedback_for_director_prompt,
+    get_action_priority,
+    sort_actions_by_authority,
 )
-from rpg.core.action_resolver import ActionResolver
 from rpg.core.probabilistic_executor import ProbabilisticActionExecutor
-
 
 # ============================================================
 # Fix #4 Tests: Authority Hierarchy

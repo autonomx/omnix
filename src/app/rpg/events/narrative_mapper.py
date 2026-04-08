@@ -20,7 +20,6 @@ The narrative events can then be consumed by:
 
 from typing import Any, Dict, List, Optional
 
-
 # Event type to narrative template mapping
 NARRATIVE_TEMPLATES = {
     "damage": {

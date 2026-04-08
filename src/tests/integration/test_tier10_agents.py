@@ -9,8 +9,8 @@ Tests the full agent pipeline integrated with PlayerLoop:
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -306,8 +306,8 @@ class TestRegressionExistingFunctionality:
 
     def test_agent_system_does_not_break_existing_tiers(self):
         """Test that adding Tier 10 doesn't break Tier 7-9 systems."""
-        from rpg.world.faction_system import FactionSystem, Faction
         from rpg.agent.agent_system import AgentSystem
+        from rpg.world.faction_system import Faction, FactionSystem
 
         # Faction system should still work independently
         fs = FactionSystem()
@@ -323,8 +323,8 @@ class TestRegressionExistingFunctionality:
 
     def test_character_engine_still_works_with_agents(self):
         """Test that CharacterEngine works alongside AgentSystem."""
-        from rpg.rpg.character.character_engine import CharacterEngine
         from rpg.agent.agent_system import AgentSystem
+        from rpg.rpg.character.character_engine import CharacterEngine
 
         engine = CharacterEngine()
         char = engine.get_or_create("test_npc", "Test NPC")

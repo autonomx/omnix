@@ -21,7 +21,6 @@ from __future__ import annotations
 import random
 from typing import Any, Dict, List, Optional
 
-
 # ============================================================
 # Event definitions — expandable pool per intervention type
 # ============================================================

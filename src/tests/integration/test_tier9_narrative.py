@@ -22,13 +22,12 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'app'))
 
 import pytest
-
-from rpg.core.player_loop import PlayerLoop
-from rpg.story.scene_engine import Scene, SceneEngine
 from rpg.character.character_engine import Character, CharacterEngine
+from rpg.core.player_loop import PlayerLoop
 from rpg.memory.narrative_memory import NarrativeMemory
-from rpg.story.story_arc_engine import StoryArcEngine, StoryArc, create_war_arc
 from rpg.story.narrative_renderer import NarrativeRenderer
+from rpg.story.scene_engine import Scene, SceneEngine
+from rpg.story.story_arc_engine import StoryArc, StoryArcEngine, create_war_arc
 
 
 class TestSceneEngine:

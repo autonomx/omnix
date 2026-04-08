@@ -8,26 +8,26 @@ from __future__ import annotations
 import pytest
 
 from app.rpg.creator.world_debug import (
+    explain_faction,
+    explain_npc,
     summarize_npc_minds,
     summarize_social_state,
-    summarize_world_pressures,
-    explain_npc,
-    explain_faction,
     summarize_tick_changes,
-)
-from app.rpg.creator.world_replay import (
-    list_snapshots,
-    get_snapshot,
-    rollback_to_snapshot,
-    summarize_timeline,
+    summarize_world_pressures,
 )
 from app.rpg.creator.world_gm_tools import (
-    inject_event,
-    seed_rumor,
     force_alliance,
     force_faction_position,
     force_npc_belief,
+    inject_event,
+    seed_rumor,
     step_ticks,
+)
+from app.rpg.creator.world_replay import (
+    get_snapshot,
+    list_snapshots,
+    rollback_to_snapshot,
+    summarize_timeline,
 )
 
 

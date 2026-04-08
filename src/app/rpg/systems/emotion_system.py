@@ -11,8 +11,8 @@ Fixes:
 - Distance computed once and cached (no redundant computations)
 """
 
-from rpg.spatial import distance
 from rpg.emotion import apply_event_emotion
+from rpg.spatial import distance
 from rpg.utils.entity_lookup import find_entity as find_npc
 
 

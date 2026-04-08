@@ -10,6 +10,12 @@ Tests for visual_state.py module covering:
 - prompt validation, moderation, fallback (Phase 12.5)
 """
 from app.rpg.presentation.visual_state import (
+    _normalize_image_request,
+    _normalize_scene_illustration,
+    _normalize_visual_identity_entry,
+    _safe_int,
+    _safe_str,
+    _stable_seed_from_text,
     append_appearance_event,
     append_image_request,
     append_scene_illustration,
@@ -24,12 +30,6 @@ from app.rpg.presentation.visual_state import (
     upsert_appearance_profile,
     upsert_character_visual_identity,
     validate_visual_prompt,
-    _stable_seed_from_text,
-    _normalize_visual_identity_entry,
-    _normalize_scene_illustration,
-    _normalize_image_request,
-    _safe_str,
-    _safe_int,
 )
 
 

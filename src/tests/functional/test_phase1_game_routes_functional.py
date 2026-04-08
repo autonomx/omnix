@@ -3,13 +3,14 @@
 Tests the FastAPI game routes against a running server or using TestClient.
 """
 
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-
 # Import the FastAPI app
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from server_fastapi import app

@@ -1,8 +1,12 @@
 """Phase 18.3A — Player character creation contract."""
 from __future__ import annotations
+
 from typing import Any, Dict
 
-from .player_progression_state import ensure_player_progression_state, allocate_starting_stats
+from .player_progression_state import (
+    allocate_starting_stats,
+    ensure_player_progression_state,
+)
 
 _DEFAULT_TOTAL_POINTS = 12
 _STAT_NAMES = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]

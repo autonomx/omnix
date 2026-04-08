@@ -15,10 +15,10 @@ from __future__ import annotations
 import pytest
 
 from app.rpg.encounter import (
-    ensure_encounter_state,
-    build_encounter_from_scene,
     EncounterResolver,
+    build_encounter_from_scene,
     build_player_actions,
+    ensure_encounter_state,
 )
 
 

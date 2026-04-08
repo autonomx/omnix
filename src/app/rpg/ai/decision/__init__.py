@@ -12,9 +12,9 @@ Core classes:
 """
 
 from .decision_engine import DecisionContext, DecisionEngine
-from .resolver import ActionResolver
 from .feedback import DecisionOutcome
 from .outcome import OutcomeRecorder
+from .resolver import ActionResolver
 
 __all__ = [
     "DecisionContext",

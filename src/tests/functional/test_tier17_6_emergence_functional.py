@@ -1,10 +1,13 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "app", "rpg", "ai", "emergence"))
-from emergence_tracker import EmergenceTracker
-from divergence_analyzer import DivergenceAnalyzer
 from causality_tracker import CausalityTracker
-from loop_detector import LoopDetector
+from divergence_analyzer import DivergenceAnalyzer
 from emergence_metrics import EmergenceMetrics
+from emergence_tracker import EmergenceTracker
+from loop_detector import LoopDetector
+
 
 class TestEmergenceFunctional:
     def test_full_emergence_pipeline(self):

@@ -5,11 +5,11 @@ and item definition safety.
 """
 
 from app.rpg.items.economy import (
-    InventoryState,
-    InventoryItem,
-    ItemDefinition,
     EquipmentManager,
     InventoryDeterminismValidator,
+    InventoryItem,
+    InventoryState,
+    ItemDefinition,
     ShopManager,
     ShopState,
 )

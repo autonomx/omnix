@@ -1,24 +1,25 @@
 """Phase 18.3A — Unit tests for player progression state."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 import pytest
 
-from app.rpg.player.player_progression_state import (
-    ensure_player_progression_state,
-    allocate_starting_stats,
-    get_stat_modifier,
-    get_skill_level,
-    award_player_xp,
-    award_skill_xp,
-    resolve_level_ups,
-    resolve_skill_level_ups,
-)
 from app.rpg.player.player_creation import (
+    apply_character_creation,
     build_default_stat_allocation,
     validate_stat_allocation,
-    apply_character_creation,
+)
+from app.rpg.player.player_progression_state import (
+    allocate_starting_stats,
+    award_player_xp,
+    award_skill_xp,
+    ensure_player_progression_state,
+    get_skill_level,
+    get_stat_modifier,
+    resolve_level_ups,
+    resolve_skill_level_ups,
 )
 
 

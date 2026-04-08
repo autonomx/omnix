@@ -1,25 +1,26 @@
 """Phase 18.3A — Regression tests ensuring no breakage."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import pytest
 
-from app.rpg.player.player_progression_state import (
-    ensure_player_progression_state,
-    allocate_starting_stats,
-)
 from app.rpg.action_resolver import (
+    resolve_action,
     resolve_attack_roll,
     resolve_noncombat_check,
-    resolve_action,
 )
-from app.rpg.items.inventory_state import normalize_inventory_state
-from app.rpg.items.item_registry import get_item_definition
-from app.rpg.items.world_items import ensure_world_item_state
-from app.rpg.items.item_stats import normalize_item_stats
 from app.rpg.creator.world_expansion import maybe_spawn_dynamic_npc
 from app.rpg.items.generated_item_builder import clamp_generated_item_stats
+from app.rpg.items.inventory_state import normalize_inventory_state
+from app.rpg.items.item_registry import get_item_definition
+from app.rpg.items.item_stats import normalize_item_stats
+from app.rpg.items.world_items import ensure_world_item_state
+from app.rpg.player.player_progression_state import (
+    allocate_starting_stats,
+    ensure_player_progression_state,
+)
 
 
 class TestLegacyCompatibility:
@@ -117,7 +118,9 @@ class TestNoBrokenImports:
     """Verify all new modules can be loaded without error."""
 
     def test_load_player_progression(self):
-        from app.rpg.player.player_progression_state import ensure_player_progression_state as fn
+        from app.rpg.player.player_progression_state import (
+            ensure_player_progression_state as fn,
+        )
         assert fn is not None
 
     def test_load_player_creation(self):
@@ -133,7 +136,9 @@ class TestNoBrokenImports:
         assert fn is not None
 
     def test_load_generated_item_builder(self):
-        from app.rpg.items.generated_item_builder import build_item_definition_from_llm as fn
+        from app.rpg.items.generated_item_builder import (
+            build_item_definition_from_llm as fn,
+        )
         assert fn is not None
 
     def test_load_xp_rules(self):

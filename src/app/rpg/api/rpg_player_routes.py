@@ -7,21 +7,20 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from app.rpg.items import apply_item_use, list_item_definitions
+from app.rpg.party import (
+    add_companion,
+    ensure_party_state,
+    remove_companion,
+)
 from app.rpg.player import (
+    build_player_inventory_view,
+    ensure_player_inventory,
     ensure_player_state,
     enter_dialogue_mode,
     exit_dialogue_mode,
-    ensure_player_inventory,
-    build_player_inventory_view,
 )
 from app.rpg.player.player_encounter import build_encounter_view
-from app.rpg.items import apply_item_use, list_item_definitions
-from app.rpg.party import (
-    ensure_party_state,
-    add_companion,
-    remove_companion,
-)
-
 
 rpg_player_bp = Blueprint("rpg_player_bp", __name__)
 
@@ -318,7 +317,10 @@ def unequip_item_route():
 @rpg_player_bp.post("/api/rpg/player/inventory/drop")
 def drop_item_route():
     """Drop an item from inventory into the world."""
-    from app.rpg.items.inventory_state import remove_inventory_item, get_inventory_item_for_drop
+    from app.rpg.items.inventory_state import (
+        get_inventory_item_for_drop,
+        remove_inventory_item,
+    )
     from app.rpg.items.world_items import drop_world_item
     from app.rpg.session.runtime import load_runtime_session, save_runtime_session
 

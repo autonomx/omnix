@@ -15,18 +15,17 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from app.rpg.ai.world_scene_narrator import (
-    SceneNarrator,
-    NPCReaction,
     NarrativeResult,
-    build_scene_prompt,
-    build_npc_reaction_prompt,
+    NPCReaction,
+    SceneNarrator,
     build_choice_prompt,
-    parse_scene_response,
-    parse_npc_reaction,
+    build_npc_reaction_prompt,
+    build_scene_prompt,
     parse_choices,
+    parse_npc_reaction,
+    parse_scene_response,
     play_scene,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test data

@@ -9,16 +9,16 @@ Key rule: option selection never mutates state directly.
 
 from __future__ import annotations
 
+from .consequences import ConsequenceBuilder
+from .intent_mapping import ActionIntentMapper
 from .models import (
     ActionConsequence,
     ActionResolutionResult,
     ResolvedAction,
     SceneTransition,
 )
-from .intent_mapping import ActionIntentMapper
-from .consequences import ConsequenceBuilder
-from .transitions import SceneTransitionBuilder
 from .resolver import ActionResolver
+from .transitions import SceneTransitionBuilder
 
 __all__ = [
     "ActionConsequence",

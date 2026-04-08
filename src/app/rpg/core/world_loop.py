@@ -35,10 +35,9 @@ Key Features:
 from __future__ import annotations
 
 import random
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 from rpg.core.npc_state import NPCState
-
 
 # Default passive event probabilities
 PASSIVE_EVENT_PROBABILITIES: Dict[str, float] = {

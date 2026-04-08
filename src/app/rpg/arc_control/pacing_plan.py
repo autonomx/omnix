@@ -8,7 +8,6 @@ such as *prefer social scenes*, *increase mystery pressure*, or
 
 from __future__ import annotations
 
-
 from .models import PacingPlanState
 
 

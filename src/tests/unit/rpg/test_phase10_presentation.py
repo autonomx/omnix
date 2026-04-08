@@ -1,17 +1,20 @@
 """Phase 10 — Presentation layer unit tests."""
 from app.rpg.presentation import (
-    build_scene_presentation_payload,
-    build_dialogue_presentation_payload,
-    build_personality_style_tags,
-    build_personality_prompt_hints,
-    ensure_personality_state,
-    get_actor_personality_profile,
-    build_personality_summary,
     build_deterministic_dialogue_fallback,
     build_deterministic_scene_fallback,
+    build_dialogue_presentation_payload,
+    build_personality_prompt_hints,
+    build_personality_style_tags,
+    build_personality_summary,
+    build_scene_presentation_payload,
+    ensure_personality_state,
+    get_actor_personality_profile,
 )
 from app.rpg.presentation.dialogue_prompt_builder import build_dialogue_llm_payload
-from app.rpg.presentation.speaker_cards import build_speaker_cards, build_party_speaker_cards
+from app.rpg.presentation.speaker_cards import (
+    build_party_speaker_cards,
+    build_speaker_cards,
+)
 
 
 def test_build_personality_style_tags_returns_deterministic_tags():

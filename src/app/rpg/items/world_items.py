@@ -1,8 +1,8 @@
 """Phase 18.3A — World item state: ground loot and scene objects."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
 import hashlib
+from typing import Any, Dict, List
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:

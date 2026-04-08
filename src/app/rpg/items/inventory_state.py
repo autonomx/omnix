@@ -9,7 +9,6 @@ from typing import Any, Dict, List
 
 from .item_registry import get_item_definition
 
-
 _MAX_INVENTORY_SLOTS = 50
 _MAX_LAST_LOOT = 10
 _MAX_EQUIPMENT_SLOTS = 12

@@ -3,6 +3,7 @@
 Ensures existing party functionality is not broken by 9.2 changes.
 """
 import sys
+
 import pytest
 
 
@@ -68,7 +69,7 @@ def test_add_duplicate_companion_does_not_increase_count():
 def test_remove_companion_reduces_count():
     """Removing a companion should decrease party size."""
     sys.path.insert(0, "src")
-    from app.rpg.party.party_state import remove_companion, ensure_party_state
+    from app.rpg.party.party_state import ensure_party_state, remove_companion
 
     ps = {
         "party_state": {

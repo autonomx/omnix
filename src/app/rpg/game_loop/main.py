@@ -10,19 +10,25 @@ The game loop follows this pattern:
 import random
 
 from rpg.ai.npc_planner import choose_target, decide
-from rpg.spatial import distance
-from rpg.emotion import decay_emotions
-from rpg.story.director import StoryDirector
 from rpg.brain.unified_brain import unified_brain
+from rpg.emotion import decay_emotions
 from rpg.narrative_context import build_context, update_tension
 from rpg.pipeline_adapter import adapt_pipeline_result
-from rpg.scene_generator import generate_scene
 from rpg.scene.grounding import build_grounding_block
 from rpg.scene.validator import validate_scene
+from rpg.scene_generator import generate_scene
 from rpg.simulation import find_npc, process
+from rpg.spatial import distance
+from rpg.story.director import StoryDirector
 
 # Import system registration
-from rpg.systems import combat_system, emotion_system, memory_system, scene_system, debug_system
+from rpg.systems import (
+    combat_system,
+    debug_system,
+    emotion_system,
+    memory_system,
+    scene_system,
+)
 
 
 def handle_action(session, action):

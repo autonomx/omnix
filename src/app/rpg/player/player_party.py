@@ -7,9 +7,9 @@ and Phase 10 presentation speaker cards.
 from typing import Any, Dict, List
 
 from app.rpg.party import (
-    ensure_party_state,
-    build_party_summary,
     build_companion_presence_summary,
+    build_party_summary,
+    ensure_party_state,
 )
 from app.rpg.presentation import build_party_speaker_cards
 

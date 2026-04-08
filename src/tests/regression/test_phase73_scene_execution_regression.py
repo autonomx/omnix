@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.execution.resolver import ActionResolver, SUPPORTED_EVENT_TYPES
 from app.rpg.coherence.core import CoherenceCore
+from app.rpg.execution.resolver import SUPPORTED_EVENT_TYPES, ActionResolver
 
 
 def _make_option(

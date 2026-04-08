@@ -10,7 +10,7 @@ The design spec requires structured output, not text:
     - tension_delta: Tension adjustment
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 
 class DirectorOutput:

@@ -12,10 +12,9 @@ Tests cover:
 
 import pytest
 
-from app.rpg.core.timeline_graph import TimelineNode, TimelineGraph
-from app.rpg.core.timeline_metadata import TimelineMetadata
 from app.rpg.core.event_bus import Event, EventBus
-
+from app.rpg.core.timeline_graph import TimelineGraph, TimelineNode
+from app.rpg.core.timeline_metadata import TimelineMetadata
 
 # ==================== TimelineNode Tests ====================
 

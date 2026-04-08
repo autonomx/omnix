@@ -3,8 +3,8 @@
 Ensures recovery does not spiral, invent entities, bypass replay rules,
 or break snapshot compatibility.
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -14,7 +14,6 @@ from app.rpg.core.snapshot_manager import SnapshotManager
 from app.rpg.narrative.story_director import StoryDirector
 from app.rpg.recovery.manager import RecoveryManager
 from app.rpg.recovery.models import RecoveryState
-
 
 # ---------------------------------------------------------------------------
 # Stubs

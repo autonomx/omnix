@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 _MAX_SHORT_TERM = 12
 _MAX_LONG_TERM = 24
 _MAX_WORLD_MEMORY = 32

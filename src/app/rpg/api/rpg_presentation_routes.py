@@ -12,11 +12,57 @@ Provides read-only builders for presentation payloads:
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from app.rpg.compat.character_cards import (
+    export_canonical_character_card,
+    import_external_character_card,
+)
+from app.rpg.creator.pack_authoring import (
+    build_pack_draft_export,
+    build_pack_draft_preview,
+    validate_pack_draft,
+)
+from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
+
+# Phase 14.4 — Memory decay (canonical decay engine)
+from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
+
+# Phase 14.3 — Memory → Dialogue Injection (canonical)
+from app.rpg.memory.dialogue_context import (
+    build_dialogue_memory_context,
+    build_llm_memory_prompt_block,
+)
+
+# Phase 16.1 — Memory lifecycle automation
+from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
+
+# Phase 14.4 — Memory Decay / Reinforcement
+from app.rpg.memory.memory_decay import apply_memory_decay
+
+# Phase 14.0 — Memory system
+from app.rpg.memory.memory_state import (
+    append_long_term_memory,
+    append_short_term_memory,
+    append_world_memory,
+    ensure_memory_state,
+)
+from app.rpg.memory.world_memory_state import ensure_world_memory_state
+from app.rpg.modding.content_packs import (
+    apply_content_pack,
+    build_pack_application_preview,
+    build_pack_bootstrap_payload,
+    ensure_content_pack_state,
+    list_content_packs,
+)
+from app.rpg.packaging.package_io import (
+    export_session_package,
+    import_session_package,
+)
 from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.presentation import (
     build_dialogue_presentation_payload,
@@ -31,12 +77,17 @@ from app.rpg.presentation import (
     build_scene_presentation_payload,
     build_setup_flow_payload,
 )
+
+# Phase 18.0 — Unified GM tooling
+from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
+
+# Phase 16.2 — Memory inspector
+from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_speaker_cards
-from app.rpg.ui.character_builder import build_character_inspector_state, build_character_ui_state
-from app.rpg.ui.world_builder import build_world_inspector_state
-from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
-from app.rpg.memory.world_memory_state import ensure_world_memory_state
+
+# Phase 12.15 — Visual inspector
+from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
 from app.rpg.presentation.visual_state import (
     append_appearance_event,
     append_image_request,
@@ -53,57 +104,38 @@ from app.rpg.presentation.visual_state import (
     upsert_character_visual_identity,
     validate_visual_prompt,
 )
-from app.rpg.compat.character_cards import (
-    export_canonical_character_card,
-    import_external_character_card,
-)
-from app.rpg.packaging.package_io import (
-    export_session_package,
-    import_session_package,
-)
-from app.rpg.modding.content_packs import (
-    apply_content_pack,
-    build_pack_application_preview,
-    build_pack_bootstrap_payload,
-    ensure_content_pack_state,
-    list_content_packs,
-)
-from app.rpg.creator.pack_authoring import (
-    build_pack_draft_export,
-    build_pack_draft_preview,
-    validate_pack_draft,
-)
-from datetime import datetime
 
-from app.rpg.templates.campaign_templates import (
-    build_campaign_template,
-    build_template_start_payload,
-    list_campaign_templates,
+# Phase 15.0 — Durable persistence
+from app.rpg.session.durable_store import (
+    list_sessions_from_disk,
+    load_session_from_disk,
+    save_session_to_disk,
+)
+from app.rpg.session.migrations import migrate_session_payload
+
+# Phase 15.2 — Session/package bridge with validation and normalization
+from app.rpg.session.package_bridge import (
+    package_to_session,
+    session_to_package,
+    validate_package_payload,
 )
 
-# Phase 12.10 — Visual worker executor
-from app.rpg.visual.worker import process_pending_image_requests
-
-# Phase 12.12 — ComfyUI provider
-from app.rpg.visual.providers import get_image_provider
-
-# Phase 12.13.5 — Visual queue management with hardening
-from app.rpg.visual.job_queue import (
-    enqueue_visual_job,
-    list_visual_jobs,
-    normalize_visual_queue,
-    prune_completed_visual_jobs,
+# Phase 15.3 — Canonical session service
+from app.rpg.session.service import (
+    archive_session as archive_canonical_session,
 )
-from app.rpg.visual.queue_runner import run_one_queued_job
-
-# Phase 12.14 — Asset dedupe and cleanup
-from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
-
-# Phase 13.4 — New Adventure Wizard UI
-from app.rpg.setup.wizard_state import (
-    build_wizard_preview_payload,
-    build_wizard_setup_payload,
-    normalize_wizard_state,
+from app.rpg.session.service import (
+    export_session_as_package,
+    import_session_from_package,
+)
+from app.rpg.session.service import (
+    list_sessions as list_canonical_sessions,
+)
+from app.rpg.session.service import (
+    load_session as load_canonical_session,
+)
+from app.rpg.session.service import (
+    save_session as save_canonical_session,
 )
 
 # Phase 13.5 — Session lifecycle + persistence
@@ -115,58 +147,22 @@ from app.rpg.session.session_store import (
     save_session,
 )
 
-# Phase 14.0 — Memory system
-from app.rpg.memory.memory_state import (
-    append_long_term_memory,
-    append_short_term_memory,
-    append_world_memory,
-    ensure_memory_state,
+# Phase 13.4 — New Adventure Wizard UI
+from app.rpg.setup.wizard_state import (
+    build_wizard_preview_payload,
+    build_wizard_setup_payload,
+    normalize_wizard_state,
 )
-
-# Phase 14.3 — Memory → Dialogue Injection (canonical)
-from app.rpg.memory.dialogue_context import (
-    build_dialogue_memory_context,
-    build_llm_memory_prompt_block,
+from app.rpg.templates.campaign_templates import (
+    build_campaign_template,
+    build_template_start_payload,
+    list_campaign_templates,
 )
-
-# Phase 16.1 — Memory lifecycle automation
-from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
-
-# Phase 14.4 — Memory Decay / Reinforcement
-from app.rpg.memory.memory_decay import apply_memory_decay
-
-# Phase 15.0 — Durable persistence
-from app.rpg.session.durable_store import (
-    list_sessions_from_disk,
-    load_session_from_disk,
-    save_session_to_disk,
+from app.rpg.ui.character_builder import (
+    build_character_inspector_state,
+    build_character_ui_state,
 )
-from app.rpg.session.migrations import migrate_session_payload
-
-# Phase 12.15 — Visual inspector
-from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
-
-# Phase 16.2 — Memory inspector
-from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
-
-# Phase 18.0 — Unified GM tooling
-from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
-
-# Phase 14.4 — Memory decay (canonical decay engine)
-from app.rpg.memory.decay import decay_memory_state, reinforce_actor_memory
-
-# Phase 15.2 — Session/package bridge with validation and normalization
-from app.rpg.session.package_bridge import package_to_session, session_to_package, validate_package_payload
-
-# Phase 15.3 — Canonical session service
-from app.rpg.session.service import (
-    archive_session as archive_canonical_session,
-    export_session_as_package,
-    import_session_from_package,
-    list_sessions as list_canonical_sessions,
-    load_session as load_canonical_session,
-    save_session as save_canonical_session,
-)
+from app.rpg.ui.world_builder import build_world_inspector_state
 
 # Phase 17.0 — Integrity validation
 from app.rpg.validation.integrity import (
@@ -176,6 +172,24 @@ from app.rpg.validation.integrity import (
     validate_simulation_state,
     validate_visual_state,
 )
+
+# Phase 12.14 — Asset dedupe and cleanup
+from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
+
+# Phase 12.13.5 — Visual queue management with hardening
+from app.rpg.visual.job_queue import (
+    enqueue_visual_job,
+    list_visual_jobs,
+    normalize_visual_queue,
+    prune_completed_visual_jobs,
+)
+
+# Phase 12.12 — ComfyUI provider
+from app.rpg.visual.providers import get_image_provider
+from app.rpg.visual.queue_runner import run_one_queued_job
+
+# Phase 12.10 — Visual worker executor
+from app.rpg.visual.worker import process_pending_image_requests
 
 rpg_presentation_bp = APIRouter()
 

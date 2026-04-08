@@ -1,5 +1,6 @@
-from typing import Any, Dict, List 
- 
+from typing import Any, Dict, List
+
+
 class CausalityTracker: 
     def __init__(self): 
         self.links = [] 

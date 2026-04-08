@@ -11,8 +11,7 @@ Key guarantees:
     - equipment is a pointer (item_id only), inventory owns quantity
     - VALID_SLOTS enforced for equipment
 """
-from typing import Dict, Any, List, Optional
-
+from typing import Any, Dict, List, Optional
 
 # Valid equipment slots — centralised for UI/balance parity
 VALID_SLOTS = {"weapon", "armor", "consumable"}

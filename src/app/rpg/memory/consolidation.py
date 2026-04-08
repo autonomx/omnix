@@ -9,8 +9,8 @@ This system:
 Call consolidate_memories(npc) periodically (e.g., every 10 ticks) to keep memory manageable.
 """
 
-from typing import List, Dict, Any, Tuple
 from collections import defaultdict
+from typing import Any, Dict, List, Tuple
 
 
 def _get_memory_key(mem: Dict[str, Any]) -> Tuple[str, str, str]:

@@ -1,8 +1,8 @@
 """Phase 10.6 — Regression tests for disabled-mode semantics fixes."""
-from app.rpg.runtime.dialogue_runtime import begin_runtime_turn
-from app.rpg.orchestration.provider_interface import set_llm_provider_mode
 from app.rpg.orchestration.controller import execute_llm_request_for_turn
+from app.rpg.orchestration.provider_interface import set_llm_provider_mode
 from app.rpg.orchestration.state import get_llm_orchestration_state
+from app.rpg.runtime.dialogue_runtime import begin_runtime_turn
 
 
 def test_phase106_disabled_mode_without_fallback_is_not_marked_success():

@@ -1,5 +1,9 @@
-import json, logging  
-from .narrative_brain import NarrativeDecision  
+import json
+import logging
+
+from .narrative_brain import NarrativeDecision
+
+
 class ResponseParser:  
     def parse(self, raw):  
         try:  

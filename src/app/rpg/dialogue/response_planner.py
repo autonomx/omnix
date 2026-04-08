@@ -18,7 +18,6 @@ from .acts import (
 )
 from .models import DialogueActDecision, DialogueResponsePlan, DialogueTurnContext
 
-
 # ------------------------------------------------------------------
 # Deterministic line templates keyed by primary act
 # ------------------------------------------------------------------

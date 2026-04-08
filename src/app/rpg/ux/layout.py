@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from .models import PanelDescriptor
 
-
 # Deterministic default panel order
 _DEFAULT_PANEL_ORDER: list[tuple[str, str, str]] = [
     ("recap", "Recap", "recap"),

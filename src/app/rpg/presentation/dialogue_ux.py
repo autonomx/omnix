@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
 INTENT_BUTTONS = [
     {"intent_id": "ask", "label": "Ask"},
     {"intent_id": "threaten", "label": "Threaten"},

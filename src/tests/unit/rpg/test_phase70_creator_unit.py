@@ -15,18 +15,9 @@ sys.modules.setdefault("flask", _flask_mock)
 
 import pytest  # noqa: E402
 
-from app.rpg.creator.schema import (  # noqa: E402
-    AdventureSetup,
-    ContentBalance,
-    FactionSeed,
-    LocationSeed,
-    LoreConstraint,
-    NPCSeed,
-    PacingProfile,
-    SafetyConstraint,
-    ThemeConstraint,
-)
+from app.rpg.coherence.models import CoherenceState, FactRecord  # noqa: E402
 from app.rpg.creator.canon import CreatorCanonFact, CreatorCanonState  # noqa: E402
+from app.rpg.creator.commands import GMCommandProcessor  # noqa: E402
 from app.rpg.creator.gm_state import (  # noqa: E402
     CanonOverrideDirective,
     DangerDirective,
@@ -38,11 +29,19 @@ from app.rpg.creator.gm_state import (  # noqa: E402
     RetconDirective,
     ToneDirective,
 )
-from app.rpg.creator.startup_pipeline import StartupGenerationPipeline  # noqa: E402
 from app.rpg.creator.recap import RecapBuilder  # noqa: E402
-from app.rpg.creator.commands import GMCommandProcessor  # noqa: E402
-from app.rpg.coherence.models import CoherenceState, FactRecord  # noqa: E402
-
+from app.rpg.creator.schema import (  # noqa: E402
+    AdventureSetup,
+    ContentBalance,
+    FactionSeed,
+    LocationSeed,
+    LoreConstraint,
+    NPCSeed,
+    PacingProfile,
+    SafetyConstraint,
+    ThemeConstraint,
+)
+from app.rpg.creator.startup_pipeline import StartupGenerationPipeline  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Mock CoherenceCore used by pipeline, recap, and commands tests

@@ -10,20 +10,21 @@ Plus integration tests verifying they work together with PlayerLoop.
 
 from __future__ import annotations
 
-import pytest
-import sys
 import os
+import sys
 from unittest.mock import MagicMock
+
+import pytest
 
 # Add src/app to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
+from rpg.core.player_loop import PlayerLoop
 from rpg.narrative.ai_director import AIDirector
 from rpg.narrative.dialogue_engine import DialogueEngine
-from rpg.narrative.pacing_controller import PacingController
 from rpg.narrative.narrative_event import NarrativeEvent
 from rpg.narrative.narrative_generator import NarrativeGenerator
-from rpg.core.player_loop import PlayerLoop
+from rpg.narrative.pacing_controller import PacingController
 
 
 class TestAIDirector:

@@ -23,7 +23,7 @@ KNOWN SOURCES OF REPLAY MISMATCH:
 
 from typing import Any, Callable, Dict, List, Optional
 
-from ..core.replay_engine import ReplayEngine, ReplayConfig
+from ..core.replay_engine import ReplayConfig, ReplayEngine
 from .state_hash import compute_state_hash
 
 

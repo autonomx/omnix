@@ -1,7 +1,9 @@
 """Phase 9.3 — Companion Narrative Integration functional tests."""
 import json
+
 from flask import Flask
 from flask.testing import FlaskClient
+
 from app.rpg.api.rpg_player_routes import rpg_player_bp
 
 
@@ -38,7 +40,7 @@ def _make_test_payload():
 
 def test_build_player_party_view_returns_presence_summary():
     """Ensure the party view returns presence_summary for narrative payload."""
-    from app.rpg.player.player_party import ensure_player_party, build_player_party_view
+    from app.rpg.player.player_party import build_player_party_view, ensure_player_party
 
     sim_state = _make_test_payload()["simulation_state"]
     sim_state = ensure_player_party(sim_state)
@@ -79,8 +81,8 @@ def test_build_companion_dialogue_context_returns_expected_keys():
 def test_record_narrative_event_updates_history():
     """Recording a narrative event updates history and last_interjection."""
     from app.rpg.party.companion_narrative import (
-        record_companion_narrative_event,
         build_party_narrative_summary,
+        record_companion_narrative_event,
     )
     from app.rpg.party.party_state import ensure_party_state
 
@@ -102,9 +104,9 @@ def test_build_companion_scene_reactions_omits_downed():
     """Downed companion should not appear in scene reactions."""
     from app.rpg.party.companion_narrative import build_companion_scene_reactions
     from app.rpg.party.party_state import (
+        add_companion,
         ensure_party_state,
         set_companion_status,
-        add_companion,
     )
 
     player_state = ensure_party_state({})
@@ -121,8 +123,11 @@ def test_build_companion_scene_reactions_omits_downed():
 
 def test_record_companion_narrative_event_keeps_history_bounded():
     """History must never exceed 20 entries after many recordings."""
-    from app.rpg.party.companion_narrative import record_companion_narrative_event, _MAX_NARRATIVE_HISTORY
-    from app.rpg.party.party_state import ensure_party_state, add_companion
+    from app.rpg.party.companion_narrative import (
+        _MAX_NARRATIVE_HISTORY,
+        record_companion_narrative_event,
+    )
+    from app.rpg.party.party_state import add_companion, ensure_party_state
 
     player_state = ensure_party_state({})
     player_state = add_companion(player_state, "npc_borin", "Borin")

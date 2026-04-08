@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from .dialogue_prompt_builder import build_dialogue_prompt
-from .dialogue_response_parser import parse_dialogue_response
 from app.rpg.player import ensure_player_state
 
+from .dialogue_prompt_builder import build_dialogue_prompt
+from .dialogue_response_parser import parse_dialogue_response
 
 _MAX_HISTORY = 40
 

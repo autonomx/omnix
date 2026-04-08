@@ -1,6 +1,10 @@
 """Phase 14.4 — Memory Decay / Reinforcement unit tests."""
 
-from app.rpg.memory.memory_decay import apply_memory_decay, _decay_entries, _reinforce_entries
+from app.rpg.memory.memory_decay import (
+    _decay_entries,
+    _reinforce_entries,
+    apply_memory_decay,
+)
 
 
 def test_decay_entries_removes_old():

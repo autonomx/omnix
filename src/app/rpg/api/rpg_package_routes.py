@@ -5,10 +5,9 @@ from flask import Blueprint, jsonify, request
 from app.rpg.persistence import (
     build_save_package,
     load_save_package,
-    validate_save_package,
     migrate_package_to_current,
+    validate_save_package,
 )
-
 
 rpg_package_bp = Blueprint("rpg_package_bp", __name__)
 

@@ -1,10 +1,11 @@
 """Tier 21: Alliance System for NPC faction management."""
 
 from __future__ import annotations
+
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
-import uuid
 
 
 class AllianceType(Enum):

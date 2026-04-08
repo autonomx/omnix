@@ -25,9 +25,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ..core.determinism import DeterminismConfig
-from ..core.llm_recording import LLMRecorder
-from ..core.llm_boundary import LLMGateway
 from ..core.event_bus import Event
+from ..core.llm_boundary import LLMGateway
+from ..core.llm_recording import LLMRecorder
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 _MAX_SESSIONS = 64
 
 

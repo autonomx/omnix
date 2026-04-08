@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict
 from datetime import datetime, timezone
+from typing import Any, Dict
 
 from .save_schema import (
     CURRENT_RPG_SCHEMA_VERSION,
-    PACKAGE_TYPE,
     ENGINE_VERSION,
+    PACKAGE_TYPE,
 )
 
 

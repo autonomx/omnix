@@ -1,6 +1,7 @@
 """Tier 21: Reputation Graph for NPC social relationships."""
 
 from __future__ import annotations
+
 from collections import defaultdict
 
 

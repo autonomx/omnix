@@ -10,12 +10,12 @@ Ensures that changes to the scene narrator don't break existing behavior:
 import unittest
 
 from app.rpg.ai.world_scene_narrator import (
-    SceneNarrator,
     NarrativeResult,
-    play_scene,
-    parse_scene_response,
-    parse_npc_reaction,
+    SceneNarrator,
     parse_choices,
+    parse_npc_reaction,
+    parse_scene_response,
+    play_scene,
 )
 
 

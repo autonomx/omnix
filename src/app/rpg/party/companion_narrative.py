@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 _MAX_INTERJECTIONS = 3
 _MAX_DIALOGUE_COMPANIONS = 3
 _MAX_NARRATIVE_HISTORY = 20
@@ -98,7 +97,11 @@ def build_companion_presence_summary(player_state: Dict[str, Any]) -> Dict[str, 
 
     Only includes companions with status='active' (not downed/absent).
     """
-    from .party_state import ensure_party_state, get_active_companions, build_party_summary
+    from .party_state import (
+        build_party_summary,
+        ensure_party_state,
+        get_active_companions,
+    )
 
     player_state = ensure_party_state(player_state)
     # Only active companions are considered "present"
@@ -275,7 +278,12 @@ def apply_companion_choice_reactions(simulation_state: Dict[str, Any], choice_pa
     Mutates simulation_state by updating player_state party companions.
     Returns updated simulation_state with _companion_reaction_events.
     """
-    from .party_state import ensure_party_state, get_active_companions, update_companion_loyalty, update_companion_morale
+    from .party_state import (
+        ensure_party_state,
+        get_active_companions,
+        update_companion_loyalty,
+        update_companion_morale,
+    )
 
     simulation_state = _safe_dict(simulation_state)
     player_state = ensure_party_state(_safe_dict(simulation_state.get("player_state")))

@@ -6,10 +6,14 @@ response builder, and agency engine deterministic behavior.
 
 from __future__ import annotations
 
-import pytest
 from dataclasses import dataclass, field
 from typing import Any
 
+import pytest
+
+from app.rpg.npc_agency.agency_engine import NPCAgencyEngine
+from app.rpg.npc_agency.decision_policy import NPCDecisionPolicy
+from app.rpg.npc_agency.faction_context import FactionContextBuilder
 from app.rpg.npc_agency.models import (
     FactionAlignmentView,
     NPCDecisionContext,
@@ -17,11 +21,10 @@ from app.rpg.npc_agency.models import (
     NPCRelationshipView,
 )
 from app.rpg.npc_agency.relationship_state import RelationshipStateBuilder
-from app.rpg.npc_agency.faction_context import FactionContextBuilder
-from app.rpg.npc_agency.decision_policy import NPCDecisionPolicy
-from app.rpg.npc_agency.response_builder import NPCResponseBuilder, SUPPORTED_NPC_EVENT_TYPES
-from app.rpg.npc_agency.agency_engine import NPCAgencyEngine
-
+from app.rpg.npc_agency.response_builder import (
+    SUPPORTED_NPC_EVENT_TYPES,
+    NPCResponseBuilder,
+)
 
 # ===========================================================================
 # Test Helpers / Fakes

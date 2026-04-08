@@ -4,26 +4,25 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.player.player_scene_state import (
-    ensure_player_state,
-    set_current_scene,
-    push_scene_history,
-    _MAX_SCENE_HISTORY,
+from app.rpg.player.player_codex import (
+    _MAX_BUCKET,
+    update_codex_from_state,
 )
 from app.rpg.player.player_dialogue_state import (
     enter_dialogue_mode,
     exit_dialogue_mode,
 )
-from app.rpg.player.player_journal import (
-    update_journal_from_state,
-    _MAX_JOURNAL,
-)
-from app.rpg.player.player_codex import (
-    update_codex_from_state,
-    _MAX_BUCKET,
-)
 from app.rpg.player.player_encounter import build_encounter_view
-
+from app.rpg.player.player_journal import (
+    _MAX_JOURNAL,
+    update_journal_from_state,
+)
+from app.rpg.player.player_scene_state import (
+    _MAX_SCENE_HISTORY,
+    ensure_player_state,
+    push_scene_history,
+    set_current_scene,
+)
 
 # ===================================================================
 # player_scene_state.py tests

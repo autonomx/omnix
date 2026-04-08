@@ -1,7 +1,9 @@
 """Unit tests for Phase 8.1 Dialogue Manager."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from app.rpg.ai.dialogue.dialogue_manager import DialogueManager
 from app.rpg.ai.dialogue.dialogue_response_parser import parse_dialogue_response
 

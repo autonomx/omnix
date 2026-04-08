@@ -6,8 +6,8 @@ active and completed quests, providing lookup and filtering.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
 from collections import OrderedDict
+from typing import Any, Dict, List, Optional
 
 
 class QuestTracker:

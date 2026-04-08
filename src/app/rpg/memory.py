@@ -1,6 +1,6 @@
-from rpg.spatial import is_near
-from rpg.simulation import find_npc
 from rpg.emotion import apply_event_emotion
+from rpg.simulation import find_npc
+from rpg.spatial import is_near
 
 
 def update_memory(session, events):

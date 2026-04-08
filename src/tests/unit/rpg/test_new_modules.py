@@ -1,26 +1,26 @@
 """Tests for new TIER 1-3 modules: ActionRegistry, MemorySummarizer, WorldState, Narrator."""
 
-import pytest
-from unittest.mock import MagicMock
-import sys
 import os
+import sys
+from unittest.mock import MagicMock
+
+import pytest
 
 # Add app directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
+from rpg.memory.summarizer import MemorySummarizer
+from rpg.narration.narrator import NarratorAgent
 from rpg.tools.action_registry import (
     ActionRegistry,
     ActionRegistryError,
-    register_default_actions,
     action_attack,
-    action_move,
     action_heal,
+    action_move,
     action_speak,
+    register_default_actions,
 )
-from rpg.memory.summarizer import MemorySummarizer
 from rpg.world.world_state import WorldState
-from rpg.narration.narrator import NarratorAgent
-
 
 # =========================================================
 # ActionRegistry Tests

@@ -29,19 +29,18 @@ Usage:
     events = bus.collect()  # Returns and clears all pending events
 """
 
-from collections import deque
 import copy
+import inspect
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-import inspect
-
-# PHASE 3 — TIMELINE GRAPH
-from .timeline_graph import TimelineGraph
 
 # PHASE 5.2 — DETERMINISTIC CLOCK (rpg-design.txt Issue #2)
 from .clock import DeterministicClock
 from .determinism import DeterminismConfig, compute_deterministic_event_id
 
+# PHASE 3 — TIMELINE GRAPH
+from .timeline_graph import TimelineGraph
 
 # Allowed layers for cross-system enforcement (Fix #3)
 ALLOWED_LAYERS = {

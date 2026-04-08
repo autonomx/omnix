@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 from app.rpg.compat.character_cards import import_external_character_card
 from app.rpg.presentation.visual_state import ensure_visual_state
 
-
 _MAX_PACKS = 32
 _MAX_PACK_CHARACTERS = 64
 

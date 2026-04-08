@@ -10,26 +10,25 @@ Tests for:
 These tests verify core functionality with mocked dependencies.
 """
 
+import os
+import sys
 import unittest
-from unittest.mock import MagicMock, patch, call
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock, call, patch
 
-import sys
-import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-from app.rpg.core.event_bus import Event, EventBus
-from app.rpg.simulation.sandbox import SimulationSandbox, SimulationResult
-from app.rpg.simulation.future_simulator import FutureSimulator, CandidateScore
 from app.rpg.ai.branch_ai_evaluator import AIBranchEvaluator, BranchEvaluation
-from app.rpg.ai.planner.npc_planner import NPCPlanner, PlanningConfig
 from app.rpg.ai.planner.candidate_generator import (
-    CandidateGenerator,
-    ActionOption,
     DEFAULT_ACTIONS,
+    ActionOption,
+    CandidateGenerator,
 )
-
+from app.rpg.ai.planner.npc_planner import NPCPlanner, PlanningConfig
+from app.rpg.core.event_bus import Event, EventBus
+from app.rpg.simulation.future_simulator import CandidateScore, FutureSimulator
+from app.rpg.simulation.sandbox import SimulationResult, SimulationSandbox
 
 # ---------------------------------------------------------------------------
 # Helpers / Fakes

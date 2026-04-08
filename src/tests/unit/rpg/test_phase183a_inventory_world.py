@@ -1,41 +1,42 @@
 """Phase 18.3A — Unit tests for inventory world grounding."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 import pytest
 
-from app.rpg.items.inventory_state import (
-    normalize_inventory_state,
-    equip_inventory_item,
-    unequip_inventory_slot,
-    find_inventory_item,
-    get_equipped_weapon,
-    get_equipped_armor,
+from app.rpg.items.generated_item_builder import (
+    build_item_definition_from_llm,
+    clamp_generated_item_stats,
+    derive_item_power_band,
 )
-from app.rpg.items.world_items import (
-    ensure_world_item_state,
-    spawn_world_item,
-    pickup_world_item,
-    drop_world_item,
-    list_scene_items,
+from app.rpg.items.inventory_state import (
+    equip_inventory_item,
+    find_inventory_item,
+    get_equipped_armor,
+    get_equipped_weapon,
+    normalize_inventory_state,
+    unequip_inventory_slot,
 )
 from app.rpg.items.item_registry import (
     get_item_definition,
     normalize_item_definition,
 )
 from app.rpg.items.item_stats import (
-    normalize_item_stats,
-    is_weapon,
+    get_weapon_attack_stat,
+    get_weapon_skill,
     is_armor,
     is_shield,
-    get_weapon_skill,
-    get_weapon_attack_stat,
+    is_weapon,
+    normalize_item_stats,
 )
-from app.rpg.items.generated_item_builder import (
-    build_item_definition_from_llm,
-    clamp_generated_item_stats,
-    derive_item_power_band,
+from app.rpg.items.world_items import (
+    drop_world_item,
+    ensure_world_item_state,
+    list_scene_items,
+    pickup_world_item,
+    spawn_world_item,
 )
 
 

@@ -6,11 +6,11 @@ validation guarantees established in Phase 17.0.
 import pytest
 
 from app.rpg.validation.integrity import (
-    validate_visual_state,
     validate_memory_state,
-    validate_session_integrity,
     validate_package_integrity,
+    validate_session_integrity,
     validate_simulation_state,
+    validate_visual_state,
 )
 
 

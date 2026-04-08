@@ -14,7 +14,6 @@ from .models import (
     GMInspectionBundle,
 )
 
-
 # Bounded output limits
 _MAX_CHOICES_IN_SUMMARY = 20
 _MAX_WARNINGS_IN_SUMMARY = 15

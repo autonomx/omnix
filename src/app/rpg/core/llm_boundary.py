@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 
 from .determinism import DeterminismConfig
 from .effects import EffectManager
-from .llm_recording import LLMRecorder, DeterministicLLMClient
+from .llm_recording import DeterministicLLMClient, LLMRecorder
 
 
 @dataclass

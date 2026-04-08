@@ -3,18 +3,17 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.items.item_registry import get_item_definition, list_item_definitions
 from app.rpg.items.inventory_state import (
+    add_inventory_items,
+    build_inventory_summary,
     ensure_inventory_state,
     normalize_inventory_state,
-    add_inventory_items,
-    remove_inventory_item,
     record_inventory_loot,
-    build_inventory_summary,
+    remove_inventory_item,
 )
 from app.rpg.items.item_effects import apply_item_use
+from app.rpg.items.item_registry import get_item_definition, list_item_definitions
 from app.rpg.items.loot_builder import build_loot_from_encounter_state
-
 
 # ---------------------------------------------------------------------------
 # Item Registry Tests

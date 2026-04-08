@@ -10,29 +10,27 @@ Tests for all 5 critical fixes from rpg-design.txt:
 These tests verify that the deterministic event system works correctly.
 """
 
+import os
+import sys
 import unittest
 from typing import Any, List, Optional
 from unittest.mock import MagicMock
 
-import sys
-import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-from app.rpg.core.event_bus import Event, EventBus, EventContext
 from app.rpg.core.clock import DeterministicClock
-from app.rpg.core.timeline_graph import TimelineGraph
-
 
 # ---------------------------------------------------------------------------
 # Fix #1: Deterministic Event ID Tests (Seeded Determinism)
 # ---------------------------------------------------------------------------
-
 from app.rpg.core.determinism import (
     DeterminismConfig,
     SeededRNG,
-    stable_json,
     compute_deterministic_event_id,
+    stable_json,
 )
+from app.rpg.core.event_bus import Event, EventBus, EventContext
+from app.rpg.core.timeline_graph import TimelineGraph
 
 
 class TestDeterministicEventIds(unittest.TestCase):

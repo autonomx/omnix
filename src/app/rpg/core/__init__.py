@@ -16,37 +16,9 @@ Use EventBus for all cross-system communication.
 # PHASE 5.2 — DETERMINISTIC CLOCK + DETERMINISM
 from .clock import DeterministicClock
 from .determinism import DeterminismConfig, SeededRNG, compute_deterministic_event_id
-# PHASE 5.3 — LLM RECORD/REPLAY LAYER
-from .llm_recording import LLMRecord, LLMRecorder, DeterministicLLMClient
-# PHASE 5.6 — LLM BOUNDARY HARDENING
-from .llm_boundary import LLMCallSpec, LLMGateway
-# PHASE 5.5 — STATE BOUNDARIES + EFFECT ISOLATION
-from .state_contracts import (
-    SerializableState,
-    ReplaySafe,
-    EffectAware,
-    LLMRecorderAware,
-    ToolRuntimeRecorderAware,
-    HostRuntimeRecorderAware,
-)
-# PHASE 5.7 — TOOL/RUNTIME BOUNDARY
-from .tool_runtime_boundary import (
-    ToolCallSpec,
-    ToolRuntimeRecord,
-    ToolRuntimeRecorder,
-    DeterministicToolRuntimeClient,
-    ToolRuntimeGateway,
-)
-# PHASE 5.8 — HOST/PROCESS BOUNDARY
-from .host_runtime_boundary import (
-    HostCallSpec,
-    HostRuntimeRecord,
-    HostRuntimeRecorder,
-    DeterministicHostRuntimeClient,
-    HostRuntimeGateway,
-)
-from .effects import EffectPolicy, EffectRecord, EffectManager
+from .effects import EffectManager, EffectPolicy, EffectRecord
 from .event_bus import Event, EventBus
+from .game_engine import GameEngine
 from .game_loop import (
     GameLoop,
     IntentParser,
@@ -57,9 +29,33 @@ from .game_loop import (
     TickPhase,
     WorldSystem,
 )
-from .game_engine import GameEngine
+
+# PHASE 5.8 — HOST/PROCESS BOUNDARY
+from .host_runtime_boundary import (
+    DeterministicHostRuntimeClient,
+    HostCallSpec,
+    HostRuntimeGateway,
+    HostRuntimeRecord,
+    HostRuntimeRecorder,
+)
+
+# PHASE 5.6 — LLM BOUNDARY HARDENING
+from .llm_boundary import LLMCallSpec, LLMGateway
+
+# PHASE 5.3 — LLM RECORD/REPLAY LAYER
+from .llm_recording import DeterministicLLMClient, LLMRecord, LLMRecorder
 from .replay_engine import EventConsumer, ReplayConfig, ReplayEngine
-from .snapshot_manager import SnapshotManager, Snapshot
+from .snapshot_manager import Snapshot, SnapshotManager
+
+# PHASE 5.5 — STATE BOUNDARIES + EFFECT ISOLATION
+from .state_contracts import (
+    EffectAware,
+    HostRuntimeRecorderAware,
+    LLMRecorderAware,
+    ReplaySafe,
+    SerializableState,
+    ToolRuntimeRecorderAware,
+)
 
 # PHASE 3 — BRANCHING TIMELINES
 from .timeline_graph import TimelineGraph, TimelineNode
@@ -67,13 +63,22 @@ from .timeline_metadata import TimelineMetadata
 
 # PHASE 4 — TIMELINE QUERY + BRANCH EVALUATION
 from .timeline_query import (
-    TimelineQueryEngine,
-    TimelineSnapshot,
-    BranchScore,
     BranchEvaluator,
+    BranchScore,
     DefaultBranchEvaluator,
     EventContext,
+    TimelineQueryEngine,
+    TimelineSnapshot,
     create_intent_event,
+)
+
+# PHASE 5.7 — TOOL/RUNTIME BOUNDARY
+from .tool_runtime_boundary import (
+    DeterministicToolRuntimeClient,
+    ToolCallSpec,
+    ToolRuntimeGateway,
+    ToolRuntimeRecord,
+    ToolRuntimeRecorder,
 )
 
 __all__ = [

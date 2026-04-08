@@ -14,8 +14,7 @@ Memory Types:
 """
 
 import math
-from typing import List, Dict, Any, Optional
-
+from typing import Any, Dict, List, Optional
 
 # Memory type constants
 MEMORY_TYPES = {

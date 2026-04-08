@@ -9,8 +9,8 @@ These tests verify the integrated behaviour of:
 
 from __future__ import annotations
 
-import sys
 import pathlib
+import sys
 import unittest
 from dataclasses import dataclass
 from typing import Any, Dict, List
@@ -21,7 +21,8 @@ if str(_PROJECT_ROOT / "src" / "app") not in sys.path:
 
 from rpg.ai.decision.decision_engine import DecisionContext, DecisionEngine
 from rpg.ai.decision.resolver import ActionResolver
-from rpg.ai.goap.planner import Action as GOAPAction, GOAPPlanner
+from rpg.ai.goap.planner import Action as GOAPAction
+from rpg.ai.goap.planner import GOAPPlanner
 
 
 @dataclass

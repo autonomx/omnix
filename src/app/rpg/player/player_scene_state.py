@@ -14,7 +14,6 @@ from typing import Any, Dict, List
 
 from .player_progression_state import ensure_player_progression_state
 
-
 _MAX_SCENE_HISTORY = 50
 
 

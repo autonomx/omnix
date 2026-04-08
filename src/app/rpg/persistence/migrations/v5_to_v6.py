@@ -7,7 +7,7 @@ Fix #4: Migration now uses _normalize_companion to ensure full normalization
 of companion records, including proper equipment structure, edge cases for
 missing fields, and malformed companions from earlier saves.
 """
-from typing import Dict, Any
+from typing import Any, Dict
 
 from app.rpg.party.party_state import _normalize_companion
 

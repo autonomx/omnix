@@ -1,12 +1,17 @@
 """Unit tests for RPG scene module."""
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'app'))
 
-from rpg.scene.grounding import build_grounding_block, _has_line_of_sight, _build_entity_grounding
-from rpg.scene.renderer import render_scene_deterministic, render_event_summary
+from rpg.scene.grounding import (
+    _build_entity_grounding,
+    _has_line_of_sight,
+    build_grounding_block,
+)
+from rpg.scene.renderer import render_event_summary, render_scene_deterministic
 from rpg.scene.validator import validate_scene
 
 

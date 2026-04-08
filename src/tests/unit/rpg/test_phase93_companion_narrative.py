@@ -1,17 +1,17 @@
 """Phase 9.3 — Companion Narrative Integration unit tests."""
-from app.rpg.party.party_state import (
-    ensure_party_state,
-    add_companion,
-    update_companion_loyalty,
-    set_companion_status,
-)
 from app.rpg.party.companion_narrative import (
-    choose_scene_interjections,
-    build_companion_scene_reactions,
-    record_companion_narrative_event,
-    build_party_narrative_summary,
-    build_companion_presence_summary,
     _pick_tone,
+    build_companion_presence_summary,
+    build_companion_scene_reactions,
+    build_party_narrative_summary,
+    choose_scene_interjections,
+    record_companion_narrative_event,
+)
+from app.rpg.party.party_state import (
+    add_companion,
+    ensure_party_state,
+    set_companion_status,
+    update_companion_loyalty,
 )
 
 

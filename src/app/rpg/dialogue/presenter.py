@@ -9,9 +9,7 @@ Read-only — no mutation of any upstream state.
 
 from __future__ import annotations
 
-
 from .models import DialogueLogEntry, DialoguePresentation, DialogueResponsePlan
-
 
 # Acts considered meaningful enough to produce a journal log entry.
 _JOURNALABLE_ACTS = frozenset({

@@ -12,11 +12,11 @@ Modules:
     world_consequence_builder: Build world consequences from outcomes
 """
 
-from .outcome_projection import project_outcomes_from_state
-from .location_dynamics import update_location_trends
-from .thread_evolution import update_thread_trends
 from .faction_dynamics import update_faction_trends
+from .location_dynamics import update_location_trends
+from .outcome_projection import project_outcomes_from_state
 from .rumor_feedback import update_rumor_feedback
+from .thread_evolution import update_thread_trends
 from .world_consequence_builder import build_world_consequences
 
 __all__ = [

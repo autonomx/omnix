@@ -11,8 +11,8 @@ Tests for:
 import unittest
 
 from app.rpg.core.effects import EffectManager, EffectPolicy
-from app.rpg.core.game_loop import GameLoop
 from app.rpg.core.event_bus import EventBus
+from app.rpg.core.game_loop import GameLoop
 
 
 class _Parser:

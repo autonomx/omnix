@@ -2,8 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from .migrations import (
+    migrate_v1_to_v2,
+    migrate_v2_to_v3,
+    migrate_v3_to_v4,
+    migrate_v4_to_v5,
+    migrate_v5_to_v6,
+    migrate_v6_to_v7,
+)
 from .save_schema import CURRENT_RPG_SCHEMA_VERSION
-from .migrations import migrate_v1_to_v2, migrate_v2_to_v3, migrate_v3_to_v4, migrate_v4_to_v5, migrate_v5_to_v6, migrate_v6_to_v7
 
 
 def _safe_int(v: Any, default: int = 1) -> int:

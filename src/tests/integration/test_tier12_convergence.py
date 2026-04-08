@@ -27,11 +27,10 @@ import pytest
 # Add project path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "app"))
 
-from rpg.cognitive.decision_resolver import DecisionResolver
 from rpg.cognitive.coalition_lock import CoalitionLockManager
-from rpg.cognitive.narrative_gravity import NarrativeGravity, StorylineState
 from rpg.cognitive.cognitive_layer import CognitiveLayer
-
+from rpg.cognitive.decision_resolver import DecisionResolver
+from rpg.cognitive.narrative_gravity import NarrativeGravity, StorylineState
 
 # ============================================================================
 # Helper Functions

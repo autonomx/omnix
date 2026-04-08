@@ -24,8 +24,7 @@ Example Emergent Behavior:
     No hardcoding. Fully emergent.
 """
 
-from typing import Dict, Any, List, Optional, Set
-
+from typing import Any, Dict, List, Optional, Set
 
 # Default decay rate per tick (0.95 = 5% decay per tick)
 DEFAULT_DECAY_RATE = 0.95
