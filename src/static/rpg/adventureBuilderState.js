@@ -36,7 +36,72 @@ var AdventureBuilderState = (function () {
             safety: null,
             content_balance: null,
             starting_location_id: null,
-            starting_npc_ids: []
+            starting_npc_ids: [],
+            // Phase A — Player & Campaign
+            player_role: '',
+            player_archetype: '',
+            player_background: '',
+            campaign_objective: '',
+            opening_hook: '',
+            starter_conflict: '',
+            core_world_laws: [],
+            genre_rules: [],
+            desired_content_mix: {
+                combat: 0.25,
+                exploration: 0.25,
+                intrigue: 0.20,
+                mystery: 0.15,
+                survival: 0.05,
+                romance: 0.05,
+                humor: 0.05
+            },
+            starting_gear: [],
+            starting_resources: {
+                gold: 0,
+                supplies: 0,
+                ammo: 0,
+                rations: 0
+            },
+            // Phase B — Opening
+            opening: {
+                location_id: '',
+                scene_frame: '',
+                present_npc_ids: [],
+                immediate_problem: '',
+                player_involvement_reason: '',
+                first_choices: [],
+                tension_level: 'medium',
+                time_of_day: '',
+                weather: ''
+            },
+            // Phase E — Generated World
+            generated_package: {
+                status: 'idle',
+                seed_hint: '',
+                generation_notes: '',
+                characters: [],
+                locations: [],
+                factions: [],
+                lore_entries: [],
+                rumors: [],
+                opening_patch: null,
+                warnings: [],
+                provenance: {
+                    used_llm: false,
+                    model: '',
+                    generated_at: ''
+                }
+            },
+            generation_preferences: {
+                enabled: true,
+                character_count: 5,
+                location_count: 4,
+                faction_count: 3,
+                lore_count: 6,
+                keep_existing_seeds: true,
+                creativity_profile: 'balanced'
+            },
+            locked_generated_ids: []
         };
     }
 
@@ -203,6 +268,63 @@ var AdventureBuilderState = (function () {
         return !!(state.history && state.history.length);
     }
 
+    function normalizeDesiredContentMix(mix) {
+        var out = {};
+        var keys = Object.keys(mix || {});
+        var sum = 0;
+        keys.forEach(function (k) {
+            var v = parseFloat(mix[k]) || 0;
+            v = Math.max(0, Math.min(1, v));
+            out[k] = v;
+            sum += v;
+        });
+        if (sum > 0) {
+            keys.forEach(function (k) { out[k] = out[k] / sum; });
+        }
+        return out;
+    }
+
+    function normalizeStartingResources(resources) {
+        var out = {};
+        Object.keys(resources || {}).forEach(function (k) {
+            var v = parseInt(resources[k], 10) || 0;
+            out[k] = Math.max(0, Math.min(999999, v));
+        });
+        return out;
+    }
+
+    function normalizeStringList(list, maxItems, maxLen) {
+        if (!Array.isArray(list)) return [];
+        var result = [];
+        for (var i = 0; i < list.length && result.length < (maxItems || 50); i++) {
+            var s = (typeof list[i] === 'string' ? list[i] : '').trim();
+            if (!s) continue;
+            if (maxLen && s.length > maxLen) s = s.substring(0, maxLen);
+            result.push(s);
+        }
+        return result;
+    }
+
+    function normalizeGearItems(list) {
+        if (!Array.isArray(list)) return [];
+        var result = [];
+        for (var i = 0; i < list.length && result.length < 16; i++) {
+            var item = list[i];
+            if (typeof item === 'string') {
+                var t = item.trim();
+                if (t) result.push({ name: t, description: '' });
+            } else if (item && typeof item === 'object') {
+                var name = (item.name || '').trim();
+                if (!name) continue;
+                result.push({
+                    name: name.substring(0, 100),
+                    description: (item.description || '').trim().substring(0, 300)
+                });
+            }
+        }
+        return result;
+    }
+
     return {
         STORAGE_KEY: STORAGE_KEY,
         defaultSetup: _defaultSetup,
@@ -216,6 +338,10 @@ var AdventureBuilderState = (function () {
         markDirty: markDirty,
         pushHistory: pushHistory,
         popHistory: popHistory,
-        hasHistory: hasHistory
+        hasHistory: hasHistory,
+        normalizeDesiredContentMix: normalizeDesiredContentMix,
+        normalizeStartingResources: normalizeStartingResources,
+        normalizeStringList: normalizeStringList,
+        normalizeGearItems: normalizeGearItems
     };
 })();

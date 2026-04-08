@@ -1,5 +1,5 @@
 /**
- * Adventure Builder — 5-Step Wizard
+ * Adventure Builder — 7-Step Wizard
  *
  * Phase 1.2 modularization:
  * - state persistence/defaults moved to AdventureBuilderState
@@ -27,7 +27,7 @@ var AdventureBuilder = (function () {
     // Constants
     // ─────────────────────────────────────────────────────────────────────────
 
-    var STEP_COUNT = 5;
+    var STEP_COUNT = 7;
     var DEBOUNCE_MS = 400;
     var MAX_SNAPSHOTS = 20;
 
@@ -84,7 +84,7 @@ var AdventureBuilder = (function () {
         clearTimeout(_debounceTimer);
         _debounceTimer = setTimeout(function () {
             _runValidation();
-            if (currentStep === 5) _runPreview();
+            if (currentStep === 7) _runPreview();
         }, DEBOUNCE_MS);
     }
 
@@ -101,7 +101,7 @@ var AdventureBuilder = (function () {
     function _runPreview() {
         AdventureBuilderApi.previewSetup(state.setup).then(function (res) {
             state.preview = res;
-            if (currentStep === 5) _renderPreviewPanel();
+            if (currentStep === 7) _renderPreviewPanel();
         }).catch(function () { /* ignore */ });
     }
 
@@ -152,7 +152,7 @@ var AdventureBuilder = (function () {
         currentStep = Math.max(1, Math.min(STEP_COUNT, n));
         state.step = currentStep;
         _renderStep();
-        if (currentStep === 5) {
+        if (currentStep === 7) {
             _runValidation();
             _runPreview();
             // Phase 2 — pre-fetch world inspection data
@@ -166,16 +166,18 @@ var AdventureBuilder = (function () {
         body.innerHTML = '';
         switch (currentStep) {
             case 1: _renderStep1(body); break;
-            case 2: _renderStep2(body); break;
-            case 3: _renderStep3(body); break;
-            case 4: _renderStep4(body); break;
-            case 5: _renderStep5(body); break;
+            case 2: _renderStep2_PlayerCampaign(body); break;
+            case 3: _renderStep3_Rules(body); break;
+            case 4: _renderStep4_World(body); break;
+            case 5: _renderStep5_Opening(body); break;
+            case 6: _renderStep6_Generated(body); break;
+            case 7: _renderStep7_Review(body); break;
         }
         _renderFooter();
     }
 
     function _renderProgress() {
-        var labels = ['Basics', 'Rules', 'World', 'Start', 'Review'];
+        var labels = ['Basics', 'Player & Campaign', 'Rules', 'World', 'Opening', 'Generated World', 'Review'];
         var html = '';
         for (var i = 0; i < labels.length; i++) {
             var cls = 'ab-step-dot';
@@ -323,9 +325,148 @@ var AdventureBuilder = (function () {
         });
     }
 
-    // ── Step 2: Rules / Tone ──
+    // ── Step 2: Player & Campaign (Phase A) ──
 
-    function _renderStep2(body) {
+    function _renderStep2_PlayerCampaign(body) {
+        var mix = setup.desired_content_mix || {};
+        var mixKeys = ['combat', 'exploration', 'intrigue', 'mystery', 'survival', 'romance', 'humor'];
+
+        var quickFills = [
+            { label: 'Suggest from genre', key: 'genre' },
+            { label: 'Balanced', key: 'balanced' },
+            { label: 'Combat-heavy', key: 'combat' },
+            { label: 'Narrative-heavy', key: 'narrative' },
+            { label: 'Mystery-heavy', key: 'mystery' },
+            { label: 'Survival-heavy', key: 'survival' }
+        ];
+
+        var html = '<div class="ab-section">' +
+            '<h4>\uD83C\uDFAD Player Fantasy</h4>' +
+            _field('Role', 'abPlayerRole', 'text', setup.player_role, 'e.g. Wandering knight, Spy, Merchant\u2026') +
+            _field('Archetype', 'abPlayerArchetype', 'text', setup.player_archetype, 'e.g. Reluctant hero, Cunning rogue\u2026') +
+            _field('Background', 'abPlayerBackground', 'text', setup.player_background, 'e.g. Exiled noble, Street orphan\u2026') +
+            '</div>' +
+            '<div class="ab-section">' +
+            '<h4>\uD83C\uDFAF Campaign Intent</h4>' +
+            _textareaField('Campaign Objective', 'abCampaignObjective', setup.campaign_objective, 'What is the overarching goal?', 3) +
+            _textareaField('Opening Hook', 'abOpeningHook', setup.opening_hook, 'What draws the player in?', 2) +
+            _textareaField('Starter Conflict', 'abStarterConflict', setup.starter_conflict, 'The initial tension or problem', 2) +
+            '</div>' +
+            '<div class="ab-section">' +
+            '<h4>\uD83D\uDCDC World Rules</h4>' +
+            '<p class="ab-hint">Laws that govern your world.</p>' +
+            _chipEditor('abCoreWorldLaws', setup.core_world_laws || [], 'e.g. Magic requires sacrifice') +
+            '<p class="ab-hint">Genre-specific rules.</p>' +
+            _chipEditor('abGenreRules', setup.genre_rules || [], 'e.g. No resurrection magic') +
+            '</div>' +
+            '<div class="ab-section">' +
+            '<h4>\uD83C\uDFB2 Play Mix</h4>' +
+            '<p class="ab-hint">Adjust desired content balance (sliders auto-normalize).</p>';
+
+        mixKeys.forEach(function (k) {
+            var val = mix[k] != null ? mix[k] : 0;
+            html += '<label class="ab-label ab-slider-label">' + _esc(k.charAt(0).toUpperCase() + k.slice(1)) +
+                ' <span class="ab-slider-val" id="abMixVal_' + k + '">' + Math.round(val * 100) + '%</span>' +
+                '<input type="range" id="abMix_' + k + '" class="ab-slider" min="0" max="1" step="0.05" value="' + val + '">' +
+                '</label>';
+        });
+
+        html += '<div class="ab-quick-fill">';
+        quickFills.forEach(function (qf) {
+            html += '<button class="ab-btn ab-btn-secondary ab-btn-sm ab-qf-btn" data-qf="' + _esc(qf.key) + '">' + _esc(qf.label) + '</button>';
+        });
+        html += '</div></div>';
+
+        // Starting gear
+        var gear = setup.starting_gear || [];
+        html += '<div class="ab-section">' +
+            '<h4>\uD83C\uDFF9 Starting Kit</h4>' +
+            '<p class="ab-hint">Gear the player starts with.</p>' +
+            '<div id="abGearList">';
+        gear.forEach(function (g, i) {
+            var gObj = typeof g === 'string' ? { name: g, description: '' } : g;
+            html += '<div class="ab-gear-row">' +
+                '<input type="text" class="ab-input ab-gear-name" value="' + _esc(gObj.name || '') + '" placeholder="Item name">' +
+                '<input type="text" class="ab-input ab-gear-desc" value="' + _esc(gObj.description || '') + '" placeholder="Description (optional)">' +
+                '<button class="ab-btn ab-btn-sm ab-gear-del" data-idx="' + i + '">\uD83D\uDDD1\uFE0F</button>' +
+                '</div>';
+        });
+        html += '</div>' +
+            '<button class="ab-btn ab-btn-add" id="abAddGear">+ Add Gear</button>' +
+            '</div>';
+
+        // Starting resources
+        var res = setup.starting_resources || {};
+        html += '<div class="ab-section">' +
+            '<h4>\uD83D\uDCB0 Starting Resources</h4>' +
+            '<div class="ab-resource-grid">' +
+            _field('Gold', 'abRes_gold', 'number', res.gold || 0, '0') +
+            _field('Supplies', 'abRes_supplies', 'number', res.supplies || 0, '0') +
+            _field('Ammo', 'abRes_ammo', 'number', res.ammo || 0, '0') +
+            _field('Rations', 'abRes_rations', 'number', res.rations || 0, '0') +
+            '</div></div>';
+
+        body.innerHTML = html;
+        _attachChipEditors(body);
+        _attachBlurValidation(body);
+
+        // Slider live update
+        mixKeys.forEach(function (k) {
+            var slider = body.querySelector('#abMix_' + k);
+            var valSpan = body.querySelector('#abMixVal_' + k);
+            if (slider && valSpan) {
+                slider.addEventListener('input', function () {
+                    valSpan.textContent = Math.round(parseFloat(slider.value) * 100) + '%';
+                });
+            }
+        });
+
+        // Quick fill buttons
+        var QF_PRESETS = {
+            balanced: { combat: 0.20, exploration: 0.20, intrigue: 0.15, mystery: 0.15, survival: 0.10, romance: 0.10, humor: 0.10 },
+            combat: { combat: 0.50, exploration: 0.15, intrigue: 0.10, mystery: 0.05, survival: 0.10, romance: 0.02, humor: 0.08 },
+            narrative: { combat: 0.05, exploration: 0.15, intrigue: 0.30, mystery: 0.15, survival: 0.02, romance: 0.20, humor: 0.13 },
+            mystery: { combat: 0.05, exploration: 0.20, intrigue: 0.20, mystery: 0.40, survival: 0.05, romance: 0.05, humor: 0.05 },
+            survival: { combat: 0.20, exploration: 0.25, intrigue: 0.05, mystery: 0.10, survival: 0.35, romance: 0.00, humor: 0.05 },
+            genre: { combat: 0.25, exploration: 0.25, intrigue: 0.20, mystery: 0.15, survival: 0.05, romance: 0.05, humor: 0.05 }
+        };
+        body.querySelectorAll('.ab-qf-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var preset = QF_PRESETS[btn.getAttribute('data-qf')] || QF_PRESETS.balanced;
+                mixKeys.forEach(function (k) {
+                    var slider = body.querySelector('#abMix_' + k);
+                    var valSpan = body.querySelector('#abMixVal_' + k);
+                    if (slider) {
+                        slider.value = preset[k] || 0;
+                        if (valSpan) valSpan.textContent = Math.round((preset[k] || 0) * 100) + '%';
+                    }
+                });
+            });
+        });
+
+        // Gear add/delete
+        var addGearBtn = body.querySelector('#abAddGear');
+        if (addGearBtn) addGearBtn.addEventListener('click', function () {
+            if (!setup.starting_gear) setup.starting_gear = [];
+            setup.starting_gear.push({ name: '', description: '' });
+            _readStep2_PlayerCampaign();
+            _markDirty();
+            _renderStep2_PlayerCampaign(body);
+        });
+        body.querySelectorAll('.ab-gear-del').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var idx = parseInt(btn.getAttribute('data-idx'), 10);
+                _readStep2_PlayerCampaign();
+                setup.starting_gear.splice(idx, 1);
+                _markDirty();
+                _renderStep2_PlayerCampaign(body);
+            });
+        });
+    }
+
+    // ── Step 3: Rules / Tone ──
+
+    function _renderStep3_Rules(body) {
         var html = '<div class="ab-section">' +
             '<h4>Hard Rules</h4>' +
             '<p class="ab-hint">Strict world rules the GM must enforce.</p>' +
@@ -351,9 +492,9 @@ var AdventureBuilder = (function () {
         _attachBlurValidation(body);
     }
 
-    // ── Step 3: World Seeds ──
+    // ── Step 4: World Seeds ──
 
-    function _renderStep3(body) {
+    function _renderStep4_World(body) {
         var factionSelCount = _selectionCount('factions');
         var locationSelCount = _selectionCount('locations');
         var npcSelCount = _selectionCount('npc_seeds');
@@ -641,50 +782,274 @@ var AdventureBuilder = (function () {
         return '<label class="ab-label">Location<select id="' + id + '" class="ab-select">' + opts + '</select></label>';
     }
 
-    // ── Step 4: Start State ──
+    // ── Step 5: Opening (Phase B) — merges old Step 4 + new opening fields ──
 
-    function _renderStep4(body) {
-        var locOpts = '<option value="">\u2014 Auto (first location) \u2014</option>';
+    function _renderStep5_Opening(body) {
+        var opening = setup.opening || {};
+        var locOpts = '<option value="">\u2014 Select Location \u2014</option>';
         setup.locations.forEach(function (l) {
-            var sel = (l.location_id === setup.starting_location_id) ? ' selected' : '';
+            var sel = (l.location_id === opening.location_id) ? ' selected' : '';
             locOpts += '<option value="' + _esc(l.location_id) + '"' + sel + '>' + _esc(l.name || l.location_id) + '</option>';
         });
 
         var npcChecks = '';
         if (!setup.npc_seeds.length) {
-            npcChecks = '<p class="ab-muted">Add NPCs in the World Seeds step first.</p>';
+            npcChecks = '<p class="ab-muted">Add NPCs in the World step first.</p>';
         } else {
             setup.npc_seeds.forEach(function (npc) {
-                var checked = (setup.starting_npc_ids || []).indexOf(npc.npc_id) >= 0 ? ' checked' : '';
-                npcChecks += '<label class="ab-checkbox-label"><input type="checkbox" class="ab-starting-npc" value="' + _esc(npc.npc_id) + '"' + checked + '> ' + _esc(npc.name || npc.npc_id) + '</label>';
+                var checked = (opening.present_npc_ids || []).indexOf(npc.npc_id) >= 0 ? ' checked' : '';
+                npcChecks += '<label class="ab-checkbox-label"><input type="checkbox" class="ab-opening-npc" value="' + _esc(npc.npc_id) + '"' + checked + '> ' + _esc(npc.name || npc.npc_id) + '</label>';
             });
         }
 
         var pacing = setup.pacing || {};
         var pacingStyles = ['', 'balanced', 'slow_burn', 'fast', 'relentless'];
         var dangerLevels = ['', 'low', 'medium', 'high'];
+        var tensionLevels = ['low', 'medium', 'high', 'extreme'];
+        var timeOptions = ['', 'dawn', 'morning', 'midday', 'afternoon', 'dusk', 'evening', 'night', 'midnight'];
+        var weatherOptions = ['', 'clear', 'cloudy', 'rain', 'storm', 'snow', 'fog', 'wind'];
 
         var html = '<div class="ab-section">' +
-            '<h4>Starting Location</h4>' +
-            '<select id="abStartLocation" class="ab-select ab-full-width">' + locOpts + '</select>' +
+            '<h4>\uD83C\uDF05 Opening Scene</h4>' +
+            '<label class="ab-label">Where You Begin<select id="abOpeningLocation" class="ab-select ab-full-width">' + locOpts + '</select></label>' +
+            _selectField('Time of Day', 'abOpeningTime', opening.time_of_day, timeOptions) +
+            _selectField('Weather', 'abOpeningWeather', opening.weather, weatherOptions) +
+            _selectField('Tension Level', 'abOpeningTension', opening.tension_level, tensionLevels) +
             '</div>' +
             '<div class="ab-section">' +
-            '<h4>Starting NPCs</h4>' +
+            '<h4>\uD83D\uDCDC What Is Happening</h4>' +
+            _textareaField('Scene Frame', 'abSceneFrame', opening.scene_frame, 'Describe the opening scene...', 3) +
+            _textareaField('Immediate Problem', 'abImmediateProblem', opening.immediate_problem, 'What urgent situation faces the player?', 3) +
+            '</div>' +
+            '<div class="ab-section">' +
+            '<h4>\uD83E\uDDD1 Why Player Is Involved</h4>' +
+            _textareaField('Involvement Reason', 'abInvolvementReason', opening.player_involvement_reason, 'Why is the player here and motivated to act?', 3) +
+            '</div>' +
+            '<div class="ab-section">' +
+            '<h4>\uD83D\uDC64 Who Is Present</h4>' +
             '<p class="ab-hint">NPCs present at the opening scene.</p>' +
-            '<div id="abStartNpcs">' + npcChecks + '</div>' +
+            '<div id="abOpeningNpcs">' + npcChecks + '</div>' +
             '</div>' +
             '<div class="ab-section">' +
-            '<h4>Pacing Profile</h4>' +
+            '<h4>\uD83C\uDFAF First Likely Choices</h4>' +
+            '<p class="ab-hint">Suggested first actions for the player.</p>' +
+            _chipEditor('abFirstChoices', opening.first_choices || [], 'e.g. Investigate the noise\u2026') +
+            '<button class="ab-btn ab-btn-secondary ab-btn-sm" id="abSuggestChoices">\u2728 Suggest opening choices</button>' +
+            '</div>' +
+            '<div class="ab-section">' +
+            '<h4>\u23F1\uFE0F Pacing Profile</h4>' +
             _selectField('Style', 'abPacingStyle', pacing.style, pacingStyles) +
             _selectField('Danger Level', 'abPacingDanger', pacing.danger_level, dangerLevels) +
             '</div>';
         body.innerHTML = html;
+        _attachChipEditors(body);
+        _attachBlurValidation(body);
+
+        var suggestBtn = body.querySelector('#abSuggestChoices');
+        if (suggestBtn) suggestBtn.addEventListener('click', function () {
+            var defaults = ['Investigate the area', 'Talk to the nearest NPC', 'Look for clues'];
+            var editor = overlayEl.querySelector('#abFirstChoices');
+            if (editor) {
+                defaults.forEach(function (d) { _addChipToEditor(editor, d); });
+            }
+        });
+    }
+
+    // ── Step 6: Generated World (Phase E) ──
+
+    function _renderStep6_Generated(body) {
+        var gp = setup.generated_package || {};
+        var prefs = setup.generation_preferences || {};
+        var creativityOptions = ['conservative', 'balanced', 'creative', 'wild'];
+
+        var html = '<div class="ab-section">' +
+            '<h4>\u2728 Generate World Details</h4>' +
+            '<p class="ab-hint">Auto-generate characters, factions, locations, and lore to flesh out your world.</p>' +
+            '<div class="ab-gen-prefs">' +
+                _field('Characters', 'abGenCharCount', 'number', prefs.character_count || 5, '5') +
+                _field('Locations', 'abGenLocCount', 'number', prefs.location_count || 4, '4') +
+                _field('Factions', 'abGenFacCount', 'number', prefs.faction_count || 3, '3') +
+                _field('Lore Entries', 'abGenLoreCount', 'number', prefs.lore_count || 6, '6') +
+                _selectField('Creativity', 'abGenCreativity', prefs.creativity_profile || 'balanced', creativityOptions) +
+            '</div>' +
+            '<button class="ab-btn ab-btn-primary" id="abGenerateWorld">\uD83C\uDF0D Generate World Details</button>' +
+            '</div>';
+
+        // Status
+        if (gp.status === 'generating') {
+            html += '<div class="ab-section"><p class="ab-muted">\u23F3 Generating\u2026</p></div>';
+        } else if (gp.status === 'done') {
+            // Warnings
+            if (gp.warnings && gp.warnings.length) {
+                html += '<div class="ab-section"><h4>\u26A0\uFE0F Warnings</h4>';
+                gp.warnings.forEach(function (w) { html += '<div class="ab-warning">' + _esc(w) + '</div>'; });
+                html += '</div>';
+            }
+            // Sub-tabs
+            html += '<div class="ab-section">' +
+                '<div class="ab-gen-tabs" id="abGenTabs">' +
+                    '<button class="ab-wg-tab ab-wg-tab-active" data-gtab="characters">\uD83D\uDC64 Characters</button>' +
+                    '<button class="ab-wg-tab" data-gtab="factions">\u2694\uFE0F Factions</button>' +
+                    '<button class="ab-wg-tab" data-gtab="locations">\uD83D\uDCCD Locations</button>' +
+                    '<button class="ab-wg-tab" data-gtab="lore">\uD83D\uDCDC Lore</button>' +
+                    '<button class="ab-wg-tab" data-gtab="opening">\uD83C\uDF05 Opening</button>' +
+                '</div>' +
+                '<div id="abGenContent"></div>' +
+                '</div>';
+
+            html += '<div class="ab-section">' +
+                '<button class="ab-btn ab-btn-launch" id="abApplyGenerated">\u2705 Apply Generated Content</button>' +
+                '</div>';
+        }
+
+        body.innerHTML = html;
+
+        // Generate button
+        var genBtn = body.querySelector('#abGenerateWorld');
+        if (genBtn) genBtn.addEventListener('click', function () {
+            _readCurrentStepIntoSetup();
+            _markDirty();
+            setup.generated_package.status = 'generating';
+            _renderStep6_Generated(body);
+            AdventureBuilderApi.generateWorld(setup, setup.generation_preferences).then(function (res) {
+                if (res.generated_package) {
+                    setup.generated_package = res.generated_package;
+                    setup.generated_package.status = 'done';
+                } else {
+                    setup.generated_package.status = 'idle';
+                }
+                _markDirty();
+                _renderStep6_Generated(body);
+            }).catch(function () {
+                setup.generated_package.status = 'idle';
+                _renderStep6_Generated(body);
+            });
+        });
+
+        // Apply button
+        var applyBtn = body.querySelector('#abApplyGenerated');
+        if (applyBtn) applyBtn.addEventListener('click', function () {
+            _readCurrentStepIntoSetup();
+            AdventureBuilderApi.applyGeneratedPackage(setup, setup.generated_package, setup.locked_generated_ids || []).then(function (res) {
+                if (res.setup) {
+                    Object.assign(setup, res.setup);
+                    _markDirty();
+                    _renderStep6_Generated(body);
+                }
+            }).catch(function () { /* ignore */ });
+        });
+
+        // Render generated content tabs
+        if (gp.status === 'done') {
+            _renderGenContentTab(body, 'characters');
+            var tabBtns = body.querySelectorAll('[data-gtab]');
+            tabBtns.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    tabBtns.forEach(function (b) { b.classList.remove('ab-wg-tab-active'); });
+                    btn.classList.add('ab-wg-tab-active');
+                    _renderGenContentTab(body, btn.getAttribute('data-gtab'));
+                });
+            });
+        }
+
         _attachBlurValidation(body);
     }
 
-    // ── Step 5: Review / Preview ──
+    function _renderGenContentTab(body, tab) {
+        var container = body.querySelector('#abGenContent');
+        if (!container) return;
+        var gp = setup.generated_package || {};
+        var locked = setup.locked_generated_ids || [];
+        var html = '';
 
-    function _renderStep5(body) {
+        var items = [];
+        if (tab === 'characters') items = gp.characters || [];
+        else if (tab === 'factions') items = gp.factions || [];
+        else if (tab === 'locations') items = gp.locations || [];
+        else if (tab === 'lore') items = gp.lore_entries || [];
+        else if (tab === 'opening' && gp.opening_patch) {
+            var op = gp.opening_patch;
+            html += '<div class="ab-entity-card"><div class="ab-entity-header"><span class="ab-entity-summary">Opening Patch</span></div>' +
+                '<div class="ab-entity-body">' +
+                '<div><strong>Scene:</strong> ' + _esc(op.scene_frame || '') + '</div>' +
+                '<div><strong>Problem:</strong> ' + _esc(op.immediate_problem || '') + '</div>' +
+                '<div><strong>Involvement:</strong> ' + _esc(op.player_involvement_reason || '') + '</div>' +
+                '</div></div>';
+            container.innerHTML = html;
+            return;
+        }
+
+        if (!items.length) {
+            container.innerHTML = '<p class="ab-muted">No ' + tab + ' generated.</p>';
+            return;
+        }
+
+        items.forEach(function (item, i) {
+            var id = item.id || item.npc_id || item.faction_id || item.location_id || (tab + '_' + i);
+            var isLocked = locked.indexOf(id) >= 0;
+            html += '<div class="ab-entity-card" data-gen-type="' + _esc(tab) + '" data-gen-idx="' + i + '">' +
+                '<div class="ab-entity-header">' +
+                    '<span class="ab-entity-summary">' + _esc(item.name || item.title || 'Item ' + (i + 1)) + '</span>' +
+                    '<button class="ab-gen-lock" data-id="' + _esc(id) + '" title="' + (isLocked ? 'Unlock' : 'Lock') + '">' + (isLocked ? '\uD83D\uDD12' : '\uD83D\uDD13') + '</button>' +
+                    '<button class="ab-gen-regen" data-type="' + _esc(tab) + '" data-id="' + _esc(id) + '" title="Regenerate">\u267B</button>' +
+                    '<button class="ab-gen-del" data-type="' + _esc(tab) + '" data-idx="' + i + '" title="Delete">\uD83D\uDDD1\uFE0F</button>' +
+                '</div>' +
+                '<div class="ab-entity-body">' +
+                    '<div>' + _esc(item.description || item.content || '') + '</div>' +
+                '</div>' +
+            '</div>';
+        });
+        container.innerHTML = html;
+
+        // Lock toggle
+        container.querySelectorAll('.ab-gen-lock').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = btn.getAttribute('data-id');
+                if (!setup.locked_generated_ids) setup.locked_generated_ids = [];
+                var idx = setup.locked_generated_ids.indexOf(id);
+                if (idx >= 0) setup.locked_generated_ids.splice(idx, 1);
+                else setup.locked_generated_ids.push(id);
+                _markDirty();
+                _renderGenContentTab(body, tab);
+            });
+        });
+
+        // Regenerate single entity
+        container.querySelectorAll('.ab-gen-regen').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var type = btn.getAttribute('data-type');
+                var id = btn.getAttribute('data-id');
+                btn.disabled = true;
+                btn.textContent = '\u23F3';
+                AdventureBuilderApi.regenerateWorldEntity(setup, type, id).then(function (res) {
+                    if (res.entity) {
+                        var arr = type === 'lore' ? (setup.generated_package.lore_entries || []) : (setup.generated_package[type] || []);
+                        for (var j = 0; j < arr.length; j++) {
+                            var eid = arr[j].id || arr[j].npc_id || arr[j].faction_id || arr[j].location_id;
+                            if (eid === id) { arr[j] = res.entity; break; }
+                        }
+                        _markDirty();
+                    }
+                    _renderGenContentTab(body, tab);
+                }).catch(function () { _renderGenContentTab(body, tab); });
+            });
+        });
+
+        // Delete entity
+        container.querySelectorAll('.ab-gen-del').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var type = btn.getAttribute('data-type');
+                var idx = parseInt(btn.getAttribute('data-idx'), 10);
+                var arr = type === 'lore' ? setup.generated_package.lore_entries : setup.generated_package[type];
+                if (arr) { arr.splice(idx, 1); _markDirty(); }
+                _renderGenContentTab(body, tab);
+            });
+        });
+    }
+
+    // ── Step 7: Review / Preview ──
+
+    function _renderStep7_Review(body) {
         _readCurrentStepIntoSetup();
         var undoDisabled = AdventureBuilderState.hasHistory(state) ? '' : ' disabled';
 
@@ -701,11 +1066,11 @@ var AdventureBuilder = (function () {
         html += '<div class="ab-step5-content" id="abStep5Content"></div>';
         body.innerHTML = html;
 
-        _renderStep5Tabs(body, step5Tab);
-        _renderStep5TabContent(body, step5Tab, undoDisabled);
+        _renderStep7Tabs(body, step5Tab);
+        _renderStep7TabContent(body, step5Tab, undoDisabled);
     }
 
-    function _renderStep5Tabs(body, activeTab) {
+    function _renderStep7Tabs(body, activeTab) {
         var tabsEl = body.querySelector('#abStep5Tabs');
         if (!tabsEl) return;
         var tabs = [
@@ -731,46 +1096,46 @@ var AdventureBuilder = (function () {
                 var tab = btn.getAttribute('data-tab');
                 if (!state.worldInspection) state.worldInspection = {};
                 state.worldInspection.activeTab = tab;
-                _renderStep5(overlayEl.querySelector('#abBody'));
+                #abBody('#abBody'));
             });
         });
     }
 
-    function _renderStep5TabContent(body, activeTab, undoDisabled) {
+    function _renderStep7TabContent(body, activeTab, undoDisabled) {
         var contentEl = body.querySelector('#abStep5Content');
         if (!contentEl) return;
 
         switch (activeTab) {
             case 'summary':
-                _renderStep5Summary(contentEl, undoDisabled);
+                _renderStep7Summary(contentEl, undoDisabled);
                 break;
             case 'validation':
-                _renderStep5Validation(contentEl);
+                _renderStep7Validation(contentEl);
                 break;
             case 'preview':
-                _renderStep5Preview(contentEl);
+                _renderStep7Preview(contentEl);
                 break;
             case 'worldgraph':
-                _renderStep5WorldGraph(contentEl);
+                _renderStep7WorldGraph(contentEl);
                 break;
             case 'simulation':
-                _renderStep5Simulation(contentEl);
+                _renderStep7Simulation(contentEl);
                 break;
             case 'inspector':
-                _renderStep5Inspector(contentEl);
+                _renderStep7Inspector(contentEl);
                 break;
             case 'timeline':
-                _renderStep5Timeline(contentEl);
+                _renderStep7Timeline(contentEl);
                 break;
             case 'diff':
-                _renderStep5Diff(contentEl);
+                _renderStep7Diff(contentEl);
                 break;
             default:
-                _renderStep5Summary(contentEl, undoDisabled);
+                _renderStep7Summary(contentEl, undoDisabled);
         }
     }
 
-    function _renderStep5Summary(contentEl, undoDisabled) {
+    function _renderStep7Summary(contentEl, undoDisabled) {
         var html = '<div class="ab-section">' +
             '<h4>Setup Summary</h4>' +
             '<div id="abReviewSummary" class="ab-review-block"></div>' +
@@ -808,7 +1173,7 @@ var AdventureBuilder = (function () {
         if (undoBtn) undoBtn.addEventListener('click', function () { _handleUndo(); });
     }
 
-    function _renderStep5Validation(contentEl) {
+    function _renderStep7Validation(contentEl) {
         var html = '<div class="ab-section">' +
             '<h4>Validation</h4>' +
             '<div id="abReviewValidation" class="ab-review-block"><p class="ab-muted">Loading\u2026</p></div>' +
@@ -818,7 +1183,7 @@ var AdventureBuilder = (function () {
         _renderReviewValidation();
     }
 
-    function _renderStep5Preview(contentEl) {
+    function _renderStep7Preview(contentEl) {
         var html = '<div class="ab-section">' +
             '<h4>Preview</h4>' +
             '<div id="abReviewPreview" class="ab-review-block"><p class="ab-muted">Loading preview\u2026</p></div>' +
@@ -827,7 +1192,7 @@ var AdventureBuilder = (function () {
         _runPreview();
     }
 
-    function _renderStep5WorldGraph(contentEl) {
+    function _renderStep7WorldGraph(contentEl) {
         var wi = state.worldInspection || {};
         var html = '<div class="ab-section ab-wg-section">' +
             '<div id="abWorldGraphDiff"></div>' +
@@ -846,7 +1211,7 @@ var AdventureBuilder = (function () {
         _fetchAndRenderWorldGraph(contentEl);
     }
 
-    function _renderStep5Simulation(contentEl) {
+    function _renderStep7Simulation(contentEl) {
         var wi = state.worldInspection || {};
         var rt = (wi.simulationRuntime) || {
             state: null,
@@ -946,7 +1311,7 @@ var AdventureBuilder = (function () {
         }
         if (wi.simulationRuntime.stepping) return;
         wi.simulationRuntime.stepping = true;
-        _renderStep5Simulation(contentEl);
+        _renderStep7Simulation(contentEl);
 
         AdventureBuilderApi.simulateStep(state.setup).then(function (res) {
             wi.simulationRuntime.stepping = false;
@@ -975,14 +1340,14 @@ var AdventureBuilder = (function () {
                 var tick = (res.simulation_state && res.simulation_state.tick) || '?';
                 _captureWorldSnapshot('After Simulation Tick ' + tick);
             }
-            _renderStep5Simulation(contentEl);
+            _renderStep7Simulation(contentEl);
         }).catch(function () {
             wi.simulationRuntime.stepping = false;
-            _renderStep5Simulation(contentEl);
+            _renderStep7Simulation(contentEl);
         });
     }
 
-    function _renderStep5Inspector(contentEl) {
+    function _renderStep7Inspector(contentEl) {
         var wi = state.worldInspection || {};
         var html = '<div class="ab-section ab-wg-section">' +
             '<div id="abWgInspectorPanel" class="ab-wg-inspector-container"></div>' +
@@ -1061,7 +1426,7 @@ var AdventureBuilder = (function () {
         }).catch(function () { /* silent */ });
     }
 
-    function _renderStep5Timeline(contentEl) {
+    function _renderStep7Timeline(contentEl) {
         var wi = state.worldInspection || {};
         var html = '<div class="ab-section ab-wg-section"><div id="abTimelineContent"></div></div>';
         contentEl.innerHTML = html;
@@ -1071,19 +1436,19 @@ var AdventureBuilder = (function () {
             onCapture: function () {
                 _captureWorldSnapshot('Manual Snapshot');
                 // Re-render after a short delay for the API call
-                setTimeout(function () { _renderStep5Timeline(contentEl); }, 600);
+                setTimeout(function () { _renderStep7Timeline(contentEl); }, 600);
             },
             onClear: function () {
                 wi.snapshots = [];
                 wi.selectedSnapshotIndex = null;
                 wi.compareMode = false;
                 wi.entityHistory = null;
-                _renderStep5Timeline(contentEl);
+                _renderStep7Timeline(contentEl);
             },
             onView: function (index) {
                 wi.selectedSnapshotIndex = index;
                 wi.activeTab = 'inspector';
-                _renderStep5(overlayEl.querySelector('#abBody'));
+                #abBody('#abBody'));
             },
             onCompare: function (index) {
                 var snap = (wi.snapshots || [])[index];
@@ -1095,14 +1460,14 @@ var AdventureBuilder = (function () {
                     if (res.success) {
                         wi.graphDiff = res.diff;
                         wi.activeTab = 'diff';
-                        _renderStep5(overlayEl.querySelector('#abBody'));
+                        #abBody('#abBody'));
                     }
                 }).catch(function () { /* silent */ });
             }
         });
     }
 
-    function _renderStep5Diff(contentEl) {
+    function _renderStep7Diff(contentEl) {
         var wi = state.worldInspection || {};
         var html = '<div class="ab-section ab-wg-section">' +
             '<div id="abDiffSummary"></div>' +
@@ -1119,7 +1484,7 @@ var AdventureBuilder = (function () {
         if (filtersEl) {
             AdventureBuilderTimeline.renderDiffFilters(filtersEl, wi.diffFilters || { nodeType: 'all', changeType: 'all' }, function (nextFilters) {
                 state.worldInspection.diffFilters = nextFilters;
-                _renderStep5(overlayEl.querySelector('#abBody'));
+                #abBody('#abBody'));
             });
         }
 
@@ -1270,11 +1635,29 @@ var AdventureBuilder = (function () {
         if (s.difficulty_style) lines.push('<div>Difficulty: ' + _esc(s.difficulty_style) + '</div>');
         lines.push('</div>');
 
+        // Player & Campaign
+        if (s.player_role || s.player_archetype || s.campaign_objective) {
+            lines.push('<div class="ab-review-group"><strong>Player Fantasy</strong>');
+            if (s.player_role) lines.push('<div>Role: ' + _esc(s.player_role) + '</div>');
+            if (s.player_archetype) lines.push('<div>Archetype: ' + _esc(s.player_archetype) + '</div>');
+            if (s.player_background) lines.push('<div>Background: ' + _esc(s.player_background) + '</div>');
+            lines.push('</div>');
+        }
+        if (s.campaign_objective) {
+            lines.push('<div class="ab-review-group"><strong>Campaign</strong>');
+            lines.push('<div>Objective: ' + _esc(s.campaign_objective) + '</div>');
+            if (s.opening_hook) lines.push('<div>Hook: ' + _esc(s.opening_hook) + '</div>');
+            if (s.starter_conflict) lines.push('<div>Conflict: ' + _esc(s.starter_conflict) + '</div>');
+            lines.push('</div>');
+        }
+
         lines.push('<div class="ab-review-group"><strong>Rules</strong>');
         lines.push('<div>Hard rules: ' + (s.hard_rules || []).length + '</div>');
         lines.push('<div>Tone rules: ' + (s.soft_tone_rules || []).length + '</div>');
         lines.push('<div>Forbidden: ' + (s.forbidden_content || []).length + '</div>');
         lines.push('<div>Canon notes: ' + (s.canon_notes || []).length + '</div>');
+        if ((s.core_world_laws || []).length) lines.push('<div>World laws: ' + s.core_world_laws.length + '</div>');
+        if ((s.genre_rules || []).length) lines.push('<div>Genre rules: ' + s.genre_rules.length + '</div>');
         lines.push('</div>');
 
         lines.push('<div class="ab-review-group"><strong>World Seeds</strong>');
@@ -1283,17 +1666,47 @@ var AdventureBuilder = (function () {
         lines.push('<div>NPCs: ' + (s.npc_seeds || []).length + '</div>');
         lines.push('</div>');
 
-        lines.push('<div class="ab-review-group"><strong>Start State</strong>');
-        var startLoc = s.starting_location_id || '(auto)';
-        var locName = startLoc;
-        (s.locations || []).forEach(function (l) { if (l.location_id === startLoc) locName = l.name; });
-        lines.push('<div>Opening in: ' + _esc(locName) + '</div>');
-        var startNames = [];
+        // Opening
+        var op = s.opening || {};
+        lines.push('<div class="ab-review-group"><strong>Opening</strong>');
+        var openLocId = op.location_id || s.starting_location_id || '(auto)';
+        var openLocName = openLocId;
+        (s.locations || []).forEach(function (l) { if (l.location_id === openLocId) openLocName = l.name; });
+        lines.push('<div>\uD83D\uDCCD Location: ' + _esc(openLocName) + '</div>');
+        if (op.time_of_day) lines.push('<div>Time: ' + _esc(op.time_of_day) + '</div>');
+        if (op.tension_level) lines.push('<div>Tension: ' + _esc(op.tension_level) + '</div>');
+        if (op.scene_frame) lines.push('<div><em>' + _esc(op.scene_frame) + '</em></div>');
+        if (op.immediate_problem) lines.push('<div>\u26A1 Problem: ' + _esc(op.immediate_problem) + '</div>');
+        if (op.player_involvement_reason) lines.push('<div>\uD83E\uDDD1 Why involved: ' + _esc(op.player_involvement_reason) + '</div>');
+        var presentNpcs = op.present_npc_ids || s.starting_npc_ids || [];
         var npcMap = {};
         (s.npc_seeds || []).forEach(function (n) { npcMap[n.npc_id] = n.name; });
-        (s.starting_npc_ids || []).forEach(function (id) { startNames.push(npcMap[id] || id); });
-        lines.push('<div>Present: ' + (startNames.length ? _esc(startNames.join(', ')) : '(auto)') + '</div>');
+        var startNames = [];
+        presentNpcs.forEach(function (id) { startNames.push(npcMap[id] || id); });
+        lines.push('<div>\uD83D\uDC64 Present: ' + (startNames.length ? _esc(startNames.join(', ')) : '(auto)') + '</div>');
+        if ((op.first_choices || []).length) lines.push('<div>First choices: ' + op.first_choices.length + '</div>');
         lines.push('</div>');
+
+        // Generated package
+        var gp = s.generated_package || {};
+        if (gp.status === 'done') {
+            lines.push('<div class="ab-review-group"><strong>Generated World</strong>');
+            lines.push('<div>Characters: ' + (gp.characters || []).length + '</div>');
+            lines.push('<div>Factions: ' + (gp.factions || []).length + '</div>');
+            lines.push('<div>Locations: ' + (gp.locations || []).length + '</div>');
+            lines.push('<div>Lore: ' + (gp.lore_entries || []).length + '</div>');
+            lines.push('</div>');
+        }
+
+        // Content mix summary
+        if (s.desired_content_mix) {
+            lines.push('<div class="ab-review-group"><strong>Content Mix</strong>');
+            Object.keys(s.desired_content_mix).forEach(function (k) {
+                var pct = Math.round((s.desired_content_mix[k] || 0) * 100);
+                if (pct > 0) lines.push('<div>' + _esc(k) + ': ' + pct + '%</div>');
+            });
+            lines.push('</div>');
+        }
 
         return lines.join('');
     }
@@ -1386,7 +1799,7 @@ var AdventureBuilder = (function () {
             span.textContent = issue.message;
             parent.appendChild(span);
         });
-        if (currentStep === 5) _renderReviewValidation();
+        if (currentStep === 7) _renderReviewValidation();
     }
 
     function _issuePathToFieldId(path) {
@@ -1414,9 +1827,11 @@ var AdventureBuilder = (function () {
         if (!overlayEl) return;
         switch (currentStep) {
             case 1: _readStep1(); break;
-            case 2: _readStep2(); break;
-            case 3: _readStep3(); break;
-            case 4: _readStep4(); break;
+            case 2: _readStep2_PlayerCampaign(); break;
+            case 3: _readStep3_Rules(); break;
+            case 4: _readStep4_World(); break;
+            case 5: _readStep5_Opening(); break;
+            case 6: _readStep6_Generated(); break;
         }
     }
 
@@ -1432,14 +1847,14 @@ var AdventureBuilder = (function () {
         if (!setup.setup_id) setup.setup_id = 'adventure_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
     }
 
-    function _readStep2() {
+    function _readStep3_Rules() {
         setup.hard_rules = _readChips('abHardRules');
         setup.soft_tone_rules = _readChips('abToneRules');
         setup.forbidden_content = _readChips('abForbidden');
         setup.canon_notes = _readChips('abCanonNotes');
     }
 
-    function _readStep3() {
+    function _readStep4_World() {
         setup.factions.forEach(function (f, i) {
             f.name = _val('abFactionName' + i) || f.name;
             f.faction_id = _val('abFactionId' + i) || f.faction_id;
@@ -1467,21 +1882,75 @@ var AdventureBuilder = (function () {
         });
     }
 
-    function _readStep4() {
-        var loc = overlayEl.querySelector('#abStartLocation');
-        setup.starting_location_id = loc ? (loc.value || null) : setup.starting_location_id;
+    function _readStep5_Opening() {
+        if (!setup.opening) setup.opening = {};
+        var loc = overlayEl.querySelector('#abOpeningLocation');
+        if (loc) setup.opening.location_id = loc.value || '';
+        setup.opening.time_of_day = _val('abOpeningTime') || setup.opening.time_of_day;
+        setup.opening.weather = _val('abOpeningWeather') || setup.opening.weather;
+        setup.opening.tension_level = _val('abOpeningTension') || setup.opening.tension_level;
+        setup.opening.scene_frame = _val('abSceneFrame') || setup.opening.scene_frame;
+        setup.opening.immediate_problem = _val('abImmediateProblem') || setup.opening.immediate_problem;
+        setup.opening.player_involvement_reason = _val('abInvolvementReason') || setup.opening.player_involvement_reason;
         var npcIds = [];
-        overlayEl.querySelectorAll('.ab-starting-npc:checked').forEach(function (cb) {
+        overlayEl.querySelectorAll('.ab-opening-npc:checked').forEach(function (cb) {
             npcIds.push(cb.value);
         });
-        setup.starting_npc_ids = npcIds;
-        var pacingStyle = _val('abPacingStyle');
-        var pacingDanger = _val('abPacingDanger');
-        if (pacingStyle || pacingDanger) {
-            if (!setup.pacing) setup.pacing = {};
-            if (pacingStyle) setup.pacing.style = pacingStyle;
-            if (pacingDanger) setup.pacing.danger_level = pacingDanger;
-        }
+        setup.opening.present_npc_ids = npcIds;
+        setup.opening.first_choices = _readChips('abFirstChoices');
+        // Also sync legacy fields
+        setup.starting_location_id = setup.opening.location_id || setup.starting_location_id;
+        setup.starting_npc_ids = npcIds.length ? npcIds : setup.starting_npc_ids;
+    }
+
+    function _readStep6_Generated() {
+        // Generation preferences are read directly from inputs if present
+        if (!setup.generation_preferences) setup.generation_preferences = {};
+        var cc = overlayEl.querySelector('#abGenCharCount');
+        if (cc) setup.generation_preferences.character_count = parseInt(cc.value, 10) || 5;
+        var lc = overlayEl.querySelector('#abGenLocCount');
+        if (lc) setup.generation_preferences.location_count = parseInt(lc.value, 10) || 4;
+        var fc = overlayEl.querySelector('#abGenFacCount');
+        if (fc) setup.generation_preferences.faction_count = parseInt(fc.value, 10) || 3;
+        var lr = overlayEl.querySelector('#abGenLoreCount');
+        if (lr) setup.generation_preferences.lore_count = parseInt(lr.value, 10) || 6;
+        var cp = overlayEl.querySelector('#abGenCreativity');
+        if (cp) setup.generation_preferences.creativity_profile = cp.value || 'balanced';
+    }
+
+    function _readStep2_PlayerCampaign() {
+        setup.player_role = _val('abPlayerRole');
+        setup.player_archetype = _val('abPlayerArchetype');
+        setup.player_background = _val('abPlayerBackground');
+        setup.campaign_objective = _val('abCampaignObjective');
+        setup.opening_hook = _val('abOpeningHook');
+        setup.starter_conflict = _val('abStarterConflict');
+        setup.core_world_laws = _readChips('abCoreWorldLaws');
+        setup.genre_rules = _readChips('abGenreRules');
+        // Read content mix sliders
+        var mixKeys = ['combat', 'exploration', 'intrigue', 'mystery', 'survival', 'romance', 'humor'];
+        var mix = {};
+        mixKeys.forEach(function (k) {
+            var el = overlayEl.querySelector('#abMix_' + k);
+            mix[k] = el ? parseFloat(el.value) || 0 : (setup.desired_content_mix[k] || 0);
+        });
+        setup.desired_content_mix = AdventureBuilderState.normalizeDesiredContentMix(mix);
+        // Read starting gear
+        var gearItems = [];
+        overlayEl.querySelectorAll('.ab-gear-row').forEach(function (row) {
+            var nameEl = row.querySelector('.ab-gear-name');
+            var descEl = row.querySelector('.ab-gear-desc');
+            var name = nameEl ? nameEl.value.trim() : '';
+            if (name) gearItems.push({ name: name, description: descEl ? descEl.value.trim() : '' });
+        });
+        setup.starting_gear = AdventureBuilderState.normalizeGearItems(gearItems);
+        // Read starting resources
+        if (!setup.starting_resources) setup.starting_resources = {};
+        ['gold', 'supplies', 'ammo', 'rations'].forEach(function (k) {
+            var el = overlayEl.querySelector('#abRes_' + k);
+            if (el) setup.starting_resources[k] = parseInt(el.value, 10) || 0;
+        });
+        setup.starting_resources = AdventureBuilderState.normalizeStartingResources(setup.starting_resources);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
