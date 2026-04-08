@@ -491,6 +491,9 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "last_turn_result": {},
             "turn_history": [],
             "voice_assignments": {},
+            "settings": {
+                "response_length": "short",
+            },
         },
     }
     return session
@@ -813,6 +816,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
         "level_up": _safe_list(progression.get("level_up")),
         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
+        "settings": runtime_state.get("settings", {}),
     }
 
     narration_result = narrate_scene(

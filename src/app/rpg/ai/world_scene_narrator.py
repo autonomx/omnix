@@ -89,6 +89,9 @@ def _attach_npc_mind_context(actor, simulation_state):
     return actor
 
 
+_NARRATION_MAX_MARKDOWN = 300
+
+
 def _safe_str(value: Any) -> str:
     return str(value) if value is not None else ""
 
@@ -99,6 +102,13 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_list(value: Any) -> List[Any]:
     return list(value) if isinstance(value, list) else []
+
+
+def _bound_text(value: Any, limit: int = 180) -> str:
+    text = _safe_str(value).strip()
+    if len(text) > limit:
+        return text[:limit].rstrip() + "..."
+    return text
 
 
 def _titleize_action(action_type: str) -> str:
@@ -123,14 +133,78 @@ def _extract_text_lines(text: str) -> List[str]:
     return lines
 
 
-def _pick_npc_reply_text(narrative: str) -> str:
-    lines = _extract_text_lines(narrative)
-    if not lines:
-        return ""
-    for line in lines:
-        if '"' in line or "says" in line.lower() or "replies" in line.lower():
-            return line
-    return lines[0]
+def _normalize_speaker_block(npc_value: Any) -> Dict[str, Any]:
+    npc_value = _safe_dict(npc_value) if isinstance(npc_value, dict) else {"text": _safe_str(npc_value).strip()}
+    return {
+        "speaker_id": _safe_str(npc_value.get("speaker_id") or npc_value.get("npc_id")).strip(),
+        "name": _safe_str(npc_value.get("name")).strip(),
+        "text": _bound_text(npc_value.get("text"), 180),
+        "emotion": _safe_str(npc_value.get("emotion")).strip(),
+        "portrait": _safe_str(npc_value.get("portrait")).strip(),
+        "role": _safe_str(npc_value.get("role")).strip(),
+    }
+
+
+def _build_safe_prompt_context(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> Dict[str, Any]:
+    scene = _safe_dict(scene)
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    xp_result = _safe_dict(narration_context.get("xp_result"))
+    skill_xp_result = _safe_dict(narration_context.get("skill_xp_result"))
+
+    return {
+        "player_input": _bound_text(narration_context.get("player_input"), 120),
+        "action_type": _safe_str(narration_context.get("action_type")).strip(),
+        "action_result": _bound_text(
+            _first_nonempty(
+                resolved.get("message"),
+                resolved.get("summary"),
+                resolved.get("result_text"),
+            ),
+            140,
+        ),
+        "target_name": _first_nonempty(
+            _safe_dict(resolved.get("combat_result")).get("target_name"),
+            resolved.get("target_name"),
+            resolved.get("npc_name"),
+            resolved.get("target_id"),
+        ),
+        "damage": int(_safe_dict(resolved.get("combat_result")).get("damage", resolved.get("damage", 0)) or 0),
+        "player_xp": int(xp_result.get("player_xp", 0) or 0),
+        "skill_xp_awards": {
+            k: int(v or 0)
+            for k, v in sorted(_safe_dict(skill_xp_result.get("awards")).items())
+            if int(v or 0) > 0
+        },
+        "level_up": bool(_safe_list(narration_context.get("level_up"))),
+        "scene_title": _safe_str(scene.get("title")).strip(),
+        "location_name": _first_nonempty(scene.get("location_name"), scene.get("location_id"), scene.get("scene_id")),
+    }
+
+
+def _build_speaker_turns(parsed: Dict[str, Any]) -> List[Dict[str, Any]]:
+    parsed = _safe_dict(parsed)
+    npc = _normalize_speaker_block(parsed.get("npc"))
+    turns: List[Dict[str, Any]] = []
+
+    narrator_text = " ".join(
+        filter(
+            None,
+            [
+                _safe_str(parsed.get("narrator")).strip(),
+                _safe_str(parsed.get("action")).strip(),
+            ],
+        )
+    ).strip()
+    if narrator_text:
+        turns.append({
+            "speaker_id": "narrator",
+            "name": "Narrator",
+            "text": _bound_text(narrator_text, 180),
+        })
+    if npc.get("text"):
+        turns.append(npc)
+    return turns
 
 
 def _build_scene_summary(scene: Dict[str, Any], llm_narrative: str) -> str:
@@ -332,34 +406,50 @@ def apply_narration_emphasis(text: str, emphasis_markers: List[str]) -> str:
 
 
 def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> Dict[str, Any]:
-    scene_summary = _build_scene_summary(scene, llm_narrative)
-    action_result_line = _build_action_result_line(narration_context)
-    npc_reply_block = _build_npc_reply_block(scene, narration_context, llm_narrative)
-    rewards_block = _build_rewards_block(narration_context)
+    parsed = _with_scene_response_defaults(parse_scene_response(llm_narrative))
+    npc = _normalize_speaker_block(parsed.get("npc"))
+    npc_text = npc.get("text", "")
+    speaker_turns = _build_speaker_turns(parsed)
 
     blocks = {
-        "scene_summary": scene_summary,
-        "action_result_line": action_result_line,
-        "npc_reply_block": npc_reply_block,
-        "rewards_block": rewards_block,
+        "scene_summary": parsed["narrator"],
+        "action_result_line": parsed["action"],
+        "npc_reply_block": npc_text,
+        "rewards_block": parsed["reward"],
     }
     emphasis_markers = _collect_emphasis_markers(scene, narration_context, blocks)
 
     ordered = [
-        scene_summary,
-        action_result_line,
-        f"**Reply:** {npc_reply_block}" if npc_reply_block else "",
-        f"**Rewards:** {rewards_block}" if rewards_block else "",
+        parsed["narrator"],
+        parsed["action"],
+        (
+            f"**{npc['name'] or 'Character'}:** {npc['text']}"
+            if npc.get("text")
+            else ""
+        ),
+        f"**Reward:** {parsed['reward']}" if parsed["reward"] else "",
     ]
-    markdown = "\n\n".join([part for part in ordered if _safe_str(part).strip()])
+    markdown = "\n\n".join(filter(None, ordered))
     markdown = apply_narration_emphasis(markdown, emphasis_markers)
 
+    if len(markdown) > _NARRATION_MAX_MARKDOWN:
+        cutoff = markdown[:_NARRATION_MAX_MARKDOWN]
+        last_break = cutoff.rfind("\n")
+        if last_break > 0:
+            cutoff = cutoff[:last_break]
+        markdown = cutoff.rstrip() + "..."
+
     return {
-        "scene_summary": apply_narration_emphasis(scene_summary, emphasis_markers),
-        "action_result_line": apply_narration_emphasis(action_result_line, emphasis_markers),
-        "npc_reply_block": apply_narration_emphasis(npc_reply_block, emphasis_markers),
-        "rewards_block": apply_narration_emphasis(rewards_block, emphasis_markers),
+        "scene_summary": apply_narration_emphasis(parsed["narrator"], emphasis_markers),
+        "action_result_line": apply_narration_emphasis(parsed["action"], emphasis_markers),
+        "npc_reply_block": apply_narration_emphasis(npc_text, emphasis_markers),
+        "npc": {
+            **npc,
+            "text": apply_narration_emphasis(npc_text, emphasis_markers),
+        },
+        "rewards_block": apply_narration_emphasis(parsed["reward"], emphasis_markers),
         "emphasis_markers": emphasis_markers,
+        "speaker_turns": speaker_turns,
         "markdown": markdown,
     }
 
@@ -393,20 +483,8 @@ class NarrativeResult:
 # Prompt builders
 # ---------------------------------------------------------------------------
 
-def build_scene_prompt(
-    scene: Dict[str, Any],
-    state: Dict[str, Any],
-    *,
-    tone: str = "dramatic",
-    max_paragraphs: int = 3,
-) -> str:
-    """Build an LLM prompt to narrate a scene.
-
-    Args:
-        scene: Scene dict with at least title, summary, actors, stakes.
-        state: Current game state dict.
-        tone: Narrative tone (dramatic, tense, mysterious, etc.).
-        max_paragraphs: Maximum number of paragraphs to generate.
+def build_scene_prompt(scene, narration_context, tone="dramatic"):
+    """Build an LLM prompt to narrate a scene with strict structured output format.
 
     Returns:
         Prompt string for the LLM.
@@ -414,13 +492,9 @@ def build_scene_prompt(
     title = scene.get("title", "Untitled Scene")
     summary = scene.get("summary", "")
     actors = scene.get("actors", [])
-    stakes = scene.get("stakes", "Unknown")
-    location = scene.get("location", "an unknown place")
+    location = scene.get("location_name") or scene.get("location") or "unknown location"
+    stakes = scene.get("stakes", "much is at stake")
     tension = scene.get("tension", "moderate")
-
-    # Build contextual state summary
-    player_name = state.get("player_name", "You")
-    genre = state.get("genre", "fantasy")
 
     actor_list = ""
     if actors:
@@ -431,29 +505,44 @@ def build_scene_prompt(
         else:
             actor_list = str(actors)
 
-    prompt = f"""You are a narrative engine for an RPG set in a {genre} world.
+    length = narration_context.get("settings", {}).get("response_length", "short")
 
-=== SCENE: {title} ===
+    length_rules = {
+        "short": "MAX 1 sentence per line",
+        "medium": "MAX 2 sentences per line",
+        "long": "MAX 4 sentences per line",
+    }
+
+    safe_context = _build_safe_prompt_context(scene, narration_context)
+
+    prompt = f"""You are a deterministic RPG narration engine.
+
+STRICT OUTPUT FORMAT:
+
+NARRATOR: <1 short sentence describing the scene>
+ACTION: <1 short sentence describing the player's action result>
+NPC: <npc_name>: "<short reply>" (omit if none)
+REWARD: <xp/items if any, else omit>
+
+RULES:
+- {length_rules.get(length)}
+- NO paragraphs
+- NO extra text
+- NO formatting outside this structure
+- KEEP IT SHORT
+
+SCENE:
+Title: {title}
 Location: {location}
 Tone: {tone}
 Tension: {tension}
-
-Summary:
-{summary}
-
+Summary: {summary}
 Actors present:
 {actor_list}
+Stakes: {stakes}
 
-Stakes:
-{stakes}
-
-=== INSTRUCTIONS ===
-Describe what happens next in {max_paragraphs} paragraphs.
-Include sensory details, character reactions, and building tension.
-Write in second person, addressing the player as "{player_name}".
-Make the narrative immersive and vivid.
-Do NOT include player choices — those will be provided separately.
-End with a moment of decision or danger.
+CONTEXT:
+{safe_context}
 """
     return prompt
 
@@ -629,62 +718,86 @@ Respond ONLY in JSON format:
 def parse_scene_response(text: str) -> Dict[str, Any]:
     """Parse a raw LLM narrative response.
 
-    Phase 5.1: Attempts JSON parsing first, falls back to text extraction.
+    Returns raw parsed fields only.
+    Parses structured output format directly from LLM response.
+    No guessing, no heuristics, exact line matching only.
 
     Args:
         text: Raw LLM response text.
 
     Returns:
-        Dict with 'narrative' and default 'choices'.
+        Dict with parsed fields.
     """
-    # Phase 5.1: Try JSON parsing first
-    try:
-        data = json.loads(text)
-        if isinstance(data, dict):
-            narrative = data.get("narrative", "").strip()
-            if narrative:
-                return {
-                    "narrative": narrative,
-                    "choices": data.get("choices", []),
-                }
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    # Fallback: text extraction
-    narrative = text.strip() if text else "The scene unfolds before you..."
-
-    return {
-        "narrative": narrative,
-        "choices": [
-            {
-                "id": "choice_1",
-                "text": "Take decisive action",
-                "type": "action",
-                "action": {
-                    "type": "intervene_thread",
-                    "target_id": "auto"
-                }
-            },
-            {
-                "id": "choice_2",
-                "text": "Observe carefully",
-                "type": "observe",
-                "action": {
-                    "type": "observe_situation",
-                    "target_id": "auto"
-                }
-            },
-            {
-                "id": "choice_3",
-                "text": "Speak to those present",
-                "type": "dialogue",
-                "action": {
-                    "type": "escalate_conflict",
-                    "target_id": "auto"
-                }
-            },
-        ],
+    result = {
+        "narrator": "",
+        "action": "",
+        "npc": {
+            "speaker_id": "",
+            "name": "",
+            "text": "",
+            "emotion": "",
+            "portrait": "",
+        },
+        "reward": "",
     }
+
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("NARRATOR:"):
+            result["narrator"] = line.replace("NARRATOR:", "").strip()
+        elif line.startswith("ACTION:"):
+            result["action"] = line.replace("ACTION:", "").strip()
+        elif line.startswith("NPC:"):
+            npc_text = line.replace("NPC:", "").strip()
+            if ":" in npc_text:
+                name, text = npc_text.split(":", 1)
+                npc_name = name.strip()
+                result["npc"] = {
+                    "speaker_id": npc_name.lower().replace(" ", "_"),
+                    "name": npc_name,
+                    "text": _bound_text(text.strip().strip('"'), 180),
+                    "emotion": "",
+                    "portrait": "",
+                }
+            else:
+                result["npc"] = {
+                    "speaker_id": "",
+                    "name": "",
+                    "text": _bound_text(npc_text, 180),
+                    "emotion": "",
+                    "portrait": "",
+                }
+        elif line.startswith("REWARD:"):
+            result["reward"] = _bound_text(line.replace("REWARD:", "").strip(), 120)
+
+    return result
+
+
+def _is_valid_scene_response(parsed: Dict[str, Any]) -> bool:
+    parsed = _safe_dict(parsed)
+    narrator = _safe_str(parsed.get("narrator")).strip()
+    action = _safe_str(parsed.get("action")).strip()
+    return bool(narrator and action)
+
+
+def _with_scene_response_defaults(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    parsed = _safe_dict(parsed)
+
+    npc = parsed.get("npc")
+    if not isinstance(npc, dict):
+        parsed["npc"] = {
+            "speaker_id": "unknown",
+            "name": "",
+            "text": _safe_str(npc).strip(),
+            "emotion": "",
+            "portrait": "",
+        }
+    if not parsed.get("narrator"):
+        parsed["narrator"] = "You are here."
+    if not parsed.get("action"):
+        parsed["action"] = "You act."
+
+    return parsed
 
 
 def parse_npc_reaction(text: str, npc_id: str = "", npc_name: str = "") -> NPCReaction:
@@ -1210,14 +1323,22 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
         if pi:
             scene["player_input"] = str(pi)
 
-    try:
-        prompt = build_scene_prompt(scene, narration_context, tone=tone)
-        response = _llm_text(llm_gateway, prompt, context={"scene": scene})
-        parsed = parse_scene_response(response)
-        narrative = parsed.get("narrative") or ""
-        return narrative
-    except Exception:
-        return _simulate_narrative(scene, narration_context, tone)
+    prompt = build_scene_prompt(scene, narration_context, tone=tone)
+    for _ in range(2):  # retry once
+        try:
+            response = _llm_text(llm_gateway, prompt, context={"scene": scene})
+            parsed = parse_scene_response(response)
+
+            if _is_valid_scene_response(parsed):
+                return response
+        except Exception:
+            pass
+
+    # fallback if LLM fails format
+    return (
+        "NARRATOR: You are here.\n"
+        "ACTION: You act.\n"
+    )
 
 
 def _simulate_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], tone: str = "dramatic") -> str:
