@@ -71,4 +71,23 @@ def adapt_session_to_frontend(session: dict[str, Any]) -> dict[str, Any]:
         "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
         "creator": {"setup_id": manifest.get("id")},
     }
+
+    # Phase 18.3A — enriched player data
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    response["player_stats"] = _safe_dict(player_state.get("stats"))
+    response["player_skills"] = _safe_dict(player_state.get("skills"))
+    response["player_level"] = player_state.get("level", 1)
+    response["player_xp"] = player_state.get("xp", 0)
+    response["player_xp_to_next"] = player_state.get("xp_to_next", 100)
+    response["player_unspent_points"] = player_state.get("unspent_points", 0)
+    response["player_inventory"] = _safe_dict(player_state.get("inventory_state"))
+    response["player_equipment"] = _safe_dict(
+        _safe_dict(player_state.get("inventory_state")).get("equipment")
+    )
+    response["nearby_npcs"] = _safe_list(player_state.get("nearby_npc_ids"))
+
+    # Memory summary
+    from app.rpg.presentation.memory_inspector import build_memory_ui_summary
+    response["memory_summary"] = build_memory_ui_summary(simulation_state)
+
     return response

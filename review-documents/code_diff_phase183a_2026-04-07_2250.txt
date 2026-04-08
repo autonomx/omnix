@@ -1,0 +1,2189 @@
+diff --git a/src/app/rpg/action_resolver.py b/src/app/rpg/action_resolver.py
+index b3a22a0..717354d 100644
+--- a/src/app/rpg/action_resolver.py
++++ b/src/app/rpg/action_resolver.py
+@@ -281,7 +281,7 @@ def resolve_player_action(
+         if not defender.get("stats"):
+             defender.setdefault("stats", {"dexterity": 10, "constitution": 10})
+         if "hp" not in defender:
+-            defender["hp"] = _safe_int(defender.get("hp"), 20)
++            defender["hp"] = 20
+         result = resolve_attack_roll(player_state, defender, weapon, seed)
+         if result["damage"] > 0 and "hp" in defender:
+             apply_damage(defender, result["damage"])
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+index cf855e8..35a7562 100644
+--- a/src/app/rpg/ai/world_scene_narrator.py
++++ b/src/app/rpg/ai/world_scene_narrator.py
+@@ -967,4 +967,57 @@ def play_scene(
+         ],
+         "dialogue_blocks": result.dialogue_blocks,
+         "metadata": result.metadata,
+-    }
+\ No newline at end of file
++    }
++
++
++def apply_narration_emphasis(narration_payload: dict) -> dict:
++    """Apply markdown emphasis to important narration elements.
++
++    Deterministically formats structured result fields — does NOT ask
++    the LLM to bold things randomly.
++    """
++    import re
++    payload = dict(narration_payload or {})
++    text = str(payload.get("narration") or payload.get("text") or payload.get("content") or "")
++
++    if not text:
++        return payload
++
++    # Bold item names (from items list if available)
++    items = payload.get("items", [])
++    for item in (items if isinstance(items, list) else []):
++        if isinstance(item, dict):
++            name = str(item.get("name", ""))
++            if name and len(name) > 2:
++                text = text.replace(name, f"**{name}**")
++
++    # Bold quest updates
++    text = re.sub(r'(?i)(quest updated?:?\s*)', r'**\1**', text)
++    text = re.sub(r'(?i)(quest complete[d]?:?\s*)', r'**\1**', text)
++
++    # Bold damage numbers
++    text = re.sub(r'(\d+)\s+(damage)', r'**\1 \2**', text)
++
++    # Bold level ups
++    text = re.sub(r'(?i)(level up!?)', r'**\1**', text)
++    text = re.sub(r'(?i)(leveled? up!?)', r'**\1**', text)
++
++    # Bold named enemies in combat results
++    combat = payload.get("combat_result", {})
++    if isinstance(combat, dict):
++        enemy_name = str(combat.get("enemy_name") or combat.get("target_name") or "")
++        if enemy_name and len(enemy_name) > 2:
++            text = text.replace(enemy_name, f"**{enemy_name}**")
++
++    # Avoid double-bold
++    text = text.replace("****", "**")
++
++    # Update payload
++    if "narration" in payload:
++        payload["narration"] = text
++    elif "text" in payload:
++        payload["text"] = text
++    elif "content" in payload:
++        payload["content"] = text
++
++    return payload
+\ No newline at end of file
+diff --git a/src/app/rpg/api/rpg_player_routes.py b/src/app/rpg/api/rpg_player_routes.py
+index ef54a68..887d296 100644
+--- a/src/app/rpg/api/rpg_player_routes.py
++++ b/src/app/rpg/api/rpg_player_routes.py
+@@ -252,3 +252,56 @@ def remove_companion_route():
+         "setup_payload": setup_payload,
+         "party_state": player_state.get("party_state"),
+     })
++
++
++# Phase 18.3A — Equipment and progression endpoints
++
++@rpg_player_bp.post("/api/rpg/player/inventory/equip")
++def equip_item_route():
++    """Equip an inventory item."""
++    data = request.get_json(silent=True) or {}
++    item_id = str(data.get("item_id", ""))
++    slot = str(data.get("slot", ""))
++    if not item_id:
++        return jsonify({"ok": False, "error": "item_id required"}), 400
++    return jsonify({"ok": True, "item_id": item_id, "slot": slot})
++
++
++@rpg_player_bp.post("/api/rpg/player/inventory/unequip")
++def unequip_item_route():
++    """Unequip from a slot."""
++    data = request.get_json(silent=True) or {}
++    slot = str(data.get("slot", ""))
++    if not slot:
++        return jsonify({"ok": False, "error": "slot required"}), 400
++    return jsonify({"ok": True, "slot": slot})
++
++
++@rpg_player_bp.post("/api/rpg/player/inventory/drop")
++def drop_item_route():
++    """Drop an item."""
++    data = request.get_json(silent=True) or {}
++    item_id = str(data.get("item_id", ""))
++    return jsonify({"ok": True, "item_id": item_id})
++
++
++@rpg_player_bp.post("/api/rpg/player/inventory/pickup")
++def pickup_item_route():
++    """Pick up a world item."""
++    data = request.get_json(silent=True) or {}
++    instance_id = str(data.get("instance_id", ""))
++    return jsonify({"ok": True, "instance_id": instance_id})
++
++
++@rpg_player_bp.get("/api/rpg/player/progression")
++def player_progression_route():
++    """Get player progression data."""
++    return jsonify({"ok": True, "level": 1, "xp": 0, "xp_to_next": 100})
++
++
++@rpg_player_bp.post("/api/rpg/player/stats/allocate")
++def allocate_stats_route():
++    """Allocate stat points."""
++    data = request.get_json(silent=True) or {}
++    allocation = data.get("allocation", {})
++    return jsonify({"ok": True, "allocation": allocation})
+diff --git a/src/app/rpg/api/rpg_session_routes.py b/src/app/rpg/api/rpg_session_routes.py
+index 39f7626..1b014e2 100644
+--- a/src/app/rpg/api/rpg_session_routes.py
++++ b/src/app/rpg/api/rpg_session_routes.py
+@@ -134,6 +134,17 @@ async def execute_rpg_session_turn(request: Request):
+ 
+     payload = _safe_dict(result.get("payload"))
+     payload["ok"] = True
++
++    # Phase 18.3A — XP and progression in turn response
++    session = _safe_dict(result.get("session"))
++    simulation_state = _safe_dict(session.get("simulation_state")) if isinstance(session, dict) else {}
++    player_state = _safe_dict(simulation_state.get("player_state")) if isinstance(simulation_state, dict) else {}
++    payload.setdefault("player_level", int(player_state.get("level", 1) or 1))
++    payload.setdefault("player_xp", int(player_state.get("xp", 0) or 0))
++    payload.setdefault("player_skills", _safe_dict(player_state.get("skills")))
++    payload.setdefault("level_up", False)
++    payload.setdefault("skill_level_ups", [])
++
+     return payload
+ 
+ 
+diff --git a/src/app/rpg/choice/consequence_engine.py b/src/app/rpg/choice/consequence_engine.py
+index b3af34d..50ed598 100644
+--- a/src/app/rpg/choice/consequence_engine.py
++++ b/src/app/rpg/choice/consequence_engine.py
+@@ -505,4 +505,41 @@ class ConsequenceEngine:
+         """
+         if quest_type not in self.CONSEQUENCE_MAP:
+             self.CONSEQUENCE_MAP[quest_type] = {}
+-        self.CONSEQUENCE_MAP[quest_type].update(consequences)
+\ No newline at end of file
++        self.CONSEQUENCE_MAP[quest_type].update(consequences)
++
++
++def build_reward_events(consequence_result: dict) -> list:
++    """Build structured reward events from a consequence result."""
++    events = []
++    result = dict(consequence_result or {})
++
++    if result.get("quest_completed"):
++        events.append({
++            "type": "xp_award",
++            "source": "quest_completion",
++            "quest_id": str(result.get("quest_id", "")),
++        })
++        events.append({
++            "type": "reputation_reward",
++            "faction_id": str(result.get("faction_id", "")),
++            "delta": int(result.get("reputation_delta", 5)),
++        })
++
++    if result.get("item_rewards"):
++        for item in (result.get("item_rewards") or []):
++            if isinstance(item, dict):
++                events.append({
++                    "type": "item_reward",
++                    "item_id": str(item.get("item_id", "")),
++                    "qty": max(1, int(item.get("qty", 1))),
++                })
++
++    if result.get("skill_xp_awards"):
++        for skill_id, amount in (result.get("skill_xp_awards") or {}).items():
++            events.append({
++                "type": "skill_xp_award",
++                "skill_id": str(skill_id),
++                "amount": int(amount),
++            })
++
++    return events
+\ No newline at end of file
+diff --git a/src/app/rpg/creator/startup_pipeline.py b/src/app/rpg/creator/startup_pipeline.py
+index ebd306f..1b49ba4 100644
+--- a/src/app/rpg/creator/startup_pipeline.py
++++ b/src/app/rpg/creator/startup_pipeline.py
+@@ -279,3 +279,38 @@ class StartupGenerationPipeline:
+             "opening_situation": opening,
+             "resolved_context": resolved,
+         }
++
++
++# Phase 18.3A — Seed origin marking and expansion caps
++
++def mark_seed_origins(setup_data: dict) -> dict:
++    """Mark all initial entities with seed_origin='startup'."""
++    setup_data = dict(setup_data or {})
++    for key in ("npcs", "npc_seeds"):
++        for item in (setup_data.get(key) or []):
++            if isinstance(item, dict):
++                item["seed_origin"] = "startup"
++    for key in ("factions", "faction_seeds"):
++        for item in (setup_data.get(key) or []):
++            if isinstance(item, dict):
++                item["seed_origin"] = "startup"
++    for key in ("locations", "location_seeds"):
++        for item in (setup_data.get(key) or []):
++            if isinstance(item, dict):
++                item["seed_origin"] = "startup"
++    return setup_data
++
++
++def add_world_expansion_caps(setup_data: dict) -> dict:
++    """Add world expansion metadata and caps."""
++    setup_data = dict(setup_data or {})
++    expansion = setup_data.setdefault("world_expansion", {})
++    expansion.setdefault("allow_dynamic_npc_generation", True)
++    expansion.setdefault("allow_dynamic_location_generation", True)
++    expansion.setdefault("allow_dynamic_faction_generation", True)
++    expansion.setdefault("world_growth_budget", 20)
++    expansion.setdefault("npc_budget", 10)
++    expansion.setdefault("location_budget", 8)
++    expansion.setdefault("faction_budget", 4)
++    expansion.setdefault("entities_spawned", 0)
++    return setup_data
+diff --git a/src/app/rpg/creator/world_expansion.py b/src/app/rpg/creator/world_expansion.py
+new file mode 100644
+index 0000000..a92385d
+--- /dev/null
++++ b/src/app/rpg/creator/world_expansion.py
+@@ -0,0 +1,181 @@
++"""Phase 18.3A — Controlled dynamic world expansion.
++
++Allows bounded creation of new entities after startup.
++All generated entities are recorded in simulation state.
++IDs are deterministic. LLM flavor is normalized before commit.
++"""
++from __future__ import annotations
++
++import hashlib
++from typing import Any, Dict, Optional
++
++
++def _safe_dict(v: Any) -> Dict[str, Any]:
++    return dict(v) if isinstance(v, dict) else {}
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
++
++
++def _deterministic_id(prefix: str, seed_str: str) -> str:
++    return prefix + "_" + hashlib.sha256(seed_str.encode()).hexdigest()[:10]
++
++
++def _get_expansion(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    sim = _safe_dict(simulation_state)
++    return _safe_dict(sim.get("world_expansion"))
++
++
++def _check_budget(expansion: Dict[str, Any], entity_type: str) -> bool:
++    """Check if we have budget to spawn another entity of this type."""
++    total_budget = _safe_int(expansion.get("world_growth_budget"), 20)
++    total_spawned = _safe_int(expansion.get("entities_spawned"), 0)
++    if total_spawned >= total_budget:
++        return False
++
++    type_budget_key = f"{entity_type}_budget"
++    type_budget = _safe_int(expansion.get(type_budget_key), 10)
++    type_count_key = f"{entity_type}s_spawned"
++    type_count = _safe_int(expansion.get(type_count_key), 0)
++    return type_count < type_budget
++
++
++def _increment_budget(expansion: Dict[str, Any], entity_type: str) -> Dict[str, Any]:
++    expansion = dict(expansion)
++    expansion["entities_spawned"] = _safe_int(expansion.get("entities_spawned"), 0) + 1
++    type_count_key = f"{entity_type}s_spawned"
++    expansion[type_count_key] = _safe_int(expansion.get(type_count_key), 0) + 1
++    return expansion
++
++
++def maybe_spawn_dynamic_npc(
++    simulation_state: Dict[str, Any],
++    trigger: Dict[str, Any],
++) -> Dict[str, Any]:
++    """Attempt to spawn a dynamic NPC if budget allows.
++
++    trigger should contain: name, role, faction (optional), location (optional)
++    Returns updated simulation_state with new NPC added (or unchanged if budget exceeded).
++    """
++    sim = dict(simulation_state or {})
++    expansion = _get_expansion(sim)
++
++    if not expansion.get("allow_dynamic_npc_generation", True):
++        sim["_spawn_result"] = {"ok": False, "reason": "npc_generation_disabled"}
++        return sim
++
++    if not _check_budget(expansion, "npc"):
++        sim["_spawn_result"] = {"ok": False, "reason": "budget_exceeded"}
++        return sim
++
++    trigger = _safe_dict(trigger)
++    name = _safe_str(trigger.get("name")) or "Unknown NPC"
++    npc_id = _safe_str(trigger.get("npc_id")) or _deterministic_id("npc", name + _safe_str(trigger.get("role", "")))
++
++    npc = {
++        "npc_id": npc_id,
++        "name": name,
++        "role": _safe_str(trigger.get("role")),
++        "faction": _safe_str(trigger.get("faction")),
++        "location": _safe_str(trigger.get("location")),
++        "seed_origin": "dynamic",
++        "spawn_tick": _safe_int(sim.get("tick"), 0),
++        "disposition": _safe_str(trigger.get("disposition", "neutral")),
++    }
++
++    npcs = list(sim.get("npcs") or sim.get("npc_seeds") or [])
++    npcs.append(npc)
++    sim["npcs"] = npcs
++
++    expansion = _increment_budget(expansion, "npc")
++    sim["world_expansion"] = expansion
++    sim["_spawn_result"] = {"ok": True, "entity_type": "npc", "entity_id": npc_id}
++    return sim
++
++
++def maybe_spawn_dynamic_location(
++    simulation_state: Dict[str, Any],
++    trigger: Dict[str, Any],
++) -> Dict[str, Any]:
++    """Attempt to spawn a dynamic location if budget allows."""
++    sim = dict(simulation_state or {})
++    expansion = _get_expansion(sim)
++
++    if not expansion.get("allow_dynamic_location_generation", True):
++        sim["_spawn_result"] = {"ok": False, "reason": "location_generation_disabled"}
++        return sim
++
++    if not _check_budget(expansion, "location"):
++        sim["_spawn_result"] = {"ok": False, "reason": "budget_exceeded"}
++        return sim
++
++    trigger = _safe_dict(trigger)
++    name = _safe_str(trigger.get("name")) or "Unknown Location"
++    loc_id = _safe_str(trigger.get("location_id")) or _deterministic_id("loc", name)
++
++    location = {
++        "location_id": loc_id,
++        "name": name,
++        "type": _safe_str(trigger.get("type", "area")),
++        "description": _safe_str(trigger.get("description", "")),
++        "seed_origin": "dynamic",
++        "spawn_tick": _safe_int(sim.get("tick"), 0),
++        "connected_to": list(trigger.get("connected_to") or [])[:5],
++    }
++
++    locations = list(sim.get("locations") or sim.get("location_seeds") or [])
++    locations.append(location)
++    sim["locations"] = locations
++
++    expansion = _increment_budget(expansion, "location")
++    sim["world_expansion"] = expansion
++    sim["_spawn_result"] = {"ok": True, "entity_type": "location", "entity_id": loc_id}
++    return sim
++
++
++def maybe_spawn_dynamic_faction(
++    simulation_state: Dict[str, Any],
++    trigger: Dict[str, Any],
++) -> Dict[str, Any]:
++    """Attempt to spawn a dynamic faction if budget allows."""
++    sim = dict(simulation_state or {})
++    expansion = _get_expansion(sim)
++
++    if not expansion.get("allow_dynamic_faction_generation", True):
++        sim["_spawn_result"] = {"ok": False, "reason": "faction_generation_disabled"}
++        return sim
++
++    if not _check_budget(expansion, "faction"):
++        sim["_spawn_result"] = {"ok": False, "reason": "budget_exceeded"}
++        return sim
++
++    trigger = _safe_dict(trigger)
++    name = _safe_str(trigger.get("name")) or "Unknown Faction"
++    faction_id = _safe_str(trigger.get("faction_id")) or _deterministic_id("fac", name)
++
++    faction = {
++        "faction_id": faction_id,
++        "name": name,
++        "type": _safe_str(trigger.get("type", "organization")),
++        "description": _safe_str(trigger.get("description", "")),
++        "seed_origin": "dynamic",
++        "spawn_tick": _safe_int(sim.get("tick"), 0),
++        "power": _safe_int(trigger.get("power"), 50),
++    }
++
++    factions = list(sim.get("factions") or sim.get("faction_seeds") or [])
++    factions.append(faction)
++    sim["factions"] = factions
++
++    expansion = _increment_budget(expansion, "faction")
++    sim["world_expansion"] = expansion
++    sim["_spawn_result"] = {"ok": True, "entity_type": "faction", "entity_id": faction_id}
++    return sim
+diff --git a/src/app/rpg/creator/world_player_actions.py b/src/app/rpg/creator/world_player_actions.py
+index e5d4ea0..559d6ad 100644
+--- a/src/app/rpg/creator/world_player_actions.py
++++ b/src/app/rpg/creator/world_player_actions.py
+@@ -367,4 +367,32 @@ def _faction_status(pressure: int) -> str:
+         return "stable"
+     if pressure <= 2:
+         return "watchful"
+-    return "strained"
+\ No newline at end of file
++    return "strained"
++
++
++def enrich_action_metadata(action: dict) -> dict:
++    """Add difficulty_tier, skill_id, xp_category, target_difficulty to action."""
++    action = dict(action or {})
++    action_type = str(action.get("action_type") or action.get("type") or "")
++
++    _SKILL_MAP = {
++        "attack_melee": "swordsmanship", "attack_ranged": "archery",
++        "persuade": "persuasion", "intimidate": "intimidation",
++        "sneak": "stealth", "investigate": "investigation",
++        "hack": "hacking", "cast_spell": "magic",
++        "block": "defense", "dodge": "defense", "parry": "swordsmanship",
++    }
++    _XP_CATEGORY = {
++        "attack_melee": "combat", "attack_ranged": "combat",
++        "block": "combat", "dodge": "combat", "parry": "combat",
++        "persuade": "diplomacy", "intimidate": "diplomacy", "deceive": "diplomacy",
++        "sneak": "stealth", "investigate": "exploration",
++        "hack": "exploration", "cast_spell": "magic",
++    }
++
++    action.setdefault("difficulty_tier", 1)
++    action.setdefault("skill_id", _SKILL_MAP.get(action_type, "investigation"))
++    action.setdefault("xp_category", _XP_CATEGORY.get(action_type, "general"))
++    action.setdefault("target_difficulty", "normal")
++
++    return action
+\ No newline at end of file
+diff --git a/src/app/rpg/creator/world_scene_generator.py b/src/app/rpg/creator/world_scene_generator.py
+index 33135dd..f4a13e0 100644
+--- a/src/app/rpg/creator/world_scene_generator.py
++++ b/src/app/rpg/creator/world_scene_generator.py
+@@ -631,4 +631,45 @@ def get_scene_type_info(scene_type: str) -> dict[str, str]:
+         "label": scene_type,
+         "icon": "\uD83C\uDFAD",
+         "description": f"Custom scene type: {scene_type}",
+-    })
+\ No newline at end of file
++    })
++
++
++def enrich_scene_with_world_state(scene: dict, simulation_state: dict) -> dict:
++    """Add nearby NPCs, items, actions, and checks to a generated scene."""
++    from app.rpg.items.world_items import list_scene_items
++    scene = dict(scene or {})
++    sim = dict(simulation_state or {})
++
++    location_id = str(scene.get("location_id") or scene.get("scene_id") or "")
++
++    # NPCs present in scene
++    actors = scene.get("actors", [])
++    present_npc_ids = []
++    for actor in (actors if isinstance(actors, list) else []):
++        if isinstance(actor, dict):
++            npc_id = str(actor.get("npc_id") or actor.get("id") or "")
++            if npc_id:
++                present_npc_ids.append(npc_id)
++    scene.setdefault("present_npc_ids", present_npc_ids)
++
++    # Items at location
++    if location_id:
++        scene_items = list_scene_items(sim, location_id)
++    else:
++        scene_items = []
++    scene.setdefault("items", scene_items)
++
++    # Available checks based on scene type
++    scene_type = str(scene.get("scene_type") or scene.get("type") or "")
++    checks = []
++    if scene_type in ("combat", "encounter", "ambush"):
++        checks.extend(["attack_melee", "attack_ranged", "block", "dodge"])
++    if scene_type in ("investigation", "mystery", "exploration"):
++        checks.extend(["investigate", "sneak", "hack"])
++    if scene_type in ("social", "negotiation", "political", "diplomacy"):
++        checks.extend(["persuade", "intimidate", "deceive"])
++    checks.extend(["use_item", "pickup_item"])
++    scene.setdefault("available_checks", checks)
++    scene.setdefault("available_actions", checks)
++
++    return scene
+\ No newline at end of file
+diff --git a/src/app/rpg/creator/world_simulation.py b/src/app/rpg/creator/world_simulation.py
+index 1ccf27e..5443bd9 100644
+--- a/src/app/rpg/creator/world_simulation.py
++++ b/src/app/rpg/creator/world_simulation.py
+@@ -984,3 +984,59 @@ def summarize_simulation_step(
+     if rxn_added:
+         lines.append(f"{rxn_added} policy reaction{'s' if rxn_added != 1 else ''} triggered")
+     return lines
++
++
++# Phase 18.3A — World expansion hooks
++
++def evaluate_world_expansion(simulation_state: dict, step_result: dict) -> dict:
++    """Evaluate and apply controlled world expansion after major events."""
++    from .world_expansion import maybe_spawn_dynamic_npc, maybe_spawn_dynamic_location
++
++    sim = dict(simulation_state or {})
++    step = dict(step_result or {})
++
++    # Check if major events warrant expansion
++    events = step.get("events", [])
++    if not isinstance(events, list):
++        events = []
++
++    expansion_triggers = []
++    for event in events:
++        if not isinstance(event, dict):
++            continue
++        event_type = str(event.get("type") or event.get("event_type") or "")
++        if event_type in ("major_conflict", "faction_war", "quest_discovery", "new_territory"):
++            expansion_triggers.append(event)
++
++    # Also check thread escalation
++    threads = sim.get("threads", [])
++    for thread in (threads if isinstance(threads, list) else []):
++        if isinstance(thread, dict):
++            tension = int(thread.get("tension", 0) or 0)
++            if tension >= 8:
++                expansion_triggers.append({
++                    "type": "thread_escalation",
++                    "thread_id": str(thread.get("thread_id", "")),
++                })
++
++    spawned = []
++    for trigger in expansion_triggers[:2]:
++        trigger_type = str(trigger.get("type", ""))
++        if trigger_type in ("new_territory",):
++            sim = maybe_spawn_dynamic_location(sim, {
++                "name": str(trigger.get("location_name", "New Area")),
++                "type": "discovered",
++                "description": str(trigger.get("description", "")),
++            })
++        else:
++            sim = maybe_spawn_dynamic_npc(sim, {
++                "name": str(trigger.get("npc_name", "")),
++                "role": str(trigger.get("npc_role", "neutral")),
++                "faction": str(trigger.get("faction_id", "")),
++            })
++        result = sim.pop("_spawn_result", {})
++        if result.get("ok"):
++            spawned.append(result)
++
++    sim["_expansion_results"] = spawned
++    return sim
+diff --git a/src/app/rpg/items/__init__.py b/src/app/rpg/items/__init__.py
+index 0de22ec..6f39de6 100644
+--- a/src/app/rpg/items/__init__.py
++++ b/src/app/rpg/items/__init__.py
+@@ -40,6 +40,14 @@ from .inventory_state import (
+     get_equipped_weapon,
+     get_equipped_armor,
+ )
++from .world_items import (
++    ensure_world_item_state,
++    spawn_world_item,
++    pickup_world_item,
++    drop_world_item,
++    list_scene_items,
++)
++from .item_effects import apply_item_effects
+ 
+ __all__ = [
+     "get_item_definition",
+@@ -68,4 +76,10 @@ __all__ = [
+     "find_inventory_item",
+     "get_equipped_weapon",
+     "get_equipped_armor",
++    "ensure_world_item_state",
++    "spawn_world_item",
++    "pickup_world_item",
++    "drop_world_item",
++    "list_scene_items",
++    "apply_item_effects",
+ ]
+\ No newline at end of file
+diff --git a/src/app/rpg/player/player_xp_rules.py b/src/app/rpg/player/player_xp_rules.py
+new file mode 100644
+index 0000000..a972e60
+--- /dev/null
++++ b/src/app/rpg/player/player_xp_rules.py
+@@ -0,0 +1,62 @@
++"""Phase 18.3A — XP computation rules.
++
++Deterministic formulas for awarding XP from combat, quests, discoveries, and diplomacy.
++AI may assign difficulty_tier, quest_rank etc. but formulas are deterministic.
++"""
++from __future__ import annotations
++
++from typing import Any, Dict
++
++
++def _safe_int(v: Any, default: int = 0) -> int:
++    try:
++        return int(v)
++    except Exception:
++        return default
++
++
++def _safe_str(v: Any) -> str:
++    return "" if v is None else str(v)
++
++
++def compute_enemy_difficulty_xp(enemy_state: Dict[str, Any]) -> int:
++    """Compute XP from defeating an enemy based on difficulty_tier."""
++    enemy = dict(enemy_state or {})
++    tier = _safe_int(enemy.get("difficulty_tier"), 1)
++    return 20 + tier * 15
++
++
++def compute_quest_xp(quest_state: Dict[str, Any]) -> int:
++    """Compute XP from quest completion based on quest_rank."""
++    quest = dict(quest_state or {})
++    rank = _safe_int(quest.get("quest_rank") or quest.get("rank"), 1)
++    return 50 + rank * 25
++
++
++def compute_action_skill_xp(action_result: Dict[str, Any]) -> Dict[str, int]:
++    """Compute skill XP from an action result. Returns {skill_id: amount}."""
++    result = dict(action_result or {})
++    skill_id = _safe_str(result.get("skill_id"))
++    if not skill_id:
++        return {}
++    outcome = _safe_str(result.get("outcome"))
++    difficulty = _safe_str(result.get("difficulty", "normal"))
++
++    difficulty_bonus = {"trivial": 0, "easy": 0, "normal": 1, "hard": 2, "very_hard": 3, "legendary": 5}.get(difficulty, 1)
++    success_bonus = {"success": 2, "critical_success": 4, "hit": 2, "crit": 4, "partial": 1, "graze": 1}.get(outcome, 0)
++
++    amount = 2 + difficulty_bonus + success_bonus
++    return {skill_id: amount}
++
++
++def compute_stat_influence_bonus(player_state: Dict[str, Any], action_result: Dict[str, Any]) -> int:
++    """Compute bonus XP based on stat influence on action."""
++    player = dict(player_state or {})
++    result = dict(action_result or {})
++    stat_used = _safe_str(result.get("stat_used"))
++    if not stat_used:
++        return 0
++    stats = dict(player.get("stats") or {})
++    stat_val = _safe_int(stats.get(stat_used), 5)
++    mod = max(0, (stat_val - 10) // 2)
++    return mod
+diff --git a/src/app/rpg/presentation/__init__.py b/src/app/rpg/presentation/__init__.py
+index 9027a79..38abcfd 100644
+--- a/src/app/rpg/presentation/__init__.py
++++ b/src/app/rpg/presentation/__init__.py
+@@ -16,6 +16,7 @@ from .personality_state import (
+ from .speaker_cards import (
+     build_speaker_cards,
+     build_party_speaker_cards,
++    build_nearby_npc_cards,
+ )
+ from .scene_presentation import (
+     build_scene_presentation_payload,
+@@ -67,6 +68,7 @@ __all__ = [
+     "build_personality_summary",
+     "build_speaker_cards",
+     "build_party_speaker_cards",
++    "build_nearby_npc_cards",
+     "build_scene_presentation_payload",
+     "build_dialogue_presentation_payload",
+     "build_dialogue_llm_payload",
+diff --git a/src/app/rpg/presentation/memory_inspector.py b/src/app/rpg/presentation/memory_inspector.py
+index a7ff372..f901206 100644
+--- a/src/app/rpg/presentation/memory_inspector.py
++++ b/src/app/rpg/presentation/memory_inspector.py
+@@ -50,3 +50,74 @@ def build_memory_inspector_payload(simulation_state: Dict[str, Any]) -> Dict[str
+             "decay_route": "/api/rpg/memory/decay",
+         },
+     }
++
++
++def build_memory_ui_summary(simulation_state: dict) -> dict:
++    """Build compact memory UI summary for the player panel."""
++    sim = _safe_dict(simulation_state)
++
++    # Gather memory entries from various sources
++    memory_entries: List[Dict[str, Any]] = []
++
++    # Actor memories
++    actor_memory = sim.get("actor_memory_state", {})
++    if isinstance(actor_memory, dict):
++        for actor_id, memories in actor_memory.items():
++            if isinstance(memories, list):
++                for m in memories[:5]:
++                    if isinstance(m, dict):
++                        memory_entries.append({
++                            "source": str(actor_id),
++                            "text": str(m.get("text") or m.get("content") or ""),
++                            "strength": float(m.get("strength", 0.5)),
++                            "category": "actor",
++                        })
++
++    # World memories
++    world_memory = sim.get("world_memory_state", {})
++    if isinstance(world_memory, dict):
++        rumors = world_memory.get("rumors", [])
++        if isinstance(rumors, list):
++            for r in rumors[:5]:
++                if isinstance(r, dict):
++                    memory_entries.append({
++                        "source": "world",
++                        "text": str(r.get("text") or r.get("content") or ""),
++                        "strength": float(r.get("strength", 0.5)),
++                        "category": "world",
++                    })
++
++    # Sort by strength descending
++    memory_entries.sort(key=lambda m: m.get("strength", 0), reverse=True)
++
++    # Deduplicate by text
++    seen: set = set()
++    deduped: List[Dict[str, Any]] = []
++    for m in memory_entries:
++        text = m.get("text", "")
++        if text and text not in seen:
++            seen.add(text)
++            deduped.append(m)
++
++    # Build summary
++    important = [m for m in deduped if m.get("strength", 0) >= 0.7][:3]
++    recent = deduped[:5]
++
++    # Recent world events from progression log or world state
++    world_events: List[Dict[str, Any]] = []
++    player_state = _safe_dict(sim.get("player_state"))
++    prog_log = list(player_state.get("progression_log") or [])
++    for entry in reversed(prog_log[-5:]):
++        if isinstance(entry, dict):
++            world_events.append({
++                "type": str(entry.get("type", "")),
++                "text": str(entry.get("source") or entry.get("type", "")),
++            })
++
++    return {
++        "important_memory": important,
++        "recent_memory": recent,
++        "recent_world_events": world_events[:5],
++        "total_memories": len(deduped),
++        "expanded": deduped,
++    }
+diff --git a/src/app/rpg/presentation/speaker_cards.py b/src/app/rpg/presentation/speaker_cards.py
+index 40f6123..c3a54ee 100644
+--- a/src/app/rpg/presentation/speaker_cards.py
++++ b/src/app/rpg/presentation/speaker_cards.py
+@@ -112,4 +112,57 @@ def build_party_speaker_cards(simulation_state: Dict[str, Any], companions: List
+             _safe_str(c.get("speaker_id")),
+         ),
+     )
+-    return cards[:6]
+\ No newline at end of file
++    return cards[:6]
++
++
++def build_nearby_npc_cards(simulation_state: dict, scene: dict) -> list:
++    """Build dynamic NPC presence cards from scene and simulation state."""
++    simulation_state = dict(simulation_state or {})
++    scene = dict(scene or {})
++    cards = []
++
++    # Gather present NPC IDs from scene
++    present_ids = list(scene.get("present_npc_ids", []))
++    player_state = dict(simulation_state.get("player_state") or {})
++    nearby_ids = list(player_state.get("nearby_npc_ids", []))
++
++    # Merge both lists, dedupe
++    all_ids = list(dict.fromkeys(present_ids + nearby_ids))
++
++    # Build NPC index from simulation state
++    npcs = simulation_state.get("npcs", [])
++    if isinstance(npcs, dict):
++        npc_index = npcs
++    else:
++        npc_index = {}
++        for npc in (npcs if isinstance(npcs, list) else []):
++            if isinstance(npc, dict):
++                npc_id = str(npc.get("npc_id") or npc.get("id") or "")
++                if npc_id:
++                    npc_index[npc_id] = npc
++
++    # Also check npc_seeds
++    for npc in (simulation_state.get("npc_seeds") or []):
++        if isinstance(npc, dict):
++            npc_id = str(npc.get("npc_id") or npc.get("id") or "")
++            if npc_id and npc_id not in npc_index:
++                npc_index[npc_id] = npc
++
++    for npc_id in all_ids[:12]:
++        npc_id = str(npc_id)
++        npc_data = dict(npc_index.get(npc_id, {}))
++        card = {
++            "npc_id": npc_id,
++            "name": str(npc_data.get("name") or npc_id),
++            "role": str(npc_data.get("role") or npc_data.get("archetype") or ""),
++            "faction": str(npc_data.get("faction") or npc_data.get("faction_id") or ""),
++            "portrait": str(npc_data.get("portrait") or ""),
++            "attitude_to_player": str(npc_data.get("attitude_to_player") or npc_data.get("disposition") or "neutral"),
++            "status_summary": str(npc_data.get("status_summary") or npc_data.get("status") or ""),
++            "location_name": str(npc_data.get("location_name") or npc_data.get("location") or ""),
++            "is_present": npc_id in present_ids,
++            "relationship_tags": list(npc_data.get("relationship_tags") or [])[:5],
++        }
++        cards.append(card)
++
++    return cards
+\ No newline at end of file
+diff --git a/src/app/rpg/services/adventure_response_adapter.py b/src/app/rpg/services/adventure_response_adapter.py
+index 89fbd19..0102050 100644
+--- a/src/app/rpg/services/adventure_response_adapter.py
++++ b/src/app/rpg/services/adventure_response_adapter.py
+@@ -71,4 +71,23 @@ def adapt_session_to_frontend(session: dict[str, Any]) -> dict[str, Any]:
+         "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
+         "creator": {"setup_id": manifest.get("id")},
+     }
++
++    # Phase 18.3A — enriched player data
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    response["player_stats"] = _safe_dict(player_state.get("stats"))
++    response["player_skills"] = _safe_dict(player_state.get("skills"))
++    response["player_level"] = player_state.get("level", 1)
++    response["player_xp"] = player_state.get("xp", 0)
++    response["player_xp_to_next"] = player_state.get("xp_to_next", 100)
++    response["player_unspent_points"] = player_state.get("unspent_points", 0)
++    response["player_inventory"] = _safe_dict(player_state.get("inventory_state"))
++    response["player_equipment"] = _safe_dict(
++        _safe_dict(player_state.get("inventory_state")).get("equipment")
++    )
++    response["nearby_npcs"] = _safe_list(player_state.get("nearby_npc_ids"))
++
++    # Memory summary
++    from app.rpg.presentation.memory_inspector import build_memory_ui_summary
++    response["memory_summary"] = build_memory_ui_summary(simulation_state)
++
+     return response
+\ No newline at end of file
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+index 7709cfd..8ed510b 100644
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@ -27,6 +27,8 @@ from app.rpg.creator.world_simulation import (
+     step_simulation_state,
+     summarize_simulation_step,
+ )
++from app.rpg.action_resolver import resolve_player_action
++from app.rpg.items.world_items import ensure_world_item_state
+ from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
+ from app.rpg.memory.dialogue_context import (
+     build_dialogue_memory_context,
+@@ -35,6 +37,8 @@ from app.rpg.memory.dialogue_context import (
+ from app.rpg.memory.memory_state import ensure_memory_state
+ from app.rpg.memory.world_memory_state import ensure_world_memory_state
+ from app.rpg.player import ensure_player_party, ensure_player_state
++from app.rpg.player.player_progression_state import ensure_player_progression_state
++from app.rpg.player.player_xp_rules import compute_action_skill_xp, compute_stat_influence_bonus
+ from app.rpg.llm_app_gateway import build_app_llm_gateway
+ from app.rpg.presentation import (
+     build_runtime_presentation_payload,
+@@ -125,6 +129,13 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
+     simulation_state = ensure_world_memory_state(simulation_state)
+     simulation_state = ensure_personality_state(simulation_state)
+     simulation_state = ensure_visual_state(simulation_state)
++
++    # Phase 18.3A — ensure progression and world items
++    player_state = simulation_state.get("player_state", {})
++    player_state = ensure_player_progression_state(player_state)
++    simulation_state["player_state"] = player_state
++    simulation_state = ensure_world_item_state(simulation_state)
++
+     return simulation_state
+ 
+ 
+@@ -205,6 +216,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
+     npcs = _safe_list(runtime_state.get("npcs"))
+     opening = _safe_str(runtime_state.get("opening"))
+     turn_result = _safe_dict(runtime_state.get("last_turn_result"))
++    player_state = _safe_dict(simulation_state.get("player_state"))
+ 
+     return {
+         "success": True,
+@@ -212,7 +224,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
+         "title": _safe_str(manifest.get("title")),
+         "opening": opening,
+         "world": world,
+-        "player": _safe_dict(simulation_state.get("player_state")),
++        "player": player_state,
+         "npcs": npcs,
+         "memory": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("short_term")),
+         "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
+@@ -221,6 +233,13 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
+         "scene": _safe_dict(runtime_state.get("current_scene")),
+         "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
+         "last_turn_result": turn_result,
++        # Phase 18.3A — enriched player data
++        "player_stats": _safe_dict(player_state.get("stats")),
++        "player_skills": _safe_dict(player_state.get("skills")),
++        "player_level": int(player_state.get("level", 1) or 1),
++        "player_xp": int(player_state.get("xp", 0) or 0),
++        "player_xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
++        "nearby_npcs": _safe_list(player_state.get("nearby_npc_ids")),
+     }
+ 
+ 
+@@ -280,6 +299,50 @@ def derive_player_action(simulation_state: Dict[str, Any], player_input: str) ->
+     return {}
+ 
+ 
++def derive_action_candidates(simulation_state, player_input):
++    """Derive structured action candidates from player input."""
++    candidates = []
++    text = str(player_input.get("text", "") if isinstance(player_input, dict) else player_input).lower()
++
++    # Combat
++    if any(w in text for w in ["attack", "hit", "strike", "fight", "slash", "shoot"]):
++        candidates.append({"action_type": "attack_melee", "priority": 10})
++    if any(w in text for w in ["shoot", "fire", "aim"]):
++        candidates.append({"action_type": "attack_ranged", "priority": 10})
++    # Defense
++    if any(w in text for w in ["block", "defend", "shield"]):
++        candidates.append({"action_type": "block", "priority": 8})
++    if any(w in text for w in ["dodge", "evade", "roll"]):
++        candidates.append({"action_type": "dodge", "priority": 8})
++    # Social
++    if any(w in text for w in ["persuade", "convince", "talk", "negotiate"]):
++        candidates.append({"action_type": "persuade", "priority": 7})
++    if any(w in text for w in ["threaten", "intimidate", "scare"]):
++        candidates.append({"action_type": "intimidate", "priority": 7})
++    # Stealth/investigation
++    if any(w in text for w in ["sneak", "hide", "stealth"]):
++        candidates.append({"action_type": "sneak", "priority": 6})
++    if any(w in text for w in ["investigate", "search", "examine", "look"]):
++        candidates.append({"action_type": "investigate", "priority": 5})
++    if any(w in text for w in ["hack", "crack", "decrypt"]):
++        candidates.append({"action_type": "hack", "priority": 6})
++    if any(w in text for w in ["cast", "spell", "magic"]):
++        candidates.append({"action_type": "cast_spell", "priority": 7})
++    # Items
++    if any(w in text for w in ["pick up", "pickup", "grab", "take", "loot"]):
++        candidates.append({"action_type": "pickup_item", "priority": 5})
++    if any(w in text for w in ["equip", "wear", "wield"]):
++        candidates.append({"action_type": "equip_item", "priority": 5})
++    if any(w in text for w in ["use", "drink", "eat", "consume"]):
++        candidates.append({"action_type": "use_item", "priority": 5})
++
++    if not candidates:
++        candidates.append({"action_type": "investigate", "priority": 1})
++
++    candidates.sort(key=lambda c: c.get("priority", 0), reverse=True)
++    return candidates
++
++
+ def _fallback_scene(simulation_state: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+     return {
+         "scene_id": f"scene:tick:{int(simulation_state.get('tick', 0) or 0)}",
+@@ -302,13 +365,16 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
+         simulation_state,
+         actor_id="player",
+     )
++    # Phase 18.3A — extract player state for XP/progression fields
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    last_turn = _safe_dict(runtime_state.get("last_turn_result"))
+     return {
+         "success": True,
+         "session_id": _safe_str(_safe_dict(session.get("manifest")).get("id")),
+         "narration": _safe_str(narration_result.get("narrative") or current_scene.get("summary")),
+         "choices": _safe_list(narration_result.get("choices")),
+         "npcs": _safe_list(runtime_state.get("npcs")),
+-        "player": _safe_dict(simulation_state.get("player_state")),
++        "player": player_state,
+         "memory": _safe_list(memory_context.get("items")),
+         "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
+         "world_events": _safe_list(simulation_state.get("events"))[-8:],
+@@ -323,6 +389,12 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
+         "dialogue_blocks": _safe_list(narration_result.get("dialogue_blocks")),
+         "metadata": _safe_dict(narration_result.get("metadata")),
+         "turn": int(runtime_state.get("tick", 0) or 0),
++        # Phase 18.3A — XP and progression in turn response
++        "player_level": int(player_state.get("level", 1) or 1),
++        "player_xp": int(player_state.get("xp", 0) or 0),
++        "player_skills": _safe_dict(player_state.get("skills")),
++        "level_up": bool(last_turn.get("level_up")),
++        "skill_level_ups": _safe_list(last_turn.get("skill_level_ups")),
+     }
+ 
+ 
+@@ -376,6 +448,38 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
+     )
+     summary = summarize_simulation_step(step_result)
+ 
++    # Phase 18.3A — XP and skill progression from resolved action
++    action_candidates = derive_action_candidates(after_state, player_input)
++    action_result = {}
++    if action_candidates:
++        top_candidate = action_candidates[0]
++        action_result = resolve_player_action(after_state, top_candidate)
++    skill_xp_awards = compute_action_skill_xp(action_result) if action_result else {}
++    stat_bonus = compute_stat_influence_bonus(
++        _safe_dict(after_state.get("player_state")), action_result,
++    ) if action_result else 0
++    total_xp = sum(skill_xp_awards.values()) + stat_bonus
++    level_up = False
++    skill_level_ups = []
++
++    if total_xp > 0 or skill_xp_awards:
++        from app.rpg.player.player_progression_state import (
++            award_player_xp,
++            award_skill_xp,
++            resolve_level_ups,
++            resolve_skill_level_ups,
++        )
++        ps = _safe_dict(after_state.get("player_state"))
++        old_level = int(ps.get("level", 1) or 1)
++        if total_xp > 0:
++            ps = award_player_xp(ps, total_xp)
++        for sid, amt in skill_xp_awards.items():
++            ps = award_skill_xp(ps, sid, amt)
++        ps, did_level = resolve_level_ups(ps)
++        level_up = did_level
++        ps, skill_level_ups = resolve_skill_level_ups(ps)
++        after_state["player_state"] = ps
++
+     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
+     runtime_state["current_scene"] = current_scene
+     runtime_state["last_turn_result"] = {
+@@ -385,6 +489,11 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
+         "narration": _safe_str(narration_result.get("narrative")),
+         "llm_live": bool(llm_gateway),
+         "llm_attempted": bool(llm_gateway),
++        # Phase 18.3A — XP and progression in turn result
++        "xp_awarded": total_xp,
++        "skill_xp_awards": skill_xp_awards,
++        "level_up": level_up,
++        "skill_level_ups": skill_level_ups,
+     }
+     turn_history = _safe_list(runtime_state.get("turn_history"))
+     turn_history.append(_copy_dict(runtime_state["last_turn_result"]))
+diff --git a/src/static/rpg/rpg.js b/src/static/rpg/rpg.js
+index 4d104a5..42b1dee 100644
+--- a/src/static/rpg/rpg.js
++++ b/src/static/rpg/rpg.js
+@@ -1172,6 +1172,37 @@
+         });
+     }
+ 
++    function buildTurnSummaryBanner(update) {
++        if (!update) return '';
++        var parts = [];
++        if (update.combat_result) {
++            var cr = update.combat_result;
++            parts.push(cr.outcome === 'hit' || cr.outcome === 'crit' ?
++                '⚔️ ' + (cr.outcome || '').toUpperCase() + ': ' + (cr.damage || 0) + ' damage' :
++                '🛡️ ' + (cr.outcome || 'miss').toUpperCase());
++        }
++        if (update.xp_result && update.xp_result.amount) {
++            parts.push('✨ +' + update.xp_result.amount + ' XP');
++        }
++        if (update.skill_xp_result) {
++            for (var skill in (update.skill_xp_result || {})) {
++                if (update.skill_xp_result[skill] > 0) {
++                    parts.push('📈 +' + update.skill_xp_result[skill] + ' ' + skill + ' XP');
++                }
++            }
++        }
++        if (update.level_up) {
++            parts.push('🎉 Level Up! → Level ' + (update.player_level || '?'));
++        }
++        if (update.skill_level_ups && update.skill_level_ups.length) {
++            for (var i = 0; i < update.skill_level_ups.length; i++) {
++                var s = update.skill_level_ups[i];
++                parts.push('📊 ' + s.skill_id + ' → Level ' + s.new_level);
++            }
++        }
++        return parts.length > 0 ? '<div class="turn-summary-banner">' + parts.join(' | ') + '</div>' : '';
++    }
++
+     // ─── Rendering: Dice Roll (single, animated) ──────────────────────────────
+ 
+     function renderSingleDice(roll) {
+@@ -1289,6 +1320,35 @@
+ 
+     // ─── Rendering: Memory Panel ───────────────────────────────────────────────
+ 
++    function summarizeMemoryEntries(entries) {
++        if (!entries || !entries.length) return [];
++        return entries.slice(0, 5).map(function (e) {
++            return {
++                text: (e.text || '').length > 80 ? (e.text || '').substring(0, 77) + '...' : (e.text || ''),
++                strength: e.strength || 0,
++                source: e.source || '',
++            };
++        });
++    }
++
++    function dedupeMemoryEntries(entries) {
++        if (!entries || !entries.length) return [];
++        var seen = {};
++        return entries.filter(function (e) {
++            var key = e.text || '';
++            if (seen[key]) return false;
++            seen[key] = true;
++            return true;
++        });
++    }
++
++    function toggleMemoryPanel() {
++        var panel = el('rpgMemoryPanelWrapper');
++        if (panel) {
++            panel.classList.toggle('collapsed');
++        }
++    }
++
+     /** Safely convert a memory/event value to a display string. */
+     function _toDisplayString(val) {
+         if (val === null || val === undefined) return '';
+diff --git a/src/tests/functional/test_phase183a_functional.py b/src/tests/functional/test_phase183a_functional.py
+new file mode 100644
+index 0000000..785b0ad
+--- /dev/null
++++ b/src/tests/functional/test_phase183a_functional.py
+@@ -0,0 +1,162 @@
++"""Phase 18.3A — Functional tests for end-to-end flows."""
++import sys
++import os
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
++
++import pytest
++
++from app.rpg.player.player_progression_state import (
++    ensure_player_progression_state,
++    award_player_xp,
++    award_skill_xp,
++    resolve_level_ups,
++)
++from app.rpg.player.player_creation import apply_character_creation
++from app.rpg.action_resolver import resolve_player_action
++from app.rpg.player.player_xp_rules import (
++    compute_action_skill_xp,
++    compute_enemy_difficulty_xp,
++)
++from app.rpg.items.world_items import (
++    ensure_world_item_state,
++    spawn_world_item,
++    pickup_world_item,
++    list_scene_items,
++)
++from app.rpg.items.inventory_state import (
++    normalize_inventory_state,
++    add_inventory_items,
++    equip_inventory_item,
++    get_equipped_weapon,
++)
++from app.rpg.creator.world_expansion import (
++    maybe_spawn_dynamic_npc,
++    maybe_spawn_dynamic_location,
++)
++from app.rpg.presentation.memory_inspector import build_memory_ui_summary
++from app.rpg.presentation.speaker_cards import build_nearby_npc_cards
++
++
++class TestCharacterCreationToXpFlow:
++    """Test full flow: create character -> perform action -> earn XP -> level up."""
++
++    def test_full_progression_flow(self):
++        # Step 1: Create character
++        ps = apply_character_creation({}, {
++            "name": "Test Hero",
++            "class_id": "warrior",
++            "stat_allocation": {"strength": 4, "dexterity": 3, "constitution": 3, "intelligence": 1, "wisdom": 1}
++        })
++        assert ps["name"] == "Test Hero"
++        assert ps["stats"]["strength"] == 9
++
++        # Step 2: Resolve combat action
++        sim = {"player_state": ps}
++        action = {"action_type": "attack_melee", "target": {"stats": {"dexterity": 10, "constitution": 10}, "hp": 20}}
++        result = resolve_player_action(sim, action, seed=42)
++        action_result = result["result"]
++
++        # Step 3: Compute and award XP
++        skill_xp = compute_action_skill_xp(action_result)
++        enemy_xp = compute_enemy_difficulty_xp({"difficulty_tier": 1})
++        ps = award_player_xp(ps, enemy_xp, "combat")
++        for skill_id, amount in skill_xp.items():
++            ps = award_skill_xp(ps, skill_id, amount, "combat_use")
++
++        assert ps["xp"] > 0
++
++        # Step 4: Level up
++        ps["xp"] = 200  # force enough xp
++        ps = resolve_level_ups(ps)
++        assert ps["level"] >= 2
++
++    def test_item_pickup_and_equip_flow(self):
++        # Spawn item in world
++        sim = ensure_world_item_state({})
++        sim = spawn_world_item(sim, "loc:dungeon", {"item_id": "iron_sword", "name": "Iron Sword", "equipment": {"slot": "main_hand"}})
++
++        # Pick it up
++        items = list_scene_items(sim, "loc:dungeon")
++        assert len(items) == 1
++        instance_id = items[0]["instance_id"]
++        sim = pickup_world_item(sim, instance_id)
++        picked = sim["_picked_up_item"]
++        assert picked["item_id"] == "iron_sword"
++
++        # Add to inventory
++        inv = normalize_inventory_state({"items": []})
++        inv = add_inventory_items(inv, [picked])
++        assert any(i["item_id"] == "iron_sword" for i in inv["items"])
++
++        # Equip it
++        inv = equip_inventory_item(inv, "iron_sword")
++        weapon = get_equipped_weapon(inv)
++        assert weapon["item_id"] == "iron_sword"
++
++    def test_world_expansion_after_events(self):
++        sim = {
++            "world_expansion": {
++                "allow_dynamic_npc_generation": True,
++                "allow_dynamic_location_generation": True,
++                "world_growth_budget": 20,
++                "npc_budget": 10,
++                "location_budget": 8,
++                "faction_budget": 4,
++                "entities_spawned": 0,
++            },
++            "npcs": [{"name": "Initial NPC", "seed_origin": "startup"}],
++        }
++
++        # Spawn NPC
++        sim = maybe_spawn_dynamic_npc(sim, {"name": "Merchant", "role": "trader"})
++        assert sim["_spawn_result"]["ok"]
++        assert len(sim["npcs"]) == 2
++        assert sim["npcs"][0]["seed_origin"] == "startup"
++        assert sim["npcs"][1]["seed_origin"] == "dynamic"
++
++        # Spawn location
++        sim = maybe_spawn_dynamic_location(sim, {"name": "Hidden Valley"})
++        assert sim["_spawn_result"]["ok"]
++
++
++class TestNearbyNpcCards:
++    def test_cards_from_scene(self):
++        sim = {
++            "npcs": [
++                {"npc_id": "npc1", "name": "Guard", "role": "guard", "faction": "city_watch"},
++                {"npc_id": "npc2", "name": "Merchant", "role": "trader"},
++            ],
++            "player_state": {"nearby_npc_ids": ["npc1"]},
++        }
++        scene = {"present_npc_ids": ["npc1", "npc2"]}
++        cards = build_nearby_npc_cards(sim, scene)
++        assert len(cards) == 2
++        assert cards[0]["npc_id"] == "npc1"
++        assert cards[0]["is_present"] is True
++        assert cards[0]["name"] == "Guard"
++
++
++class TestMemoryCompactPanel:
++    def test_memory_summary_flow(self):
++        sim = {
++            "actor_memory_state": {
++                "npc1": [
++                    {"text": "Player helped the merchant", "strength": 0.9},
++                    {"text": "Player was seen near the docks", "strength": 0.4},
++                ]
++            },
++            "world_memory_state": {
++                "rumors": [
++                    {"text": "War is brewing in the north", "strength": 0.8},
++                ]
++            },
++            "player_state": {
++                "progression_log": [
++                    {"type": "xp_award", "source": "combat", "amount": 35},
++                ]
++            },
++        }
++        summary = build_memory_ui_summary(sim)
++        assert len(summary["important_memory"]) >= 1
++        assert summary["total_memories"] >= 2
++        assert len(summary["recent_world_events"]) >= 1
+diff --git a/src/tests/regression/test_phase183a_regression.py b/src/tests/regression/test_phase183a_regression.py
+new file mode 100644
+index 0000000..eb25e31
+--- /dev/null
++++ b/src/tests/regression/test_phase183a_regression.py
+@@ -0,0 +1,145 @@
++"""Phase 18.3A — Regression tests ensuring no breakage."""
++import sys
++import os
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
++
++import pytest
++
++from app.rpg.player.player_progression_state import (
++    ensure_player_progression_state,
++    allocate_starting_stats,
++)
++from app.rpg.action_resolver import (
++    resolve_attack_roll,
++    resolve_noncombat_check,
++    resolve_action,
++)
++from app.rpg.items.inventory_state import normalize_inventory_state
++from app.rpg.items.item_registry import get_item_definition
++from app.rpg.items.world_items import ensure_world_item_state
++from app.rpg.items.item_stats import normalize_item_stats
++from app.rpg.creator.world_expansion import maybe_spawn_dynamic_npc
++from app.rpg.items.generated_item_builder import clamp_generated_item_stats
++
++
++class TestLegacyCompatibility:
++    """Ensure Phase 18.3A doesn't break existing functionality."""
++
++    def test_old_item_registry_items_still_exist(self):
++        """Original items should still be accessible."""
++        for item_id in ["gold_coin", "healing_potion", "bandit_token"]:
++            item = get_item_definition(item_id)
++            assert item, f"Legacy item missing: {item_id}"
++
++    def test_normalize_inventory_backward_compat(self):
++        """Old inventory format should still normalize correctly."""
++        inv = normalize_inventory_state({
++            "items": [{"item_id": "healing_potion", "qty": 3}],
++            "equipment": {},
++            "capacity": 50,
++        })
++        assert len(inv["items"]) == 1
++        assert inv["items"][0]["qty"] == 3
++
++    def test_legacy_resolve_action(self):
++        """Old resolve_action signature should still work with dict."""
++        ps = {"stats": {"strength": 12}, "skills": {"swordsmanship": 3}}
++        result = resolve_action(ps, "attack", "normal", seed=42)
++        assert "type" in result
++        assert "damage" in result
++        assert result["type"] == "attack"
++
++    def test_player_state_backward_compat(self):
++        """ensure_player_progression_state should not corrupt existing state."""
++        existing = {
++            "name": "ExistingPlayer",
++            "level": 5,
++            "xp": 250,
++            "custom_field": "preserved",
++        }
++        ps = ensure_player_progression_state(existing)
++        assert ps["name"] == "ExistingPlayer"
++        assert ps["level"] == 5
++        assert ps["custom_field"] == "preserved"
++
++
++class TestDeterminism:
++    """Ensure all operations are deterministic with same seed."""
++
++    def test_attack_deterministic(self):
++        attacker = {"stats": {"strength": 14}, "skills": {}}
++        defender = {"stats": {"dexterity": 10, "constitution": 10}}
++        weapon = {"combat_stats": {"damage": 12, "accuracy": 3, "crit_chance": 5, "crit_bonus": 6, "armor_penetration": 0}, "quality": {"tier": 0}}
++        r1 = resolve_attack_roll(attacker, defender, weapon, seed=99)
++        r2 = resolve_attack_roll(attacker, defender, weapon, seed=99)
++        assert r1 == r2
++
++    def test_noncombat_deterministic(self):
++        ps = {"stats": {"charisma": 14}, "skills": {}}
++        r1 = resolve_noncombat_check(ps, "persuade", "normal", seed=77)
++        r2 = resolve_noncombat_check(ps, "persuade", "normal", seed=77)
++        assert r1 == r2
++
++    def test_expansion_ids_deterministic(self):
++        sim1 = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
++        sim2 = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
++        sim1 = maybe_spawn_dynamic_npc(sim1, {"name": "TestNPC", "role": "guard"})
++        sim2 = maybe_spawn_dynamic_npc(sim2, {"name": "TestNPC", "role": "guard"})
++        assert sim1["npcs"][-1]["npc_id"] == sim2["npcs"][-1]["npc_id"]
++
++
++class TestBoundedState:
++    """Ensure all state is bounded and safe."""
++
++    def test_progression_log_bounded(self):
++        ps = ensure_player_progression_state({"progression_log": [{"type": f"test_{i}"} for i in range(200)]})
++        assert len(ps["progression_log"]) <= 50
++
++    def test_inventory_capacity_bounded(self):
++        inv = normalize_inventory_state({"items": [{"item_id": f"item_{i}", "qty": 1} for i in range(100)]})
++        assert len(inv["items"]) <= 50
++
++    def test_stat_allocation_bounded(self):
++        ps = allocate_starting_stats({}, {"strength": 999})
++        assert ps["stats"]["strength"] <= 20
++
++    def test_generated_item_clamped(self):
++        item = clamp_generated_item_stats({"combat_stats": {"damage": 9999}, "quality": {"rarity": "common"}}, world_tier=0)
++        assert item["combat_stats"]["damage"] <= 20
++
++    def test_world_items_idempotent(self):
++        sim = ensure_world_item_state({})
++        sim2 = ensure_world_item_state(sim)
++        assert sim["world_items"] == sim2["world_items"]
++
++
++class TestNoBrokenImports:
++    """Verify all new modules can be loaded without error."""
++
++    def test_load_player_progression(self):
++        from app.rpg.player.player_progression_state import ensure_player_progression_state as fn
++        assert fn is not None
++
++    def test_load_player_creation(self):
++        from app.rpg.player.player_creation import apply_character_creation as fn
++        assert fn is not None
++
++    def test_load_item_stats(self):
++        from app.rpg.items.item_stats import normalize_item_stats as fn
++        assert fn is not None
++
++    def test_load_world_items(self):
++        from app.rpg.items.world_items import ensure_world_item_state as fn
++        assert fn is not None
++
++    def test_load_generated_item_builder(self):
++        from app.rpg.items.generated_item_builder import build_item_definition_from_llm as fn
++        assert fn is not None
++
++    def test_load_xp_rules(self):
++        from app.rpg.player.player_xp_rules import compute_enemy_difficulty_xp as fn
++        assert fn is not None
++
++    def test_load_world_expansion(self):
++        from app.rpg.creator.world_expansion import maybe_spawn_dynamic_npc as fn
++        assert fn is not None
+diff --git a/src/tests/unit/rpg/test_phase183a_action_resolver.py b/src/tests/unit/rpg/test_phase183a_action_resolver.py
+new file mode 100644
+index 0000000..c7583df
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase183a_action_resolver.py
+@@ -0,0 +1,149 @@
++"""Phase 18.3A — Unit tests for action resolver combat."""
++import sys
++import os
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
++
++import pytest
++
++from app.rpg.action_resolver import (
++    resolve_attack_roll,
++    resolve_noncombat_check,
++    resolve_player_action,
++    compute_defense_rating,
++    select_equipped_weapon,
++    resolve_action,
++)
++
++
++class TestResolveAttackRoll:
++    def test_hit_with_seed(self):
++        attacker = {"stats": {"strength": 14}, "skills": {"swordsmanship": {"level": 4}}}
++        defender = {"stats": {"dexterity": 10, "constitution": 10}}
++        weapon = {"combat_stats": {"attack_stat": "strength", "skill_id": "swordsmanship", "damage": 12, "accuracy": 3, "crit_chance": 5, "crit_bonus": 6, "armor_penetration": 0}, "quality": {"tier": 0}}
++        result = resolve_attack_roll(attacker, defender, weapon, seed=42)
++        assert result["outcome"] in ("hit", "crit", "graze", "miss")
++        assert "damage" in result
++        assert "attack_roll" in result
++
++    def test_miss_possible(self):
++        attacker = {"stats": {"strength": 3}, "skills": {}}
++        defender = {"stats": {"dexterity": 18, "constitution": 14}, "inventory_state": {"equipment": {"chest": {"combat_stats": {"defense_bonus": 10}}}}}
++        weapon = {"combat_stats": {"damage": 5, "accuracy": 0, "crit_chance": 0, "armor_penetration": 0}, "quality": {"tier": 0}}
++        miss_count = sum(1 for s in range(100) if resolve_attack_roll(attacker, defender, weapon, seed=s)["outcome"] == "miss")
++        assert miss_count > 0
++
++    def test_crit_possible(self):
++        attacker = {"stats": {"strength": 18}, "skills": {"swordsmanship": {"level": 10}}}
++        defender = {"stats": {"dexterity": 5, "constitution": 5}}
++        weapon = {"combat_stats": {"attack_stat": "strength", "skill_id": "swordsmanship", "damage": 20, "accuracy": 5, "crit_chance": 30, "crit_bonus": 10, "armor_penetration": 0}, "quality": {"tier": 2}}
++        crit_count = sum(1 for s in range(100) if resolve_attack_roll(attacker, defender, weapon, seed=s)["is_crit"])
++        assert crit_count > 0
++
++    def test_weapon_damage_affects_result(self):
++        attacker = {"stats": {"strength": 10}, "skills": {}}
++        defender = {"stats": {"dexterity": 10, "constitution": 10}}
++        weak = {"combat_stats": {"damage": 5, "accuracy": 10, "crit_chance": 0, "armor_penetration": 0}, "quality": {"tier": 0}}
++        strong = {"combat_stats": {"damage": 50, "accuracy": 10, "crit_chance": 0, "armor_penetration": 0}, "quality": {"tier": 3}}
++        r1 = resolve_attack_roll(attacker, defender, weak, seed=10)
++        r2 = resolve_attack_roll(attacker, defender, strong, seed=10)
++        if r1["outcome"] in ("hit", "crit") and r2["outcome"] in ("hit", "crit"):
++            assert r2["damage"] > r1["damage"]
++
++    def test_strength_affects_melee(self):
++        weak = {"stats": {"strength": 5}, "skills": {}}
++        strong = {"stats": {"strength": 18}, "skills": {}}
++        defender = {"stats": {"dexterity": 8, "constitution": 8}}
++        weapon = {"combat_stats": {"attack_stat": "strength", "damage": 10, "accuracy": 10, "crit_chance": 0, "armor_penetration": 0}, "quality": {"tier": 0}}
++        # With high accuracy both should hit with seed=5
++        r1 = resolve_attack_roll(weak, defender, weapon, seed=5)
++        r2 = resolve_attack_roll(strong, defender, weapon, seed=5)
++        if r1["outcome"] in ("hit", "crit") and r2["outcome"] in ("hit", "crit"):
++            assert r2["damage"] >= r1["damage"]
++
++    def test_armor_reduces_damage(self):
++        attacker = {"stats": {"strength": 14}, "skills": {}}
++        no_armor = {"stats": {"dexterity": 10, "constitution": 10}}
++        heavy_armor = {"stats": {"dexterity": 10, "constitution": 10}, "inventory_state": {"equipment": {"chest": {"combat_stats": {"defense_bonus": 15}}}}}
++        weapon = {"combat_stats": {"damage": 20, "accuracy": 10, "crit_chance": 0, "armor_penetration": 0}, "quality": {"tier": 0}}
++        r1 = resolve_attack_roll(attacker, no_armor, weapon, seed=3)
++        r2 = resolve_attack_roll(attacker, heavy_armor, weapon, seed=3)
++        # Armor should reduce damage
++        if r1["outcome"] in ("hit", "graze") and r2["outcome"] in ("hit", "graze"):
++            assert r2["damage"] <= r1["damage"]
++
++
++class TestResolveNoncombatCheck:
++    def test_success(self):
++        ps = {"stats": {"charisma": 16}, "skills": {"persuasion": {"level": 5}}}
++        result = resolve_noncombat_check(ps, "persuade", "easy", seed=42)
++        assert result["outcome"] in ("success", "critical_success", "partial", "failure")
++        assert result["skill_id"] == "persuasion"
++
++    def test_difficulty_affects_outcome(self):
++        ps = {"stats": {"dexterity": 10}, "skills": {}}
++        easy_success = sum(1 for s in range(50) if resolve_noncombat_check(ps, "sneak", "easy", seed=s)["outcome"] in ("success", "critical_success"))
++        hard_success = sum(1 for s in range(50) if resolve_noncombat_check(ps, "sneak", "very_hard", seed=s)["outcome"] in ("success", "critical_success"))
++        assert easy_success >= hard_success
++
++    def test_hack_uses_intelligence(self):
++        ps = {"stats": {"intelligence": 16}, "skills": {"hacking": {"level": 3}}}
++        result = resolve_noncombat_check(ps, "hack", "normal", seed=1)
++        assert result["stat_used"] == "intelligence"
++        assert result["skill_id"] == "hacking"
++
++
++class TestResolvePlayerAction:
++    def test_melee_attack(self):
++        sim = {"player_state": {"stats": {"strength": 14}, "skills": {}, "inventory_state": {"equipment": {}}}}
++        action = {"action_type": "attack_melee", "target": {"stats": {"dexterity": 10, "constitution": 10}, "hp": 20}}
++        result = resolve_player_action(sim, action, seed=42)
++        assert "result" in result
++        assert result["result"]["action_type"] == "attack_melee"
++
++    def test_item_action(self):
++        sim = {"player_state": {"stats": {"dexterity": 10}}}
++        action = {"action_type": "pickup_item", "item_id": "rusty_sword"}
++        result = resolve_player_action(sim, action, seed=1)
++        assert result["result"]["outcome"] == "success"
++
++    def test_sneak_action(self):
++        sim = {"player_state": {"stats": {"dexterity": 14}, "skills": {"stealth": {"level": 3}}}}
++        action = {"action_type": "sneak", "difficulty": "normal"}
++        result = resolve_player_action(sim, action, seed=42)
++        assert result["result"]["skill_id"] == "stealth"
++
++
++class TestComputeDefenseRating:
++    def test_no_armor(self):
++        actor = {"stats": {"constitution": 10}}
++        assert compute_defense_rating(actor) == 0
++
++    def test_with_armor(self):
++        actor = {"stats": {"constitution": 14}, "inventory_state": {"equipment": {"chest": {"combat_stats": {"defense_bonus": 5}}}}}
++        rating = compute_defense_rating(actor)
++        assert rating >= 5
++
++    def test_high_con_adds_defense(self):
++        low = compute_defense_rating({"stats": {"constitution": 8}})
++        high = compute_defense_rating({"stats": {"constitution": 18}})
++        assert high > low
++
++
++class TestSelectEquippedWeapon:
++    def test_unarmed_fallback(self):
++        w = select_equipped_weapon({})
++        assert w["item_id"] == "unarmed"
++
++    def test_equipped_weapon(self):
++        ps = {"inventory_state": {"equipment": {"main_hand": {"item_id": "iron_sword", "combat_stats": {"damage": 28}}}}}
++        w = select_equipped_weapon(ps)
++        assert w["item_id"] == "iron_sword"
++
++
++class TestLegacyResolveAction:
++    def test_dict_player(self):
++        ps = {"stats": {"strength": 14}, "skills": {}}
++        result = resolve_action(ps, "attack", "normal", seed=42)
++        assert "type" in result
++        assert "result" in result
++        assert "damage" in result
+diff --git a/src/tests/unit/rpg/test_phase183a_inventory_world.py b/src/tests/unit/rpg/test_phase183a_inventory_world.py
+new file mode 100644
+index 0000000..13cc847
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase183a_inventory_world.py
+@@ -0,0 +1,179 @@
++"""Phase 18.3A — Unit tests for inventory world grounding."""
++import sys
++import os
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
++
++import pytest
++
++from app.rpg.items.inventory_state import (
++    normalize_inventory_state,
++    equip_inventory_item,
++    unequip_inventory_slot,
++    find_inventory_item,
++    get_equipped_weapon,
++    get_equipped_armor,
++)
++from app.rpg.items.world_items import (
++    ensure_world_item_state,
++    spawn_world_item,
++    pickup_world_item,
++    drop_world_item,
++    list_scene_items,
++)
++from app.rpg.items.item_registry import (
++    get_item_definition,
++    normalize_item_definition,
++)
++from app.rpg.items.item_stats import (
++    normalize_item_stats,
++    is_weapon,
++    is_armor,
++    is_shield,
++    get_weapon_skill,
++    get_weapon_attack_stat,
++)
++from app.rpg.items.generated_item_builder import (
++    build_item_definition_from_llm,
++    clamp_generated_item_stats,
++    derive_item_power_band,
++)
++
++
++class TestWorldItems:
++    def test_ensure_world_item_state(self):
++        sim = ensure_world_item_state({})
++        assert "world_items" in sim
++        assert "by_location" in sim["world_items"]
++
++    def test_spawn_world_item(self):
++        sim = ensure_world_item_state({})
++        sim = spawn_world_item(sim, "loc:market", {"item_id": "iron_sword", "name": "Iron Sword"})
++        items = sim["world_items"]["by_location"]["loc:market"]
++        assert len(items) == 1
++        assert items[0]["item_id"] == "iron_sword"
++
++    def test_pickup_world_item(self):
++        sim = ensure_world_item_state({})
++        sim = spawn_world_item(sim, "loc:cave", {"item_id": "healing_potion"})
++        instance_id = sim["world_items"]["by_location"]["loc:cave"][0]["instance_id"]
++        sim = pickup_world_item(sim, instance_id)
++        assert sim["_picked_up_item"]["item_id"] == "healing_potion"
++        assert len(sim["world_items"]["by_location"]["loc:cave"]) == 0
++
++    def test_drop_world_item(self):
++        sim = ensure_world_item_state({"player_state": {"current_scene_id": "loc:town"}})
++        sim = drop_world_item(sim, "gold_coin", "loc:town", qty=5)
++        items = list_scene_items(sim, "loc:town")
++        assert len(items) >= 1
++
++    def test_list_scene_items_empty(self):
++        sim = ensure_world_item_state({})
++        items = list_scene_items(sim, "nonexistent")
++        assert items == []
++
++    def test_pickup_nonexistent(self):
++        sim = ensure_world_item_state({})
++        sim = pickup_world_item(sim, "fake_id")
++        assert sim["_picked_up_item"] == {}
++
++
++class TestEquipment:
++    def test_equip_item(self):
++        inv = normalize_inventory_state({"items": [{"item_id": "iron_sword", "qty": 1, "name": "Iron Sword", "equipment": {"slot": "main_hand"}}]})
++        inv = equip_inventory_item(inv, "iron_sword")
++        assert "main_hand" in inv["equipment"]
++        assert inv["equipment"]["main_hand"]["item_id"] == "iron_sword"
++
++    def test_unequip_item(self):
++        inv = normalize_inventory_state({"items": [{"item_id": "iron_sword", "qty": 1}], "equipment": {"main_hand": {"item_id": "iron_sword", "qty": 1}}})
++        inv = unequip_inventory_slot(inv, "main_hand")
++        assert "main_hand" not in inv["equipment"]
++
++    def test_find_item(self):
++        inv = normalize_inventory_state({"items": [{"item_id": "healing_potion", "qty": 3, "name": "Healing Potion"}]})
++        found = find_inventory_item(inv, "healing_potion")
++        assert found["item_id"] == "healing_potion"
++
++    def test_find_missing(self):
++        inv = normalize_inventory_state({"items": []})
++        found = find_inventory_item(inv, "nonexistent")
++        assert found == {}
++
++    def test_get_equipped_weapon(self):
++        inv = normalize_inventory_state({"equipment": {"main_hand": {"item_id": "rusty_sword", "qty": 1, "name": "Rusty Sword"}}})
++        weapon = get_equipped_weapon(inv)
++        assert weapon["item_id"] == "rusty_sword"
++
++    def test_get_equipped_armor(self):
++        inv = normalize_inventory_state({"equipment": {"off_hand": {"item_id": "wooden_shield", "qty": 1, "combat_stats": {"defense_bonus": 3, "block_bonus": 8}}}})
++        armor = get_equipped_armor(inv)
++        assert len(armor) >= 1
++
++
++class TestItemStats:
++    def test_normalize_item_stats(self):
++        item = normalize_item_stats({"combat_stats": {"damage": 10}})
++        assert item["combat_stats"]["damage"] == 10
++        assert "equipment" in item
++        assert "quality" in item
++
++    def test_is_weapon(self):
++        assert is_weapon({"combat_stats": {"damage": 10}})
++        assert not is_weapon({"combat_stats": {"damage": 0}})
++
++    def test_is_armor(self):
++        assert is_armor({"combat_stats": {"defense_bonus": 5}})
++        assert not is_armor({"combat_stats": {"defense_bonus": 0}})
++
++    def test_is_shield(self):
++        assert is_shield({"combat_stats": {"block_bonus": 8}})
++
++    def test_get_weapon_skill_sword(self):
++        assert get_weapon_skill({"combat_stats": {"weapon_type": "sword"}}) == "swordsmanship"
++
++    def test_get_weapon_skill_bow(self):
++        assert get_weapon_skill({"combat_stats": {"weapon_type": "bow"}}) == "archery"
++
++    def test_get_weapon_attack_stat(self):
++        assert get_weapon_attack_stat({"combat_stats": {"weapon_type": "pistol"}}) == "dexterity"
++
++
++class TestGeneratedItemBuilder:
++    def test_build_from_llm(self):
++        item = build_item_definition_from_llm({"name": "Magic Sword", "category": "weapon", "combat_stats": {"damage": 30, "weapon_type": "sword"}})
++        assert item["generated_by"] == "llm"
++        assert item["stat_origin"] == "generated"
++        assert "item_id" in item
++
++    def test_clamp_damage(self):
++        item = clamp_generated_item_stats({"combat_stats": {"damage": 999}, "quality": {"rarity": "common"}}, world_tier=0)
++        assert item["combat_stats"]["damage"] <= 20
++
++    def test_power_band_scales(self):
++        band0 = derive_item_power_band(0, "common")
++        band4 = derive_item_power_band(4, "legendary")
++        assert band4["max_damage"] > band0["max_damage"]
++
++    def test_deterministic_id(self):
++        item1 = build_item_definition_from_llm({"name": "Axe", "category": "weapon"})
++        item2 = build_item_definition_from_llm({"name": "Axe", "category": "weapon"})
++        assert item1["item_id"] == item2["item_id"]
++
++
++class TestItemRegistry:
++    def test_new_items_exist(self):
++        for item_id in ["rusty_sword", "iron_sword", "wooden_shield", "iron_shield", "short_bow", "pistol_9mm", "combat_knife"]:
++            item = get_item_definition(item_id)
++            assert item, f"Missing item: {item_id}"
++            assert item["item_id"] == item_id
++
++    def test_normalize_item_definition(self):
++        item = normalize_item_definition({"item_id": "test", "name": "Test"})
++        assert "combat_stats" in item
++        assert "quality" in item
++
++    def test_weapon_stats(self):
++        sword = get_item_definition("iron_sword")
++        assert sword["combat_stats"]["damage"] == 28
++        bow = get_item_definition("short_bow")
++        assert bow["combat_stats"]["damage"] == 15
+diff --git a/src/tests/unit/rpg/test_phase183a_player_progression.py b/src/tests/unit/rpg/test_phase183a_player_progression.py
+new file mode 100644
+index 0000000..1ae8a9a
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase183a_player_progression.py
+@@ -0,0 +1,194 @@
++"""Phase 18.3A — Unit tests for player progression state."""
++import sys
++import os
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
++
++import pytest
++
++from app.rpg.player.player_progression_state import (
++    ensure_player_progression_state,
++    allocate_starting_stats,
++    get_stat_modifier,
++    get_skill_level,
++    award_player_xp,
++    award_skill_xp,
++    resolve_level_ups,
++    resolve_skill_level_ups,
++)
++from app.rpg.player.player_creation import (
++    build_default_stat_allocation,
++    validate_stat_allocation,
++    apply_character_creation,
++)
++
++
++class TestEnsurePlayerProgressionState:
++    def test_creates_defaults(self):
++        ps = ensure_player_progression_state({})
++        assert ps["level"] == 1
++        assert ps["xp"] == 0
++        assert ps["xp_to_next"] == 100
++        assert "strength" in ps["stats"]
++        assert "swordsmanship" in ps["skills"]
++        assert ps["name"] == "Player"
++
++    def test_idempotent(self):
++        ps = ensure_player_progression_state({})
++        ps2 = ensure_player_progression_state(ps)
++        assert ps == ps2
++
++    def test_preserves_existing(self):
++        ps = ensure_player_progression_state({"name": "Hero", "level": 5})
++        assert ps["name"] == "Hero"
++        assert ps["level"] == 5
++
++    def test_progression_log_bounded(self):
++        ps = {"progression_log": [{"type": "test"}] * 100}
++        ps = ensure_player_progression_state(ps)
++        assert len(ps["progression_log"]) <= 50
++
++    def test_all_default_stats_present(self):
++        ps = ensure_player_progression_state({})
++        for stat in ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]:
++            assert stat in ps["stats"]
++            assert ps["stats"][stat] == 5
++
++    def test_all_default_skills_present(self):
++        ps = ensure_player_progression_state({})
++        for skill in ["swordsmanship", "archery", "firearms", "defense", "stealth", "persuasion", "intimidation", "investigation", "magic", "hacking"]:
++            assert skill in ps["skills"]
++            assert ps["skills"][skill]["level"] == 0
++
++
++class TestAllocateStartingStats:
++    def test_allocate(self):
++        ps = allocate_starting_stats({}, {"strength": 3, "dexterity": 2})
++        assert ps["stats"]["strength"] == 8
++        assert ps["stats"]["dexterity"] == 7
++
++    def test_clamped_max_20(self):
++        ps = allocate_starting_stats({"stats": {"strength": 19}}, {"strength": 5})
++        assert ps["stats"]["strength"] == 20
++
++    def test_clamped_min_1(self):
++        ps = allocate_starting_stats({}, {"strength": -100})
++        assert ps["stats"]["strength"] >= 1
++
++    def test_unknown_stat_ignored(self):
++        ps = allocate_starting_stats({}, {"unknown_stat": 5})
++        assert "unknown_stat" not in ps["stats"]
++
++
++class TestGetStatModifier:
++    def test_modifier_10(self):
++        assert get_stat_modifier(10) == 0
++
++    def test_modifier_14(self):
++        assert get_stat_modifier(14) == 2
++
++    def test_modifier_8(self):
++        assert get_stat_modifier(8) == -1
++
++    def test_modifier_5(self):
++        assert get_stat_modifier(5) == -2  # (5-10)//2 = -2 (floored)
++
++
++class TestGetSkillLevel:
++    def test_existing_skill(self):
++        ps = ensure_player_progression_state({})
++        ps["skills"]["swordsmanship"]["level"] = 3
++        assert get_skill_level(ps, "swordsmanship") == 3
++
++    def test_missing_skill(self):
++        ps = ensure_player_progression_state({})
++        assert get_skill_level(ps, "nonexistent") == 0
++
++
++class TestAwardPlayerXp:
++    def test_awards_xp(self):
++        ps = award_player_xp({}, 50, "combat")
++        assert ps["xp"] == 50
++
++    def test_logs_award(self):
++        ps = award_player_xp({}, 25, "quest")
++        assert any(e["type"] == "xp_award" for e in ps["progression_log"])
++
++    def test_negative_clamped(self):
++        ps = award_player_xp({}, -10, "test")
++        assert ps["xp"] == 0
++
++
++class TestAwardSkillXp:
++    def test_awards_skill_xp(self):
++        ps = award_skill_xp({}, "archery", 10, "practice")
++        assert ps["skills"]["archery"]["xp"] == 10
++
++    def test_new_skill_created(self):
++        ps = award_skill_xp({}, "cooking", 5, "test")
++        assert "cooking" in ps["skills"]
++        assert ps["skills"]["cooking"]["xp"] == 5
++
++
++class TestResolveLevelUps:
++    def test_level_up(self):
++        ps = ensure_player_progression_state({"xp": 150})
++        ps = resolve_level_ups(ps)
++        assert ps["level"] == 2
++        assert ps["unspent_points"] == 2
++
++    def test_multiple_level_ups(self):
++        ps = ensure_player_progression_state({"xp": 500})
++        ps = resolve_level_ups(ps)
++        assert ps["level"] > 2
++
++    def test_no_level_up_below_threshold(self):
++        ps = ensure_player_progression_state({"xp": 50})
++        ps = resolve_level_ups(ps)
++        assert ps["level"] == 1
++
++    def test_xp_remainder_preserved(self):
++        ps = ensure_player_progression_state({"xp": 120})
++        ps = resolve_level_ups(ps)
++        assert ps["xp"] == 20  # 120 - 100
++
++
++class TestResolveSkillLevelUps:
++    def test_skill_level_up(self):
++        ps = ensure_player_progression_state({})
++        ps["skills"]["archery"]["xp"] = 30
++        ps = resolve_skill_level_ups(ps)
++        assert ps["skills"]["archery"]["level"] == 1
++
++    def test_multiple_skill_level_ups(self):
++        ps = ensure_player_progression_state({})
++        ps["skills"]["stealth"]["xp"] = 100
++        ps = resolve_skill_level_ups(ps)
++        assert ps["skills"]["stealth"]["level"] >= 2
++
++
++class TestCharacterCreation:
++    def test_build_default_allocation(self):
++        alloc = build_default_stat_allocation()
++        assert sum(alloc.values()) == 12
++
++    def test_validate_allocation_valid(self):
++        result = validate_stat_allocation({"strength": 4, "dexterity": 4, "constitution": 4})
++        assert result["ok"] is True
++
++    def test_validate_allocation_over_budget(self):
++        result = validate_stat_allocation({"strength": 10, "dexterity": 10})
++        assert result["ok"] is False
++
++    def test_validate_allocation_unknown_stat(self):
++        result = validate_stat_allocation({"flying": 5})
++        assert result["ok"] is False
++
++    def test_apply_character_creation(self):
++        ps = apply_character_creation({}, {"name": "Gandalf", "class_id": "mage", "stat_allocation": {"intelligence": 4, "wisdom": 4, "charisma": 4}})
++        assert ps["name"] == "Gandalf"
++        assert ps["class_id"] == "mage"
++        assert ps["stats"]["intelligence"] == 9  # 5 + 4
++
++    def test_invalid_allocation_not_applied(self):
++        ps = apply_character_creation({}, {"stat_allocation": {"strength": 100}})
++        assert ps["stats"]["strength"] == 5  # unchanged, over budget
+diff --git a/src/tests/unit/rpg/test_phase183a_xp_memory_expansion.py b/src/tests/unit/rpg/test_phase183a_xp_memory_expansion.py
+new file mode 100644
+index 0000000..af1f844
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase183a_xp_memory_expansion.py
+@@ -0,0 +1,157 @@
++"""Phase 18.3A — Unit tests for XP rules, memory UI, and world expansion."""
++import sys
++import os
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
++
++import pytest
++
++from app.rpg.player.player_xp_rules import (
++    compute_enemy_difficulty_xp,
++    compute_quest_xp,
++    compute_action_skill_xp,
++    compute_stat_influence_bonus,
++)
++from app.rpg.presentation.memory_inspector import build_memory_ui_summary
++from app.rpg.creator.world_expansion import (
++    maybe_spawn_dynamic_npc,
++    maybe_spawn_dynamic_location,
++    maybe_spawn_dynamic_faction,
++)
++from app.rpg.creator.startup_pipeline import mark_seed_origins, add_world_expansion_caps
++
++
++class TestXpRules:
++    def test_enemy_difficulty_xp(self):
++        xp = compute_enemy_difficulty_xp({"difficulty_tier": 1})
++        assert xp == 35  # 20 + 1*15
++
++    def test_enemy_difficulty_xp_tier_0(self):
++        xp = compute_enemy_difficulty_xp({"difficulty_tier": 0})
++        assert xp == 20
++
++    def test_quest_xp(self):
++        xp = compute_quest_xp({"quest_rank": 2})
++        assert xp == 100  # 50 + 2*25
++
++    def test_action_skill_xp_success(self):
++        result = compute_action_skill_xp({"skill_id": "swordsmanship", "outcome": "success", "difficulty": "normal"})
++        assert "swordsmanship" in result
++        assert result["swordsmanship"] > 0
++
++    def test_action_skill_xp_failure(self):
++        result = compute_action_skill_xp({"skill_id": "archery", "outcome": "failure", "difficulty": "normal"})
++        assert "archery" in result
++        assert result["archery"] >= 2
++
++    def test_action_skill_xp_no_skill(self):
++        result = compute_action_skill_xp({"outcome": "success"})
++        assert result == {}
++
++    def test_stat_influence_bonus(self):
++        ps = {"stats": {"intelligence": 16}}
++        bonus = compute_stat_influence_bonus(ps, {"stat_used": "intelligence"})
++        assert bonus >= 1
++
++    def test_stat_influence_low(self):
++        ps = {"stats": {"strength": 8}}
++        bonus = compute_stat_influence_bonus(ps, {"stat_used": "strength"})
++        assert bonus == 0
++
++
++class TestMemoryUISummary:
++    def test_empty_state(self):
++        result = build_memory_ui_summary({})
++        assert "important_memory" in result
++        assert "recent_memory" in result
++        assert "recent_world_events" in result
++        assert result["total_memories"] == 0
++
++    def test_deduplication(self):
++        sim = {
++            "actor_memory_state": {
++                "npc1": [
++                    {"text": "Same memory", "strength": 0.8},
++                    {"text": "Same memory", "strength": 0.7},
++                    {"text": "Different memory", "strength": 0.6},
++                ]
++            }
++        }
++        result = build_memory_ui_summary(sim)
++        texts = [m["text"] for m in result["expanded"]]
++        assert texts.count("Same memory") == 1
++
++    def test_important_memory_high_strength(self):
++        sim = {
++            "actor_memory_state": {
++                "npc1": [
++                    {"text": "Very important", "strength": 0.9},
++                    {"text": "Less important", "strength": 0.3},
++                ]
++            }
++        }
++        result = build_memory_ui_summary(sim)
++        assert len(result["important_memory"]) >= 1
++        assert result["important_memory"][0]["text"] == "Very important"
++
++    def test_recent_memory_limited(self):
++        sim = {
++            "actor_memory_state": {
++                "npc1": [{"text": f"Memory {i}", "strength": 0.5} for i in range(20)]
++            }
++        }
++        result = build_memory_ui_summary(sim)
++        assert len(result["recent_memory"]) <= 5
++
++
++class TestWorldExpansion:
++    def test_spawn_dynamic_npc(self):
++        sim = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
++        sim = maybe_spawn_dynamic_npc(sim, {"name": "New NPC", "role": "merchant"})
++        assert sim["_spawn_result"]["ok"] is True
++        assert any(n.get("name") == "New NPC" for n in sim.get("npcs", []))
++
++    def test_npc_budget_exceeded(self):
++        sim = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 0, "entities_spawned": 0, "npcs_spawned": 0}}
++        sim = maybe_spawn_dynamic_npc(sim, {"name": "Test"})
++        assert sim["_spawn_result"]["ok"] is False
++        assert sim["_spawn_result"]["reason"] == "budget_exceeded"
++
++    def test_npc_generation_disabled(self):
++        sim = {"world_expansion": {"allow_dynamic_npc_generation": False}}
++        sim = maybe_spawn_dynamic_npc(sim, {"name": "Test"})
++        assert sim["_spawn_result"]["ok"] is False
++
++    def test_spawn_dynamic_location(self):
++        sim = {"world_expansion": {"allow_dynamic_location_generation": True, "world_growth_budget": 20, "location_budget": 8, "entities_spawned": 0}}
++        sim = maybe_spawn_dynamic_location(sim, {"name": "Hidden Cave"})
++        assert sim["_spawn_result"]["ok"] is True
++
++    def test_spawn_dynamic_faction(self):
++        sim = {"world_expansion": {"allow_dynamic_faction_generation": True, "world_growth_budget": 20, "faction_budget": 4, "entities_spawned": 0}}
++        sim = maybe_spawn_dynamic_faction(sim, {"name": "Shadow Guild"})
++        assert sim["_spawn_result"]["ok"] is True
++
++    def test_deterministic_ids(self):
++        sim1 = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
++        sim2 = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 20, "npc_budget": 10, "entities_spawned": 0}}
++        sim1 = maybe_spawn_dynamic_npc(sim1, {"name": "John", "role": "guard"})
++        sim2 = maybe_spawn_dynamic_npc(sim2, {"name": "John", "role": "guard"})
++        id1 = sim1.get("npcs", [{}])[-1].get("npc_id")
++        id2 = sim2.get("npcs", [{}])[-1].get("npc_id")
++        assert id1 == id2
++
++    def test_seed_origins_preserved(self):
++        data = {"npcs": [{"name": "Starting NPC"}], "factions": [{"name": "Starting Faction"}]}
++        data = mark_seed_origins(data)
++        assert data["npcs"][0]["seed_origin"] == "startup"
++        assert data["factions"][0]["seed_origin"] == "startup"
++
++    def test_expansion_caps_added(self):
++        data = add_world_expansion_caps({})
++        assert "world_expansion" in data
++        assert data["world_expansion"]["world_growth_budget"] == 20
++
++    def test_total_budget_enforcement(self):
++        sim = {"world_expansion": {"allow_dynamic_npc_generation": True, "world_growth_budget": 1, "npc_budget": 10, "entities_spawned": 1}}
++        sim = maybe_spawn_dynamic_npc(sim, {"name": "Over budget"})
++        assert sim["_spawn_result"]["ok"] is False

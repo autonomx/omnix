@@ -632,3 +632,44 @@ def get_scene_type_info(scene_type: str) -> dict[str, str]:
         "icon": "\uD83C\uDFAD",
         "description": f"Custom scene type: {scene_type}",
     })
+
+
+def enrich_scene_with_world_state(scene: dict, simulation_state: dict) -> dict:
+    """Add nearby NPCs, items, actions, and checks to a generated scene."""
+    from app.rpg.items.world_items import list_scene_items
+    scene = dict(scene or {})
+    sim = dict(simulation_state or {})
+
+    location_id = str(scene.get("location_id") or scene.get("scene_id") or "")
+
+    # NPCs present in scene
+    actors = scene.get("actors", [])
+    present_npc_ids = []
+    for actor in (actors if isinstance(actors, list) else []):
+        if isinstance(actor, dict):
+            npc_id = str(actor.get("npc_id") or actor.get("id") or "")
+            if npc_id:
+                present_npc_ids.append(npc_id)
+    scene.setdefault("present_npc_ids", present_npc_ids)
+
+    # Items at location
+    if location_id:
+        scene_items = list_scene_items(sim, location_id)
+    else:
+        scene_items = []
+    scene.setdefault("items", scene_items)
+
+    # Available checks based on scene type
+    scene_type = str(scene.get("scene_type") or scene.get("type") or "")
+    checks = []
+    if scene_type in ("combat", "encounter", "ambush"):
+        checks.extend(["attack_melee", "attack_ranged", "block", "dodge"])
+    if scene_type in ("investigation", "mystery", "exploration"):
+        checks.extend(["investigate", "sneak", "hack"])
+    if scene_type in ("social", "negotiation", "political", "diplomacy"):
+        checks.extend(["persuade", "intimidate", "deceive"])
+    checks.extend(["use_item", "pickup_item"])
+    scene.setdefault("available_checks", checks)
+    scene.setdefault("available_actions", checks)
+
+    return scene

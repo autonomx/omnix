@@ -984,3 +984,59 @@ def summarize_simulation_step(
     if rxn_added:
         lines.append(f"{rxn_added} policy reaction{'s' if rxn_added != 1 else ''} triggered")
     return lines
+
+
+# Phase 18.3A — World expansion hooks
+
+def evaluate_world_expansion(simulation_state: dict, step_result: dict) -> dict:
+    """Evaluate and apply controlled world expansion after major events."""
+    from .world_expansion import maybe_spawn_dynamic_npc, maybe_spawn_dynamic_location
+
+    sim = dict(simulation_state or {})
+    step = dict(step_result or {})
+
+    # Check if major events warrant expansion
+    events = step.get("events", [])
+    if not isinstance(events, list):
+        events = []
+
+    expansion_triggers = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("type") or event.get("event_type") or "")
+        if event_type in ("major_conflict", "faction_war", "quest_discovery", "new_territory"):
+            expansion_triggers.append(event)
+
+    # Also check thread escalation
+    threads = sim.get("threads", [])
+    for thread in (threads if isinstance(threads, list) else []):
+        if isinstance(thread, dict):
+            tension = int(thread.get("tension", 0) or 0)
+            if tension >= 8:
+                expansion_triggers.append({
+                    "type": "thread_escalation",
+                    "thread_id": str(thread.get("thread_id", "")),
+                })
+
+    spawned = []
+    for trigger in expansion_triggers[:2]:
+        trigger_type = str(trigger.get("type", ""))
+        if trigger_type in ("new_territory",):
+            sim = maybe_spawn_dynamic_location(sim, {
+                "name": str(trigger.get("location_name", "New Area")),
+                "type": "discovered",
+                "description": str(trigger.get("description", "")),
+            })
+        else:
+            sim = maybe_spawn_dynamic_npc(sim, {
+                "name": str(trigger.get("npc_name", "")),
+                "role": str(trigger.get("npc_role", "neutral")),
+                "faction": str(trigger.get("faction_id", "")),
+            })
+        result = sim.pop("_spawn_result", {})
+        if result.get("ok"):
+            spawned.append(result)
+
+    sim["_expansion_results"] = spawned
+    return sim

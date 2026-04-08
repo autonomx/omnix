@@ -134,6 +134,17 @@ async def execute_rpg_session_turn(request: Request):
 
     payload = _safe_dict(result.get("payload"))
     payload["ok"] = True
+
+    # Phase 18.3A — XP and progression in turn response
+    session = _safe_dict(result.get("session"))
+    simulation_state = _safe_dict(session.get("simulation_state")) if isinstance(session, dict) else {}
+    player_state = _safe_dict(simulation_state.get("player_state")) if isinstance(simulation_state, dict) else {}
+    payload.setdefault("player_level", int(player_state.get("level", 1) or 1))
+    payload.setdefault("player_xp", int(player_state.get("xp", 0) or 0))
+    payload.setdefault("player_skills", _safe_dict(player_state.get("skills")))
+    payload.setdefault("level_up", False)
+    payload.setdefault("skill_level_ups", [])
+
     return payload
 
 

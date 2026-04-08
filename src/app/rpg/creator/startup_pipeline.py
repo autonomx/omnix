@@ -279,3 +279,38 @@ class StartupGenerationPipeline:
             "opening_situation": opening,
             "resolved_context": resolved,
         }
+
+
+# Phase 18.3A — Seed origin marking and expansion caps
+
+def mark_seed_origins(setup_data: dict) -> dict:
+    """Mark all initial entities with seed_origin='startup'."""
+    setup_data = dict(setup_data or {})
+    for key in ("npcs", "npc_seeds"):
+        for item in (setup_data.get(key) or []):
+            if isinstance(item, dict):
+                item["seed_origin"] = "startup"
+    for key in ("factions", "faction_seeds"):
+        for item in (setup_data.get(key) or []):
+            if isinstance(item, dict):
+                item["seed_origin"] = "startup"
+    for key in ("locations", "location_seeds"):
+        for item in (setup_data.get(key) or []):
+            if isinstance(item, dict):
+                item["seed_origin"] = "startup"
+    return setup_data
+
+
+def add_world_expansion_caps(setup_data: dict) -> dict:
+    """Add world expansion metadata and caps."""
+    setup_data = dict(setup_data or {})
+    expansion = setup_data.setdefault("world_expansion", {})
+    expansion.setdefault("allow_dynamic_npc_generation", True)
+    expansion.setdefault("allow_dynamic_location_generation", True)
+    expansion.setdefault("allow_dynamic_faction_generation", True)
+    expansion.setdefault("world_growth_budget", 20)
+    expansion.setdefault("npc_budget", 10)
+    expansion.setdefault("location_budget", 8)
+    expansion.setdefault("faction_budget", 4)
+    expansion.setdefault("entities_spawned", 0)
+    return setup_data
