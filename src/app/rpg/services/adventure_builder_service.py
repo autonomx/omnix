@@ -1595,3 +1595,165 @@ def apply_player_action_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
         "simulation": inspection.get("simulation"),
         "inspector": inspection.get("inspector"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase E — LLM World Generation service functions
+# ---------------------------------------------------------------------------
+
+
+def generate_world_proposal(
+    setup: dict, preferences: dict | None = None
+) -> dict:
+    """Service-level wrapper for world generation.
+
+    Acquires an LLM gateway (if available) and delegates to the generator.
+    Validates the result before returning.
+    """
+    from ..creator.llm_world_generator import generate_world_bootstrap_proposal
+    from ..creator.validation import validate_generated_package
+    from ..llm_app_gateway import build_app_llm_gateway
+
+    data = apply_adventure_defaults(dict(setup))
+    gateway = build_app_llm_gateway()
+
+    result = generate_world_bootstrap_proposal(
+        data,
+        preferences=preferences,
+        llm_gateway=gateway,
+    )
+
+    # Validate quality
+    quality_issues = validate_generated_package(result, data)
+    result["quality_issues"] = quality_issues
+    result["success"] = result.get("status") == "ready"
+
+    return result
+
+
+def regenerate_world_section(
+    setup: dict, section: str, preferences: dict | None = None
+) -> dict:
+    """Regenerate one section of the world package.
+
+    Generates a full proposal, then extracts only the requested section.
+    Valid sections: characters, locations, factions, lore_entries, rumors.
+    """
+    valid_sections = {"characters", "locations", "factions", "lore_entries", "rumors"}
+    if section not in valid_sections:
+        return {
+            "success": False,
+            "error": f"Invalid section: {section}. Must be one of {sorted(valid_sections)}",
+        }
+
+    full_proposal = generate_world_proposal(setup, preferences=preferences)
+    if not full_proposal.get("success"):
+        return full_proposal
+
+    return {
+        "success": True,
+        "section": section,
+        "data": full_proposal.get(section, []),
+        "provenance": full_proposal.get("provenance", {}),
+        "warnings": full_proposal.get("warnings", []),
+    }
+
+
+def regenerate_world_entity(
+    setup: dict, entity_type: str, entity_id: str
+) -> dict:
+    """Regenerate a single entity within the generated package.
+
+    Generates a full proposal, finds the entity by type and ID, and returns
+    only that entity. Falls back to the first entity of the matching type
+    if the specific ID is not found.
+    """
+    section_map = {
+        "character": "characters",
+        "npc": "characters",
+        "location": "locations",
+        "faction": "factions",
+        "lore": "lore_entries",
+        "rumor": "rumors",
+    }
+    id_field_map = {
+        "characters": "npc_id",
+        "locations": "location_id",
+        "factions": "faction_id",
+        "lore_entries": "title",
+        "rumors": "text",
+    }
+
+    section = section_map.get(entity_type)
+    if not section:
+        return {
+            "success": False,
+            "error": f"Invalid entity_type: {entity_type}. Must be one of {sorted(section_map.keys())}",
+        }
+
+    full_proposal = generate_world_proposal(setup)
+    if not full_proposal.get("success"):
+        return full_proposal
+
+    entities = full_proposal.get(section, [])
+    id_field = id_field_map.get(section, "")
+
+    # Try to find entity by ID
+    match = None
+    for entity in entities:
+        if entity.get(id_field) == entity_id:
+            match = entity
+            break
+
+    # Fallback to first entity
+    if match is None and entities:
+        match = entities[0]
+
+    if match is None:
+        return {
+            "success": False,
+            "error": f"No {entity_type} entity generated",
+        }
+
+    return {
+        "success": True,
+        "entity_type": entity_type,
+        "entity": match,
+        "provenance": full_proposal.get("provenance", {}),
+    }
+
+
+def apply_generated_package(
+    setup: dict, generated: dict, locked_ids: list | None = None
+) -> dict:
+    """Accept and merge generated package into setup.
+
+    Returns the merged setup dict.
+    """
+    from ..creator.llm_world_merge import merge_generated_package_into_setup
+    from ..creator.validation import validate_generated_package
+
+    data = apply_adventure_defaults(dict(setup))
+
+    # Validate before merging
+    quality_issues = validate_generated_package(generated, data)
+    blocking = [i for i in quality_issues if i.get("severity") == "error"]
+    if blocking:
+        return {
+            "success": False,
+            "error": "Generated package has blocking quality issues",
+            "quality_issues": quality_issues,
+        }
+
+    merged = merge_generated_package_into_setup(
+        data,
+        generated,
+        keep_existing_seeds=True,
+        locked_ids=locked_ids,
+    )
+
+    return {
+        "success": True,
+        "setup": merged,
+        "quality_issues": quality_issues,
+    }

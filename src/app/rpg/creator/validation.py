@@ -697,3 +697,163 @@ def validate_adventure_setup_payload(payload: dict) -> ValidationResult:
     all_issues.extend(validate_setup_cross_references(payload))
     all_issues.extend(validate_setup_ux_hints(payload))
     return ValidationResult(issues=all_issues)
+
+
+# ---------------------------------------------------------------------------
+# Phase E — Generated package quality validation
+# ---------------------------------------------------------------------------
+
+
+def validate_generated_package(package: dict, setup: dict) -> list[dict]:
+    """Validate generated package quality.
+
+    Checks:
+    - Duplicate/near-duplicate character names
+    - Generic titles with no personalisation
+    - Locations with no opening relevance
+    - Factions with no goals or methods
+    - Lore entries that repeat each other
+    - Generated content contradicting world laws or genre rules
+    - Too many generated entities relative to opening scope
+
+    Returns a list of ``ValidationIssue``-shaped dicts.
+    """
+    issues: list[dict] = []
+
+    characters = package.get("characters", [])
+    locations = package.get("locations", [])
+    factions = package.get("factions", [])
+    lore_entries = package.get("lore_entries", [])
+
+    # --- 1. Duplicate / near-duplicate character names ---
+    char_names: list[str] = []
+    for idx, char in enumerate(characters):
+        name = (char.get("name") or "").strip()
+        norm = _normalize_for_compare(name)
+        if not name:
+            issues.append(_issue_dict(
+                f"characters[{idx}].name", "empty_character_name",
+                "Generated character has no name",
+            ))
+            continue
+        if _looks_generic_name(name):
+            issues.append(_issue_dict(
+                f"characters[{idx}].name", "generic_character_name",
+                f"Generated character name '{name}' is generic — consider personalising",
+            ))
+        for prev_idx, prev in enumerate(char_names):
+            if _normalize_for_compare(prev) == norm:
+                issues.append(_issue_dict(
+                    f"characters[{idx}].name", "duplicate_character_name",
+                    f"Character '{name}' duplicates character at index {prev_idx}",
+                ))
+                break
+        char_names.append(name)
+
+    # --- 2. Locations with no opening relevance ---
+    opening_hook = (setup.get("opening_hook") or "").lower()
+    starter_conflict = (setup.get("starter_conflict") or "").lower()
+    premise = (setup.get("premise") or "").lower()
+    context_words = {
+        w for w in f"{opening_hook} {starter_conflict} {premise}".split()
+        if len(w) > 3
+    }
+    for idx, loc in enumerate(locations):
+        desc = (loc.get("description") or "").lower()
+        name = (loc.get("name") or "").lower()
+        loc_words = {w for w in f"{desc} {name}".split() if len(w) > 3}
+        if context_words and not (loc_words & context_words):
+            issues.append(_issue_dict(
+                f"locations[{idx}]", "disconnected_location",
+                f"Location '{loc.get('name', '')}' has no obvious connection to the opening or premise",
+                severity="info",
+            ))
+
+    # --- 3. Factions with no goals ---
+    for idx, faction in enumerate(factions):
+        goals = faction.get("goals", [])
+        if not goals:
+            issues.append(_issue_dict(
+                f"factions[{idx}].goals", "faction_no_goals",
+                f"Faction '{faction.get('name', '')}' has no goals — factions need motivation",
+            ))
+        desc = faction.get("description", "")
+        if not desc or len(desc.strip()) < 10:
+            issues.append(_issue_dict(
+                f"factions[{idx}].description", "faction_thin_description",
+                f"Faction '{faction.get('name', '')}' has a very thin description",
+            ))
+
+    # --- 4. Lore entries that repeat each other ---
+    lore_texts: list[str] = []
+    for idx, entry in enumerate(lore_entries):
+        content = _normalize_for_compare(entry.get("content") or entry.get("description", ""))
+        if not content:
+            continue
+        for prev_idx, prev in enumerate(lore_texts):
+            overlap = _text_overlap_ratio(content, prev)
+            if overlap > 0.7:
+                issues.append(_issue_dict(
+                    f"lore_entries[{idx}]", "duplicate_lore",
+                    f"Lore entry '{entry.get('title', '')}' is very similar to entry at index {prev_idx}",
+                ))
+                break
+        lore_texts.append(content)
+
+    # --- 5. Content contradicting world laws or genre rules ---
+    forbidden_content = {t.strip().lower() for t in setup.get("forbidden_content", []) if t}
+    if forbidden_content:
+        all_text = _collect_package_text(package)
+        for forbidden in forbidden_content:
+            if forbidden in all_text:
+                issues.append(_issue_dict(
+                    "forbidden_content", "generated_forbidden_content",
+                    f"Generated content may contain forbidden theme: '{forbidden}'",
+                ))
+
+    # --- 6. Too many entities relative to opening scope ---
+    total_entities = len(characters) + len(locations) + len(factions)
+    opening_hook_text = setup.get("opening_hook", "")
+    if total_entities > 12 and (not opening_hook_text or len(opening_hook_text) < 20):
+        issues.append(_issue_dict(
+            "package", "too_many_entities_for_scope",
+            f"{total_entities} entities generated but opening is minimal — consider reducing scope",
+        ))
+
+    return issues
+
+
+def _normalize_for_compare(text: str) -> str:
+    """Normalize text for comparison: lowercase, strip, collapse whitespace."""
+    return " ".join((text or "").lower().strip().split())
+
+
+def _text_overlap_ratio(text_a: str, text_b: str) -> float:
+    """Compute word-overlap ratio between two texts."""
+    words_a = set(text_a.split())
+    words_b = set(text_b.split())
+    if not words_a or not words_b:
+        return 0.0
+    intersection = words_a & words_b
+    smaller = min(len(words_a), len(words_b))
+    return len(intersection) / smaller if smaller > 0 else 0.0
+
+
+def _collect_package_text(package: dict) -> str:
+    """Collect all text from a generated package for content scanning."""
+    parts: list[str] = []
+    for char in package.get("characters", []):
+        parts.append(char.get("name", ""))
+        parts.append(char.get("description", ""))
+    for loc in package.get("locations", []):
+        parts.append(loc.get("name", ""))
+        parts.append(loc.get("description", ""))
+    for faction in package.get("factions", []):
+        parts.append(faction.get("name", ""))
+        parts.append(faction.get("description", ""))
+    for lore in package.get("lore_entries", []):
+        parts.append(lore.get("title", ""))
+        parts.append(lore.get("content", ""))
+    for rumor in package.get("rumors", []):
+        parts.append(rumor.get("text", ""))
+    return " ".join(parts).lower()

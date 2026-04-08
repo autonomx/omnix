@@ -9,6 +9,10 @@ Provides endpoints for the adventure creation/editing flow:
 - POST /api/rpg/adventure/regenerate         — regenerate a section
 - POST /api/rpg/adventure/regenerate-item    — regenerate a single item
 - POST /api/rpg/adventure/regenerate-multiple — regenerate multiple items
+- POST /api/rpg/adventure/generate_world     — generate world bootstrap proposal
+- POST /api/rpg/adventure/regenerate_section — regenerate one world section
+- POST /api/rpg/adventure/regenerate_entity  — regenerate one world entity
+- POST /api/rpg/adventure/apply_generated_package — apply generated package
 - POST /api/rpg/adventure/inspect-world      — inspect the world graph
 - POST /api/rpg/adventure/inspect-world-snapshot — build a world snapshot
 - POST /api/rpg/adventure/compare-world      — compare two setups
@@ -24,10 +28,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..services.adventure_builder_service import (
+    apply_generated_package,
     build_adventure_preview,
     build_template_payload,
     compare_world,
     compute_creator_health,
+    generate_world_proposal,
     get_templates,
     inspect_world,
     inspect_world_snapshot,
@@ -35,6 +41,8 @@ from ..services.adventure_builder_service import (
     regenerate_multiple_items_service,
     regenerate_setup_section,
     regenerate_single_item,
+    regenerate_world_entity,
+    regenerate_world_section,
     start_adventure,
     validate_setup,
 )
@@ -361,6 +369,99 @@ async def adventure_compare_entity(request: Request):
             "entity_id": entity_id,
             "diff": diff,
         }
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": str(e)},
+            status_code=500,
+        )
+
+
+# ---------------------------------------------------------------------------
+# World generation (Phase E)
+# ---------------------------------------------------------------------------
+
+
+@rpg_adventure_bp.post("/api/rpg/adventure/generate_world")
+async def adventure_generate_world(request: Request):
+    """Generate a full world bootstrap proposal."""
+    try:
+        data = await request.json()
+        setup = data.get("setup", {})
+        preferences = data.get("preferences")
+        result = generate_world_proposal(setup, preferences=preferences)
+        return result
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": str(e)},
+            status_code=500,
+        )
+
+
+@rpg_adventure_bp.post("/api/rpg/adventure/regenerate_section")
+async def adventure_regenerate_world_section(request: Request):
+    """Regenerate one section of the generated package."""
+    try:
+        data = await request.json()
+        setup = data.get("setup", {})
+        section = data.get("section", "")
+        preferences = data.get("preferences")
+
+        if not section:
+            return JSONResponse(
+                {"success": False, "error": "Missing section"},
+                status_code=400,
+            )
+
+        result = regenerate_world_section(setup, section, preferences=preferences)
+        return result
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": str(e)},
+            status_code=500,
+        )
+
+
+@rpg_adventure_bp.post("/api/rpg/adventure/regenerate_entity")
+async def adventure_regenerate_world_entity(request: Request):
+    """Regenerate one entity within the generated package."""
+    try:
+        data = await request.json()
+        setup = data.get("setup", {})
+        entity_type = data.get("entity_type", "")
+        entity_id = data.get("entity_id", "")
+
+        if not entity_type or not entity_id:
+            return JSONResponse(
+                {"success": False, "error": "Missing entity_type or entity_id"},
+                status_code=400,
+            )
+
+        result = regenerate_world_entity(setup, entity_type, entity_id)
+        return result
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "error": str(e)},
+            status_code=500,
+        )
+
+
+@rpg_adventure_bp.post("/api/rpg/adventure/apply_generated_package")
+async def adventure_apply_generated_package(request: Request):
+    """Accept and merge generated package into setup."""
+    try:
+        data = await request.json()
+        setup = data.get("setup", {})
+        generated = data.get("generated", {})
+        locked_ids = data.get("locked_ids")
+
+        if not generated:
+            return JSONResponse(
+                {"success": False, "error": "Missing generated package"},
+                status_code=400,
+            )
+
+        result = apply_generated_package(setup, generated, locked_ids=locked_ids)
+        return result
     except Exception as e:
         return JSONResponse(
             {"success": False, "error": str(e)},
