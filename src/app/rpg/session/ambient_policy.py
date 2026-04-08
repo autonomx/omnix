@@ -1,0 +1,144 @@
+"""Living-world ambient interruption policy.
+
+Determines when ambient updates should interrupt the player vs queue silently.
+All decisions are deterministic and bounded.
+"""
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+def _safe_dict(v: Any) -> Dict[str, Any]:
+    return v if isinstance(v, dict) else {}
+
+
+def _safe_str(v: Any) -> str:
+    if v is None:
+        return ""
+    return str(v) if not isinstance(v, str) else v
+
+
+def _safe_list(v: Any) -> List[Any]:
+    return v if isinstance(v, list) else []
+
+
+# ── Interruption constants ────────────────────────────────────────────────
+
+_MIN_TICKS_BETWEEN_INTERRUPTS = 3
+_MAX_PENDING_INTERRUPTS = 2
+
+
+# ── Main interruption policy ─────────────────────────────────────────────
+
+def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> bool:
+    """Determine if an ambient update should interrupt the player.
+    
+    Interrupt when:
+    - Direct address to player (npc_to_player with high priority)
+    - Urgent threat / combat start
+    - Encounter start
+    - Arrival of important NPC
+    - Escalation tied to active thread
+    - Companion urgent warning
+    
+    Do NOT interrupt when:
+    - Low salience gossip
+    - Repetitive chatter
+    - Player just received an interruption recently
+    """
+    session = _safe_dict(session)
+    update = _safe_dict(update)
+    runtime = _safe_dict(session.get("runtime_state"))
+    
+    kind = _safe_str(update.get("kind"))
+    priority = float(update.get("priority", 0) or 0)
+    target_id = _safe_str(update.get("target_id"))
+    
+    # Never interrupt for system summaries or low-priority world events
+    if kind == "system_summary":
+        return False
+    if kind == "world_event" and priority < 0.5:
+        return False
+    if kind == "gossip":
+        return False
+    
+    # Rate-limit interruptions
+    last_interrupt_tick = int(runtime.get("last_interrupt_tick", -999) or -999)
+    current_tick = int(runtime.get("tick", 0) or 0)
+    if (current_tick - last_interrupt_tick) < _MIN_TICKS_BETWEEN_INTERRUPTS:
+        # Still allow truly urgent events
+        if kind not in ("combat_start",) and priority < 0.9:
+            return False
+    
+    # Combat and urgent threats always interrupt
+    if kind == "combat_start":
+        return True
+    if kind == "warning" and priority >= 0.7:
+        return True
+    
+    # Direct NPC address to player
+    if kind == "npc_to_player" and target_id == "player" and priority >= 0.5:
+        return True
+    
+    # Companion warnings
+    if kind == "companion_comment" and priority >= 0.6:
+        return True
+    
+    # Arrivals with high priority (important NPC)
+    if kind == "arrival" and priority >= 0.6:
+        return True
+    
+    # Explicit interrupt flag from the update itself
+    if update.get("interrupt") and priority >= 0.5:
+        return True
+    
+    return False
+
+
+def classify_ambient_delivery(
+    session: Dict[str, Any],
+    update: Dict[str, Any],
+    is_typing: bool = False,
+) -> str:
+    """Classify how an ambient update should be delivered to the frontend.
+    
+    Returns one of:
+    - "interrupt" — display immediately, even if typing
+    - "badge" — show unread badge, queue for later
+    - "silent" — add to feed without notification
+    """
+    session = _safe_dict(session)
+    update = _safe_dict(update)
+    
+    should_int = should_interrupt_player(session, update)
+    kind = _safe_str(update.get("kind"))
+    priority = float(update.get("priority", 0) or 0)
+    
+    if should_int:
+        # If typing and it's not truly urgent, downgrade to badge
+        if is_typing and kind not in ("combat_start",) and priority < 0.9:
+            return "badge"
+        return "interrupt"
+    
+    # Medium priority → badge
+    if priority >= 0.4:
+        return "badge"
+    
+    return "silent"
+
+
+def record_interrupt(session: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    """Record that an interruption was delivered, updating pending state."""
+    session = _safe_dict(session)
+    runtime = _safe_dict(session.get("runtime_state"))
+    
+    runtime["last_interrupt_tick"] = int(runtime.get("tick", 0) or 0)
+    runtime["pending_interrupt"] = {
+        "ambient_id": _safe_str(update.get("ambient_id")),
+        "kind": _safe_str(update.get("kind")),
+        "speaker_id": _safe_str(update.get("speaker_id")),
+        "text": _safe_str(update.get("text"))[:200],
+    }
+    
+    session["runtime_state"] = runtime
+    return session

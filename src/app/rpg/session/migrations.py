@@ -41,6 +41,23 @@ def migrate_session_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         manifest["schema_version"] = 2
         payload["manifest"] = manifest
 
+    if version < 4:
+        # Migrate to v4: add living-world ambient state
+        runtime_state = _safe_dict(payload.get("runtime_state"))
+        runtime_state.setdefault("ambient_queue", [])
+        runtime_state.setdefault("ambient_seq", 0)
+        runtime_state.setdefault("last_idle_tick_at", "")
+        runtime_state.setdefault("last_player_turn_at", "")
+        runtime_state.setdefault("idle_streak", 0)
+        runtime_state.setdefault("ambient_cooldowns", {})
+        runtime_state.setdefault("recent_ambient_ids", [])
+        runtime_state.setdefault("pending_interrupt", None)
+        runtime_state.setdefault("subscription_state", {"last_polled_seq": 0})
+        runtime_state.setdefault("ambient_metrics", {"emitted": 0, "suppressed": 0, "coalesced": 0})
+        payload["runtime_state"] = runtime_state
+        manifest["schema_version"] = 4
+        payload["manifest"] = manifest
+
     # Always ensure simulation_state has required sub-states
     simulation_state = _safe_dict(payload.get("simulation_state"))
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))

@@ -32,6 +32,18 @@ from app.rpg.creator.world_simulation import (
     step_simulation_state,
     summarize_simulation_step,
 )
+from app.rpg.session.ambient_builder import (
+    _MAX_IDLE_TICKS_PER_REQUEST,
+    _MAX_RESUME_CATCHUP_TICKS,
+    build_ambient_updates,
+    coalesce_ambient_updates,
+    enqueue_ambient_updates,
+    ensure_ambient_runtime_state,
+    get_pending_ambient_updates,
+    is_player_visible_update,
+    normalize_ambient_state,
+    score_ambient_salience,
+)
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
@@ -79,7 +91,7 @@ from app.rpg.presentation.visual_state import ensure_visual_state
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
 
 
@@ -503,6 +515,17 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "settings": {
                 "response_length": "short",
             },
+            # Living-world ambient state (Phase 0.2)
+            "ambient_queue": [],
+            "ambient_seq": 0,
+            "last_idle_tick_at": "",
+            "last_player_turn_at": "",
+            "idle_streak": 0,
+            "ambient_cooldowns": {},
+            "recent_ambient_ids": [],
+            "pending_interrupt": None,
+            "subscription_state": {"last_polled_seq": 0},
+            "ambient_metrics": {"emitted": 0, "suppressed": 0, "coalesced": 0},
         },
     }
     return session
@@ -869,6 +892,11 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     turn_history.append(_copy_dict(runtime_state["last_turn_result"]))
     runtime_state["turn_history"] = turn_history[-_MAX_HISTORY:]
 
+    # Living-world: record player turn timing, reset idle streak
+    runtime_state = ensure_ambient_runtime_state(runtime_state)
+    runtime_state["last_player_turn_at"] = _utc_now_iso()
+    runtime_state["idle_streak"] = 0
+
     session["setup_payload"] = next_setup
     session["simulation_state"] = after_state
     session["runtime_state"] = runtime_state
@@ -897,4 +925,220 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
             "response_length": _safe_str(runtime_state.get("settings", {}).get("response_length", "short")),
             "presentation": build_runtime_presentation_payload(after_state),
         },
+    }
+
+
+# ── Living world: idle tick engine (Phase 1) ──────────────────────────────
+
+
+def _advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "heartbeat") -> Dict[str, Any]:
+    """Step simulation forward without player input.
+
+    Uses existing step_simulation_state() but does not require player action.
+    Preserves canonical tick order and records metadata.
+    """
+    setup = apply_adventure_defaults(_copy_dict(session.get("setup_payload")))
+    simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
+
+    metadata = _safe_dict(setup.get("metadata"))
+    metadata["simulation_state"] = simulation_state
+    setup["metadata"] = metadata
+
+    step_result = step_simulation_state(setup)
+    after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
+    next_setup = _safe_dict(step_result.get("next_setup")) or setup
+
+    return {
+        "ok": True,
+        "before_state": _safe_dict(step_result.get("before_state")),
+        "after_state": after_state,
+        "next_setup": next_setup,
+        "step_result": step_result,
+        "reason": reason,
+    }
+
+
+def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, Any]:
+    """Advance the world by one idle tick without player action.
+
+    Loads canonical session, advances simulation, builds ambient updates,
+    enqueues them, persists session, and returns structured result.
+    """
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+
+    session = _copy_dict(session)
+    runtime_state = ensure_ambient_runtime_state(_copy_dict(session.get("runtime_state")))
+    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
+    
+    # Replay safety: idle ticks must record/consume captured data
+    current_tick = int(runtime_state.get("tick", 0) or 0)
+    if mode == "replay":
+        # In replay mode, consume captured idle tick results
+        key = f"idle_tick:{current_tick}"
+        captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(key))
+        if not captured:
+            return {"ok": False, "error": f"missing_replay_idle_tick_for_tick:{current_tick}"}
+        return {
+            "ok": True,
+            "session": session,
+            "updates": _safe_list(captured.get("updates")),
+            "latest_seq": int(captured.get("latest_seq", 0) or 0),
+            "idle_streak": int(captured.get("idle_streak", 0) or 0),
+        }
+    
+    # Advance simulation
+    advance_result = _advance_simulation_for_idle(session, reason=reason)
+    if not advance_result.get("ok"):
+        return {"ok": False, "error": "idle_advance_failed"}
+
+    before_state = _safe_dict(advance_result.get("before_state"))
+    after_state = _safe_dict(advance_result.get("after_state"))
+    next_setup = _safe_dict(advance_result.get("next_setup"))
+
+    # Build ambient context
+    context = {
+        "player_location": _get_player_location_id(after_state, runtime_state),
+        "nearby_npc_ids": _safe_list(_safe_dict(after_state.get("player_state")).get("nearby_npc_ids")),
+        "recent_ambient_ids": _safe_list(runtime_state.get("recent_ambient_ids")),
+    }
+
+    # Extract, filter, score, coalesce
+    raw_updates = build_ambient_updates(before_state, after_state, runtime_state)
+    visible = [u for u in raw_updates if is_player_visible_update(u, session)]
+    for u in visible:
+        u["priority"] = score_ambient_salience(u, context)
+    coalesced = coalesce_ambient_updates(visible, runtime_state)
+
+    # Enqueue
+    runtime_state = enqueue_ambient_updates(runtime_state, coalesced)
+
+    # Idle bookkeeping
+    runtime_state["idle_streak"] = int(runtime_state.get("idle_streak", 0) or 0) + 1
+    runtime_state["last_idle_tick_at"] = _utc_now_iso()
+    runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
+    runtime_state = normalize_ambient_state(runtime_state)
+
+    # Persist
+    session["simulation_state"] = after_state
+    session["setup_payload"] = next_setup
+    session["runtime_state"] = runtime_state
+    manifest = _safe_dict(session.get("manifest"))
+    manifest["updated_at"] = _utc_now_iso()
+    session["manifest"] = manifest
+    # Replay capture: record idle tick result for future replay
+    runtime_state.setdefault("llm_records", [])
+    runtime_state.setdefault("llm_records_index", {})
+    idle_record = {
+        "type": "idle_tick",
+        "tick": current_tick,
+        "reason": reason,
+        "updates": coalesced,
+        "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+        "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+    }
+    runtime_state["llm_records"].append(idle_record)
+    runtime_state["llm_records_index"][f"idle_tick:{current_tick}"] = idle_record
+    session["runtime_state"] = runtime_state
+    
+    session = save_runtime_session(session)
+
+    return {
+        "ok": True,
+        "session": session,
+        "updates": coalesced,
+        "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+        "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+    }
+
+
+def apply_idle_ticks(session_id: str, count: int, *, reason: str = "heartbeat") -> Dict[str, Any]:
+    """Apply multiple idle ticks, clamped to _MAX_IDLE_TICKS_PER_REQUEST.
+
+    Coalesces results across ticks. Persists once at the end.
+    """
+    count = max(1, min(int(count), _MAX_IDLE_TICKS_PER_REQUEST))
+    all_updates: List[Dict[str, Any]] = []
+    last_result: Dict[str, Any] = {}
+
+    ticks_applied = 0
+    for i in range(count):
+        result = apply_idle_tick(session_id, reason=reason)
+        if not result.get("ok"):
+            if i == 0:
+                return result
+            break
+        ticks_applied += 1
+        last_result = result
+        all_updates.extend(_safe_list(result.get("updates")))
+
+    return {
+        "ok": True,
+        "session": _safe_dict(last_result.get("session")),
+        "updates": all_updates,
+        "latest_seq": int(last_result.get("latest_seq", 0) or 0),
+        "ticks_applied": ticks_applied,
+    }
+
+
+def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[str, Any]:
+    """Apply bounded catch-up ticks on session resume.
+    
+    Converts elapsed time to capped idle ticks. If excess ticks would be
+    generated, summarizes them into a single catch-up ambient update.
+    """
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+    
+    runtime_state = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
+    
+    # Compute ticks from elapsed time (1 tick per ~5 seconds of real time)
+    raw_ticks = max(0, elapsed_seconds // 5)
+    capped_ticks = min(raw_ticks, _MAX_RESUME_CATCHUP_TICKS)
+    excess_ticks = max(0, raw_ticks - capped_ticks)
+    
+    if capped_ticks == 0:
+        return {
+            "ok": True,
+            "session": session,
+            "updates": [],
+            "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+            "ticks_applied": 0,
+            "excess_summarized": 0,
+        }
+    
+    # Apply the capped ticks
+    result = apply_idle_ticks(session_id, capped_ticks, reason="resume_catchup")
+    if not result.get("ok"):
+        return result
+    
+    all_updates = _safe_list(result.get("updates"))
+    
+    # If there were excess ticks, generate a summary update
+    if excess_ticks > 0:
+        from app.rpg.session.ambient_builder import make_ambient_update, enqueue_ambient_updates
+        session = _safe_dict(result.get("session"))
+        runtime_state = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
+        
+        summary = make_ambient_update(
+            tick=int(runtime_state.get("tick", 0) or 0),
+            kind="system_summary",
+            priority=0.5,
+            text=f"While you were away, the world advanced through {excess_ticks} additional moments. Much has changed.",
+            source="simulation",
+        )
+        runtime_state = enqueue_ambient_updates(runtime_state, [summary])
+        session["runtime_state"] = runtime_state
+        session = save_runtime_session(session)
+        all_updates.append(summary)
+    
+    return {
+        "ok": True,
+        "session": _safe_dict(result.get("session")) if not excess_ticks else session,
+        "updates": all_updates,
+        "latest_seq": int(result.get("latest_seq", 0) or 0),
+        "ticks_applied": capped_ticks,
+        "excess_summarized": excess_ticks,
     }
