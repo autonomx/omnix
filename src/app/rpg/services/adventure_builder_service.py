@@ -14,6 +14,7 @@ from typing import Any
 from ..creator.defaults import (
     apply_adventure_defaults,
     build_setup_template,
+    infer_default_opening,
     list_setup_templates,
 )
 from ..creator.regeneration import (
@@ -33,7 +34,7 @@ from ..creator.regeneration import (
     merge_thread_lists,
 )
 from ..creator.schema import AdventureSetup
-from ..creator.validation import validate_adventure_setup_payload
+from ..creator.validation import validate_adventure_setup_payload, validate_adventure_setup_semantics
 from ..creator.world_player_actions import apply_player_action
 from ..session.runtime import build_session_from_start_result, save_runtime_session
 from .adventure_response_adapter import (
@@ -110,6 +111,17 @@ def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
                 "npcs": counts.get("npcs", 0),
             },
             "warnings": warnings,
+            "player_role": preview.get("player_role") or "",
+            "player_archetype": preview.get("player_archetype") or "",
+            "player_background": preview.get("player_background") or "",
+            "campaign_objective": preview.get("campaign_objective") or "",
+            "opening_hook": preview.get("opening_hook") or "",
+            "starter_conflict": preview.get("starter_conflict") or "",
+            "core_world_laws": _safe_list(preview.get("core_world_laws")),
+            "genre_rules": _safe_list(preview.get("genre_rules")),
+            "desired_content_mix": _safe_dict(preview.get("desired_content_mix")),
+            "starting_gear": _safe_list(preview.get("starting_gear")),
+            "starting_resources": _safe_dict(preview.get("starting_resources")),
         },
         "resolved_context": {
             "location_id": resolved_context.get("location_id"),
@@ -117,6 +129,321 @@ def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
             "npc_ids": _safe_list(resolved_context.get("npc_ids")),
             "npc_names": _safe_list(resolved_context.get("npc_names")),
         },
+        "opening_preview": _safe_dict(prepared.get("opening_preview")),
+        "adventure_preview": _safe_dict(prepared.get("adventure_preview")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase D — Rich preview helpers (deterministic, no LLM)
+# ---------------------------------------------------------------------------
+
+
+def _truncate(text: str, max_len: int) -> str:
+    """Truncate *text* to *max_len* characters, adding '…' if trimmed."""
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def _first_or(items: list[Any], default: str = "") -> str:
+    """Return the first element of *items* as a string, or *default*."""
+    if items:
+        return str(items[0])
+    return default
+
+
+def summarize_understood_setup(setup: dict[str, Any]) -> dict[str, Any]:
+    """Summarize what the system understood from the setup.
+
+    Returns
+    -------
+    dict
+        ``player_fantasy``, ``world_shape``, ``campaign_feel``, ``core_rules``.
+    """
+    role = setup.get("player_role", "") or ""
+    archetype = setup.get("player_archetype", "") or ""
+    background = setup.get("player_background", "") or ""
+    objective = setup.get("campaign_objective", "") or ""
+    genre = setup.get("genre", "") or ""
+    setting = setup.get("setting", "") or ""
+    mood = setup.get("mood", "") or ""
+    premise = setup.get("premise", "") or ""
+    content_mix = setup.get("desired_content_mix") or {}
+    core_world_laws = list(setup.get("core_world_laws") or [])
+    genre_rules = list(setup.get("genre_rules") or [])
+
+    # Player fantasy
+    parts = [p for p in [archetype, role] if p]
+    fantasy = " — ".join(parts) if parts else "Adventurer"
+    if background:
+        fantasy += f" ({background})"
+    if objective:
+        fantasy += f" seeking to {objective.lower().rstrip('.')}"
+
+    # World shape
+    world_parts = [p for p in [genre, setting] if p]
+    world_shape = ", ".join(world_parts) if world_parts else "Unnamed world"
+    if premise:
+        world_shape += f". {_truncate(premise, 120)}"
+
+    # Campaign feel
+    feel_parts: list[str] = []
+    if mood:
+        feel_parts.append(mood.capitalize())
+    if content_mix:
+        top = sorted(content_mix.items(), key=lambda kv: kv[1], reverse=True)[:2]
+        feel_parts.extend(k.capitalize() for k, _ in top)
+    campaign_feel = " / ".join(feel_parts) if feel_parts else "Balanced"
+
+    rules = (core_world_laws + genre_rules)[:6] or ["Actions have consequences"]
+
+    return {
+        "player_fantasy": fantasy,
+        "world_shape": world_shape,
+        "campaign_feel": campaign_feel,
+        "core_rules": rules,
+    }
+
+
+def infer_campaign_loop_preview(setup: dict[str, Any]) -> dict[str, Any]:
+    """Infer a campaign loop preview from objective, content mix, genre, mood,
+    conflict, and seeds.
+
+    Returns
+    -------
+    dict
+        ``primary_loop`` and ``secondary_loops``.
+    """
+    genre = (setup.get("genre") or "").lower()
+    objective = setup.get("campaign_objective", "") or ""
+    conflict = setup.get("starter_conflict", "") or ""
+    mood = (setup.get("mood") or "").lower()
+    content_mix = setup.get("desired_content_mix") or {}
+    factions = list(setup.get("factions") or [])
+    npc_seeds = list(setup.get("npc_seeds") or [])
+
+    # Primary loop — use objective if available, else infer from genre
+    if objective:
+        primary = f"Pursue objective: {_truncate(objective, 120)}"
+    elif "mystery" in genre or "noir" in genre:
+        primary = "Investigate leads → uncover hidden truths → confront the mastermind"
+    elif "horror" in genre:
+        primary = "Survive threats → unravel the source → escape or destroy the evil"
+    elif "sci-fi" in genre or "scifi" in genre or "science" in genre:
+        primary = "Explore unknown sectors → gather intel → confront the anomaly"
+    elif "political" in genre or "intrigue" in genre:
+        primary = "Build alliances → outmanoeuvre rivals → seize or protect power"
+    else:
+        primary = "Explore the world → overcome challenges → achieve your goal"
+
+    # Secondary loops
+    secondary: list[str] = []
+    if factions:
+        faction_names = [
+            (f.get("name") or f.get("faction_id", "a faction"))
+            if isinstance(f, dict) else str(f)
+            for f in factions[:3]
+        ]
+        secondary.append(f"Navigate faction politics ({', '.join(faction_names)})")
+    if content_mix.get("combat", 0) >= 0.25:
+        secondary.append("Survive combat encounters and grow stronger")
+    if content_mix.get("mystery", 0) >= 0.2:
+        secondary.append("Solve mysteries and gather clues")
+    if content_mix.get("social", 0) >= 0.2:
+        secondary.append("Build relationships and negotiate alliances")
+    if content_mix.get("exploration", 0) >= 0.25:
+        secondary.append("Discover new locations and hidden secrets")
+    if npc_seeds and not secondary:
+        secondary.append("Interact with key characters and shape relationships")
+    if conflict and not secondary:
+        secondary.append(f"Resolve: {_truncate(conflict, 100)}")
+    if not secondary:
+        secondary.append("Advance personal story arcs")
+
+    return {
+        "primary_loop": primary,
+        "secondary_loops": secondary,
+    }
+
+
+def build_opening_narration_preview(
+    setup: dict[str, Any], opening_context: dict[str, Any]
+) -> str:
+    """Build a 2-4 paragraph opening narration preview (max ~800 chars).
+
+    Deterministic template — no LLM required.
+    """
+    location = opening_context.get("location_name") or "an unknown place"
+    scene_frame = opening_context.get("scene_frame") or ""
+    problem = opening_context.get("immediate_problem") or ""
+    involvement = opening_context.get("player_involvement_reason") or ""
+    tension = opening_context.get("tension_level") or "medium"
+    time_of_day = opening_context.get("time_of_day") or "evening"
+    weather = opening_context.get("weather") or "clear"
+
+    mood = (setup.get("mood") or "").lower()
+    genre = (setup.get("genre") or "").lower()
+    role = setup.get("player_role") or "adventurer"
+    hook = setup.get("opening_hook") or ""
+
+    # Paragraph 1 — scene setting
+    weather_phrase = f"under {weather} skies" if weather != "clear" else ""
+    p1_parts = [f"The {time_of_day} settles over {location}"]
+    if weather_phrase:
+        p1_parts[0] += f" {weather_phrase}"
+    p1_parts[0] += "."
+    if scene_frame:
+        p1_parts.append(_truncate(scene_frame, 160) + ".")
+
+    # Paragraph 2 — hook and tension
+    p2_parts: list[str] = []
+    if hook:
+        p2_parts.append(_truncate(hook, 180) + ".")
+    elif problem:
+        p2_parts.append(_truncate(problem, 180) + ".")
+    if tension == "high":
+        p2_parts.append("Danger hangs thick in the air.")
+    elif tension == "low":
+        p2_parts.append("A moment of calm — but it won't last.")
+
+    # Paragraph 3 — player involvement
+    p3_parts: list[str] = []
+    if involvement:
+        p3_parts.append(f"As a {role}, {_truncate(involvement, 160)}.")
+    else:
+        p3_parts.append(f"As a {role}, you find yourself drawn into the unfolding events.")
+
+    paragraphs = [
+        " ".join(p1_parts),
+    ]
+    if p2_parts:
+        paragraphs.append(" ".join(p2_parts))
+    paragraphs.append(" ".join(p3_parts))
+
+    narration = "\n\n".join(paragraphs)
+    return _truncate(narration, 800)
+
+
+def build_adventure_preview(setup: dict[str, Any]) -> dict[str, Any]:
+    """Build a rich preview of the adventure setup.
+
+    All content is deterministic — no LLM calls.
+
+    Returns
+    -------
+    dict
+        Full preview contract with ``opening_preview``, ``launch_cast``,
+        ``starter_conflict``, ``campaign_loop_preview``,
+        ``likely_first_actions``, ``understood_setup``.
+    """
+    opening_ctx = build_opening_context(setup)
+
+    # --- opening_preview ---
+    narration = build_opening_narration_preview(setup, opening_ctx)
+    opening_preview = {
+        "title": setup.get("title") or "",
+        "location_name": opening_ctx.get("location_name", ""),
+        "scene_frame": opening_ctx.get("scene_frame", ""),
+        "narration_preview": narration,
+        "immediate_problem": opening_ctx.get("immediate_problem", ""),
+        "player_involvement_reason": opening_ctx.get("player_involvement_reason", ""),
+        "tension_level": opening_ctx.get("tension_level", "medium"),
+        "time_of_day": opening_ctx.get("time_of_day", "evening"),
+        "weather": opening_ctx.get("weather", "clear"),
+    }
+
+    # --- launch_cast ---
+    npc_seeds = list(setup.get("npc_seeds") or [])
+    present_ids = set(opening_ctx.get("present_npc_ids") or [])
+    launch_cast: list[dict[str, str]] = []
+    for npc in npc_seeds:
+        if not isinstance(npc, dict):
+            continue
+        npc_id = npc.get("npc_id", "")
+        if npc_id in present_ids or not present_ids:
+            launch_cast.append({
+                "npc_id": npc_id,
+                "name": npc.get("name", npc_id),
+                "role": npc.get("role", "unknown"),
+                "reason_present": npc.get("reason_present", "Part of the opening scene"),
+            })
+        if len(launch_cast) >= 5:
+            break
+
+    # --- starter_conflict ---
+    conflict_text = setup.get("starter_conflict") or ""
+    factions = list(setup.get("factions") or [])
+    parties = [
+        (f.get("name") or f.get("faction_id", "Unknown"))
+        if isinstance(f, dict) else str(f)
+        for f in factions[:4]
+    ]
+    hook = setup.get("opening_hook") or ""
+    starter_conflict = {
+        "summary": conflict_text or hook or "An emerging situation demands attention",
+        "parties": parties or ["Unknown forces"],
+        "stakes": setup.get("campaign_objective") or "The fate of the region hangs in the balance",
+    }
+
+    # --- campaign_loop_preview ---
+    loop_preview = infer_campaign_loop_preview(setup)
+
+    # --- likely_first_actions ---
+    first_choices = list((setup.get("opening") or {}).get("first_choices") or [])
+    if not first_choices:
+        first_choices = list(opening_ctx.get("first_choices") or [])
+    likely_first_actions = first_choices[:5] if first_choices else [
+        "Investigate the immediate surroundings",
+        "Talk to nearby characters",
+        "Assess the situation before acting",
+    ]
+
+    # --- understood_setup ---
+    understood = summarize_understood_setup(setup)
+
+    return {
+        "opening_preview": opening_preview,
+        "launch_cast": launch_cast,
+        "starter_conflict": starter_conflict,
+        "campaign_loop_preview": loop_preview,
+        "likely_first_actions": likely_first_actions,
+        "understood_setup": understood,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase A/B — Opening context builder
+# ---------------------------------------------------------------------------
+
+
+def build_opening_context(setup: dict[str, Any]) -> dict[str, Any]:
+    """Build a rich opening context dict from an adventure setup payload.
+
+    Combines explicit ``opening`` data with inferred defaults so every
+    opening field is populated.
+
+    Returns
+    -------
+    dict
+        Keys: ``location_id``, ``location_name``, ``present_npc_ids``,
+        ``scene_frame``, ``immediate_problem``, ``player_involvement_reason``,
+        ``first_choices``, ``tension_level``, ``time_of_day``, ``weather``.
+    """
+    opening = setup.get("opening") or {}
+    inferred = infer_default_opening(setup)
+
+    return {
+        "location_id": opening.get("location_id") or inferred.get("location_id", ""),
+        "location_name": opening.get("location_name") or inferred.get("location_name", ""),
+        "present_npc_ids": opening.get("present_npc_ids") or inferred.get("present_npc_ids", []),
+        "scene_frame": opening.get("scene_frame") or inferred.get("scene_frame", ""),
+        "immediate_problem": opening.get("immediate_problem") or inferred.get("immediate_problem", ""),
+        "player_involvement_reason": opening.get("player_involvement_reason") or inferred.get("player_involvement_reason", ""),
+        "first_choices": opening.get("first_choices") or inferred.get("first_choices", []),
+        "tension_level": opening.get("tension_level") or inferred.get("tension_level", "medium"),
+        "time_of_day": opening.get("time_of_day") or inferred.get("time_of_day", "evening"),
+        "weather": opening.get("weather") or inferred.get("weather", "clear"),
     }
 
 
@@ -157,7 +484,14 @@ def validate_setup(payload: dict[str, Any]) -> dict[str, Any]:
     Returns the validation result dict with ``issues`` and ``blocking``.
     """
     result = validate_adventure_setup_payload(payload)
-    return {"success": True, "validation": result.to_dict()}
+    semantics = validate_adventure_setup_semantics(payload)
+    return {
+        "success": True,
+        "validation": result.to_dict(),
+        "warnings": semantics.get("warnings", []),
+        "notices": semantics.get("notices", []),
+        "semantic_scores": semantics.get("scores", {}),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +511,7 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
 
     data = apply_adventure_defaults(dict(payload))
     validation = validate_adventure_setup_payload(data)
+    semantics = validate_adventure_setup_semantics(data)
 
     if validation.is_blocking():
         return _build_preview_contract({
@@ -224,6 +559,13 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
         "npcs": len(setup.npc_seeds),
     }
 
+    # Phase A — build opening context
+    setup_dict = setup.to_dict()
+    opening_ctx = build_opening_context(setup_dict)
+
+    # Phase D — build rich adventure preview
+    adventure_preview = build_adventure_preview(setup_dict)
+
     prepared = {
         "ok": True,
         "validation": validation.to_dict(),
@@ -233,9 +575,24 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
             "setting": setup.setting,
             "premise": setup.premise,
             "counts": counts,
-            "warnings": [],
+            "warnings": semantics.get("warnings", []),
+            "player_role": setup.player_role,
+            "player_archetype": setup.player_archetype,
+            "player_background": setup.player_background,
+            "campaign_objective": setup.campaign_objective,
+            "opening_hook": setup.opening_hook,
+            "starter_conflict": setup.starter_conflict,
+            "core_world_laws": list(setup.core_world_laws),
+            "genre_rules": list(setup.genre_rules),
+            "desired_content_mix": dict(setup.desired_content_mix),
+            "starting_gear": list(setup.starting_gear),
+            "starting_resources": dict(setup.starting_resources),
         },
         "resolved_context": resolved_context,
+        "opening_preview": opening_ctx,
+        "adventure_preview": adventure_preview,
+        "semantic_scores": semantics.get("scores", {}),
+        "notices": semantics.get("notices", []),
     }
 
     return _build_preview_contract(prepared)
@@ -294,6 +651,7 @@ def start_adventure(payload: dict[str, Any]) -> dict[str, Any]:
     adapted["start_response_version"] = ADVENTURE_START_RESPONSE_VERSION
     adapted["session_manifest"] = _safe_dict(session.get("manifest"))
     adapted["persisted"] = True
+    adapted["opening_context"] = build_opening_context(data)
 
     return adapted
 
@@ -852,6 +1210,10 @@ def _build_preview_contract_from_payload(payload: dict[str, Any]) -> dict[str, A
         "npcs": len(setup.npc_seeds),
     }
 
+    # Phase A — build opening context
+    setup_dict = setup.to_dict()
+    opening_ctx = build_opening_context(setup_dict)
+
     return {
         "ok": True,
         "validation": {"issues": [], "blocking": False, "hints": []},
@@ -862,8 +1224,20 @@ def _build_preview_contract_from_payload(payload: dict[str, Any]) -> dict[str, A
             "premise": setup.premise,
             "counts": counts,
             "warnings": [],
+            "player_role": setup.player_role,
+            "player_archetype": setup.player_archetype,
+            "player_background": setup.player_background,
+            "campaign_objective": setup.campaign_objective,
+            "opening_hook": setup.opening_hook,
+            "starter_conflict": setup.starter_conflict,
+            "core_world_laws": list(setup.core_world_laws),
+            "genre_rules": list(setup.genre_rules),
+            "desired_content_mix": dict(setup.desired_content_mix),
+            "starting_gear": list(setup.starting_gear),
+            "starting_resources": dict(setup.starting_resources),
         },
         "resolved_context": resolved_context,
+        "opening_preview": opening_ctx,
     }
 
 
@@ -1220,4 +1594,166 @@ def apply_player_action_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
         "graph": inspection.get("graph"),
         "simulation": inspection.get("simulation"),
         "inspector": inspection.get("inspector"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase E — LLM World Generation service functions
+# ---------------------------------------------------------------------------
+
+
+def generate_world_proposal(
+    setup: dict, preferences: dict | None = None
+) -> dict:
+    """Service-level wrapper for world generation.
+
+    Acquires an LLM gateway (if available) and delegates to the generator.
+    Validates the result before returning.
+    """
+    from ..creator.llm_world_generator import generate_world_bootstrap_proposal
+    from ..creator.validation import validate_generated_package
+    from ..llm_app_gateway import build_app_llm_gateway
+
+    data = apply_adventure_defaults(dict(setup))
+    gateway = build_app_llm_gateway()
+
+    result = generate_world_bootstrap_proposal(
+        data,
+        preferences=preferences,
+        llm_gateway=gateway,
+    )
+
+    # Validate quality
+    quality_issues = validate_generated_package(result, data)
+    result["quality_issues"] = quality_issues
+    result["success"] = result.get("status") == "ready"
+
+    return result
+
+
+def regenerate_world_section(
+    setup: dict, section: str, preferences: dict | None = None
+) -> dict:
+    """Regenerate one section of the world package.
+
+    Generates a full proposal, then extracts only the requested section.
+    Valid sections: characters, locations, factions, lore_entries, rumors.
+    """
+    valid_sections = {"characters", "locations", "factions", "lore_entries", "rumors"}
+    if section not in valid_sections:
+        return {
+            "success": False,
+            "error": f"Invalid section: {section}. Must be one of {sorted(valid_sections)}",
+        }
+
+    full_proposal = generate_world_proposal(setup, preferences=preferences)
+    if not full_proposal.get("success"):
+        return full_proposal
+
+    return {
+        "success": True,
+        "section": section,
+        "data": full_proposal.get(section, []),
+        "provenance": full_proposal.get("provenance", {}),
+        "warnings": full_proposal.get("warnings", []),
+    }
+
+
+def regenerate_world_entity(
+    setup: dict, entity_type: str, entity_id: str
+) -> dict:
+    """Regenerate a single entity within the generated package.
+
+    Generates a full proposal, finds the entity by type and ID, and returns
+    only that entity. Falls back to the first entity of the matching type
+    if the specific ID is not found.
+    """
+    section_map = {
+        "character": "characters",
+        "npc": "characters",
+        "location": "locations",
+        "faction": "factions",
+        "lore": "lore_entries",
+        "rumor": "rumors",
+    }
+    id_field_map = {
+        "characters": "npc_id",
+        "locations": "location_id",
+        "factions": "faction_id",
+        "lore_entries": "title",
+        "rumors": "text",
+    }
+
+    section = section_map.get(entity_type)
+    if not section:
+        return {
+            "success": False,
+            "error": f"Invalid entity_type: {entity_type}. Must be one of {sorted(section_map.keys())}",
+        }
+
+    full_proposal = generate_world_proposal(setup)
+    if not full_proposal.get("success"):
+        return full_proposal
+
+    entities = full_proposal.get(section, [])
+    id_field = id_field_map.get(section, "")
+
+    # Try to find entity by ID
+    match = None
+    for entity in entities:
+        if entity.get(id_field) == entity_id:
+            match = entity
+            break
+
+    # Fallback to first entity
+    if match is None and entities:
+        match = entities[0]
+
+    if match is None:
+        return {
+            "success": False,
+            "error": f"No {entity_type} entity generated",
+        }
+
+    return {
+        "success": True,
+        "entity_type": entity_type,
+        "entity": match,
+        "provenance": full_proposal.get("provenance", {}),
+    }
+
+
+def apply_generated_package(
+    setup: dict, generated: dict, locked_ids: list | None = None
+) -> dict:
+    """Accept and merge generated package into setup.
+
+    Returns the merged setup dict.
+    """
+    from ..creator.llm_world_merge import merge_generated_package_into_setup
+    from ..creator.validation import validate_generated_package
+
+    data = apply_adventure_defaults(dict(setup))
+
+    # Validate before merging
+    quality_issues = validate_generated_package(generated, data)
+    blocking = [i for i in quality_issues if i.get("severity") == "error"]
+    if blocking:
+        return {
+            "success": False,
+            "error": "Generated package has blocking quality issues",
+            "quality_issues": quality_issues,
+        }
+
+    merged = merge_generated_package_into_setup(
+        data,
+        generated,
+        keep_existing_seeds=True,
+        locked_ids=locked_ids,
+    )
+
+    return {
+        "success": True,
+        "setup": merged,
+        "quality_issues": quality_issues,
     }

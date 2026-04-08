@@ -130,6 +130,103 @@ class ContentBalance:
         return cls(**data)
 
 
+# ---------------------------------------------------------------------------
+# Phase A — schema helper functions (standalone, operate on raw dicts)
+# ---------------------------------------------------------------------------
+
+
+def normalize_desired_content_mix(mix: dict) -> dict:
+    """Clamp values to [0,1] and normalize to sum 1.0 if nonzero."""
+    if not isinstance(mix, dict):
+        return {}
+    clamped = {k: max(0.0, min(1.0, float(v))) for k, v in mix.items() if isinstance(v, (int, float))}
+    total = sum(clamped.values())
+    if total > 0:
+        clamped = {k: round(v / total, 4) for k, v in clamped.items()}
+    return clamped
+
+
+def normalize_starting_gear(items: list) -> list:
+    """Cap to 16, trim descriptions, drop empty items."""
+    if not isinstance(items, list):
+        return []
+    result: list[dict] = []
+    for item in items[:16]:
+        if not isinstance(item, dict):
+            continue
+        name = " ".join(str(item.get("name", "")).strip().split())
+        if not name:
+            continue
+        cleaned = dict(item)
+        cleaned["name"] = name
+        if "description" in cleaned:
+            cleaned["description"] = " ".join(str(cleaned["description"]).strip().split())
+        result.append(cleaned)
+    return result
+
+
+def normalize_starting_resources(resources: dict) -> dict:
+    """Clamp values to [0, 999999], drop zero/negative."""
+    if not isinstance(resources, dict):
+        return {}
+    result: dict[str, int] = {}
+    for k, v in resources.items():
+        try:
+            val = int(v)
+        except (TypeError, ValueError):
+            continue
+        val = max(0, min(999999, val))
+        if val > 0:
+            result[str(k)] = val
+    return result
+
+
+def normalize_creator_setup(payload: dict) -> dict:
+    """Normalize all Phase A creator setup fields in a raw dict payload."""
+    if not isinstance(payload, dict):
+        return payload
+
+    result = dict(payload)
+
+    for str_field in (
+        "player_role", "player_archetype", "player_background",
+        "campaign_objective", "opening_hook", "starter_conflict",
+    ):
+        val = result.get(str_field)
+        if isinstance(val, str):
+            result[str_field] = " ".join(val.strip().split())
+
+    # core_world_laws: cap 12 items, each max 160 chars
+    laws = result.get("core_world_laws")
+    if isinstance(laws, list):
+        result["core_world_laws"] = [
+            " ".join(str(x).strip().split())[:160]
+            for x in laws[:12]
+            if str(x).strip()
+        ]
+
+    # genre_rules: cap 12 items, each max 160 chars
+    rules = result.get("genre_rules")
+    if isinstance(rules, list):
+        result["genre_rules"] = [
+            " ".join(str(x).strip().split())[:160]
+            for x in rules[:12]
+            if str(x).strip()
+        ]
+
+    result["desired_content_mix"] = normalize_desired_content_mix(
+        result.get("desired_content_mix", {})
+    )
+    result["starting_gear"] = normalize_starting_gear(
+        result.get("starting_gear", [])
+    )
+    result["starting_resources"] = normalize_starting_resources(
+        result.get("starting_resources", {})
+    )
+
+    return result
+
+
 @dataclass
 class AdventureSetup:
     setup_id: str
@@ -154,6 +251,20 @@ class AdventureSetup:
     mood: str | None = None
     starting_location_id: str | None = None
     starting_npc_ids: list[str] = field(default_factory=list)
+
+    # Phase A — creator input fields
+    player_role: str = ""
+    player_archetype: str = ""
+    player_background: str = ""
+    campaign_objective: str = ""
+    opening_hook: str = ""
+    starter_conflict: str = ""
+    core_world_laws: list[str] = field(default_factory=list)
+    genre_rules: list[str] = field(default_factory=list)
+    desired_content_mix: dict[str, float] = field(default_factory=dict)
+    starting_gear: list[dict[str, Any]] = field(default_factory=list)
+    starting_resources: dict[str, int] = field(default_factory=dict)
+    opening: dict[str, Any] = field(default_factory=dict)
 
     def validate(self) -> None:
         if not self.setup_id:
@@ -255,6 +366,28 @@ class AdventureSetup:
                 normalized_starting_npcs.append(norm)
         result.starting_npc_ids = _dedupe_keep_order(normalized_starting_npcs)
 
+        # Phase A — normalize creator input fields
+        result.player_role = _norm_str(result.player_role) or ""
+        result.player_archetype = _norm_str(result.player_archetype) or ""
+        result.player_background = _norm_str(result.player_background) or ""
+        result.campaign_objective = _norm_str(result.campaign_objective) or ""
+        result.opening_hook = _norm_str(result.opening_hook) or ""
+        result.starter_conflict = _norm_str(result.starter_conflict) or ""
+
+        result.core_world_laws = [
+            (_norm_str(x) or "")[:160]
+            for x in result.core_world_laws[:12]
+            if _norm_str(x)
+        ]
+        result.genre_rules = [
+            (_norm_str(x) or "")[:160]
+            for x in result.genre_rules[:12]
+            if _norm_str(x)
+        ]
+        result.starting_gear = normalize_starting_gear(result.starting_gear)
+        result.desired_content_mix = normalize_desired_content_mix(result.desired_content_mix)
+        result.starting_resources = normalize_starting_resources(result.starting_resources)
+
         return result
 
     def validate_for_ui(self) -> dict:
@@ -291,6 +424,18 @@ class AdventureSetup:
             "mood": self.mood,
             "starting_location_id": self.starting_location_id,
             "starting_npc_ids": list(self.starting_npc_ids),
+            "player_role": self.player_role,
+            "player_archetype": self.player_archetype,
+            "player_background": self.player_background,
+            "campaign_objective": self.campaign_objective,
+            "opening_hook": self.opening_hook,
+            "starter_conflict": self.starter_conflict,
+            "core_world_laws": list(self.core_world_laws),
+            "genre_rules": list(self.genre_rules),
+            "desired_content_mix": dict(self.desired_content_mix),
+            "starting_gear": list(self.starting_gear),
+            "starting_resources": dict(self.starting_resources),
+            "opening": dict(self.opening),
         }
 
     @classmethod
@@ -322,4 +467,16 @@ class AdventureSetup:
             mood=data.get("mood"),
             starting_location_id=data.get("starting_location_id"),
             starting_npc_ids=list(data.get("starting_npc_ids", [])),
+            player_role=data.get("player_role", ""),
+            player_archetype=data.get("player_archetype", ""),
+            player_background=data.get("player_background", ""),
+            campaign_objective=data.get("campaign_objective", ""),
+            opening_hook=data.get("opening_hook", ""),
+            starter_conflict=data.get("starter_conflict", ""),
+            core_world_laws=list(data.get("core_world_laws", [])),
+            genre_rules=list(data.get("genre_rules", [])),
+            desired_content_mix=dict(data.get("desired_content_mix", {})),
+            starting_gear=list(data.get("starting_gear", [])),
+            starting_resources=dict(data.get("starting_resources", {})),
+            opening=dict(data.get("opening", {})),
         )

@@ -622,12 +622,458 @@ def apply_adventure_defaults(setup_data: dict) -> dict:
     if not result.get("starting_npc_ids") and result.get("npc_seeds"):
         result["starting_npc_ids"] = [npc["npc_id"] for npc in result["npc_seeds"][:3]]
 
+    # Phase A — merge creator input defaults
+    result = merge_creator_input_with_defaults(result)
+
     return result
 
 
 # ---------------------------------------------------------------------------
-# Setup templates
+# Phase A — Creator input defaults & opening inference
 # ---------------------------------------------------------------------------
+
+_GENRE_ROLES: dict[str, str] = {
+    "fantasy": "Wandering adventurer seeking fortune and glory",
+    "cyberpunk": "Street-level operator navigating corporate shadows",
+    "mystery": "Investigator drawn into a web of secrets",
+    "noir": "Hard-boiled detective with a complicated past",
+    "political": "Ambitious newcomer navigating deadly court politics",
+    "intrigue": "Ambitious newcomer navigating deadly court politics",
+    "grimdark": "Desperate survivor clinging to life in a broken world",
+    "survival": "Desperate survivor clinging to life in a broken world",
+    "horror": "Ordinary person confronting unspeakable terror",
+}
+
+_GENRE_OBJECTIVES: dict[str, str] = {
+    "fantasy": "Uncover the source of the growing darkness and restore balance",
+    "cyberpunk": "Pull off the job and survive the fallout",
+    "mystery": "Solve the central case and expose the truth",
+    "noir": "Solve the central case and expose the truth",
+    "political": "Secure lasting influence without being destroyed by rivals",
+    "intrigue": "Secure lasting influence without being destroyed by rivals",
+    "grimdark": "Find safety for your people in a world that offers none",
+    "survival": "Find safety for your people in a world that offers none",
+    "horror": "Survive the night and uncover what is really happening",
+}
+
+_GENRE_HOOKS: dict[str, str] = {
+    "fantasy": "A mysterious stranger arrives bearing an urgent warning",
+    "cyberpunk": "A dead drop contains a job offer too good to be true",
+    "mystery": "A body is found under impossible circumstances",
+    "noir": "A desperate client walks into your office with a simple request",
+    "political": "An unexpected invitation to the inner court arrives",
+    "intrigue": "An unexpected invitation to the inner court arrives",
+    "grimdark": "Scouts report movement on the horizon — something is coming",
+    "survival": "Scouts report movement on the horizon — something is coming",
+    "horror": "Strange noises are heard from a place that should be empty",
+}
+
+_GENRE_CONFLICTS: dict[str, str] = {
+    "fantasy": "A local village is threatened and no one else will help",
+    "cyberpunk": "Your crew owes a dangerous debt that comes due tonight",
+    "mystery": "Key evidence is about to be destroyed unless you act now",
+    "noir": "Key evidence is about to be destroyed unless you act now",
+    "political": "Two powerful factions demand your allegiance simultaneously",
+    "intrigue": "Two powerful factions demand your allegiance simultaneously",
+    "grimdark": "Supplies are running out and a rival group blocks the only route",
+    "survival": "Supplies are running out and a rival group blocks the only route",
+    "horror": "The only exit is sealed and something is inside with you",
+}
+
+_GENRE_RULES: dict[str, list[str]] = {
+    "fantasy": [
+        "Magic always has a cost",
+        "Ancient prophecies may be misleading",
+        "The wilds are dangerous after dark",
+    ],
+    "cyberpunk": [
+        "Cyberware degrades over time without maintenance",
+        "Corporate zones are surveilled at all times",
+        "Net-running carries risk of brain damage",
+    ],
+    "mystery": [
+        "Clues must be discoverable through investigation",
+        "NPCs have alibis that can be verified or broken",
+        "The truth is never simple",
+    ],
+    "noir": [
+        "Clues must be discoverable through investigation",
+        "Everyone has something to hide",
+        "Violence has consequences",
+    ],
+    "political": [
+        "Reputation is currency",
+        "Alliances are temporary",
+        "Public actions have political repercussions",
+    ],
+    "intrigue": [
+        "Reputation is currency",
+        "Alliances are temporary",
+        "Public actions have political repercussions",
+    ],
+    "grimdark": [
+        "Resources are finite and must be tracked",
+        "Death is permanent",
+        "Trust must be earned through action",
+    ],
+    "survival": [
+        "Resources are finite and must be tracked",
+        "Death is permanent",
+        "Trust must be earned through action",
+    ],
+    "horror": [
+        "The unknown is more frightening than the revealed",
+        "Isolation increases danger",
+        "Light sources are limited",
+    ],
+}
+
+_GENRE_CONTENT_MIX: dict[str, dict[str, float]] = {
+    "fantasy": {"combat": 0.25, "exploration": 0.25, "social": 0.2, "mystery": 0.15, "politics": 0.15},
+    "cyberpunk": {"combat": 0.2, "exploration": 0.15, "social": 0.2, "mystery": 0.2, "politics": 0.25},
+    "mystery": {"combat": 0.05, "exploration": 0.15, "social": 0.25, "mystery": 0.45, "politics": 0.1},
+    "noir": {"combat": 0.1, "exploration": 0.15, "social": 0.25, "mystery": 0.4, "politics": 0.1},
+    "political": {"combat": 0.05, "exploration": 0.1, "social": 0.25, "mystery": 0.2, "politics": 0.4},
+    "intrigue": {"combat": 0.05, "exploration": 0.1, "social": 0.25, "mystery": 0.2, "politics": 0.4},
+    "grimdark": {"combat": 0.35, "exploration": 0.25, "social": 0.15, "mystery": 0.1, "politics": 0.15},
+    "survival": {"combat": 0.3, "exploration": 0.3, "social": 0.15, "mystery": 0.1, "politics": 0.15},
+    "horror": {"combat": 0.1, "exploration": 0.25, "social": 0.15, "mystery": 0.4, "politics": 0.1},
+}
+
+_GENRE_GEAR: dict[str, list[dict]] = {
+    "fantasy": [
+        {"name": "Torch", "description": "A simple torch for dark places"},
+        {"name": "Rope", "description": "50 feet of sturdy hemp rope"},
+        {"name": "Rations", "description": "Three days of dried travel rations"},
+        {"name": "Waterskin", "description": "A leather waterskin, full"},
+    ],
+    "cyberpunk": [
+        {"name": "Credstick", "description": "Loaded with 500 credits"},
+        {"name": "Sidearm", "description": "A compact 9mm pistol"},
+        {"name": "Cyberdeck", "description": "A basic hacking terminal"},
+        {"name": "Fake ID", "description": "Corporate-grade forged identity"},
+    ],
+    "mystery": [
+        {"name": "Notebook", "description": "A well-worn investigator's notebook"},
+        {"name": "Magnifying glass", "description": "For examining fine details"},
+        {"name": "Camera", "description": "A compact camera for evidence"},
+    ],
+    "noir": [
+        {"name": "Revolver", "description": "A snub-nosed .38 special"},
+        {"name": "Flask", "description": "Filled with cheap bourbon"},
+        {"name": "Notebook", "description": "A battered detective's notebook"},
+    ],
+    "political": [
+        {"name": "Signet ring", "description": "Proof of minor noble standing"},
+        {"name": "Sealed letter", "description": "A letter of introduction"},
+        {"name": "Coin purse", "description": "Enough gold for bribes"},
+    ],
+    "intrigue": [
+        {"name": "Signet ring", "description": "Proof of minor noble standing"},
+        {"name": "Sealed letter", "description": "A letter of introduction"},
+        {"name": "Coin purse", "description": "Enough gold for bribes"},
+    ],
+    "grimdark": [
+        {"name": "Rusted blade", "description": "A notched short sword"},
+        {"name": "Bandages", "description": "Dirty but functional cloth wraps"},
+        {"name": "Tinderbox", "description": "Flint and steel, still works"},
+    ],
+    "survival": [
+        {"name": "Medkit", "description": "A half-empty first aid kit"},
+        {"name": "Flashlight", "description": "Batteries at 40%"},
+        {"name": "Knife", "description": "A sturdy survival knife"},
+    ],
+    "horror": [
+        {"name": "Flashlight", "description": "Batteries are fresh — for now"},
+        {"name": "Medkit", "description": "A basic first aid kit"},
+        {"name": "Lighter", "description": "A disposable butane lighter"},
+    ],
+}
+
+_GENRE_RESOURCES: dict[str, dict[str, int]] = {
+    "fantasy": {"gold": 50, "health_potions": 2},
+    "cyberpunk": {"credits": 500, "stim_packs": 2},
+    "mystery": {"cash": 200, "favors": 1},
+    "noir": {"cash": 100, "cigarettes": 10},
+    "political": {"gold": 200, "influence_tokens": 3},
+    "intrigue": {"gold": 200, "influence_tokens": 3},
+    "grimdark": {"rations": 3, "bandages": 2, "water": 3},
+    "survival": {"rations": 3, "ammo": 12, "water": 3},
+    "horror": {"batteries": 4, "bandages": 3},
+}
+
+
+def _match_genre(genre: str) -> str:
+    """Find the best matching genre key from the lookup tables."""
+    g = (genre or "").lower()
+    for key in _GENRE_ROLES:
+        if key in g:
+            return key
+    return ""
+
+
+def infer_default_player_role(setup: dict) -> str:
+    """Infer a default player role from genre/setting/premise."""
+    key = _match_genre(setup.get("genre", ""))
+    return _GENRE_ROLES.get(key, "A capable individual drawn into extraordinary events")
+
+
+def infer_default_campaign_objective(setup: dict) -> str:
+    """Infer a default campaign objective from genre/premise."""
+    key = _match_genre(setup.get("genre", ""))
+    return _GENRE_OBJECTIVES.get(key, "Uncover the truth and shape the outcome")
+
+
+def infer_default_opening_hook(setup: dict) -> str:
+    """Infer a default opening hook from genre/mood/premise."""
+    key = _match_genre(setup.get("genre", ""))
+    return _GENRE_HOOKS.get(key, "Something unexpected disrupts an ordinary day")
+
+
+def infer_default_starter_conflict(setup: dict) -> str:
+    """Infer a default starter conflict from genre/difficulty/mood."""
+    key = _match_genre(setup.get("genre", ""))
+    return _GENRE_CONFLICTS.get(key, "A pressing problem demands immediate attention")
+
+
+def infer_default_genre_rules(setup: dict) -> list[str]:
+    """Infer default genre rules from genre/setting."""
+    key = _match_genre(setup.get("genre", ""))
+    return list(_GENRE_RULES.get(key, ["Actions have consequences", "The world reacts to player choices"]))
+
+
+def infer_default_content_mix(setup: dict) -> dict[str, float]:
+    """Infer a default content mix from genre/mood/difficulty."""
+    key = _match_genre(setup.get("genre", ""))
+    return dict(_GENRE_CONTENT_MIX.get(key, {
+        "combat": 0.2, "exploration": 0.2, "social": 0.2, "mystery": 0.2, "politics": 0.2,
+    }))
+
+
+def infer_default_starting_gear(setup: dict) -> list[dict]:
+    """Infer default starting gear from genre/mood/difficulty."""
+    key = _match_genre(setup.get("genre", ""))
+    return list(_GENRE_GEAR.get(key, [
+        {"name": "Basic supplies", "description": "A small pack of essentials"},
+    ]))
+
+
+def infer_default_starting_resources(setup: dict) -> dict[str, int]:
+    """Infer default starting resources from genre/difficulty."""
+    key = _match_genre(setup.get("genre", ""))
+    return dict(_GENRE_RESOURCES.get(key, {"supplies": 10}))
+
+
+# ---------------------------------------------------------------------------
+# Phase B1 — Opening inference helpers
+# ---------------------------------------------------------------------------
+
+
+def infer_opening_location(setup: dict) -> str:
+    """Infer the opening location id from setup context."""
+    loc_id = setup.get("starting_location_id")
+    if loc_id:
+        return loc_id
+    locations = setup.get("locations") or []
+    if locations:
+        return locations[0].get("location_id", "") if isinstance(locations[0], dict) else ""
+    return ""
+
+
+def infer_opening_scene_frame(setup: dict) -> str:
+    """Infer a brief scene-setting sentence for the opening."""
+    genre = (setup.get("genre") or "").lower()
+    mood = (setup.get("mood") or "").lower()
+    hook = setup.get("opening_hook", "")
+
+    if hook:
+        return f"The story opens as: {hook}"
+
+    frames = {
+        "fantasy": "The air smells of woodsmoke and old magic as you arrive at your destination.",
+        "cyberpunk": "Neon reflections shimmer on rain-slicked streets as you step out of the shadows.",
+        "mystery": "A heavy silence hangs over the scene — something is not right.",
+        "noir": "Rain drums on the window. The phone rings.",
+        "political": "The great hall buzzes with whispered alliances and veiled threats.",
+        "intrigue": "The great hall buzzes with whispered alliances and veiled threats.",
+        "grimdark": "Ash drifts on a cold wind. The camp is restless.",
+        "survival": "Ash drifts on a cold wind. The camp is restless.",
+        "horror": "The lights flicker once, then go out entirely.",
+    }
+    for key, frame in frames.items():
+        if key in genre:
+            return frame
+    return "The adventure begins in an unremarkable place on an unremarkable day — or so it seems."
+
+
+def infer_opening_problem(setup: dict) -> str:
+    """Infer the immediate problem the player faces at the start."""
+    conflict = setup.get("starter_conflict", "")
+    if conflict:
+        return conflict
+    return infer_default_starter_conflict(setup)
+
+
+def infer_player_involvement_reason(setup: dict) -> str:
+    """Infer why the player is involved in the opening situation."""
+    role = setup.get("player_role", "")
+    background = setup.get("player_background", "")
+    genre = (setup.get("genre") or "").lower()
+
+    if background:
+        return f"Your background as {background} has brought you here."
+    if role:
+        return f"As a {role}, this situation demands your attention."
+
+    reasons = {
+        "fantasy": "Fate — or something like it — has placed you at the center of events.",
+        "cyberpunk": "A contact called in a favor you can't refuse.",
+        "mystery": "Someone asked for your help, and you couldn't say no.",
+        "noir": "A client showed up with a case that smelled like trouble.",
+        "political": "An invitation arrived that could not be safely ignored.",
+        "grimdark": "Survival leaves no room for bystanders.",
+        "survival": "Survival leaves no room for bystanders.",
+        "horror": "You were in the wrong place at the wrong time.",
+    }
+    for key, reason in reasons.items():
+        if key in genre:
+            return reason
+    return "Circumstances have drawn you into the heart of the matter."
+
+
+def infer_opening_present_npcs(setup: dict) -> list[str]:
+    """Infer which NPCs are present in the opening scene."""
+    npc_ids = setup.get("starting_npc_ids") or []
+    if npc_ids:
+        return list(npc_ids[:5])
+    npcs = setup.get("npc_seeds") or []
+    return [n.get("npc_id", "") for n in npcs[:3] if isinstance(n, dict) and n.get("npc_id")]
+
+
+def infer_first_choices(setup: dict) -> list[str]:
+    """Infer the initial set of choices available to the player."""
+    genre = (setup.get("genre") or "").lower()
+
+    choices_map = {
+        "fantasy": [
+            "Investigate the rumor at the tavern",
+            "Seek out the local authority for information",
+            "Head into the wilds to see for yourself",
+        ],
+        "cyberpunk": [
+            "Accept the job offer",
+            "Dig into the client's background first",
+            "Consult your fixer for leverage",
+        ],
+        "mystery": [
+            "Examine the evidence at the scene",
+            "Interview the first witness",
+            "Research the victim's background",
+        ],
+        "noir": [
+            "Take the case",
+            "Ask around the neighborhood",
+            "Follow the money trail",
+        ],
+        "political": [
+            "Accept the invitation and attend",
+            "Send a proxy to gauge the situation",
+            "Seek counsel from a trusted advisor",
+        ],
+        "intrigue": [
+            "Accept the invitation and attend",
+            "Send a proxy to gauge the situation",
+            "Seek counsel from a trusted advisor",
+        ],
+        "grimdark": [
+            "Fortify the camp and prepare to defend",
+            "Send scouts to assess the threat",
+            "Negotiate with the approaching group",
+        ],
+        "survival": [
+            "Fortify the camp and prepare to defend",
+            "Send scouts to assess the threat",
+            "Search for an alternate supply route",
+        ],
+        "horror": [
+            "Search for another way out",
+            "Barricade the entrance",
+            "Investigate the source of the noise",
+        ],
+    }
+    for key, ch in choices_map.items():
+        if key in genre:
+            return list(ch)
+    return [
+        "Investigate further",
+        "Seek allies",
+        "Prepare for what comes next",
+    ]
+
+
+def infer_default_opening(setup: dict) -> dict:
+    """Infer a complete opening context dict from the setup."""
+    location_id = infer_opening_location(setup)
+
+    # Determine location name
+    location_name = location_id
+    for loc in (setup.get("locations") or []):
+        if isinstance(loc, dict) and loc.get("location_id") == location_id:
+            location_name = loc.get("name", location_id)
+            break
+
+    mood = (setup.get("mood") or "").lower()
+    tension = "medium"
+    if mood in ("dark", "grim", "tense", "edgy"):
+        tension = "high"
+    elif mood in ("heroic", "light", "whimsical"):
+        tension = "low"
+
+    return {
+        "location_id": location_id,
+        "location_name": location_name,
+        "scene_frame": infer_opening_scene_frame(setup),
+        "immediate_problem": infer_opening_problem(setup),
+        "player_involvement_reason": infer_player_involvement_reason(setup),
+        "present_npc_ids": infer_opening_present_npcs(setup),
+        "first_choices": infer_first_choices(setup),
+        "tension_level": tension,
+        "time_of_day": "evening",
+        "weather": "clear",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase A — Merge creator input with defaults
+# ---------------------------------------------------------------------------
+
+
+def merge_creator_input_with_defaults(payload: dict) -> dict:
+    """Normalize schema, backfill defaults only when missing, preserve explicit choices."""
+    from .schema import normalize_creator_setup
+
+    result = normalize_creator_setup(dict(payload))
+
+    if not result.get("player_role"):
+        result["player_role"] = infer_default_player_role(result)
+    if not result.get("campaign_objective"):
+        result["campaign_objective"] = infer_default_campaign_objective(result)
+    if not result.get("opening_hook"):
+        result["opening_hook"] = infer_default_opening_hook(result)
+    if not result.get("starter_conflict"):
+        result["starter_conflict"] = infer_default_starter_conflict(result)
+    if not result.get("genre_rules"):
+        result["genre_rules"] = infer_default_genre_rules(result)
+    if not result.get("desired_content_mix"):
+        result["desired_content_mix"] = infer_default_content_mix(result)
+    if not result.get("starting_gear"):
+        result["starting_gear"] = infer_default_starting_gear(result)
+    if not result.get("starting_resources"):
+        result["starting_resources"] = infer_default_starting_resources(result)
+    if not result.get("opening"):
+        result["opening"] = infer_default_opening(result)
+
+    return result
 
 _TEMPLATES: dict[str, dict] = {
     "fantasy_adventure": {

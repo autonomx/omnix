@@ -213,6 +213,65 @@ var AdventureBuilderApi = (function () {
         }).then(_json);
     }
 
+    /**
+     * Generate world details from setup and preferences (Phase E).
+     *
+     * @param {Object} setup       - Current setup payload
+     * @param {Object} preferences - Generation preferences
+     */
+    function generateWorld(setup, preferences) {
+        return fetch(BASE + '/generate-world', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setup: setup, preferences: preferences }),
+        }).then(_json);
+    }
+
+    /**
+     * Regenerate a single section of the generated world (Phase E).
+     *
+     * @param {Object} setup       - Current setup payload
+     * @param {string} section     - Section to regenerate (e.g. 'characters')
+     * @param {Object} preferences - Generation preferences
+     */
+    function regenerateWorldSection(setup, section, preferences) {
+        return fetch(BASE + '/regenerate-world-section', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setup: setup, section: section, preferences: preferences }),
+        }).then(_json);
+    }
+
+    /**
+     * Regenerate a single entity in the generated world (Phase E).
+     *
+     * @param {Object} setup      - Current setup payload
+     * @param {string} entityType - Entity type (e.g. 'characters')
+     * @param {string} entityId   - Entity id to regenerate
+     */
+    function regenerateWorldEntity(setup, entityType, entityId) {
+        return fetch(BASE + '/regenerate-world-entity', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setup: setup, entity_type: entityType, entity_id: entityId }),
+        }).then(_json);
+    }
+
+    /**
+     * Apply generated package content into the setup (Phase E).
+     *
+     * @param {Object} setup     - Current setup payload
+     * @param {Object} generated - Generated package to apply
+     * @param {string[]} lockedIds - IDs of locked entities to preserve
+     */
+    function applyGeneratedPackage(setup, generated, lockedIds) {
+        return fetch(BASE + '/apply-generated', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setup: setup, generated: generated, locked_ids: lockedIds }),
+        }).then(_json);
+    }
+
     return {
         getTemplates: getTemplates,
         buildTemplate: buildTemplate,
@@ -228,5 +287,9 @@ var AdventureBuilderApi = (function () {
         compareEntity: compareEntity,
         simulateStep: simulateStep,
         getSimulationState: getSimulationState,
+        generateWorld: generateWorld,
+        regenerateWorldSection: regenerateWorldSection,
+        regenerateWorldEntity: regenerateWorldEntity,
+        applyGeneratedPackage: applyGeneratedPackage,
     };
 })();
