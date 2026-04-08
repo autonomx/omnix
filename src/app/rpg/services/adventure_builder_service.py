@@ -318,13 +318,15 @@ def _build_game_loop() -> "GameLoop":
 
     Uses minimal mock/stub dependencies since the regeneration pipeline
     only needs access to the startup_generation_pipeline, not full execution.
+    Injects the app LLM provider so generation can use LLM narration.
     """
     from ..core.event_bus import EventBus
     from ..core.game_loop import GameLoop
+    from ..llm_app_gateway import build_app_llm_gateway
 
     # Create a real EventBus — other deps can be null objects for creator flows.
     event_bus = EventBus()
-    return GameLoop(
+    loop = GameLoop(
         intent_parser=_NullDependency(),
         world=_NullDependency(),
         npc_system=_NullDependency(),
@@ -332,6 +334,9 @@ def _build_game_loop() -> "GameLoop":
         story_director=_NullDependency(),
         scene_renderer=_NullDependency(),
     )
+    # Inject app LLM provider so startup pipeline can use it
+    loop.llm_gateway = build_app_llm_gateway()
+    return loop
 
 
 def _bootstrap_loop_dependencies() -> None:
@@ -539,11 +544,13 @@ def _run_regeneration(normalized_payload: dict[str, Any], target: str) -> Any:
     from ..core.event_bus import EventBus
     from ..creator.canon import CreatorCanonState
     from ..creator.startup_pipeline import StartupGenerationPipeline
+    from ..llm_app_gateway import build_app_llm_gateway
 
     event_bus = EventBus()
     canon_state = CreatorCanonState()
+    llm_gateway = build_app_llm_gateway()
     pipeline = StartupGenerationPipeline(
-        llm_gateway=_NullDependency(),
+        llm_gateway=llm_gateway,
         coherence_core=event_bus,
         creator_canon_state=canon_state,
     )
