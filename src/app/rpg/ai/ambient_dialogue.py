@@ -158,7 +158,7 @@ def build_ambient_dialogue_candidates(
                     "location_id": npc_loc,
                     "tick": tick,
                 })
-                break  # Only one NPC-to-NPC candidate per speaker
+                break  # One NPC-to-NPC candidate per speaker to prevent chatter spam
         
         # Companion commentary
         if _safe_str(npc_info.get("role")).lower() in ("companion", "ally", "follower"):
