@@ -896,13 +896,13 @@ class TestConsequenceRewards:
 # ---------------------------------------------------------------------------
 
 class TestRuntimeSchemaVersion:
-    """Verify runtime uses schema version 3."""
+    """Verify runtime uses schema version 4."""
 
     def test_schema_version(self):
         import_path = os.path.join(SRC_DIR, "app", "rpg", "session", "runtime.py")
         with open(import_path) as f:
             content = f.read()
-        assert "_SCHEMA_VERSION = 3" in content
+        assert "_SCHEMA_VERSION = 4" in content
 
 
 # ---------------------------------------------------------------------------
