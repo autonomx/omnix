@@ -1953,6 +1953,7 @@
         rpgState.heartbeatTimer = setInterval(function () {
             if (!rpgState.sessionId) { stopAmbientHeartbeat(); return; }
             if (document.hidden) return; // Don't tick when tab is hidden
+            localStorage.setItem('omnix_rpg_last_activity', String(Date.now()));
 
             fetch('/api/rpg/session/idle_tick', {
                 method: 'POST',
@@ -2162,6 +2163,31 @@
 
     function startLivingWorld() {
         if (!rpgState.sessionId) return;
+        // Resume catch-up: compute elapsed seconds since last activity
+        var lastActivity = parseInt(localStorage.getItem('omnix_rpg_last_activity') || '0', 10);
+        var now = Date.now();
+        var elapsedSeconds = lastActivity ? Math.floor((now - lastActivity) / 1000) : 0;
+
+        // Record current activity time
+        localStorage.setItem('omnix_rpg_last_activity', String(now));
+
+        if (elapsedSeconds > 10) {
+            fetch('/api/rpg/session/resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: rpgState.sessionId,
+                    elapsed_seconds: elapsedSeconds,
+                }),
+            }).then(function (r) { return r.json(); })
+              .then(function (data) {
+                if (data.ok && data.updates && data.updates.length) {
+                    data.updates.forEach(function (u) { appendAmbientUpdate(u); });
+                    updateState({ ambientSeq: data.latest_seq || rpgState.ambientSeq });
+                }
+            }).catch(function () { /* ignore resume errors */ });
+        }
+
         startAmbientHeartbeat();
         connectSessionStream();
         _setupTypingDetection();

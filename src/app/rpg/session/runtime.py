@@ -970,7 +970,24 @@ def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, 
 
     session = _copy_dict(session)
     runtime_state = ensure_ambient_runtime_state(_copy_dict(session.get("runtime_state")))
-
+    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
+    
+    # Replay safety: idle ticks must record/consume captured data
+    current_tick = int(runtime_state.get("tick", 0) or 0)
+    if mode == "replay":
+        # In replay mode, consume captured idle tick results
+        key = f"idle_tick:{current_tick}"
+        captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(key))
+        if not captured:
+            return {"ok": False, "error": f"missing_replay_idle_tick_for_tick:{current_tick}"}
+        return {
+            "ok": True,
+            "session": session,
+            "updates": _safe_list(captured.get("updates")),
+            "latest_seq": int(captured.get("latest_seq", 0) or 0),
+            "idle_streak": int(captured.get("idle_streak", 0) or 0),
+        }
+    
     # Advance simulation
     advance_result = _advance_simulation_for_idle(session, reason=reason)
     if not advance_result.get("ok"):
@@ -1010,6 +1027,21 @@ def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, 
     manifest = _safe_dict(session.get("manifest"))
     manifest["updated_at"] = _utc_now_iso()
     session["manifest"] = manifest
+    # Replay capture: record idle tick result for future replay
+    runtime_state.setdefault("llm_records", [])
+    runtime_state.setdefault("llm_records_index", {})
+    idle_record = {
+        "type": "idle_tick",
+        "tick": current_tick,
+        "reason": reason,
+        "updates": coalesced,
+        "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+        "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+    }
+    runtime_state["llm_records"].append(idle_record)
+    runtime_state["llm_records_index"][f"idle_tick:{current_tick}"] = idle_record
+    session["runtime_state"] = runtime_state
+    
     session = save_runtime_session(session)
 
     return {
@@ -1047,4 +1079,66 @@ def apply_idle_ticks(session_id: str, count: int, *, reason: str = "heartbeat") 
         "updates": all_updates,
         "latest_seq": int(last_result.get("latest_seq", 0) or 0),
         "ticks_applied": ticks_applied,
+    }
+
+
+def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[str, Any]:
+    """Apply bounded catch-up ticks on session resume.
+    
+    Converts elapsed time to capped idle ticks. If excess ticks would be
+    generated, summarizes them into a single catch-up ambient update.
+    """
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+    
+    runtime_state = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
+    
+    # Compute ticks from elapsed time (1 tick per ~5 seconds of real time)
+    raw_ticks = max(0, elapsed_seconds // 5)
+    capped_ticks = min(raw_ticks, _MAX_RESUME_CATCHUP_TICKS)
+    excess_ticks = max(0, raw_ticks - capped_ticks)
+    
+    if capped_ticks == 0:
+        return {
+            "ok": True,
+            "session": session,
+            "updates": [],
+            "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+            "ticks_applied": 0,
+            "excess_summarized": 0,
+        }
+    
+    # Apply the capped ticks
+    result = apply_idle_ticks(session_id, capped_ticks, reason="resume_catchup")
+    if not result.get("ok"):
+        return result
+    
+    all_updates = _safe_list(result.get("updates"))
+    
+    # If there were excess ticks, generate a summary update
+    if excess_ticks > 0:
+        from app.rpg.session.ambient_builder import make_ambient_update, enqueue_ambient_updates
+        session = _safe_dict(result.get("session"))
+        runtime_state = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
+        
+        summary = make_ambient_update(
+            tick=int(runtime_state.get("tick", 0) or 0),
+            kind="system_summary",
+            priority=0.5,
+            text=f"While you were away, the world advanced through {excess_ticks} additional moments. Much has changed.",
+            source="simulation",
+        )
+        runtime_state = enqueue_ambient_updates(runtime_state, [summary])
+        session["runtime_state"] = runtime_state
+        session = save_runtime_session(session)
+        all_updates.append(summary)
+    
+    return {
+        "ok": True,
+        "session": _safe_dict(result.get("session")) if not excess_ticks else session,
+        "updates": all_updates,
+        "latest_seq": int(result.get("latest_seq", 0) or 0),
+        "ticks_applied": capped_ticks,
+        "excess_summarized": excess_ticks,
     }

@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.rpg.session.runtime import (
     apply_idle_ticks,
+    apply_resume_catchup,
     apply_turn,
     build_frontend_bootstrap_payload,
     load_runtime_session,
@@ -423,3 +424,28 @@ async def stream_rpg_session(request: Request):
                 last_heartbeat = now
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=sse_headers)
+
+
+@rpg_session_bp.post("/api/rpg/session/resume")
+async def resume_rpg_session(request: Request):
+    """Resume a session with bounded catch-up for elapsed time."""
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    elapsed_seconds = int(data.get("elapsed_seconds", 0) or 0)
+
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    result = apply_resume_catchup(session_id, elapsed_seconds=elapsed_seconds)
+    if not result.get("ok"):
+        err = _safe_str(result.get("error") or "resume_failed")
+        status = 404 if err == "session_not_found" else 500
+        return JSONResponse({"ok": False, "error": err}, status_code=status)
+
+    return {
+        "ok": True,
+        "updates": _safe_list(result.get("updates")),
+        "latest_seq": int(result.get("latest_seq", 0) or 0),
+        "ticks_applied": int(result.get("ticks_applied", 0) or 0),
+        "excess_summarized": int(result.get("excess_summarized", 0) or 0),
+    }
