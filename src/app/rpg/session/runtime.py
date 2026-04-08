@@ -44,6 +44,17 @@ from app.rpg.session.ambient_builder import (
     normalize_ambient_state,
     score_ambient_salience,
 )
+from app.rpg.ai.ambient_dialogue import (
+    apply_dialogue_cooldowns,
+    build_ambient_dialogue_candidates,
+    build_ambient_dialogue_request,
+    select_ambient_dialogue_candidate,
+)
+from app.rpg.ai.world_scene_narrator import narrate_ambient_update
+from app.rpg.session.ambient_policy import (
+    classify_ambient_delivery,
+    record_interrupt,
+)
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
@@ -958,37 +969,66 @@ def _advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "hear
     }
 
 
-def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, Any]:
-    """Advance the world by one idle tick without player action.
+def _build_idle_player_context(
+    after_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    player_state = _safe_dict(after_state.get("player_state"))
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    return {
+        "player_location": _safe_str(
+            player_state.get("location_id")
+            or current_scene.get("location_id")
+        ),
+        "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
+        "scene_id": _safe_str(current_scene.get("scene_id")),
+        "world_summary": _safe_str(current_scene.get("summary") or current_scene.get("scene")),
+    }
 
-    Loads canonical session, advances simulation, builds ambient updates,
-    enqueues them, persists session, and returns structured result.
+
+def _apply_idle_tick_to_session(
+    session: Dict[str, Any],
+    *,
+    reason: str = "heartbeat",
+) -> Dict[str, Any]:
+    """Apply one idle tick to an in-memory session.
+
+    This is the canonical implementation for idle ticking.
+    Public wrappers should load/save around this helper rather than
+    recursively calling apply_idle_tick() in a loop.
     """
-    session = load_runtime_session(session_id)
-    if session is None:
-        return {"ok": False, "error": "session_not_found"}
-
     session = _copy_dict(session)
     runtime_state = ensure_ambient_runtime_state(_copy_dict(session.get("runtime_state")))
     mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
-    
-    # Replay safety: idle ticks must record/consume captured data
-    current_tick = int(runtime_state.get("tick", 0) or 0)
+
+    # Simulation tick is authoritative; runtime tick is only a mirror/cache.
+    current_tick = int(_safe_dict(session.get("simulation_state")).get("tick", runtime_state.get("tick", 0)) or 0)
+    idle_capture_key = f"idle_tick:{current_tick}"
+
     if mode == "replay":
-        # In replay mode, consume captured idle tick results
-        key = f"idle_tick:{current_tick}"
-        captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(key))
+        captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(idle_capture_key))
         if not captured:
             return {"ok": False, "error": f"missing_replay_idle_tick_for_tick:{current_tick}"}
+        replay_updates = _safe_list(captured.get("updates"))
+        if not replay_updates:
+            return {"ok": False, "error": f"missing_replay_ambient_updates_for_tick:{current_tick}"}
+
+        # Harden replay contract: updates must already be presentation-ready.
+        for idx, update in enumerate(replay_updates):
+            update = _safe_dict(update)
+            if not _safe_str(update.get("text")):
+                return {"ok": False, "error": f"missing_replay_ambient_text_for_tick:{current_tick}:index:{idx}"}
+            if not _safe_str(update.get("delivery")):
+                return {"ok": False, "error": f"missing_replay_ambient_delivery_for_tick:{current_tick}:index:{idx}"}
+
         return {
             "ok": True,
             "session": session,
-            "updates": _safe_list(captured.get("updates")),
+            "updates": replay_updates,
             "latest_seq": int(captured.get("latest_seq", 0) or 0),
             "idle_streak": int(captured.get("idle_streak", 0) or 0),
         }
-    
-    # Advance simulation
+
     advance_result = _advance_simulation_for_idle(session, reason=reason)
     if not advance_result.get("ok"):
         return {"ok": False, "error": "idle_advance_failed"}
@@ -997,57 +1037,214 @@ def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, 
     after_state = _safe_dict(advance_result.get("after_state"))
     next_setup = _safe_dict(advance_result.get("next_setup"))
 
-    # Build ambient context
+    player_context = _build_idle_player_context(after_state, runtime_state)
     context = {
-        "player_location": _get_player_location_id(after_state, runtime_state),
-        "nearby_npc_ids": _safe_list(_safe_dict(after_state.get("player_state")).get("nearby_npc_ids")),
+        "player_location": _safe_str(player_context.get("player_location")),
+        "nearby_npc_ids": _safe_list(player_context.get("nearby_npc_ids")),
         "recent_ambient_ids": _safe_list(runtime_state.get("recent_ambient_ids")),
     }
 
-    # Extract, filter, score, coalesce
     raw_updates = build_ambient_updates(before_state, after_state, runtime_state)
+
+    dialogue_candidates = build_ambient_dialogue_candidates(after_state, runtime_state, player_context)
+    selected_dialogue = select_ambient_dialogue_candidate(dialogue_candidates, runtime_state)
+    if selected_dialogue:
+        runtime_state = apply_dialogue_cooldowns(runtime_state, selected_dialogue)
+        raw_updates.append(
+            _make_dialogue_update_from_candidate(
+                selected_dialogue,
+                {
+                    "scene_id": _safe_str(player_context.get("scene_id")),
+                    "world_summary": _safe_str(player_context.get("world_summary")),
+                },
+            )
+        )
+
     visible = [u for u in raw_updates if is_player_visible_update(u, session)]
     for u in visible:
         u["priority"] = score_ambient_salience(u, context)
     coalesced = coalesce_ambient_updates(visible, runtime_state)
 
-    # Enqueue
     runtime_state = enqueue_ambient_updates(runtime_state, coalesced)
+    queued_updates = get_pending_ambient_updates(
+        {"runtime_state": runtime_state},
+        after_seq=max(0, int(runtime_state.get("ambient_seq", 0) or 0) - len(coalesced)),
+        limit=max(1, len(coalesced) or 1),
+    )
+    narrated_updates, runtime_state = _apply_ambient_narration_and_delivery(
+        session=session,
+        updates=queued_updates,
+        after_state=after_state,
+        runtime_state=runtime_state,
+        idle_capture_key=idle_capture_key,
+    )
+    if narrated_updates:
+        queue = _safe_list(runtime_state.get("ambient_queue"))
+        by_seq = {int(_safe_dict(u).get("seq", 0) or 0): u for u in narrated_updates}
+        runtime_state["ambient_queue"] = [
+            _copy_dict(by_seq.get(int(_safe_dict(item).get("seq", 0) or 0)) or item)
+            for item in queue
+        ]
 
-    # Idle bookkeeping
     runtime_state["idle_streak"] = int(runtime_state.get("idle_streak", 0) or 0) + 1
     runtime_state["last_idle_tick_at"] = _utc_now_iso()
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
     runtime_state = normalize_ambient_state(runtime_state)
 
-    # Persist
     session["simulation_state"] = after_state
     session["setup_payload"] = next_setup
     session["runtime_state"] = runtime_state
+
     manifest = _safe_dict(session.get("manifest"))
     manifest["updated_at"] = _utc_now_iso()
     session["manifest"] = manifest
-    # Replay capture: record idle tick result for future replay
+
     runtime_state.setdefault("llm_records", [])
     runtime_state.setdefault("llm_records_index", {})
+
+    # FIX: prevent [-0:] returning entire queue when no updates were emitted
+    queue = _safe_list(runtime_state.get("ambient_queue"))
+    emitted_count = len(narrated_updates) if narrated_updates else len(coalesced)
+    if emitted_count > 0:
+        final_updates = queue[-emitted_count:]
+    else:
+        final_updates = []
     idle_record = {
         "type": "idle_tick",
         "tick": current_tick,
         "reason": reason,
-        "updates": coalesced,
+        "updates": final_updates,
         "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
         "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
     }
     runtime_state["llm_records"].append(idle_record)
-    runtime_state["llm_records_index"][f"idle_tick:{current_tick}"] = idle_record
+    runtime_state["llm_records_index"][idle_capture_key] = idle_record
     session["runtime_state"] = runtime_state
-    
-    session = save_runtime_session(session)
 
     return {
         "ok": True,
         "session": session,
-        "updates": coalesced,
+        "updates": final_updates,
+        "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+        "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+    }
+
+
+def _make_dialogue_update_from_candidate(
+    candidate: Dict[str, Any],
+    session_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    req = build_ambient_dialogue_request(candidate, session_context)
+    return {
+        "tick": int(req.get("tick", 0) or 0),
+        "kind": _safe_str(req.get("kind") or "npc_to_player"),
+        "priority": float(_safe_dict(candidate).get("salience", 0.0) or 0.0),
+        "interrupt": bool(req.get("interrupt")),
+        "speaker_id": _safe_str(req.get("speaker_id")),
+        "speaker_name": _safe_str(req.get("speaker_name")),
+        "target_id": _safe_str(req.get("target_id")),
+        "target_name": _safe_str(req.get("target_name")),
+        "scene_id": _safe_str(req.get("scene_id")),
+        "location_id": _safe_str(req.get("location_id")),
+        "text": _safe_str(req.get("text_hint")),
+        "structured": {
+            "emotion": _safe_str(req.get("emotion")),
+            "world_context": _safe_str(req.get("world_context")),
+        },
+        "source_event_ids": [],
+        "source": "dialogue",
+        "created_at": _utc_now_iso(),
+    }
+
+
+def _apply_ambient_narration_and_delivery(
+    *,
+    session: Dict[str, Any],
+    updates: List[Dict[str, Any]],
+    after_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    idle_capture_key: str,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    session = _copy_dict(session)
+    runtime_state = _copy_dict(runtime_state)
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    narrated_updates: List[Dict[str, Any]] = []
+
+    llm_gateway = None
+    try:
+        from app.shared import get_provider
+        llm_gateway = get_provider()
+    except Exception:
+        llm_gateway = None
+
+    runtime_state.setdefault("llm_records", [])
+    runtime_state.setdefault("llm_records_index", {})
+
+    # Defensive contract: this helper expects already-enqueued updates
+    # so that seq/ambient_id are stable for capture and replacement.
+    for idx, update in enumerate(updates):
+        update = _safe_dict(update)
+        if int(update.get("seq", 0) or 0) <= 0 or not _safe_str(update.get("ambient_id")):
+            raise ValueError(
+                f"_apply_ambient_narration_and_delivery requires enqueued updates with seq/ambient_id (index={idx})"
+            )
+
+    for idx, update in enumerate(updates):
+        update = _copy_dict(update)
+        narration = narrate_ambient_update(
+            ambient_update=update,
+            simulation_state=after_state,
+            current_scene=current_scene,
+            llm_gateway=llm_gateway,
+        )
+        update["text"] = _safe_str(narration.get("text"))
+        update["speaker_turns"] = _safe_list(narration.get("speaker_turns"))
+        update["narration"] = {
+            "used_app_llm": bool(narration.get("used_app_llm")),
+            "raw_llm_narrative": _safe_str(narration.get("raw_llm_narrative")),
+            "structured": _safe_dict(narration.get("structured")),
+        }
+        update["delivery"] = classify_ambient_delivery(session, update, is_typing=False)
+
+        if update["delivery"] == "interrupt":
+            session = record_interrupt(session, update)
+            runtime_state = _safe_dict(session.get("runtime_state"))
+
+        capture_record = {
+            "type": "ambient_narration",
+            "idle_capture_key": idle_capture_key,
+            "index": idx,
+            "ambient_id": _safe_str(update.get("ambient_id")),
+            "kind": _safe_str(update.get("kind")),
+            "text": _safe_str(update.get("text")),
+            "speaker_turns": _safe_list(update.get("speaker_turns")),
+            "delivery": _safe_str(update.get("delivery")),
+            "narration": _safe_dict(update.get("narration")),
+        }
+        runtime_state["llm_records"].append(capture_record)
+        runtime_state["llm_records_index"][f"{idle_capture_key}:ambient:{idx}"] = capture_record
+        narrated_updates.append(update)
+
+    return narrated_updates, runtime_state
+
+
+def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, Any]:
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+
+    session = _copy_dict(session)
+    result = _apply_idle_tick_to_session(session, reason=reason)
+    if not result.get("ok"):
+        return result
+
+    session = save_runtime_session(_safe_dict(result.get("session")))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+
+    return {
+        "ok": True,
+        "session": session,
+        "updates": _safe_list(result.get("updates")),
         "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
         "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
     }
@@ -1056,28 +1253,33 @@ def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, 
 def apply_idle_ticks(session_id: str, count: int, *, reason: str = "heartbeat") -> Dict[str, Any]:
     """Apply multiple idle ticks, clamped to _MAX_IDLE_TICKS_PER_REQUEST.
 
-    Coalesces results across ticks. Persists once at the end.
+    Coalesces results across ticks in memory and saves once at the end.
     """
     count = max(1, min(int(count), _MAX_IDLE_TICKS_PER_REQUEST))
-    all_updates: List[Dict[str, Any]] = []
-    last_result: Dict[str, Any] = {}
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
 
+    session = _copy_dict(session)
+    all_updates: List[Dict[str, Any]] = []
     ticks_applied = 0
-    for i in range(count):
-        result = apply_idle_tick(session_id, reason=reason)
+
+    for _ in range(count):
+        result = _apply_idle_tick_to_session(session, reason=reason)
         if not result.get("ok"):
-            if i == 0:
+            if ticks_applied == 0:
                 return result
             break
-        ticks_applied += 1
-        last_result = result
+        session = _safe_dict(result.get("session"))
         all_updates.extend(_safe_list(result.get("updates")))
+        ticks_applied += 1
 
+    session = save_runtime_session(session)
     return {
         "ok": True,
-        "session": _safe_dict(last_result.get("session")),
+        "session": session,
         "updates": all_updates,
-        "latest_seq": int(last_result.get("latest_seq", 0) or 0),
+        "latest_seq": int(_safe_dict(session.get("runtime_state")).get("ambient_seq", 0) or 0),
         "ticks_applied": ticks_applied,
     }
 
