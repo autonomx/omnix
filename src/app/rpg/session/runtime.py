@@ -44,12 +44,14 @@ from app.rpg.presentation import (
     build_runtime_presentation_payload,
     build_scene_presentation_payload,
 )
+from app.rpg.presentation.memory_inspector import build_memory_ui_summary
 from app.rpg.presentation.personality_state import ensure_personality_state
+from app.rpg.presentation.speaker_cards import build_nearby_npc_cards
 from app.rpg.presentation.visual_state import ensure_visual_state
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _MAX_HISTORY = 64
 
 
@@ -218,28 +220,47 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     turn_result = _safe_dict(runtime_state.get("last_turn_result"))
     player_state = _safe_dict(simulation_state.get("player_state"))
 
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    narration = _safe_str(turn_result.get("narration")) or opening
+
+    # Build nearby NPC cards
+    try:
+        nearby_npcs = build_nearby_npc_cards(simulation_state, current_scene)
+    except Exception:
+        nearby_npcs = _safe_list(player_state.get("nearby_npc_ids"))
+
     return {
         "success": True,
         "session_id": _safe_str(manifest.get("id")),
         "title": _safe_str(manifest.get("title")),
         "opening": opening,
-        "world": world,
-        "player": player_state,
-        "npcs": npcs,
-        "memory": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("short_term")),
-        "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
-        "world_events": _safe_list(simulation_state.get("events"))[-8:],
+        "narration": narration,
+        "player": {
+            "stats": _safe_dict(player_state.get("stats")),
+            "skills": _safe_dict(player_state.get("skills")),
+            "level": int(player_state.get("level", 1) or 1),
+            "xp": int(player_state.get("xp", 0) or 0),
+            "xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
+            "inventory_state": _safe_dict(player_state.get("inventory_state")),
+            "equipment": _safe_dict(player_state.get("equipment")),
+            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
+            "available_checks": _safe_list(player_state.get("available_checks")),
+        },
+        "nearby_npcs": nearby_npcs,
+        "known_npcs": npcs,
+        "scene": {
+            "scene_id": _safe_str(current_scene.get("scene_id")),
+            "items": _safe_list(current_scene.get("items")),
+            "available_checks": _safe_list(current_scene.get("available_checks")),
+            "present_npc_ids": _safe_list(current_scene.get("present_npc_ids")),
+        },
+        "memory_summary": build_memory_ui_summary(simulation_state),
+        "combat_result": _safe_dict(turn_result.get("combat_result")),
+        "xp_result": _safe_dict(turn_result.get("xp_result")),
+        "skill_xp_result": _safe_dict(turn_result.get("skill_xp_result")),
+        "level_up": turn_result.get("level_up"),
+        "skill_level_ups": _safe_list(turn_result.get("skill_level_ups")),
         "presentation": build_runtime_presentation_payload(simulation_state),
-        "scene": _safe_dict(runtime_state.get("current_scene")),
-        "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
-        "last_turn_result": turn_result,
-        # Phase 18.3A — enriched player data
-        "player_stats": _safe_dict(player_state.get("stats")),
-        "player_skills": _safe_dict(player_state.get("skills")),
-        "player_level": int(player_state.get("level", 1) or 1),
-        "player_xp": int(player_state.get("xp", 0) or 0),
-        "player_xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
-        "nearby_npcs": _safe_list(player_state.get("nearby_npc_ids")),
     }
 
 
@@ -475,9 +496,10 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
             ps = award_player_xp(ps, total_xp)
         for sid, amt in skill_xp_awards.items():
             ps = award_skill_xp(ps, sid, amt)
-        ps, did_level = resolve_level_ups(ps)
-        level_up = did_level
-        ps, skill_level_ups = resolve_skill_level_ups(ps)
+        ps = resolve_level_ups(ps)
+        level_up = bool(ps.get("_level_ups"))
+        ps = resolve_skill_level_ups(ps)
+        skill_level_ups = list(ps.get("_skill_level_ups") or [])
         after_state["player_state"] = ps
 
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)

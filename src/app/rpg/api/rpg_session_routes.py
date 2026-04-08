@@ -8,8 +8,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from flask import Blueprint, Response, jsonify, request
 
 from app.rpg.session.runtime import (
     apply_turn,
@@ -18,7 +17,12 @@ from app.rpg.session.runtime import (
     save_runtime_session,
 )
 
-rpg_session_bp = APIRouter()
+rpg_session_bp = Blueprint("rpg_session_bp", __name__)
+
+_DEPRECATION_HEADERS = {
+    "X-Omnix-RPG-Recommended-Create": "/api/rpg/adventure/start",
+    "X-Omnix-RPG-Recommended-Turn": "/api/rpg/session/turn",
+}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -37,49 +41,109 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
-async def _get_json(request: Request) -> Dict[str, Any]:
-    """Get JSON body from request, returning empty dict on failure."""
-    try:
-        body = await request.json()
-        return body if isinstance(body, dict) else {}
-    except Exception:
-        return {}
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
 
 
-def _jsonify(data: Dict[str, Any], status_code: int = 200) -> JSONResponse:
-    """FastAPI-compatible JSON response."""
-    return JSONResponse(content=data, status_code=status_code)
+def _get_json() -> Dict[str, Any]:
+    """Get JSON body from Flask request, returning empty dict on failure."""
+    body = request.get_json(silent=True) or {}
+    return body if isinstance(body, dict) else {}
 
 
-@rpg_session_bp.post("/api/rpg/session/list")
-async def list_rpg_sessions():
+def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the canonical turn response payload from an apply_turn result."""
+    raw_payload = _safe_dict(result.get("payload"))
+    session = _safe_dict(result.get("session"))
+    sim = _safe_dict(session.get("simulation_state"))
+    player_state = _safe_dict(sim.get("player_state"))
+    stats = _safe_dict(player_state.get("stats"))
+    skills = _safe_dict(player_state.get("skills"))
+    equipment = _safe_dict(player_state.get("equipment"))
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+
+    scene_state = _safe_dict(sim.get("current_scene"))
+    memory = _safe_dict(sim.get("memory"))
+
+    payload: Dict[str, Any] = {
+        "success": True,
+        "session_id": _safe_str(raw_payload.get("session_id") or session.get("session_id")),
+        "title": _safe_str(raw_payload.get("title")),
+        "opening": _safe_str(raw_payload.get("opening")),
+        "narration": _safe_str(raw_payload.get("narration")),
+        # Player block
+        "player": {
+            "stats": stats,
+            "skills": skills,
+            "level": int(player_state.get("level", 1) or 1),
+            "xp": int(player_state.get("xp", 0) or 0),
+            "xp_to_next": int(player_state.get("xp_to_next", 0) or 0),
+            "inventory_state": inventory_state,
+            "equipment": equipment,
+            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
+            "available_checks": _safe_list(player_state.get("available_checks")),
+        },
+        # NPC blocks
+        "nearby_npcs": _safe_list(raw_payload.get("nearby_npcs") or sim.get("nearby_npcs")),
+        "known_npcs": _safe_list(raw_payload.get("known_npcs") or sim.get("known_npcs")),
+        # Scene block
+        "scene": {
+            "scene_id": _safe_str(scene_state.get("scene_id")),
+            "items": _safe_list(scene_state.get("items")),
+            "available_checks": _safe_list(scene_state.get("available_checks")),
+            "present_npc_ids": _safe_list(scene_state.get("present_npc_ids")),
+        },
+        # Memory block
+        "memory_summary": {
+            "important_memory": _safe_list(memory.get("important_memory")),
+            "recent_memory": _safe_list(memory.get("recent_memory")),
+            "recent_world_events": _safe_list(memory.get("recent_world_events")),
+        },
+        # Progression
+        "combat_result": raw_payload.get("combat_result"),
+        "xp_result": raw_payload.get("xp_result"),
+        "skill_xp_result": raw_payload.get("skill_xp_result"),
+        "level_up": raw_payload.get("level_up", False),
+        "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
+        # Presentation
+        "presentation": _safe_dict(raw_payload.get("presentation")),
+    }
+    return payload
+
+
+@rpg_session_bp.route("/api/rpg/session/list", methods=["POST"])
+def list_rpg_sessions():
     """List all RPG sessions for the settings panel."""
     from app.rpg.session.service import list_sessions
 
     sessions = list_sessions() or []
-    return {"ok": True, "sessions": sessions}
+    resp = jsonify({"ok": True, "sessions": sessions})
+    resp.headers.update(_DEPRECATION_HEADERS)
+    return resp
 
 
-@rpg_session_bp.post("/api/rpg/session/get")
-async def get_rpg_session(request: Request):
-    data = await _get_json(request)
+@rpg_session_bp.route("/api/rpg/session/get", methods=["POST"])
+def get_rpg_session():
+    data = _get_json()
     session_id = _safe_str(data.get("session_id")).strip()
     session = load_runtime_session(session_id)
     if session is None:
-        return _jsonify({"ok": False, "error": "session_not_found"}), 404
+        return jsonify({"ok": False, "error": "session_not_found"}), 404
     payload = build_frontend_bootstrap_payload(session)
     payload["ok"] = True
     payload["game"] = payload
-    return payload
+    resp = jsonify(payload)
+    resp.headers.update(_DEPRECATION_HEADERS)
+    return resp
 
 
-@rpg_session_bp.post("/api/rpg/session/update")
-async def update_rpg_session(request: Request):
-    data = await _get_json(request)
+@rpg_session_bp.route("/api/rpg/session/update", methods=["POST"])
+def update_rpg_session():
+    data = _get_json()
     session_id = _safe_str(data.get("session_id")).strip()
     session = load_runtime_session(session_id)
     if session is None:
-        return _jsonify({"ok": False, "error": "session_not_found"}), 404
+        return jsonify({"ok": False, "error": "session_not_found"}), 404
 
     manifest = _safe_dict(session.get("manifest"))
     runtime_state = _safe_dict(session.get("runtime_state"))
@@ -97,108 +161,109 @@ async def update_rpg_session(request: Request):
     session = save_runtime_session(session)
     payload = build_frontend_bootstrap_payload(session)
     payload["ok"] = True
-    return payload
+    resp = jsonify(payload)
+    resp.headers.update(_DEPRECATION_HEADERS)
+    return resp
 
 
-@rpg_session_bp.post("/api/rpg/session/delete")
-async def delete_rpg_session(request: Request):
-    data = await _get_json(request)
+@rpg_session_bp.route("/api/rpg/session/delete", methods=["POST"])
+def delete_rpg_session():
+    data = _get_json()
     session_id = _safe_str(data.get("session_id")).strip()
     session = load_runtime_session(session_id)
     if session is None:
-        return _jsonify({"ok": False, "error": "session_not_found"}), 404
+        return jsonify({"ok": False, "error": "session_not_found"}), 404
     manifest = _safe_dict(session.get("manifest"))
+    manifest["archived"] = True
     manifest["status"] = "archived"
     session["manifest"] = manifest
     save_runtime_session(session)
-    return {"ok": True}
+    resp = jsonify({"ok": True})
+    resp.headers.update(_DEPRECATION_HEADERS)
+    return resp
 
 
-@rpg_session_bp.post("/api/rpg/session/turn")
-async def execute_rpg_session_turn(request: Request):
-    data = await _get_json(request)
+@rpg_session_bp.route("/api/rpg/session/turn", methods=["POST"])
+def execute_rpg_session_turn():
+    data = _get_json()
     session_id = _safe_str(data.get("session_id")).strip()
     player_input = _safe_str(data.get("input")).strip()
     action = _safe_dict(data.get("action"))
 
     if not session_id:
-        return _jsonify({"ok": False, "error": "session_id_required"}), 400
+        return jsonify({"ok": False, "error": "session_id_required"}), 400
     if not player_input:
-        return _jsonify({"ok": False, "error": "input_required"}), 400
+        return jsonify({"ok": False, "error": "input_required"}), 400
 
     result = apply_turn(session_id, player_input, action=action)
     if not result.get("ok"):
         if result.get("error") == "session_not_found":
-            return _jsonify({"ok": False, "error": "session_not_found"}), 404
-        return _jsonify({"ok": False, "error": "turn_failed", "details": result}), 500
+            return jsonify({"ok": False, "error": "session_not_found"}), 404
+        return jsonify({"ok": False, "error": "turn_failed", "details": result}), 500
 
-    payload = _safe_dict(result.get("payload"))
-    payload["ok"] = True
-
-    # Phase 18.3A — XP and progression in turn response
-    session = _safe_dict(result.get("session"))
-    simulation_state = _safe_dict(session.get("simulation_state")) if isinstance(session, dict) else {}
-    player_state = _safe_dict(simulation_state.get("player_state")) if isinstance(simulation_state, dict) else {}
-    payload.setdefault("player_level", int(player_state.get("level", 1) or 1))
-    payload.setdefault("player_xp", int(player_state.get("xp", 0) or 0))
-    payload.setdefault("player_skills", _safe_dict(player_state.get("skills")))
-    payload.setdefault("level_up", False)
-    payload.setdefault("skill_level_ups", [])
-
-    return payload
+    payload = _build_turn_payload(result)
+    resp = jsonify(payload)
+    resp.headers.update(_DEPRECATION_HEADERS)
+    return resp
 
 
-@rpg_session_bp.post("/api/rpg/session/turn/stream")
-async def execute_rpg_session_turn_stream(request: Request):
-    data = await _get_json(request)
+@rpg_session_bp.route("/api/rpg/session/turn/stream", methods=["POST"])
+def execute_rpg_session_turn_stream():
+    data = _get_json()
     session_id = _safe_str(data.get("session_id")).strip()
     player_input = _safe_str(data.get("input")).strip()
     action = _safe_dict(data.get("action"))
 
+    sse_headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        **_DEPRECATION_HEADERS,
+    }
+
     if not session_id:
-
-        def _sid_missing():
-            yield f"data: {json.dumps({'type': 'error', 'error': 'session_id_required'})}\n\n"
-
-        return StreamingResponse(_sid_missing(), media_type="text/event-stream", status_code=400)
+        return Response(
+            _sse({"type": "error", "error": "session_id_required"}),
+            status=400,
+            mimetype="text/event-stream",
+            headers=sse_headers,
+        )
 
     if not player_input:
-
-        def _input_missing():
-            yield f"data: {json.dumps({'type': 'error', 'error': 'input_required'})}\n\n"
-
-        return StreamingResponse(_input_missing(), media_type="text/event-stream", status_code=400)
+        return Response(
+            _sse({"type": "error", "error": "input_required"}),
+            status=400,
+            mimetype="text/event-stream",
+            headers=sse_headers,
+        )
 
     result = apply_turn(session_id, player_input, action=action)
 
     if not result.get("ok"):
-
-        def _failed():
-            err = _safe_str(result.get("error") or "turn_failed")
-            yield f"data: {json.dumps({'type': 'error', 'error': err})}\n\n"
-
+        err = _safe_str(result.get("error") or "turn_failed")
         status = 404 if result.get("error") == "session_not_found" else 500
-        return StreamingResponse(_failed(), media_type="text/event-stream", status_code=status)
+        return Response(
+            _sse({"type": "error", "error": err}),
+            status=status,
+            mimetype="text/event-stream",
+            headers=sse_headers,
+        )
 
-    payload = _safe_dict(result.get("payload"))
+    payload = _build_turn_payload(result)
     narration = _safe_str(payload.get("narration"))
 
     def generate():
         words = narration.split()
         for idx, word in enumerate(words):
             chunk = word + (" " if idx < len(words) - 1 else "")
-            yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"
+            yield _sse({"type": "token", "text": chunk})
 
         final_payload = dict(payload)
         final_payload["type"] = "done"
         final_payload["ok"] = True
-        yield f"data: {json.dumps(final_payload)}\n\n"
+        yield _sse(final_payload)
 
-    return StreamingResponse(
+    return Response(
         generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
+        mimetype="text/event-stream",
+        headers=sse_headers,
     )

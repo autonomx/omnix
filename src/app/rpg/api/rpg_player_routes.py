@@ -254,54 +254,189 @@ def remove_companion_route():
     })
 
 
-# Phase 18.3A — Equipment and progression endpoints
+# Phase 18.3A — Equipment and progression endpoints (session-aware)
 
 @rpg_player_bp.post("/api/rpg/player/inventory/equip")
 def equip_item_route():
-    """Equip an inventory item."""
+    """Equip an inventory item into equipment slot."""
+    from app.rpg.items.inventory_state import equip_inventory_item
+    from app.rpg.session.runtime import load_runtime_session, save_runtime_session
+
     data = request.get_json(silent=True) or {}
     item_id = str(data.get("item_id", ""))
     slot = str(data.get("slot", ""))
+    session_id = str(data.get("session_id", ""))
+
     if not item_id:
         return jsonify({"ok": False, "error": "item_id required"}), 400
+
+    if session_id:
+        session = load_runtime_session(session_id)
+        if session and isinstance(session, dict):
+            sim = dict(session.get("simulation_state") or {})
+            ps = dict(sim.get("player_state") or {})
+            inv = dict(ps.get("inventory_state") or {})
+            inv = equip_inventory_item(inv, item_id, slot)
+            ps["inventory_state"] = inv
+            sim["player_state"] = ps
+            session["simulation_state"] = sim
+            save_runtime_session(session)
+            return jsonify({"ok": True, "item_id": item_id, "slot": slot, "equipment": inv.get("equipment", {})})
+
     return jsonify({"ok": True, "item_id": item_id, "slot": slot})
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/unequip")
 def unequip_item_route():
-    """Unequip from a slot."""
+    """Unequip an item from equipment slot."""
+    from app.rpg.items.inventory_state import unequip_inventory_slot
+    from app.rpg.session.runtime import load_runtime_session, save_runtime_session
+
     data = request.get_json(silent=True) or {}
     slot = str(data.get("slot", ""))
+    session_id = str(data.get("session_id", ""))
+
     if not slot:
         return jsonify({"ok": False, "error": "slot required"}), 400
+
+    if session_id:
+        session = load_runtime_session(session_id)
+        if session and isinstance(session, dict):
+            sim = dict(session.get("simulation_state") or {})
+            ps = dict(sim.get("player_state") or {})
+            inv = dict(ps.get("inventory_state") or {})
+            inv = unequip_inventory_slot(inv, slot)
+            ps["inventory_state"] = inv
+            sim["player_state"] = ps
+            session["simulation_state"] = sim
+            save_runtime_session(session)
+            return jsonify({"ok": True, "slot": slot, "equipment": inv.get("equipment", {})})
+
     return jsonify({"ok": True, "slot": slot})
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/drop")
 def drop_item_route():
-    """Drop an item."""
+    """Drop an item from inventory into the world."""
+    from app.rpg.items.inventory_state import remove_inventory_item
+    from app.rpg.items.world_items import drop_world_item
+    from app.rpg.session.runtime import load_runtime_session, save_runtime_session
+
     data = request.get_json(silent=True) or {}
     item_id = str(data.get("item_id", ""))
+    session_id = str(data.get("session_id", ""))
+
+    if not item_id:
+        return jsonify({"ok": False, "error": "item_id required"}), 400
+
+    if session_id:
+        session = load_runtime_session(session_id)
+        if session and isinstance(session, dict):
+            sim = dict(session.get("simulation_state") or {})
+            ps = dict(sim.get("player_state") or {})
+            inv = dict(ps.get("inventory_state") or {})
+            inv = remove_inventory_item(inv, item_id, qty=1)
+            ps["inventory_state"] = inv
+            sim["player_state"] = ps
+            location_id = str(ps.get("current_scene_id", ""))
+            sim = drop_world_item(sim, item_id, location_id)
+            session["simulation_state"] = sim
+            save_runtime_session(session)
+            return jsonify({"ok": True, "item_id": item_id})
+
     return jsonify({"ok": True, "item_id": item_id})
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/pickup")
 def pickup_item_route():
-    """Pick up a world item."""
+    """Pick up a world item into inventory."""
+    from app.rpg.items.inventory_state import add_inventory_items
+    from app.rpg.items.world_items import pickup_world_item
+    from app.rpg.session.runtime import load_runtime_session, save_runtime_session
+
     data = request.get_json(silent=True) or {}
     instance_id = str(data.get("instance_id", ""))
+    session_id = str(data.get("session_id", ""))
+
+    if not instance_id:
+        return jsonify({"ok": False, "error": "instance_id required"}), 400
+
+    if session_id:
+        session = load_runtime_session(session_id)
+        if session and isinstance(session, dict):
+            sim = dict(session.get("simulation_state") or {})
+            sim = pickup_world_item(sim, instance_id)
+            picked = sim.pop("_picked_up_item", {})
+            if picked and isinstance(picked, dict) and picked.get("item_id"):
+                ps = dict(sim.get("player_state") or {})
+                inv = dict(ps.get("inventory_state") or {})
+                inv = add_inventory_items(inv, [picked])
+                ps["inventory_state"] = inv
+                sim["player_state"] = ps
+                session["simulation_state"] = sim
+                save_runtime_session(session)
+                return jsonify({"ok": True, "instance_id": instance_id, "item": picked})
+            else:
+                return jsonify({"ok": False, "error": "item_not_found", "instance_id": instance_id})
+
     return jsonify({"ok": True, "instance_id": instance_id})
 
 
-@rpg_player_bp.get("/api/rpg/player/progression")
+@rpg_player_bp.post("/api/rpg/player/progression")
 def player_progression_route():
-    """Get player progression data."""
+    """Get player progression data from session."""
+    from app.rpg.session.runtime import load_runtime_session
+
+    data = request.get_json(silent=True) or {}
+    session_id = str(data.get("session_id", ""))
+
+    if session_id:
+        session = load_runtime_session(session_id)
+        if session and isinstance(session, dict):
+            sim = dict(session.get("simulation_state") or {})
+            ps = dict(sim.get("player_state") or {})
+            return jsonify({
+                "ok": True,
+                "level": int(ps.get("level", 1) or 1),
+                "xp": int(ps.get("xp", 0) or 0),
+                "xp_to_next": int(ps.get("xp_to_next", 100) or 100),
+                "unspent_points": int(ps.get("unspent_points", 0) or 0),
+                "unspent_skill_points": int(ps.get("unspent_skill_points", 0) or 0),
+                "stats": dict(ps.get("stats") or {}),
+                "skills": dict(ps.get("skills") or {}),
+                "perk_flags": list(ps.get("perk_flags") or []),
+            })
+
     return jsonify({"ok": True, "level": 1, "xp": 0, "xp_to_next": 100})
 
 
 @rpg_player_bp.post("/api/rpg/player/stats/allocate")
 def allocate_stats_route():
-    """Allocate stat points."""
+    """Allocate stat points from session."""
+    from app.rpg.player.player_progression_state import allocate_starting_stats
+    from app.rpg.session.runtime import load_runtime_session, save_runtime_session
+
     data = request.get_json(silent=True) or {}
     allocation = data.get("allocation", {})
+    session_id = str(data.get("session_id", ""))
+
+    if not isinstance(allocation, dict) or not allocation:
+        return jsonify({"ok": False, "error": "allocation required"}), 400
+
+    if session_id:
+        session = load_runtime_session(session_id)
+        if session and isinstance(session, dict):
+            sim = dict(session.get("simulation_state") or {})
+            ps = dict(sim.get("player_state") or {})
+            unspent = int(ps.get("unspent_points", 0) or 0)
+            total_requested = sum(int(v) for v in allocation.values())
+            if total_requested > unspent:
+                return jsonify({"ok": False, "error": "insufficient_points", "unspent": unspent, "requested": total_requested}), 400
+            ps = allocate_starting_stats(ps, allocation)
+            ps["unspent_points"] = max(0, unspent - total_requested)
+            sim["player_state"] = ps
+            session["simulation_state"] = sim
+            save_runtime_session(session)
+            return jsonify({"ok": True, "stats": dict(ps.get("stats") or {}), "unspent_points": ps.get("unspent_points", 0)})
+
     return jsonify({"ok": True, "allocation": allocation})

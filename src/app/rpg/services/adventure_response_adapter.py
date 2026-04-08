@@ -54,40 +54,59 @@ def adapt_session_to_frontend(session: dict[str, Any]) -> dict[str, Any]:
     manifest = _safe_dict(session.get("manifest"))
     runtime_state = _safe_dict(session.get("runtime_state"))
     simulation_state = _safe_dict(session.get("simulation_state"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+
+    # Build nearby NPC cards
+    from app.rpg.presentation.speaker_cards import build_nearby_npc_cards
+    nearby_npc_cards = build_nearby_npc_cards(simulation_state, current_scene)
+
+    # Memory summary
+    from app.rpg.presentation.memory_inspector import build_memory_ui_summary
+    memory_summary = build_memory_ui_summary(simulation_state)
 
     response = {
         "response_version": ADVENTURE_START_RESPONSE_VERSION,
         "success": True,
-        "session_id": _safe_dict(session.get("manifest")).get("id"),
-        "title": _safe_dict(session.get("manifest")).get("title"),
+        "session_id": manifest.get("id"),
+        "title": manifest.get("title"),
         "opening": runtime_state.get("opening") or "",
+        "narration": runtime_state.get("opening") or "",
         "world": _safe_dict(runtime_state.get("world")),
-        "player": _safe_dict(simulation_state.get("player_state")),
+        "player": {
+            "stats": _safe_dict(player_state.get("stats")),
+            "skills": _safe_dict(player_state.get("skills")),
+            "level": int(player_state.get("level", 1) or 1),
+            "xp": int(player_state.get("xp", 0) or 0),
+            "xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
+            "inventory_state": inventory_state,
+            "equipment": _safe_dict(inventory_state.get("equipment")),
+            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
+            "available_checks": _safe_list(player_state.get("available_checks")),
+        },
+        "nearby_npcs": nearby_npc_cards,
+        "known_npcs": _safe_list(runtime_state.get("npcs")),
+        "scene": {
+            "scene_id": str(current_scene.get("scene_id", "")),
+            "items": _safe_list(current_scene.get("items")),
+            "available_checks": _safe_list(current_scene.get("available_checks")),
+            "present_npc_ids": _safe_list(current_scene.get("present_npc_ids")),
+        },
+        "memory_summary": memory_summary,
+        "combat_result": {},
+        "xp_result": {},
+        "skill_xp_result": {},
+        "level_up": [],
+        "skill_level_ups": [],
+        "presentation": {},
+        # Legacy compatibility fields
         "npcs": _safe_list(runtime_state.get("npcs")),
         "memory": _safe_list(_safe_dict(simulation_state.get("memory_state")).get("short_term")),
         "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
         "world_events": _safe_list(simulation_state.get("events"))[-8:],
-        "scene": _safe_dict(runtime_state.get("current_scene")),
         "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
         "creator": {"setup_id": manifest.get("id")},
     }
-
-    # Phase 18.3A — enriched player data
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    response["player_stats"] = _safe_dict(player_state.get("stats"))
-    response["player_skills"] = _safe_dict(player_state.get("skills"))
-    response["player_level"] = player_state.get("level", 1)
-    response["player_xp"] = player_state.get("xp", 0)
-    response["player_xp_to_next"] = player_state.get("xp_to_next", 100)
-    response["player_unspent_points"] = player_state.get("unspent_points", 0)
-    response["player_inventory"] = _safe_dict(player_state.get("inventory_state"))
-    response["player_equipment"] = _safe_dict(
-        _safe_dict(player_state.get("inventory_state")).get("equipment")
-    )
-    response["nearby_npcs"] = _safe_list(player_state.get("nearby_npc_ids"))
-
-    # Memory summary
-    from app.rpg.presentation.memory_inspector import build_memory_ui_summary
-    response["memory_summary"] = build_memory_ui_summary(simulation_state)
 
     return response
