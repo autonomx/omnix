@@ -34,7 +34,7 @@ from ..creator.regeneration import (
     merge_thread_lists,
 )
 from ..creator.schema import AdventureSetup
-from ..creator.validation import validate_adventure_setup_payload
+from ..creator.validation import validate_adventure_setup_payload, validate_adventure_setup_semantics
 from ..creator.world_player_actions import apply_player_action
 from ..session.runtime import build_session_from_start_result, save_runtime_session
 from .adventure_response_adapter import (
@@ -205,7 +205,14 @@ def validate_setup(payload: dict[str, Any]) -> dict[str, Any]:
     Returns the validation result dict with ``issues`` and ``blocking``.
     """
     result = validate_adventure_setup_payload(payload)
-    return {"success": True, "validation": result.to_dict()}
+    semantics = validate_adventure_setup_semantics(payload)
+    return {
+        "success": True,
+        "validation": result.to_dict(),
+        "warnings": semantics.get("warnings", []),
+        "notices": semantics.get("notices", []),
+        "semantic_scores": semantics.get("scores", {}),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +232,7 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
 
     data = apply_adventure_defaults(dict(payload))
     validation = validate_adventure_setup_payload(data)
+    semantics = validate_adventure_setup_semantics(data)
 
     if validation.is_blocking():
         return _build_preview_contract({
@@ -285,7 +293,7 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
             "setting": setup.setting,
             "premise": setup.premise,
             "counts": counts,
-            "warnings": [],
+            "warnings": semantics.get("warnings", []),
             "player_role": setup.player_role,
             "player_archetype": setup.player_archetype,
             "player_background": setup.player_background,
@@ -300,6 +308,8 @@ def preview_setup(payload: dict[str, Any]) -> dict[str, Any]:
         },
         "resolved_context": resolved_context,
         "opening_preview": opening_ctx,
+        "semantic_scores": semantics.get("scores", {}),
+        "notices": semantics.get("notices", []),
     }
 
     return _build_preview_contract(prepared)
