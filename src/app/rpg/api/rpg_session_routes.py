@@ -48,7 +48,7 @@ def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
     player_input = _safe_str(data.get("input")).strip()
     action = _safe_dict(data.get("action"))
 
-    if not action and player_input.startswith("{") and player_input.endswith("}"):
+    if not action and player_input.startswith("{"):
         try:
             parsed = json.loads(player_input)
             action = _safe_dict(parsed)
@@ -94,7 +94,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     equipment = _safe_dict(inventory_state.get("equipment"))
 
     runtime_state = _safe_dict(session.get("runtime_state"))
-    scene_state = _safe_dict(runtime_state.get("current_scene"))
+    scene_state = _safe_dict(runtime_state.get("current_scene")) or _safe_dict(sim.get("current_scene"))
     memory = _safe_dict(sim.get("memory"))
 
     payload: Dict[str, Any] = {
@@ -137,6 +137,8 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "skill_xp_result": raw_payload.get("skill_xp_result"),
         "level_up": _safe_list(raw_payload.get("level_up")),
         "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
+        "action_metadata": _safe_dict(raw_payload.get("action_metadata")),
+        "structured_narration": _safe_dict(raw_payload.get("structured_narration")),
         # Presentation
         "presentation": _safe_dict(raw_payload.get("presentation")),
     }

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -86,6 +87,281 @@ def _attach_npc_mind_context(actor, simulation_state):
         actor["last_decision"] = mind.get("last_decision") or {}
 
     return actor
+
+
+def _safe_str(value: Any) -> str:
+    return str(value) if value is not None else ""
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _titleize_action(action_type: str) -> str:
+    value = _safe_str(action_type).strip().replace("_", " ")
+    return value[:1].upper() + value[1:] if value else "Action"
+
+
+def _first_nonempty(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _extract_text_lines(text: str) -> List[str]:
+    lines = []
+    for part in _safe_str(text).splitlines():
+        part = part.strip()
+        if part:
+            lines.append(part)
+    return lines
+
+
+def _pick_npc_reply_text(narrative: str) -> str:
+    lines = _extract_text_lines(narrative)
+    if not lines:
+        return ""
+    for line in lines:
+        if '"' in line or "says" in line.lower() or "replies" in line.lower():
+            return line
+    return lines[0]
+
+
+def _build_scene_summary(scene: Dict[str, Any], llm_narrative: str) -> str:
+    scene = _safe_dict(scene)
+    title = _safe_str(scene.get("title")).strip()
+    location_name = _first_nonempty(
+        scene.get("location_name"),
+        scene.get("location_id"),
+        scene.get("scene_id"),
+    )
+    summary = _safe_str(scene.get("summary")).strip()
+
+    if summary:
+        if title:
+            return f"You are in {title}. {summary}"
+        return summary
+
+    llm_lines = _extract_text_lines(llm_narrative)
+    if llm_lines:
+        return llm_lines[0]
+
+    if title and location_name:
+        return f"You are in {title} at {location_name}."
+    if title:
+        return f"You are in {title}."
+    if location_name:
+        return f"You are at {location_name}."
+    return "The scene settles around you."
+
+
+def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    combat = _safe_dict(resolved.get("combat_result"))
+    action_type = _safe_str(narration_context.get("action_type")).strip()
+    action_label = _titleize_action(action_type)
+
+    outcome = _safe_str(combat.get("outcome")).strip().lower()
+    target_name = _first_nonempty(
+        combat.get("target_name"),
+        resolved.get("target_name"),
+        resolved.get("npc_name"),
+        resolved.get("target_id"),
+    )
+    damage = int(combat.get("damage", resolved.get("damage", 0)) or 0)
+
+    if outcome in ("hit", "crit", "graze", "miss"):
+        if outcome == "miss":
+            if target_name:
+                return f"**{action_label}:** You miss **{target_name}**."
+            return f"**{action_label}:** You miss."
+        if target_name:
+            return f"**{action_label}:** {outcome.title()} on **{target_name}** for **{damage} damage**."
+        return f"**{action_label}:** {outcome.title()} for **{damage} damage**."
+
+    if resolved.get("ok") is False:
+        message = _first_nonempty(resolved.get("message"), resolved.get("reason"))
+        if message:
+            return f"**{action_label}:** {message}"
+        return f"**{action_label}:** The attempt fails."
+
+    message = _first_nonempty(
+        resolved.get("message"),
+        resolved.get("summary"),
+        resolved.get("result_text"),
+    )
+    if message:
+        return f"**{action_label}:** {message}"
+
+    return f"**{action_label}:** You act."
+
+
+def _build_npc_reply_block(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> str:
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+
+    reply = _first_nonempty(
+        resolved.get("npc_reply"),
+        resolved.get("reply"),
+        resolved.get("dialogue"),
+        resolved.get("spoken_response"),
+    )
+    if reply:
+        return reply
+
+    target_name = _first_nonempty(
+        resolved.get("target_name"),
+        resolved.get("npc_name"),
+        resolved.get("target_id"),
+    )
+    picked = _pick_npc_reply_text(llm_narrative)
+    if picked:
+        if target_name and target_name.lower() not in picked.lower():
+            return f"**{target_name}:** {picked}"
+        return picked
+    return ""
+
+
+def _build_rewards_block(narration_context: Dict[str, Any]) -> str:
+    narration_context = _safe_dict(narration_context)
+    xp_result = _safe_dict(narration_context.get("xp_result"))
+    skill_xp_result = _safe_dict(narration_context.get("skill_xp_result"))
+    level_up = _safe_list(narration_context.get("level_up"))
+    skill_level_ups = _safe_list(narration_context.get("skill_level_ups"))
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+
+    parts: List[str] = []
+
+    player_xp = int(xp_result.get("player_xp", 0) or 0)
+    if player_xp > 0:
+        parts.append(f"**+{player_xp} XP**")
+
+    awards = _safe_dict(skill_xp_result.get("awards"))
+    skill_parts = []
+    for skill_id in sorted(awards.keys()):
+        amount = int(awards.get(skill_id, 0) or 0)
+        if amount > 0:
+            skill_parts.append(f"**+{amount} {skill_id} XP**")
+    if skill_parts:
+        parts.append(", ".join(skill_parts))
+
+    item_name = _first_nonempty(
+        resolved.get("item_name"),
+        _safe_dict(resolved.get("dropped_item")).get("name"),
+        _safe_dict(resolved.get("picked_up_item")).get("name"),
+        _safe_dict(resolved.get("item")).get("name"),
+    )
+    if item_name:
+        parts.append(f"**Item:** {item_name}")
+
+    if level_up:
+        parts.append("**Level Up!**")
+
+    if skill_level_ups:
+        labels = []
+        for entry in skill_level_ups:
+            entry = _safe_dict(entry)
+            skill_id = _first_nonempty(entry.get("skill_id"), entry.get("name"))
+            if skill_id:
+                labels.append(skill_id)
+        if labels:
+            parts.append("**Skill Up:** " + ", ".join(labels))
+
+    return " · ".join(parts)
+
+
+def _collect_emphasis_markers(scene: Dict[str, Any], narration_context: Dict[str, Any], blocks: Dict[str, str]) -> List[str]:
+    scene = _safe_dict(scene)
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    xp_result = _safe_dict(narration_context.get("xp_result"))
+    markers: List[str] = []
+
+    for value in [
+        scene.get("title"),
+        scene.get("location_name"),
+        resolved.get("target_name"),
+        resolved.get("npc_name"),
+        _safe_dict(resolved.get("item")).get("name"),
+        _safe_dict(resolved.get("picked_up_item")).get("name"),
+        _safe_dict(resolved.get("dropped_item")).get("name"),
+    ]:
+        text = _safe_str(value).strip()
+        if text:
+            markers.append(text)
+
+    damage = int(_safe_dict(resolved.get("combat_result")).get("damage", resolved.get("damage", 0)) or 0)
+    if damage > 0:
+        markers.append(f"{damage} damage")
+
+    player_xp = int(xp_result.get("player_xp", 0) or 0)
+    if player_xp > 0:
+        markers.append(f"+{player_xp} XP")
+
+    if _safe_list(narration_context.get("level_up")):
+        markers.append("Level Up!")
+
+    deduped: List[str] = []
+    seen = set()
+    for marker in markers:
+        key = marker.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(marker)
+    return deduped
+
+
+def apply_narration_emphasis(text: str, emphasis_markers: List[str]) -> str:
+    rendered = _safe_str(text)
+    for marker in sorted(_safe_list(emphasis_markers), key=len, reverse=True):
+        marker = _safe_str(marker).strip()
+        if not marker:
+            continue
+        # Only match standalone text (avoid breaking markdown or double wrapping)
+        pattern = rf"(?<!\*)\b{re.escape(marker)}\b(?!\*)"
+        rendered = re.sub(pattern, f"**{marker}**", rendered)
+    rendered = rendered.replace("****", "**")
+    return rendered
+
+
+def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> Dict[str, Any]:
+    scene_summary = _build_scene_summary(scene, llm_narrative)
+    action_result_line = _build_action_result_line(narration_context)
+    npc_reply_block = _build_npc_reply_block(scene, narration_context, llm_narrative)
+    rewards_block = _build_rewards_block(narration_context)
+
+    blocks = {
+        "scene_summary": scene_summary,
+        "action_result_line": action_result_line,
+        "npc_reply_block": npc_reply_block,
+        "rewards_block": rewards_block,
+    }
+    emphasis_markers = _collect_emphasis_markers(scene, narration_context, blocks)
+
+    ordered = [
+        scene_summary,
+        action_result_line,
+        f"**Reply:** {npc_reply_block}" if npc_reply_block else "",
+        f"**Rewards:** {rewards_block}" if rewards_block else "",
+    ]
+    markdown = "\n\n".join([part for part in ordered if _safe_str(part).strip()])
+    markdown = apply_narration_emphasis(markdown, emphasis_markers)
+
+    return {
+        "scene_summary": apply_narration_emphasis(scene_summary, emphasis_markers),
+        "action_result_line": apply_narration_emphasis(action_result_line, emphasis_markers),
+        "npc_reply_block": apply_narration_emphasis(npc_reply_block, emphasis_markers),
+        "rewards_block": apply_narration_emphasis(rewards_block, emphasis_markers),
+        "emphasis_markers": emphasis_markers,
+        "markdown": markdown,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -925,6 +1201,102 @@ class SceneNarrator:
 # Convenience functions (service layer)
 # ---------------------------------------------------------------------------
 
+def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_gateway: Any, tone: str = "dramatic") -> str:
+    """Generate narrative using LLM."""
+    # Inject player_input from narration_context into scene
+    scene = dict(scene or {})
+    if "player_input" not in scene and narration_context:
+        pi = narration_context.get("player_input", "")
+        if pi:
+            scene["player_input"] = str(pi)
+
+    try:
+        prompt = build_scene_prompt(scene, narration_context, tone=tone)
+        response = _llm_text(llm_gateway, prompt, context={"scene": scene})
+        parsed = parse_scene_response(response)
+        narrative = parsed.get("narrative") or ""
+        return narrative
+    except Exception:
+        return _simulate_narrative(scene, narration_context, tone)
+
+
+def _simulate_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], tone: str = "dramatic") -> str:
+    """Generate simulated narrative text without LLM.
+
+    Incorporates player input and scene actors for varied responses.
+    """
+    title = scene.get("title", "The Scene")
+    summary = scene.get("summary", "Events unfold around you.")
+    stakes = scene.get("stakes", "much is at stake")
+    player_input = narration_context.get("player_input", scene.get("player_input", ""))
+    actors_data = scene.get("actors", [])
+
+    # Extract NPC names from actor dicts
+    npc_names = []
+    if isinstance(actors_data, list):
+        for a in actors_data[:5]:
+            if isinstance(a, dict):
+                name = a.get("name", a.get("id", ""))
+                if name:
+                    npc_names.append(str(name))
+            else:
+                npc_names.append(str(a))
+    elif isinstance(actors_data, dict):
+        npc_names = list(actors_data.keys())[:5]
+
+    npc_text = f"{', '.join(npc_names)} {'are' if len(npc_names) != 1 else 'is'} {'present' if npc_names else 'absent'}" if npc_names else "You are alone for now"
+
+    # Acknowledge player's action
+    action_text = ""
+    if player_input:
+        action_lower = player_input.lower().strip()
+        if any(w in action_lower for w in ("look", "observe", "see", "examine", "search")):
+            action_text = "You carefully observe your surroundings. "
+        elif any(w in action_lower for w in ("talk", "speak", "ask", "question", "whisper", "say")):
+            npc = npc_names[0] if npc_names else "those nearby"
+            action_text = f"You try to speak with {npc}. "
+        elif any(w in action_lower for w in ("attack", "hit", "strike", "kill", "fight")):
+            npc = npc_names[0] if npc_names else "your target"
+            action_text = f"You lash out toward {npc}. "
+        elif any(w in action_lower for w in ("move", "go", "walk", "run", "leave", "head")):
+            loc = scene.get("location", "another area")
+            action_text = f"You start to move toward {loc}. "
+        elif any(w in action_lower for w in ("take", "grab", "pick up", "use")):
+            action_text = "You reach for something. "
+        else:
+            action_text = f"Your words echo: \"{player_input[:80]}\". "
+    else:
+        action_text = "You hesitate, weighing your options. "
+
+    title_scene = f"{title}\n\n" if title != "The Scene" else ""
+
+    return (
+        f"{title_scene}{action_text}"
+        f"{summary}\n\n"
+        f"{npc_text}, the weight of the moment pressing down. "
+        f"The stakes are clear: {stakes}. "
+        f"The air is thick with {tone} tension as the scene unfolds."
+    )
+
+
+def narrate_scene(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_gateway: Any | None = None, tone: str = "dramatic") -> Dict[str, Any]:
+    scene = _safe_dict(scene)
+    narration_context = _safe_dict(narration_context)
+
+    if llm_gateway:
+        llm_narrative = _generate_live_narrative(scene, narration_context, llm_gateway=llm_gateway, tone=tone)
+    else:
+        llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
+
+    structured = build_structured_narration(scene, narration_context, llm_narrative)
+
+    return {
+        "narrative": _safe_str(structured.get("markdown")),
+        "structured_narration": structured,
+        "raw_llm_narrative": llm_narrative,
+    }
+
+
 def play_scene(
     scene: Dict[str, Any],
     state: Dict[str, Any],
@@ -970,7 +1342,7 @@ def play_scene(
     }
 
 
-def apply_narration_emphasis(narration_payload: dict) -> dict:
+def apply_legacy_narration_emphasis(narration_payload: dict) -> dict:
     """Apply markdown emphasis to important narration elements.
 
     Deterministically formats structured result fields — does NOT ask

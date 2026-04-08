@@ -748,8 +748,8 @@ class TestNarrationEmphasis:
 
     @pytest.fixture(autouse=True)
     def _setup(self):
-        from app.rpg.ai.world_scene_narrator import apply_narration_emphasis
-        self.apply = apply_narration_emphasis
+        from app.rpg.ai.world_scene_narrator import apply_legacy_narration_emphasis
+        self.apply = apply_legacy_narration_emphasis
 
     def test_bold_damage(self):
         result = self.apply({"narration": "You deal 15 damage to the enemy."})

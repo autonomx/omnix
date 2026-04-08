@@ -77,6 +77,25 @@ class AppLLMGateway:
             return ""
         return str(response).strip()
 
+    def complete(self, prompt: str) -> Dict[str, Any]:
+        response = self.generate(prompt)
+        if isinstance(response, dict):
+            return {
+                "text": str(response.get("text") or response.get("content") or ""),
+                "raw": response,
+            }
+        return {"text": str(response or ""), "raw": response}
+
+    def complete_json(self, prompt: str) -> Dict[str, Any]:
+        response = self.complete(prompt)
+        text = str(response.get("text") or "").strip()
+        if not text:
+            return {}
+        try:
+            return json.loads(text)
+        except Exception:
+            return {}
+
     def call(
         self,
         method: str,

@@ -1,366 +1,529 @@
-1) Fix drop_world_item() to preserve full item records
-File: src/app/rpg/items/world_items.py
-diff --git a/src/app/rpg/items/world_items.py b/src/app/rpg/items/world_items.py
-index 0be75c1..6a1c4d2 100644
---- a/src/app/rpg/items/world_items.py
-+++ b/src/app/rpg/items/world_items.py
-@@ -1,6 +1,6 @@
- from __future__ import annotations
- from typing import Any, Dict, List
- 
-@@
- def _safe_list(v: Any) -> List[Any]:
-     return list(v) if isinstance(v, list) else []
- 
-+def _copy_item_record(item: Dict[str, Any]) -> Dict[str, Any]:
-+    item = _safe_dict(item)
-+    return {
-+        "item_id": _safe_str(item.get("item_id")),
-+        "qty": _safe_int(item.get("qty"), 1) or 1,
-+        "name": _safe_str(item.get("name")),
-+        "category": _safe_str(item.get("category")),
-+        "tags": _safe_list(item.get("tags")),
-+        "description": _safe_str(item.get("description")),
-+        "combat_stats": _safe_dict(item.get("combat_stats")),
-+        "equipment": _safe_dict(item.get("equipment")),
-+        "quality": _safe_dict(item.get("quality")),
-+        "value": _safe_int(item.get("value"), 0),
-+        "instance_id": _safe_str(item.get("instance_id")),
-+        "durability": _safe_int(item.get("durability"), 100),
-+    }
-+
-@@
--def drop_world_item(
--    simulation_state: Dict[str, Any],
--    item_id: str,
--    location_id: str,
--    qty: int = 1,
--) -> Dict[str, Any]:
-+def drop_world_item(
-+    simulation_state: Dict[str, Any],
-+    item_or_item_id: Any,
-+    location_id: str,
-+    qty: int = 1,
-+) -> Dict[str, Any]:
-     simulation_state = ensure_world_item_state(simulation_state)
-     world_items = _safe_dict(simulation_state.get("world_items"))
-     by_location = _safe_dict(world_items.get("by_location"))
-     items = _safe_list(by_location.get(location_id))
--
--    dropped_item = {
--        "item_id": item_id,
--        "qty": int(qty or 1),
--        "instance_id": f"wi:{location_id}:{item_id}:{len(items)}",
--    }
-+    if isinstance(item_or_item_id, dict):
-+        dropped_item = _copy_item_record(item_or_item_id)
-+        dropped_item["qty"] = int(qty or dropped_item.get("qty", 1) or 1)
-+        dropped_item["instance_id"] = _safe_str(dropped_item.get("instance_id")) or f"wi:{location_id}:{_safe_str(dropped_item.get('item_id'))}:{len(items)}"
-+        item_id = _safe_str(dropped_item.get("item_id"))
-+    else:
-+        item_id = _safe_str(item_or_item_id)
-+        dropped_item = {
-+            "item_id": item_id,
-+            "qty": int(qty or 1),
-+            "instance_id": f"wi:{location_id}:{item_id}:{len(items)}",
-+        }
-     items.append(dropped_item)
-     by_location[location_id] = items
-     simulation_state["world_items"] = {"by_location": by_location}
-@@
-         "result": {
-             "ok": True,
-             "action_type": "drop_item",
-             "item_id": item_id,
-             "location_id": location_id,
-             "qty": int(qty or 1),
-             "dropped_item": dropped_item,
-         },
-     }
-2) Add inventory helper to fetch the full item being dropped
-File: src/app/rpg/items/inventory_state.py
-diff --git a/src/app/rpg/items/inventory_state.py b/src/app/rpg/items/inventory_state.py
-index <old>..<new> 100644
---- a/src/app/rpg/items/inventory_state.py
-+++ b/src/app/rpg/items/inventory_state.py
-@@
- def find_inventory_item(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
-     ...
- 
-+def get_inventory_item_for_drop(inventory_state: Dict[str, Any], item_id: str) -> Dict[str, Any]:
-+    inventory_state = normalize_inventory_state(inventory_state)
-+    for item in _safe_list(inventory_state.get("items")):
-+        item = _safe_dict(item)
-+        if _safe_str(item.get("item_id")) == _safe_str(item_id):
-+            return dict(item)
-+    return {}
-
-If you maintain __all__ exports, add get_inventory_item_for_drop.
-
-3) Fix drop route to pass full item record, not just item_id
-File: src/app/rpg/api/rpg_player_routes.py
-diff --git a/src/app/rpg/api/rpg_player_routes.py b/src/app/rpg/api/rpg_player_routes.py
-index bae7e0d..f09b9f1 100644
---- a/src/app/rpg/api/rpg_player_routes.py
-+++ b/src/app/rpg/api/rpg_player_routes.py
-@@ -1,6 +1,6 @@
-@@
--    from app.rpg.items.inventory_state import remove_inventory_item
-+    from app.rpg.items.inventory_state import remove_inventory_item, get_inventory_item_for_drop
-     from app.rpg.items.world_items import drop_world_item
-@@
-         if session and isinstance(session, dict):
-             sim = dict(session.get("simulation_state") or {})
-             runtime_state = dict(session.get("runtime_state") or {})
-             ps = dict(sim.get("player_state") or {})
-             inv = dict(ps.get("inventory_state") or {})
-+            dropped_item = get_inventory_item_for_drop(inv, item_id)
-             inv = remove_inventory_item(inv, item_id, qty=1)
-             ps["inventory_state"] = inv
-             sim["player_state"] = ps
-@@
--            drop_result = drop_world_item(sim, item_id, location_id, qty=1)
-+            drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": 1}
-+            drop_result = drop_world_item(sim, drop_payload, location_id, qty=1)
-             sim = dict(drop_result.get("simulation_state") or sim)
-             session["simulation_state"] = sim
-             save_runtime_session(session)
-             return jsonify({
-                 "ok": True,
-                 "item_id": item_id,
-                 "location_id": location_id,
-                 "result": dict(drop_result.get("result") or {}),
--                "equipment": dict(dict(ps.get("inventory_state") or {}).get("equipment") or {}),
-+                "equipment": dict(dict(inv or {}).get("equipment") or {}),
-             })
-4) Fix runtime.py drop action to pass full item record
-File: src/app/rpg/session/runtime.py
 diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
-index 41cbf98..8c0d6e4 100644
 --- a/src/app/rpg/session/runtime.py
 +++ b/src/app/rpg/session/runtime.py
-@@ -28,6 +28,7 @@ from app.rpg.items.inventory_state import (
-     equip_inventory_item,
-     unequip_inventory_slot,
-     remove_inventory_item,
-+    get_inventory_item_for_drop,
+@@ -44,6 +44,7 @@ from app.rpg.items.world_items import (
+     pickup_world_item,
  )
-@@
- def _drop_item_action(
-     simulation_state: Dict[str, Any],
-     runtime_state: Dict[str, Any],
-@@
-     qty = int(action.get("qty", 1) or 1)
-     player_state = _safe_dict(simulation_state.get("player_state"))
-     inventory_state = _safe_dict(player_state.get("inventory_state"))
-+    dropped_item = get_inventory_item_for_drop(inventory_state, item_id)
-     inventory_state = remove_inventory_item(inventory_state, item_id, qty=qty)
-     player_state["inventory_state"] = inventory_state
-     simulation_state["player_state"] = player_state
+ from app.rpg.llm_app_gateway import build_app_llm_gateway
+ from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
+ from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
+@@ -731,17 +732,41 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
+         player_input = _structured_action_prompt(action)
+     player_input = player_input or action_type.replace("_", " ").strip() or "Wait"
  
-     location_id = _get_player_location_id(simulation_state, runtime_state)
--    result = drop_world_item(simulation_state, item_id, location_id, qty=qty)
-+    drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": qty}
-+    result = drop_world_item(simulation_state, drop_payload, location_id, qty=qty)
-     next_state = _safe_dict(result.get("simulation_state"))
-     return {
-         "simulation_state": next_state,
-         "result": _safe_dict(result.get("result")),
+     llm_gateway = build_app_llm_gateway()
+-    advisory = get_action_advisory(
+-        llm_gateway=llm_gateway,
+-        player_input=player_input,
+-        simulation_state=simulation_state,
+-        runtime_state=runtime_state,
+-        candidate_action=action,
+-    )
++    advisory = {}
++    runtime_state.setdefault("llm_records", [])
++    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
++    current_tick = int(runtime_state.get("tick", 0) or 0)
++
++    if mode == "live":
++        advisory = get_action_advisory(
++            llm_gateway=llm_gateway,
++            player_input=player_input,
++            simulation_state=simulation_state,
++            runtime_state=runtime_state,
++            candidate_action=action,
++        )
++        runtime_state["llm_records"].append({
++            "type": "action_advisory",
++            "tick": current_tick,
++            "player_input": player_input,
++            "candidate_action": {
++                "action_type": _safe_str(action.get("action_type")),
++                "target_id": _safe_str(action.get("target_id")),
++                "npc_id": _safe_str(action.get("npc_id")),
++                "item_id": _safe_str(action.get("item_id")),
++            },
++            "output": _safe_dict(advisory),
++        })
++    else:
++        for record in _safe_list(runtime_state.get("llm_records")):
++            record = _safe_dict(record)
++            if record.get("type") == "action_advisory" and int(record.get("tick", -1) or -1) == current_tick:
++                advisory = _safe_dict(record.get("output"))
++                break
++
+     if advisory:
+         action = merge_action_advisory(action, advisory)
+         action_type = _safe_str(action.get("action_type")).strip()
+ 
+     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
+     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
+@@ -765,8 +790,14 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
+         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
      }
-5) Remove duplicate equipment truth from canonical state
-
-Right now _ensure_simulation_state() still mirrors equipment into player_state["equipment"], while the canonical source is player_state["inventory_state"]["equipment"]. That should stop.
-
-File: src/app/rpg/session/runtime.py
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
-index 41cbf98..3c7cafe 100644
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@ -168,7 +168,6 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-     player_state = ensure_player_progression_state(player_state)
-     inventory_state = _safe_dict(player_state.get("inventory_state"))
-     player_state["inventory_state"] = inventory_state
--    player_state["equipment"] = _extract_equipment(player_state)
-     simulation_state["player_state"] = player_state
-     return simulation_state
-Also patch any remaining payload builder that reads player_state["equipment"]
-
-You already fixed most of these, but do a repo-wide search and replace any remaining canonical reads:
-
-player_state.get("equipment")
-with:
-_safe_dict(_safe_dict(player_state.get("inventory_state")).get("equipment"))
-6) Clean dead code after the new apply_turn() return
-
-The latest review showed old tail code still left after the new return in apply_turn(). Remove it entirely so the function has one flow and one end.
-
-File: src/app/rpg/session/runtime.py
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
-index 41cbf98..2be6d30 100644
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@ -730,20 +730,3 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None = None) -> Dict[str, Any]:
+ 
+-    narration_result = narrate_scene(current_scene, narration_context, tone="dramatic")
++    narration_result = narrate_scene(
++        current_scene,
++        narration_context,
++        llm_gateway=llm_gateway,
++        tone="dramatic",
++    )
+     summary = summarize_simulation_step(step_result)
+ 
+     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
+@@ -805,6 +836,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
+             "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
+             "level_up": _safe_list(progression.get("level_up")),
+             "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
+             "action_metadata": _safe_dict(action.get("metadata")),
++            "structured_narration": _safe_dict(narration_result.get("structured_narration")),
              "presentation": build_runtime_presentation_payload(after_state),
          },
      }
--    turn_history = _safe_list(runtime_state.get("turn_history"))
--    ...
--    # DELETE ALL REMAINING OLD/UNREACHABLE APPLY_TURN TAIL CODE BELOW THE NEW RETURN
--    # The function must end immediately after the return above.
-
-Do this as a real deletion, not a comment.
-
-7) Keep level_up shape consistent as a list everywhere
-
-You already fixed this in build_frontend_bootstrap_payload(). Do the same check in _build_turn_payload() and any other response adapters.
-
-File: src/app/rpg/api/rpg_session_routes.py
 diff --git a/src/app/rpg/api/rpg_session_routes.py b/src/app/rpg/api/rpg_session_routes.py
-index 21766d9..7fcb0b1 100644
 --- a/src/app/rpg/api/rpg_session_routes.py
 +++ b/src/app/rpg/api/rpg_session_routes.py
-@@ -90,7 +90,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
-         "combat_result": raw_payload.get("combat_result"),
-         "xp_result": raw_payload.get("xp_result"),
-         "skill_xp_result": raw_payload.get("skill_xp_result"),
--        "level_up": raw_payload.get("level_up", False),
-+        "level_up": _safe_list(raw_payload.get("level_up")),
+@@ -137,6 +137,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+         "level_up": _safe_list(raw_payload.get("level_up")),
          "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
+         "action_metadata": _safe_dict(raw_payload.get("action_metadata")),
++        "structured_narration": _safe_dict(raw_payload.get("structured_narration")),
+         # Presentation
          "presentation": _safe_dict(raw_payload.get("presentation")),
      }
-8) Decide whether stat_bonus is informational or applied XP
-
-Right now _award_progression() reports stat_bonus in xp_result, but does not appear to add it to awarded XP. That is misleading. Either apply it or rename it. The cleaner fix is to apply it, bounded.
-
-File: src/app/rpg/session/runtime.py
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
-index 41cbf98..9e4b1a6 100644
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@ -285,10 +285,12 @@ def _award_progression(
- ) -> Dict[str, Any]:
-     player_state = _safe_dict(simulation_state.get("player_state"))
-     action_xp = int(_safe_dict(resolved_result.get("xp_result")).get("player_xp", 0) or 0)
-+    stat_bonus = int(compute_stat_influence_bonus(player_state, resolved_result) or 0)
-+    total_player_xp = max(0, action_xp + stat_bonus)
-     skill_xp_awards = _safe_dict(_safe_dict(resolved_result.get("skill_xp_result")).get("awards"))
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+--- a/src/app/rpg/ai/world_scene_narrator.py
++++ b/src/app/rpg/ai/world_scene_narrator.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
  
--    if action_xp > 0:
--        player_state = award_player_xp(player_state, action_xp, source=_safe_str(resolved_result.get("action_type")))
-+    if total_player_xp > 0:
-+        player_state = award_player_xp(player_state, total_player_xp, source=_safe_str(resolved_result.get("action_type")))
+ import json
++import re
+ from typing import Any, Dict, List
+ 
 @@
-         "xp_result": {
--            "player_xp": action_xp,
--            "stat_bonus": compute_stat_influence_bonus(player_state, resolved_result),
-+            "player_xp": total_player_xp,
-+            "base_player_xp": action_xp,
-+            "stat_bonus": stat_bonus,
-         },
-
-If you do not want stats to modify XP, then instead remove stat_bonus from xp_result.
-
-9) Add one real unmocked combat integration test
-
-The current combat test monkeypatches resolve_player_action(), so it proves payload wiring, not real combat mechanics. Add one unmocked test that goes through the real resolver.
-
-File: src/tests/unit/rpg/test_phase183c_runtime_authority.py
-
-Append:
-
-diff --git a/src/tests/unit/rpg/test_phase183c_runtime_authority.py b/src/tests/unit/rpg/test_phase183c_runtime_authority.py
-index <new>..<newer> 100644
---- a/src/tests/unit/rpg/test_phase183c_runtime_authority.py
-+++ b/src/tests/unit/rpg/test_phase183c_runtime_authority.py
+ def _safe_str(value: Any) -> str:
+     return str(value) if value is not None else ""
 @@
- def test_attack_turn_surfaces_combat_result(runtime_module, monkeypatch):
-     ...
-     assert payload["skill_xp_result"]["awards"]["swordsmanship"] == 3
+ def _safe_list(value: Any) -> List[Any]:
+     return list(value) if isinstance(value, list) else []
 +
 +
-+def test_attack_turn_uses_real_resolver(runtime_module, monkeypatch):
-+    session = _base_session()
++def _titleize_action(action_type: str) -> str:
++    value = _safe_str(action_type).strip().replace("_", " ")
++    return value[:1].upper() + value[1:] if value else "Action"
 +
-+    monkeypatch.setattr(runtime_module, "load_runtime_session", lambda session_id: session)
-+    monkeypatch.setattr(runtime_module, "save_runtime_session", lambda s: s)
-+    monkeypatch.setattr(
-+        runtime_module,
-+        "step_simulation_state",
-+        lambda setup: {"next_setup": setup, "after_state": setup.get("metadata", {}).get("simulation_state", {})},
++
++def _first_nonempty(*values: Any) -> str:
++    for value in values:
++        text = _safe_str(value).strip()
++        if text:
++            return text
++    return ""
++
++
++def _extract_text_lines(text: str) -> List[str]:
++    lines = []
++    for part in _safe_str(text).splitlines():
++        part = part.strip()
++        if part:
++            lines.append(part)
++    return lines
++
++
++def _pick_npc_reply_text(narrative: str) -> str:
++    lines = _extract_text_lines(narrative)
++    if not lines:
++        return ""
++    for line in lines:
++        if '"' in line or "says" in line.lower() or "replies" in line.lower():
++            return line
++    return lines[0]
++
++
++def _build_scene_summary(scene: Dict[str, Any], llm_narrative: str) -> str:
++    scene = _safe_dict(scene)
++    title = _safe_str(scene.get("title")).strip()
++    location_name = _first_nonempty(
++        scene.get("location_name"),
++        scene.get("location_id"),
++        scene.get("scene_id"),
 +    )
-+    monkeypatch.setattr(
-+        runtime_module,
-+        "generate_scenes_from_simulation",
-+        lambda state: [runtime_module._safe_dict(session["runtime_state"]["current_scene"])],
-+    )
-+    monkeypatch.setattr(runtime_module, "summarize_simulation_step", lambda step: ["combat resolved"])
-+    monkeypatch.setattr(
-+        runtime_module,
-+        "narrate_scene",
-+        lambda scene, ctx, tone="dramatic": {"narrative": "Combat resolves."},
-+    )
++    summary = _safe_str(scene.get("summary")).strip()
 +
-+    # Equip the sword first
-+    session["simulation_state"]["player_state"]["inventory_state"]["equipment"] = {
-+        "main_hand": session["simulation_state"]["player_state"]["inventory_state"]["items"][0]
++    if summary:
++        if title:
++            return f"You are in {title}. {summary}"
++        return summary
++
++    llm_lines = _extract_text_lines(llm_narrative)
++    if llm_lines:
++        return llm_lines[0]
++
++    if title and location_name:
++        return f"You are in {title} at {location_name}."
++    if title:
++        return f"You are in {title}."
++    if location_name:
++        return f"You are at {location_name}."
++    return "The scene settles around you."
++
++
++def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
++    narration_context = _safe_dict(narration_context)
++    resolved = _safe_dict(narration_context.get("resolved_result"))
++    combat = _safe_dict(resolved.get("combat_result"))
++    action_type = _safe_str(narration_context.get("action_type")).strip()
++    action_label = _titleize_action(action_type)
++
++    outcome = _safe_str(combat.get("outcome")).strip().lower()
++    target_name = _first_nonempty(
++        combat.get("target_name"),
++        resolved.get("target_name"),
++        resolved.get("npc_name"),
++        resolved.get("target_id"),
++    )
++    damage = int(combat.get("damage", resolved.get("damage", 0)) or 0)
++
++    if outcome in ("hit", "crit", "graze", "miss"):
++        if outcome == "miss":
++            if target_name:
++                return f"**{action_label}:** You miss **{target_name}**."
++            return f"**{action_label}:** You miss."
++        if target_name:
++            return f"**{action_label}:** {outcome.title()} on **{target_name}** for **{damage} damage**."
++        return f"**{action_label}:** {outcome.title()} for **{damage} damage**."
++
++    if resolved.get("ok") is False:
++        message = _first_nonempty(resolved.get("message"), resolved.get("reason"))
++        if message:
++            return f"**{action_label}:** {message}"
++        return f"**{action_label}:** The attempt fails."
++
++    message = _first_nonempty(
++        resolved.get("message"),
++        resolved.get("summary"),
++        resolved.get("result_text"),
++    )
++    if message:
++        return f"**{action_label}:** {message}"
++
++    return f"**{action_label}:** You act."
++
++
++def _build_npc_reply_block(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> str:
++    narration_context = _safe_dict(narration_context)
++    resolved = _safe_dict(narration_context.get("resolved_result"))
++
++    reply = _first_nonempty(
++        resolved.get("npc_reply"),
++        resolved.get("reply"),
++        resolved.get("dialogue"),
++        resolved.get("spoken_response"),
++    )
++    if reply:
++        return reply
++
++    target_name = _first_nonempty(
++        resolved.get("target_name"),
++        resolved.get("npc_name"),
++        resolved.get("target_id"),
++    )
++    picked = _pick_npc_reply_text(llm_narrative)
++    if picked:
++        if target_name and target_name.lower() not in picked.lower():
++            return f"**{target_name}:** {picked}"
++        return picked
++    return ""
++
++
++def _build_rewards_block(narration_context: Dict[str, Any]) -> str:
++    narration_context = _safe_dict(narration_context)
++    xp_result = _safe_dict(narration_context.get("xp_result"))
++    skill_xp_result = _safe_dict(narration_context.get("skill_xp_result"))
++    level_up = _safe_list(narration_context.get("level_up"))
++    skill_level_ups = _safe_list(narration_context.get("skill_level_ups"))
++    resolved = _safe_dict(narration_context.get("resolved_result"))
++
++    parts: List[str] = []
++
++    player_xp = int(xp_result.get("player_xp", 0) or 0)
++    if player_xp > 0:
++        parts.append(f"**+{player_xp} XP**")
++
++    awards = _safe_dict(skill_xp_result.get("awards"))
++    skill_parts = []
++    for skill_id in sorted(awards.keys()):
++        amount = int(awards.get(skill_id, 0) or 0)
++        if amount > 0:
++            skill_parts.append(f"**+{amount} {skill_id} XP**")
++    if skill_parts:
++        parts.append(", ".join(skill_parts))
++
++    item_name = _first_nonempty(
++        resolved.get("item_name"),
++        _safe_dict(resolved.get("dropped_item")).get("name"),
++        _safe_dict(resolved.get("picked_up_item")).get("name"),
++        _safe_dict(resolved.get("item")).get("name"),
++    )
++    if item_name:
++        parts.append(f"**Item:** {item_name}")
++
++    if level_up:
++        parts.append("**Level Up!**")
++
++    if skill_level_ups:
++        labels = []
++        for entry in skill_level_ups:
++            entry = _safe_dict(entry)
++            skill_id = _first_nonempty(entry.get("skill_id"), entry.get("name"))
++            if skill_id:
++                labels.append(skill_id)
++        if labels:
++            parts.append("**Skill Up:** " + ", ".join(labels))
++
++    return " · ".join(parts)
++
++
++def _collect_emphasis_markers(scene: Dict[str, Any], narration_context: Dict[str, Any], blocks: Dict[str, str]) -> List[str]:
++    scene = _safe_dict(scene)
++    narration_context = _safe_dict(narration_context)
++    resolved = _safe_dict(narration_context.get("resolved_result"))
++    xp_result = _safe_dict(narration_context.get("xp_result"))
++    markers: List[str] = []
++
++    for value in [
++        scene.get("title"),
++        scene.get("location_name"),
++        resolved.get("target_name"),
++        resolved.get("npc_name"),
++        _safe_dict(resolved.get("item")).get("name"),
++        _safe_dict(resolved.get("picked_up_item")).get("name"),
++        _safe_dict(resolved.get("dropped_item")).get("name"),
++    ]:
++        text = _safe_str(value).strip()
++        if text:
++            markers.append(text)
++
++    damage = int(_safe_dict(resolved.get("combat_result")).get("damage", resolved.get("damage", 0)) or 0)
++    if damage > 0:
++        markers.append(f"{damage} damage")
++
++    player_xp = int(xp_result.get("player_xp", 0) or 0)
++    if player_xp > 0:
++        markers.append(f"+{player_xp} XP")
++
++    if _safe_list(narration_context.get("level_up")):
++        markers.append("Level Up!")
++
++    deduped: List[str] = []
++    seen = set()
++    for marker in markers:
++        key = marker.lower()
++        if key not in seen:
++            seen.add(key)
++            deduped.append(marker)
++    return deduped
++
++
++def apply_narration_emphasis(text: str, emphasis_markers: List[str]) -> str:
++    rendered = _safe_str(text)
++    for marker in sorted(_safe_list(emphasis_markers), key=len, reverse=True):
++        marker = _safe_str(marker).strip()
++        if not marker:
++            continue
++        pattern = re.escape(marker)
++        rendered = re.sub(pattern, f"**{marker}**", rendered)
++    rendered = rendered.replace("****", "**")
++    return rendered
++
++
++def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> Dict[str, Any]:
++    scene_summary = _build_scene_summary(scene, llm_narrative)
++    action_result_line = _build_action_result_line(narration_context)
++    npc_reply_block = _build_npc_reply_block(scene, narration_context, llm_narrative)
++    rewards_block = _build_rewards_block(narration_context)
++
++    blocks = {
++        "scene_summary": scene_summary,
++        "action_result_line": action_result_line,
++        "npc_reply_block": npc_reply_block,
++        "rewards_block": rewards_block,
++    }
++    emphasis_markers = _collect_emphasis_markers(scene, narration_context, blocks)
++
++    ordered = [
++        scene_summary,
++        action_result_line,
++        f"**Reply:** {npc_reply_block}" if npc_reply_block else "",
++        f"**Rewards:** {rewards_block}" if rewards_block else "",
++    ]
++    markdown = "\n\n".join([part for part in ordered if _safe_str(part).strip()])
++    markdown = apply_narration_emphasis(markdown, emphasis_markers)
++
++    return {
++        "scene_summary": apply_narration_emphasis(scene_summary, emphasis_markers),
++        "action_result_line": apply_narration_emphasis(action_result_line, emphasis_markers),
++        "npc_reply_block": apply_narration_emphasis(npc_reply_block, emphasis_markers),
++        "rewards_block": apply_narration_emphasis(rewards_block, emphasis_markers),
++        "emphasis_markers": emphasis_markers,
++        "markdown": markdown,
++    }
+@@
+ def narrate_scene(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_gateway: Any | None = None, tone: str = "dramatic") -> Dict[str, Any]:
+     scene = _safe_dict(scene)
+     narration_context = _safe_dict(narration_context)
+@@
+-    if llm_gateway:
+-        narrative = _generate_live_narrative(scene, narration_context, llm_gateway=llm_gateway, tone=tone)
+-    else:
+-        narrative = _simulate_narrative(scene, narration_context, tone=tone)
+-
+-    return {
+-        "narrative": narrative,
+-    }
++    if llm_gateway:
++        llm_narrative = _generate_live_narrative(scene, narration_context, llm_gateway=llm_gateway, tone=tone)
++    else:
++        llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
++
++    structured = build_structured_narration(scene, narration_context, llm_narrative)
++
++    return {
++        "narrative": _safe_str(structured.get("markdown")),
++        "structured_narration": structured,
++        "raw_llm_narrative": llm_narrative,
++    }
+diff --git a/src/static/rpg/rpg.js b/src/static/rpg/rpg.js
+--- a/src/static/rpg/rpg.js
++++ b/src/static/rpg/rpg.js
+@@ -118,6 +118,29 @@
+         return String(value || '');
+     }
+ 
++    function buildStructuredNarrationMarkdown(update) {
++        var sn = (update && update.structured_narration) || {};
++        if (!sn || typeof sn !== 'object') return '';
++        var parts = [];
++        if (sn.scene_summary) {
++            parts.push(sn.scene_summary);
++        }
++        if (sn.action_result_line) {
++            parts.push(sn.action_result_line);
++        }
++        if (sn.npc_reply_block) {
++            parts.push('**Reply:** ' + sn.npc_reply_block);
++        }
++        if (sn.rewards_block) {
++            parts.push('**Rewards:** ' + sn.rewards_block);
++        }
++        return parts.join('\n\n').trim();
 +    }
 +
-+    result = runtime_module.apply_turn(
-+        "sess_test_authority",
-+        "attack the bandit",
-+        action={"action_type": "attack_melee", "target": session["simulation_state"]["npcs"]["npc_bandit"]},
-+    )
++    function getNarrationMarkdown(update) {
++        var structured = buildStructuredNarrationMarkdown(update);
++        return structured || String((update && update.narration) || '');
++    }
 +
-+    assert result["ok"] is True
-+    payload = result["payload"]
-+    assert isinstance(payload["combat_result"], dict)
-+    assert payload["combat_result"].get("outcome") in ("hit", "miss", "crit", "graze", None)
+@@ -842,7 +865,7 @@
+         var narrationEl = panel.querySelector('.rpg-narration');
+         if (narrationEl) {
+-            var narration = String(update.narration || '');
++            var narration = getNarrationMarkdown(update);
+             if (window.marked && typeof window.marked.parse === 'function') {
+                 narrationEl.innerHTML = window.marked.parse(narration);
+             } else {
+diff --git a/src/tests/unit/rpg/test_phase184b_structured_narration.py b/src/tests/unit/rpg/test_phase184b_structured_narration.py
+new file mode 100644
+--- /dev/null
++++ b/src/tests/unit/rpg/test_phase184b_structured_narration.py
+@@ -0,0 +1,89 @@
++from app.rpg.ai.world_scene_narrator import build_structured_narration
++
++
++def test_build_structured_narration_includes_required_blocks():
++    scene = {
++        "scene_id": "scene:tavern",
++        "title": "The Rusty Flagon Tavern",
++        "location_name": "Rusty Flagon",
++        "summary": "Patrons glance over as tension gathers near the hearth.",
++    }
++    narration_context = {
++        "action_type": "persuade",
++        "resolved_result": {
++            "ok": True,
++            "target_name": "Sara",
++            "message": "You get Sara's attention.",
++            "npc_reply": '"All right," Sara says. "I will listen."',
++        },
++        "xp_result": {"player_xp": 12},
++        "skill_xp_result": {"awards": {"persuasion": 3}},
++        "level_up": [],
++        "skill_level_ups": [],
++    }
++    result = build_structured_narration(scene, narration_context, "Sara watches you carefully.")
++
++    assert result["scene_summary"]
++    assert result["action_result_line"]
++    assert result["npc_reply_block"]
++    assert result["rewards_block"]
++    assert isinstance(result["emphasis_markers"], list)
++    assert "**+12 XP**" in result["rewards_block"] or "+12 XP" in result["rewards_block"]
++
++
++def test_build_structured_narration_marks_damage_and_level_up():
++    scene = {
++        "scene_id": "scene:road",
++        "title": "Old North Road",
++        "location_name": "Old North Road",
++    }
++    narration_context = {
++        "action_type": "attack_melee",
++        "resolved_result": {
++            "ok": True,
++            "target_name": "Bandit",
++            "combat_result": {
++                "outcome": "hit",
++                "damage": 18,
++                "target_name": "Bandit",
++            },
++        },
++        "xp_result": {"player_xp": 20},
++        "skill_xp_result": {"awards": {"swordsmanship": 4}},
++        "level_up": [{"level": 2}],
++        "skill_level_ups": [{"skill_id": "swordsmanship"}],
++    }
++    result = build_structured_narration(scene, narration_context, "")
++
++    assert "18 damage" in result["markdown"]
++    assert "Level Up!" in result["markdown"]
++    assert result["action_result_line"]
++
++
++def test_build_structured_narration_falls_back_without_npc_reply():
++    scene = {
++        "scene_id": "scene:market",
++        "title": "Market Square",
++    }
++    narration_context = {
++        "action_type": "investigate",
++        "resolved_result": {
++            "ok": True,
++            "message": "You find fresh boot prints near the cart.",
++        },
++        "xp_result": {"player_xp": 5},
++        "skill_xp_result": {"awards": {"investigation": 2}},
++        "level_up": [],
++        "skill_level_ups": [],
++    }
++    result = build_structured_narration(scene, narration_context, "Vendors keep their distance as you inspect the square.")
++
++    assert result["scene_summary"]
++    assert result["action_result_line"]
++    assert result["markdown"]
 
-This is still lightweight, but it stops fully mocking the resolver.
+Run these after applying:
 
-10) Tighten existing integration assertions around full item drop fidelity
-File: src/tests/unit/rpg/test_phase183b_integration.py
-
-Add:
-
-diff --git a/src/tests/unit/rpg/test_phase183b_integration.py b/src/tests/unit/rpg/test_phase183b_integration.py
-index 7390990..c2d4d88 100644
---- a/src/tests/unit/rpg/test_phase183b_integration.py
-+++ b/src/tests/unit/rpg/test_phase183b_integration.py
-@@
- class TestItemActions:
-@@
-     def test_world_item_spawn_and_list(self):
-         ...
- 
-+    def test_drop_preserves_item_metadata(self):
-+        sim = self.ensure_world({})
-+        dropped = {
-+            "item_id": "iron_sword",
-+            "name": "Iron Sword",
-+            "qty": 1,
-+            "equipment": {"slot": "main_hand"},
-+            "combat_stats": {"damage": 28, "weapon_type": "sword"},
-+            "quality": {"tier": 1, "rarity": "common"},
-+        }
-+        result = self.drop_item(sim, dropped, "tavern", qty=1)
-+        sim2 = result["simulation_state"]
-+        items = self.list_items(sim2, "tavern")
-+        assert items[0]["item_id"] == "iron_sword"
-+        assert items[0]["name"] == "Iron Sword"
-+        assert items[0]["combat_stats"]["damage"] == 28
-+        assert items[0]["equipment"]["slot"] == "main_hand"
-Order to apply
-src/app/rpg/items/world_items.py
-src/app/rpg/items/inventory_state.py
-src/app/rpg/api/rpg_player_routes.py
-src/app/rpg/session/runtime.py
-src/app/rpg/api/rpg_session_routes.py
-src/tests/unit/rpg/test_phase183c_runtime_authority.py
-src/tests/unit/rpg/test_phase183b_integration.py
-Done when
-dropped items preserve their full metadata
-equipment is canonical only in inventory_state["equipment"]
-apply_turn() has one clean return path
-level_up is always a list
-unmocked combat path test passes through canonical turn flow
+pytest -q src/tests/unit/rpg/test_phase183c_runtime_authority.py
+pytest -q src/tests/unit/rpg/test_phase184_llm_action_intelligence.py
+pytest -q src/tests/unit/rpg/test_phase184b_structured_narration.py

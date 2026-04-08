@@ -145,6 +145,7 @@ def drop_world_item(
             "item_id": item_id,
             "qty": int(qty or 1),
             "instance_id": f"wi:{location_id}:{item_id}:{len(items)}",
+            "_degraded": True,
         }
     items.append(dropped_item)
     by_location[location_id] = items

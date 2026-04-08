@@ -44,6 +44,7 @@ from app.rpg.items.world_items import (
     pickup_world_item,
 )
 from app.rpg.llm_app_gateway import build_app_llm_gateway
+from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
 from app.rpg.memory.dialogue_context import (
     build_dialogue_memory_context,
@@ -197,7 +198,15 @@ def _normalize_structured_action(action: Any, player_input: str = "") -> Dict[st
         return {}
 
     if normalized.get("action_type"):
-        normalized.setdefault("target_id", _safe_str(normalized.get("target_id") or normalized.get("npc_id")).strip())
+        action_type = _safe_str(normalized.get("action_type")).strip().lower()
+        if action_type == "talk":
+            normalized["action_type"] = "persuade"
+        elif action_type == "threaten":
+            normalized["action_type"] = "intimidate"
+        normalized.setdefault(
+            "target_id",
+            _safe_str(normalized.get("target_id") or normalized.get("npc_id")).strip(),
+        )
         return normalized
 
     legacy_type = _safe_str(normalized.get("type")).strip().lower()
@@ -731,6 +740,47 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         player_input = _structured_action_prompt(action)
     player_input = player_input or action_type.replace("_", " ").strip() or "Wait"
 
+    llm_gateway = build_app_llm_gateway()
+    advisory = {}
+    runtime_state.setdefault("llm_records", [])
+    runtime_state["llm_records_index"] = _safe_dict(runtime_state.get("llm_records_index"))
+    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
+    current_tick = int(runtime_state.get("tick", 0) or 0)
+
+    if mode == "live":
+        advisory = get_action_advisory(
+            llm_gateway=llm_gateway,
+            player_input=player_input,
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            candidate_action=action,
+        )
+        record = {
+            "type": "action_advisory",
+            "tick": current_tick,
+            "player_input": player_input,
+            "candidate_action": {
+                "action_type": _safe_str(action.get("action_type")),
+                "target_id": _safe_str(action.get("target_id")),
+                "npc_id": _safe_str(action.get("npc_id")),
+                "item_id": _safe_str(action.get("item_id")),
+            },
+            "output": _safe_dict(advisory),
+        }
+        runtime_state["llm_records"].append(record)
+        runtime_state["llm_records_index"][
+            f"action_advisory:{current_tick}"
+        ] = record
+    else:
+        key = f"action_advisory:{current_tick}"
+        record = _safe_dict(runtime_state.get("llm_records_index")).get(key)
+        if not record:
+            raise RuntimeError(f"missing_replay_action_advisory_for_tick:{current_tick}")
+        advisory = _safe_dict(record.get("output"))
+    if advisory:
+        action = merge_action_advisory(action, advisory)
+        action_type = _safe_str(action.get("action_type")).strip()
+
     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
     resolved_result = _safe_dict(authoritative.get("result"))
@@ -765,8 +815,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
     }
 
-    llm_gateway = build_app_llm_gateway()
-    narration_result = narrate_scene(current_scene, narration_context, llm_gateway=llm_gateway, tone="dramatic")
+    narration_result = narrate_scene(
+        current_scene,
+        narration_context,
+        llm_gateway=llm_gateway,
+        tone="dramatic",
+    )
     summary = summarize_simulation_step(step_result)
 
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
@@ -805,6 +859,8 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
             "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
             "level_up": _safe_list(progression.get("level_up")),
             "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
+            "action_metadata": _safe_dict(action.get("metadata")),
+            "structured_narration": _safe_dict(narration_result.get("structured_narration")),
             "presentation": build_runtime_presentation_payload(after_state),
         },
     }

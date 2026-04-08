@@ -351,6 +351,8 @@ def drop_item_route():
             drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": 1}
             drop_result = drop_world_item(sim, drop_payload, location_id, qty=1)
             sim = dict(drop_result.get("simulation_state") or sim)
+            ps = dict(sim.get("player_state") or {})
+            final_inv = dict(ps.get("inventory_state") or {})
             session["simulation_state"] = sim
             save_runtime_session(session)
             return jsonify({
@@ -358,7 +360,7 @@ def drop_item_route():
                 "item_id": item_id,
                 "location_id": location_id,
                 "result": dict(drop_result.get("result") or {}),
-                "equipment": dict(dict(inv or {}).get("equipment") or {}),
+                "equipment": dict(final_inv.get("equipment") or {}),
             })
 
     return jsonify({"ok": True, "item_id": item_id})

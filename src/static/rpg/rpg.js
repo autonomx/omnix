@@ -116,6 +116,33 @@
         processDiceQueue();
     }
 
+    function buildStructuredNarrationMarkdown(update) {
+        var sn = (update && update.structured_narration) || {};
+        if (!sn || typeof sn !== 'object') return '';
+        var parts = [];
+        if (sn.scene_summary) {
+            parts.push(sn.scene_summary);
+        }
+        if (sn.action_result_line) {
+            parts.push(sn.action_result_line);
+        }
+        if (sn.npc_reply_block) {
+            parts.push('**Reply:** ' + sn.npc_reply_block);
+        }
+        if (sn.rewards_block) {
+            parts.push('**Rewards:** ' + sn.rewards_block);
+        }
+        return parts.join('\n\n').trim();
+    }
+
+    function getNarrationMarkdown(update) {
+        var structured = buildStructuredNarrationMarkdown(update);
+        if (structured && structured.length > 0) {
+            return structured;
+        }
+        return String((update && update.narration) || '');
+    }
+
     function processDiceQueue() {
         if (isShowingDice || !diceQueue.length) return;
         isShowingDice = true;
@@ -826,7 +853,7 @@
         var messages = [];
 
         if (data.narration) {
-            messages.push({ type: 'narration', content: data.narration });
+            messages.push({ type: 'narration', content: getNarrationMarkdown(data) });
         }
 
         if (Array.isArray(data.events)) {
