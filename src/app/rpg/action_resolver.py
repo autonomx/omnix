@@ -273,6 +273,20 @@ def resolve_player_action(
     action_type = str(action.get("action_type", action.get("type", "investigate")))
     player_state = _safe_dict(sim.get("player_state"))
 
+    def _target_name(target: Dict[str, Any]) -> str:
+        target = _safe_dict(target)
+        return str(
+            target.get("name")
+            or target.get("npc_name")
+            or target.get("display_name")
+            or target.get("npc_id")
+            or target.get("id")
+            or ""
+        )
+
+    def _success_like(outcome: str) -> bool:
+        return str(outcome or "") in {"success", "critical_success", "hit", "crit"}
+
     combat_actions = {"attack_melee", "attack_ranged", "attack", "block", "parry"}
     if action_type in combat_actions:
         weapon = select_equipped_weapon(player_state)
@@ -285,6 +299,17 @@ def resolve_player_action(
         if result["damage"] > 0 and "hp" in defender:
             apply_damage(defender, result["damage"])
             result["defender_hp_after"] = _safe_int(defender.get("hp"))
+        result["target_name"] = _target_name(defender)
+        result["enemy_state"] = {
+            "difficulty_tier": _safe_int(defender.get("difficulty_tier"), 1),
+            "name": _target_name(defender),
+        }
+        result["enemy_difficulty_tier"] = _safe_int(defender.get("difficulty_tier"), 1)
+        result["enemy_defeated"] = bool(
+            result.get("damage", 0) > 0
+            and "hp" in defender
+            and _safe_int(defender.get("hp"), 0) <= 0
+        )
         result["action_type"] = action_type
         return {"result": result, "simulation_state": sim}
 
@@ -303,6 +328,25 @@ def resolve_player_action(
 
     difficulty = str(action.get("difficulty", "normal"))
     result = resolve_noncombat_check(player_state, action_type, difficulty, seed)
+    result["target_name"] = _target_name(_safe_dict(action.get("target")))
+
+    if action_type == "steal" and _success_like(result.get("outcome")):
+        gold_stolen = _safe_int(action.get("gold_stolen") or action.get("gold_amount"), 0)
+        loot_value = _safe_int(action.get("loot_value"), 0)
+        result["gold_stolen"] = gold_stolen
+        result["loot_value"] = loot_value
+
+    if action_type == "investigate" and _success_like(result.get("outcome")):
+        result["found_clue"] = bool(action.get("found_clue"))
+        result["discovery"] = str(action.get("discovery") or "")
+        result["revealed"] = bool(action.get("revealed"))
+        result["important_find"] = bool(
+            action.get("important_find")
+            or action.get("found_clue")
+            or action.get("revealed")
+            or action.get("discovery")
+        )
+
     return {"result": result, "simulation_state": sim}
 
 

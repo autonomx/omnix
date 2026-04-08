@@ -11,11 +11,14 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+logger = logging.getLogger(__name__)
+
 from app.rpg.action_resolver import resolve_player_action
-from app.rpg.ai.world_scene_narrator import play_scene as narrate_scene
+from app.rpg.ai.world_scene_narrator import narrate_scene
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.world_player_actions import (
     ESCALATE_CONFLICT,
@@ -44,7 +47,6 @@ from app.rpg.items.world_items import (
     pickup_world_item,
 )
 from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.ai.world_scene_narrator import narrate_scene
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
 from app.rpg.memory.dialogue_context import (
@@ -62,6 +64,7 @@ from app.rpg.player.player_progression_state import (
     resolve_skill_level_ups,
 )
 from app.rpg.player.player_xp_rules import (
+    compute_action_player_xp,
     compute_action_skill_xp,
     compute_stat_influence_bonus,
 )
@@ -392,8 +395,10 @@ def _award_progression(
     resolved_result: Dict[str, Any],
 ) -> Dict[str, Any]:
     player_state = _safe_dict(simulation_state.get("player_state"))
-    action_xp = int(_safe_dict(resolved_result.get("xp_result")).get("player_xp", 0) or 0)
-    stat_bonus = int(compute_stat_influence_bonus(player_state, resolved_result) or 0)
+    explicit_player_xp = int(_safe_dict(resolved_result.get("xp_result")).get("player_xp", 0) or 0)
+    computed_player_xp = int(compute_action_player_xp(resolved_result) or 0)
+    action_xp = max(0, explicit_player_xp + computed_player_xp)
+    stat_bonus = int(compute_stat_influence_bonus(player_state, resolved_result) or 0) if action_xp > 0 else 0
     total_player_xp = max(0, action_xp + stat_bonus)
     skill_xp_awards = _safe_dict(_safe_dict(resolved_result.get("skill_xp_result")).get("awards"))
 
@@ -419,6 +424,8 @@ def _award_progression(
         "xp_result": {
             "player_xp": total_player_xp,
             "base_player_xp": action_xp,
+            "explicit_player_xp": explicit_player_xp,
+            "computed_player_xp": computed_player_xp,
             "stat_bonus": stat_bonus,
         },
         "skill_xp_result": {
@@ -828,6 +835,8 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         llm_gateway=llm_gateway,
         tone="dramatic",
     )
+    if gateway_available and not narration_result.get("used_llm"):
+        logger.error("RPG narration fallback occurred despite gateway availability")
     summary = summarize_simulation_step(step_result)
 
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)

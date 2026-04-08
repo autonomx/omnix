@@ -1,4 +1,11 @@
 @echo off
+
+:: Disable HuggingFace internet checks when model is already local
+set HF_HUB_OFFLINE=1
+set TRANSFORMERS_OFFLINE=1
+set HF_DATASETS_OFFLINE=1
+set HF_EVALUATE_OFFLINE=1
+
 echo ================================================
 echo FasterQwen3TTS Model Setup
 echo ================================================

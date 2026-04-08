@@ -209,8 +209,8 @@ def _build_speaker_turns(parsed: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _structured_fallback_response() -> str:
     return (
-        "NARRATOR: You are here.\n"
-        "ACTION: You act.\n"
+        "NARRATOR: [ERROR: LLM FORMAT INVALID]\n"
+        "ACTION: [NO VALID RESPONSE]\n"
     )
 
 
@@ -784,7 +784,7 @@ def _is_valid_scene_response(parsed: Dict[str, Any]) -> bool:
     parsed = _safe_dict(parsed)
     narrator = _safe_str(parsed.get("narrator")).strip()
     action = _safe_str(parsed.get("action")).strip()
-    return bool(narrator and action)
+    return bool(narrator or action)
 
 
 def _with_scene_response_defaults(parsed: Dict[str, Any]) -> Dict[str, Any]:
@@ -1334,6 +1334,7 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
     for _ in range(2):  # retry once
         try:
             response = _llm_text(llm_gateway, prompt, context={"scene": scene})
+            logger.info("[RPG LLM RAW OUTPUT]\n%s", response)
             parsed = parse_scene_response(response)
 
             if _is_valid_scene_response(parsed):
@@ -1342,7 +1343,7 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
             pass
 
     # fallback if LLM fails format
-    logger.warning("Structured RPG narration LLM output failed validation; using deterministic fallback.")
+    logger.error("Structured RPG narration LLM output failed validation")
     return _structured_fallback_response()
 
 
@@ -1411,8 +1412,10 @@ def narrate_scene(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_
 
     if llm_gateway:
         llm_narrative = _generate_live_narrative(scene, narration_context, llm_gateway=llm_gateway, tone=tone)
+        used_llm = "[ERROR:" not in llm_narrative
     else:
         llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
+        used_llm = False
 
     structured = build_structured_narration(scene, narration_context, llm_narrative)
 
@@ -1421,7 +1424,8 @@ def narrate_scene(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_
         "structured_narration": structured,
         "speaker_turns": _safe_list(structured.get("speaker_turns")),
         "raw_llm_narrative": llm_narrative,
-        "used_llm": bool(llm_gateway),
+        "used_llm": used_llm,
+        "llm_error": "[ERROR:" in llm_narrative,
     }
 
 
