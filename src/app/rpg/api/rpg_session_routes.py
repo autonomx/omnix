@@ -12,10 +12,15 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.rpg.session.runtime import (
+    apply_idle_ticks,
     apply_turn,
     build_frontend_bootstrap_payload,
     load_runtime_session,
     save_runtime_session,
+)
+from app.rpg.session.ambient_builder import (
+    ensure_ambient_runtime_state,
+    get_pending_ambient_updates,
 )
 
 rpg_session_bp = APIRouter()
@@ -147,6 +152,16 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "response_length": _safe_str(raw_payload.get("response_length", "short")),
         # Presentation
         "presentation": _safe_dict(raw_payload.get("presentation")),
+        # Living-world ambient metadata (Phase 7.4)
+        "ambient_updates": _safe_list(
+            get_pending_ambient_updates(session, after_seq=0, limit=8)
+        ),
+        "latest_ambient_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+        "unread_ambient_count": max(
+            0,
+            int(runtime_state.get("ambient_seq", 0) or 0)
+            - int(_safe_dict(runtime_state.get("subscription_state")).get("last_polled_seq", 0) or 0),
+        ),
     }
     return payload
 
@@ -282,3 +297,129 @@ async def execute_rpg_session_turn_stream(request: Request):
         yield _sse(final_payload)
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers=sse_headers)
+
+
+# ── Living-world endpoints (Phase 7) ──────────────────────────────────────
+
+
+@rpg_session_bp.post("/api/rpg/session/idle_tick")
+async def idle_tick_rpg_session(request: Request):
+    """Advance world simulation by idle ticks without player action."""
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    count = int(data.get("count", 1) or 1)
+    reason = _safe_str(data.get("reason") or "heartbeat").strip()
+
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    result = apply_idle_ticks(session_id, count, reason=reason)
+    if not result.get("ok"):
+        err = _safe_str(result.get("error") or "idle_tick_failed")
+        status = 404 if err == "session_not_found" else 500
+        return JSONResponse({"ok": False, "error": err}, status_code=status)
+
+    return {
+        "ok": True,
+        "updates": _safe_list(result.get("updates")),
+        "latest_seq": int(result.get("latest_seq", 0) or 0),
+        "ticks_applied": int(result.get("ticks_applied", 0) or 0),
+    }
+
+
+@rpg_session_bp.post("/api/rpg/session/poll")
+async def poll_rpg_session(request: Request):
+    """Poll for pending ambient updates by sequence number."""
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    after_seq = int(data.get("after_seq", 0) or 0)
+    limit = int(data.get("limit", 8) or 8)
+
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+
+    updates = get_pending_ambient_updates(session, after_seq=after_seq, limit=limit)
+    runtime = _safe_dict(session.get("runtime_state"))
+
+    return {
+        "ok": True,
+        "updates": updates,
+        "latest_seq": int(runtime.get("ambient_seq", 0) or 0),
+    }
+
+
+@rpg_session_bp.get("/api/rpg/session/stream")
+async def stream_rpg_session(request: Request):
+    """Persistent SSE stream for living-world ambient updates.
+
+    Query params:
+      session_id  — required
+      after_seq   — optional, start from this seq
+    """
+    import asyncio
+    import time
+
+    session_id = _safe_str(request.query_params.get("session_id", "")).strip()
+    after_seq = int(request.query_params.get("after_seq", "0") or 0)
+
+    sse_headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+
+    if not session_id:
+        def error_gen():
+            yield _sse({"type": "error", "error": "session_id_required"})
+        return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)
+
+    async def event_generator():
+        local_seq = after_seq
+        heartbeat_interval = 5  # seconds
+        last_heartbeat = time.monotonic()
+
+        # Initial backlog flush
+        session = load_runtime_session(session_id)
+        if session is None:
+            yield _sse({"type": "error", "error": "session_not_found"})
+            return
+
+        backlog = get_pending_ambient_updates(session, after_seq=local_seq, limit=8)
+        for update in backlog:
+            yield _sse({"type": "ambient", "update": update})
+            seq = int(_safe_dict(update).get("seq", 0) or 0)
+            if seq > local_seq:
+                local_seq = seq
+
+        # Long-lived event loop with heartbeats and ambient polling
+        for _ in range(600):  # max ~50 minutes at 5s intervals
+            await asyncio.sleep(heartbeat_interval)
+            now = time.monotonic()
+
+            # Check for new updates
+            session = load_runtime_session(session_id)
+            if session is None:
+                yield _sse({"type": "error", "error": "session_closed"})
+                return
+
+            new_updates = get_pending_ambient_updates(session, after_seq=local_seq, limit=8)
+            for update in new_updates:
+                yield _sse({"type": "ambient", "update": update})
+                seq = int(_safe_dict(update).get("seq", 0) or 0)
+                if seq > local_seq:
+                    local_seq = seq
+
+            # Heartbeat
+            if now - last_heartbeat >= heartbeat_interval:
+                runtime = _safe_dict(session.get("runtime_state"))
+                yield _sse({
+                    "type": "heartbeat",
+                    "latest_seq": int(runtime.get("ambient_seq", 0) or 0),
+                    "tick": int(runtime.get("tick", 0) or 0),
+                })
+                last_heartbeat = now
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=sse_headers)
