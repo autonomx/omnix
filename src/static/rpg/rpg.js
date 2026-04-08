@@ -90,6 +90,14 @@
         player: null,      // latest player state from API
         isLoading: false,
         voice_assignments: {}, // speaker -> voice_id
+        // Living-world ambient state (Phase 8)
+        sessionStream: null,
+        ambientSeq: 0,
+        unreadAmbient: 0,
+        isTyping: false,
+        heartbeatTimer: null,
+        pollTimer: null,
+        ambientFeedBuffer: [],
     };
 
     // TTS settings
@@ -664,6 +672,7 @@
             // Clear the feed
             var feed = el('rpgNarrativeFeed');
             if (feed) feed.innerHTML = '<div class="rpg-msg rpg-msg--system">Game loaded. Continue your adventure!</div>';
+            startLivingWorld();
         } catch (e) {
             alert('Failed to load game');
         } finally {
@@ -1006,6 +1015,7 @@
         } finally {
             setLoading(false);
             persistSnapshot();
+            if (rpgState.sessionId) startLivingWorld();
         }
     }
 
@@ -1818,6 +1828,9 @@
     // ─── Reset / new-session ───────────────────────────────────────────────────
 
     function resetSession() {
+        // Stop living-world heartbeat/stream
+        stopAmbientHeartbeat();
+        disconnectSessionStream();
         updateState({
             sessionId:   null,
             messages:    [],
@@ -1828,6 +1841,9 @@
             memory:      [],
             worldEvents: [],
             player:      null,
+            ambientSeq:  0,
+            unreadAmbient: 0,
+            ambientFeedBuffer: [],
         });
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(STATE_STORAGE_KEY);
@@ -1866,6 +1882,296 @@
         if (typeof AdventureBuilder !== 'undefined') {
             AdventureBuilder.open();
         }
+    }
+
+    // ─── Living World: Ambient Feed + Subscription (Phases 8-10) ────────────────
+
+    var HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
+    var AMBIENT_RECONNECT_DELAY_MS = 3000;
+    var _ambientReconnectAttempts = 0;
+    var _maxReconnectAttempts = 10;
+
+    // ── Phase 8: Persistent SSE subscription ─────────────────────────────────
+
+    function connectSessionStream() {
+        if (!rpgState.sessionId) return;
+        disconnectSessionStream();
+
+        var url = '/api/rpg/session/stream?session_id=' +
+            encodeURIComponent(rpgState.sessionId) +
+            '&after_seq=' + (rpgState.ambientSeq || 0);
+
+        try {
+            var es = new EventSource(url);
+            updateState({ sessionStream: es });
+
+            es.onmessage = function (event) {
+                try {
+                    var data = JSON.parse(event.data);
+                    if (data.type === 'ambient' && data.update) {
+                        handleAmbientUpdate(data.update);
+                    } else if (data.type === 'heartbeat') {
+                        // Heartbeat — update latest seq if we missed anything
+                        var serverSeq = parseInt(data.latest_seq, 10) || 0;
+                        if (serverSeq > rpgState.ambientSeq) {
+                            pollAmbientUpdates();
+                        }
+                    }
+                } catch (e) { /* ignore parse errors */ }
+            };
+
+            es.onerror = function () {
+                disconnectSessionStream();
+                _ambientReconnectAttempts++;
+                if (_ambientReconnectAttempts < _maxReconnectAttempts) {
+                    setTimeout(connectSessionStream, AMBIENT_RECONNECT_DELAY_MS * _ambientReconnectAttempts);
+                }
+            };
+
+            es.onopen = function () {
+                _ambientReconnectAttempts = 0;
+            };
+        } catch (e) {
+            // SSE not supported — fall back to polling
+            startAmbientPolling();
+        }
+    }
+
+    function disconnectSessionStream() {
+        if (rpgState.sessionStream) {
+            try { rpgState.sessionStream.close(); } catch (e) { /* ignore */ }
+            updateState({ sessionStream: null });
+        }
+    }
+
+    // ── Phase 8: Heartbeat idle advancement ──────────────────────────────────
+
+    function startAmbientHeartbeat() {
+        stopAmbientHeartbeat();
+        if (!rpgState.sessionId) return;
+
+        rpgState.heartbeatTimer = setInterval(function () {
+            if (!rpgState.sessionId) { stopAmbientHeartbeat(); return; }
+            if (document.hidden) return; // Don't tick when tab is hidden
+
+            fetch('/api/rpg/session/idle_tick', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: rpgState.sessionId,
+                    count: 1,
+                    reason: 'heartbeat',
+                }),
+            }).then(function (r) { return r.json(); })
+              .then(function (data) {
+                if (data.ok && data.updates && data.updates.length) {
+                    data.updates.forEach(function (u) { handleAmbientUpdate(u); });
+                }
+            }).catch(function () { /* ignore heartbeat failures */ });
+        }, HEARTBEAT_INTERVAL_MS);
+    }
+
+    function stopAmbientHeartbeat() {
+        if (rpgState.heartbeatTimer) {
+            clearInterval(rpgState.heartbeatTimer);
+            rpgState.heartbeatTimer = null;
+        }
+    }
+
+    // ── Phase 8: Poll fallback ───────────────────────────────────────────────
+
+    function startAmbientPolling() {
+        stopAmbientPolling();
+        if (!rpgState.sessionId) return;
+
+        rpgState.pollTimer = setInterval(function () {
+            if (!rpgState.sessionId) { stopAmbientPolling(); return; }
+            if (document.hidden) return;
+            pollAmbientUpdates();
+        }, HEARTBEAT_INTERVAL_MS + 1000);
+    }
+
+    function stopAmbientPolling() {
+        if (rpgState.pollTimer) {
+            clearInterval(rpgState.pollTimer);
+            rpgState.pollTimer = null;
+        }
+    }
+
+    function pollAmbientUpdates() {
+        if (!rpgState.sessionId) return;
+        fetch('/api/rpg/session/poll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: rpgState.sessionId,
+                after_seq: rpgState.ambientSeq || 0,
+                limit: 8,
+            }),
+        }).then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok && data.updates && data.updates.length) {
+                data.updates.forEach(function (u) { handleAmbientUpdate(u); });
+            }
+        }).catch(function () { /* ignore poll failures */ });
+    }
+
+    // ── Phase 9: Ambient update handling and rendering ───────────────────────
+
+    function handleAmbientUpdate(update) {
+        if (!update) return;
+        var seq = parseInt(update.seq, 10) || 0;
+        // Dedup: skip if already seen
+        if (seq <= rpgState.ambientSeq) return;
+        updateState({ ambientSeq: seq });
+
+        var kind = update.kind || 'world_event';
+        var isUrgent = kind === 'combat_start' || kind === 'warning' ||
+            (kind === 'npc_to_player' && update.interrupt);
+
+        if (rpgState.isTyping && !isUrgent) {
+            // Queue as unread
+            rpgState.ambientFeedBuffer.push(update);
+            updateState({ unreadAmbient: rpgState.unreadAmbient + 1 });
+            updateUnreadBadge();
+            return;
+        }
+
+        appendAmbientUpdate(update);
+    }
+
+    function appendAmbientUpdate(update) {
+        var feed = el('rpgNarrativeFeed');
+        if (!feed) return;
+
+        var welcome = el('rpgWelcome');
+        if (welcome) welcome.style.display = 'none';
+
+        var card = renderAmbientCard(update);
+        feed.appendChild(card);
+        feed.scrollTop = feed.scrollHeight;
+
+        // TTS for NPC speech
+        if (ttsEnabled && update.speaker_name && update.text) {
+            speakText(update.text, update.speaker_name);
+        }
+    }
+
+    // ── Phase 9: Ambient card renderer ───────────────────────────────────────
+
+    function renderAmbientCard(update) {
+        var div = document.createElement('div');
+        var kind = update.kind || 'world_event';
+
+        // Map kind → CSS class
+        var kindClass = 'rpg-ambient--' + kind.replace(/_/g, '-');
+        div.className = 'rpg-msg rpg-ambient ' + kindClass;
+
+        var content = '';
+        switch (kind) {
+            case 'npc_to_player':
+                content = '<span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-says">says to you:</span> '
+                    + '<em class="rpg-ambient-text">"' + escapeHtml(update.text || '') + '"</em>';
+                break;
+            case 'npc_to_npc':
+                content = '<span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-says">speaks to '
+                    + escapeHtml(update.target_name || 'someone') + ':</span> '
+                    + '<em class="rpg-ambient-text">"' + escapeHtml(update.text || '') + '"</em>';
+                break;
+            case 'arrival':
+                content = '\uD83D\uDEB6 <span class="rpg-ambient-text">' + escapeHtml(update.text || 'Someone arrives.') + '</span>';
+                break;
+            case 'departure':
+                content = '\uD83D\uDEB6 <span class="rpg-ambient-text">' + escapeHtml(update.text || 'Someone departs.') + '</span>';
+                break;
+            case 'combat_start':
+                content = '\u2694\uFE0F <strong class="rpg-ambient-text rpg-ambient-urgent">'
+                    + escapeHtml(update.text || 'Combat begins!') + '</strong>';
+                break;
+            case 'warning':
+                content = '\u26A0\uFE0F <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || '') + '</span> '
+                    + '<span class="rpg-ambient-text rpg-ambient-urgent">' + escapeHtml(update.text || 'Be careful!') + '</span>';
+                break;
+            case 'companion_comment':
+                content = '\uD83D\uDCAC <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'Companion') + '</span>: '
+                    + '<em class="rpg-ambient-text">"' + escapeHtml(update.text || '') + '"</em>';
+                break;
+            case 'system_summary':
+                content = '\uD83D\uDCDC <span class="rpg-ambient-text rpg-ambient-summary">' + escapeHtml(update.text || '') + '</span>';
+                break;
+            default:
+                content = '\uD83C\uDF0D <span class="rpg-ambient-text">' + escapeHtml(update.text || 'The world stirs.') + '</span>';
+                break;
+        }
+
+        div.innerHTML = content;
+
+        // Add subtle timestamp
+        var time = document.createElement('span');
+        time.className = 'rpg-ambient-time';
+        time.textContent = 'tick ' + (update.tick || '?');
+        div.appendChild(time);
+
+        return div;
+    }
+
+    // ── Phase 9: Unread badge and typing-aware flush ─────────────────────────
+
+    function updateUnreadBadge() {
+        var badge = el('rpgAmbientBadge');
+        if (!badge) return;
+        if (rpgState.unreadAmbient > 0) {
+            badge.textContent = rpgState.unreadAmbient;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    function flushAmbientBuffer() {
+        if (!rpgState.ambientFeedBuffer.length) return;
+        var buffer = rpgState.ambientFeedBuffer.slice();
+        rpgState.ambientFeedBuffer = [];
+        updateState({ unreadAmbient: 0 });
+        updateUnreadBadge();
+        buffer.forEach(function (u) { appendAmbientUpdate(u); });
+    }
+
+    // ── Phase 10: Typing detection for ambient flow ──────────────────────────
+
+    function _setupTypingDetection() {
+        var inputEl = el('userInput') || el('chatInput');
+        if (!inputEl) return;
+
+        inputEl.addEventListener('focus', function () {
+            updateState({ isTyping: true });
+        });
+        inputEl.addEventListener('blur', function () {
+            updateState({ isTyping: false });
+            // Flush queued ambient on blur
+            flushAmbientBuffer();
+        });
+        inputEl.addEventListener('input', function () {
+            updateState({ isTyping: true });
+        });
+    }
+
+    // ── Phase 8: Bootstrap living world on session load ──────────────────────
+
+    function startLivingWorld() {
+        if (!rpgState.sessionId) return;
+        startAmbientHeartbeat();
+        connectSessionStream();
+        _setupTypingDetection();
+        console.log('[RPG] Living world started (session=' + rpgState.sessionId + ', seq=' + rpgState.ambientSeq + ')');
+    }
+
+    function stopLivingWorld() {
+        stopAmbientHeartbeat();
+        stopAmbientPolling();
+        disconnectSessionStream();
     }
 
     // ─── Init ──────────────────────────────────────────────────────────────────
@@ -1916,6 +2222,7 @@
                 updateState({ worldEvents: res.worldEvents });
             }
             persistSnapshot();
+            startLivingWorld();
         };
 
         // Restore persisted session id (will retry fresh session on first failure)
@@ -1989,6 +2296,11 @@
         setupCollapsible();
         setupInputIntercept();
 
+        // Start living-world subscription if session exists
+        if (rpgState.sessionId) {
+            startLivingWorld();
+        }
+
         console.log('[RPG] RPG mode ready (state v' + stateVersion + ')');
     }
 
@@ -2002,5 +2314,10 @@
         reset:       resetSession,
         switchMode:  switchMode,
         handleInput: handleRPGInput,
+        // Living-world debug helpers
+        startLivingWorld: startLivingWorld,
+        stopLivingWorld:  stopLivingWorld,
+        flushAmbient:     flushAmbientBuffer,
+        pollAmbient:      pollAmbientUpdates,
     };
 }());

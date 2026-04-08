@@ -5128,6 +5128,106 @@ pre:hover .code-copy-btn {
     font-style: italic;
 }
 
+/* ── Living-World Ambient Updates (Phase 9-10) ─────────────────────────── */
+.rpg-ambient {
+    padding: 6px 14px;
+    margin: 2px 0;
+    border-left: 3px solid var(--border-color);
+    font-size: 0.88rem;
+    line-height: 1.45;
+    opacity: 0;
+    animation: rpg-ambient-fade-in 0.4s ease forwards;
+    position: relative;
+}
+@keyframes rpg-ambient-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.rpg-ambient--npc-to-player {
+    border-left-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.06);
+}
+.rpg-ambient--npc-to-npc {
+    border-left-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.04);
+}
+.rpg-ambient--arrival,
+.rpg-ambient--departure {
+    border-left-color: #22c55e;
+    background: rgba(34, 197, 94, 0.04);
+    font-style: italic;
+}
+.rpg-ambient--combat-start {
+    border-left-color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+    font-weight: 600;
+}
+.rpg-ambient--warning {
+    border-left-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.06);
+}
+.rpg-ambient--companion-comment {
+    border-left-color: #06b6d4;
+    background: rgba(6, 182, 212, 0.04);
+}
+.rpg-ambient--system-summary {
+    border-left-color: var(--text-muted);
+    background: rgba(107, 114, 128, 0.04);
+    font-style: italic;
+    font-size: 0.82rem;
+}
+.rpg-ambient--world-event {
+    border-left-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.03);
+}
+
+.rpg-ambient-speaker {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.rpg-ambient-says {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+.rpg-ambient-text {
+    color: var(--text-secondary);
+}
+.rpg-ambient-urgent {
+    color: #ef4444;
+}
+.rpg-ambient-summary {
+    color: var(--text-muted);
+}
+.rpg-ambient-time {
+    position: absolute;
+    right: 8px;
+    top: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+/* Unread ambient badge */
+.rpg-ambient-badge {
+    display: none;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 10px;
+    padding: 1px 6px;
+    min-width: 16px;
+    text-align: center;
+    vertical-align: middle;
+    margin-left: 4px;
+    animation: rpg-badge-pulse 1.5s ease-in-out infinite;
+}
+@keyframes rpg-badge-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+}
+
 /* Choice Panel */
 .rpg-choice-panel {
     display: flex;
