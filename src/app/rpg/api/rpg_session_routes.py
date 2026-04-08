@@ -139,6 +139,12 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
         "action_metadata": _safe_dict(raw_payload.get("action_metadata")),
         "structured_narration": _safe_dict(raw_payload.get("structured_narration")),
+        "speaker_turns": _safe_list(raw_payload.get("speaker_turns")),
+        "narration": _safe_str(raw_payload.get("narration")),
+        "used_app_llm": bool(raw_payload.get("used_app_llm")),
+        "gateway_available": bool(raw_payload.get("gateway_available")),
+        "raw_llm_narrative": _safe_str(raw_payload.get("raw_llm_narrative")),
+        "response_length": _safe_str(raw_payload.get("response_length", "short")),
         # Presentation
         "presentation": _safe_dict(raw_payload.get("presentation")),
     }

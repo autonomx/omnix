@@ -207,6 +207,13 @@ def _build_speaker_turns(parsed: Dict[str, Any]) -> List[Dict[str, Any]]:
     return turns
 
 
+def _structured_fallback_response() -> str:
+    return (
+        "NARRATOR: You are here.\n"
+        "ACTION: You act.\n"
+    )
+
+
 def _build_scene_summary(scene: Dict[str, Any], llm_narrative: str) -> str:
     scene = _safe_dict(scene)
     title = _safe_str(scene.get("title")).strip()
@@ -1335,10 +1342,8 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
             pass
 
     # fallback if LLM fails format
-    return (
-        "NARRATOR: You are here.\n"
-        "ACTION: You act.\n"
-    )
+    logger.warning("Structured RPG narration LLM output failed validation; using deterministic fallback.")
+    return _structured_fallback_response()
 
 
 def _simulate_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], tone: str = "dramatic") -> str:
@@ -1414,7 +1419,9 @@ def narrate_scene(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_
     return {
         "narrative": _safe_str(structured.get("markdown")),
         "structured_narration": structured,
+        "speaker_turns": _safe_list(structured.get("speaker_turns")),
         "raw_llm_narrative": llm_narrative,
+        "used_llm": bool(llm_gateway),
     }
 
 

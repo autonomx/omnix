@@ -44,6 +44,7 @@ from app.rpg.items.world_items import (
     pickup_world_item,
 )
 from app.rpg.llm_app_gateway import build_app_llm_gateway
+from app.rpg.ai.world_scene_narrator import narrate_scene
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
 from app.rpg.memory.dialogue_context import (
@@ -819,6 +820,8 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "settings": runtime_state.get("settings", {}),
     }
 
+    llm_gateway = build_app_llm_gateway()
+    gateway_available = bool(llm_gateway)
     narration_result = narrate_scene(
         current_scene,
         narration_context,
@@ -865,6 +868,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
             "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
             "action_metadata": _safe_dict(action.get("metadata")),
             "structured_narration": _safe_dict(narration_result.get("structured_narration")),
+            "speaker_turns": _safe_list(narration_result.get("speaker_turns")),
+            "narration": _safe_str(narration_result.get("narrative")),
+            "used_app_llm": bool(narration_result.get("used_llm")),
+            "gateway_available": gateway_available,
+            "raw_llm_narrative": _safe_str(narration_result.get("raw_llm_narrative")),
+            "response_length": _safe_str(runtime_state.get("settings", {}).get("response_length", "short")),
             "presentation": build_runtime_presentation_payload(after_state),
         },
     }
