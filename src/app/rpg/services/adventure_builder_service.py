@@ -147,8 +147,8 @@ def build_opening_context(setup: dict[str, Any]) -> dict[str, Any]:
     Returns
     -------
     dict
-        Keys: ``location_id``, ``present_npc_ids``, ``scene_frame``,
-        ``immediate_problem``, ``player_involvement_reason``,
+        Keys: ``location_id``, ``location_name``, ``present_npc_ids``,
+        ``scene_frame``, ``immediate_problem``, ``player_involvement_reason``,
         ``first_choices``, ``tension_level``, ``time_of_day``, ``weather``.
     """
     opening = setup.get("opening") or {}
@@ -156,6 +156,7 @@ def build_opening_context(setup: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "location_id": opening.get("location_id") or inferred.get("location_id", ""),
+        "location_name": opening.get("location_name") or inferred.get("location_name", ""),
         "present_npc_ids": opening.get("present_npc_ids") or inferred.get("present_npc_ids", []),
         "scene_frame": opening.get("scene_frame") or inferred.get("scene_frame", ""),
         "immediate_problem": opening.get("immediate_problem") or inferred.get("immediate_problem", ""),
