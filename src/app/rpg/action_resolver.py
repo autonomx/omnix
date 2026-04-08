@@ -14,8 +14,10 @@ from typing import Any, Dict, List, Optional
 # ---------------------------------------------------------------------------
 
 _ACTION_PROFILES: Dict[str, Dict[str, str]] = {
+    "attack_unarmed": {"stat": "strength", "skill": ""},
     "attack_melee": {"stat": "strength", "skill": "swordsmanship"},
     "attack_ranged": {"stat": "dexterity", "skill": "archery"},
+    "observe": {"stat": "", "skill": ""},
     "block": {"stat": "strength", "skill": "defense"},
     "dodge": {"stat": "dexterity", "skill": "defense"},
     "parry": {"stat": "dexterity", "skill": "swordsmanship"},
@@ -114,10 +116,15 @@ def select_equipped_weapon(player_state: Dict[str, Any]) -> Dict[str, Any]:
         "item_id": "unarmed",
         "name": "Unarmed",
         "combat_stats": {
-            "weapon_type": "unarmed", "attack_stat": "strength",
-            "skill_id": "swordsmanship", "damage": 3,
-            "accuracy": 2, "crit_chance": 5, "crit_bonus": 1,
-            "range": 1, "armor_penetration": 0,
+            "weapon_type": "unarmed",
+            "attack_stat": "strength",
+            "skill_id": "",
+            "damage": 3,
+            "accuracy": 1,
+            "crit_chance": 3,
+            "crit_bonus": 0,
+            "range": 1,
+            "armor_penetration": 0,
         },
         "quality": {"tier": 0, "rarity": "common"},
     }
@@ -287,7 +294,7 @@ def resolve_player_action(
     def _success_like(outcome: str) -> bool:
         return str(outcome or "") in {"success", "critical_success", "hit", "crit"}
 
-    combat_actions = {"attack_melee", "attack_ranged", "attack", "block", "parry"}
+    combat_actions = {"attack_melee", "attack_ranged", "attack", "attack_unarmed", "block", "parry"}
     if action_type in combat_actions:
         weapon = select_equipped_weapon(player_state)
         defender = _safe_dict(action.get("target") or action.get("defender") or {})
@@ -311,6 +318,9 @@ def resolve_player_action(
             and _safe_int(defender.get("hp"), 0) <= 0
         )
         result["action_type"] = action_type
+        # Special handling for unarmed attacks
+        if action_type == "attack_unarmed":
+            result["skill_id"] = ""
         return {"result": result, "simulation_state": sim}
 
     item_actions = {"pickup_item", "equip_item", "unequip_item", "use_item"}
@@ -330,6 +340,12 @@ def resolve_player_action(
     result = resolve_noncombat_check(player_state, action_type, difficulty, seed)
     result["target_name"] = _target_name(_safe_dict(action.get("target")))
 
+    # Special handling for observation
+    if action_type == "observe":
+        result["skill_id"] = ""
+        result["discovery"] = False
+        result["important_find"] = False
+    
     if action_type == "steal" and _success_like(result.get("outcome")):
         gold_stolen = _safe_int(action.get("gold_stolen") or action.get("gold_amount"), 0)
         loot_value = _safe_int(action.get("loot_value"), 0)

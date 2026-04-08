@@ -1,3 +1,57 @@
+/* ==================== RPG SKILL CARDS ==================== */
+
+.rpg-player-skills {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.rpg-skill-card {
+    background: var(--bg-tertiary, #252540);
+    border: 1px solid var(--border-color, #2a2a3e);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.rpg-skill-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.rpg-skill-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary, #e2e8f0);
+    text-transform: capitalize;
+}
+
+.rpg-skill-level {
+    font-size: 0.78rem;
+    color: var(--accent, #6366f1);
+    font-weight: 700;
+}
+
+.rpg-skill-meta {
+    font-size: 0.74rem;
+    color: var(--text-secondary, #a0aec0);
+    margin-bottom: 6px;
+}
+
+.rpg-skill-progress {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+}
+
+.rpg-skill-progress-fill {
+    height: 100%;
+    background: var(--accent, #6366f1);
+}
+
 /* ==================== XTTS CONTROL PANEL ==================== */
 
 .xtts-status {

@@ -400,12 +400,13 @@ def _award_progression(
     action_xp = max(0, explicit_player_xp + computed_player_xp)
     stat_bonus = int(compute_stat_influence_bonus(player_state, resolved_result) or 0) if action_xp > 0 else 0
     total_player_xp = max(0, action_xp + stat_bonus)
-    skill_xp_awards = _safe_dict(_safe_dict(resolved_result.get("skill_xp_result")).get("awards"))
+    explicit_awards = _safe_dict(_safe_dict(resolved_result.get("skill_xp_result")).get("awards"))
+    computed_skill_awards = {}
 
-    if total_player_xp > 0:
-        player_state = award_player_xp(player_state, total_player_xp, source=_safe_str(resolved_result.get("action_type")))
+    if not explicit_awards:
+        computed_skill_awards = compute_action_skill_xp(resolved_result)
 
-    computed_skill_awards = compute_action_skill_xp(resolved_result)
+    skill_xp_awards = dict(explicit_awards)
     for skill_id, amount in computed_skill_awards.items():
         skill_xp_awards[skill_id] = int(skill_xp_awards.get(skill_id, 0) or 0) + int(amount or 0)
 
@@ -618,15 +619,28 @@ def derive_player_action(simulation_state: Dict[str, Any], player_input: str) ->
 
 
 def derive_action_candidates(simulation_state, player_input):
-    """Derive structured action candidates from player input."""
     candidates = []
     text = str(player_input.get("text", "") if isinstance(player_input, dict) else player_input).lower()
 
-    # Combat
-    if any(w in text for w in ["attack", "hit", "strike", "fight", "slash", "shoot"]):
-        candidates.append({"action_type": "attack_melee", "priority": 10})
+    # Passive observation: no XP path
+    if any(w in text for w in ["look around", "look about", "observe", "glance", "scan", "take in"]):
+        candidates.append({"action_type": "observe", "priority": 4})
+
+    # Real investigation: deliberate scrutiny
+    if any(w in text for w in ["investigate", "search", "examine", "inspect", "analyze"]):
+        candidates.append({"action_type": "investigate", "priority": 6})
+
+    # Unarmed combat
+    if any(w in text for w in ["punch", "kick", "headbutt", "slam"]):
+        candidates.append({"action_type": "attack_unarmed", "priority": 10})
+
+    # Armed / generic combat
+    if any(w in text for w in ["attack", "hit", "strike", "fight", "slash", "stab"]):
+        candidates.append({"action_type": "attack_melee", "priority": 9})
+
     if any(w in text for w in ["shoot", "fire", "aim"]):
         candidates.append({"action_type": "attack_ranged", "priority": 10})
+
     # Defense
     if any(w in text for w in ["block", "defend", "shield"]):
         candidates.append({"action_type": "block", "priority": 8})
@@ -637,11 +651,9 @@ def derive_action_candidates(simulation_state, player_input):
         candidates.append({"action_type": "persuade", "priority": 7})
     if any(w in text for w in ["threaten", "intimidate", "scare"]):
         candidates.append({"action_type": "intimidate", "priority": 7})
-    # Stealth/investigation
+    # Stealth
     if any(w in text for w in ["sneak", "hide", "stealth"]):
         candidates.append({"action_type": "sneak", "priority": 6})
-    if any(w in text for w in ["investigate", "search", "examine", "look"]):
-        candidates.append({"action_type": "investigate", "priority": 5})
     if any(w in text for w in ["hack", "crack", "decrypt"]):
         candidates.append({"action_type": "hack", "priority": 6})
     if any(w in text for w in ["cast", "spell", "magic"]):
@@ -655,7 +667,7 @@ def derive_action_candidates(simulation_state, player_input):
         candidates.append({"action_type": "use_item", "priority": 5})
 
     if not candidates:
-        candidates.append({"action_type": "investigate", "priority": 1})
+        candidates.append({"action_type": "observe", "priority": 1})
 
     candidates.sort(key=lambda c: c.get("priority", 0), reverse=True)
     return candidates

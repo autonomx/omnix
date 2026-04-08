@@ -1481,11 +1481,27 @@
         var skillKeys = Object.keys(skills);
         var skillHtml = '';
         if (skillKeys.length) {
-            skillHtml = '<div class="rpg-player-section-title">🎯 Skills</div><div class="rpg-player-skills">' +
+            skillHtml =
+                '<div class="rpg-player-section-title">🎯 Skills</div>' +
+                '<div class="rpg-player-skills">' +
                 skillKeys.map(function(sk) {
-                    var lvl = typeof skills[sk] === 'number' ? skills[sk] : (skills[sk] && skills[sk].level || 0);
-                    return '<span class="rpg-skill-badge">' + escapeHtml(sk) + ' <strong>' + lvl + '</strong></span>';
-                }).join('') + '</div>';
+                    var entry = (skills[sk] && typeof skills[sk] === 'object') ? skills[sk] : { level: Number(skills[sk] || 0), xp: 0, xp_to_next: 25 };
+                    var lvl = Number(entry.level || 0);
+                    var xp = Number(entry.xp || 0);
+                    var xpToNext = Number(entry.xp_to_next || 25);
+                    var pct = xpToNext > 0 ? Math.max(0, Math.min(100, Math.floor((xp / xpToNext) * 100))) : 0;
+
+                    return '' +
+                        '<div class="rpg-skill-card">' +
+                            '<div class="rpg-skill-header">' +
+                                '<span class="rpg-skill-name">' + escapeHtml(sk) + '</span>' +
+                                '<span class="rpg-skill-level">Lv ' + lvl + '</span>' +
+                            '</div>' +
+                            '<div class="rpg-skill-meta">' + xp + ' / ' + xpToNext + ' XP</div>' +
+                            '<div class="rpg-skill-progress"><div class="rpg-skill-progress-fill" style="width:' + pct + '%"></div></div>' +
+                        '</div>';
+                }).join('') +
+                '</div>';
         }
 
         // Unspent stat points
