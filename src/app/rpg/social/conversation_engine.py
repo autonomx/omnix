@@ -116,16 +116,9 @@ def build_next_conversation_line(conversation: Dict[str, Any], simulation_state:
                     # Record into replay structures
                     llm_records = runtime_state.setdefault("llm_records", []) if isinstance(runtime_state, dict) else []
                     llm_records_index = runtime_state.setdefault("llm_records_index", {}) if isinstance(runtime_state, dict) else {}
-                    replay_record = {
-                        "type": "conversation_line",
-                        "tick": int(tick or 0),
-                        "conversation_id": conv_id,
-                        "turn": turn_num,
-                        "speaker_id": speaker_id,
-                        "output": dict(record),
-                    }
-                    llm_records.append(replay_record)
-                    llm_records_index[record_key] = replay_record
+                    record_index = len(llm_records)
+                    llm_records.append(dict(record))
+                    llm_records_index[record_key] = record_index
 
                     parsed = _safe_dict(record.get("parsed"))
                     return build_conversation_line(
@@ -140,11 +133,12 @@ def build_next_conversation_line(conversation: Dict[str, Any], simulation_state:
                     )
             else:
                 # Replay mode: read back from recorded data
+                llm_records = runtime_state.get("llm_records", []) if isinstance(runtime_state, dict) else []
                 llm_records_index = _safe_dict(runtime_state.get("llm_records_index")) if isinstance(runtime_state, dict) else {}
-                replay_record = _safe_dict(llm_records_index.get(record_key))
-                if replay_record:
-                    output = _safe_dict(replay_record.get("output"))
-                    parsed = _safe_dict(output.get("parsed"))
+                record_index = llm_records_index.get(record_key)
+                if isinstance(record_index, int) and record_index < len(llm_records):
+                    replay_record = _safe_dict(llm_records[record_index])
+                    parsed = _safe_dict(replay_record.get("parsed"))
                     if parsed.get("text"):
                         return build_conversation_line(
                             conversation_id=conv_id,
@@ -156,7 +150,7 @@ def build_next_conversation_line(conversation: Dict[str, Any], simulation_state:
                             created_tick=tick,
                             source="llm",
                         )
-                # Fall through to template if no replay record
+                raise RuntimeError(f"Missing recorded conversation line for replay: {record_key}")
         except ImportError:
             pass
 
@@ -190,9 +184,11 @@ def try_start_ambient_conversations(simulation_state: Dict[str, Any], runtime_st
     ensure_conversation_state(simulation_state)
     player_loc = _player_location(simulation_state, runtime_state)
     candidate_groups = find_candidate_conversation_groups(simulation_state, player_loc, tick)
+    started = 0
 
     for group in candidate_groups:
         topics = build_conversation_topic_candidates(simulation_state, runtime_state, player_loc, group, tick)
+        print("[RPG conversation topics]", group, topics)
         if not topics:
             continue
         topic = topics[0]
@@ -207,7 +203,11 @@ def try_start_ambient_conversations(simulation_state: Dict[str, Any], runtime_st
             topic=topic,
             tick=tick,
         )
-        break
+        started += 1
+        if len(list_active_conversations(simulation_state, location_id=player_loc)) >= 2:
+            break
+        if started >= 2:
+            break
     return simulation_state
 
 

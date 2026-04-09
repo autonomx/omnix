@@ -160,4 +160,19 @@ def build_conversation_topic_candidates(
     if last_player_action and _safe_str(last_player_action.get("text")).lower().find("cave") >= 0:
         topics.append(_build_risk_conflict_topic("player_plan:cave"))
 
+    # HARD FALLBACK:
+    # If multiple NPCs are together and nothing else triggered, still allow
+    # ambient conversation so the world does not feel frozen.
+    if not topics and len(participant_ids) >= 2:
+        a = participant_ids[0]
+        b = participant_ids[1]
+        topics.append({
+            "type": "ambient_chat",
+            "anchor": f"{a}:{b}:ambient_chat",
+            "summary": "NPCs casually talk among themselves.",
+            "stance": "comment",
+            "priority": 0.20,
+            "reason": "ambient fallback",
+        })
+
     return _dedupe_topics(topics)[:8]

@@ -132,8 +132,16 @@ def build_conversation_line(
     source: str = "template",
     speaker_name: str = "",
 ) -> Dict[str, Any]:
+    line_id = _stable_id(
+        "convline",
+        conversation_id,
+        int(turn or 0),
+        _safe_str(speaker),
+        _safe_str(text),
+    )
     return {
         "conversation_id": _safe_str(conversation_id),
+        "line_id": line_id,
         "turn": int(turn or 0),
         "speaker": _safe_str(speaker),
         "speaker_name": _safe_str(speaker_name),

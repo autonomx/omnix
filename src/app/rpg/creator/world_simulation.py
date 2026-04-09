@@ -29,7 +29,12 @@ from typing import Any
 
 from app.rpg.ai.llm_mind import NPCMind
 from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
-from app.rpg.social.conversation_engine import run_conversation_tick
+from app.rpg.social.conversation_engine import (
+    run_conversation_tick,
+    try_start_party_reaction_conversation,
+)
+from app.rpg.social.offscreen_conversations import run_offscreen_conversation_pass
+from app.rpg.social.rumor_from_conversations import collect_rumors_from_recent_conversations
 from app.rpg.sandbox import (
     build_world_consequences,
     project_outcomes_from_state,
@@ -81,6 +86,12 @@ def _safe_str_p6(value):
     if value is None:
         return ""
     return str(value)
+
+
+def _safe_dict_p6(value):
+    if isinstance(value, dict):
+        return value
+    return {}
 
 
 def _iter_npc_definitions(setup_payload):
@@ -158,6 +169,11 @@ def _decision_to_event(decision_dict, npc_context, tick):
         or decision_dict.get("text")
         or decision_dict.get("dialogue_hint")
     )
+    npc_index = _safe_dict_p6(npc_context.get("npc_index"))
+    target_name = ""
+    if target_id:
+        target_row = _safe_dict_p6(npc_index.get(target_id))
+        target_name = _safe_str_p6(target_row.get("name")) or target_id
 
     # IMPORTANT:
     # `reason` is internal planner/debug metadata. Preserve it for inspector /
@@ -182,8 +198,6 @@ def _decision_to_event(decision_dict, npc_context, tick):
         public_summary = f"{npc_name} arrives."
     elif action_key in {"observe", "watch"}:
         public_summary = f"{npc_name} watches the situation carefully."
-    elif action_key == "support":
-        public_summary = f"{npc_name} moves to support their allies."
     elif action_key == "stabilize":
         public_summary = f"{npc_name} tries to restore order nearby."
     elif action_key == "retaliate":
@@ -191,9 +205,21 @@ def _decision_to_event(decision_dict, npc_context, tick):
     elif action_key in {"avoid", "retreat", "withdraw"}:
         public_summary = f"{npc_name} keeps their distance."
     elif action_key in {"negotiate", "parley"}:
-        public_summary = f"{npc_name} cautiously opens contact."
+        public_summary = (
+            f"{npc_name} speaks with {target_name}."
+            if target_name else
+            f"{npc_name} cautiously opens contact."
+        )
     elif action_key == "investigate":
         public_summary = f"{npc_name} investigates suspicious developments."
+    elif action_key == "support":
+        public_summary = (
+            f"{npc_name} checks in with {target_name}."
+            if target_name else
+            f"{npc_name} moves to support their allies."
+        )
+    elif action_key == "move":
+        public_summary = f"{npc_name} heads elsewhere."
     elif action_key in {"speak", "talk", "address"}:
         public_summary = dialogue_hint or f"{npc_name} speaks."
     elif action_key in {"warn", "threaten"}:
@@ -686,6 +712,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
 
     for npc_id, mind in sorted(npc_minds.items()):
         npc_context = dict(npc_index.get(npc_id) or {"npc_id": npc_id})
+        npc_context["npc_index"] = npc_index
         mind.observe_events(observed_events, tick=next_tick, npc_context=npc_context)
         mind.refresh_goals(simulation_state=history_state, npc_context=npc_context)
         decision = mind.decide(simulation_state=history_state, npc_context=npc_context, tick=next_tick)
@@ -877,8 +904,66 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
                 mind["beliefs"][str(target_id)] = dict(patch or {})
 
     # --- Conversation system tick ---
-    runtime_state = _safe_dict(meta.get("runtime_state"))
-    run_conversation_tick(history_state, runtime_state, int(history_state.get("tick", 0) or 0))
+    runtime_state = meta.setdefault("runtime_state", {})
+    if not isinstance(runtime_state, dict):
+        runtime_state = {}
+        meta["runtime_state"] = runtime_state
+
+    current_tick = int(history_state.get("tick", 0) or 0)
+
+    # Start party-reaction conversations inside the authoritative simulation
+    # step, not later in session/runtime.py.
+    last_player_action = _safe_dict(runtime_state.get("last_player_action"))
+    if last_player_action:
+        try_start_party_reaction_conversation(
+            history_state,
+            runtime_state,
+            last_player_action,
+            current_tick,
+        )
+
+    run_conversation_tick(history_state, runtime_state, current_tick)
+
+    if history_state.get("debug_meta") is None or not isinstance(history_state.get("debug_meta"), dict):
+        history_state["debug_meta"] = {}
+    history_state["debug_meta"]["conversation_debug"] = {
+        "tick": current_tick,
+        "active_conversation_count": len(
+            _safe_list(_safe_dict(_safe_dict(history_state.get("social_state")).get("conversations")).get("active"))
+        ),
+        "recent_event_types": [
+            _safe_str_p6(_safe_dict(e).get("type"))
+            for e in _safe_list(history_state.get("events"))[-6:]
+        ],
+    }
+
+    # Later expansion: offscreen conversation summaries also belong to the
+    # world tick so they remain deterministic and bounded.
+    run_offscreen_conversation_pass(history_state, runtime_state, current_tick)
+
+    # Later expansion: closed conversations can feed rumor state.
+    rumors = collect_rumors_from_recent_conversations(history_state)
+    if rumors:
+        social_state = history_state.setdefault("social_state", {})
+        if not isinstance(social_state, dict):
+            social_state = {}
+            history_state["social_state"] = social_state
+        rumor_rows = social_state.setdefault("rumors", [])
+        if not isinstance(rumor_rows, list):
+            rumor_rows = []
+            social_state["rumors"] = rumor_rows
+        emitted_sources_list = social_state.setdefault("emitted_rumor_sources", [])
+        if not isinstance(emitted_sources_list, list):
+            emitted_sources_list = []
+            social_state["emitted_rumor_sources"] = emitted_sources_list
+        emitted_sources = {str(x) for x in emitted_sources_list if str(x)}
+        for rumor in rumors:
+            source_id = rumor.get("source_conversation_id")
+            if source_id and source_id not in emitted_sources:
+                rumor_rows.append(rumor)
+                emitted_sources.add(source_id)
+        social_state["rumors"] = rumor_rows[-80:]
+        social_state["emitted_rumor_sources"] = sorted(emitted_sources)[-200:]
 
     # --- Phase 7: Debug Meta Tracking ---
     history_state.setdefault("debug_meta", {})

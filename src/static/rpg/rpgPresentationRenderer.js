@@ -1194,7 +1194,7 @@ export function renderConversationInspector(payload) {
         const topic = conv.topic || {};
         const lines = Array.isArray(conv.lines) ? conv.lines : [];
         const lastLines = lines.slice(-3).map((l) =>
-          `<div class="inspector-conv-line">${escapeHtml(l.speaker || "?")}: ${escapeHtml(l.text || "")}</div>`
+          `<div class="inspector-conv-line">${escapeHtml(l.speaker_name || l.speaker || "?")}: ${escapeHtml(l.text || "")}</div>`
         ).join("");
         return `
           <div class="inspector-conv-card">

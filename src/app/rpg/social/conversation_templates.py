@@ -77,6 +77,19 @@ def build_template_line(conversation: Dict[str, Any], speaker_id: str, simulatio
     elif topic_type in {"local_incident", "event_commentary"}:
         text = summary or "Something about this does not sit right."
         kind = "statement"
+    elif topic_type == "ambient_chat":
+        if role in {"innkeeper", "merchant", "bartender", "shopkeeper"}:
+            text = "Business has its own rhythm, but the mood around here has changed."
+            kind = "statement"
+        elif role in {"guard", "watchman", "soldier"}:
+            text = "Keep your eyes open. Trouble has a way of arriving quietly."
+            kind = "warning"
+        elif role in {"thief", "mercenary", "adventurer"}:
+            text = "Quiet places make me nervous. Something usually follows."
+            kind = "statement"
+        else:
+            text = "There is always something worth noticing if you listen closely."
+            kind = "statement"
     else:
         text = "There is something we should discuss before we move on."
         kind = "statement"

@@ -202,6 +202,7 @@ build_faction_topic_candidates = _faction.build_faction_topic_candidates
 build_background_chatter_lines = _crowd.build_background_chatter_lines
 
 _conversation_to_ambient_updates = _ambient._conversation_to_ambient_updates
+build_ambient_updates = _ambient.build_ambient_updates
 
 ensure_personality_state = _personality.ensure_personality_state
 get_personality_profile = _personality.get_personality_profile
@@ -1842,3 +1843,62 @@ class TestFixExpansionModules:
     def test_crowd_chatter_still_empty_for_no_events(self):
         lines = build_background_chatter_lines("loc:market", [])
         assert lines == []
+
+
+def test_replay_missing_conversation_line_raises():
+    sim = _minimal_sim()
+    rt = _minimal_runtime()
+    rt["conversation_settings"] = {"llm_expand_npc_conversations": True}
+    rt["mode"] = "replay"
+    conv = open_conversation(
+        sim, rt,
+        kind="ambient_npc_conversation",
+        location_id="loc:tavern",
+        participants=["npc:guard", "npc:merchant"],
+        topic=_make_topic(),
+        tick=5,
+    )
+    with pytest.raises(RuntimeError):
+        build_next_conversation_line(conv, sim, rt, 5)
+
+
+def test_conversation_line_has_line_id():
+    line = build_conversation_line(
+        conversation_id="conv:test",
+        turn=1,
+        speaker="npc:guard",
+        speaker_name="Guard",
+        text="Hold there.",
+        kind="statement",
+        created_tick=1,
+    )
+    assert line["line_id"]
+
+
+def test_ambient_chat_topic_exists_when_no_other_topics():
+    sim = _minimal_sim()
+    rt = _minimal_runtime()
+    topics = build_conversation_topic_candidates(
+        sim,
+        rt,
+        "loc:tavern",
+        ["npc:guard", "npc:merchant"],
+        1,
+    )
+    assert topics
+    assert any(t.get("type") in {"ambient_chat", "event_commentary", "plan_reaction", "moral_conflict", "risk_conflict"} for t in topics)
+
+
+def test_ambient_builder_suppresses_observe_events():
+    before = _minimal_sim()
+    after = _minimal_sim()
+    after["events"] = [{
+        "event_id": "evt:1",
+        "type": "observe",
+        "summary": "Bran the Innkeeper watches the situation carefully.",
+        "location_id": "loc:tavern",
+    }]
+    rt = _minimal_runtime()
+    updates = build_ambient_updates(before, after, rt, 1)
+    texts = [u.get("text", "") for u in updates]
+    assert not any("watches the situation carefully" in t.lower() for t in texts)

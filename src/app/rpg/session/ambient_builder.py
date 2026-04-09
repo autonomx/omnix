@@ -208,14 +208,15 @@ def _conversation_to_ambient_updates(simulation_state: Dict[str, Any], runtime_s
     payload = build_conversation_payload(simulation_state, runtime_state, location_id=player_loc)
     updates: List[Dict[str, Any]] = []
     # Track which lines have already been surfaced via ambient
-    surfaced = set(_safe_list(_safe_dict(runtime_state).get("_surfaced_conversation_line_keys")))
+    subscription_state = _safe_dict(runtime_state).setdefault("subscription_state", {})
+    surfaced = set(_safe_list(subscription_state.get("_surfaced_conversation_line_keys")))
     new_surfaced = set(surfaced)
 
     for conv in payload.get("active_conversations", []):
         cid = str(conv.get("conversation_id") or "")
         for line in conv.get("lines", [])[-2:]:
-            turn = int(line.get("turn", 0) or 0)
-            dedup_key = f"{cid}:{turn}"
+            line_id = _safe_str(line.get("line_id"))
+            dedup_key = line_id or f"{cid}:{int(line.get('turn', 0) or 0)}:{_safe_str(line.get('speaker'))}:{_safe_str(line.get('text'))}"
             if dedup_key in surfaced:
                 continue
             new_surfaced.add(dedup_key)
@@ -236,7 +237,7 @@ def _conversation_to_ambient_updates(simulation_state: Dict[str, Any], runtime_s
     # Persist surfaced keys (bounded to last 120 entries)
     if isinstance(runtime_state, dict):
         all_keys = sorted(new_surfaced)
-        runtime_state["_surfaced_conversation_line_keys"] = all_keys[-120:]
+        subscription_state["_surfaced_conversation_line_keys"] = all_keys[-120:]
 
     return updates
 
@@ -271,6 +272,13 @@ def build_ambient_updates(
         if not eid or eid in before_event_ids:
             continue
 
+        text = _safe_str(event.get("description") or event.get("summary"))
+        event_type = _safe_str(event.get("type")).lower()
+        if event_type in {"observe", "watch"}:
+            continue
+        if "watches the situation carefully" in text.lower():
+            continue
+
         if _is_low_value_internal_npc_event(event, player_loc):
             continue
         if _is_low_value_npc_world_event(event, player_loc):
@@ -282,7 +290,7 @@ def build_ambient_updates(
             kind="world_event",
             priority=0.5 if loc == player_loc else 0.2,
             location_id=loc,
-            text=_safe_str(event.get("description") or event.get("summary") or f"Something happens at {loc}"),
+            text=text or f"Something happens at {loc}",
             source_event_ids=[eid],
             source="simulation",
         ))

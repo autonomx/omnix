@@ -69,6 +69,15 @@ def build_timeline_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
             "snapshot_id": str(conv.get("conversation_id", "")),
             "label": "conversation_closed",
         })
+    lines_by_conversation = _safe_dict(conv_state.get("lines_by_conversation"))
+    for cid, rows in sorted(lines_by_conversation.items()):
+        for line in _safe_list(rows)[-3:]:
+            line = _safe_dict(line)
+            snapshot_rows.append({
+                "tick": _safe_int(line.get("created_tick"), 0),
+                "snapshot_id": str(line.get("line_id") or f"{cid}:{line.get('turn', 0)}"),
+                "label": "conversation_line",
+            })
 
     snapshot_rows.sort(key=lambda x: (x["tick"], str(x["snapshot_id"])))
 

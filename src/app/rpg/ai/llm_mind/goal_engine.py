@@ -282,7 +282,7 @@ class GoalEngine:
                     npc_id=npc_id,
                     goal_type="move_to_populated_location",
                     target_id=best_loc,
-                    priority=0.42,
+                    priority=0.52,
                     reason="Move toward activity",
                 ))
 
@@ -310,12 +310,26 @@ class GoalEngine:
                 priority=0.60 + min(trust * 0.20, 0.20),
                 reason="Player is viewed as trustworthy",
             ))
+        elif nearby_npcs:
+            # CRITICAL:
+            # If another NPC is nearby, prefer social interaction over passive
+            # observation so the world remains active even in quiet scenes.
+            other = nearby_npcs[0]
+            other_id = _safe_str(other.get("npc_id"))
+            if other_id:
+                goals.append(self._make_goal(
+                    npc_id=npc_id,
+                    goal_type="negotiate_with_nearby_npc",
+                    target_id=other_id,
+                    priority=0.45,
+                    reason="Force social interaction",
+                ))
         else:
             goals.append(self._make_goal(
                 npc_id=npc_id,
                 goal_type="observe",
                 target_id="player",
-                priority=0.14,
+                priority=0.05,
                 reason="Maintain awareness of player",
             ))
 

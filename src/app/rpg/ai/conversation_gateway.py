@@ -13,6 +13,12 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
 def generate_recorded_conversation_line(
     llm_gateway: Any,
     conversation: Dict[str, Any],
@@ -32,7 +38,10 @@ def generate_recorded_conversation_line(
     parsed = parse_conversation_line_response(raw)
     if not is_valid_conversation_line(parsed):
         return {}
+    conv_id = _safe_str(_safe_dict(conversation).get("conversation_id"))
+    turn = int(_safe_dict(conversation).get("turn_count", 0) or 0) + 1
     return {
+        "key": f"conversation_line:{conv_id}:{turn}",
         "prompt": prompt,
         "raw": raw,
         "parsed": parsed,
