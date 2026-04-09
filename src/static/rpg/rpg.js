@@ -651,6 +651,65 @@
             titleDiv.appendChild(saveTitleBtn);
             manageSection.appendChild(titleDiv);
             body.appendChild(manageSection);
+
+            // ── Phase F: In-game World Behavior settings ─────────────────
+            var wbSection = document.createElement('div');
+            wbSection.innerHTML = '<h4>\uD83C\uDF0D World Behavior</h4><p class="ab-hint">Adjust how the living world behaves during play.</p>';
+            var wbContainer = document.createElement('div');
+            wbContainer.id = 'rpgWorldBehaviorSettings';
+            wbContainer.innerHTML = '<p>Loading...</p>';
+            wbSection.appendChild(wbContainer);
+
+            fetch('/api/rpg/session/world_behavior', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: rpgState.sessionId }),
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (!data.ok) { wbContainer.innerHTML = '<p>Unable to load settings</p>'; return; }
+                var eff = data.effective || {};
+                var fields = [
+                    { key: 'ambient_activity', label: 'Ambient Activity', options: ['low', 'medium', 'high'] },
+                    { key: 'npc_initiative', label: 'NPC Initiative', options: ['low', 'medium', 'high'] },
+                    { key: 'interruptions', label: 'Interruptions', options: ['minimal', 'normal', 'frequent'] },
+                    { key: 'quest_prompting', label: 'Quest Prompting', options: ['off', 'light', 'guided', 'strong'] },
+                    { key: 'companion_chatter', label: 'Companion Chatter', options: ['quiet', 'normal', 'talkative'] },
+                    { key: 'world_pressure', label: 'World Pressure', options: ['gentle', 'standard', 'harsh'] },
+                    { key: 'opening_guidance', label: 'Opening Guidance', options: ['light', 'normal', 'strong'] },
+                    { key: 'play_style_bias', label: 'Play Style', options: ['sandbox', 'balanced', 'story_directed'] },
+                ];
+                var html = '';
+                fields.forEach(function(f) {
+                    var val = eff[f.key] || f.options[1];
+                    html += '<label style="display:block;margin-bottom:6px;">' + escapeHtml(f.label) +
+                        '<select class="rpg-wb-select" data-wb-key="' + f.key + '" style="margin-left:8px;">';
+                    f.options.forEach(function(o) {
+                        html += '<option value="' + o + '"' + (o === val ? ' selected' : '') + '>' + o.replace(/_/g, ' ') + '</option>';
+                    });
+                    html += '</select></label>';
+                });
+                html += '<button class="btn btn-primary" id="rpgSaveWorldBehavior" style="margin-top:8px;">Save World Behavior</button>';
+                wbContainer.innerHTML = html;
+
+                var saveWbBtn = wbContainer.querySelector('#rpgSaveWorldBehavior');
+                if (saveWbBtn) saveWbBtn.addEventListener('click', function() {
+                    var changes = {};
+                    wbContainer.querySelectorAll('.rpg-wb-select').forEach(function(sel) {
+                        changes[sel.getAttribute('data-wb-key')] = sel.value;
+                    });
+                    fetch('/api/rpg/session/world_behavior/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: rpgState.sessionId, changes: changes }),
+                    }).then(function(r) { return r.json(); }).then(function(result) {
+                        if (result.ok) { alert('World behavior updated'); }
+                        else { alert('Failed to update: ' + (result.error || 'unknown')); }
+                    }).catch(function() { alert('Failed to update world behavior'); });
+                });
+            }).catch(function() {
+                wbContainer.innerHTML = '<p>Failed to load world behavior settings</p>';
+            });
+
+            body.appendChild(wbSection);
         }
 
         panel.classList.add('active');
@@ -2028,7 +2087,10 @@
 
         var kind = update.kind || 'world_event';
         var isUrgent = kind === 'combat_start' || kind === 'warning' ||
-            (kind === 'npc_to_player' && update.interrupt);
+            kind === 'demand' || kind === 'plea_for_help' ||
+            (kind === 'npc_to_player' && update.interrupt) ||
+            (kind === 'taunt' && update.interrupt) ||
+            (kind === 'quest_prompt' && update.interrupt);
 
         if (rpgState.isTyping && !isUrgent) {
             // Queue as unread
@@ -2098,6 +2160,30 @@
             case 'companion_comment':
                 content = '\uD83D\uDCAC <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'Companion') + '</span>: '
                     + '<em class="rpg-ambient-text">"' + escapeHtml(update.text || '') + '"</em>';
+                break;
+            case 'quest_prompt':
+                content = '\uD83D\uDCDC <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text rpg-ambient-quest">' + escapeHtml(update.text || 'A new quest beckons.') + '</span>';
+                break;
+            case 'recruitment_offer':
+                content = '\uD83E\uDD1D <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text">' + escapeHtml(update.text || 'An offer is made.') + '</span>';
+                break;
+            case 'plea_for_help':
+                content = '\uD83C\uDD98 <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text rpg-ambient-urgent">' + escapeHtml(update.text || 'Someone needs your help!') + '</span>';
+                break;
+            case 'demand':
+                content = '\u2757 <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text rpg-ambient-urgent">' + escapeHtml(update.text || 'A demand is made.') + '</span>';
+                break;
+            case 'taunt':
+                content = '\uD83D\uDE24 <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text">' + escapeHtml(update.text || 'Someone taunts you.') + '</span>';
+                break;
+            case 'gossip':
+                content = '\uD83D\uDDE3\uFE0F <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span>: '
+                    + '<em class="rpg-ambient-text rpg-ambient-gossip">"' + escapeHtml(update.text || '') + '"</em>';
                 break;
             case 'system_summary':
                 content = '\uD83D\uDCDC <span class="rpg-ambient-text rpg-ambient-summary">' + escapeHtml(update.text || '') + '</span>';

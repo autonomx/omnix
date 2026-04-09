@@ -5181,6 +5181,37 @@ pre:hover .code-copy-btn {
     border-left-color: #a78bfa;
     background: rgba(167, 139, 250, 0.03);
 }
+/* Phase F — new initiative/event kinds */
+.rpg-ambient--quest-prompt {
+    border-left-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.05);
+}
+.rpg-ambient--recruitment-offer {
+    border-left-color: #10b981;
+    background: rgba(16, 185, 129, 0.04);
+}
+.rpg-ambient--plea-for-help {
+    border-left-color: #ef4444;
+    background: rgba(239, 68, 68, 0.04);
+}
+.rpg-ambient--demand {
+    border-left-color: #dc2626;
+    background: rgba(220, 38, 38, 0.05);
+}
+.rpg-ambient--taunt {
+    border-left-color: #f97316;
+    background: rgba(249, 115, 22, 0.04);
+}
+.rpg-ambient--gossip {
+    border-left-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.03);
+    font-style: italic;
+    font-size: 0.88rem;
+}
+.rpg-ambient-quest {
+    color: #b45309;
+    font-weight: 500;
+}
 
 .rpg-ambient-speaker {
     font-weight: 600;

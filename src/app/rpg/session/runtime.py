@@ -1335,6 +1335,10 @@ def _apply_idle_tick_to_session(
         "updates": final_updates,
         "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
         "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+        # Phase 8: capture initiative and event decisions for replay
+        "initiative_candidate": _safe_dict(selected_initiative) if selected_initiative else None,
+        "world_events_emitted": len(event_updates) if event_updates else 0,
+        "dialogue_candidate": _safe_dict(selected_dialogue) if selected_dialogue else None,
     }
     runtime_state["llm_records"].append(idle_record)
     runtime_state["llm_records_index"][idle_capture_key] = idle_record

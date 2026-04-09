@@ -467,6 +467,7 @@ var AdventureBuilder = (function () {
     // ── Step 3: Rules / Tone ──
 
     function _renderStep3_Rules(body) {
+        var wb = setup.world_behavior || {};
         var html = '<div class="ab-section">' +
             '<h4>Hard Rules</h4>' +
             '<p class="ab-hint">Strict world rules the GM must enforce.</p>' +
@@ -486,6 +487,18 @@ var AdventureBuilder = (function () {
             '<h4>Canon Notes</h4>' +
             '<p class="ab-hint">Important world lore facts the GM should respect.</p>' +
             _chipEditor('abCanonNotes', setup.canon_notes, 'e.g. The king has been dead for 10 years') +
+            '</div>' +
+            '<div class="ab-section">' +
+            '<h4>\uD83C\uDF0D World Behavior</h4>' +
+            '<p class="ab-hint">Control how the living world behaves during play. Genre-tuned defaults are pre-selected.</p>' +
+            _selectField('Ambient Activity', 'abWbAmbientActivity', wb.ambient_activity || 'medium', ['low', 'medium', 'high']) +
+            _selectField('NPC Initiative', 'abWbNpcInitiative', wb.npc_initiative || 'medium', ['low', 'medium', 'high']) +
+            _selectField('Interruptions', 'abWbInterruptions', wb.interruptions || 'normal', ['minimal', 'normal', 'frequent']) +
+            _selectField('Quest Prompting', 'abWbQuestPrompting', wb.quest_prompting || 'guided', ['off', 'light', 'guided', 'strong']) +
+            _selectField('Companion Chatter', 'abWbCompanionChatter', wb.companion_chatter || 'normal', ['quiet', 'normal', 'talkative']) +
+            _selectField('World Pressure', 'abWbWorldPressure', wb.world_pressure || 'standard', ['gentle', 'standard', 'harsh']) +
+            _selectField('Opening Guidance', 'abWbOpeningGuidance', wb.opening_guidance || 'normal', ['light', 'normal', 'strong']) +
+            _selectField('Play Style', 'abWbPlayStyleBias', wb.play_style_bias || 'balanced', ['sandbox', 'balanced', 'story_directed']) +
             '</div>';
         body.innerHTML = html;
         _attachChipEditors(body);
@@ -1852,6 +1865,17 @@ var AdventureBuilder = (function () {
         setup.soft_tone_rules = _readChips('abToneRules');
         setup.forbidden_content = _readChips('abForbidden');
         setup.canon_notes = _readChips('abCanonNotes');
+        // Phase F: world behavior config
+        setup.world_behavior = {
+            ambient_activity: _val('abWbAmbientActivity') || 'medium',
+            npc_initiative: _val('abWbNpcInitiative') || 'medium',
+            interruptions: _val('abWbInterruptions') || 'normal',
+            quest_prompting: _val('abWbQuestPrompting') || 'guided',
+            companion_chatter: _val('abWbCompanionChatter') || 'normal',
+            world_pressure: _val('abWbWorldPressure') || 'standard',
+            opening_guidance: _val('abWbOpeningGuidance') || 'normal',
+            play_style_bias: _val('abWbPlayStyleBias') || 'balanced',
+        };
     }
 
     function _readStep4_World() {
