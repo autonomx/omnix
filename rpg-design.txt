@@ -1,1471 +1,1017 @@
-The goal is to change the builder from “fill some world fields and launch” into “author a compelling opening campaign with clear player fantasy, strong launch context, semantic validation, and a convincing preview.”
+Goal
 
-Implementation order
+Transform RPG flow from:
 
-Do it in this order:
+player acts
+world replies
 
-Phase A — Stronger creator inputs
-Phase B — Launch-quality opening builder
-Phase C — Semantic validation
-Phase D — Better preview
-Phase E — LLM-generated unique world bootstrap
+into:
 
-Then small integration/UI polish and tests
+world keeps moving
+NPCs make decisions
+NPCs talk to each other
+NPCs talk to the player first
+ambient incidents happen
+the player can be interrupted
+all of it remains deterministic, bounded, replay-safe
+Design principles
+1. Simulation truth first
 
-Do not start with preview first. Preview quality depends on having the richer setup fields and semantic validation in place.
+Ambient activity must come from simulation state, not from the LLM inventing story.
 
-Phase A — Stronger creator inputs
+Correct split:
+
+simulation decides what happens
+dialogue/narration decides how it is expressed
+2. Server authoritative
+
+The frontend should never create world events or NPC initiative.
+It may only:
+
+request idle advancement
+subscribe to updates
+render results
+3. Bounded and replay-safe
+
+Everything must be:
+
+tick-based
+recorded
+capped
+deterministic in ordering
+fail-fast in replay when capture is missing
+4. Player relevance filter
+
+The world can be alive without spamming the player.
+Only player-relevant activity should surface to the feed.
+
+System overview
+
+Build this in five layers:
+
+Phase 1 — Ambient simulation advancement
+
+Idle ticks advance the world even when the player does nothing.
+
+Phase 2 — NPC initiative engine
+
+NPCs decide to speak, confront, warn, recruit, gossip, or react without player prompting.
+
+Phase 3 — Interruptions and delivery policy
+
+Urgent events can interrupt; low-priority activity is queued or badged.
+
+Phase 4 — Player-facing ambient feed
+
+The UI renders autonomous activity distinctly from direct turn responses.
+
+Phase 5 — Opening-aware ambient behavior
+
+The new setup/opening data drives early idle activity, so the first 5–10 minutes feel authored, not generic.
+
+Phase 1 — Ambient simulation advancement
 Objective
 
-Add first-class setup fields for:
+Advance the world while idle, in a way that produces meaningful nearby activity.
 
-player role/archetype
-campaign objective
-opening hook
-core world laws
-genre-specific mechanics/rules
-starter tension/conflict
-desired content mix
-starting gear/resources
-Files to modify
-Frontend
-src/static/rpg/adventureBuilderState.js
-src/static/rpg/adventureBuilder.js
-optional CSS file used by builder UI
-Backend
-src/app/rpg/creator/schema.py
-src/app/rpg/creator/defaults.py
-src/app/rpg/creator/validation.py
-src/app/rpg/adventure_builder_service.py
-src/app/rpg/api/rpg_adventure_routes.py
-A1. Expand builder state model
-File
+Files
+src/app/rpg/session/runtime.py
+src/app/rpg/session/ambient_builder.py
+src/app/rpg/session/ambient_policy.py
+src/app/rpg/api/rpg_session_routes.py
+What to add
+A. Idle tick cadence policy
 
-src/static/rpg/adventureBuilderState.js
+Use heartbeat-driven idle advancement, but make the server decide how much progression to apply.
 
-Add top-level fields
+Add helper in runtime.py:
 
-Add these normalized state fields:
-
-player_role: "",
-player_archetype: "",
-player_background: "",
-campaign_objective: "",
-opening_hook: "",
-starter_conflict: "",
-core_world_laws: [],
-genre_rules: [],
-desired_content_mix: {
-  combat: 0.25,
-  exploration: 0.25,
-  intrigue: 0.20,
-  mystery: 0.15,
-  survival: 0.05,
-  romance: 0.05,
-  humor: 0.05,
-},
-starting_gear: [],
-starting_resources: {
-  gold: 0,
-  supplies: 0,
-  ammo: 0,
-  rations: 0,
-},
-Add helper normalizers
-
-Add helper functions in state module:
-
-function normalizeDesiredContentMix(mix) { ... }
-function normalizeStartingResources(resources) { ... }
-function normalizeStringList(list, maxItems, maxLen) { ... }
-function normalizeGearItems(list) { ... }
-Rules
-hard cap lists
-trim strings
-drop empty items
-clamp mix values to [0,1]
-normalize content mix to total 1.0 if nonzero
-A2. Add schema support
-File
-
-src/app/rpg/creator/schema.py
-
-Add fields to adventure setup schema
-
-Add these to the canonical setup payload shape:
-
-"player_role": str,
-"player_archetype": str,
-"player_background": str,
-"campaign_objective": str,
-"opening_hook": str,
-"starter_conflict": str,
-"core_world_laws": List[str],
-"genre_rules": List[str],
-"desired_content_mix": Dict[str, float],
-"starting_gear": List[Dict[str, Any]],
-"starting_resources": Dict[str, int],
-Add schema helpers
-
-Create/extend:
-
-normalize_creator_setup(payload)
-normalize_desired_content_mix(mix)
-normalize_starting_gear(items)
-normalize_starting_resources(resources)
-Hard caps
-
-Use bounded sizes:
-
-world laws max 12
-genre rules max 12
-starting gear max 16
-each line max 160 chars
-numeric resources max sane cap, e.g. 999999
-A3. Add defaults generation
-File
-
-src/app/rpg/creator/defaults.py
-
-Add default inference helpers
-
-Add functions like:
-
-def infer_default_player_role(setup): ...
-def infer_default_campaign_objective(setup): ...
-def infer_default_opening_hook(setup): ...
-def infer_default_starter_conflict(setup): ...
-def infer_default_genre_rules(setup): ...
-def infer_default_content_mix(setup): ...
-def infer_default_starting_gear(setup): ...
-def infer_default_starting_resources(setup): ...
-Behavior
-
-Defaults should depend on:
-
-genre
-setting
-mood
-difficulty
-premise
-difficulty_style if already present
-
-Examples:
-
-fantasy + exploration → torch, rope, rations
-cyberpunk + stealth/intrigue → credstick, sidearm, deck, fake ID
-survival horror → medkit, flashlight, low supplies
-Important
-
-Defaults must be:
-
-genre-aware
-bounded
-deterministic
-not too verbose
-easy for user to override
-A4. Expose new fields in builder UI
-File
-
-src/static/rpg/adventureBuilder.js
-
-Step changes
-
-Do not dump all new fields into one long form. Split them into clear subpanels.
-
-In current early setup step, add these sections:
-Player Fantasy
-role
-archetype
-background
-Campaign Intent
-campaign objective
-opening hook
-starter conflict
-World Rules
-core world laws
-genre rules
-Play Mix
-desired content mix sliders
-combat
-exploration
-intrigue
-mystery
-survival
-romance
-humor
-Starting Kit
-starting gear editor
-starting resources mini-form
-UI behavior
-use chips/tag editors for laws and rules
-use textarea for hook/objective/conflict
-use slider bars for content mix
-use repeatable rows for gear
-show small helper text per section
-Add “quick fill” buttons
-
-Buttons:
-
-“Suggest from genre”
-“Balanced”
-“Combat-heavy”
-“Narrative-heavy”
-“Mystery-heavy”
-“Survival-heavy”
-
-These should fill desired_content_mix and maybe genre rules deterministically on frontend from preset maps.
-
-A5. Carry new fields through service layer
-File
-
-src/app/rpg/adventure_builder_service.py
-
-Ensure:
-
-template load includes new fields
-validate endpoint preserves them
-preview endpoint uses them
-start endpoint persists them into final setup payload
-
-Add a helper:
-
-def merge_creator_input_with_defaults(payload): ...
-
-This should:
-
-normalize schema
-backfill defaults only when missing
-preserve explicit creator choices
-Phase B — Launch-quality opening builder
-Objective
-
-Add a dedicated Opening step that defines:
-
-where you begin
-what is happening right now
-who is present
-what the immediate problem is
-why the player is involved
-what the first likely choices are
-
-This is the biggest UX improvement.
-
-Files to modify
-Frontend
-src/static/rpg/adventureBuilderState.js
-src/static/rpg/adventureBuilder.js
-Backend
-src/app/rpg/creator/schema.py
-src/app/rpg/creator/defaults.py
-src/app/rpg/creator/validation.py
-src/app/rpg/adventure_builder_service.py
-B1. Add opening model to state/schema
-New nested object
-
-Add:
-
-opening: {
-  location_id: "",
-  scene_frame: "",
-  present_npc_ids: [],
-  immediate_problem: "",
-  player_involvement_reason: "",
-  first_choices: [],
-  tension_level: "medium",
-  time_of_day: "",
-  weather: "",
-}
-Python schema equivalent
-
-Same shape in creator/schema.py.
-
-Field meanings
-scene_frame: what is happening in the first moment
-immediate_problem: concrete situation demanding response
-player_involvement_reason: why the player cares / is involved
-first_choices: likely first actions shown in preview, not hardcoded gameplay options
-tension_level: low/medium/high
-time_of_day, weather: scene texture only
-B2. Rework builder flow
-File
-
-src/static/rpg/adventureBuilder.js
-
-Change step flow from:
-
-Basics
-Rules & Tone
-World Seeds
-Start State
-Review & Launch
-
-to:
-
-Basics
-Rules & Tone
-World Seeds
-Opening
-Review & Launch
-
-You can merge the thinnest parts of current Start State into Opening.
-
-Opening step sections
-Opening Scene
-where you begin
-time of day
-weather
-tension level
-What Is Happening Right Now
-scene frame
-immediate problem
-Why The Player Is Involved
-player involvement reason
-Who Is Present
-present NPC picker
-present faction indicator if relevant
-First Likely Choices
-repeatable suggestion rows
-allow user edits
-button: “Suggest opening choices”
-UI behavior
-
-When location changes:
-
-filter NPCs by location first
-still allow override, but show warning if disconnected
-B3. Add backend opening inference
-File
-
-src/app/rpg/creator/defaults.py
-
-Add:
-
-def infer_opening_location(setup): ...
-def infer_opening_scene_frame(setup): ...
-def infer_opening_problem(setup): ...
-def infer_player_involvement_reason(setup): ...
-def infer_opening_present_npcs(setup): ...
-def infer_first_choices(setup): ...
-Rules
-
-These should be inferred from:
-
-opening hook
-campaign objective
-selected starting location
-NPC seeds
-faction seeds
-mood
-genre
-starter conflict
-Example output
-location: market square
-scene frame: public execution is being interrupted by masked raiders
-immediate problem: chaos breaks out and someone important is fleeing
-involvement: you were hired to protect the target / your sibling is there / the relic is yours
-first choices:
-intervene openly
-follow the fleeing suspect
-protect civilians
-use the chaos to gather intel
-
-Keep these as preview/opening intent, not deterministic forced options.
-
-B4. Persist opening into start pipeline
-File
-
-src/app/rpg/adventure_builder_service.py
-
-When launching:
-
-map opening.location_id into actual starting location
-map opening.present_npc_ids into actual starter scene presence
-persist opening metadata into setup payload for runtime/presentation use
-
-Add:
-
-def build_opening_context(setup): ...
-
-Return:
-
-{
-  "location_id": ...,
-  "present_npc_ids": ...,
-  "scene_frame": ...,
-  "immediate_problem": ...,
-  "player_involvement_reason": ...,
-  "first_choices": [...],
-  "tension_level": ...,
-  "time_of_day": ...,
-  "weather": ...,
-}
-
-That object should be saved into setup/session bootstrap metadata.
-
-Phase C — Semantic validation
-Objective
-
-Add warnings for:
-
-weak premise
-no actionable opening
-generic factions/NPCs
-contradictory canon/rules
-disconnected starting NPCs/location
-too many seeds with no central conflict
-
-This is warning-level validation, not hard blocking, except for severe contradictions.
-
-Files to modify
-src/app/rpg/creator/validation.py
-src/app/rpg/adventure_builder_service.py
-optionally src/static/rpg/adventureBuilder.js to display grouped warnings
-C1. Add semantic validator module/functions
-File
-
-src/app/rpg/creator/validation.py
-
-Add a second-layer validator:
-
-def validate_adventure_setup_semantics(setup: Dict[str, Any]) -> Dict[str, Any]:
-
-Return structure:
-
-{
-  "warnings": [...],
-  "notices": [...],
-  "scores": {
-    "premise_strength": 0.0,
-    "opening_clarity": 0.0,
-    "seed_cohesion": 0.0,
-    "player_hook_strength": 0.0,
-  }
-}
-Warning types
-Weak premise
-
-Trigger if:
-
-premise too short
-objective empty
-opening hook empty
-all three are vague/generic
-No actionable opening
-
-Trigger if:
-
-no immediate problem
-no first choices
-opening scene frame too empty
-no player involvement reason
-Generic factions/NPCs
-
-Trigger if:
-
-multiple entities with nearly identical labels/descriptions
-names are placeholders
-descriptions are too short/generic
-Contradictory canon/rules
-
-Trigger if:
-
-forbidden content conflicts with allowed tone
-world laws conflict with genre rules
-canon notes conflict with premise/opening
-player role contradicts world rules
-Disconnected starting NPCs/location
-
-Trigger if:
-
-present NPCs not tied to opening location
-opening location not referenced anywhere else
-starter NPCs have no relation to objective/hook/conflict
-Too many seeds / no center
-
-Trigger if:
-
-too many factions + NPCs + locations with weak premise
-too many seeded elements but no central conflict/objective
-C2. Add helper heuristics
-
-Add pure helpers:
-
-def _text_strength(text: str) -> float: ...
-def _looks_generic_name(name: str) -> bool: ...
-def _entity_description_strength(entity: Dict[str, Any]) -> float: ...
-def _opening_is_actionable(opening: Dict[str, Any]) -> bool: ...
-def _compute_seed_cohesion(setup: Dict[str, Any]) -> float: ...
-
-Keep them:
-
-deterministic
-lightweight
-rule-based
-no LLM dependency
-C3. Merge semantic validation into existing validate/preview service
-File
-
-src/app/rpg/adventure_builder_service.py
-
-In validation pipeline:
-
-run structural validation first
-then semantic validation
-return both
-
-Response shape:
-
-{
-  "ok": True,
-  "errors": [...],
-  "warnings": [...],
-  "notices": [...],
-  "semantic_scores": {...}
-}
-Severity rules
-structural errors block launch
-semantic warnings do not block launch
-severe contradiction can optionally escalate to blocking error
-C4. Show validation meaningfully in UI
-File
-
-src/static/rpg/adventureBuilder.js
-
-In Review step:
-
-group validation by:
-blocking errors
-warning issues
-improvement suggestions
-
-Show semantic scores with small labels:
-
-Premise strength
-Opening clarity
-Seed cohesion
-Player hook strength
-
-Do not just dump raw warning strings. Render category cards.
-
-Phase D — Better preview
-Objective
-
-Show:
-
-opening narration preview
-cast present at launch
-starter conflict
-inferred campaign loop
-likely first actions
-“what the AI understood from your setup”
-
-This should feel like a playable teaser, not just a validation dump.
-
-Files to modify
-src/app/rpg/adventure_builder_service.py
-src/app/rpg/api/rpg_adventure_routes.py
-src/static/rpg/adventureBuilder.js
-
-Optional:
-
-src/app/rpg/ai/world_scene_narrator.py only if you want to reuse narration helpers
-but prefer deterministic builder-side preview generation first
-D1. Build a richer preview contract
-File
-
-src/app/rpg/adventure_builder_service.py
-
-Extend preview builder with:
-
-def build_adventure_preview(setup: Dict[str, Any]) -> Dict[str, Any]:
-
-Add to response:
-
-{
-  "opening_preview": {
-    "title": str,
-    "location_name": str,
-    "scene_frame": str,
-    "narration_preview": str,
-    "immediate_problem": str,
-    "player_involvement_reason": str,
-    "tension_level": str,
-    "time_of_day": str,
-    "weather": str,
-  },
-  "launch_cast": [
-    {
-      "npc_id": str,
-      "name": str,
-      "role": str,
-      "reason_present": str,
-    }
-  ],
-  "starter_conflict": {
-    "summary": str,
-    "parties": [str],
-    "stakes": str,
-  },
-  "campaign_loop_preview": {
-    "primary_loop": str,
-    "secondary_loops": [str],
-  },
-  "likely_first_actions": [str],
-  "understood_setup": {
-    "player_fantasy": str,
-    "world_shape": str,
-    "campaign_feel": str,
-    "core_rules": [str],
-  },
-}
-D2. Generate opening narration preview
-Deterministic version first
-
-Do not require LLM.
-
-Add helper:
-
-def build_opening_narration_preview(setup, opening_context) -> str:
-
-Template it from:
-
-location
-mood
-conflict
-hook
-player role
-current scene frame
-
-Example format:
-
-2–4 short paragraphs max
-concise
-should feel like the first screen of the adventure
-
-Keep bounded:
-
-max ~800 chars
-Optional LLM mode later
-
-If you add LLM:
-
-it must style only
-deterministic fallback required
-no new world facts
-capture/replay safe
-D3. Infer campaign loop preview
-
-Add helper:
-
-def infer_campaign_loop_preview(setup) -> Dict[str, Any]:
-
-Examples:
-
-“Investigate leads → confront faction operatives → uncover relic network”
-“Take contracts → survive missions → upgrade crew → expose conspiracy”
-“Explore ruins → manage supplies → decode lore → prevent awakening”
-
-This should be generated from:
-
-objective
-content mix
-genre
-mood
-conflict
-seeds
-D4. Build “what the AI understood” summary
-
-Add helper:
-
-def summarize_understood_setup(setup) -> Dict[str, Any]:
-
-Return:
-
-player fantasy
-world shape
-campaign feel
-core rules
-
-This is extremely important because it lets the player verify:
-
-“yes, this builder understood what I meant”
-D5. Render richer preview UI
-File
-
-src/static/rpg/adventureBuilder.js
-
-In preview/review step, replace generic summary blocks with cards:
-
-Opening Preview Card
-title
-location
-opening narration preview
-immediate problem
-why you are involved
-Launch Cast Card
-NPC name
-role
-why present
-Starter Conflict Card
-summary
-stakes
-involved parties
-Campaign Loop Card
-primary loop
-secondary loops
-First Actions Card
-likely first actions
-Understanding Card
-“The system understands your setup as…”
-player fantasy
-world shape
-campaign feel
-rules it will try to honor
-Routes / API changes
-File
-
-src/app/rpg/api/rpg_adventure_routes.py
-
-Ensure these routes accept/return the richer payload:
-
-Template endpoint
-
-Return defaulted new fields.
-
-Validate endpoint
-
-Return:
-
-{
-  "ok": true,
-  "errors": [],
-  "warnings": [],
-  "notices": [],
-  "semantic_scores": {...}
-}
-Preview endpoint
-
-Return:
-
-{
-  "ok": true,
-  "preview": {
-    ...
-  }
-}
-Start endpoint
-
-Persist all new fields into the adventure/session payload.
-
-Detailed per-phase patch guidance for coding LLM
-Part 1 — Schema and state
-
-Implement first:
-
-state fields
-schema normalization
-defaults
-basic UI controls
-
-Do not yet build semantic scoring or rich preview.
-
-Part 2 — Opening step
-
-Implement:
-
-new nested opening model
-new builder step
-opening inference
-launch mapping into setup/session bootstrap
-Part 3 — Semantic validation
-
-Implement:
-
-semantic validator helpers
-warning categories
-validation UI cards
-scores
-Part 4 — Preview
-
-Implement:
-
-preview contract expansion
-opening narration preview
-launch cast
-conflict summary
-campaign loop
-likely first actions
-understood setup panel
-Part 5 — Tests
-
-Add tests for all new schema/default/validation/preview behavior.
-
-Tests to add
-Backend tests
-
-Add or extend tests under your RPG creator/builder test area.
-
-Schema/defaults
-normalizes new fields
-clamps content mix
-trims gear/resources
-backfills defaults deterministically
-Opening
-builds opening context when missing
-preserves explicit opening overrides
-location/NPC selection is bounded and deterministic
-Semantic validation
-warns on weak premise
-warns on no actionable opening
-warns on generic factions/NPCs
-warns on contradictory rules
-warns on disconnected starting NPCs
-warns on too many seeds / weak center
-Preview
-preview includes opening_preview
-preview includes launch_cast
-preview includes likely_first_actions
-preview includes understood_setup
-preview stays bounded and does not mutate setup truth
-Start flow
-all new fields persist into session/setup payload
-starting gear/resources survive launch
-opening context survives launch
-Frontend tests if available
-content mix sliders normalize correctly
-opening step renders and persists state
-validation cards display grouped warnings
-preview cards render correctly
-Important design rules for coding LLM
-Do not let preview invent canonical truth
-preview is descriptive
-launch payload remains authoritative
-Do not collapse everything into freeform prompt text
-new fields must be structured first-class fields
-Keep everything bounded
-lists capped
-text trimmed
-preview concise
-Defaults must be genre-aware, not generic placeholders
-but still deterministic and overrideable
-Semantic validation should be rule-based, not LLM-based
-cheap
-deterministic
-testable
-Opening step must improve first 30 minutes of play
-not just store more metadata
-Literal instruction block to give coding LLM
-
-Implement the RPG adventure setup upgrade in four ordered phases. First add first-class creator inputs across state, schema, defaults, validation, service, routes, and builder UI for player role/archetype, campaign objective, opening hook, core world laws, genre rules, starter conflict, desired content mix, and starting gear/resources. Second add a dedicated Opening step with structured opening state for where the player begins, what is happening right now, who is present, the immediate problem, why the player is involved, and likely first choices, and persist that opening context into launch/setup payloads. Third add semantic validation warnings and scores for weak premise, no actionable opening, generic entities, contradictory rules, disconnected starting NPCs/location, and too many seeds without a central conflict. Fourth expand preview to show opening narration preview, launch cast, starter conflict, campaign loop preview, likely first actions, and a “what the system understood from your setup” summary. Keep all logic deterministic, bounded, and structured, with tests for schema/defaults/opening/validation/preview/start flow.
-
-
-add a new phase after Preview.
-
-The right order becomes:
-
-Phase A — Stronger creator inputs
-Phase B — Launch-quality opening builder
-Phase C — Semantic validation
-Phase D — Better preview
-Phase E — LLM-generated unique world bootstrap
-
-That phase should not replace the structured builder. It should sit on top of it:
-
-player provides intent, rules, constraints, tone
-system uses LLM to generate rich starter content
-all generated output is converted into structured bounded data
-user can review/edit/regenerate before launch
-
-That gives you uniqueness without surrendering control.
-
-Phase E — LLM-generated unique world bootstrap
-Objective
-
-Use the app LLM to generate a rich, unique starting package from the builder inputs, including:
-
-characters with bios, motives, relationships, hooks
-locations with descriptions and role in the world
-factions with goals, tensions, methods, and presence
-lore blocks, myths, rumors, institutions, conflicts
-opening scene details and starter hooks
-starting gear/item flavor where appropriate
-
-The generated output must be:
-
-structured
-bounded
-editable
-deterministic enough for your architecture
-previewable before launch
-optional, not mandatory
-Core design rule
-
-LLM generates proposals, not truth directly.
-
-The LLM should never directly mutate canonical simulation state.
-
-Correct flow:
-
-Builder inputs are normalized
-LLM generates structured proposal payload
-Backend parses and validates it
-Proposal is shown to user
-User accepts/regenerates/edits
-Accepted proposal is merged into canonical setup payload
-Launch uses accepted structured data only
-
-That is the safest version for your project.
-
-What this phase should generate
-1. Characters
-
-Generate a bounded set of starter characters:
-
-name
-role
-short bio
-public impression
-motive
-attitude toward player
-secrets or tension hooks
-location presence
-faction ties
-speech style tags
-2. Locations
-
-Generate:
-
-location name
-category/type
-short description
-atmosphere
-what happens there
-danger/opportunity tags
-controlling faction if any
-why it matters in the opening
-3. Factions
-
-Generate:
-
-name
-identity
-goals
-methods
-public face
-pressure/conflict angle
-relationship to opening situation
-relationship to player if relevant
-4. Lore / world texture
-
-Generate:
-
-key lore truths
-rumors
-customs/laws
-social norms
-recent events
-magic/tech rules
-taboo or forbidden elements
-5. Opening package
-
-Generate:
-
-opening narration scaffold
-starter conflict
-present NPCs
-immediate problem
-likely first actions
-emotional tone of first scene
-6. Optional starter items
-
-Generate:
-
-named starter items
-short description
-use/purpose
-rarity/quality flavor
-optional stat hints if your item pipeline supports it
-Where this phase sits in the UX
-
-Add this after Phase A/B inputs are filled, but before final launch.
-
-Best UX:
-
-user fills core intent and opening direction
-presses “Generate World Details”
-system generates starter package
-user reviews tabs:
-Characters
-Factions
-Locations
-Lore
-Opening
-user can:
-accept all
-regenerate section
-regenerate one entity
-edit manually
-lock selected items and regenerate the rest
-
-This is much better than blindly autogenerating everything on load.
-
-Files to modify
-Frontend
-src/static/rpg/adventureBuilderState.js
-src/static/rpg/adventureBuilder.js
-builder CSS file if needed
-Backend
-src/app/rpg/adventure_builder_service.py
-src/app/rpg/api/rpg_adventure_routes.py
-src/app/rpg/creator/schema.py
-src/app/rpg/creator/validation.py
-src/app/rpg/creator/defaults.py
-New backend modules recommended
-src/app/rpg/creator/llm_world_generator.py
-src/app/rpg/creator/llm_world_parser.py
-src/app/rpg/creator/llm_world_merge.py
-
-If you already have a shared LLM provider path, use that instead of inventing a new one.
-
-E1 — Add generated proposal state
-Frontend state
-
-In adventureBuilderState.js, add:
-
-generated_package: {
-  status: "idle", // idle | loading | ready | error
-  seed_hint: "",
-  generation_notes: "",
-  characters: [],
-  locations: [],
-  factions: [],
-  lore_entries: [],
-  rumors: [],
-  opening_patch: null,
-  warnings: [],
-  provenance: {
-    used_llm: false,
-    model: "",
-    generated_at: "",
-  },
-},
-generation_preferences: {
-  enabled: true,
-  character_count: 5,
-  location_count: 4,
-  faction_count: 3,
-  lore_count: 6,
-  keep_existing_seeds: true,
-  creativity_profile: "balanced", // grounded | balanced | wild
-},
-locked_generated_ids: [],
-Backend schema
-
-In creator/schema.py, add normalized schema for:
-
-generated_package
-generation_preferences
-proposal entity shapes
-
-Generated content should be bounded:
-
-characters max 8
-locations max 8
-factions max 6
-lore max 12
-rumors max 12
-E2 — Add generator service
-New file
-
-src/app/rpg/creator/llm_world_generator.py
-
-Create a high-level function:
-
-def generate_world_bootstrap_proposal(setup: Dict[str, Any]) -> Dict[str, Any]:
-
-This function should:
-
-normalize setup
-build generation request
-call app LLM provider
-parse structured output
-normalize and bound output
-return proposal payload
-
-Also add:
-
-def build_world_generation_prompt(setup: Dict[str, Any]) -> Dict[str, Any]:
-
-and maybe:
-
-def fallback_world_bootstrap_proposal(setup: Dict[str, Any]) -> Dict[str, Any]:
-
-Fallback must exist if LLM fails.
-
-E3 — Structured prompt contract
-
-Do not ask the LLM for loose prose. Ask for structured JSON.
-
-Prompt should include
-genre
-setting
-premise
-player role/archetype/background
-campaign objective
-opening hook
-starter conflict
-core world laws
-genre rules
-desired content mix
-current seed entities if any
-opening context
-forbidden content / canon constraints
-Prompt instructions
-
-Tell the LLM to generate:
-
-unique but coherent content
-bounded counts
-concise descriptions
-no contradiction with creator inputs
-no overpowering the player
-no irreversible canonical events beyond setup
-no excessive world scale unless requested
-no placeholders
-Required response shape
-
-Require JSON with keys like:
-
-{
-  "characters": [...],
-  "locations": [...],
-  "factions": [...],
-  "lore_entries": [...],
-  "rumors": [...],
-  "opening_patch": {...},
-  "generation_notes": ""
-}
-E4 — Parse and normalize generated content
-New file
-
-src/app/rpg/creator/llm_world_parser.py
-
-Add:
-
-def parse_world_bootstrap_response(raw_text: str) -> Dict[str, Any]:
-
-and:
-
-def normalize_generated_world_package(payload: Dict[str, Any]) -> Dict[str, Any]:
-
-Responsibilities:
-
-parse JSON safely
-strip invalid fields
-bound lengths
-normalize strings
-ensure IDs
-dedupe by normalized names
-reject malformed structures
-downgrade invalid content to warnings, not crashes
-
-For every generated entity:
-
-assign deterministic IDs if missing
-ensure required fields
-trim descriptions
-cap nested lists
-E5 — Merge generated proposal into builder state
-New file
-
-src/app/rpg/creator/llm_world_merge.py
-
-Add:
-
-def merge_generated_package_into_setup(
-    setup: Dict[str, Any],
-    generated: Dict[str, Any],
+def compute_idle_tick_count(
+    session: dict,
     *,
-    keep_existing_seeds: bool = True,
-    locked_ids: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    elapsed_seconds: int,
+    reason: str = "heartbeat",
+) -> int:
 
 Rules:
 
-if keep_existing_seeds=True, do not overwrite user-authored entities with same IDs
-merge by ID when explicit
-otherwise merge by normalized name only if safe
-locked generated entities survive regeneration
-accepted generated opening patch may fill missing opening fields, not overwrite explicit user fields unless requested
+tab open heartbeat: usually 1 tick
+resume catch-up: capped batch
+active encounter: maybe suppress or reduce ambient chatter ticks
+recent player action: lower ambient aggression briefly
+B. Scene-aware idle advance
 
-This is critical. Without a merge layer, regeneration becomes destructive and frustrating.
+Extend _apply_idle_tick_to_session() to build a local scene context after stepping simulation:
 
-E6 — Add generation endpoints
+current location
+present NPCs
+nearby active factions
+recent world events
+opening metadata from setup if still relevant
+C. Ambient extraction categories
+
+In ambient_builder.py, make sure build_ambient_updates() can emit:
+
+npc_to_player
+npc_to_npc
+world_event
+arrival
+departure
+warning
+combat_start
+quest_prompt
+companion_comment
+system_summary
+D. Salience scoring refinement
+
+Extend salience to account for:
+
+tied to opening conflict
+tied to campaign objective
+tied to player role/background
+repeated same speaker penalty
+repeated same kind penalty
+same location / same scene bonus
+Phase 2 — NPC initiative engine
+Objective
+
+NPCs act and speak first, based on beliefs, goals, tension, and context.
+
+Files
+src/app/rpg/ai/ambient_dialogue.py
+optionally new:
+src/app/rpg/ai/npc_initiative.py
+src/app/rpg/session/runtime.py
+What to add
+A. Split dialogue from initiative
+
+Right now ambient dialogue candidate generation is good, but you should separate:
+
+initiative decision: should this NPC act/talk now?
+dialogue phrasing: what words express that action?
+
+Create new helper file:
+
+src/app/rpg/ai/npc_initiative.py
+
+Add:
+
+def build_npc_initiative_candidates(
+    simulation_state: dict,
+    runtime_state: dict,
+    player_context: dict,
+) -> list[dict]:
+
+Each candidate should have:
+
+kind
+speaker_id
+target_id
+reason
+salience
+interrupt
+action_intent
+location_id
+
+Kinds:
+
+npc_to_player
+npc_to_npc
+warning
+demand
+taunt
+gossip
+companion_comment
+quest_prompt
+recruitment_offer
+plea_for_help
+B. Initiative rules
+
+Use rule-based triggers first.
+
+Examples:
+
+hostile NPC nearby + player idle → taunt/warning
+trusted NPC nearby + active conflict → advice/help
+faction pressure spike near player → messenger/warning
+objective-related NPC present → quest prompt
+companion present + salient event → companion comment
+recent incident + witness nearby → rumor or direct address
+opening hook still unresolved → bias activity toward it
+C. Cooldown model
+
+Keep your existing cooldown model, but expand keys:
+
+speaker:{id}
+kind:{kind}
+pair:{speaker}:{target}
+reason:{reason}
+opening:{hook_id}
+
+This prevents:
+
+same NPC spamming
+same conflict being restated every tick
+same hook firing too often
+D. Deterministic selection
+
+Sort by:
+
+salience descending
+interrupt True first
+opening relevance
+speaker_id
+target_id
+
+No uncontrolled randomness.
+
+Phase 3 — Interruptions and delivery policy
+Objective
+
+Make autonomous activity feel alive without being annoying.
+
+Files
+src/app/rpg/session/ambient_policy.py
+src/app/rpg/session/runtime.py
+src/static/rpg/rpg.js
+What to add
+A. Delivery classes
+
+Keep these three:
+
+interrupt
+badge
+silent
+
+But refine policy.
+
+B. Interrupt rules
+
+Interrupt only when one of these is true:
+
+direct threat
+combat starts
+urgent warning
+quest-critical direct address
+important arrival tied to opening/campaign objective
+companion urgent warning
+
+Everything else:
+
+badge if medium relevance
+silent if low relevance
+C. Player typing rules
+
+Do not make the backend depend on live typing state for truth.
+Let the backend classify urgency canonically.
+Let the frontend decide whether a badge waits while typing.
+
+D. Quiet-window after player action
+
+Add a small suppression window after player turns.
+
+In runtime state:
+
+"post_player_quiet_ticks": 0
+
+After apply_turn():
+
+set to 1 or 2
+
+During idle ticks:
+
+reduce low-priority initiative during quiet window
+still allow urgent interrupts
+
+This prevents ambient spam immediately after each player input.
+
+Phase 4 — Player-facing ambient feed
+Objective
+
+Make autonomous world activity legible and compelling.
+
+Files
+src/static/rpg/rpg.js
+src/static/rpg/rpgDialogueRenderer.js
+src/static/style.css
+What to add
+A. Message type rendering
+
+Render distinct cards for:
+
+narrator event
+NPC speaking to player
+NPC speaking to NPC
+faction/world event
+arrival/departure
+quest prompt
+urgent warning/combat
+B. Ambient thread grouping
+
+If 2–3 related updates happen near each other, group them visually.
+
+Example:
+
+“Raised voices near the gate”
+Bran to guard
+Bran to player
+
+Render as a compact scene thread rather than isolated spam cards.
+
+C. Unread ambient tray
+
+If player is typing, badge items should queue into:
+
+unread badge
+optional compact tray
+flush on blur/send
+D. Optional companion channel
+
+If companion comments become frequent, give them a slightly different style class so they feel helpful rather than noisy.
+
+Phase 5 — Opening-aware ambient behavior
+Objective
+
+Use the stronger setup/opening data so the first 5–10 minutes feel intentionally staged.
+
+Files
+src/app/rpg/session/runtime.py
+src/app/rpg/creator/defaults.py
+src/app/rpg/services/adventure_builder_service.py
+src/app/rpg/ai/npc_initiative.py
+src/app/rpg/session/ambient_builder.py
+What to add
+A. Opening pressure state
+
+When adventure launches, persist opening-aware runtime metadata:
+
+"opening_runtime": {
+    "active": True,
+    "scene_frame": ...,
+    "immediate_problem": ...,
+    "player_involvement_reason": ...,
+    "starter_conflict": ...,
+    "present_npc_ids": [...],
+    "first_choices": [...],
+    "opening_resolved": False,
+}
+B. Opening bias in initiative
+
+While opening_resolved == False:
+
+boost salience for NPCs tied to opening
+boost world events tied to starter conflict
+bias companion and witness dialogue toward opening problem
+suppress unrelated generic chatter unless very strong
+C. Opening resolution detection
+
+Add simple rule-based checks:
+
+player acted on opening conflict
+key opening NPC engaged
+opening location left
+first conflict escalated or resolved
+
+Then lower opening bias gradually.
+
+This makes the early game feel authored without railroading.
+
+Phase 6 — World event initiative
+Objective
+
+Let the world produce non-dialogue activity on its own.
+
+Files
+src/app/rpg/session/ambient_builder.py
+maybe new:
+src/app/rpg/world/world_event_director.py
+What to add
+A. Event classes
+
+World may autonomously surface:
+
+faction movement
+rumor spread
+resource shortage
+public disturbance
+weather/environment change
+patrol arrival
+market lockdown
+ritual/protest/ceremony
+accident/fire/explosion
+scouting report
+B. Event surfacing rules
+
+Only emit if:
+
+visible to player
+nearby or relevant to objective/opening
+sufficiently salient
+not duplicate of recent event
+C. Convert to player-facing forms
+
+Examples:
+
+narrator line
+NPC messenger
+scene change
+system summary
+Phase 7 — Quest prompting without hard rails
+Objective
+
+Make the world proactively offer direction without turning into scripted objective spam.
+
+Files
+src/app/rpg/ai/npc_initiative.py
+src/app/rpg/session/ambient_builder.py
+src/app/rpg/services/adventure_builder_service.py
+What to add
+A. Quest-prompt candidate type
+
+New initiative kind:
+
+quest_prompt
+
+Examples:
+
+a guard asks for help
+a companion suggests a lead
+a witness shares actionable info
+an employer arrives with a job
+a faction rep makes an offer
+B. Constraints
+
+Quest prompts must:
+
+tie to objective/opening/conflict
+not repeat too often
+not override player agency
+not fabricate impossible tasks
+C. UI rendering
+
+Quest prompts should feel like:
+
+actionable diegetic dialogue
+not MMO popups
+Phase 8 — Replay/capture safety
+Objective
+
+Keep ambient initiative and narration replay-safe.
+
+Files
+src/app/rpg/session/runtime.py
+src/app/rpg/ai/world_scene_narrator.py
+replay/capture helpers already in your codebase
+What to add
+A. Capture initiative decision
+
+For each idle tick, capture:
+
+selected initiative candidate
+selected dialogue candidate
+narrated update text if LLM used
+delivery classification
+B. Replay validation
+
+Replay must fail if expected ambient update or narrated text is missing.
+
+C. Do not regenerate during replay
+
+Never re-run LLM during replay.
+Never reselect candidates differently during replay.
+
+Phase 9 — Tests
+Backend tests
+
+Add tests for:
+
+idle tick emits initiative without player input
+hostile NPC can interrupt
+companion can comment
+opening-aware salience boosts work
+quiet window suppresses chatter after player turn
+unrelated chatter suppressed while opening unresolved
+world events are filtered by visibility
+queue remains bounded
+replay fails when ambient capture missing
+Frontend tests if available
+badge items queue while typing
+interrupt renders immediately
+unread flush works
+duplicate SSE/poll events not duplicated in feed
+File-by-file implementation map
+New files recommended
+src/app/rpg/ai/npc_initiative.py
+optional src/app/rpg/world/world_event_director.py
+Must modify
+src/app/rpg/session/runtime.py
+src/app/rpg/ai/ambient_dialogue.py
+src/app/rpg/session/ambient_builder.py
+src/app/rpg/session/ambient_policy.py
+src/app/rpg/api/rpg_session_routes.py
+src/static/rpg/rpg.js
+src/static/style.css
+Suggested implementation order for coding LLM
+Part 1
+
+Create npc_initiative.py, add initiative candidate building and selection.
+
+Part 2
+
+Wire initiative into idle tick runtime and opening-aware salience.
+
+Part 3
+
+Extend ambient builder and policy for quest prompts, world events, and quiet-window logic.
+
+Part 4
+
+Update frontend feed rendering, unread tray, and grouping.
+
+Part 5
+
+Add replay capture and tests.
+
+Literal instruction block for coding LLM
+
+Implement a world-acts-without-player-input system for the RPG as a deterministic server-authoritative ambient initiative layer. Add an NPC initiative engine that produces rule-based autonomous candidates such as NPC-to-player speech, NPC-to-NPC speech, warnings, taunts, companion comments, quest prompts, and recruitment/help requests based on beliefs, goals, faction pressure, nearby context, and opening-state relevance. Wire this into idle ticking so simulation advances without player input, candidate salience is scored deterministically, selected activity is narrated and queued as bounded ambient updates, and delivery is classified as interrupt, badge, or silent. Add opening-aware runtime bias so starter conflict, opening NPCs, and immediate problems dominate early idle behavior until resolved. Add quiet-window suppression after player turns, player-relevant world event surfacing, frontend ambient feed rendering with unread/badge behavior, replay-safe capture of initiative/narration decisions, and tests for autonomous activity, interruption policy, opening bias, bounded queues, and replay failure conditions.
+
+
+
+Phase F — World Behavior Customization / Director Controls
+
+This phase gives the player or creator control over how alive, aggressive, chatty, reactive, and story-directed the world feels.
+
+Without this phase, even a good ambient system can feel wrong because different players want very different experiences:
+
+some want constant interruptions
+some want a quieter exploration game
+some want heavy faction activity
+some want NPC banter but not forced quest prompting
+some want slow-burn realism
+some want high-drama story pressure
+
+So this phase should make the ambient system tunable, not one-size-fits-all.
+
+Phase F — World Behavior Customization / Director Controls
+Objective
+
+Let the creator and/or player customize:
+
+how often the world acts without input
+how often NPCs initiate
+how often interruptions happen
+how strongly the opening/conflict is pushed
+how much ambient dialogue vs world events appear
+how aggressive quest prompting is
+how reactive factions are
+how much the simulation pressures the player
+how noisy companions are
+how “story directed” vs “sandbox autonomous” the experience feels
+
+This should be available in a Settings / Director / World Behavior panel.
+
+Design principle
+
+These controls must bias the system, not override simulation truth.
+
+Correct model:
+
+settings affect salience, cooldowns, surfacing thresholds, pacing
+settings do not directly force impossible events
+settings do not let presentation invent truth
+
+So:
+
+“High NPC initiative” means lower cooldowns / higher candidate weights
+not “always make NPCs talk every tick”
+Where this belongs
+
+You can expose it in two places:
+
+Option A — Adventure Builder
+
+Good for creator-facing setup defaults.
+
+Put it under:
+
+Setting panel
+or a dedicated World Behavior / Director step
+Option B — In-game Settings
+
+Good for player live tuning during play.
+
+This is valuable because a player may start wanting “high drama” and later switch to “quieter sandbox”.
+
+Best approach
+
+Support both:
+
+builder default settings saved into the adventure
+runtime session override settings for current playthrough
+What should be customizable
+1. Ambient world activity
+
+How often non-player activity appears.
+
+Field:
+
+"ambient_activity": "low" | "medium" | "high"
+
+Effect:
+
+adjusts idle tick surfacing threshold
+adjusts world-event emission frequency
+adjusts coalescing sensitivity
+2. NPC initiative frequency
+
+How often NPCs speak or act first.
+
+Field:
+
+"npc_initiative": "low" | "medium" | "high"
+
+Effect:
+
+candidate salience bonus/penalty
+cooldown duration scaling
+per-scene chatter caps
+3. Interruption intensity
+
+How often the player gets interrupted.
+
+Field:
+
+"interruptions": "minimal" | "normal" | "frequent"
+
+Effect:
+
+interrupt threshold
+badge vs interrupt cutoff
+quiet-window strength
+4. Quest prompting strength
+
+How much the world proactively offers hooks/jobs/leads.
+
+Field:
+
+"quest_prompting": "off" | "light" | "guided" | "strong"
+
+Effect:
+
+enables/disables quest_prompt candidates
+changes salience of opening/objective prompts
+changes repeat cooldowns for lead-offers
+5. Companion talkativeness
+
+How much companions comment/react.
+
+Field:
+
+"companion_chatter": "quiet" | "normal" | "talkative"
+
+Effect:
+
+companion comment candidate weights
+companion cooldowns
+companion interruption permissions
+6. Faction/world pressure
+
+How strongly the world escalates while idle.
+
+Field:
+
+"world_pressure": "gentle" | "standard" | "harsh"
+
+Effect:
+
+faction pressure surfacing
+escalation salience
+urgency of hostile/world-event activity
+
+This should bias surfacing first, not directly rewrite simulation logic unless you explicitly want that later.
+
+7. Opening guidance strength
+
+How strongly the system keeps pushing the opening conflict.
+
+Field:
+
+"opening_guidance": "light" | "normal" | "strong"
+
+Effect:
+
+opening bias in early initiative scoring
+suppression of unrelated chatter
+quest prompt salience tied to starter conflict
+8. Story direction vs sandbox autonomy
+
+The most important tuning axis.
+
+Field:
+
+"play_style_bias": "sandbox" | "balanced" | "story_directed"
+
+Effect:
+
+sandbox:
+weaker opening/objective bias
+more incidental world behavior
+less proactive hook surfacing
+story_directed:
+stronger objective/opening bias
+more NPCs steering toward meaningful conflict
+more structured prompts and interruptions
+
+This should be a bias, not a rail.
+
+9. Content mix influence on ambient behavior
+
+You already added desired_content_mix. Use it at runtime too.
+
+Effect:
+
+mystery-heavy → more rumors, witnesses, clues, quiet pressure
+combat-heavy → more threat/warning/combat-start surfacing
+intrigue-heavy → more faction messengers, offers, political whispers
+exploration-heavy → more environmental/world-event surfacing
+
+This is a strong bridge between builder setup and ambient runtime.
+
+Data model changes
+Builder / canonical setup
+
+Add a structured config object:
+
 File
 
-src/app/rpg/api/rpg_adventure_routes.py
+src/app/rpg/creator/schema.py
 
-Add endpoints:
+"world_behavior": {
+    "ambient_activity": "medium",
+    "npc_initiative": "medium",
+    "interruptions": "normal",
+    "quest_prompting": "guided",
+    "companion_chatter": "normal",
+    "world_pressure": "standard",
+    "opening_guidance": "normal",
+    "play_style_bias": "balanced",
+}
 
-Generate full package
-POST /api/rpg/adventure/generate_world
+Add normalization helper:
+
+def normalize_world_behavior_config(value: dict) -> dict:
+
+Allowed enums only. Fill defaults if missing.
+
+Also add to AdventureSetup.
+
+Runtime session state
+
+Allow runtime override:
+
+File
+
+src/app/rpg/session/runtime.py
+
+"world_behavior_override": {}
+
+At runtime, effective config should be:
+
+effective_world_behavior = merge(setup.world_behavior, runtime_override)
+
+Runtime override should be optional and session-local.
+
+Backend implementation plan
+F1 — Schema + defaults
+Files
+src/app/rpg/creator/schema.py
+src/app/rpg/creator/defaults.py
+Add
+normalized world_behavior
+genre-sensitive defaults if desired
+
+Example defaults:
+
+mystery/noir → lower ambient activity, stronger quest prompting, stronger opening guidance
+fantasy adventure → medium everything
+grimdark/survival → high world pressure, lower chatter, stronger interruptions
+political/intrigue → higher NPC initiative, lower combat surfacing, strong faction activity
+F2 — Builder UI controls
+Files
+src/static/rpg/adventureBuilderState.js
+src/static/rpg/adventureBuilder.js
+Add panel
+
+Either:
+
+World Behavior section under Settings
+or
+Director Controls section
+
+Controls:
+
+dropdowns or segmented toggles for each behavior axis
+short explanatory help text
+
+Example UI copy:
+
+Ambient Activity: how often the world advances visibly without your input
+NPC Initiative: how often nearby NPCs speak or act first
+Interruptions: how often urgent events interrupt your flow
+Play Style Bias: sandbox vs story-directed
+F3 — Runtime effective config helper
+File
+
+src/app/rpg/session/runtime.py
+
+Add:
+
+def get_effective_world_behavior(session: dict) -> dict:
+
+This should merge:
+
+setup config
+runtime override
+
+Use it inside idle tick path.
+
+F4 — Apply behavior config to initiative scoring
+Files
+src/app/rpg/ai/npc_initiative.py
+src/app/rpg/session/ambient_builder.py
+src/app/rpg/session/ambient_policy.py
+Examples
+Ambient activity
+low: require higher salience to emit
+high: lower threshold, but still bounded
+NPC initiative
+low: longer speaker cooldowns
+high: shorter cooldowns and slight salience boost
+Interruptions
+minimal: more badge, less interrupt
+frequent: lower interrupt threshold
+Quest prompting
+off/light: suppress many quest_prompt candidates
+strong: boost objective-tied prompts
+Companion chatter
+quiet: companion candidate penalty
+talkative: companion salience boost, shorter cooldown
+Opening guidance
+strong: opening-tied candidates boosted for more ticks
+light: opening bias decays faster
+Play style bias
+sandbox: bonus for incidental world activity, penalty for explicit steering
+story_directed: bonus for objective/opening-tied candidates, stronger hook surfacing
+F5 — Add runtime settings route
+File
+
+src/app/rpg/api/rpg_session_routes.py
+
+Add endpoint:
+
+POST /api/rpg/session/world_behavior
 
 Request:
 
 {
-  "setup": {...},
-  "generation_preferences": {...}
+  "session_id": "...",
+  "world_behavior_override": {
+    "interruptions": "minimal",
+    "npc_initiative": "high"
+  }
 }
 
 Response:
 
 {
   "ok": true,
-  "generated_package": {...},
-  "warnings": [...]
+  "world_behavior": {...effective config...}
 }
-Regenerate one section
-POST /api/rpg/adventure/regenerate_section
 
-Section options:
+This allows live tuning during play.
 
-characters
-locations
-factions
-lore
-opening
-Regenerate one entity
-POST /api/rpg/adventure/regenerate_entity
+F6 — Add frontend in-game settings UI
+Files
+src/static/rpg/rpg.js
+maybe settings modal component if you have one
 
-Request includes:
+Add a small panel or modal:
 
-entity_type
-entity_id or entity name
-current setup
-locked ids
-Accept generated package
+Ambient Activity
+NPC Initiative
+Interruptions
+Quest Prompting
+Companion Chatter
+Play Style Bias
 
-You may not even need a special endpoint if accept happens client-side and is sent with preview/start, but adding one is fine:
+This can be lightweight at first.
 
-POST /api/rpg/adventure/apply_generated_package
-E7 — Add UI for generated content review
-File
+Interaction with ambient system
 
-src/static/rpg/adventureBuilder.js
+This new phase should plug directly into the “world acts without player input” system.
 
-Add a new step or expandable panel:
-
-Option 1: New step
-
-“Generated World”
-
-Option 2: Review sub-tabs
-
-Inside Review step add tabs:
-
-Overview
-Generated Characters
-Generated Factions
-Generated Locations
-Generated Lore
-Opening
-
-I prefer a dedicated step if generation is central.
-
-UI features
-
-Each generated entity card should support:
-
-edit
-delete
-regenerate this one
-lock
-accept/reject
-Character card
-
-Show:
-
-name
-role
-bio
-motive
-ties
-opening relevance
-Location card
-
-Show:
-
-name
-description
-why it matters now
-who is there
-threat/opportunity tags
-Faction card
-
-Show:
-
-name
-goals
-methods
-conflict angle
-opening relevance
-Lore card
-
-Show:
-
-truth/rumor text
-category
-relevance
-Opening patch card
-
-Show:
-
-scene frame
-immediate problem
-why player is involved
-first likely choices
-E8 — Use LLM-generated content in preview
-
-This phase should feed directly into Phase D preview.
-
-File
-
-src/app/rpg/adventure_builder_service.py
-
-When previewing:
-
-include generated characters/factions/locations/lore if accepted
-if proposal not yet accepted, preview may still show it as “proposed generated content”
-
-Preview should become much stronger because the cast and world texture are now richer.
-
-E9 — Semantic validation for generated content
+Example mapping
+Low-interruption sandbox
+{
+  "ambient_activity": "medium",
+  "npc_initiative": "low",
+  "interruptions": "minimal",
+  "quest_prompting": "light",
+  "companion_chatter": "quiet",
+  "world_pressure": "standard",
+  "opening_guidance": "light",
+  "play_style_bias": "sandbox"
+}
+Story-heavy dramatic campaign
+{
+  "ambient_activity": "high",
+  "npc_initiative": "high",
+  "interruptions": "frequent",
+  "quest_prompting": "strong",
+  "companion_chatter": "normal",
+  "world_pressure": "harsh",
+  "opening_guidance": "strong",
+  "play_style_bias": "story_directed"
+}
+Balanced default
+{
+  "ambient_activity": "medium",
+  "npc_initiative": "medium",
+  "interruptions": "normal",
+  "quest_prompting": "guided",
+  "companion_chatter": "normal",
+  "world_pressure": "standard",
+  "opening_guidance": "normal",
+  "play_style_bias": "balanced"
+}
+Validation rules
 File
 
 src/app/rpg/creator/validation.py
 
-Add validations for generated package quality:
+Add validation for world_behavior:
 
-duplicate or near-duplicate character names
-generic titles like “Guard,” “Merchant,” “Wizard” with no personalization
-locations with no opening relevance
-factions with no goals or methods
-lore entries that repeat each other
-generated content contradicting world laws or genre rules
-too many generated entities relative to opening scope
-opening patch introducing unrelated conflict
+unknown enum values
+incompatible combinations only as notices, not errors
 
-These should be warnings, not hard errors, unless they violate explicit forbidden rules.
+Examples:
 
-E10 — Determinism / replay / launch safety
-
-Because your architecture cares about determinism, generation must be treated carefully.
-
-Best approach
-
-Generation happens only during setup time, before launch, and accepted output is stored in canonical setup JSON.
-
-That means runtime simulation does not need to regenerate anything.
-
-So determinism is preserved by:
-
-generating once
-storing accepted structured output
-launching from stored output only
-Optional provenance metadata
-
-Store in setup:
-
-"generated_package_meta": {
-  "used_llm": True,
-  "generator_version": "v1",
-  "generated_at": "...",
-  "preferences": {...},
-}
-
-This helps debugging and later migrations.
-
-E11 — Defaults and fallback behavior
+ambient_activity=low + interruptions=frequent → notice: contradictory feel
+sandbox + strong opening guidance → notice, not block
+quest_prompting=off + weak premise/opening → notice: player may lack direction
+Preview integration
 File
 
-src/app/rpg/creator/defaults.py
+src/app/rpg/services/adventure_builder_service.py
 
-Add a deterministic non-LLM fallback bootstrap generator for when:
+In preview, add:
 
-LLM unavailable
-parse failure
-validation failure
-user disables generation
+"world_behavior_preview": {
+    "summary": "This adventure is configured as a story-directed, moderately reactive world with frequent NPC initiative and light companion chatter."
+}
 
-Fallback should still generate:
+This helps the player understand how the world will behave before launch.
 
-a few starter NPCs
-a few locations
-at least one faction
-opening patch
-lore snippets
-
-This ensures the feature is robust.
-
-E12 — Tests
+Tests
+Backend
 
 Add tests for:
 
-Generator request building
-includes creator inputs
-includes opening context
-respects counts/preferences
-Parser
-parses valid JSON
-strips invalid fields
-bounds long content
-assigns IDs
-dedupes near-duplicates
-Merge
-respects keep_existing_seeds
-respects locked ids
-does not overwrite explicit fields unintentionally
-merges opening patch safely
-Validation
-warns on generic generated content
-warns on contradictions
-warns on overload
-Preview integration
-accepted generated content appears in preview
-proposed content appears separately if not applied
-Launch
-accepted generated entities persist into final setup/session
-Suggested UX wording
-
-Use buttons like:
-
-Generate world details
-Regenerate characters
-Regenerate factions
-Lock this
-Apply generated content
-Keep my manual entries
-Blend with my existing setup
-
-This should feel like assisted worldbuilding, not black-box autowriting.
-
-Important design rules for coding LLM
-Never let generation bypass structured schema
-Never make generated content mandatory
-Never overwrite user-authored content without explicit merge rules
-Always provide deterministic fallback
-All generated content must be reviewable/editable before launch
-Opening relevance matters more than total quantity
-Prefer fewer, richer entities over many shallow ones
-Final phase list
+normalization of world_behavior
+effective config merge with runtime override
+initiative scoring changes by config
+interruption classification changes by config
+opening bias changes by config
+invalid values normalized safely
+Frontend if available
+settings persist in builder state
+runtime override requests send correctly
+settings modal reflects current values
+Phase list now
 
 Phase A — Stronger creator inputs
 Phase B — Launch-quality opening builder
 Phase C — Semantic validation
 Phase D — Better preview
 Phase E — LLM-generated unique world bootstrap
+Phase F — World Behavior Customization / Director Controls
+Phase G — World acts without player input
+
+That order is better than putting customization after the ambient system, because Phase F gives you the knobs the ambient system should respect from day one.
+
+Recommendation on naming
+
+I would call the UI section:
+
+World Behavior for player-facing simplicity
+
+and internally maybe:
+
+director_settings or world_behavior
+
+Avoid “director” in the visible UI unless you want a more GM/dev-oriented tone.
 
 Literal instruction block for coding LLM
 
-Add a new Phase E after preview that uses the app LLM to generate a structured, bounded, reviewable world bootstrap proposal from the creator inputs and opening context. The generator should produce unique starter characters, locations, factions, lore entries, rumors, and an opening patch, all in strict JSON form with deterministic normalization and fallback behavior. Implement new generator, parser, and merge modules; add generation state and preferences to the builder; add backend endpoints for generate/regenerate/apply; add UI to review, edit, lock, regenerate, and accept generated content; integrate accepted content into preview and launch; and add semantic validation for generated content quality and contradictions. Ensure generated content is only a proposal until accepted, never becomes runtime truth directly, and remains bounded, editable, and consistent with creator rules.
+Add a new Phase F before or alongside the ambient initiative system that introduces structured world-behavior customization settings in the builder and runtime. Add a normalized world_behavior config to adventure setup and optional runtime override settings for ambient activity, NPC initiative, interruptions, quest prompting, companion chatter, world pressure, opening guidance, and play-style bias. Expose these in the adventure builder Settings or World Behavior panel and add an in-game session override endpoint and UI. Then wire the effective behavior config into idle tick surfacing, initiative candidate scoring, cooldown scaling, interruption thresholds, quest prompt frequency, companion comment frequency, opening-bias strength, and sandbox-vs-story-directed behavior, while keeping all effects deterministic, bounded, and bias-only rather than forcing impossible world events.
