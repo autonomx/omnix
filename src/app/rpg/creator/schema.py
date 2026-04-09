@@ -130,6 +130,72 @@ class ContentBalance:
         return cls(**data)
 
 
+# ── Phase F — World Behavior Customization ────────────────────────────────
+
+# Allowed enum values for each world-behavior axis.
+_WORLD_BEHAVIOR_ENUMS: dict[str, tuple[str, ...]] = {
+    "ambient_activity": ("low", "medium", "high"),
+    "npc_initiative": ("low", "medium", "high"),
+    "interruptions": ("minimal", "normal", "frequent"),
+    "quest_prompting": ("off", "light", "guided", "strong"),
+    "companion_chatter": ("quiet", "normal", "talkative"),
+    "world_pressure": ("gentle", "standard", "harsh"),
+    "opening_guidance": ("light", "normal", "strong"),
+    "play_style_bias": ("sandbox", "balanced", "story_directed"),
+}
+
+_WORLD_BEHAVIOR_DEFAULTS: dict[str, str] = {
+    "ambient_activity": "medium",
+    "npc_initiative": "medium",
+    "interruptions": "normal",
+    "quest_prompting": "guided",
+    "companion_chatter": "normal",
+    "world_pressure": "standard",
+    "opening_guidance": "normal",
+    "play_style_bias": "balanced",
+}
+
+
+def normalize_world_behavior_config(value: dict | None) -> dict:
+    """Normalize a world_behavior config dict.
+
+    Allowed enums only.  Missing keys are filled with defaults.
+    Unknown keys are silently dropped.
+    """
+    if not isinstance(value, dict):
+        return dict(_WORLD_BEHAVIOR_DEFAULTS)
+
+    result: dict[str, str] = {}
+    for key, allowed in _WORLD_BEHAVIOR_ENUMS.items():
+        raw = value.get(key)
+        if isinstance(raw, str) and raw.strip().lower() in allowed:
+            result[key] = raw.strip().lower()
+        else:
+            result[key] = _WORLD_BEHAVIOR_DEFAULTS[key]
+    return result
+
+
+@dataclass
+class WorldBehaviorConfig:
+    """Structured world-behavior settings for builder and runtime."""
+    ambient_activity: str = "medium"
+    npc_initiative: str = "medium"
+    interruptions: str = "normal"
+    quest_prompting: str = "guided"
+    companion_chatter: str = "normal"
+    world_pressure: str = "standard"
+    opening_guidance: str = "normal"
+    play_style_bias: str = "balanced"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "WorldBehaviorConfig":
+        normalized = normalize_world_behavior_config(data)
+        return cls(**normalized)
+
+
 # ---------------------------------------------------------------------------
 # Phase A — schema helper functions (standalone, operate on raw dicts)
 # ---------------------------------------------------------------------------
@@ -273,6 +339,9 @@ def normalize_creator_setup(payload: dict) -> dict:
     result["opening"] = normalize_opening_payload(
         result.get("opening", {})
     )
+    result["world_behavior"] = normalize_world_behavior_config(
+        result.get("world_behavior")
+    )
 
     return result
 
@@ -315,6 +384,9 @@ class AdventureSetup:
     starting_gear: list[dict[str, Any]] = field(default_factory=list)
     starting_resources: dict[str, int] = field(default_factory=dict)
     opening: dict[str, Any] = field(default_factory=dict)
+
+    # Phase F — World Behavior Customization
+    world_behavior: dict[str, str] = field(default_factory=lambda: dict(_WORLD_BEHAVIOR_DEFAULTS))
 
     def validate(self) -> None:
         if not self.setup_id:
@@ -437,6 +509,7 @@ class AdventureSetup:
         result.starting_gear = normalize_starting_gear(result.starting_gear)
         result.desired_content_mix = normalize_desired_content_mix(result.desired_content_mix)
         result.starting_resources = normalize_starting_resources(result.starting_resources)
+        result.world_behavior = normalize_world_behavior_config(result.world_behavior)
 
         return result
 
@@ -486,6 +559,7 @@ class AdventureSetup:
             "starting_gear": list(self.starting_gear),
             "starting_resources": dict(self.starting_resources),
             "opening": dict(self.opening),
+            "world_behavior": dict(self.world_behavior),
         }
 
     @classmethod
@@ -529,4 +603,5 @@ class AdventureSetup:
             starting_gear=list(data.get("starting_gear", [])),
             starting_resources=dict(data.get("starting_resources", {})),
             opening=dict(data.get("opening", {})),
+            world_behavior=normalize_world_behavior_config(data.get("world_behavior")),
         )
