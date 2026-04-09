@@ -704,6 +704,16 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         ),
     )[:12]
 
+    # Canonical decision map for downstream systems.
+    # IMPORTANT:
+    # ambient_builder.py, ambient_dialogue.py, and world_event_director.py
+    # all expect npc_decisions to be a dict keyed by npc_id.
+    npc_decision_map = {
+        str(item.get("npc_id") or ""): item
+        for item in new_npc_decisions
+        if str(item.get("npc_id") or "")
+    }
+
     new_npc_events = sorted(
         new_npc_events,
         key=lambda item: (
@@ -718,7 +728,7 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
         npc_id: mind.to_dict()
         for npc_id, mind in sorted(npc_minds.items())
     }
-    history_state["npc_decisions"] = list(new_npc_decisions)
+    history_state["npc_decisions"] = dict(sorted(npc_decision_map.items()))
 
     existing_events = history_state.get("events") or []
     history_state["events"] = list(existing_events) + list(new_npc_events)

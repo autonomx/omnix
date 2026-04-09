@@ -108,6 +108,7 @@ class NPCMind:
         npc_context = npc_context or {}
         top_goal = self.goal_engine.top_goal()
         location_id = _safe_str(npc_context.get("location_id"))
+        npc_name = _safe_str(npc_context.get("name")) or self.npc_id
 
         if not top_goal:
             decision = NPCDecision.fallback(
@@ -127,6 +128,11 @@ class NPCMind:
         mapping = {
             "stabilize_location": ("stabilize", "stabilize", "location", "The NPC acts to restore order."),
             "support_faction": ("support", "support", "faction", "The NPC rallies support for their faction."),
+            "check_on_nearby_ally": ("support", "support", "npc", "The NPC moves to coordinate with a nearby ally."),
+            "negotiate_with_nearby_npc": ("negotiate", "negotiate", "npc", f"{npc_name} speaks with someone nearby."),
+            "retaliate_against_nearby_npc": ("retaliate", "retaliate", "npc", "The NPC confronts a nearby rival."),
+            "investigate_local_incident": ("investigate", "investigate", "entity", "The NPC looks into a recent disturbance nearby."),
+            "move_to_populated_location": ("move", "move", "location", "The NPC heads toward activity."),
             "retaliate": ("retaliate", "retaliate", "actor", "The NPC moves against a perceived enemy."),
             "avoid_player": ("avoid", "avoid", "actor", "The NPC keeps their distance."),
             "approach_player": ("negotiate", "negotiate", "actor", "The NPC cautiously opens contact."),

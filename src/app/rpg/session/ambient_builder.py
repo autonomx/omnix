@@ -31,6 +31,35 @@ def _safe_str(value: Any) -> str:
         return value
     return str(value)
 
+def _is_low_value_npc_world_event(event: Dict[str, Any], player_loc: str) -> bool:
+    event = _safe_dict(event)
+    if _safe_str(event.get("source")) != "npc_mind":
+        return False
+
+    event_type = _safe_str(event.get("type")).strip().lower()
+    event_loc = _safe_str(event.get("location_id")).strip()
+    target_id = _safe_str(event.get("target_id")).strip().lower()
+
+    # Keep directly player-relevant actions.
+    if target_id == "player":
+        return False
+
+    # Keep stronger visible actions.
+    if event_type in {
+        "attack", "threaten", "warn", "retaliate",
+        "investigate", "negotiate", "speak", "talk", "address",
+        "move", "travel", "arrive", "enter", "depart", "leave",
+    }:
+        return False
+
+    # Suppress repetitive maintenance loops, especially off-screen.
+    if event_type in {"observe", "watch", "support", "stabilize", "avoid"}:
+        if not player_loc or event_loc != player_loc:
+            return True
+        return True
+
+    return False
+
 def _is_low_value_internal_npc_event(event: Dict[str, Any], player_loc: str) -> bool:
     """Return True for low-value NPC mind bookkeeping events that should not
     surface in the player ambient feed.
@@ -203,6 +232,8 @@ def build_ambient_updates(
             continue
 
         if _is_low_value_internal_npc_event(event, player_loc):
+            continue
+        if _is_low_value_npc_world_event(event, player_loc):
             continue
 
         loc = _safe_str(event.get("location_id"))

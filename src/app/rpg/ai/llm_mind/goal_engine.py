@@ -19,6 +19,18 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _safe_list(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
 def _goal_sort_key(goal: Dict[str, Any]):
     priority = _safe_float(goal.get("priority"), 0.0)
     goal_id = _safe_str(goal.get("goal_id"))
@@ -29,6 +41,52 @@ def _goal_sort_key(goal: Dict[str, Any]):
 class GoalEngine:
     goals: List[Dict[str, Any]] = field(default_factory=list)
     max_goals: int = _MAX_GOALS
+
+    def _nearby_npcs(
+        self,
+        npc_id: str,
+        npc_location_id: str,
+        simulation_state: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        npc_index = _safe_dict(simulation_state.get("npc_index"))
+        rows: List[Dict[str, Any]] = []
+        for other_id, raw in sorted(npc_index.items()):
+            other = _safe_dict(raw)
+            # Canonical id is the dict key; nested npc_id may be absent or stale.
+            other_npc_id = _safe_str(other_id)
+            if not other_npc_id or other_npc_id == npc_id:
+                continue
+            if _safe_str(other.get("location_id")) != npc_location_id:
+                continue
+            rows.append({
+                "npc_id": other_npc_id,
+                "name": _safe_str(other.get("name")),
+                "faction_id": _safe_str(other.get("faction_id")),
+                "role": _safe_str(other.get("role")),
+            })
+        return rows
+
+    def _recent_local_incident(
+        self,
+        npc_location_id: str,
+        simulation_state: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        events = _safe_list(simulation_state.get("events"))
+        for raw in reversed(events[-20:]):
+            event = _safe_dict(raw)
+            if _safe_str(event.get("location_id")) != npc_location_id:
+                continue
+            event_type = _safe_str(event.get("type")).lower()
+            if event_type in {"attack", "threaten", "retaliate", "incident", "destabilize", "sabotage"}:
+                return event
+        return {}
+
+    def _belief_score(self, belief_summary: Dict[str, Dict[str, float]], target_id: str, key: str) -> float:
+        beliefs = _safe_dict(
+            belief_summary.get(target_id)
+            or belief_summary.get(str(target_id))
+        )
+        return _safe_float(beliefs.get(key), 0.0)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -91,6 +149,7 @@ class GoalEngine:
         npc_id = _safe_str(npc_context.get("npc_id"))
         npc_location_id = _safe_str(npc_context.get("location_id"))
         npc_faction_id = _safe_str(npc_context.get("faction_id"))
+        npc_role = _safe_str(npc_context.get("role")).lower()
 
         player_beliefs = belief_summary.get("player", {})
         trust = _safe_float(player_beliefs.get("trust"), 0.0)
@@ -100,6 +159,15 @@ class GoalEngine:
         locations = simulation_state.get("locations") or {}
         location_state = locations.get(npc_location_id) or {}
         location_pressure = _safe_float(location_state.get("pressure"), 0.0)
+        nearby_npcs = self._nearby_npcs(
+            npc_id=npc_id,
+            npc_location_id=npc_location_id,
+            simulation_state=simulation_state,
+        )
+        local_incident = self._recent_local_incident(
+            npc_location_id=npc_location_id,
+            simulation_state=simulation_state,
+        )
 
         goals: List[Dict[str, Any]] = []
 
@@ -112,14 +180,111 @@ class GoalEngine:
                 reason="Local pressure is elevated",
             ))
 
+        # Keep faction support available, but lower it so it stops dominating
+        # every calm tick when there are actual nearby people to react to.
         if npc_faction_id:
             goals.append(self._make_goal(
                 npc_id=npc_id,
                 goal_type="support_faction",
                 target_id=npc_faction_id,
-                priority=0.45,
+                priority=0.22,
                 reason="Faction loyalty baseline",
             ))
+
+        # React to recent local incidents before defaulting to idle observation.
+        local_incident_target = _safe_str(
+            local_incident.get("target_id")
+            or local_incident.get("actor")
+            or local_incident.get("event_id")
+        )
+        if npc_location_id and local_incident_target:
+            goals.append(self._make_goal(
+                npc_id=npc_id,
+                goal_type="investigate_local_incident",
+                target_id=local_incident_target,
+                priority=0.58 + min(location_pressure * 0.05, 0.10),
+                reason="Recent disturbance nearby",
+            ))
+
+        # Nearby NPC interaction goals: this is the main living-world pass.
+        for other in nearby_npcs[:4]:
+            other_id = _safe_str(other.get("npc_id"))
+            other_faction_id = _safe_str(other.get("faction_id"))
+            other_role = _safe_str(other.get("role")).lower()
+            if not other_id:
+                continue
+
+            other_hostility = self._belief_score(belief_summary, other_id, "hostility")
+            other_trust = self._belief_score(belief_summary, other_id, "trust")
+            same_faction = bool(
+                npc_faction_id and other_faction_id and npc_faction_id == other_faction_id
+            )
+
+            # Hostile nearby NPC -> confront / retaliate instead of staring forever.
+            if other_hostility >= 0.30:
+                goals.append(self._make_goal(
+                    npc_id=npc_id,
+                    goal_type="retaliate_against_nearby_npc",
+                    target_id=other_id,
+                    priority=0.62 + min(other_hostility * 0.20, 0.18),
+                    reason="Nearby NPC is viewed as hostile",
+                ))
+                continue
+
+            # Same-faction nearby NPC -> coordinate / check in.
+            if same_faction:
+                goals.append(self._make_goal(
+                    npc_id=npc_id,
+                    goal_type="check_on_nearby_ally",
+                    target_id=other_id,
+                    priority=0.44 + min(location_pressure * 0.03, 0.08),
+                    reason="Nearby ally is available for coordination",
+                ))
+                continue
+
+            # Neutral or trusted nearby NPC -> talk, trade, gossip, negotiate.
+            if other_trust >= -0.10:
+                base_priority = 0.40
+                if npc_role in {"merchant", "innkeeper", "bartender", "shopkeeper"}:
+                    base_priority = 0.48
+                elif other_role in {"merchant", "innkeeper", "guard"}:
+                    base_priority = 0.45
+                goals.append(self._make_goal(
+                    npc_id=npc_id,
+                    goal_type="negotiate_with_nearby_npc",
+                    target_id=other_id,
+                    priority=base_priority + min(max(other_trust, 0.0) * 0.10, 0.08),
+                    reason="Nearby NPC is available for social interaction",
+                ))
+
+        # If nobody is nearby, move toward activity instead of endlessly observing.
+        if not nearby_npcs:
+            npc_index = _safe_dict(simulation_state.get("npc_index"))
+            location_counts: Dict[str, int] = {}
+            for _, raw in sorted(npc_index.items()):
+                row = _safe_dict(raw)
+                loc = _safe_str(row.get("location_id"))
+                if not loc:
+                    continue
+                location_counts[loc] = location_counts.get(loc, 0) + 1
+
+            best_loc = ""
+            best_count = 0
+            for loc, count in sorted(location_counts.items()):
+                if loc == npc_location_id:
+                    continue
+                if count > best_count:
+                    best_loc = loc
+                    best_count = count
+
+            if best_loc and best_count >= 2:
+                goals.append(self._make_goal(
+                    npc_id=npc_id,
+                    goal_type="move_to_populated_location",
+                    target_id=best_loc,
+                    priority=0.42,
+                    reason="Move toward activity",
+                ))
 
         if hostility >= 0.35:
             goals.append(self._make_goal(
@@ -150,7 +315,7 @@ class GoalEngine:
                 npc_id=npc_id,
                 goal_type="observe",
                 target_id="player",
-                priority=0.35,
+                priority=0.14,
                 reason="Maintain awareness of player",
             ))
 
@@ -183,7 +348,14 @@ class GoalEngine:
     def merge_goals(self, generated: List[Dict[str, Any]]) -> None:
         generated = generated or []
         merged = {}
-        for goal in self.goals + generated:
+        # Decay older goals so fresh context can take over.
+        decayed_existing: List[Dict[str, Any]] = []
+        for goal in self.goals:
+            row = dict(goal)
+            row["priority"] = _safe_float(row.get("priority"), 0.0) * 0.6
+            decayed_existing.append(row)
+
+        for goal in decayed_existing + generated:
             goal_id = _safe_str(goal.get("goal_id"))
             if not goal_id:
                 continue
