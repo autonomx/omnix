@@ -2085,6 +2085,12 @@
         if (seq <= rpgState.ambientSeq) return;
         updateState({ ambientSeq: seq });
 
+        // Handle scene weaver beats
+        if (update.source === 'scene_weaver') {
+            appendSceneBeat(update);
+            return;
+        }
+
         var kind = update.kind || 'world_event';
         var isUrgent = kind === 'combat_start' || kind === 'warning' ||
             kind === 'demand' || kind === 'plea_for_help' ||
@@ -2101,6 +2107,67 @@
         }
 
         appendAmbientUpdate(update);
+    }
+
+    function appendSceneBeat(update) {
+        const feed = el('rpgAmbientFeed') || el('rpgNarrativeFeed') || el('chatMessages');
+        if (!feed) return;
+
+        const sceneId = update.structured?.scene_id;
+        if (!sceneId) return appendAmbientUpdate(update);
+        const sceneKind = (update.structured?.scene_kind || 'scene').replace(/_/g, ' ');
+
+        let container = feed.querySelector(`[data-scene-id="${sceneId}"]`);
+
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'rpg-ambient rpg-ambient-scene';
+            container.dataset.sceneId = sceneId;
+            container.dataset.sceneKind = sceneKind;
+            container.dataset.lastBeatTs = String(Date.now());
+
+            container.innerHTML = `
+                <div class="rpg-ambient-scene-header">${escapeHtml(sceneKind)}</div>
+                <div class="rpg-ambient-scene-lines"></div>
+            `;
+
+            feed.appendChild(container);
+        }
+        container.dataset.lastBeatTs = String(Date.now());
+        container.classList.remove('rpg-ambient-scene-faded');
+
+        const lines = container.querySelector('.rpg-ambient-scene-lines');
+
+        const row = document.createElement('div');
+        row.className = 'rpg-ambient-scene-line';
+        if (update.target_id === 'player') {
+            row.classList.add('rpg-ambient-scene-line--to-player');
+        }
+        if (update.kind === 'npc_to_npc') {
+            row.classList.add('rpg-ambient-scene-line--npc-to-npc');
+        }
+        if (update.kind === 'npc_to_player') {
+            row.classList.add('rpg-ambient-scene-line--npc-to-player');
+        }
+        if (
+            update.kind === 'companion_comment' ||
+            (update.speaker_id && String(update.speaker_id).toLowerCase().indexOf('companion') !== -1)
+        ) {
+            row.classList.add('rpg-ambient-scene-line--companion');
+        }
+
+        row.innerHTML = `
+            <span class="rpg-ambient-scene-speaker">${escapeHtml(update.speaker_name || 'NPC')}</span>
+            <span class="rpg-ambient-scene-text">${escapeHtml(update.text || '')}</span>
+        `;
+
+        lines.appendChild(row);
+
+        // Lightweight fade marker for old scenes so the feed stays readable.
+        window.clearTimeout(container._fadeTimer);
+        container._fadeTimer = window.setTimeout(function () {
+            container.classList.add('rpg-ambient-scene-faded');
+        }, 8000);
     }
 
     function appendAmbientUpdate(update) {

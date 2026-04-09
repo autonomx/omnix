@@ -54,15 +54,46 @@ MAX_INITIATIVE_CANDIDATES = 32
 
 # ── Cooldown helpers ──────────────────────────────────────────────────────
 
-def _is_on_cooldown(cooldowns: Dict[str, Any], key: str, current_tick: int, cooldown_ticks: int) -> bool:
+def _is_on_cooldown(
+    cooldowns: Dict[str, Any],
+    key: str,
+    current_tick: int,
+    cooldown_ticks: int,
+) -> bool:
     """Check if a cooldown key is still active."""
     last_tick = int(cooldowns.get(key, -999) or -999)
     return (current_tick - last_tick) < cooldown_ticks
 
 
-def _set_cooldown(cooldowns: Dict[str, Any], key: str, current_tick: int) -> None:
+def _set_cooldown(
+    cooldowns: Dict[str, Any],
+    key: str,
+    current_tick: int,
+) -> None:
     """Record a cooldown activation."""
     cooldowns[key] = current_tick
+
+
+def _scaled_cooldown(base: int, level: str) -> int:
+    """Scale cooldowns by world-behavior intensity."""
+    level = _safe_str(level).lower()
+    if level in ("high", "talkative", "frequent", "strong"):
+        return max(1, base - 1)
+    if level in ("low", "quiet", "minimal", "light", "off"):
+        return base + 1
+    return base
+
+
+def _personality_bias(npc_info: Dict[str, Any], kind: str) -> float:
+    """Small deterministic personality bias for initiative kinds."""
+    personality = _safe_str(_safe_dict(npc_info.get("personality")).get("style") or npc_info.get("personality")).lower()
+    if kind in ("taunt", "demand") and personality in ("aggressive", "bold", "hotheaded"):
+        return 0.08
+    if kind in ("warning", "plea_for_help") and personality in ("cautious", "careful", "wary"):
+        return 0.06
+    if kind in ("npc_to_player", "companion_comment", "recruitment_offer") and personality in ("friendly", "warm", "helpful", "loyal"):
+        return 0.06
+    return 0.0
 
 
 # ── Build candidates ──────────────────────────────────────────────────────
@@ -95,6 +126,8 @@ def build_npc_initiative_candidates(
     faction_pressure = _safe_dict(simulation_state.get("faction_pressure"))
     objectives = _safe_list(simulation_state.get("objectives"))
     tick = int(simulation_state.get("tick", 0) or 0)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    party_ids = set(_safe_list(player_state.get("party_npc_ids")))
 
     encounter_active = bool(
         simulation_state.get("encounter_active")
@@ -147,7 +180,11 @@ def build_npc_initiative_candidates(
         hostility = float(player_belief.get("hostility", 0) or 0)
 
         role = _safe_str(npc_info.get("role")).lower()
-        is_companion = role in ("companion", "ally", "follower")
+        is_companion = (
+            role in ("companion", "ally", "follower", "support", "guard", "scout", "party_member")
+            or npc_id in party_ids
+            or bool(npc_info.get("is_companion"))
+        )
         is_opening_npc = npc_id in opening_npc_ids
 
         # ── Rule: hostile NPC nearby + player idle → taunt/warning ────
@@ -243,6 +280,26 @@ def build_npc_initiative_candidates(
                 "interrupt": False,
                 "action_intent": "comment",
                 "location_id": npc_loc,
+                "_opening_tied": is_opening_npc,
+                "tick": tick,
+            })
+
+        # ── Rule: companion nearby + player idle → idle companion comment ───
+        if is_companion and player_idle and not encounter_active:
+            salience = 0.28 + opening_bonus
+            salience += _personality_bias(npc_info, "companion_comment")
+            candidates.append({
+                "kind": "companion_comment",
+                "speaker_id": npc_id,
+                "speaker_name": npc_name,
+                "target_id": "player",
+                "target_name": "you",
+                "reason": "companion_idle_presence",
+                "salience": min(salience, 1.0),
+                "interrupt": False,
+                "action_intent": "comment",
+                "location_id": npc_loc,
+                "_opening_tied": is_opening_npc,
                 "tick": tick,
             })
 

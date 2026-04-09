@@ -1,0 +1,48 @@
+/* ==================== SCENE WEAVING RENDERING ==================== */
+
+.rpg-ambient-scene {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(88, 28, 135, 0.05) 100%);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+    border-radius: var(--radius-md);
+    margin: 8px 0;
+    padding: 12px;
+}
+
+.rpg-ambient-scene-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    opacity: 0.8;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.rpg-ambient-scene-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.rpg-ambient-scene-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.rpg-ambient-scene-speaker {
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    min-width: 80px;
+}
+
+.rpg-ambient-scene-text {
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}

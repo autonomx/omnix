@@ -57,6 +57,12 @@ from app.rpg.ai.npc_initiative import (
     compute_opening_relevance,
     select_npc_initiative_candidate,
 )
+from app.rpg.ai.scene_weaver import (
+    apply_scene_cooldowns,
+    build_scene_beats,
+    build_scene_candidates,
+    select_scene_candidate,
+)
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -145,6 +151,52 @@ def _utc_now_iso() -> str:
 
 def _copy_dict(value: Any) -> Dict[str, Any]:
     return dict(_safe_dict(value))
+
+
+def _ensure_scene_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
+    scene_runtime.setdefault("active_scenes", [])
+    scene_runtime["active_scenes"] = _safe_list(scene_runtime.get("active_scenes"))[-4:]
+    scene_runtime.setdefault("recent_scene_ids", [])
+    scene_runtime["recent_scene_ids"] = _safe_list(scene_runtime.get("recent_scene_ids"))[-16:]
+    scene_runtime.setdefault("recent_scene_pairs", [])
+    scene_runtime["recent_scene_pairs"] = _safe_list(scene_runtime.get("recent_scene_pairs"))[-16:]
+    runtime_state["scene_runtime"] = scene_runtime
+    return runtime_state
+
+
+def _filter_salient_player_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Keep only player-meaningful events for idle initiative context."""
+    result: List[Dict[str, Any]] = []
+    for evt in _safe_list(events):
+        evt = _safe_dict(evt)
+        text = " ".join(
+            [
+                _safe_str(evt.get("type")),
+                _safe_str(evt.get("event_type")),
+                _safe_str(evt.get("description")),
+                _safe_str(evt.get("summary")),
+                _safe_str(evt.get("text")),
+                _safe_str(evt.get("goal")),
+                _safe_str(evt.get("label")),
+            ]
+        ).lower()
+        if any(
+            p in text
+            for p in (
+                "maintain awareness",
+                "awareness of player",
+                "baseline",
+                "loyalty baseline",
+                "faction loyalty baseline",
+                "goal maintenance",
+                "state driver",
+            )
+        ):
+            continue
+        result.append(evt)
+    return result[-4:]
 
 
 # ── Phase F — effective world behavior config ─────────────────────────────
@@ -1163,7 +1215,9 @@ def _build_idle_player_context(
             if isinstance(after_state.get("active_conflict"), dict) else ""
         ),
         "recent_incidents": _safe_list(after_state.get("incidents"))[-4:],
-        "salient_events": _safe_list(after_state.get("events"))[-4:],
+        "salient_events": _filter_salient_player_events(
+            _safe_list(after_state.get("events"))
+        ),
     }
 
 
@@ -1248,6 +1302,27 @@ def _apply_idle_tick_to_session(
         raw_updates.append(
             _make_initiative_update_from_candidate(selected_initiative)
         )
+
+    # ── Phase G: scene weaving ───────────────────────────────────────
+    scene_candidates = build_scene_candidates(
+        after_state,
+        runtime_state,
+        player_context,
+    )
+
+    selected_scene = select_scene_candidate(scene_candidates, runtime_state)
+    scene_beats = []
+
+    if selected_scene:
+        runtime_state = apply_scene_cooldowns(runtime_state, selected_scene)
+        scene_beats = build_scene_beats(
+            selected_scene,
+            after_state,
+            runtime_state,
+        )
+
+        for beat in scene_beats:
+            raw_updates.append(_make_scene_update_from_beat(beat))
 
     # Phase 6: world event director
     world_event_candidates = build_world_event_candidates(
@@ -1404,7 +1479,11 @@ def _make_initiative_update_from_candidate(
         elif kind == "warning":
             text = f"{speaker_name} warns you of danger."
         elif kind == "companion_comment":
-            text = f"{speaker_name} has something to say."
+            reason = _safe_str(_safe_dict(candidate.get("structured")).get("reason") or candidate.get("reason"))
+            if reason == "companion_idle_presence":
+                text = f"{speaker_name} glances around, then leans closer to you."
+            else:
+                text = f"{speaker_name} murmurs a quick thought under their breath."
         else:
             text = f"{speaker_name} wants your attention."
 
@@ -1427,6 +1506,30 @@ def _make_initiative_update_from_candidate(
         "source_event_ids": [],
         "source": "initiative",
         "created_at": _utc_now_iso(),
+    }
+
+
+def _make_scene_update_from_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
+    beat = _safe_dict(beat)
+    return {
+        "tick": 0,
+        "kind": _safe_str(beat.get("kind") or "npc_to_npc"),
+        "priority": float(beat.get("priority", 0.0) or 0.0),
+        "interrupt": False,
+        "speaker_id": _safe_str(beat.get("speaker_id")),
+        "speaker_name": _safe_str(beat.get("speaker_name")),
+        "target_id": _safe_str(beat.get("target_id")),
+        "target_name": _safe_str(beat.get("target_name")),
+        "scene_id": _safe_str(beat.get("scene_id")),
+        "location_id": _safe_str(beat.get("location_id")),
+        "text": _safe_str(beat.get("text_hint")),
+        "structured": {
+            "reason": _safe_str(beat.get("reason")),
+            "scene_id": _safe_str(beat.get("scene_id")),
+            "scene_kind": _safe_str(beat.get("scene_kind")),
+            "beat_index": int(beat.get("beat_index", 0) or 0),
+        },
+        "source": "scene_weaver",
     }
 
 

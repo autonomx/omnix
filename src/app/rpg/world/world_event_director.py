@@ -52,6 +52,45 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _is_internal_maintenance_event(raw: Dict[str, Any]) -> bool:
+    """True if a raw event is simulation bookkeeping, not player-facing fiction."""
+    raw = _safe_dict(raw)
+    text = " ".join(
+        [
+            _safe_str(raw.get("type")),
+            _safe_str(raw.get("event_type")),
+            _safe_str(raw.get("description")),
+            _safe_str(raw.get("summary")),
+            _safe_str(raw.get("text")),
+            _safe_str(raw.get("goal")),
+            _safe_str(raw.get("label")),
+        ]
+    ).lower()
+
+    blocked_phrases = (
+        "maintain awareness",
+        "awareness of player",
+        "faction loyalty baseline",
+        "loyalty baseline",
+        "baseline",
+        "goal maintenance",
+        "state driver",
+        "maintain awareness of player",
+    )
+
+    blocked_types = (
+        "maintenance",
+        "baseline",
+        "goal_update",
+        "awareness",
+    )
+
+    raw_type = _safe_str(raw.get("type") or raw.get("event_type")).lower()
+    if raw_type in blocked_types:
+        return True
+    return any(p in text for p in blocked_phrases)
+
+
 # ── Blank event template ─────────────────────────────────────────────────
 
 
@@ -363,6 +402,10 @@ def build_world_event_candidates(
         raw = _safe_dict(raw)
         eid = _safe_str(raw.get("event_id"))
         if not eid or eid in processed_event_ids:
+            continue
+
+        # Never surface internal maintenance / bookkeeping to the player.
+        if _is_internal_maintenance_event(raw):
             continue
 
         loc = _safe_str(raw.get("location_id"))

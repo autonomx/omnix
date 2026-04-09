@@ -5208,6 +5208,49 @@ pre:hover .code-copy-btn {
     font-style: italic;
     font-size: 0.88rem;
 }
+
+.rpg-ambient-scene {
+    border-left-color: #60a5fa;
+    background: rgba(96, 165, 250, 0.04);
+    transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+.rpg-ambient-scene-faded {
+    opacity: 0.82;
+    background: rgba(96, 165, 250, 0.025);
+}
+
+.rpg-ambient-scene-header {
+    font-size: 0.78rem;
+    font-weight: 700;
+    opacity: 0.8;
+    margin-bottom: 6px;
+    text-transform: capitalize;
+}
+
+.rpg-ambient-scene-line {
+    margin: 4px 0;
+}
+
+.rpg-ambient-scene-speaker {
+    font-weight: 700;
+}
+
+.rpg-ambient-scene-text {
+    opacity: 0.95;
+}
+
+.rpg-ambient-scene-line--npc-to-player .rpg-ambient-scene-speaker {
+    text-decoration: underline;
+}
+
+.rpg-ambient-scene-line--companion .rpg-ambient-scene-speaker {
+    opacity: 0.9;
+}
+
+.rpg-ambient-scene-line--to-player {
+    font-weight: 600;
+}
 .rpg-ambient-quest {
     color: #b45309;
     font-weight: 500;
