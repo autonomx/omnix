@@ -40,11 +40,14 @@ def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> 
     - Arrival of important NPC
     - Escalation tied to active thread
     - Companion urgent warning
+    - Quest prompt with high priority (Phase 7)
+    - Plea for help with urgency (Phase 2)
     
     Do NOT interrupt when:
     - Low salience gossip
     - Repetitive chatter
     - Player just received an interruption recently
+    - Post-player quiet window is active (Phase 3D)
     """
     session = _safe_dict(session)
     update = _safe_dict(update)
@@ -53,6 +56,15 @@ def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> 
     kind = _safe_str(update.get("kind"))
     priority = float(update.get("priority", 0) or 0)
     target_id = _safe_str(update.get("target_id"))
+    
+    # Phase 3D: quiet-window suppression (unless truly urgent)
+    quiet_ticks = int(runtime.get("post_player_quiet_ticks", 0) or 0)
+    if quiet_ticks > 0:
+        # Only combat_start can break the quiet window
+        if kind == "combat_start" and priority >= 0.9:
+            pass  # Allow through
+        else:
+            return False
     
     # Never interrupt for system summaries or low-priority world events
     if kind == "system_summary":
@@ -86,6 +98,22 @@ def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> 
     
     # Arrivals with high priority (important NPC)
     if kind == "arrival" and priority >= 0.6:
+        return True
+    
+    # Phase 2: Plea for help (high urgency)
+    if kind == "plea_for_help" and priority >= 0.6:
+        return True
+    
+    # Phase 7: Quest prompt (only if high priority and targets player)
+    if kind == "quest_prompt" and target_id == "player" and priority >= 0.7:
+        return True
+    
+    # Phase 2: Demand (always urgent)
+    if kind == "demand" and priority >= 0.6:
+        return True
+    
+    # Phase 2: Recruitment offer (moderate priority)
+    if kind == "recruitment_offer" and priority >= 0.7:
         return True
     
     # Explicit interrupt flag from the update itself

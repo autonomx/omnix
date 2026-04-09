@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from .schema import ContentBalance, PacingProfile, SafetyConstraint
+from .schema import ContentBalance, PacingProfile, SafetyConstraint, normalize_world_behavior_config
 
 
 def default_pacing_profile() -> PacingProfile:
@@ -802,6 +802,116 @@ _GENRE_RESOURCES: dict[str, dict[str, int]] = {
     "horror": {"batteries": 4, "bandages": 3},
 }
 
+# ── Phase F — Genre-sensitive world behavior defaults ──────────────────────
+
+_GENRE_WORLD_BEHAVIOR: dict[str, dict[str, str]] = {
+    "mystery": {
+        "ambient_activity": "low",
+        "npc_initiative": "medium",
+        "interruptions": "minimal",
+        "quest_prompting": "strong",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "strong",
+        "play_style_bias": "story_directed",
+    },
+    "noir": {
+        "ambient_activity": "low",
+        "npc_initiative": "medium",
+        "interruptions": "minimal",
+        "quest_prompting": "strong",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "strong",
+        "play_style_bias": "story_directed",
+    },
+    "fantasy": {
+        "ambient_activity": "medium",
+        "npc_initiative": "medium",
+        "interruptions": "normal",
+        "quest_prompting": "guided",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "normal",
+        "play_style_bias": "balanced",
+    },
+    "grimdark": {
+        "ambient_activity": "high",
+        "npc_initiative": "low",
+        "interruptions": "frequent",
+        "quest_prompting": "light",
+        "companion_chatter": "quiet",
+        "world_pressure": "harsh",
+        "opening_guidance": "normal",
+        "play_style_bias": "balanced",
+    },
+    "survival": {
+        "ambient_activity": "high",
+        "npc_initiative": "low",
+        "interruptions": "frequent",
+        "quest_prompting": "light",
+        "companion_chatter": "quiet",
+        "world_pressure": "harsh",
+        "opening_guidance": "normal",
+        "play_style_bias": "balanced",
+    },
+    "political": {
+        "ambient_activity": "medium",
+        "npc_initiative": "high",
+        "interruptions": "normal",
+        "quest_prompting": "guided",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "normal",
+        "play_style_bias": "story_directed",
+    },
+    "intrigue": {
+        "ambient_activity": "medium",
+        "npc_initiative": "high",
+        "interruptions": "normal",
+        "quest_prompting": "guided",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "normal",
+        "play_style_bias": "story_directed",
+    },
+    "cyberpunk": {
+        "ambient_activity": "high",
+        "npc_initiative": "medium",
+        "interruptions": "normal",
+        "quest_prompting": "guided",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "normal",
+        "play_style_bias": "balanced",
+    },
+    "horror": {
+        "ambient_activity": "low",
+        "npc_initiative": "low",
+        "interruptions": "minimal",
+        "quest_prompting": "light",
+        "companion_chatter": "quiet",
+        "world_pressure": "harsh",
+        "opening_guidance": "strong",
+        "play_style_bias": "story_directed",
+    },
+}
+
+
+def infer_default_world_behavior(setup: dict) -> dict[str, str]:
+    """Infer genre-sensitive world behavior defaults."""
+    key = _match_genre(setup.get("genre", ""))
+    return dict(_GENRE_WORLD_BEHAVIOR.get(key, {
+        "ambient_activity": "medium",
+        "npc_initiative": "medium",
+        "interruptions": "normal",
+        "quest_prompting": "guided",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "normal",
+        "play_style_bias": "balanced",
+    }))
+
 
 def _match_genre(genre: str) -> str:
     """Find the best matching genre key from the lookup tables."""
@@ -1080,6 +1190,13 @@ def merge_creator_input_with_defaults(payload: dict) -> dict:
         if value and not merged_opening.get(key):
             merged_opening[key] = value
     result["opening"] = merged_opening
+
+    # Phase F — world behavior defaults
+    existing_wb = result.get("world_behavior")
+    if not isinstance(existing_wb, dict) or not existing_wb:
+        result["world_behavior"] = infer_default_world_behavior(result)
+    else:
+        result["world_behavior"] = normalize_world_behavior_config(existing_wb)
 
     return result
 

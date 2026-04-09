@@ -449,3 +449,71 @@ async def resume_rpg_session(request: Request):
         "ticks_applied": int(result.get("ticks_applied", 0) or 0),
         "excess_summarized": int(result.get("excess_summarized", 0) or 0),
     }
+
+
+# ── Phase F — World behavior settings endpoints ──────────────────────────
+
+
+@rpg_session_bp.post("/api/rpg/session/world_behavior")
+async def get_world_behavior(request: Request):
+    """Return effective world behavior config for a session."""
+    from app.rpg.session.runtime import get_effective_world_behavior
+
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+
+    effective = get_effective_world_behavior(session)
+    setup_config = _safe_dict(_safe_dict(session.get("setup_payload")).get("world_behavior"))
+    override = _safe_dict(_safe_dict(session.get("runtime_state")).get("world_behavior_override"))
+
+    return {
+        "ok": True,
+        "effective": effective,
+        "setup_config": setup_config,
+        "override": override,
+    }
+
+
+@rpg_session_bp.post("/api/rpg/session/world_behavior/update")
+async def update_world_behavior(request: Request):
+    """Update in-game world behavior overrides."""
+    from app.rpg.creator.schema import _WORLD_BEHAVIOR_ENUMS, normalize_world_behavior_config
+    from app.rpg.session.runtime import get_effective_world_behavior
+
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    changes = _safe_dict(data.get("changes"))
+
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    override = dict(_safe_dict(runtime_state.get("world_behavior_override")))
+
+    # Apply only valid changes
+    for key, allowed in _WORLD_BEHAVIOR_ENUMS.items():
+        val = changes.get(key)
+        if isinstance(val, str) and val.strip().lower() in allowed:
+            override[key] = val.strip().lower()
+
+    runtime_state["world_behavior_override"] = override
+    session["runtime_state"] = runtime_state
+    session = save_runtime_session(session)
+
+    effective = get_effective_world_behavior(session)
+
+    return {
+        "ok": True,
+        "effective": effective,
+        "override": override,
+    }

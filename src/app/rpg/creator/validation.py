@@ -696,7 +696,69 @@ def validate_adventure_setup_payload(payload: dict) -> ValidationResult:
     all_issues.extend(validate_setup_balances(payload))
     all_issues.extend(validate_setup_cross_references(payload))
     all_issues.extend(validate_setup_ux_hints(payload))
+    all_issues.extend(validate_world_behavior(payload))
     return ValidationResult(issues=all_issues)
+
+
+# ---------------------------------------------------------------------------
+# Phase F — World behavior validation
+# ---------------------------------------------------------------------------
+
+def validate_world_behavior(payload: dict) -> list[ValidationIssue]:
+    """Validate world_behavior config for unknown values and contradictory combos."""
+    from .schema import _WORLD_BEHAVIOR_ENUMS
+
+    issues: list[ValidationIssue] = []
+    wb = payload.get("world_behavior")
+    if not isinstance(wb, dict):
+        return issues
+
+    # Check for unknown enum values
+    for key, allowed in _WORLD_BEHAVIOR_ENUMS.items():
+        val = wb.get(key)
+        if val is not None and isinstance(val, str) and val.strip().lower() not in allowed:
+            issues.append(ValidationIssue(
+                path=f"world_behavior.{key}",
+                code="invalid_world_behavior_value",
+                message=f"world_behavior.{key} value '{val}' is not recognized; "
+                        f"allowed: {', '.join(allowed)}",
+                severity="warning",
+            ))
+
+    # Contradictory combinations (notices, not errors)
+    ambient = wb.get("ambient_activity", "medium")
+    interruptions = wb.get("interruptions", "normal")
+    opening_guidance = wb.get("opening_guidance", "normal")
+    play_style = wb.get("play_style_bias", "balanced")
+    quest_prompting = wb.get("quest_prompting", "guided")
+    premise = payload.get("premise", "")
+    opening_hook = payload.get("opening_hook", "")
+
+    if ambient == "low" and interruptions == "frequent":
+        issues.append(ValidationIssue(
+            path="world_behavior",
+            code="contradictory_world_behavior",
+            message="Low ambient activity with frequent interruptions may feel contradictory",
+            severity="info",
+        ))
+
+    if play_style == "sandbox" and opening_guidance == "strong":
+        issues.append(ValidationIssue(
+            path="world_behavior",
+            code="contradictory_world_behavior",
+            message="Sandbox play style with strong opening guidance may feel contradictory",
+            severity="info",
+        ))
+
+    if quest_prompting == "off" and (not premise or len(premise.strip()) < 20) and (not opening_hook or len(opening_hook.strip()) < 10):
+        issues.append(ValidationIssue(
+            path="world_behavior.quest_prompting",
+            code="no_direction_risk",
+            message="Quest prompting is off and opening is minimal — player may lack direction",
+            severity="info",
+        ))
+
+    return issues
 
 
 # ---------------------------------------------------------------------------
