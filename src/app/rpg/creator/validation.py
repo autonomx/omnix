@@ -805,10 +805,10 @@ def validate_generated_package(package: dict, setup: dict) -> list[dict]:
     if forbidden_content:
         all_text = _collect_package_text(package)
         for forbidden in forbidden_content:
-            if forbidden in all_text:
+            if forbidden and re.search(rf"\b{re.escape(forbidden)}\b", all_text):
                 issues.append(_issue_dict(
                     "forbidden_content", "generated_forbidden_content",
-                    f"Generated content may contain forbidden theme: '{forbidden}'",
+                    f"Generated content appears to include forbidden theme '{forbidden}'",
                 ))
 
     # --- 6. Too many entities relative to opening scope ---

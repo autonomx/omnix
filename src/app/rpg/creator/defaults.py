@@ -1070,8 +1070,16 @@ def merge_creator_input_with_defaults(payload: dict) -> dict:
         result["starting_gear"] = infer_default_starting_gear(result)
     if not result.get("starting_resources"):
         result["starting_resources"] = infer_default_starting_resources(result)
-    if not result.get("opening"):
-        result["opening"] = infer_default_opening(result)
+
+    inferred_opening = infer_default_opening(result)
+    existing_opening = result.get("opening")
+    if not isinstance(existing_opening, dict):
+        existing_opening = {}
+    merged_opening = dict(existing_opening)
+    for key, value in inferred_opening.items():
+        if value and not merged_opening.get(key):
+            merged_opening[key] = value
+    result["opening"] = merged_opening
 
     return result
 

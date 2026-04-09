@@ -140,6 +140,10 @@ def _merge_entity_list(
 
     # Second pass: generated entities
     for gen_entity in generated:
+        gen_entity = dict(gen_entity)
+        metadata = dict(gen_entity.get("metadata", {}))
+        metadata.setdefault("source", "generated")
+        gen_entity["metadata"] = metadata
         gen_id = gen_entity.get(id_field, "")
         if gen_id in seen_ids:
             # Entity exists — only update if not keep_existing and not locked

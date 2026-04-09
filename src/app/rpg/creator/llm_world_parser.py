@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-import uuid
+import hashlib
 from typing import Any
 
 
@@ -80,7 +80,15 @@ def _ensure_id(entity: dict, prefix: str, id_field: str) -> dict:
             slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:20]
             result[id_field] = f"{prefix}_{slug}"
         else:
-            result[id_field] = f"{prefix}_{uuid.uuid4().hex[:8]}"
+            basis = "|".join([
+                prefix,
+                _safe_str(result.get("role")),
+                _safe_str(result.get("title")),
+                _safe_str(result.get("description"), 80),
+                _safe_str(result.get("content"), 80),
+            ])
+            digest = hashlib.sha1(basis.encode("utf-8")).hexdigest()[:8]
+            result[id_field] = f"{prefix}_{digest}"
     return result
 
 

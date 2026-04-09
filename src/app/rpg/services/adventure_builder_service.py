@@ -1664,62 +1664,113 @@ def regenerate_world_entity(
 ) -> dict:
     """Regenerate a single entity within the generated package.
 
-    Generates a full proposal, finds the entity by type and ID, and returns
-    only that entity. Falls back to the first entity of the matching type
-    if the specific ID is not found.
+    Creates a focused context containing only the target entity and its
+    immediate relationships to preserve coherence and context.
     """
-    section_map = {
-        "character": "characters",
-        "npc": "characters",
-        "location": "locations",
-        "faction": "factions",
-        "lore": "lore_entries",
-        "rumor": "rumors",
-    }
-    id_field_map = {
-        "characters": "npc_id",
-        "locations": "location_id",
-        "factions": "faction_id",
-        "lore_entries": "title",
-        "rumors": "text",
-    }
+    from ..creator.defaults import apply_adventure_defaults
+    from ..creator.llm_world_generator import generate_world_bootstrap_proposal
+    from ..shared.llm_gateway import build_app_llm_gateway
 
-    section = section_map.get(entity_type)
-    if not section:
+    data = apply_adventure_defaults(dict(setup))
+
+    section_map = {
+        "character": ("characters", "npc_seeds", "npc_id"),
+        "npc": ("characters", "npc_seeds", "npc_id"),
+        "location": ("locations", "locations", "location_id"),
+        "faction": ("factions", "factions", "faction_id"),
+    }
+    section_info = section_map.get(entity_type)
+    if not section_info:
         return {
             "success": False,
-            "error": f"Invalid entity_type: {entity_type}. Must be one of {sorted(section_map.keys())}",
+            "error": f"Invalid entity_type: {entity_type}",
         }
 
-    full_proposal = generate_world_proposal(setup)
-    if not full_proposal.get("success"):
-        return full_proposal
-
-    entities = full_proposal.get(section, [])
-    id_field = id_field_map.get(section, "")
-
-    # Try to find entity by ID
-    match = None
-    for entity in entities:
+    proposal_section, setup_section, id_field = section_info
+    existing_entities = list(data.get(setup_section, []))
+    target = None
+    for entity in existing_entities:
         if entity.get(id_field) == entity_id:
-            match = entity
+            target = dict(entity)
             break
 
-    # Fallback to first entity
-    if match is None and entities:
-        match = entities[0]
-
-    if match is None:
+    if not target:
         return {
             "success": False,
-            "error": f"No {entity_type} entity generated",
+            "error": f"Entity not found in setup: {entity_id}",
+        }
+
+    focused_setup = dict(data)
+    focused_setup["regeneration_target"] = {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "current_entity": target,
+    }
+
+    if entity_type in ("character", "npc"):
+        loc_id = target.get("location_id")
+        faction_id = target.get("faction_id")
+        focused_setup["npc_seeds"] = [target]
+        focused_setup["locations"] = [
+            loc for loc in data.get("locations", [])
+            if not loc_id or loc.get("location_id") == loc_id
+        ][:3]
+        focused_setup["factions"] = [
+            fac for fac in data.get("factions", [])
+            if not faction_id or fac.get("faction_id") == faction_id
+        ][:3]
+    elif entity_type == "location":
+        loc_id = target.get("location_id")
+        focused_setup["locations"] = [target]
+        focused_setup["npc_seeds"] = [
+            npc for npc in data.get("npc_seeds", [])
+            if npc.get("location_id") == loc_id
+        ][:5]
+        focused_setup["factions"] = [
+            fac for fac in data.get("factions", [])
+            if any(npc.get("faction_id") == fac.get("faction_id") for npc in focused_setup["npc_seeds"])
+        ][:3]
+    elif entity_type == "faction":
+        faction_id = target.get("faction_id")
+        focused_setup["factions"] = [target]
+        focused_setup["npc_seeds"] = [
+            npc for npc in data.get("npc_seeds", [])
+            if npc.get("faction_id") == faction_id
+        ][:5]
+        loc_ids = {npc.get("location_id") for npc in focused_setup["npc_seeds"] if npc.get("location_id")}
+        focused_setup["locations"] = [
+            loc for loc in data.get("locations", [])
+            if loc.get("location_id") in loc_ids
+        ][:3]
+
+    gateway = build_app_llm_gateway()
+    proposal = generate_world_bootstrap_proposal(
+        focused_setup,
+        preferences={"entity_focus": entity_type},
+        llm_gateway=gateway,
+    )
+
+    if proposal.get("status") != "ready":
+        return {
+            "success": False,
+            "error": "Entity regeneration failed",
+            "warnings": proposal.get("warnings", []),
+        }
+
+    items = list(proposal.get(proposal_section, []))
+    regenerated = items[0] if items else None
+    if not regenerated:
+        return {
+            "success": False,
+            "error": f"No regenerated {entity_type} returned",
         }
 
     return {
         "success": True,
         "entity_type": entity_type,
-        "entity": match,
-        "provenance": full_proposal.get("provenance", {}),
+        "entity": regenerated,
+        "provenance": proposal.get("provenance", {}),
+        "warnings": proposal.get("warnings", []),
     }
 
 

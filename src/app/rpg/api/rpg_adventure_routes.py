@@ -118,6 +118,7 @@ async def adventure_validate(request: Request):
         validation = _safe_dict(result.get("validation"))
         return {
             "ok": not validation.get("blocking", False),
+            "validation": validation,
             "errors": [
                 i for i in _safe_list(validation.get("issues"))
                 if isinstance(i, dict) and i.get("severity") == "error"
@@ -143,12 +144,12 @@ async def adventure_preview(request: Request):
     """Prepare a rich preview of the adventure setup."""
     try:
         data = await request.json()
-        result = preview_setup(data)
+        setup = data.get("setup") if isinstance(data, dict) else None
+        setup = setup if isinstance(setup, dict) else data
+        result = preview_setup(setup)
         # Ensure adventure_preview is surfaced at top level
         if "adventure_preview" not in result:
-            result["adventure_preview"] = _safe_dict(
-                build_adventure_preview(data)
-            )
+            result["adventure_preview"] = _safe_dict(build_adventure_preview(setup))
         return result
     except Exception as e:
         return JSONResponse(

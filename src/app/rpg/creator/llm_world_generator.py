@@ -12,6 +12,29 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
+def _call_app_llm(llm_gateway: Any, prompt: str, setup: dict) -> str:
+    """Call LLM using supported gateway interfaces."""
+    if llm_gateway is None:
+        raise RuntimeError("llm_gateway_missing")
+
+    # Preferred unified gateway
+    if hasattr(llm_gateway, "call"):
+        resp = llm_gateway.call(prompt, context=setup)
+        return resp if isinstance(resp, str) else str(resp or "")
+
+    # Alternative interface
+    if hasattr(llm_gateway, "generate_text"):
+        resp = llm_gateway.generate_text(prompt, context=setup)
+        return resp if isinstance(resp, str) else str(resp or "")
+
+    # Legacy fallback
+    if hasattr(llm_gateway, "generate"):
+        resp = llm_gateway.generate(prompt, context=setup)
+        return resp if isinstance(resp, str) else str(resp or "")
+
+    raise RuntimeError("unsupported_llm_gateway_interface")
+
+
 # ---------------------------------------------------------------------------
 # Prompt construction
 # ---------------------------------------------------------------------------
@@ -192,7 +215,7 @@ def generate_world_bootstrap_proposal(
                 f"{prompts['user_prompt']}"
             )
 
-            raw_response = llm_gateway.generate(full_prompt, context=setup)
+            raw_response = _call_app_llm(llm_gateway, full_prompt, setup)
 
             if raw_response and raw_response.strip():
                 parsed = parse_world_bootstrap_response(raw_response)
@@ -217,6 +240,9 @@ def generate_world_bootstrap_proposal(
 
     # Deterministic fallback
     result = fallback_world_bootstrap_proposal(setup, preferences=prefs)
+    warnings = list(result.get("warnings", []))
+    warnings.append("LLM generation unavailable or failed; fallback used")
+    result["warnings"] = warnings
     result["provenance"] = {
         "used_llm": False,
         "model": "deterministic_fallback",

@@ -181,6 +181,53 @@ def normalize_starting_resources(resources: dict) -> dict:
     return result
 
 
+def normalize_opening_payload(opening: dict) -> dict:
+    """Normalize nested opening payload."""
+    if not isinstance(opening, dict):
+        return {}
+
+    result = dict(opening)
+    for str_field in (
+        "location_id",
+        "location_name",
+        "scene_frame",
+        "immediate_problem",
+        "player_involvement_reason",
+        "tension_level",
+        "time_of_day",
+        "weather",
+    ):
+        val = result.get(str_field)
+        if isinstance(val, str):
+            result[str_field] = " ".join(val.strip().split())[:300]
+
+    present = result.get("present_npc_ids")
+    if isinstance(present, list):
+        result["present_npc_ids"] = [
+            " ".join(str(x).strip().split())[:80]
+            for x in present[:8]
+            if str(x).strip()
+        ]
+    else:
+        result["present_npc_ids"] = []
+
+    first_choices = result.get("first_choices")
+    if isinstance(first_choices, list):
+        result["first_choices"] = [
+            " ".join(str(x).strip().split())[:160]
+            for x in first_choices[:8]
+            if str(x).strip()
+        ]
+    else:
+        result["first_choices"] = []
+
+    tension = (result.get("tension_level") or "").lower()
+    if tension not in {"low", "medium", "high"}:
+        result["tension_level"] = "medium"
+
+    return result
+
+
 def normalize_creator_setup(payload: dict) -> dict:
     """Normalize all Phase A creator setup fields in a raw dict payload."""
     if not isinstance(payload, dict):
@@ -222,6 +269,9 @@ def normalize_creator_setup(payload: dict) -> dict:
     )
     result["starting_resources"] = normalize_starting_resources(
         result.get("starting_resources", {})
+    )
+    result["opening"] = normalize_opening_payload(
+        result.get("opening", {})
     )
 
     return result
