@@ -81,34 +81,82 @@ def open_conversation(
     return conversation
 
 
+def _resolve_speaker_name(simulation_state: Dict[str, Any], speaker_id: str) -> str:
+    npc_index = _safe_dict(_safe_dict(simulation_state).get("npc_index"))
+    row = _safe_dict(npc_index.get(speaker_id))
+    return _safe_str(row.get("name")) or _safe_str(speaker_id)
+
+
 def build_next_conversation_line(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     speaker_id = select_next_speaker(conversation, simulation_state)
     recent_lines = get_conversation_lines(simulation_state, conversation.get("conversation_id"))
+    speaker_display = _resolve_speaker_name(simulation_state, speaker_id)
 
     if settings.get("llm_expand_npc_conversations"):
         try:
             from app.rpg.ai.conversation_gateway import generate_recorded_conversation_line
-            llm_gateway = _safe_dict(runtime_state).get("llm_gateway")
-            record = generate_recorded_conversation_line(
-                llm_gateway,
-                conversation,
-                speaker_id,
-                simulation_state,
-                runtime_state,
-                recent_lines,
-            )
-            if record and _safe_dict(record).get("parsed"):
-                parsed = _safe_dict(record.get("parsed"))
-                return build_conversation_line(
-                    conversation_id=conversation.get("conversation_id"),
-                    turn=int(conversation.get("turn_count", 0) or 0) + 1,
-                    speaker=parsed.get("speaker", speaker_id),
-                    text=parsed.get("text", ""),
-                    kind=parsed.get("kind", "statement"),
-                    created_tick=tick,
-                    source="llm",
+            from app.rpg.llm_app_gateway import build_app_llm_gateway
+            llm_gateway = build_app_llm_gateway()
+            mode = _safe_str(_safe_dict(runtime_state).get("mode")).strip().lower() or "live"
+            conv_id = _safe_str(conversation.get("conversation_id"))
+            turn_num = int(conversation.get("turn_count", 0) or 0) + 1
+            record_key = f"conversation_line:{conv_id}:{turn_num}"
+
+            if mode == "live":
+                record = generate_recorded_conversation_line(
+                    llm_gateway,
+                    conversation,
+                    speaker_id,
+                    simulation_state,
+                    runtime_state,
+                    recent_lines,
                 )
+                if record and _safe_dict(record).get("parsed"):
+                    # Record into replay structures
+                    llm_records = runtime_state.setdefault("llm_records", []) if isinstance(runtime_state, dict) else []
+                    llm_records_index = runtime_state.setdefault("llm_records_index", {}) if isinstance(runtime_state, dict) else {}
+                    replay_record = {
+                        "type": "conversation_line",
+                        "tick": int(tick or 0),
+                        "conversation_id": conv_id,
+                        "turn": turn_num,
+                        "speaker_id": speaker_id,
+                        "output": dict(record),
+                    }
+                    llm_records.append(replay_record)
+                    llm_records_index[record_key] = replay_record
+
+                    parsed = _safe_dict(record.get("parsed"))
+                    return build_conversation_line(
+                        conversation_id=conv_id,
+                        turn=turn_num,
+                        speaker=parsed.get("speaker", speaker_id),
+                        speaker_name=speaker_display,
+                        text=parsed.get("text", ""),
+                        kind=parsed.get("kind", "statement"),
+                        created_tick=tick,
+                        source="llm",
+                    )
+            else:
+                # Replay mode: read back from recorded data
+                llm_records_index = _safe_dict(runtime_state.get("llm_records_index")) if isinstance(runtime_state, dict) else {}
+                replay_record = _safe_dict(llm_records_index.get(record_key))
+                if replay_record:
+                    output = _safe_dict(replay_record.get("output"))
+                    parsed = _safe_dict(output.get("parsed"))
+                    if parsed.get("text"):
+                        return build_conversation_line(
+                            conversation_id=conv_id,
+                            turn=turn_num,
+                            speaker=parsed.get("speaker", speaker_id),
+                            speaker_name=speaker_display,
+                            text=parsed.get("text", ""),
+                            kind=parsed.get("kind", "statement"),
+                            created_tick=tick,
+                            source="llm",
+                        )
+                # Fall through to template if no replay record
         except ImportError:
             pass
 
@@ -117,6 +165,7 @@ def build_next_conversation_line(conversation: Dict[str, Any], simulation_state:
         conversation_id=conversation.get("conversation_id"),
         turn=int(conversation.get("turn_count", 0) or 0) + 1,
         speaker=speaker_id,
+        speaker_name=line_payload.get("speaker_name", speaker_display),
         text=line_payload.get("text", ""),
         kind=line_payload.get("kind", "statement"),
         created_tick=tick,

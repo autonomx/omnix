@@ -569,6 +569,7 @@ async def rpg_session_conversation_intervene(request: Request):
     result = apply_player_intervention(conversation_id, option_id, simulation_state, runtime_state, tick)
     session["simulation_state"] = simulation_state
     session["runtime_state"] = runtime_state
+    session = save_runtime_session(session)
 
     payload = build_conversation_payload(
         simulation_state,

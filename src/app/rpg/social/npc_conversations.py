@@ -130,11 +130,13 @@ def build_conversation_line(
     kind: str,
     created_tick: int,
     source: str = "template",
+    speaker_name: str = "",
 ) -> Dict[str, Any]:
     return {
         "conversation_id": _safe_str(conversation_id),
         "turn": int(turn or 0),
         "speaker": _safe_str(speaker),
+        "speaker_name": _safe_str(speaker_name),
         "text": _safe_str(text),
         "kind": _safe_str(kind) or "statement",
         "created_tick": int(created_tick or 0),

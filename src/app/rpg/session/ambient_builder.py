@@ -204,11 +204,21 @@ def _nearby_npc_ids(simulation_state: Dict[str, Any]) -> List[str]:
 
 
 def _conversation_to_ambient_updates(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], player_loc: str, tick: int) -> List[Dict[str, Any]]:
-    """Surface conversation lines as ambient updates."""
+    """Surface NEW conversation lines as ambient updates, keyed for dedup."""
     payload = build_conversation_payload(simulation_state, runtime_state, location_id=player_loc)
     updates: List[Dict[str, Any]] = []
+    # Track which lines have already been surfaced via ambient
+    surfaced = set(_safe_list(_safe_dict(runtime_state).get("_surfaced_conversation_line_keys")))
+    new_surfaced = set(surfaced)
+
     for conv in payload.get("active_conversations", []):
+        cid = str(conv.get("conversation_id") or "")
         for line in conv.get("lines", [])[-2:]:
+            turn = int(line.get("turn", 0) or 0)
+            dedup_key = f"{cid}:{turn}"
+            if dedup_key in surfaced:
+                continue
+            new_surfaced.add(dedup_key)
             speaker = str(line.get("speaker_name") or line.get("speaker") or "").strip()
             text = str(line.get("text") or "").strip()
             if not text:
@@ -219,9 +229,15 @@ def _conversation_to_ambient_updates(simulation_state: Dict[str, Any], runtime_s
                 priority=0.7,
                 location_id=player_loc,
                 text=f'{speaker}: "{text}"' if speaker else text,
-                source_event_ids=[str(conv.get("conversation_id"))],
+                source_event_ids=[cid],
                 source="conversation",
             ))
+
+    # Persist surfaced keys (bounded to last 120 entries)
+    if isinstance(runtime_state, dict):
+        all_keys = sorted(new_surfaced)
+        runtime_state["_surfaced_conversation_line_keys"] = all_keys[-120:]
+
     return updates
 
 

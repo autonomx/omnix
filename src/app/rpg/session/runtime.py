@@ -1115,6 +1115,21 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     next_setup = _safe_dict(step_result.get("next_setup")) or setup
     after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
 
+    # --- Party reaction conversations after world step ---
+    try:
+        from app.rpg.social.conversation_engine import try_start_party_reaction_conversation
+        party_action = {
+            "action_type": action_type,
+            "text": player_input,
+            "target_id": _safe_str(action.get("target_id")),
+        }
+        try_start_party_reaction_conversation(
+            after_state, runtime_state, party_action,
+            int(after_state.get("tick", 0) or 0),
+        )
+    except ImportError:
+        pass
+
     scenes = generate_scenes_from_simulation(after_state)
     current_scene = _safe_dict(scenes[0]) if scenes else _fallback_scene(after_state, player_input)
 

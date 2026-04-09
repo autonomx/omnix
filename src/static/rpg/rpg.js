@@ -1110,6 +1110,10 @@
                 updateState({ player: update.player });
                 renderPlayerPanel(update.player);
             }
+            // Render conversation cards from turn response
+            if (data && data.active_conversations) {
+                renderConversations(data.active_conversations);
+            }
             // Speak narration after response is complete
             if (data && data.narration) speakNarration(data.narration);
         } catch (err) {
