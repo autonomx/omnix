@@ -29,6 +29,7 @@ from typing import Any
 
 from app.rpg.ai.llm_mind import NPCMind
 from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
+from app.rpg.social.conversation_engine import run_conversation_tick
 from app.rpg.sandbox import (
     build_world_consequences,
     project_outcomes_from_state,
@@ -874,6 +875,10 @@ def step_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
             mind.setdefault("beliefs", {})
             for target_id, patch in sorted((belief_targets or {}).items()):
                 mind["beliefs"][str(target_id)] = dict(patch or {})
+
+    # --- Conversation system tick ---
+    runtime_state = _safe_dict(meta.get("runtime_state"))
+    run_conversation_tick(history_state, runtime_state, int(history_state.get("tick", 0) or 0))
 
     # --- Phase 7: Debug Meta Tracking ---
     history_state.setdefault("debug_meta", {})

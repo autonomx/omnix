@@ -23,6 +23,8 @@ from app.rpg.session.runtime import (
     load_runtime_session,
     save_runtime_session,
 )
+from app.rpg.social.conversation_presentation import build_conversation_payload
+from app.rpg.social.player_interventions import apply_player_intervention
 
 rpg_session_bp = APIRouter()
 
@@ -165,6 +167,14 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
             - int(_safe_dict(runtime_state.get("subscription_state")).get("last_polled_seq", 0) or 0),
         ),
     }
+    # Conversation system payload
+    location_id = _safe_str(
+        runtime_state.get("current_location_id")
+        or _safe_dict(sim.get("player_state")).get("location_id")
+    )
+    conversation_payload = build_conversation_payload(sim, runtime_state, location_id=location_id)
+    payload["active_conversations"] = conversation_payload.get("active_conversations", [])
+    payload["recent_conversations"] = conversation_payload.get("recent_conversations", [])
     return payload
 
 
@@ -539,3 +549,36 @@ async def update_world_behavior(request: Request):
         "effective": effective,
         "override": override,
     }
+
+
+@rpg_session_bp.post("/api/rpg/session/conversation/intervene")
+async def rpg_session_conversation_intervene(request: Request):
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id"))
+    conversation_id = _safe_str(data.get("conversation_id"))
+    option_id = _safe_str(data.get("option_id"))
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    tick = int(_safe_dict(simulation_state).get("tick", 0) or 0)
+
+    result = apply_player_intervention(conversation_id, option_id, simulation_state, runtime_state, tick)
+    session["simulation_state"] = simulation_state
+    session["runtime_state"] = runtime_state
+    session = save_runtime_session(session)
+
+    payload = build_conversation_payload(
+        simulation_state,
+        runtime_state,
+        location_id=_safe_str(runtime_state.get("current_location_id")),
+    )
+    return JSONResponse({
+        "success": True,
+        "result": result,
+        "active_conversations": payload.get("active_conversations", []),
+        "recent_conversations": payload.get("recent_conversations", []),
+    })

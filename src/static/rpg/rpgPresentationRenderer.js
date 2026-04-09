@@ -1179,3 +1179,64 @@ export function renderSessionPackagePanel(sessionData, packageData) {
     </div>
   `;
 }
+
+// ---- Conversation inspector ----
+
+export function renderConversationInspector(payload) {
+  const container = document.getElementById("rpg-conversation-inspector");
+  if (!container) return;
+
+  const activeConvs = Array.isArray(payload?.active_conversations) ? payload.active_conversations : [];
+  const recentConvs = Array.isArray(payload?.recent_conversations) ? payload.recent_conversations : [];
+
+  const activeHtml = activeConvs.length
+    ? activeConvs.map((conv) => {
+        const topic = conv.topic || {};
+        const lines = Array.isArray(conv.lines) ? conv.lines : [];
+        const lastLines = lines.slice(-3).map((l) =>
+          `<div class="inspector-conv-line">${escapeHtml(l.speaker || "?")}: ${escapeHtml(l.text || "")}</div>`
+        ).join("");
+        return `
+          <div class="inspector-conv-card">
+            <div class="inspector-conv-header">
+              <span class="inspector-conv-id">${escapeHtml(conv.conversation_id || "")}</span>
+              <span class="inspector-conv-kind">${escapeHtml(conv.kind || "")}</span>
+            </div>
+            ${_renderKeyValueList([
+              { key: "Topic", value: topic.type || "" },
+              { key: "Anchor", value: topic.anchor || "" },
+              { key: "Participants", value: (conv.participants || []).join(", ") },
+              { key: "Turns", value: String(conv.turn_count || 0) + " / " + String(conv.max_turns || 0) },
+            ])}
+            <div class="inspector-conv-lines">${lastLines || "<em>No lines yet.</em>"}</div>
+          </div>
+        `;
+      }).join("")
+    : `<div class="inspector-empty">No active conversations.</div>`;
+
+  const recentHtml = recentConvs.length
+    ? recentConvs.slice(-5).map((conv) => {
+        const topic = conv.topic || {};
+        return `
+          <div class="inspector-conv-card inspector-conv-closed">
+            <div class="inspector-conv-header">
+              <span class="inspector-conv-id">${escapeHtml(conv.conversation_id || "")}</span>
+              <span class="inspector-conv-reason">${escapeHtml(conv.close_reason || "closed")}</span>
+            </div>
+            ${_renderKeyValueList([
+              { key: "Topic", value: topic.type || "" },
+              { key: "Participants", value: (conv.participants || []).join(", ") },
+            ])}
+          </div>
+        `;
+      }).join("")
+    : `<div class="inspector-empty">No recent conversations.</div>`;
+
+  container.innerHTML = `
+    <div class="inspector-panel">
+      <div class="inspector-header">Conversations</div>
+      <div class="inspector-section"><h5>Active</h5>${activeHtml}</div>
+      <div class="inspector-section"><h5>Recent</h5>${recentHtml}</div>
+    </div>
+  `;
+}

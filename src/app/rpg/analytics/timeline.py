@@ -53,6 +53,23 @@ def build_timeline_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
             "label": "tick",
         })
 
+    # Include conversation events from social_state
+    conv_state = _safe_dict(_safe_dict(simulation_state.get("social_state")).get("conversations"))
+    for conv in _safe_list(conv_state.get("active"))[:10]:
+        conv = _safe_dict(conv)
+        snapshot_rows.append({
+            "tick": _safe_int(conv.get("created_tick"), 0),
+            "snapshot_id": str(conv.get("conversation_id", "")),
+            "label": "conversation_started",
+        })
+    for conv in _safe_list(conv_state.get("recent"))[-10:]:
+        conv = _safe_dict(conv)
+        snapshot_rows.append({
+            "tick": _safe_int(conv.get("updated_tick"), 0),
+            "snapshot_id": str(conv.get("conversation_id", "")),
+            "label": "conversation_closed",
+        })
+
     snapshot_rows.sort(key=lambda x: (x["tick"], str(x["snapshot_id"])))
 
     return {

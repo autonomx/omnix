@@ -1110,6 +1110,10 @@
                 updateState({ player: update.player });
                 renderPlayerPanel(update.player);
             }
+            // Render conversation cards from turn response
+            if (data && data.active_conversations) {
+                renderConversations(data.active_conversations);
+            }
             // Speak narration after response is complete
             if (data && data.narration) speakNarration(data.narration);
         } catch (err) {
@@ -2536,6 +2540,73 @@
         }
 
         console.log('[RPG] RPG mode ready (state v' + stateVersion + ')');
+    }
+
+    // ── Conversation rendering ────────────────────────────────────────────
+
+    function renderConversations(conversations) {
+        var root = document.getElementById("rpg-conversations");
+        if (!root) return;
+        root.innerHTML = "";
+
+        (conversations || []).forEach(function(conv) {
+            var card = document.createElement("div");
+            card.className = "rpg-conversation-card";
+
+            var title = document.createElement("div");
+            title.className = "rpg-conversation-title";
+            var topic = (conv.topic && conv.topic.summary) || "Conversation";
+            title.textContent = topic;
+            card.appendChild(title);
+
+            var body = document.createElement("div");
+            body.className = "rpg-conversation-lines";
+            (conv.lines || []).slice(-4).forEach(function(line) {
+                var row = document.createElement("div");
+                row.className = "rpg-conversation-line";
+                var speaker = line.speaker_name || line.speaker || "Someone";
+                row.textContent = speaker + ': "' + (line.text || "") + '"';
+                body.appendChild(row);
+            });
+            card.appendChild(body);
+
+            if (conv.player_can_intervene && (conv.intervention_options || []).length) {
+                var actions = document.createElement("div");
+                actions.className = "rpg-conversation-actions";
+                conv.intervention_options.forEach(function(opt) {
+                    var btn = document.createElement("button");
+                    btn.className = "rpg-choice-btn";
+                    btn.textContent = opt.text || opt.id;
+                    btn.onclick = function() { sendConversationIntervention(conv.conversation_id, opt.id); };
+                    actions.appendChild(btn);
+                });
+                card.appendChild(actions);
+            }
+
+            root.appendChild(card);
+        });
+    }
+
+    function sendConversationIntervention(conversationId, optionId) {
+        var payload = {
+            session_id: rpgState.sessionId,
+            conversation_id: conversationId,
+            option_id: optionId,
+        };
+        fetch("/api/rpg/session/conversation/intervene", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data && data.active_conversations) {
+                renderConversations(data.active_conversations);
+            }
+        })
+        .catch(function(err) {
+            console.error('[RPG] Conversation intervention error:', err);
+        });
     }
 
     // Defer until after all other scripts have initialised

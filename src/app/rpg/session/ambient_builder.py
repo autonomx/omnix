@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from app.rpg.social.conversation_presentation import build_conversation_payload
+
 # ── Hard caps (Phase 0.3) ──────────────────────────────────────────────────
 _MAX_AMBIENT_QUEUE = 32
 _MAX_RECENT_AMBIENT_IDS = 64
@@ -201,6 +203,44 @@ def _nearby_npc_ids(simulation_state: Dict[str, Any]) -> List[str]:
     return [_safe_str(nid) for nid in _safe_list(player.get("nearby_npc_ids")) if _safe_str(nid)]
 
 
+def _conversation_to_ambient_updates(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], player_loc: str, tick: int) -> List[Dict[str, Any]]:
+    """Surface NEW conversation lines as ambient updates, keyed for dedup."""
+    payload = build_conversation_payload(simulation_state, runtime_state, location_id=player_loc)
+    updates: List[Dict[str, Any]] = []
+    # Track which lines have already been surfaced via ambient
+    surfaced = set(_safe_list(_safe_dict(runtime_state).get("_surfaced_conversation_line_keys")))
+    new_surfaced = set(surfaced)
+
+    for conv in payload.get("active_conversations", []):
+        cid = str(conv.get("conversation_id") or "")
+        for line in conv.get("lines", [])[-2:]:
+            turn = int(line.get("turn", 0) or 0)
+            dedup_key = f"{cid}:{turn}"
+            if dedup_key in surfaced:
+                continue
+            new_surfaced.add(dedup_key)
+            speaker = str(line.get("speaker_name") or line.get("speaker") or "").strip()
+            text = str(line.get("text") or "").strip()
+            if not text:
+                continue
+            updates.append(make_ambient_update(
+                tick=tick,
+                kind="conversation_line",
+                priority=0.7,
+                location_id=player_loc,
+                text=f'{speaker}: "{text}"' if speaker else text,
+                source_event_ids=[cid],
+                source="conversation",
+            ))
+
+    # Persist surfaced keys (bounded to last 120 entries)
+    if isinstance(runtime_state, dict):
+        all_keys = sorted(new_surfaced)
+        runtime_state["_surfaced_conversation_line_keys"] = all_keys[-120:]
+
+    return updates
+
+
 def build_ambient_updates(
     before_state: Dict[str, Any],
     after_state: Dict[str, Any],
@@ -354,6 +394,9 @@ def build_ambient_updates(
                     source="simulation",
                 ))
 
+    # ── Conversation lines ──
+    updates.extend(_conversation_to_ambient_updates(after_state, runtime_state, player_loc, tick))
+
     return updates
 
 
@@ -403,6 +446,8 @@ def score_ambient_salience(update: Dict[str, Any], context: Dict[str, Any]) -> f
         score += 0.15
     elif kind in ("gossip",):
         score += 0.05
+    elif kind in ("conversation_line",):
+        score += 0.15
 
     # Interrupt flag
     if update.get("interrupt"):

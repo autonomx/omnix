@@ -123,3 +123,26 @@ def build_personality_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any
         "profile_count": len(profiles),
         "actor_ids": sorted(profiles.keys())[:20],
     }
+
+
+def get_personality_profile(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    """Get a raw personality profile by NPC ID."""
+    simulation_state = simulation_state if isinstance(simulation_state, dict) else {}
+    presentation_state = simulation_state.get("presentation_state") if isinstance(simulation_state.get("presentation_state"), dict) else {}
+    personality_state = presentation_state.get("personality_state") if isinstance(presentation_state.get("personality_state"), dict) else {}
+    profiles = personality_state.get("profiles") if isinstance(personality_state.get("profiles"), dict) else {}
+    profile = profiles.get(str(npc_id))
+    return profile if isinstance(profile, dict) else {}
+
+
+def get_personality_tags(simulation_state: Dict[str, Any], npc_id: str) -> List[str]:
+    """Get style tags for an NPC."""
+    profile = get_personality_profile(simulation_state, npc_id)
+    tags = profile.get("style_tags")
+    return [str(x) for x in tags] if isinstance(tags, list) else []
+
+
+def get_voice_style(simulation_state: Dict[str, Any], npc_id: str) -> str:
+    """Get the voice style for an NPC."""
+    profile = get_personality_profile(simulation_state, npc_id)
+    return str(profile.get("voice_style") or "").strip()
