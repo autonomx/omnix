@@ -407,3 +407,346 @@ class TestNPCMindEndToEnd:
         # Empty sim, empty ctx → no goals at all after merge
         decision = mind.decide({}, _npc_ctx(), tick=1)
         assert decision.action_type == "wait"
+
+    def test_decide_preserves_target_id(self):
+        """negotiate decision must preserve the target NPC id."""
+        from app.rpg.ai.llm_mind.npc_mind import NPCMind
+        mind = NPCMind(npc_id="npc:a")
+        sim = _basic_sim_with_colocated_npc(other_id="npc:guard")
+        ctx = _npc_ctx()
+        mind.refresh_goals(sim, ctx)
+        decision = mind.decide(sim, ctx, tick=1)
+        assert decision.target_id == "npc:guard"
+        assert decision.target_kind == "npc"
+
+    def test_decide_intent_is_negotiate_not_observe(self):
+        """negotiate_with_nearby_npc must map to intent=negotiate."""
+        from app.rpg.ai.llm_mind.npc_mind import NPCMind
+        mind = NPCMind(npc_id="npc:a")
+        sim = _basic_sim_with_colocated_npc()
+        ctx = _npc_ctx()
+        mind.refresh_goals(sim, ctx)
+        decision = mind.decide(sim, ctx, tick=1)
+        assert decision.intent == "negotiate"
+        assert decision.intent != "observe"
+        assert decision.intent != "wait"
+
+
+# ── 9. conversation_templates.py supports ambient_chat ───────────────────
+
+class TestConversationTemplatesAmbientChat:
+    """Invariant: topic_type == 'ambient_chat' must produce spoken content,
+    not fall through to the generic default."""
+
+    def test_ambient_chat_merchant_line(self):
+        from app.rpg.social.conversation_templates import build_template_line
+        conv = {"topic": {"type": "ambient_chat", "stance": "comment", "summary": ""}}
+        sim = {"npc_index": {"npc:m": {"name": "Merchant", "role": "merchant"}}}
+        result = build_template_line(conv, "npc:m", sim, {})
+        assert result["text"], "Must produce non-empty text"
+        assert result["text"] != "There is something we should discuss before we move on."
+        assert result["kind"] in {"statement", "warning", "question", "challenge"}
+
+    def test_ambient_chat_guard_line(self):
+        from app.rpg.social.conversation_templates import build_template_line
+        conv = {"topic": {"type": "ambient_chat", "stance": "comment", "summary": ""}}
+        sim = {"npc_index": {"npc:g": {"name": "Guard", "role": "guard"}}}
+        result = build_template_line(conv, "npc:g", sim, {})
+        assert result["text"]
+        assert result["kind"] == "warning"
+
+    def test_ambient_chat_default_role_line(self):
+        from app.rpg.social.conversation_templates import build_template_line
+        conv = {"topic": {"type": "ambient_chat", "stance": "comment", "summary": ""}}
+        sim = {"npc_index": {"npc:v": {"name": "Villager", "role": "villager"}}}
+        result = build_template_line(conv, "npc:v", sim, {})
+        assert result["text"]
+        assert "discuss" not in result["text"].lower(), "Must not use generic default"
+
+
+# ── 10. world_simulation.py event summaries ──────────────────────────────
+
+class TestWorldSimulationEventSummaries:
+    """Invariant: _decision_to_event produces meaningful NPC-to-NPC summaries,
+    not vague or passive descriptions."""
+
+    def test_negotiate_summary_uses_target_name(self):
+        from app.rpg.creator.world_simulation import _decision_to_event
+        decision = {
+            "npc_id": "npc:bran",
+            "action_type": "negotiate",
+            "target_id": "npc:elara",
+            "target_kind": "npc",
+            "location_id": "loc:market",
+            "urgency": 0.5,
+        }
+        npc_ctx = {
+            "name": "Bran",
+            "npc_id": "npc:bran",
+            "location_id": "loc:market",
+            "npc_index": {
+                "npc:elara": {"name": "Elara"},
+            },
+        }
+        event = _decision_to_event(decision, npc_ctx, tick=5)
+        assert event is not None
+        assert "Bran speaks with Elara" in event["summary"]
+        assert event["type"] == "negotiate"
+        assert event["source"] == "npc_mind"
+
+    def test_support_summary_uses_target_name(self):
+        from app.rpg.creator.world_simulation import _decision_to_event
+        decision = {
+            "npc_id": "npc:bran",
+            "action_type": "support",
+            "target_id": "npc:elara",
+            "target_kind": "npc",
+            "location_id": "loc:market",
+            "urgency": 0.5,
+        }
+        npc_ctx = {
+            "name": "Bran",
+            "npc_id": "npc:bran",
+            "location_id": "loc:market",
+            "npc_index": {
+                "npc:elara": {"name": "Elara"},
+            },
+        }
+        event = _decision_to_event(decision, npc_ctx, tick=5)
+        assert event is not None
+        assert "Bran checks in with Elara" in event["summary"]
+
+    def test_move_summary(self):
+        from app.rpg.creator.world_simulation import _decision_to_event
+        decision = {
+            "npc_id": "npc:bran",
+            "action_type": "move",
+            "target_id": "loc:tavern",
+            "target_kind": "location",
+            "location_id": "loc:market",
+            "target_location": "the tavern",
+            "urgency": 0.5,
+        }
+        npc_ctx = {"name": "Bran", "npc_id": "npc:bran", "npc_index": {}}
+        event = _decision_to_event(decision, npc_ctx, tick=5)
+        assert event is not None
+        assert "Bran heads toward" in event["summary"]
+
+    def test_wait_produces_no_event(self):
+        from app.rpg.creator.world_simulation import _decision_to_event
+        decision = {
+            "npc_id": "npc:bran",
+            "action_type": "wait",
+            "target_id": "",
+            "location_id": "loc:market",
+            "urgency": 0.0,
+        }
+        npc_ctx = {"name": "Bran", "npc_id": "npc:bran", "npc_index": {}}
+        event = _decision_to_event(decision, npc_ctx, tick=5)
+        assert event is None, "wait actions must not produce events"
+
+    def test_internal_reason_not_in_summary(self):
+        """internal_reason must be stored separately, not leaked into summary."""
+        from app.rpg.creator.world_simulation import _decision_to_event
+        decision = {
+            "npc_id": "npc:bran",
+            "action_type": "negotiate",
+            "target_id": "npc:elara",
+            "target_kind": "npc",
+            "location_id": "loc:market",
+            "urgency": 0.5,
+            "reason": "Force social interaction — nearby NPC present",
+        }
+        npc_ctx = {
+            "name": "Bran",
+            "npc_id": "npc:bran",
+            "npc_index": {"npc:elara": {"name": "Elara"}},
+        }
+        event = _decision_to_event(decision, npc_ctx, tick=5)
+        assert "Force social" not in event["summary"]
+        assert event.get("internal_reason") == "Force social interaction — nearby NPC present"
+
+
+# ── 11. conversation_engine.py allows up to 2 ambient starts ─────────────
+
+class TestConversationEngineAmbientStarts:
+    """Invariant: try_start_ambient_conversations can start up to 2
+    conversations when the scene is quiet."""
+
+    def test_two_ambient_conversations_can_start(self):
+        from app.rpg.social.conversation_engine import try_start_ambient_conversations
+        from app.rpg.social.npc_conversations import ensure_conversation_state, list_active_conversations
+        sim = {
+            "player_state": {"location_id": "loc:market", "nearby_npc_ids": ["npc:a", "npc:b", "npc:c", "npc:d"]},
+            "npc_index": {
+                "npc:a": {"name": "Alice", "location_id": "loc:market", "role": "merchant"},
+                "npc:b": {"name": "Bob", "location_id": "loc:market", "role": "guard"},
+                "npc:c": {"name": "Carol", "location_id": "loc:market", "role": "thief"},
+                "npc:d": {"name": "Dan", "location_id": "loc:market", "role": "innkeeper"},
+            },
+            "events": [],
+        }
+        ensure_conversation_state(sim)
+        runtime = {}
+        try_start_ambient_conversations(sim, runtime, tick=5)
+        active = list_active_conversations(sim, location_id="loc:market")
+        # Must be able to start at least 1, up to 2
+        assert len(active) >= 1
+        assert len(active) <= 2
+
+    def test_bounded_at_two(self):
+        """Even with many candidate groups, at most 2 conversations start."""
+        from app.rpg.social.conversation_engine import try_start_ambient_conversations
+        from app.rpg.social.npc_conversations import ensure_conversation_state, list_active_conversations
+        sim = {
+            "player_state": {
+                "location_id": "loc:market",
+                "nearby_npc_ids": [f"npc:{i}" for i in range(8)],
+            },
+            "npc_index": {
+                f"npc:{i}": {"name": f"NPC{i}", "location_id": "loc:market", "role": "villager"}
+                for i in range(8)
+            },
+            "events": [],
+        }
+        ensure_conversation_state(sim)
+        runtime = {}
+        try_start_ambient_conversations(sim, runtime, tick=5)
+        active = list_active_conversations(sim, location_id="loc:market")
+        assert len(active) <= 2
+
+    def test_no_debug_print(self):
+        """conversation_engine should not have print() debug output."""
+        import inspect
+        from app.rpg.social import conversation_engine
+        source = inspect.getsource(conversation_engine.try_start_ambient_conversations)
+        assert "print(" not in source, "Debug print() must be removed"
+
+
+# ── 12. Ambient builder: on-screen observe/watch also suppressed ─────────
+
+class TestAmbientBuilderOnScreenSuppression:
+    """Invariant: observe/watch events from npc_mind must be suppressed
+    even when they occur at the player's location."""
+
+    def test_onscreen_observe_suppressed_by_internal_filter(self):
+        from app.rpg.session.ambient_builder import _is_low_value_internal_npc_event
+        event = {
+            "type": "observe",
+            "source": "npc_mind",
+            "location_id": "loc:market",
+            "summary": "Guard observes",
+            "target_id": "npc:merchant",
+        }
+        # Even same-location observe must be suppressed
+        assert _is_low_value_internal_npc_event(event, "loc:market") is True
+
+    def test_onscreen_watch_suppressed_by_internal_filter(self):
+        from app.rpg.session.ambient_builder import _is_low_value_internal_npc_event
+        event = {
+            "type": "watch",
+            "source": "npc_mind",
+            "location_id": "loc:market",
+            "summary": "Guard watches",
+            "target_id": "npc:merchant",
+        }
+        assert _is_low_value_internal_npc_event(event, "loc:market") is True
+
+    def test_watches_situation_carefully_text_suppressed(self):
+        """The specific spam phrase must be caught by build_ambient_updates."""
+        from app.rpg.session.ambient_builder import build_ambient_updates
+        before = {"events": [], "tick": 4, "player_state": {"location_id": "loc:market"}}
+        after = {
+            "events": [
+                {
+                    "event_id": "e1",
+                    "type": "observe",
+                    "summary": "Bran watches the situation carefully.",
+                    "location_id": "loc:market",
+                    "source": "npc_mind",
+                },
+            ],
+            "tick": 5,
+            "player_state": {"location_id": "loc:market"},
+            "npc_decisions": {},
+        }
+        updates = build_ambient_updates(before, after, {})
+        texts = [u.get("text", "") for u in updates]
+        assert not any("watches the situation carefully" in t for t in texts)
+
+
+# ── 13. Ambient builder surfaces negotiate NPC-to-NPC decisions ──────────
+
+class TestAmbientBuilderNPCtoNPCDecisions:
+    """Invariant: negotiate decisions between nearby NPCs should surface
+    as npc_to_npc ambient updates so the player sees social interactions."""
+
+    def test_negotiate_decision_surfaces(self):
+        from app.rpg.session.ambient_builder import build_ambient_updates
+        before = {
+            "events": [],
+            "npc_decisions": {},
+            "tick": 4,
+            "player_state": {
+                "location_id": "loc:market",
+                "nearby_npc_ids": ["npc:bran"],
+            },
+        }
+        after = {
+            "events": [],
+            "npc_decisions": {
+                "npc:bran": {
+                    "action_type": "negotiate",
+                    "target_id": "npc:elara",
+                    "location_id": "loc:market",
+                },
+            },
+            "npc_index": {
+                "npc:bran": {"name": "Bran", "location_id": "loc:market"},
+                "npc:elara": {"name": "Elara", "location_id": "loc:market"},
+            },
+            "tick": 5,
+            "player_state": {
+                "location_id": "loc:market",
+                "nearby_npc_ids": ["npc:bran"],
+            },
+        }
+        updates = build_ambient_updates(before, after, {})
+        npc_to_npc = [u for u in updates if u.get("kind") == "npc_to_npc"]
+        assert len(npc_to_npc) >= 1
+        assert "Bran speaks with Elara" in npc_to_npc[0]["text"]
+
+    def test_support_decision_surfaces(self):
+        from app.rpg.session.ambient_builder import build_ambient_updates
+        before = {
+            "events": [],
+            "npc_decisions": {},
+            "tick": 4,
+            "player_state": {
+                "location_id": "loc:market",
+                "nearby_npc_ids": ["npc:bran"],
+            },
+        }
+        after = {
+            "events": [],
+            "npc_decisions": {
+                "npc:bran": {
+                    "action_type": "support",
+                    "target_id": "npc:elara",
+                    "location_id": "loc:market",
+                },
+            },
+            "npc_index": {
+                "npc:bran": {"name": "Bran", "location_id": "loc:market"},
+                "npc:elara": {"name": "Elara", "location_id": "loc:market"},
+            },
+            "tick": 5,
+            "player_state": {
+                "location_id": "loc:market",
+                "nearby_npc_ids": ["npc:bran"],
+            },
+        }
+        updates = build_ambient_updates(before, after, {})
+        npc_to_npc = [u for u in updates if u.get("kind") == "npc_to_npc"]
+        assert len(npc_to_npc) >= 1
+        assert "Bran checks in with Elara" in npc_to_npc[0]["text"]

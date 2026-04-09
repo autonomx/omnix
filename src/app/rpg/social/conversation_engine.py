@@ -188,7 +188,6 @@ def try_start_ambient_conversations(simulation_state: Dict[str, Any], runtime_st
 
     for group in candidate_groups:
         topics = build_conversation_topic_candidates(simulation_state, runtime_state, player_loc, group, tick)
-        print("[RPG conversation topics]", group, topics)
         if not topics:
             continue
         topic = topics[0]
