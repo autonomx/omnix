@@ -85,6 +85,7 @@ from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
 from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_speaker_cards
+from app.rpg.social.conversation_presentation import build_conversation_payload
 
 # Phase 12.15 — Visual inspector
 from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
@@ -528,6 +529,10 @@ async def presentation_scene(request: Request):
     else:
         payload = {"content": payload, "runtime": runtime_payload, "orchestration": orchestration_payload, "live_provider": live_provider_payload, "player_overlay": inspector_overlay_payload.get("player_overlay", {})}
     response = {"ok": True, "presentation": payload, "character_ui_state": _extract_character_ui_state(simulation_state), "character_inspector_state": _extract_character_inspector_state(simulation_state), "world_inspector_state": _extract_world_inspector_state(simulation_state), "visual_state": _extract_visual_state(simulation_state), "memory_state": _safe_dict(simulation_state.get("memory_state"))}
+    # Inject conversation payload
+    conv_payload = build_conversation_payload(simulation_state, {})
+    response["active_conversations"] = conv_payload.get("active_conversations", [])
+    response["recent_conversations"] = conv_payload.get("recent_conversations", [])
     return _jsonify(_add_content_pack_data(response, simulation_state))
 
 

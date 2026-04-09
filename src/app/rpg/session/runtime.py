@@ -1058,6 +1058,10 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     advisory = {}
     runtime_state.setdefault("llm_records", [])
     runtime_state["llm_records_index"] = _safe_dict(runtime_state.get("llm_records_index"))
+    runtime_state.setdefault("conversation_settings", {})
+    runtime_state.setdefault("offscreen_conversation_summaries", [])
+    runtime_state.setdefault("last_player_action", {})
+    runtime_state.setdefault("last_conversation_intervention", {})
     mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
     current_tick = int(runtime_state.get("tick", 0) or 0)
 

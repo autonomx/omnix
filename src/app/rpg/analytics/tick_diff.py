@@ -113,6 +113,11 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
         "party_before": before_party,
         "party_after": after_party,
         "changed_npc_ids": changed_npcs[:20],
+        # Conversation diff fields
+        "new_conversations": _new_conversations(before_state, after_state),
+        "closed_conversations": _closed_conversations(before_state, after_state),
+        "new_conversation_lines": _new_conversation_lines(before_state, after_state),
+        "conversation_interventions": _conversation_interventions(before_state, after_state),
         "summary": {
             "event_delta": len(after_events) - len(before_events),
             "consequence_delta": len(after_consequences) - len(before_consequences),
@@ -125,3 +130,51 @@ def build_tick_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -
             "party_narrative_history_after": len(_safe_list(after_narrative.get("history"))),
         },
     }
+
+
+def _conv_state(sim: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(_safe_dict(sim).get("social_state")).get("conversations"))
+
+
+def _new_conversations(before: Dict[str, Any], after: Dict[str, Any]) -> List[Dict[str, Any]]:
+    before_ids = {str(_safe_dict(c).get("conversation_id")) for c in _safe_list(_conv_state(before).get("active"))}
+    out: List[Dict[str, Any]] = []
+    for c in _safe_list(_conv_state(after).get("active")):
+        c = _safe_dict(c)
+        cid = str(c.get("conversation_id", ""))
+        if cid and cid not in before_ids:
+            out.append(dict(c))
+    return out[:10]
+
+
+def _closed_conversations(before: Dict[str, Any], after: Dict[str, Any]) -> List[Dict[str, Any]]:
+    before_recent_ids = {str(_safe_dict(c).get("conversation_id")) for c in _safe_list(_conv_state(before).get("recent"))}
+    out: List[Dict[str, Any]] = []
+    for c in _safe_list(_conv_state(after).get("recent")):
+        c = _safe_dict(c)
+        cid = str(c.get("conversation_id", ""))
+        if cid and cid not in before_recent_ids:
+            out.append(dict(c))
+    return out[:10]
+
+
+def _new_conversation_lines(before: Dict[str, Any], after: Dict[str, Any]) -> List[Dict[str, Any]]:
+    before_lines = _safe_dict(_conv_state(before).get("lines_by_conversation"))
+    after_lines = _safe_dict(_conv_state(after).get("lines_by_conversation"))
+    out: List[Dict[str, Any]] = []
+    for cid, after_rows in sorted(after_lines.items()):
+        before_count = len(_safe_list(before_lines.get(cid)))
+        for line in _safe_list(after_rows)[before_count:]:
+            if isinstance(line, dict):
+                out.append(dict(line))
+    return out[:20]
+
+
+def _conversation_interventions(before: Dict[str, Any], after: Dict[str, Any]) -> List[Dict[str, Any]]:
+    before_rt = _safe_dict(before.get("runtime_state"))
+    after_rt = _safe_dict(after.get("runtime_state"))
+    before_int = _safe_dict(before_rt.get("last_conversation_intervention"))
+    after_int = _safe_dict(after_rt.get("last_conversation_intervention"))
+    if after_int and after_int != before_int:
+        return [dict(after_int)]
+    return []
