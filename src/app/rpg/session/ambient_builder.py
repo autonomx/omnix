@@ -312,6 +312,16 @@ def score_ambient_salience(update: Dict[str, Any], context: Dict[str, Any]) -> f
         score += 0.5
     elif kind in ("arrival", "departure"):
         score += 0.1
+    elif kind in ("quest_prompt", "plea_for_help", "demand"):
+        score += 0.3
+    elif kind in ("recruitment_offer",):
+        score += 0.2
+    elif kind in ("taunt",):
+        score += 0.4
+    elif kind in ("companion_comment",):
+        score += 0.15
+    elif kind in ("gossip",):
+        score += 0.05
 
     # Interrupt flag
     if update.get("interrupt"):
@@ -355,6 +365,11 @@ def is_player_visible_update(update: Dict[str, Any], session: Dict[str, Any]) ->
     if kind == "npc_to_player":
         return True
 
+    # Phase 2/7: Initiative-driven kinds always visible when targeting player
+    if kind in ("quest_prompt", "recruitment_offer", "plea_for_help", "demand", "taunt"):
+        if _safe_str(update.get("target_id")) == "player":
+            return True
+
     # Must be at same location or location-independent
     if update_loc and player_loc and update_loc != player_loc:
         return False
@@ -390,9 +405,10 @@ def coalesce_ambient_updates(updates: List[Dict[str, Any]], runtime_state: Dict[
         kind = _safe_str(u.get("kind"))
         pri = float(u.get("priority", 0) or 0)
 
-        if kind in ("combat_start", "warning", "npc_to_player"):
+        if kind in ("combat_start", "warning", "npc_to_player",
+                    "quest_prompt", "plea_for_help", "demand", "recruitment_offer"):
             high_priority.append(u)
-        elif kind in ("npc_to_npc", "npc_reaction", "companion_comment"):
+        elif kind in ("npc_to_npc", "npc_reaction", "companion_comment", "taunt", "gossip"):
             npc_chatter.append(u)
         else:
             if pri >= 0.4:

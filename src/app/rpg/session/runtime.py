@@ -50,11 +50,25 @@ from app.rpg.ai.ambient_dialogue import (
     build_ambient_dialogue_request,
     select_ambient_dialogue_candidate,
 )
+from app.rpg.ai.npc_initiative import (
+    apply_initiative_cooldowns,
+    apply_world_behavior_bias,
+    build_npc_initiative_candidates,
+    compute_opening_relevance,
+    select_npc_initiative_candidate,
+)
+from app.rpg.world.world_event_director import (
+    apply_world_behavior_to_events,
+    build_world_event_candidates,
+    convert_events_to_ambient_updates,
+    filter_world_events,
+)
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update
 from app.rpg.session.ambient_policy import (
     classify_ambient_delivery,
     record_interrupt,
 )
+from app.rpg.creator.schema import normalize_world_behavior_config
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
@@ -105,6 +119,9 @@ from app.rpg.session.service import save_session as save_canonical_session
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
 
+# Phase F — quiet-window ticks after player action
+_DEFAULT_POST_PLAYER_QUIET_TICKS = 2
+
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -128,6 +145,157 @@ def _utc_now_iso() -> str:
 
 def _copy_dict(value: Any) -> Dict[str, Any]:
     return dict(_safe_dict(value))
+
+
+# ── Phase F — effective world behavior config ─────────────────────────────
+
+
+def get_effective_world_behavior(session: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge setup world_behavior with runtime override.
+
+    The setup config provides adventure-level defaults.
+    The runtime override lets the player tune mid-game.
+    """
+    session = _safe_dict(session)
+    setup = _safe_dict(session.get("setup_payload"))
+    runtime = _safe_dict(session.get("runtime_state"))
+
+    base = normalize_world_behavior_config(_safe_dict(setup.get("world_behavior")))
+    override = _safe_dict(runtime.get("world_behavior_override"))
+
+    effective = dict(base)
+    from app.rpg.creator.schema import _WORLD_BEHAVIOR_ENUMS
+    for key, allowed in _WORLD_BEHAVIOR_ENUMS.items():
+        val = override.get(key)
+        if isinstance(val, str) and val.strip().lower() in allowed:
+            effective[key] = val.strip().lower()
+
+    return effective
+
+
+# ── Phase 1 — idle tick cadence policy ────────────────────────────────────
+
+
+def compute_idle_tick_count(
+    session: Dict[str, Any],
+    *,
+    elapsed_seconds: int = 0,
+    reason: str = "heartbeat",
+) -> int:
+    """Decide how many idle ticks to apply based on context.
+
+    Rules:
+    - tab open heartbeat: usually 1 tick
+    - resume catch-up: capped batch via elapsed_seconds
+    - active encounter: suppress or reduce ambient chatter ticks
+    - recent player action: lower ambient aggression briefly
+    """
+    session = _safe_dict(session)
+    runtime = _safe_dict(session.get("runtime_state"))
+    sim = _safe_dict(session.get("simulation_state"))
+
+    encounter_active = bool(
+        sim.get("encounter_active") or sim.get("active_encounter")
+    )
+    quiet_ticks = int(runtime.get("post_player_quiet_ticks", 0) or 0)
+
+    if reason == "resume_catchup":
+        raw = max(0, elapsed_seconds // 5)
+        return min(raw, _MAX_RESUME_CATCHUP_TICKS)
+
+    if reason == "heartbeat":
+        # Suppress during active encounters
+        if encounter_active:
+            return 0
+        # Reduce during quiet window after player action
+        if quiet_ticks > 0:
+            return 0
+        return 1
+
+    return 1
+
+
+# ── Phase 5 — opening-aware runtime metadata ─────────────────────────────
+
+
+def _build_opening_runtime(setup: Dict[str, Any]) -> Dict[str, Any]:
+    """Build opening-aware runtime metadata from setup payload.
+
+    Persisted as runtime_state["opening_runtime"].
+    """
+    setup = _safe_dict(setup)
+    opening = _safe_dict(setup.get("opening"))
+
+    if not opening:
+        return {"active": False, "opening_resolved": True}
+
+    return {
+        "active": True,
+        "scene_frame": _safe_str(opening.get("scene_frame")),
+        "immediate_problem": _safe_str(opening.get("immediate_problem")),
+        "player_involvement_reason": _safe_str(opening.get("player_involvement_reason")),
+        "starter_conflict": _safe_str(setup.get("starter_conflict")),
+        "present_npc_ids": _safe_list(opening.get("present_npc_ids")),
+        "first_choices": _safe_list(opening.get("first_choices")),
+        "opening_resolved": False,
+    }
+
+
+def _check_opening_resolution(
+    session: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Check simple rule-based conditions for opening resolution.
+
+    Returns updated opening_runtime dict.
+    """
+    session = _safe_dict(session)
+    runtime = _safe_dict(session.get("runtime_state"))
+    sim = _safe_dict(session.get("simulation_state"))
+    opening_rt = _safe_dict(runtime.get("opening_runtime"))
+
+    if not opening_rt.get("active") or opening_rt.get("opening_resolved"):
+        return opening_rt
+
+    opening_rt = dict(opening_rt)
+
+    # Rule: player has acted on opening conflict (tick > 3 means some engagement)
+    tick = int(sim.get("tick", 0) or 0)
+    player_turns = len(_safe_list(runtime.get("turn_history")))
+
+    # Simple heuristics for opening resolution
+    resolved = False
+
+    # Player engaged with key opening NPCs (at least 2 turns)
+    if player_turns >= 2:
+        # Check if player interacted with opening NPCs
+        turn_history = _safe_list(runtime.get("turn_history"))
+        opening_npcs = set(_safe_list(opening_rt.get("present_npc_ids")))
+        engaged_opening_npcs = set()
+        for turn in turn_history:
+            turn = _safe_dict(turn)
+            action = _safe_dict(turn.get("action"))
+            target = _safe_str(action.get("target_id") or action.get("npc_id"))
+            if target in opening_npcs:
+                engaged_opening_npcs.add(target)
+        if engaged_opening_npcs:
+            resolved = True
+
+    # Player left opening location
+    player_state = _safe_dict(sim.get("player_state"))
+    player_loc = _safe_str(player_state.get("location_id"))
+    opening_loc = _safe_str(_safe_dict(_safe_dict(session.get("setup_payload")).get("opening")).get("location_id"))
+    if opening_loc and player_loc and player_loc != opening_loc and player_turns >= 1:
+        resolved = True
+
+    # Tick-based fallback: after tick 10, opening bias decays
+    if tick >= 10:
+        resolved = True
+
+    if resolved:
+        opening_rt["opening_resolved"] = True
+        opening_rt["active"] = False
+
+    return opening_rt
 
 
 def _build_opening_text(generated: Dict[str, Any]) -> str:
@@ -907,6 +1075,11 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     runtime_state = ensure_ambient_runtime_state(runtime_state)
     runtime_state["last_player_turn_at"] = _utc_now_iso()
     runtime_state["idle_streak"] = 0
+    # Phase 3D: quiet-window suppression after player action
+    runtime_state["post_player_quiet_ticks"] = _DEFAULT_POST_PLAYER_QUIET_TICKS
+    # Phase 5C: check if opening is resolved after player acts
+    session["runtime_state"] = runtime_state
+    runtime_state["opening_runtime"] = _check_opening_resolution(session)
 
     session["setup_payload"] = next_setup
     session["simulation_state"] = after_state
@@ -975,6 +1148,7 @@ def _build_idle_player_context(
 ) -> Dict[str, Any]:
     player_state = _safe_dict(after_state.get("player_state"))
     current_scene = _safe_dict(runtime_state.get("current_scene"))
+    idle_streak = int(runtime_state.get("idle_streak", 0) or 0)
     return {
         "player_location": _safe_str(
             player_state.get("location_id")
@@ -983,6 +1157,13 @@ def _build_idle_player_context(
         "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
         "scene_id": _safe_str(current_scene.get("scene_id")),
         "world_summary": _safe_str(current_scene.get("summary") or current_scene.get("scene")),
+        "player_idle": idle_streak > 0,
+        "active_conflict": _safe_str(
+            _safe_dict(after_state.get("active_conflict")).get("conflict_id")
+            if isinstance(after_state.get("active_conflict"), dict) else ""
+        ),
+        "recent_incidents": _safe_list(after_state.get("incidents"))[-4:],
+        "salient_events": _safe_list(after_state.get("events"))[-4:],
     }
 
 
@@ -1037,6 +1218,15 @@ def _apply_idle_tick_to_session(
     after_state = _safe_dict(advance_result.get("after_state"))
     next_setup = _safe_dict(advance_result.get("next_setup"))
 
+    # Phase 3D: quiet-window suppression after player action
+    quiet_ticks = int(runtime_state.get("post_player_quiet_ticks", 0) or 0)
+    if quiet_ticks > 0:
+        runtime_state["post_player_quiet_ticks"] = quiet_ticks - 1
+
+    # Phase F: effective world behavior config
+    session["runtime_state"] = runtime_state
+    world_behavior = get_effective_world_behavior(session)
+
     player_context = _build_idle_player_context(after_state, runtime_state)
     context = {
         "player_location": _safe_str(player_context.get("player_location")),
@@ -1046,6 +1236,31 @@ def _apply_idle_tick_to_session(
 
     raw_updates = build_ambient_updates(before_state, after_state, runtime_state)
 
+    # Phase 2: NPC initiative candidates (in addition to ambient dialogue)
+    initiative_candidates = build_npc_initiative_candidates(
+        after_state, runtime_state, player_context,
+    )
+    # Phase F4: apply world behavior bias to initiative candidates
+    initiative_candidates = apply_world_behavior_bias(initiative_candidates, world_behavior)
+    selected_initiative = select_npc_initiative_candidate(initiative_candidates, runtime_state)
+    if selected_initiative:
+        runtime_state = apply_initiative_cooldowns(runtime_state, selected_initiative)
+        raw_updates.append(
+            _make_initiative_update_from_candidate(selected_initiative)
+        )
+
+    # Phase 6: world event director
+    world_event_candidates = build_world_event_candidates(
+        after_state, runtime_state, player_context,
+    )
+    world_event_candidates = apply_world_behavior_to_events(
+        world_event_candidates, world_behavior,
+    )
+    filtered_events = filter_world_events(world_event_candidates, session)
+    event_updates = convert_events_to_ambient_updates(filtered_events, runtime_state)
+    raw_updates.extend(event_updates)
+
+    # Phase G / ambient dialogue (existing system)
     dialogue_candidates = build_ambient_dialogue_candidates(after_state, runtime_state, player_context)
     selected_dialogue = select_ambient_dialogue_candidate(dialogue_candidates, runtime_state)
     if selected_dialogue:
@@ -1090,6 +1305,10 @@ def _apply_idle_tick_to_session(
     runtime_state["last_idle_tick_at"] = _utc_now_iso()
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
     runtime_state = normalize_ambient_state(runtime_state)
+
+    # Phase 5C: check opening resolution during idle
+    session["runtime_state"] = runtime_state
+    runtime_state["opening_runtime"] = _check_opening_resolution(session)
 
     session["simulation_state"] = after_state
     session["setup_payload"] = next_setup
@@ -1153,6 +1372,56 @@ def _make_dialogue_update_from_candidate(
         },
         "source_event_ids": [],
         "source": "dialogue",
+        "created_at": _utc_now_iso(),
+    }
+
+
+def _make_initiative_update_from_candidate(
+    candidate: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Convert an NPC initiative candidate into an ambient update."""
+    candidate = _safe_dict(candidate)
+    kind = _safe_str(candidate.get("kind") or "npc_to_player")
+    speaker_name = _safe_str(candidate.get("speaker_name"))
+    reason = _safe_str(candidate.get("reason"))
+    action_intent = _safe_str(candidate.get("action_intent"))
+
+    # Build default text from candidate metadata
+    text = _safe_str(candidate.get("text_hint"))
+    if not text:
+        if kind == "quest_prompt":
+            text = f"{speaker_name} has something important to share about your quest."
+        elif kind == "recruitment_offer":
+            text = f"{speaker_name} approaches with an offer."
+        elif kind == "plea_for_help":
+            text = f"{speaker_name} urgently needs your help."
+        elif kind in ("taunt", "demand"):
+            text = f"{speaker_name} confronts you."
+        elif kind == "warning":
+            text = f"{speaker_name} warns you of danger."
+        elif kind == "companion_comment":
+            text = f"{speaker_name} has something to say."
+        else:
+            text = f"{speaker_name} wants your attention."
+
+    return {
+        "tick": int(candidate.get("tick", 0) or 0),
+        "kind": kind,
+        "priority": float(candidate.get("salience", 0.0) or 0.0),
+        "interrupt": bool(candidate.get("interrupt")),
+        "speaker_id": _safe_str(candidate.get("speaker_id")),
+        "speaker_name": speaker_name,
+        "target_id": _safe_str(candidate.get("target_id")),
+        "target_name": _safe_str(candidate.get("target_name")),
+        "scene_id": "",
+        "location_id": _safe_str(candidate.get("location_id")),
+        "text": text,
+        "structured": {
+            "reason": reason,
+            "action_intent": action_intent,
+        },
+        "source_event_ids": [],
+        "source": "initiative",
         "created_at": _utc_now_iso(),
     }
 
