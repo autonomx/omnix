@@ -109,6 +109,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "title": _safe_str(raw_payload.get("title")),
         "opening": _safe_str(raw_payload.get("opening")),
         "narration": _safe_str(raw_payload.get("narration")),
+        "choices": _safe_list(raw_payload.get("choices")),
         # Player block
         "player": {
             "stats": stats,
@@ -184,10 +185,7 @@ async def get_rpg_session(request: Request):
     if session is None:
         return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
     payload = build_frontend_bootstrap_payload(session)
-    payload["ok"] = True
-    payload["game"] = payload
-
-    return payload
+    return {"ok": True, "game": payload}
 
 
 @rpg_session_bp.post("/api/rpg/session/update")

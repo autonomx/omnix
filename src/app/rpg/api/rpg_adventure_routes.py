@@ -22,6 +22,7 @@ Provides endpoints for the adventure creation/editing flow:
 """
 from __future__ import annotations
 
+import traceback
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -79,7 +80,11 @@ async def adventure_templates():
         return {"success": True, "templates": templates}
     except Exception as e:
         return JSONResponse(
-            {"success": False, "error": str(e)},
+            {
+                "success": False,
+                "error": str(e),
+                "trace": traceback.format_exc(),
+            },
             status_code=500,
         )
 
@@ -99,7 +104,11 @@ async def adventure_template(request: Request):
         return result
     except Exception as e:
         return JSONResponse(
-            {"success": False, "error": str(e)},
+            {
+                "success": False,
+                "error": str(e),
+                "trace": traceback.format_exc(),
+            },
             status_code=500,
         )
 
@@ -129,7 +138,11 @@ async def adventure_validate(request: Request):
         }
     except Exception as e:
         return JSONResponse(
-            {"success": False, "error": str(e)},
+            {
+                "success": False,
+                "error": str(e),
+                "trace": traceback.format_exc(),
+            },
             status_code=500,
         )
 
@@ -153,7 +166,11 @@ async def adventure_preview(request: Request):
         return result
     except Exception as e:
         return JSONResponse(
-            {"success": False, "error": str(e)},
+            {
+                "success": False,
+                "error": str(e),
+                "trace": traceback.format_exc(),
+            },
             status_code=500,
         )
 
@@ -172,7 +189,11 @@ async def adventure_start(request: Request):
         return result
     except Exception as e:
         return JSONResponse(
-            {"success": False, "error": str(e)},
+            {
+                "success": False,
+                "error": str(e),
+                "trace": traceback.format_exc(),
+            },
             status_code=500,
         )
 
@@ -213,7 +234,11 @@ async def adventure_regenerate(request: Request):
         return result
     except Exception as e:
         return JSONResponse(
-            {"success": False, "error": str(e)},
+            {
+                "success": False,
+                "error": str(e),
+                "trace": traceback.format_exc(),
+            },
             status_code=500,
         )
 
@@ -383,6 +408,7 @@ async def adventure_compare_entity(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/generate_world")
+@rpg_adventure_bp.post("/api/rpg/adventure/generate-world")  # frontend compatibility
 async def adventure_generate_world(request: Request):
     """Generate a full world bootstrap proposal."""
     try:

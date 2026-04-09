@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from typing import Any, Dict
 
 from ..creator.defaults import (
     apply_adventure_defaults,
@@ -69,6 +69,50 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     return {}
+
+
+def _normalize_setup(setup: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(setup, dict):
+        setup = {}
+
+    return {
+        "world": dict(setup.get("world") or {}),
+        "player": dict(setup.get("player") or {}),
+        "npcs": list(setup.get("npcs") or []),
+        "locations": list(setup.get("locations") or []),
+        "quests": list(setup.get("quests") or []),
+        "items": list(setup.get("items") or []),
+        "factions": list(setup.get("factions") or []),
+    }
+
+
+def _validate_generated_content(setup: dict[str, Any]) -> dict[str, Any]:
+    # Ensure safe NPC structure
+    safe_npcs = []
+    for i, npc in enumerate(setup.get("npcs", [])):
+        if not isinstance(npc, dict):
+            continue
+        safe_npcs.append({
+            "id": str(npc.get("id") or f"npc_{i}"),
+            "name": str(npc.get("name") or f"NPC {i}"),
+            "role": str(npc.get("role") or "unknown"),
+        })
+
+    setup["npcs"] = safe_npcs
+
+    # Same pattern for locations
+    safe_locations = []
+    for i, loc in enumerate(setup.get("locations", [])):
+        if not isinstance(loc, dict):
+            continue
+        safe_locations.append({
+            "id": str(loc.get("id") or f"loc_{i}"),
+            "name": str(loc.get("name") or f"Location {i}"),
+        })
+
+    setup["locations"] = safe_locations
+
+    return setup
 
 
 def _build_preview_contract(prepared: dict[str, Any]) -> dict[str, Any]:
@@ -1630,6 +1674,8 @@ def generate_world_proposal(
     from ..creator.validation import validate_generated_package
     from ..llm_app_gateway import build_app_llm_gateway
 
+    setup = _normalize_setup(setup)
+    setup = _validate_generated_content(setup)
     data = apply_adventure_defaults(dict(setup))
     gateway = build_app_llm_gateway()
 

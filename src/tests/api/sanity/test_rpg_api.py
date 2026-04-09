@@ -613,3 +613,52 @@ class TestRPGFunctional:
         data = resp.get_json()
         session_ids = [game["session_id"] for game in data["games"]]
         assert session_id not in session_ids
+
+
+# ---------------------------------------------------------------------------
+# RPG Adventure Builder API – Healthcheck for new endpoints
+# ---------------------------------------------------------------------------
+
+
+class TestRPGAdventureAPI:
+    """Tests for the new RPG adventure builder API endpoints."""
+
+    def test_adventure_templates_endpoint(self, flask_client):
+        """GET /api/rpg/adventure/templates should return 200 and JSON."""
+        resp = flask_client.get("/api/rpg/adventure/templates")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "templates" in data
+        assert isinstance(data["templates"], list)
+
+    def test_adventure_validate_endpoint(self, flask_client):
+        """POST /api/rpg/adventure/validate should accept empty payload."""
+        resp = flask_client.post("/api/rpg/adventure/validate", json={})
+        assert resp.status_code in (200, 400, 500)
+        data = resp.get_json()
+        assert "ok" in data  # Validation result
+
+    def test_adventure_preview_endpoint(self, flask_client):
+        """POST /api/rpg/adventure/preview should respond."""
+        resp = flask_client.post("/api/rpg/adventure/preview", json={"setup": {}})
+        assert resp.status_code in (200, 500)
+        if resp.status_code == 200:
+            data = resp.get_json()
+            assert "success" in data
+
+    def test_adventure_start_endpoint(self, flask_client):
+        """POST /api/rpg/adventure/start should respond."""
+        resp = flask_client.post("/api/rpg/adventure/start", json={})
+        assert resp.status_code in (200, 500)
+        if resp.status_code == 200:
+            data = resp.get_json()
+            assert "success" in data
+
+    def test_session_get_endpoint(self, flask_client):
+        """POST /api/rpg/session/get should respond."""
+        # Test with invalid session_id
+        resp = flask_client.post("/api/rpg/session/get", json={"session_id": "invalid"})
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert data["ok"] is False

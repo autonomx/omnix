@@ -151,6 +151,57 @@ def _decision_to_event(decision_dict, npc_context, tick):
     if action_type in {"wait", ""}:
         return None
 
+    npc_name = _safe_str_p6(npc_context.get("name")) or npc_id
+    dialogue_hint = _safe_str_p6(
+        decision_dict.get("dialogue")
+        or decision_dict.get("text")
+        or decision_dict.get("dialogue_hint")
+    )
+
+    # IMPORTANT:
+    # `reason` is internal planner/debug metadata. Preserve it for inspector /
+    # debugging, but never expose it directly as player-facing event text.
+    public_summary = ""
+    action_key = action_type.strip().lower()
+
+    if action_key in {"move", "travel"}:
+        destination = _safe_str_p6(
+            decision_dict.get("target_location")
+            or decision_dict.get("destination")
+            or decision_dict.get("destination_id")
+        )
+        public_summary = (
+            f"{npc_name} heads toward {destination}."
+            if destination
+            else f"{npc_name} moves to a new position."
+        )
+    elif action_key in {"depart", "leave"}:
+        public_summary = f"{npc_name} leaves the area."
+    elif action_key in {"arrive", "enter"}:
+        public_summary = f"{npc_name} arrives."
+    elif action_key in {"observe", "watch"}:
+        public_summary = f"{npc_name} watches the situation carefully."
+    elif action_key == "support":
+        public_summary = f"{npc_name} moves to support their allies."
+    elif action_key == "stabilize":
+        public_summary = f"{npc_name} tries to restore order nearby."
+    elif action_key == "retaliate":
+        public_summary = f"{npc_name} prepares to strike back."
+    elif action_key in {"avoid", "retreat", "withdraw"}:
+        public_summary = f"{npc_name} keeps their distance."
+    elif action_key in {"negotiate", "parley"}:
+        public_summary = f"{npc_name} cautiously opens contact."
+    elif action_key == "investigate":
+        public_summary = f"{npc_name} investigates suspicious developments."
+    elif action_key in {"speak", "talk", "address"}:
+        public_summary = dialogue_hint or f"{npc_name} speaks."
+    elif action_key in {"warn", "threaten"}:
+        public_summary = dialogue_hint or f"{npc_name} issues a warning."
+    elif action_key == "attack":
+        public_summary = dialogue_hint or f"{npc_name} lashes out."
+    else:
+        public_summary = dialogue_hint or f"{npc_name} takes action."
+
     return {
         "event_id": f"npc_event:{tick}:{npc_id}:{action_type}:{target_id or 'none'}",
         "tick": int(tick),
@@ -160,7 +211,8 @@ def _decision_to_event(decision_dict, npc_context, tick):
         "target_kind": target_kind,
         "location_id": location_id,
         "faction_id": _safe_str_p6(npc_context.get("faction_id")),
-        "summary": _safe_str_p6(decision_dict.get("reason")) or f"{npc_id} chooses to {action_type}",
+        "summary": public_summary,
+        "internal_reason": _safe_str_p6(decision_dict.get("reason")),
         "salience": min(max(urgency, 0.2), 1.0),
         "source": "npc_mind",
     }

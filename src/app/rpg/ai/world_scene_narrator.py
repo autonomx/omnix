@@ -29,11 +29,15 @@ logger = logging.getLogger(__name__)
 
 def _llm_text(llm_gateway, prompt, *, context=None):
     """Call the LLM gateway and return the response as a clean string."""
+    logger.debug("[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
     response = llm_gateway.call("generate", prompt, context=context or {})
+    logger.debug("[RPG LLM GATEWAY] Received response type: %s, length: %d", type(response), len(str(response)) if response else 0)
     if response is None:
+        logger.warning("[RPG LLM GATEWAY] LLM returned None")
         return ""
     if isinstance(response, str):
         return response
+    logger.warning("[RPG LLM GATEWAY] LLM returned non-string type: %s", type(response))
     return str(response)
 
 
@@ -284,6 +288,20 @@ def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
     return f"**{action_label}:** You act."
 
 
+def _pick_npc_reply_text(llm_narrative: str) -> str:
+    """Extract NPC dialogue from LLM narrative text."""
+    # Look for quoted text or dialogue patterns
+    import re
+    quotes = re.findall(r'"([^"]*)"', _safe_str(llm_narrative))
+    if quotes:
+        return quotes[0]
+    # Look for dialogue after colons
+    dialogue_match = re.search(r':\s*([^.!?]+[.!?])', _safe_str(llm_narrative))
+    if dialogue_match:
+        return dialogue_match.group(1).strip()
+    return ""
+
+
 def _build_npc_reply_block(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> str:
     narration_context = _safe_dict(narration_context)
     resolved = _safe_dict(narration_context.get("resolved_result"))
@@ -523,19 +541,28 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     }.get(length, "")
 
     safe_context = _build_safe_prompt_context(scene, narration_context)
+    logger.debug("[RPG PROMPT] Scene title: %s, location: %s", title, location)
+    logger.debug("[RPG PROMPT] Narration context keys: %s", list(narration_context.keys()))
+    logger.debug("[RPG PROMPT] Safe context: %s", safe_context)
 
     prompt = f"""You are a deterministic RPG narration engine.
 
-STRICT OUTPUT FORMAT:
+YOUR ONLY TASK: Generate narration for a player's action in an RPG.
+
+STRICT OUTPUT FORMAT (follow exactly):
 
 NARRATOR: <1 short sentence describing the scene>
 ACTION: <1 short sentence describing the player's action result>
 NPC: <npc_name>: "<short reply>" (omit if none)
 REWARD: <xp/items if any, else omit>
 
-RULES:
-- NO extra text
-- NO formatting outside this structure
+IMPORTANT RULES:
+- Output ONLY the 4 lines shown above
+- NO extra text, explanations, or commentary
+- NO faction goals, loyalty, awareness, or ambient content
+- NO markdown, formatting, or special characters
+- NO content about ticks, time, or system messages
+- Just the structured response
 {length_instruction}
 
 SCENE:
@@ -551,6 +578,7 @@ Stakes: {stakes}
 CONTEXT:
 {safe_context}
 """
+    logger.debug("[RPG PROMPT] Final prompt length: %d", len(prompt))
     return prompt
 
 
@@ -727,7 +755,7 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
 
     Returns raw parsed fields only.
     Parses structured output format directly from LLM response.
-    No guessing, no heuristics, exact line matching only.
+    More flexible parsing that looks for keywords anywhere in the text.
 
     Args:
         text: Raw LLM response text.
@@ -735,6 +763,8 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
     Returns:
         Dict with parsed fields.
     """
+    logger.debug("[RPG PARSE] Starting to parse response, length: %d", len(text))
+
     result = {
         "narrator": "",
         "action": "",
@@ -748,35 +778,71 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
         "reward": "",
     }
 
-    for line in text.splitlines():
-        line = line.strip()
-        if line.startswith("NARRATOR:"):
-            result["narrator"] = line.replace("NARRATOR:", "").strip()
-        elif line.startswith("ACTION:"):
-            result["action"] = line.replace("ACTION:", "").strip()
-        elif line.startswith("NPC:"):
-            npc_text = line.replace("NPC:", "").strip()
-            if ":" in npc_text:
-                name, text = npc_text.split(":", 1)
-                npc_name = name.strip()
-                result["npc"] = {
-                    "speaker_id": npc_name.lower().replace(" ", "_"),
-                    "name": npc_name,
-                    "text": _bound_text(text.strip().strip('"'), 180),
-                    "emotion": "",
-                    "portrait": "",
-                }
-            else:
-                result["npc"] = {
-                    "speaker_id": "",
-                    "name": "",
-                    "text": _bound_text(npc_text, 180),
-                    "emotion": "",
-                    "portrait": "",
-                }
-        elif line.startswith("REWARD:"):
-            result["reward"] = _bound_text(line.replace("REWARD:", "").strip(), 120)
+    # Clean up the text
+    text = _safe_str(text).strip()
+    logger.debug("[RPG PARSE] Cleaned text: %r", text[:200] + "..." if len(text) > 200 else text)
 
+    # Look for patterns anywhere in the text
+    import re
+
+    # NARRATOR pattern
+    narrator_match = re.search(r'NARRATOR:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    if narrator_match:
+        result["narrator"] = narrator_match.group(1).strip()
+        logger.debug("[RPG PARSE] Found NARRATOR: %r", result["narrator"])
+
+    # ACTION pattern
+    action_match = re.search(r'ACTION:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    if action_match:
+        result["action"] = action_match.group(1).strip()
+        logger.debug("[RPG PARSE] Found ACTION: %r", result["action"])
+
+    # NPC pattern
+    npc_match = re.search(r'NPC:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    if npc_match:
+        npc_text = npc_match.group(1).strip()
+        logger.debug("[RPG PARSE] Found NPC text: %r", npc_text)
+        if ":" in npc_text:
+            name, text_part = npc_text.split(":", 1)
+            npc_name = name.strip()
+            result["npc"] = {
+                "speaker_id": npc_name.lower().replace(" ", "_"),
+                "name": npc_name,
+                "text": _bound_text(text_part.strip().strip('"'), 180),
+                "emotion": "",
+                "portrait": "",
+            }
+            logger.debug("[RPG PARSE] Parsed NPC: name=%r, text=%r", npc_name, result["npc"]["text"])
+        else:
+            result["npc"] = {
+                "speaker_id": "",
+                "name": "",
+                "text": _bound_text(npc_text, 180),
+                "emotion": "",
+                "portrait": "",
+            }
+            logger.debug("[RPG PARSE] Parsed NPC without name: text=%r", result["npc"]["text"])
+
+    # REWARD pattern
+    reward_match = re.search(r'REWARD:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    if reward_match:
+        result["reward"] = _bound_text(reward_match.group(1).strip(), 120)
+        logger.debug("[RPG PARSE] Found REWARD: %r", result["reward"])
+
+    # Fallback: if no structured format found, try to extract from plain text
+    if not result["narrator"] and not result["action"]:
+        lines = text.split('\n')
+        logger.debug("[RPG PARSE] No structured format found, using fallback with %d lines", len(lines))
+        if lines:
+            # Assume first line is narrator
+            result["narrator"] = lines[0].strip()
+            logger.debug("[RPG PARSE] Fallback NARRATOR: %r", result["narrator"])
+        if len(lines) > 1:
+            # Assume second line is action
+            result["action"] = lines[1].strip()
+            logger.debug("[RPG PARSE] Fallback ACTION: %r", result["action"])
+
+    logger.debug("[RPG PARSE] Final parsed result: %s", result)
     return result
 
 
@@ -784,7 +850,15 @@ def _is_valid_scene_response(parsed: Dict[str, Any]) -> bool:
     parsed = _safe_dict(parsed)
     narrator = _safe_str(parsed.get("narrator")).strip()
     action = _safe_str(parsed.get("action")).strip()
-    return bool(narrator or action)
+    npc_text = _safe_str(parsed.get("npc", {}).get("text")).strip()
+
+    # Accept any response that has at least some content
+    has_content = bool(narrator or action or npc_text)
+    is_valid = has_content and len((narrator + action + npc_text).strip()) > 10  # At least 10 chars of content
+
+    logger.warning("[RPG VALIDATE] narrator=%r, action=%r, npc_text=%r -> valid=%s",
+                narrator[:50], action[:50], npc_text[:50], is_valid)
+    return is_valid
 
 
 def _with_scene_response_defaults(parsed: Dict[str, Any]) -> Dict[str, Any]:
@@ -1331,19 +1405,36 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
             scene["player_input"] = str(pi)
 
     prompt = build_scene_prompt(scene, narration_context, tone=tone)
-    for _ in range(2):  # retry once
+    logger.warning("[RPG LLM PROMPT]\n%s", prompt)
+    for attempt in range(2):  # retry once
         try:
-            response = _llm_text(llm_gateway, prompt, context={"scene": scene})
-            logger.info("[RPG LLM RAW OUTPUT]\n%s", response)
+            response = _llm_text(llm_gateway, prompt, context={})
+            logger.warning("[RPG LLM RAW OUTPUT attempt %d]\n%s", attempt + 1, response)
+
+            # Check if response contains invalid content (like ambient updates)
+            response_lower = _safe_str(response).lower()
+            if any(phrase in response_lower for phrase in [
+                "faction loyalty baseline",
+                "maintain awareness",
+                "playertick",
+                "📜 📜"
+            ]):
+                logger.error("LLM response contains invalid ambient-like content, rejecting: %s", response[:200])
+                continue
+
             parsed = parse_scene_response(response)
+            logger.warning("[RPG PARSED RESPONSE]\n%s", parsed)
 
             if _is_valid_scene_response(parsed):
+                logger.warning("LLM response validation successful")
                 return response
-        except Exception:
-            pass
+            else:
+                logger.error("LLM response failed validation, parsed: %s", parsed)
+        except Exception as e:
+            logger.exception("Exception during LLM narration")
 
     # fallback if LLM fails format
-    logger.error("Structured RPG narration LLM output failed validation")
+    logger.error("Structured RPG narration LLM output failed validation after 2 attempts")
     return _structured_fallback_response()
 
 

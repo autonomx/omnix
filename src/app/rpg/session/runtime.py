@@ -32,21 +32,23 @@ from app.rpg.ai.npc_initiative import (
     compute_opening_relevance,
     select_npc_initiative_candidate,
 )
+from app.rpg.ai.scene_continuity import (
+    advance_scene,
+    build_continuation_beats,
+    compact_finished_scenes,
+    get_active_scene_candidates,
+    maybe_build_scene_consequence,
+    select_continuing_scene,
+    start_persistent_scene,
+)
+from app.rpg.ai.scene_continuity import (
+    ensure_scene_runtime_state as ensure_persistent_scene_runtime_state,
+)
 from app.rpg.ai.scene_weaver import (
     apply_scene_cooldowns,
     build_scene_beats,
     build_scene_candidates,
     select_scene_candidate,
-)
-from app.rpg.ai.scene_continuity import (
-    advance_scene,
-    build_continuation_beats,
-    compact_finished_scenes,
-    ensure_scene_runtime_state as ensure_persistent_scene_runtime_state,
-    get_active_scene_candidates,
-    maybe_build_scene_consequence,
-    select_continuing_scene,
-    start_persistent_scene,
 )
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
 from app.rpg.creator.defaults import apply_adventure_defaults

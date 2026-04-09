@@ -1,106 +1,97 @@
-Below is the full apply-this-patch spec for a Scene Continuity Engine that fits the architecture you now have:
-
-deterministic
-bounded
-server-authoritative
-scene-aware
-compatible with your current initiative + scene-weaver + ambient feed setup
-
-This adds multi-tick scene persistence and escalation so scenes no longer feel like one-off bursts.
-
 Goal
 
-Upgrade scenes from:
+Allow the player to intervene in an active scene with actions like:
 
-one tick
-one burst
-one exchange
+step in
+calm them down
+take a side
+ask what is happening
+redirect the topic
+threaten / provoke
+leave / ignore
 
-to:
+Those interventions should:
 
-persistent across ticks
-stateful
-escalating
-player-pull aware
-able to resolve or spill into world events
-Design summary
-What a persistent scene should do
+target the active scene by scene_id
+affect scene tension and progression
+optionally resolve, redirect, or escalate the scene
+stay deterministic and bounded
+never let the LLM become simulation truth
+Design model
+Scene intervention is a runtime/presentation action
 
-A scene should:
+It is not raw simulation truth by itself.
 
-start from current scene-weaver output
-survive across multiple idle ticks
-remember topic, participants, tension, and progress
-emit one or more new beats over time
-escalate when ignored
-optionally pull in player
-terminate cleanly
-What it should not do
+Flow:
 
-It should not:
+player selects an intervention
+backend validates the scene is active and nearby
+backend applies deterministic scene-state mutation
+backend emits new scene beats / outcomes
+optional world consequence follows
+LLM role
 
-become simulation truth directly
-create unbounded history
-spam every tick
-override impossible world state
-require the LLM every tick
-Core model
+The LLM may help phrase the resulting narration/dialogue, but it should not decide:
 
-Add a bounded runtime structure:
+whether the player successfully calmed the scene
+whether the scene resolves
+whether tension rises or drops
 
-"scene_runtime": {
-  "active_scenes": [],
-  "recent_scene_ids": [],
-  "recent_scene_pairs": [],
-  "last_scene_tick": -999,
-}
+That should be rule-based.
 
-Each active scene:
+New concepts
+Intervention action types
 
-{
-  "scene_id": "scene:bran:guard_1:opening_conflict",
-  "scene_kind": "argument",
-  "topic": "opening_conflict",
-  "location_id": "gate_square",
-  "participants": ["bran", "guard_1"],
-  "primary_speaker_id": "bran",
-  "secondary_speaker_id": "guard_1",
-  "player_pull": "address_player",
-  "opening_tied": True,
-  "priority": 0.68,
-  "tension": 0.52,
-  "beat_cursor": 0,
-  "max_beats": 4,
-  "started_tick": 12,
-  "last_advanced_tick": 12,
-  "expiry_tick": 18,
-  "status": "active"
-}
-Files to modify
+Add a small bounded set:
+
+observe_scene
+step_into_scene
+ask_about_scene
+support_primary
+support_secondary
+calm_scene
+provoke_scene
+redirect_scene
+leave_scene
+
+These are enough for a strong first pass.
+
+Intervention effects
+
+Each action changes scene state deterministically.
+
+Example:
+
+calm_scene → tension -0.15
+provoke_scene → tension +0.18
+support_primary → tension +0.08 or -0.05 depending on scene kind
+ask_about_scene → converts player pull into direct explanation beat
+leave_scene → marks player disengaged, allowing escalation to continue
+redirect_scene → changes topic to player_intervention
+Files to add / modify
 New file
-src/app/rpg/ai/scene_continuity.py
+src/app/rpg/ai/scene_intervention.py
 Modify
-src/app/rpg/ai/scene_weaver.py
 src/app/rpg/session/runtime.py
-src/app/rpg/session/ambient_policy.py
-src/app/rpg/world/world_event_director.py
+src/app/rpg/api/rpg_session_routes.py
+src/app/rpg/ai/scene_continuity.py
 src/static/rpg/rpg.js
 src/static/style.css
 
 Optional:
 
 src/app/rpg/ai/world_scene_narrator.py
-Part 1 — New continuity module
-File: src/app/rpg/ai/scene_continuity.py
+Part 1 — New intervention module
+File: src/app/rpg/ai/scene_intervention.py
 
-Create this file.
+Create:
 
-diff --git a/src/app/rpg/ai/scene_continuity.py b/src/app/rpg/ai/scene_continuity.py
+diff --git a/src/app/rpg/ai/scene_intervention.py b/src/app/rpg/ai/scene_intervention.py
 new file mode 100644
 --- /dev/null
-+++ b/src/app/rpg/ai/scene_continuity.py
++++ b/src/app/rpg/ai/scene_intervention.py
 @@
-+"""Persistent multi-tick scene continuity for RPG ambient scenes."""
++"""Deterministic player intervention in active scenes."""
 +
 +from __future__ import annotations
 +
@@ -121,686 +112,461 @@ new file mode 100644
 +    return str(v) if not isinstance(v, str) else v
 +
 +
-+_MAX_ACTIVE_SCENES = 4
-+_MAX_SCENE_HISTORY = 16
++_VALID_INTERVENTIONS = {
++    "observe_scene",
++    "step_into_scene",
++    "ask_about_scene",
++    "support_primary",
++    "support_secondary",
++    "calm_scene",
++    "provoke_scene",
++    "redirect_scene",
++    "leave_scene",
++}
 +
 +
-+def ensure_scene_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-+    runtime_state = dict(_safe_dict(runtime_state))
-+    scene_runtime = dict(_safe_dict(runtime_state.get("scene_runtime")))
-+    scene_runtime.setdefault("active_scenes", [])
-+    scene_runtime["active_scenes"] = _safe_list(scene_runtime.get("active_scenes"))[-_MAX_ACTIVE_SCENES:]
-+    scene_runtime.setdefault("recent_scene_ids", [])
-+    scene_runtime["recent_scene_ids"] = _safe_list(scene_runtime.get("recent_scene_ids"))[-_MAX_SCENE_HISTORY:]
-+    scene_runtime.setdefault("recent_scene_pairs", [])
-+    scene_runtime["recent_scene_pairs"] = _safe_list(scene_runtime.get("recent_scene_pairs"))[-_MAX_SCENE_HISTORY:]
-+    scene_runtime["last_scene_tick"] = int(scene_runtime.get("last_scene_tick", -999) or -999)
-+    runtime_state["scene_runtime"] = scene_runtime
-+    return runtime_state
-+
-+
-+def start_persistent_scene(
-+    runtime_state: Dict[str, Any],
-+    selected_scene: Dict[str, Any],
-+    current_tick: int,
-+) -> Dict[str, Any]:
-+    runtime_state = ensure_scene_runtime_state(runtime_state)
-+    scene_runtime = dict(_safe_dict(runtime_state.get("scene_runtime")))
-+    active_scenes = list(_safe_list(scene_runtime.get("active_scenes")))
-+    selected_scene = dict(_safe_dict(selected_scene))
-+
-+    scene = {
-+        "scene_id": _safe_str(selected_scene.get("scene_id")),
-+        "scene_kind": _safe_str(selected_scene.get("scene_kind")),
-+        "topic": _safe_str(selected_scene.get("topic")),
-+        "location_id": _safe_str(selected_scene.get("location_id")),
-+        "participants": [str(x) for x in _safe_list(selected_scene.get("participants")) if str(x).strip()],
-+        "primary_speaker_id": _safe_str(selected_scene.get("primary_speaker_id")),
-+        "secondary_speaker_id": _safe_str(selected_scene.get("secondary_speaker_id")),
-+        "player_pull": _safe_str(selected_scene.get("player_pull") or "overhear"),
-+        "opening_tied": bool(selected_scene.get("opening_tied")),
-+        "priority": float(selected_scene.get("priority", 0.0) or 0.0),
-+        "tension": float(selected_scene.get("priority", 0.0) or 0.0),
-+        "beat_cursor": 0,
-+        "max_beats": min(max(int(selected_scene.get("beats", 2) or 2) + 1, 2), 4),
-+        "started_tick": int(current_tick),
-+        "last_advanced_tick": int(current_tick),
-+        "expiry_tick": int(current_tick) + 6,
-+        "status": "active",
-+    }
-+
-+    active_scenes.append(scene)
-+    scene_runtime["active_scenes"] = active_scenes[-_MAX_ACTIVE_SCENES:]
-+    runtime_state["scene_runtime"] = scene_runtime
-+    return runtime_state
-+
-+
-+def get_active_scene_candidates(
-+    runtime_state: Dict[str, Any],
-+    simulation_state: Dict[str, Any],
-+    current_tick: int,
-+) -> List[Dict[str, Any]]:
-+    runtime_state = ensure_scene_runtime_state(runtime_state)
-+    simulation_state = _safe_dict(simulation_state)
++def get_active_scene(runtime_state: Dict[str, Any], scene_id: str) -> Optional[Dict[str, Any]]:
++    runtime_state = _safe_dict(runtime_state)
 +    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
-+    active_scenes = _safe_list(scene_runtime.get("active_scenes"))
-+    npc_index = _safe_dict(simulation_state.get("npc_index"))
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    player_loc = _safe_str(player_state.get("location_id"))
-+
-+    candidates: List[Dict[str, Any]] = []
-+    for scene in active_scenes:
++    for scene in _safe_list(scene_runtime.get("active_scenes")):
 +        scene = _safe_dict(scene)
-+        if _safe_str(scene.get("status")) != "active":
-+            continue
-+        if int(scene.get("expiry_tick", -999) or -999) < current_tick:
-+            continue
-+        if _safe_str(scene.get("location_id")) != player_loc:
-+            continue
-+
-+        participants = [p for p in _safe_list(scene.get("participants")) if _safe_str(p)]
-+        if not participants:
-+            continue
-+
-+        everyone_present = True
-+        for npc_id in participants:
-+            npc = _safe_dict(npc_index.get(npc_id))
-+            if _safe_str(npc.get("location_id")) != player_loc:
-+                everyone_present = False
-+                break
-+        if not everyone_present:
-+            continue
-+
-+        candidates.append(scene)
-+
-+    candidates.sort(
-+        key=lambda s: (
-+            -float(s.get("tension", 0.0) or 0.0),
-+            -float(s.get("priority", 0.0) or 0.0),
-+            _safe_str(s.get("scene_id")),
-+        )
-+    )
-+    return candidates
-+
-+
-+def select_continuing_scene(
-+    runtime_state: Dict[str, Any],
-+    simulation_state: Dict[str, Any],
-+    current_tick: int,
-+) -> Optional[Dict[str, Any]]:
-+    candidates = get_active_scene_candidates(runtime_state, simulation_state, current_tick)
-+    for scene in candidates:
-+        last_tick = int(scene.get("last_advanced_tick", -999) or -999)
-+        if (current_tick - last_tick) >= 1:
++        if _safe_str(scene.get("scene_id")) == _safe_str(scene_id):
 +            return scene
 +    return None
 +
 +
-+def advance_scene(
++def validate_scene_intervention(
 +    runtime_state: Dict[str, Any],
++    simulation_state: Dict[str, Any],
 +    scene_id: str,
-+    current_tick: int,
-+    *,
-+    player_ignored: bool = True,
++    action_type: str,
 +) -> Dict[str, Any]:
-+    runtime_state = ensure_scene_runtime_state(runtime_state)
++    runtime_state = _safe_dict(runtime_state)
++    simulation_state = _safe_dict(simulation_state)
++    action_type = _safe_str(action_type)
++
++    if action_type not in _VALID_INTERVENTIONS:
++        return {"ok": False, "error": "invalid_scene_intervention"}
++
++    scene = get_active_scene(runtime_state, scene_id)
++    if not scene:
++        return {"ok": False, "error": "scene_not_found"}
++
++    if _safe_str(scene.get("status")) != "active":
++        return {"ok": False, "error": "scene_not_active"}
++
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    player_loc = _safe_str(player_state.get("location_id"))
++    if _safe_str(scene.get("location_id")) != player_loc:
++        return {"ok": False, "error": "scene_not_nearby"}
++
++    return {"ok": True, "scene": scene}
++
++
++def apply_scene_intervention(
++    runtime_state: Dict[str, Any],
++    simulation_state: Dict[str, Any],
++    *,
++    scene_id: str,
++    action_type: str,
++) -> Dict[str, Any]:
++    runtime_state = dict(_safe_dict(runtime_state))
++    simulation_state = _safe_dict(simulation_state)
 +    scene_runtime = dict(_safe_dict(runtime_state.get("scene_runtime")))
 +    active_scenes = []
++    result = {
++        "ok": True,
++        "scene_id": scene_id,
++        "action_type": action_type,
++        "beats": [],
++        "resolved": False,
++        "tension_delta": 0.0,
++    }
 +
 +    for scene in _safe_list(scene_runtime.get("active_scenes")):
 +        scene = dict(_safe_dict(scene))
-+        if _safe_str(scene.get("scene_id")) != scene_id:
++        if _safe_str(scene.get("scene_id")) != _safe_str(scene_id):
 +            active_scenes.append(scene)
 +            continue
 +
-+        scene["beat_cursor"] = int(scene.get("beat_cursor", 0) or 0) + 1
-+        scene["last_advanced_tick"] = int(current_tick)
 +        tension = float(scene.get("tension", 0.0) or 0.0)
-+        if player_ignored:
-+            tension = min(1.0, tension + 0.08)
-+        scene["tension"] = tension
++        primary = _safe_str(scene.get("primary_speaker_id"))
++        secondary = _safe_str(scene.get("secondary_speaker_id"))
++        topic = _safe_str(scene.get("topic"))
++        location_id = _safe_str(scene.get("location_id"))
++        beat_cursor = int(scene.get("beat_cursor", 0) or 0)
 +
-+        if scene["beat_cursor"] >= int(scene.get("max_beats", 2) or 2):
-+            scene["status"] = "resolved"
-+        elif int(scene.get("expiry_tick", -999) or -999) < current_tick:
-+            scene["status"] = "expired"
-+
-+        active_scenes.append(scene)
-+
-+    scene_runtime["active_scenes"] = active_scenes[-_MAX_ACTIVE_SCENES:]
-+    runtime_state["scene_runtime"] = scene_runtime
-+    return runtime_state
-+
-+
-+def compact_finished_scenes(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-+    runtime_state = ensure_scene_runtime_state(runtime_state)
-+    scene_runtime = dict(_safe_dict(runtime_state.get("scene_runtime")))
-+    recent_ids = list(_safe_list(scene_runtime.get("recent_scene_ids")))
-+    recent_pairs = list(_safe_list(scene_runtime.get("recent_scene_pairs")))
-+    still_active = []
-+
-+    for scene in _safe_list(scene_runtime.get("active_scenes")):
-+        scene = _safe_dict(scene)
-+        status = _safe_str(scene.get("status"))
-+        if status == "active":
-+            still_active.append(scene)
-+            continue
-+
-+        scene_id = _safe_str(scene.get("scene_id"))
-+        pair_key = f"{_safe_str(scene.get('primary_speaker_id'))}:{_safe_str(scene.get('secondary_speaker_id'))}"
-+        if scene_id:
-+            recent_ids.append(scene_id)
-+        if pair_key != ":":
-+            recent_pairs.append(pair_key)
-+
-+    scene_runtime["recent_scene_ids"] = recent_ids[-_MAX_SCENE_HISTORY:]
-+    scene_runtime["recent_scene_pairs"] = recent_pairs[-_MAX_SCENE_HISTORY:]
-+    scene_runtime["active_scenes"] = still_active[-_MAX_ACTIVE_SCENES:]
-+    runtime_state["scene_runtime"] = scene_runtime
-+    return runtime_state
-+
-+
-+def build_continuation_beats(
-+    scene: Dict[str, Any],
-+    simulation_state: Dict[str, Any],
-+) -> List[Dict[str, Any]]:
-+    scene = _safe_dict(scene)
-+    simulation_state = _safe_dict(simulation_state)
-+    npc_index = _safe_dict(simulation_state.get("npc_index"))
-+
-+    participants = [p for p in _safe_list(scene.get("participants")) if _safe_str(p)]
-+    if len(participants) < 2:
-+        return []
-+
-+    a_id = _safe_str(scene.get("primary_speaker_id") or participants[0])
-+    b_id = _safe_str(scene.get("secondary_speaker_id") or participants[1])
-+    a_name = _safe_str(_safe_dict(npc_index.get(a_id)).get("name") or a_id)
-+    b_name = _safe_str(_safe_dict(npc_index.get(b_id)).get("name") or b_id)
-+    topic = _safe_str(scene.get("topic"))
-+    scene_kind = _safe_str(scene.get("scene_kind"))
-+    scene_id = _safe_str(scene.get("scene_id"))
-+    location_id = _safe_str(scene.get("location_id"))
-+    beat_cursor = int(scene.get("beat_cursor", 0) or 0)
-+    tension = float(scene.get("tension", 0.0) or 0.0)
-+
-+    text_a = f"{a_name} keeps pressing the point."
-+    text_b = f"{b_name} does not look convinced."
-+
-+    if topic == "opening_conflict":
-+        if beat_cursor == 1:
-+            text_a = f"{a_name} glances around. \"We are running out of time.\""
-+            text_b = f"{b_name} folds their arms. \"Then stop acting like this can wait.\""
-+        elif beat_cursor >= 2:
-+            text_a = f"{a_name}'s voice tightens. \"If this goes wrong, it will be on all of us.\""
-+            text_b = f"{b_name} turns sharply. \"Then maybe the player deserves the truth.\""
-+    elif topic == "recent_incident":
-+        if beat_cursor == 1:
-+            text_a = f"{a_name} lowers their voice. \"People are already talking.\""
-+            text_b = f"{b_name} answers, \"And by tonight, it will be worse.\""
-+        elif beat_cursor >= 2:
-+            text_a = f"{a_name} looks unsettled. \"This is spreading faster than anyone expected.\""
-+            text_b = f"{b_name} mutters, \"Then we act now, or we lose control.\""
-+    elif scene_kind == "argument":
-+        if beat_cursor == 1:
-+            text_a = f"{a_name} snaps, \"You are not listening.\""
-+            text_b = f"{b_name} fires back, \"I listened. I just disagree.\""
-+        elif beat_cursor >= 2:
-+            text_a = f"{a_name} steps closer, tension visible in every word."
-+            text_b = f"{b_name} refuses to back down."
-+
-+    beats = [
-+        {
-+            "kind": "npc_to_npc",
-+            "speaker_id": a_id,
-+            "speaker_name": a_name,
-+            "target_id": b_id,
-+            "target_name": b_name,
-+            "text_hint": text_a,
-+            "reason": f"{topic}_continuation",
-+            "priority": min(1.0, float(scene.get("priority", 0.0) or 0.0) + tension * 0.1),
-+            "location_id": location_id,
-+            "scene_id": scene_id,
-+            "scene_kind": scene_kind,
-+            "beat_index": beat_cursor * 2,
-+        },
-+        {
-+            "kind": "npc_to_npc",
-+            "speaker_id": b_id,
-+            "speaker_name": b_name,
-+            "target_id": a_id,
-+            "target_name": a_name,
-+            "text_hint": text_b,
-+            "reason": f"{topic}_continuation",
-+            "priority": max(0.0, float(scene.get("priority", 0.0) or 0.0) - 0.03 + tension * 0.08),
-+            "location_id": location_id,
-+            "scene_id": scene_id,
-+            "scene_kind": scene_kind,
-+            "beat_index": beat_cursor * 2 + 1,
-+        },
-+    ]
-+
-+    if _safe_str(scene.get("player_pull")) == "address_player" and beat_cursor >= 1:
-+        beats.append(
-+            {
++        if action_type == "observe_scene":
++            result["beats"] = [{
 +                "kind": "npc_to_player",
-+                "speaker_id": b_id,
-+                "speaker_name": b_name,
++                "speaker_id": secondary or primary,
 +                "target_id": "player",
-+                "target_name": "you",
-+                "text_hint": f"{b_name} turns toward you. \"Well? You heard enough. Say something.\"",
-+                "reason": f"{topic}_player_pull",
-+                "priority": min(1.0, float(scene.get("priority", 0.0) or 0.0) + 0.08),
++                "text_hint": "You pause and listen more closely as the exchange unfolds.",
++                "reason": "scene_observation",
++                "priority": 0.35,
 +                "location_id": location_id,
 +                "scene_id": scene_id,
-+                "scene_kind": scene_kind,
-+                "beat_index": beat_cursor * 2 + 2,
-+            }
-+        )
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
 +
-+    return beats[:3]
++        elif action_type == "step_into_scene":
++            scene["player_pull"] = "address_player"
++            tension = min(1.0, tension + 0.04)
++            result["tension_delta"] = 0.04
++            result["beats"] = [{
++                "kind": "npc_to_player",
++                "speaker_id": primary or secondary,
++                "target_id": "player",
++                "text_hint": "Both of them turn toward you as you step into the exchange.",
++                "reason": "scene_step_in",
++                "priority": 0.55,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
 +
++        elif action_type == "ask_about_scene":
++            scene["player_pull"] = "address_player"
++            result["beats"] = [{
++                "kind": "npc_to_player",
++                "speaker_id": secondary or primary,
++                "target_id": "player",
++                "text_hint": "You ask what is going on, and the argument shifts toward explanation.",
++                "reason": f"{topic}_player_question",
++                "priority": 0.52,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
 +
-+def maybe_build_scene_consequence(
-+    scene: Dict[str, Any],
-+    simulation_state: Dict[str, Any],
-+) -> Optional[Dict[str, Any]]:
-+    scene = _safe_dict(scene)
-+    if _safe_str(scene.get("status")) != "resolved":
-+        return None
++        elif action_type == "support_primary":
++            tension = min(1.0, tension + 0.08)
++            result["tension_delta"] = 0.08
++            result["beats"] = [{
++                "kind": "npc_to_player",
++                "speaker_id": primary,
++                "target_id": "player",
++                "text_hint": "You back their position, and the scene sharpens immediately.",
++                "reason": "scene_support_primary",
++                "priority": 0.58,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
 +
-+    topic = _safe_str(scene.get("topic"))
-+    location_id = _safe_str(scene.get("location_id"))
-+    tension = float(scene.get("tension", 0.0) or 0.0)
-+    if tension < 0.65:
-+        return None
++        elif action_type == "support_secondary":
++            tension = min(1.0, tension + 0.08)
++            result["tension_delta"] = 0.08
++            result["beats"] = [{
++                "kind": "npc_to_player",
++                "speaker_id": secondary,
++                "target_id": "player",
++                "text_hint": "You take their side, and the disagreement turns harder.",
++                "reason": "scene_support_secondary",
++                "priority": 0.58,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
 +
-+    event_type = "public_disturbance"
-+    text = "The argument leaves a visible strain in the air."
-+    if topic == "opening_conflict":
-+        event_type = "quest_prompt"
-+        text = "The unresolved dispute finally spills toward the player."
-+    elif topic == "recent_incident":
-+        event_type = "rumor_spread"
-+        text = "What began as a quiet exchange now spreads into open concern."
++        elif action_type == "calm_scene":
++            tension = max(0.0, tension - 0.15)
++            result["tension_delta"] = -0.15
++            result["beats"] = [{
++                "kind": "npc_to_player",
++                "speaker_id": primary or secondary,
++                "target_id": "player",
++                "text_hint": "You try to calm them, and the edge in the scene softens slightly.",
++                "reason": "scene_calm_attempt",
++                "priority": 0.5,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
++            if tension <= 0.2:
++                scene["status"] = "resolved"
++                result["resolved"] = True
++
++        elif action_type == "provoke_scene":
++            tension = min(1.0, tension + 0.18)
++            result["tension_delta"] = 0.18
++            result["beats"] = [{
++                "kind": "npc_to_player",
++                "speaker_id": secondary or primary,
++                "target_id": "player",
++                "text_hint": "Your words make the scene worse almost immediately.",
++                "reason": "scene_provoked",
++                "priority": 0.7,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
++
++        elif action_type == "redirect_scene":
++            scene["topic"] = "player_intervention"
++            tension = max(0.0, tension - 0.05)
++            result["tension_delta"] = -0.05
++            result["beats"] = [{
++                "kind": "npc_to_player",
++                "speaker_id": primary or secondary,
++                "target_id": "player",
++                "text_hint": "You redirect the exchange, forcing both of them to respond to you instead.",
++                "reason": "scene_redirected",
++                "priority": 0.54,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
++
++        elif action_type == "leave_scene":
++            result["beats"] = [{
++                "kind": "world_event",
++                "speaker_id": "",
++                "target_id": "",
++                "text_hint": "You step away, leaving the scene to continue without you.",
++                "reason": "scene_left",
++                "priority": 0.32,
++                "location_id": location_id,
++                "scene_id": scene_id,
++                "scene_kind": _safe_str(scene.get("scene_kind")),
++                "beat_index": beat_cursor + 100,
++            }]
++
++        scene["tension"] = tension
++        active_scenes.append(scene)
++
++    scene_runtime["active_scenes"] = active_scenes
++    runtime_state["scene_runtime"] = scene_runtime
++    result["runtime_state"] = runtime_state
++    return result
+Part 2 — Add intervention endpoint
+File: src/app/rpg/api/rpg_session_routes.py
+diff --git a/src/app/rpg/api/rpg_session_routes.py b/src/app/rpg/api/rpg_session_routes.py
+--- a/src/app/rpg/api/rpg_session_routes.py
++++ b/src/app/rpg/api/rpg_session_routes.py
+@@
+ from app.rpg.session.runtime import apply_turn, load_runtime_session, save_runtime_session
++from app.rpg.ai.scene_intervention import apply_scene_intervention, validate_scene_intervention
+@@
++@rpg_session_bp.post("/api/rpg/session/scene_intervene")
++async def scene_intervene(request: Request):
++    data = await request.json()
++    session_id = _safe_str(data.get("session_id")).strip()
++    scene_id = _safe_str(data.get("scene_id")).strip()
++    action_type = _safe_str(data.get("action_type")).strip()
++
++    if not session_id:
++        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
++    if not scene_id:
++        return JSONResponse({"ok": False, "error": "scene_id_required"}, status_code=400)
++    if not action_type:
++        return JSONResponse({"ok": False, "error": "action_type_required"}, status_code=400)
++
++    session = load_runtime_session(session_id)
++    if session is None:
++        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
++
++    runtime_state = _safe_dict(session.get("runtime_state"))
++    simulation_state = _safe_dict(session.get("simulation_state"))
++
++    check = validate_scene_intervention(runtime_state, simulation_state, scene_id, action_type)
++    if not check.get("ok"):
++        return JSONResponse(check, status_code=400)
++
++    result = apply_scene_intervention(
++        runtime_state,
++        simulation_state,
++        scene_id=scene_id,
++        action_type=action_type,
++    )
++
++    session["runtime_state"] = _safe_dict(result.get("runtime_state"))
++    session = save_runtime_session(session)
 +
 +    return {
-+        "kind": "world_event",
-+        "priority": min(1.0, 0.55 + tension * 0.2),
-+        "interrupt": False,
-+        "speaker_id": "",
-+        "speaker_name": "",
-+        "target_id": "",
-+        "target_name": "",
-+        "location_id": location_id,
-+        "text": text,
-+        "structured": {
-+            "event_type": event_type,
-+            "from_scene_id": _safe_str(scene.get("scene_id")),
-+            "topic": topic,
-+        },
-+        "source_event_ids": [],
-+        "source": "scene_continuity",
++        "ok": True,
++        "scene_id": scene_id,
++        "action_type": action_type,
++        "beats": _safe_list(result.get("beats")),
++        "resolved": bool(result.get("resolved")),
++        "tension_delta": float(result.get("tension_delta", 0.0) or 0.0),
 +    }
-Part 2 — Make scene-weaver start persistent scenes
-File: src/app/rpg/ai/scene_weaver.py
-
-No redesign needed. But ensure scene_id, participants, player_pull, beats, priority, topic, scene_kind are always present. If any of those are currently optional, normalize them.
-
-diff --git a/src/app/rpg/ai/scene_weaver.py b/src/app/rpg/ai/scene_weaver.py
---- a/src/app/rpg/ai/scene_weaver.py
-+++ b/src/app/rpg/ai/scene_weaver.py
-@@
- def build_scene_candidates(
-@@
-             candidates.append({
-                 "scene_kind": scene_kind,
-                 "scene_id": f"scene:{speaker_id}:{target_id}:{topic}",
-                 "location_id": player_loc,
-                 "topic": topic,
-                 "participants": [speaker_id, target_id],
-                 "primary_speaker_id": speaker_id,
-                 "secondary_speaker_id": target_id,
-                 "beats": 2,
-                 "priority": min(priority, 1.0),
-                 "interrupt": priority >= 0.7,
-                 "opening_tied": topic == "opening_conflict",
-                 "player_pull": player_pull,
-             })
-
-If this already matches, no further change needed.
-
-Part 3 — Wire continuity into runtime
-File: src/app/rpg/session/runtime.py
-Add imports
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@
- from app.rpg.ai.scene_weaver import (
-     apply_scene_cooldowns,
-     build_scene_beats,
-     build_scene_candidates,
-     select_scene_candidate,
- )
-+from app.rpg.ai.scene_continuity import (
-+    advance_scene,
-+    build_continuation_beats,
-+    compact_finished_scenes,
-+    ensure_scene_runtime_state as ensure_persistent_scene_runtime_state,
-+    get_active_scene_candidates,
-+    maybe_build_scene_consequence,
-+    select_continuing_scene,
-+    start_persistent_scene,
-+)
-Unify scene runtime initializer
-
-You already have _ensure_scene_runtime_state. Expand it or replace internals with continuity helper.
-
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@
- def _ensure_scene_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
--    runtime_state = _copy_dict(runtime_state)
--    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
--    scene_runtime.setdefault("active_scenes", [])
--    scene_runtime["active_scenes"] = _safe_list(scene_runtime.get("active_scenes"))[-4:]
--    scene_runtime.setdefault("recent_scene_ids", [])
--    scene_runtime["recent_scene_ids"] = _safe_list(scene_runtime.get("recent_scene_ids"))[-16:]
--    scene_runtime.setdefault("recent_scene_pairs", [])
--    scene_runtime["recent_scene_pairs"] = _safe_list(scene_runtime.get("recent_scene_pairs"))[-16:]
--    scene_runtime["last_scene_tick"] = int(scene_runtime.get("last_scene_tick", -999) or -999)
--    runtime_state["scene_runtime"] = scene_runtime
--    return runtime_state
-+    return ensure_persistent_scene_runtime_state(runtime_state)
-Add scene beat conversion helper if not already present
-
-If _make_scene_update_from_beat() already exists, keep it.
-
-Wire continuity into _apply_idle_tick_to_session()
-
-Replace current one-shot scene logic with:
-
-continue active scene first
-otherwise start a new persistent scene
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@
--    # ── Phase G: scene weaving ───────────────────────────────────────
--    scene_candidates = build_scene_candidates(
--        after_state,
--        runtime_state,
--        player_context,
--    )
--
--    selected_scene = select_scene_candidate(scene_candidates, runtime_state)
--    scene_beats = []
--    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
--    current_tick = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
--    last_scene_tick = int(scene_runtime.get("last_scene_tick", -999) or -999)
--
--    # Simple scene cadence: no more than one scene every 2 ticks.
--    if selected_scene and (current_tick - last_scene_tick) < 2:
--        selected_scene = None
--
--    # Prevent the same NPC from both initiating solo and appearing in a scene this tick.
--    if selected_scene and selected_initiative:
--        scene_participants = set(_safe_list(selected_scene.get("participants")))
--        if _safe_str(selected_initiative.get("speaker_id")) in scene_participants:
--            selected_initiative = None
--
--    if selected_initiative:
--        runtime_state = apply_initiative_cooldowns(runtime_state, selected_initiative)
--        raw_updates.append(
--            _make_initiative_update_from_candidate(selected_initiative)
--        )
--
--    if selected_scene:
--        runtime_state = apply_scene_cooldowns(runtime_state, selected_scene)
--        scene_beats = build_scene_beats(
--            selected_scene,
--            after_state,
--            runtime_state,
--        )[:3]
--
--        scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
--        scene_runtime["last_scene_tick"] = current_tick
--        runtime_state["scene_runtime"] = scene_runtime
--
--        for beat in scene_beats:
--            raw_updates.append(_make_scene_update_from_beat(beat))
-+    # ── Phase G / G+1: scene weaving + continuity ────────────────────
-+    scene_beats = []
-+    current_tick = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
-+    continuing_scene = select_continuing_scene(runtime_state, after_state, current_tick)
-+    selected_scene = None
-+
-+    if continuing_scene:
-+        scene_beats = build_continuation_beats(continuing_scene, after_state)[:3]
-+        runtime_state = advance_scene(
-+            runtime_state,
-+            _safe_str(continuing_scene.get("scene_id")),
-+            current_tick,
-+            player_ignored=True,
-+        )
-+
-+        for beat in scene_beats:
-+            raw_updates.append(_make_scene_update_from_beat(beat))
-+
-+        # When continuing a scene, suppress same-speaker standalone initiative.
-+        continuing_participants = set(_safe_list(continuing_scene.get("participants")))
-+        if selected_initiative and _safe_str(selected_initiative.get("speaker_id")) in continuing_participants:
-+            selected_initiative = None
-+    else:
-+        scene_candidates = build_scene_candidates(
-+            after_state,
-+            runtime_state,
-+            player_context,
-+        )
-+        selected_scene = select_scene_candidate(scene_candidates, runtime_state)
-+        scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
-+        last_scene_tick = int(scene_runtime.get("last_scene_tick", -999) or -999)
-+
-+        if selected_scene and (current_tick - last_scene_tick) < 2:
-+            selected_scene = None
-+
-+        if selected_scene and selected_initiative:
-+            scene_participants = set(_safe_list(selected_scene.get("participants")))
-+            if _safe_str(selected_initiative.get("speaker_id")) in scene_participants:
-+                selected_initiative = None
-+
-+        if selected_scene:
-+            runtime_state = apply_scene_cooldowns(runtime_state, selected_scene)
-+            runtime_state = start_persistent_scene(runtime_state, selected_scene, current_tick)
-+            scene_beats = build_scene_beats(
-+                selected_scene,
-+                after_state,
-+                runtime_state,
-+            )[:3]
-+
-+            scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
-+            scene_runtime["last_scene_tick"] = current_tick
-+            runtime_state["scene_runtime"] = scene_runtime
-+
-+            for beat in scene_beats:
-+                raw_updates.append(_make_scene_update_from_beat(beat))
-+
-+    if selected_initiative:
-+        runtime_state = apply_initiative_cooldowns(runtime_state, selected_initiative)
-+        raw_updates.append(
-+            _make_initiative_update_from_candidate(selected_initiative)
-+        )
-Add consequence emission + cleanup near end of idle tick
-
-Before saving runtime_state:
-
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@
-     event_updates = build_world_event_updates(
-         world_event_candidates,
-         runtime_state,
-         player_context,
-     )
-@@
-     for update in coalesced_updates:
-         _enqueue_ambient_update(runtime_state, update)
-+
-+    # Scene continuity cleanup + scene-driven consequence
-+    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
-+    for scene in _safe_list(scene_runtime.get("active_scenes")):
-+        consequence = maybe_build_scene_consequence(scene, after_state)
-+        if consequence:
-+            _enqueue_ambient_update(runtime_state, consequence)
-+    runtime_state = compact_finished_scenes(runtime_state)
-Capture continuity debug trace
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@
-         "scene_candidate": _safe_dict(selected_scene) if selected_scene else None,
-         "scene_beats_emitted": len(scene_beats) if scene_beats else 0,
-+        "continuing_scene": _safe_dict(continuing_scene) if continuing_scene else None,
-Part 4 — Delivery policy should respect continuation scenes
-File: src/app/rpg/session/ambient_policy.py
-
-If you already classify delivery by kind, make scenes with player pull slightly more interrupt-friendly.
-
-diff --git a/src/app/rpg/session/ambient_policy.py b/src/app/rpg/session/ambient_policy.py
---- a/src/app/rpg/session/ambient_policy.py
-+++ b/src/app/rpg/session/ambient_policy.py
-@@
- def classify_delivery(update: Dict[str, Any], runtime_state: Dict[str, Any], player_context: Dict[str, Any]) -> str:
-@@
-     kind = _safe_str(update.get("kind"))
-     priority = float(update.get("priority", 0.0) or 0.0)
-+    structured = _safe_dict(update.get("structured"))
-+    scene_kind = _safe_str(structured.get("scene_kind"))
-+    reason = _safe_str(structured.get("reason"))
- 
-     if kind in ("combat_start", "warning", "demand"):
-         return "interrupt"
-+    if kind == "npc_to_player" and scene_kind and "player_pull" in reason:
-+        return "interrupt" if priority >= 0.6 else "badge"
-     if priority >= 0.75:
-         return "interrupt"
-     if priority >= 0.4:
-         return "badge"
-     return "silent"
-Part 5 — Frontend scene cards should preserve multi-tick continuity
+Part 3 — Convert intervention beats into feed updates
 File: src/static/rpg/rpg.js
 
-You already group by scene_id. Good. But do not remove active scenes too quickly if new beats keep arriving. Add beat count + touch time.
+Add UI actions for active scene cards.
 
 diff --git a/src/static/rpg/rpg.js b/src/static/rpg/rpg.js
 --- a/src/static/rpg/rpg.js
 +++ b/src/static/rpg/rpg.js
 @@
-     function appendSceneBeat(update) {
-         const feed = el('rpgAmbientFeed') || el('rpgNarrativeFeed') || el('chatMessages');
-         if (!feed) return;
- 
-         const sceneId = update.structured?.scene_id;
-         if (!sceneId) return appendAmbientUpdate(update);
-         const sceneKind = (update.structured?.scene_kind || 'scene').replace(/_/g, ' ');
- 
-         let container = feed.querySelector(`[data-scene-id="${sceneId}"]`);
- 
          if (!container) {
              container = document.createElement('div');
              container.className = 'rpg-ambient rpg-ambient-scene';
              container.dataset.sceneId = sceneId;
              container.dataset.sceneKind = sceneKind;
              container.dataset.lastBeatTs = String(Date.now());
-+            container.dataset.beatCount = '0';
+             container.dataset.beatCount = '0';
  
              container.innerHTML = `
                  <div class="rpg-ambient-scene-header">${escapeHtml(sceneKind)}</div>
                  <div class="rpg-ambient-scene-lines"></div>
++                <div class="rpg-ambient-scene-actions">
++                    <button type="button" class="rpg-scene-action" data-scene-action="ask_about_scene">Ask</button>
++                    <button type="button" class="rpg-scene-action" data-scene-action="calm_scene">Calm</button>
++                    <button type="button" class="rpg-scene-action" data-scene-action="support_primary">Support</button>
++                    <button type="button" class="rpg-scene-action" data-scene-action="provoke_scene">Provoke</button>
++                    <button type="button" class="rpg-scene-action" data-scene-action="leave_scene">Leave</button>
++                </div>
              `;
-@@
+ 
+             feed.appendChild(container);
++            attachSceneActionHandlers(container);
          }
-         container.dataset.lastBeatTs = String(Date.now());
-+        container.dataset.beatCount = String((parseInt(container.dataset.beatCount || '0', 10) || 0) + 1);
-         container.classList.remove('rpg-ambient-scene-faded');
 @@
--        window.clearTimeout(container._removeTimer);
--        container._removeTimer = window.setTimeout(function () {
--            if (container && container.parentNode) {
--                container.parentNode.removeChild(container);
--            }
--        }, 20000);
-+        window.clearTimeout(container._removeTimer);
-+        container._removeTimer = window.setTimeout(function () {
-+            var lastBeatTs = parseInt(container.dataset.lastBeatTs || '0', 10) || 0;
-+            if ((Date.now() - lastBeatTs) < 12000) return;
-+            if (container && container.parentNode) {
-+                container.parentNode.removeChild(container);
-+            }
-+        }, 20000);
      }
-Part 6 — Visual cue for escalating scenes
++
++    function attachSceneActionHandlers(container) {
++        container.querySelectorAll('.rpg-scene-action').forEach(function(btn) {
++            btn.addEventListener('click', function() {
++                var sceneId = container.dataset.sceneId;
++                var actionType = btn.getAttribute('data-scene-action');
++                if (!sceneId || !actionType || !rpgState.sessionId) return;
++                if (btn.dataset.loading === '1') return;
++                btn.dataset.loading = '1';
++                btn.disabled = true;
++
++                fetch('/api/rpg/session/scene_intervene', {
++                    method: 'POST',
++                    headers: { 'Content-Type': 'application/json' },
++                    body: JSON.stringify({
++                        session_id: rpgState.sessionId,
++                        scene_id: sceneId,
++                        action_type: actionType,
++                    }),
++                }).then(function(r) { return r.json(); }).then(function(data) {
++                    if (!data.ok) return;
++                    (data.beats || []).forEach(function(beat) {
++                        appendSceneBeat({
++                            kind: beat.kind || 'npc_to_player',
++                            source: 'scene_weaver',
++                            speaker_id: beat.speaker_id || '',
++                            speaker_name: beat.speaker_name || 'NPC',
++                            target_id: beat.target_id || '',
++                            target_name: beat.target_name || '',
++                            text: beat.text_hint || '',
++                            structured: {
++                                scene_id: beat.scene_id || sceneId,
++                                scene_kind: beat.scene_kind || 'scene',
++                                reason: beat.reason || actionType,
++                                beat_index: beat.beat_index || 999,
++                            }
++                        });
++                    });
++                }).finally(function() {
++                    btn.dataset.loading = '0';
++                    btn.disabled = false;
++                });
++            });
++        });
++    }
+Part 4 — Add styles for scene actions
 File: src/static/style.css
 diff --git a/src/static/style.css b/src/static/style.css
 --- a/src/static/style.css
 +++ b/src/static/style.css
 @@
- .rpg-ambient-scene {
-     border-left-color: #60a5fa;
-     background: rgba(96, 165, 250, 0.04);
-     transition: opacity 0.2s ease, background 0.2s ease;
+ .rpg-ambient-scene-line {
+     margin: 4px 0;
  }
 +
-+.rpg-ambient-scene[data-scene-kind="argument"] {
-+    border-left-color: #f59e0b;
-+    background: rgba(245, 158, 11, 0.045);
++.rpg-ambient-scene-actions {
++    display: flex;
++    gap: 6px;
++    flex-wrap: wrap;
++    margin-top: 8px;
 +}
 +
-+.rpg-ambient-scene[data-scene-kind="rumor scene"] {
-+    border-left-color: #8b5cf6;
-+    background: rgba(139, 92, 246, 0.04);
++.rpg-scene-action {
++    font-size: 0.75rem;
++    padding: 4px 8px;
++    border-radius: 6px;
++    border: 1px solid rgba(255,255,255,0.14);
++    background: rgba(255,255,255,0.04);
++    cursor: pointer;
 +}
-Part 7 — Optional narrator enhancement
-File: src/app/rpg/ai/world_scene_narrator.py
+Part 5 — Let runtime know player intervened
+File: src/app/rpg/ai/scene_continuity.py
 
-If you later want narrator-aware continuity, pass scene metadata into narration context. This is optional. The continuity engine works without it.
+You already assume player_ignored=True in continuation. Add a field so intervention dampens escalation.
 
-Expected behavior after this patch
+diff --git a/src/app/rpg/ai/scene_continuity.py b/src/app/rpg/ai/scene_continuity.py
+--- a/src/app/rpg/ai/scene_continuity.py
++++ b/src/app/rpg/ai/scene_continuity.py
+@@
+         "last_advanced_tick": int(current_tick),
+         "expiry_tick": int(current_tick) + 6,
+         "status": "active",
++        "player_intervened_tick": -999,
+     }
 
-Before:
+In apply_scene_intervention():
 
-NPC scene appears once
-disappears
-does not evolve
+diff --git a/src/app/rpg/ai/scene_intervention.py b/src/app/rpg/ai/scene_intervention.py
+--- a/src/app/rpg/ai/scene_intervention.py
++++ b/src/app/rpg/ai/scene_intervention.py
+@@
+         scene["tension"] = tension
++        scene["player_intervened_tick"] = beat_cursor + 1
+         active_scenes.append(scene)
 
-After:
+Better: set current tick if you pass it in. For first pass, this is enough; ideally pass explicit tick from route/runtime.
 
-NPCs start a scene
-scene continues next tick
-tone escalates if ignored
-player gets pulled in
-final consequence may surface as a world event
-finished scene cools down and is remembered
+Then in runtime.py, when advancing continuation:
 
-Example:
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@
+     if continuing_scene:
++        player_intervened_recently = int(continuing_scene.get("player_intervened_tick", -999) or -999) >= int(continuing_scene.get("beat_cursor", 0) or 0)
+         scene_beats = build_continuation_beats(continuing_scene, after_state)[:3]
+         runtime_state = advance_scene(
+             runtime_state,
+             _safe_str(continuing_scene.get("scene_id")),
+             current_tick,
+-            player_ignored=True,
++            player_ignored=not player_intervened_recently,
+         )
+What this gives you
 
-Tick 12: Bran and a guard argue quietly
-Tick 13: tension rises, they sharpen their language
-Tick 14: guard turns to player directly
-Tick 15: argument spills into a visible disturbance / quest hook
+Now the player can:
 
-That is the first truly ongoing world drama layer.
+step into a live argument
+ask what is happening
+calm or provoke the exchange
+take a side
+walk away
 
-Acceptance checklist
+And the scene continuity engine reacts:
 
-You’re done when:
+tension changes
+scene may resolve sooner
+scene may escalate faster
+player is no longer just a spectator
 
- scene_runtime.active_scenes persists between ticks
- one active scene can continue across 2–4 beats
- ignored scenes increase tension
- continuing scenes can pull in player
- resolved high-tension scenes can emit a world event
- active scene cleanup is bounded
- frontend scene blocks remain grouped across multiple ticks
+That is the next real leap from:
+
+living world
+
+to:
+
+interactive living drama

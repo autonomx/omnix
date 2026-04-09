@@ -31,6 +31,51 @@ def _safe_str(value: Any) -> str:
         return value
     return str(value)
 
+def _is_low_value_internal_npc_event(event: Dict[str, Any], player_loc: str) -> bool:
+    """Return True for low-value NPC mind bookkeeping events that should not
+    surface in the player ambient feed.
+
+    Keep meaningful visible world activity. Suppress repetitive maintenance
+    loops and internal-planner style events that add noise without consequence.
+    """
+    event = _safe_dict(event)
+    if _safe_str(event.get("source")) != "npc_mind":
+        return False
+
+    event_type = _safe_str(event.get("type")).strip().lower()
+    event_loc = _safe_str(event.get("location_id")).strip()
+    summary = _safe_str(event.get("summary")).strip().lower()
+    target_id = _safe_str(event.get("target_id")).strip().lower()
+
+    # Always keep directly player-relevant hostile/social actions.
+    if event_type in {
+        "attack", "threaten", "warn", "speak", "talk", "address",
+        "arrive", "enter", "move", "travel", "depart", "leave",
+        "investigate", "retaliate", "negotiate", "parley",
+    }:
+        return False
+
+    # Always keep if directly targeting the player.
+    if target_id == "player":
+        return False
+
+    # Suppress low-value maintenance loops, especially off-screen.
+    if event_type in {"observe", "watch", "support", "stabilize", "avoid", "retreat", "withdraw"}:
+        if not event_loc or not player_loc or event_loc != player_loc:
+            return True
+
+    # Defensive filter for any leaked internal/debug phrasing.
+    leaked_markers = (
+        "baseline",
+        "maintain awareness",
+        "faction loyalty",
+        "awareness of player",
+    )
+    if any(marker in summary for marker in leaked_markers):
+        return True
+
+    return False
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -156,6 +201,10 @@ def build_ambient_updates(
         eid = _safe_str(event.get("event_id"))
         if not eid or eid in before_event_ids:
             continue
+
+        if _is_low_value_internal_npc_event(event, player_loc):
+            continue
+
         loc = _safe_str(event.get("location_id"))
         updates.append(make_ambient_update(
             tick=tick,

@@ -36,21 +36,23 @@ class AppLLMGateway:
         *,
         context: Optional[Dict[str, Any]] = None,
     ) -> List[ChatMessage]:
-        system_parts: List[str] = []
-        if self.global_system_prompt:
-            system_parts.append(self.global_system_prompt.strip())
-        system_parts.append(
-            "You are narrating and shaping content for a deterministic RPG system. "
-            "Return only the requested content. "
-            "Do not add markdown fences unless explicitly requested."
+        logger.debug("[RPG GATEWAY] Building messages, prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
+
+        # For RPG narration, use a specific system prompt that overrides the global one
+        system_text = (
+            "You are a deterministic RPG narration engine. "
+            "Your only task is to generate structured RPG narration responses. "
+            "Return only the requested content in the exact format specified. "
+            "Do not add extra text, explanations, or commentary."
         )
-        system_text = "\n\n".join(part for part in system_parts if part).strip()
 
         user_parts: List[str] = [prompt.strip()]
         if context:
             try:
                 context_text = json.dumps(context, ensure_ascii=False, sort_keys=True)
-            except Exception:
+                logger.debug("[RPG GATEWAY] Context JSON length: %d", len(context_text))
+            except Exception as e:
+                logger.warning("[RPG GATEWAY] Failed to serialize context: %s", e)
                 context_text = "{}"
             user_parts.append("Context JSON:")
             user_parts.append(context_text)
@@ -60,6 +62,8 @@ class AppLLMGateway:
         if system_text:
             messages.append(ChatMessage(role="system", content=system_text))
         messages.append(ChatMessage(role="user", content=user_text))
+
+        logger.debug("[RPG GATEWAY] Built %d messages", len(messages))
         return messages
 
     def generate(
@@ -68,14 +72,21 @@ class AppLLMGateway:
         *,
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
+        logger.debug("[RPG GATEWAY] Calling provider.chat_completion")
         messages = self._build_messages(prompt, context=context)
         response = self.provider.chat_completion(messages=messages, stream=False)
 
+        logger.debug("[RPG GATEWAY] Provider returned type: %s", type(response))
         if isinstance(response, ChatResponse):
-            return (response.content or "").strip()
+            content = (response.content or "").strip()
+            logger.debug("[RPG GATEWAY] ChatResponse content length: %d", len(content))
+            return content
         if response is None:
+            logger.warning("[RPG GATEWAY] Provider returned None")
             return ""
-        return str(response).strip()
+        content = str(response).strip()
+        logger.debug("[RPG GATEWAY] Provider returned string length: %d", len(content))
+        return content
 
     def complete(self, prompt: str) -> Dict[str, Any]:
         response = self.generate(prompt)

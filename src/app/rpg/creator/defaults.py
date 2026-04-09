@@ -582,6 +582,18 @@ def apply_adventure_defaults(setup_data: dict) -> dict:
     """
     result = dict(setup_data)
 
+    # Required fields
+    if not result.get("setup_id"):
+        result["setup_id"] = f"preview_{uuid.uuid4().hex[:12]}"
+    if not result.get("title"):
+        result["title"] = "Untitled Adventure"
+    if not result.get("genre"):
+        result["genre"] = "fantasy"
+    if not result.get("setting"):
+        result["setting"] = "A mysterious world"
+    if not result.get("premise"):
+        result["premise"] = "An adventure awaits"
+
     if not result.get("hard_rules"):
         result["hard_rules"] = []
     if not result.get("soft_tone_rules"):
