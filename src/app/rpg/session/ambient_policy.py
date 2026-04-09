@@ -89,8 +89,13 @@ def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> 
         return True
     
     # Direct NPC address to player
-    if kind == "npc_to_player" and target_id == "player" and priority >= 0.5:
-        return True
+    if kind == "npc_to_player" and target_id == "player":
+        structured = _safe_dict(update.get("structured"))
+        scene_kind = _safe_str(structured.get("scene_kind"))
+        reason = _safe_str(structured.get("reason"))
+        if scene_kind and "player_pull" in reason:
+            return priority >= 0.6
+        return priority >= 0.5
     
     # Companion warnings
     if kind == "companion_comment" and priority >= 0.6:

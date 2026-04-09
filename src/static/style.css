@@ -5220,6 +5220,16 @@ pre:hover .code-copy-btn {
     background: rgba(96, 165, 250, 0.025);
 }
 
+.rpg-ambient-scene[data-scene-kind="argument"] {
+    border-left-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.045);
+}
+
+.rpg-ambient-scene[data-scene-kind="rumor scene"] {
+    border-left-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.04);
+}
+
 .rpg-ambient-scene-header {
     font-size: 0.78rem;
     font-weight: 700;

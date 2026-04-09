@@ -2169,6 +2169,7 @@
             container.dataset.sceneId = sceneId;
             container.dataset.sceneKind = sceneKind;
             container.dataset.lastBeatTs = String(Date.now());
+            container.dataset.beatCount = '0';
 
             container.innerHTML = `
                 <div class="rpg-ambient-scene-header">${escapeHtml(sceneKind)}</div>
@@ -2178,6 +2179,7 @@
             feed.appendChild(container);
         }
         container.dataset.lastBeatTs = String(Date.now());
+        container.dataset.beatCount = String((parseInt(container.dataset.beatCount || '0', 10) || 0) + 1);
         container.classList.remove('rpg-ambient-scene-faded');
 
         const lines = container.querySelector('.rpg-ambient-scene-lines');
@@ -2215,6 +2217,8 @@
 
         window.clearTimeout(container._removeTimer);
         container._removeTimer = window.setTimeout(function () {
+            var lastBeatTs = parseInt(container.dataset.lastBeatTs || '0', 10) || 0;
+            if ((Date.now() - lastBeatTs) < 12000) return;
             if (container && container.parentNode) {
                 container.parentNode.removeChild(container);
             }

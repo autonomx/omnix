@@ -38,6 +38,16 @@ from app.rpg.ai.scene_weaver import (
     build_scene_candidates,
     select_scene_candidate,
 )
+from app.rpg.ai.scene_continuity import (
+    advance_scene,
+    build_continuation_beats,
+    compact_finished_scenes,
+    ensure_scene_runtime_state as ensure_persistent_scene_runtime_state,
+    get_active_scene_candidates,
+    maybe_build_scene_consequence,
+    select_continuing_scene,
+    start_persistent_scene,
+)
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.schema import normalize_world_behavior_config
@@ -153,17 +163,7 @@ def _copy_dict(value: Any) -> Dict[str, Any]:
 
 
 def _ensure_scene_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    runtime_state = _copy_dict(runtime_state)
-    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
-    scene_runtime.setdefault("active_scenes", [])
-    scene_runtime["active_scenes"] = _safe_list(scene_runtime.get("active_scenes"))[-4:]
-    scene_runtime.setdefault("recent_scene_ids", [])
-    scene_runtime["recent_scene_ids"] = _safe_list(scene_runtime.get("recent_scene_ids"))[-16:]
-    scene_runtime.setdefault("recent_scene_pairs", [])
-    scene_runtime["recent_scene_pairs"] = _safe_list(scene_runtime.get("recent_scene_pairs"))[-16:]
-    scene_runtime["last_scene_tick"] = int(scene_runtime.get("last_scene_tick", -999) or -999)
-    runtime_state["scene_runtime"] = scene_runtime
-    return runtime_state
+    return ensure_persistent_scene_runtime_state(runtime_state)
 
 
 def _filter_salient_player_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1337,49 +1337,67 @@ def _apply_idle_tick_to_session(
     initiative_candidates = apply_world_behavior_bias(initiative_candidates, world_behavior)
     selected_initiative = select_npc_initiative_candidate(initiative_candidates, runtime_state)
 
-    # ── Phase G: scene weaving ───────────────────────────────────────
-    scene_candidates = build_scene_candidates(
-        after_state,
-        runtime_state,
-        player_context,
-    )
-
-    selected_scene = select_scene_candidate(scene_candidates, runtime_state)
+    # ── Phase G / G+1: scene weaving + continuity ───────────────────
     scene_beats = []
-    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
     current_tick = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
-    last_scene_tick = int(scene_runtime.get("last_scene_tick", -999) or -999)
+    continuing_scene = select_continuing_scene(runtime_state, after_state, current_tick)
+    selected_scene = None
 
-    # Simple scene cadence: no more than one scene every 2 ticks.
-    if selected_scene and (current_tick - last_scene_tick) < 2:
-        selected_scene = None
+    if continuing_scene:
+        scene_beats = build_continuation_beats(continuing_scene, after_state)[:3]
+        runtime_state = advance_scene(
+            runtime_state,
+            _safe_str(continuing_scene.get("scene_id")),
+            current_tick,
+            player_ignored=True,
+        )
 
-    # Prevent the same NPC from both initiating solo and appearing in a scene this tick.
-    if selected_scene and selected_initiative:
-        scene_participants = set(_safe_list(selected_scene.get("participants")))
-        if _safe_str(selected_initiative.get("speaker_id")) in scene_participants:
+        for beat in scene_beats:
+            raw_updates.append(_make_scene_update_from_beat(beat))
+
+        # When continuing a scene, suppress same-speaker standalone initiative.
+        continuing_participants = set(_safe_list(continuing_scene.get("participants")))
+        if selected_initiative and _safe_str(selected_initiative.get("speaker_id")) in continuing_participants:
             selected_initiative = None
+    else:
+        scene_candidates = build_scene_candidates(
+            after_state,
+            runtime_state,
+            player_context,
+        )
+        selected_scene = select_scene_candidate(scene_candidates, runtime_state)
+        scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
+        last_scene_tick = int(scene_runtime.get("last_scene_tick", -999) or -999)
+
+        if selected_scene and (current_tick - last_scene_tick) < 2:
+            selected_scene = None
+
+        if selected_scene and selected_initiative:
+            scene_participants = set(_safe_list(selected_scene.get("participants")))
+            if _safe_str(selected_initiative.get("speaker_id")) in scene_participants:
+                selected_initiative = None
+
+        if selected_scene:
+            runtime_state = apply_scene_cooldowns(runtime_state, selected_scene)
+            runtime_state = start_persistent_scene(runtime_state, selected_scene, current_tick)
+            scene_beats = build_scene_beats(
+                selected_scene,
+                after_state,
+                runtime_state,
+            )[:3]
+
+            scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
+            scene_runtime["last_scene_tick"] = current_tick
+            runtime_state["scene_runtime"] = scene_runtime
+
+            for beat in scene_beats:
+                raw_updates.append(_make_scene_update_from_beat(beat))
 
     if selected_initiative:
         runtime_state = apply_initiative_cooldowns(runtime_state, selected_initiative)
         raw_updates.append(
             _make_initiative_update_from_candidate(selected_initiative)
         )
-
-    if selected_scene:
-        runtime_state = apply_scene_cooldowns(runtime_state, selected_scene)
-        scene_beats = build_scene_beats(
-            selected_scene,
-            after_state,
-            runtime_state,
-        )[:3]
-
-        scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
-        scene_runtime["last_scene_tick"] = current_tick
-        runtime_state["scene_runtime"] = scene_runtime
-
-        for beat in scene_beats:
-            raw_updates.append(_make_scene_update_from_beat(beat))
 
     # Phase 6: world event director
     world_event_candidates = build_world_event_candidates(
@@ -1413,6 +1431,15 @@ def _apply_idle_tick_to_session(
     coalesced = coalesce_ambient_updates(visible, runtime_state)
 
     runtime_state = enqueue_ambient_updates(runtime_state, coalesced)
+
+    # Scene continuity cleanup + scene-driven consequence
+    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
+    for scene in _safe_list(scene_runtime.get("active_scenes")):
+        consequence = maybe_build_scene_consequence(scene, after_state)
+        if consequence:
+            scene["consequence_emitted"] = True
+            runtime_state = enqueue_ambient_updates(runtime_state, [consequence])
+    runtime_state = compact_finished_scenes(runtime_state)
     queued_updates = get_pending_ambient_updates(
         {"runtime_state": runtime_state},
         after_seq=max(0, int(runtime_state.get("ambient_seq", 0) or 0) - len(coalesced)),
@@ -1469,6 +1496,9 @@ def _apply_idle_tick_to_session(
         "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
         # Phase 8: capture initiative and event decisions for replay
         "initiative_candidate": _safe_dict(selected_initiative) if selected_initiative else None,
+        "scene_candidate": _safe_dict(selected_scene) if selected_scene else None,
+        "scene_beats_emitted": len(scene_beats) if scene_beats else 0,
+        "continuing_scene": _safe_dict(continuing_scene) if continuing_scene else None,
         "world_events_emitted": len(event_updates) if event_updates else 0,
         "dialogue_candidate": _safe_dict(selected_dialogue) if selected_dialogue else None,
     }
