@@ -512,13 +512,15 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         else:
             actor_list = str(actors)
 
-    length = narration_context.get("settings", {}).get("response_length", "short")
+    settings = _safe_dict(narration_context.get("settings"))
+    rl = _safe_dict(settings.get("response_length"))
+    length = rl.get("narrator_length", "medium")
 
-    length_rules = {
-        "short": "MAX 1 sentence per line",
-        "medium": "MAX 2 sentences per line",
-        "long": "MAX 4 sentences per line",
-    }
+    length_instruction = {
+        "short": "Keep narration concise (max 1 paragraph).",
+        "medium": "Use moderate detail (1–2 paragraphs).",
+        "long": "Use rich, immersive detail (2–4 paragraphs).",
+    }.get(length, "")
 
     safe_context = _build_safe_prompt_context(scene, narration_context)
 
@@ -532,11 +534,9 @@ NPC: <npc_name>: "<short reply>" (omit if none)
 REWARD: <xp/items if any, else omit>
 
 RULES:
-- {length_rules.get(length)}
-- NO paragraphs
 - NO extra text
 - NO formatting outside this structure
-- KEEP IT SHORT
+{length_instruction}
 
 SCENE:
 Title: {title}

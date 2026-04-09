@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -21,6 +21,7 @@ def build_dialogue_prompt(
     player_state: Dict[str, Any],
     npc_mind: Dict[str, Any],
     player_message: str,
+    runtime_state: Optional[Dict[str, Any]] = None,
 ) -> str:
     npc = _safe_dict(npc)
     scene = _safe_dict(scene)
@@ -32,6 +33,18 @@ def build_dialogue_prompt(
     last_decision = _safe_dict(npc_mind.get("last_decision"))
     dialogue_state = _safe_dict(player_state.get("dialogue_state"))
     history = _safe_list(dialogue_state.get("history"))[-6:]
+
+    # Inject character length setting
+    runtime_state = _safe_dict(runtime_state or player_state.get("runtime_state"))
+    settings = _safe_dict(runtime_state.get("settings"))
+    rl = _safe_dict(settings.get("response_length"))
+    char_len = rl.get("character_length", "medium")
+
+    char_instruction = {
+        "short": "Keep dialogue brief and direct.",
+        "medium": "Use natural conversational detail.",
+        "long": "Use expressive, personality-rich dialogue.",
+    }.get(char_len, "")
 
     history_lines = []
     for item in history:
@@ -73,4 +86,7 @@ Return JSON only with keys:
 - tone: string
 - suggested_replies: array of up to 4 short strings
 - intent: string
+
+STYLE:
+{char_instruction}
 """.strip()

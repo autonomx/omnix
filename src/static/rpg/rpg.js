@@ -601,6 +601,50 @@
         loadSection.appendChild(loadContainer);
         body.appendChild(loadSection);
 
+        // Response Length Settings
+        var settingsSection = document.createElement('div');
+        settingsSection.innerHTML = '<h4>Response Length</h4>';
+        var currentSettings = (rpgState.runtimeState && rpgState.runtimeState.settings && rpgState.runtimeState.settings.response_length) || { narrator_length: 'medium', character_length: 'medium' };
+        var narratorSelect = document.createElement('label');
+        narratorSelect.innerHTML = 'Narrator Length: <select id="rpgNarratorLength"><option value="short"' + (currentSettings.narrator_length === 'short' ? ' selected' : '') + '>Short</option><option value="medium"' + (currentSettings.narrator_length === 'medium' ? ' selected' : '') + '>Medium</option><option value="long"' + (currentSettings.narrator_length === 'long' ? ' selected' : '') + '>Long</option></select>';
+        var characterSelect = document.createElement('label');
+        characterSelect.innerHTML = 'Character Length: <select id="rpgCharacterLength"><option value="short"' + (currentSettings.character_length === 'short' ? ' selected' : '') + '>Short</option><option value="medium"' + (currentSettings.character_length === 'medium' ? ' selected' : '') + '>Medium</option><option value="long"' + (currentSettings.character_length === 'long' ? ' selected' : '') + '>Long</option></select>';
+        settingsSection.appendChild(narratorSelect);
+        settingsSection.appendChild(document.createElement('br'));
+        settingsSection.appendChild(characterSelect);
+        var saveBtn = document.createElement('button');
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.textContent = 'Save Settings';
+        saveBtn.addEventListener('click', function() {
+            var narrator = document.getElementById('rpgNarratorLength').value;
+            var character = document.getElementById('rpgCharacterLength').value;
+            // Persist to server
+            if (rpgState.sessionId) {
+                fetch('/api/rpg/session/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: rpgState.sessionId,
+                        settings: {
+                            response_length: {
+                                narrator_length: narrator,
+                                character_length: character
+                            }
+                        },
+                    }),
+                }).then(() => {
+                    alert('Settings saved');
+                }).catch(() => {
+                    alert('Failed to save settings');
+                });
+            } else {
+                alert('No active game to save settings to');
+            }
+        });
+        settingsSection.appendChild(document.createElement('br'));
+        settingsSection.appendChild(saveBtn);
+        body.appendChild(settingsSection);
+
         // Export and Title
         if (rpgState.sessionId) {
             var manageSection = document.createElement('div');

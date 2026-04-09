@@ -218,6 +218,27 @@ async def update_rpg_session(request: Request):
     return payload
 
 
+@rpg_session_bp.post("/api/rpg/session/settings")
+async def update_rpg_session_settings(request: Request):
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    settings = _safe_dict(data.get("settings"))
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    existing = _safe_dict(runtime_state.get("settings"))
+    merged = dict(existing)
+    merged.update(settings)
+    runtime_state["settings"] = merged
+    session["runtime_state"] = runtime_state
+    session = save_runtime_session(session)
+
+    return {"ok": True}
+
+
 @rpg_session_bp.post("/api/rpg/session/delete")
 async def delete_rpg_session(request: Request):
     data = await request.json()

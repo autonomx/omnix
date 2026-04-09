@@ -112,6 +112,7 @@ class DialogueManager:
                 player_state=simulation_state["player_state"],
                 npc_mind=npc_mind,
                 player_message=player_message,
+                runtime_state=simulation_state,
             )
             try:
                 raw = self.llm_client.generate_json(prompt)

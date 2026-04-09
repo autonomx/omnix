@@ -697,6 +697,7 @@ var AdventureBuilder = (function () {
                     _locationSelect('abNpcLocation' + i, npc.location_id) +
                     '<label class="ab-label"><input type="checkbox" id="abNpcSurvive' + i + '" ' + (npc.must_survive ? 'checked' : '') + '> Must Survive (plot armor)</label>' +
                     _chipEditor('abNpcGoals' + i, npc.goals || [], 'Add a goal\u2026') +
+                    '<button type="button" class="btn btn-secondary ab-fill-npc-btn" data-npc-index="' + i + '">Fill with AI</button>' +
                 '</div>' +
             '</div>';
         });
@@ -707,6 +708,7 @@ var AdventureBuilder = (function () {
         _attachEntitySelect(list);
         _attachAutoSlug(list, 'Npc');
         _attachChipEditors(list);
+        _attachNpcFillHandlers(list);
     }
 
     // -- Entity helpers
@@ -756,6 +758,43 @@ var AdventureBuilder = (function () {
                     _toggleSelection(target, id);
                     _renderStep();
                 }
+            });
+        });
+    }
+
+    function _attachNpcFillHandlers(container) {
+        container.querySelectorAll('.ab-fill-npc-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (btn.dataset.loading === "1") return;
+                var idx = parseInt(btn.getAttribute('data-npc-index'), 10);
+                if (isNaN(idx)) return;
+
+                var npc = (setup.npc_seeds || [])[idx] || {};
+                btn.dataset.loading = "1";
+                btn.disabled = true;
+                btn.textContent = 'Filling...';
+
+                fetch('/api/rpg/adventure/fill_npc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        setup: setup,
+                        npc_seed: npc
+                    })
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (data.ok && data.npc_seed) {
+                        setup.npc_seeds[idx] = Object.assign({}, setup.npc_seeds[idx] || {}, data.npc_seed);
+                        _renderNpcCards();
+                    } else {
+                        alert('Unable to fill NPC');
+                    }
+                }).catch(function() {
+                    alert('Unable to fill NPC');
+                }).finally(function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Fill with AI';
+                    btn.dataset.loading = "0";
+                });
             });
         });
     }

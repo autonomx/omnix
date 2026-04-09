@@ -7,9 +7,27 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Dict, Optional
+
+from .llm_world_parser import parse_world_bootstrap_response
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_dict(v: Any) -> dict:
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def _safe_list(v: Any) -> list:
+    return list(v) if isinstance(v, (list, tuple)) else []
+
+
+def _safe_str(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    return str(v)
 
 
 def _call_app_llm(llm_gateway: Any, prompt: str, setup: dict) -> str:
@@ -415,4 +433,80 @@ def fallback_world_bootstrap_proposal(
         "opening_patch": opening_patch,
         "generation_notes": f"Deterministic fallback content for {genre_key} genre",
         "warnings": [],
+    }
+
+
+def generate_npc_seed_enrichment(
+    setup: Dict[str, Any],
+    npc_seed: Dict[str, Any],
+    *,
+    llm_gateway: Any = None,
+) -> Dict[str, Any]:
+    setup = _safe_dict(setup)
+    npc_seed = _safe_dict(npc_seed)
+
+    name = _safe_str(npc_seed.get("name"))
+    role = _safe_str(npc_seed.get("role"))
+    description = _safe_str(npc_seed.get("description"))
+
+    prompt = f"""
+You are enriching a single RPG NPC seed into a richer structured character.
+
+Setup:
+- genre: {_safe_str(setup.get("genre"))}
+- premise: {_safe_str(setup.get("premise"))}
+- lore: {_safe_list(setup.get("lore_constraints"))}
+- opening: {_safe_dict(setup.get("opening"))}
+
+Current NPC seed:
+- name: {name}
+- role: {role}
+- description: {description}
+
+Return strict JSON:
+{{
+  "name": "...",
+  "role": "...",
+  "description": "...",
+  "personality_summary": "...",
+  "history": "...",
+  "traits": ["...", "..."],
+  "motives": ["...", "..."],
+  "hooks": ["...", "..."]
+}}
+
+Rules:
+- If fields are empty, invent grounded values from setup.
+- If description exists, preserve its core and deepen it.
+- Be concise but rich.
+"""
+
+    if llm_gateway is not None:
+        try:
+            from .llm_world_parser import parse_world_bootstrap_response
+            raw = _call_app_llm(llm_gateway, prompt, setup)
+            parsed = parse_world_bootstrap_response(raw)
+            parsed = _safe_dict(parsed)
+            return {
+                "name": _safe_str(parsed.get("name")) or name,
+                "role": _safe_str(parsed.get("role")) or role,
+                "description": _safe_str(parsed.get("description")) or description,
+                "personality_summary": _safe_str(parsed.get("personality_summary")),
+                "history": _safe_str(parsed.get("history")),
+                "traits": _safe_list(parsed.get("traits"))[:6],
+                "motives": _safe_list(parsed.get("motives"))[:6],
+                "hooks": _safe_list(parsed.get("hooks"))[:6],
+            }
+        except Exception:
+            logger.warning("NPC enrichment failed", exc_info=True)
+
+    return {
+        "name": name or "Wandering Healer",
+        "role": role or "healer",
+        "description": description or "A capable healer shaped by distance, loss, and survival.",
+        "personality_summary": "Guarded but compassionate, with a practical streak.",
+        "history": "They left home under difficult circumstances and rebuilt their life by helping others where they could.",
+        "traits": ["kind", "guarded", "practical"],
+        "motives": ["stay free", "protect the vulnerable"],
+        "hooks": ["knows more than they first admit"],
     }

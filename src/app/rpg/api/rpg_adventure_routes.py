@@ -497,6 +497,24 @@ async def adventure_simulate_step(request: Request):
         )
 
 
+@rpg_adventure_bp.post("/api/rpg/adventure/fill_npc")
+async def adventure_fill_npc(request: Request):
+    """Enrich an NPC seed using AI."""
+    from app.rpg.creator.llm_world_generator import generate_npc_seed_enrichment
+    from app.rpg.llm_app_gateway import build_app_llm_gateway
+
+    data = await request.json()
+    setup = _safe_dict(data.get("setup"))
+    npc_seed = _safe_dict(data.get("npc_seed"))
+
+    gateway = build_app_llm_gateway()
+    enriched = generate_npc_seed_enrichment(setup, npc_seed, llm_gateway=gateway)
+    return {
+        "ok": True,
+        "npc_seed": enriched,
+    }
+
+
 @rpg_adventure_bp.post("/api/rpg/adventure/simulation-state")
 async def adventure_simulation_state(request: Request):
     """Get the current simulation state without advancing."""
