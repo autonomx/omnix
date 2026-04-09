@@ -66,6 +66,7 @@ _REAL_MODULES = {
     "app.rpg.presentation.personality_state",
     "app.rpg.analytics.tick_diff",
     "app.rpg.analytics.timeline",
+    "app.rpg.session.ambient_builder",
 }
 
 
@@ -142,6 +143,7 @@ _crowd = _load("app.rpg.social.crowd_conversations", "app/rpg/social/crowd_conve
 _personality = _load("app.rpg.presentation.personality_state", "app/rpg/presentation/personality_state.py")
 _tick_diff = _load("app.rpg.analytics.tick_diff", "app/rpg/analytics/tick_diff.py")
 _timeline = _load("app.rpg.analytics.timeline", "app/rpg/analytics/timeline.py")
+_ambient = _load("app.rpg.session.ambient_builder", "app/rpg/session/ambient_builder.py")
 
 # ── Module-level aliases for tested functions ──────────────────────────────
 
@@ -193,10 +195,13 @@ run_offscreen_conversation_pass = _offscreen.run_offscreen_conversation_pass
 
 conversation_can_generate_rumor = _rumor.conversation_can_generate_rumor
 build_rumor_from_conversation = _rumor.build_rumor_from_conversation
+collect_rumors_from_recent_conversations = _rumor.collect_rumors_from_recent_conversations
 
 build_faction_topic_candidates = _faction.build_faction_topic_candidates
 
 build_background_chatter_lines = _crowd.build_background_chatter_lines
+
+_conversation_to_ambient_updates = _ambient._conversation_to_ambient_updates
 
 ensure_personality_state = _personality.ensure_personality_state
 get_personality_profile = _personality.get_personality_profile
@@ -998,6 +1003,7 @@ class TestFunctionalExpansion:
         conv = {
             "topic": {"type": "moral_conflict", "anchor": "npc:thief", "summary": "Should we trust the thief?"},
             "status": "closed",
+            "turn_count": 3,
         }
         assert conversation_can_generate_rumor(conv) is True
 
@@ -1423,3 +1429,416 @@ class TestIntegrationFullCycle:
         assert len(list_active_conversations(sim)) == 0
         recent = list_recent_conversations(sim)
         assert len(recent) >= 1
+
+
+# ===========================================================================
+# Fix verification tests — cover all 10 reported issues
+# ===========================================================================
+
+
+class TestFixWorldSimIntegration:
+    """Fix 1: run_conversation_tick() is wired into world_simulation step."""
+
+    def test_world_simulation_imports_conversation_engine(self):
+        """Verify the world_simulation module imports run_conversation_tick."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "world_simulation_check",
+            os.path.join(SRC_DIR, "app", "rpg", "creator", "world_simulation.py"),
+        )
+        # We just check the source code, not load it (too many deps)
+        with open(os.path.join(SRC_DIR, "app", "rpg", "creator", "world_simulation.py")) as f:
+            source = f.read()
+        assert "from app.rpg.social.conversation_engine import run_conversation_tick" in source
+        assert "run_conversation_tick(history_state" in source
+
+
+class TestFixInterventionSave:
+    """Fix 2: intervention route saves session."""
+
+    def test_intervention_route_calls_save(self):
+        """Verify save_runtime_session is called after intervention mutation."""
+        route_path = os.path.join(SRC_DIR, "app", "rpg", "api", "rpg_session_routes.py")
+        with open(route_path) as f:
+            source = f.read()
+        # The save_runtime_session call must appear between the apply_player_intervention
+        # and the return JSONResponse
+        idx_apply = source.find("apply_player_intervention(")
+        idx_save = source.find("save_runtime_session(session)", idx_apply)
+        idx_return = source.find("return JSONResponse(", idx_save)
+        assert idx_apply > 0
+        assert idx_save > idx_apply
+        assert idx_return > idx_save
+
+
+class TestFixAmbientDedupe:
+    """Fix 3: conversation lines in ambient are deduped."""
+
+    def test_ambient_dedupe_prevents_repeat(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("event_commentary", "ev:1", "Guard comments on disturbance.")
+
+        open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        advance_active_conversations(sim, rt, 5)
+
+        updates1 = _conversation_to_ambient_updates(sim, rt, "loc:tavern", 5)
+        assert len(updates1) >= 1, "Should produce at least one ambient update"
+
+        # Second call with no new lines should produce NO new updates (deduped)
+        updates2 = _conversation_to_ambient_updates(sim, rt, "loc:tavern", 6)
+        assert len(updates2) == 0, "Should produce no updates since lines are same"
+
+    def test_ambient_surfaced_keys_bounded(self):
+        rt = {"_surfaced_conversation_line_keys": [f"k:{i}" for i in range(200)]}
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        # Running with empty conversations should still trim the key set
+        _conversation_to_ambient_updates(sim, rt, "loc:tavern", 10)
+        keys = rt.get("_surfaced_conversation_line_keys", [])
+        assert len(keys) <= 120
+
+
+class TestFixSpeakerName:
+    """Fix 4: speaker_name is stored in conversation line records."""
+
+    def test_build_conversation_line_stores_speaker_name(self):
+        line = build_conversation_line(
+            conversation_id="conv:1",
+            turn=1,
+            speaker="npc:guard",
+            text="Hello there",
+            kind="statement",
+            created_tick=5,
+            speaker_name="Guard",
+        )
+        assert line["speaker_name"] == "Guard"
+
+    def test_build_conversation_line_default_speaker_name(self):
+        line = build_conversation_line(
+            conversation_id="conv:1",
+            turn=1,
+            speaker="npc:guard",
+            text="Hello",
+            kind="statement",
+            created_tick=5,
+        )
+        assert line["speaker_name"] == ""
+
+    def test_advance_populates_speaker_name(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("plan_reaction", "test", "React to plan")
+
+        open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        advance_active_conversations(sim, rt, 5)
+
+        active = list_active_conversations(sim)
+        if active:
+            lines = get_conversation_lines(sim, active[0]["conversation_id"])
+            if lines:
+                assert lines[0]["speaker_name"] != "", \
+                    "speaker_name should be populated from npc_index"
+
+
+class TestFixLLMReplaySafety:
+    """Fix 5 & 6: LLM path records into llm_records and uses build_app_llm_gateway."""
+
+    def test_engine_source_has_replay_recording(self):
+        """Verify the conversation_engine source records into llm_records."""
+        path = os.path.join(SRC_DIR, "app", "rpg", "social", "conversation_engine.py")
+        with open(path) as f:
+            source = f.read()
+        assert 'llm_records' in source
+        assert 'llm_records_index' in source
+        assert 'record_key' in source
+        # Verify replay readback
+        assert 'mode == "live"' in source or "mode == 'live'" in source
+
+    def test_engine_uses_build_app_llm_gateway(self):
+        """Verify the engine imports from llm_app_gateway, not runtime_state."""
+        path = os.path.join(SRC_DIR, "app", "rpg", "social", "conversation_engine.py")
+        with open(path) as f:
+            source = f.read()
+        assert "build_app_llm_gateway" in source
+        # Should NOT use runtime_state.get("llm_gateway") anymore
+        assert 'runtime_state).get("llm_gateway")' not in source
+
+
+class TestFixPresentationRuntime:
+    """Fix 7: presentation route passes runtime_state."""
+
+    def test_presentation_route_passes_runtime_state(self):
+        path = os.path.join(SRC_DIR, "app", "rpg", "api", "rpg_presentation_routes.py")
+        with open(path) as f:
+            source = f.read()
+        # Should NOT have build_conversation_payload(simulation_state, {})
+        assert "build_conversation_payload(simulation_state, {})" not in source
+        # Should have build_conversation_payload(simulation_state, runtime_state)
+        assert "build_conversation_payload(simulation_state, runtime_state)" in source
+
+
+class TestFixUIRenderHook:
+    """Fix 8: renderConversations() is called in turn response handler."""
+
+    def test_rpg_js_calls_render_conversations_in_turn_handler(self):
+        path = os.path.join(SRC_DIR, "static", "rpg", "rpg.js")
+        with open(path) as f:
+            source = f.read()
+        # renderConversations should be called with data.active_conversations
+        assert "renderConversations(data.active_conversations)" in source
+
+
+class TestFixInterventionBeliefs:
+    """Fix 9: interventions now mutate NPC beliefs and close conversations."""
+
+    def test_support_boosts_trust(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("moral_conflict", "npc:thief", "Trust debate")
+
+        conv = open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        conv_id = conv["conversation_id"]
+
+        result = apply_player_intervention(conv_id, "support:npc:guard", sim, rt, 6)
+        assert result["success"] is True
+        assert "trust_boost:npc:guard" in result.get("effects", [])
+
+        # Verify beliefs were actually mutated
+        guard_beliefs = sim.get("npc_minds", {}).get("npc:guard", {}).get("beliefs", {}).get("player", {})
+        assert guard_beliefs.get("trust", 0) > 0, "Guard's trust in player should increase"
+
+    def test_support_creates_friction_with_other(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("moral_conflict", "npc:thief", "Trust debate")
+
+        conv = open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        conv_id = conv["conversation_id"]
+
+        apply_player_intervention(conv_id, "support:npc:guard", sim, rt, 6)
+
+        merchant_beliefs = sim.get("npc_minds", {}).get("npc:merchant", {}).get("beliefs", {}).get("player", {})
+        assert merchant_beliefs.get("hostility", 0) > 0, "Merchant should feel friction"
+
+    def test_clarify_boosts_respect(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("plan_reaction", "plan:1", "Plan discussion")
+
+        conv = open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        conv_id = conv["conversation_id"]
+
+        result = apply_player_intervention(conv_id, "clarify", sim, rt, 6)
+        assert "respect_all" in result.get("effects", [])
+
+        guard_beliefs = sim.get("npc_minds", {}).get("npc:guard", {}).get("beliefs", {}).get("player", {})
+        assert guard_beliefs.get("respect", 0) > 0
+
+    def test_end_discussion_closes_conversation(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("risk_conflict", "cave", "Cave risk")
+
+        conv = open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        conv_id = conv["conversation_id"]
+        assert len(list_active_conversations(sim)) == 1
+
+        result = apply_player_intervention(conv_id, "end_discussion", sim, rt, 6)
+        assert "conversation_closed" in result.get("effects", [])
+        assert len(list_active_conversations(sim)) == 0
+        assert len(list_recent_conversations(sim)) == 1
+
+    def test_continue_has_no_effect(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("moral_conflict", "test", "Test")
+
+        conv = open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        conv_id = conv["conversation_id"]
+        result = apply_player_intervention(conv_id, "continue", sim, rt, 6)
+        assert "none" in result.get("effects", [])
+        assert len(list_active_conversations(sim)) == 1  # Still active
+
+    def test_intervention_options_use_display_names(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("moral_conflict", "test", "Test")
+
+        conv = open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        active = list_active_conversations(sim)
+        options = build_intervention_options(active[0], sim, rt)
+        # Options should use display names (Guard, Merchant), not raw IDs
+        texts = [o["text"] for o in options]
+        assert any("Guard" in t for t in texts), f"Expected 'Guard' in option texts: {texts}"
+        assert any("Merchant" in t for t in texts), f"Expected 'Merchant' in option texts: {texts}"
+
+
+class TestFixExpansionModules:
+    """Fix 10: expansion stubs are real systems now."""
+
+    def test_offscreen_uses_npc_data(self):
+        sim = _minimal_sim()
+        # Add NPCs at a different location
+        sim["npc_index"]["npc:blacksmith"] = {
+            "name": "Blacksmith", "location_id": "loc:forge", "role": "merchant",
+        }
+        sim["npc_index"]["npc:apprentice"] = {
+            "name": "Apprentice", "location_id": "loc:forge", "role": "apprentice",
+        }
+        rt = {"current_location_id": "loc:tavern"}
+
+        run_offscreen_conversation_pass(sim, rt, 5)
+        summaries = rt.get("offscreen_conversation_summaries", [])
+        assert len(summaries) >= 1
+        last = summaries[-1]
+        assert "location_id" in last
+        assert "participants" in last
+        assert last["location_id"] == "loc:forge"
+
+    def test_offscreen_skips_player_location(self):
+        sim = _minimal_sim()
+        # All NPCs are at player's location
+        rt = {"current_location_id": "loc:tavern"}
+        rt["offscreen_conversation_summaries"] = []
+        run_offscreen_conversation_pass(sim, rt, 5)
+        summaries = rt.get("offscreen_conversation_summaries", [])
+        # Should NOT generate summaries at player location
+        for s in summaries:
+            assert s.get("location_id") != "loc:tavern"
+
+    def test_rumor_requires_turn_count(self):
+        conv_short = {
+            "topic": {"type": "moral_conflict", "anchor": "test"},
+            "turn_count": 1,
+        }
+        conv_long = {
+            "topic": {"type": "moral_conflict", "anchor": "test"},
+            "turn_count": 3,
+        }
+        assert conversation_can_generate_rumor(conv_short) is False
+        assert conversation_can_generate_rumor(conv_long) is True
+
+    def test_rumor_from_conversation_has_metadata(self):
+        conv = {
+            "conversation_id": "conv:test123",
+            "topic": {"type": "moral_conflict", "anchor": "npc:thief", "summary": "Theft debate"},
+            "participants": ["npc:guard", "npc:thief"],
+            "turn_count": 4,
+            "updated_tick": 10,
+        }
+        rumor = build_rumor_from_conversation(conv)
+        assert rumor["type"] == "rumor"
+        assert rumor["source_conversation_id"] == "conv:test123"
+        assert rumor["topic_type"] == "moral_conflict"
+        assert len(rumor["participants"]) == 2
+
+    def test_collect_rumors_from_recent(self):
+        sim = _minimal_sim()
+        ensure_conversation_state(sim)
+        rt = _minimal_runtime()
+        topic = _make_topic("moral_conflict", "npc:thief", "Test")
+
+        conv = open_conversation(
+            sim, rt,
+            kind="ambient_npc_conversation",
+            location_id="loc:tavern",
+            participants=["npc:guard", "npc:merchant"],
+            topic=topic,
+            tick=5,
+        )
+        # Advance enough turns to meet threshold
+        for t in range(3):
+            advance_active_conversations(sim, rt, 5 + t)
+
+        # Close it
+        close_conversation(sim, conv["conversation_id"], reason="completed")
+        rumors = collect_rumors_from_recent_conversations(sim)
+        assert len(rumors) >= 1
+
+    def test_faction_topics_high_pressure(self):
+        sim = _minimal_sim()
+        sim["factions"] = {"faction:thieves": {"name": "Thieves Guild", "pressure": 4}}
+        topics = build_faction_topic_candidates(sim, "faction:thieves")
+        assert len(topics) >= 2  # Base + urgency
+        urgency = [t for t in topics if t.get("stance") == "urgent"]
+        assert len(urgency) >= 1
+
+    def test_crowd_chatter_varied_events(self):
+        events = [
+            {"type": "attack", "summary": "A fight broke out"},
+            {"type": "theft", "summary": "Goods were stolen"},
+            {"type": "trade", "summary": "Market day"},
+        ]
+        lines = build_background_chatter_lines("loc:market", events)
+        assert len(lines) >= 3
+        # Lines should be deduplicated
+        assert len(lines) == len(set(lines))
+
+    def test_crowd_chatter_still_empty_for_no_events(self):
+        lines = build_background_chatter_lines("loc:market", [])
+        assert lines == []
