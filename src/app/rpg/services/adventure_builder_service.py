@@ -34,7 +34,10 @@ from ..creator.regeneration import (
     merge_thread_lists,
 )
 from ..creator.schema import AdventureSetup
-from ..creator.validation import validate_adventure_setup_payload, validate_adventure_setup_semantics
+from ..creator.validation import (
+    validate_adventure_setup_payload,
+    validate_adventure_setup_semantics,
+)
 from ..creator.world_player_actions import apply_player_action
 from ..session.runtime import build_session_from_start_result, save_runtime_session
 from .adventure_response_adapter import (
@@ -430,13 +433,26 @@ def build_opening_context(setup: dict[str, Any]) -> dict[str, Any]:
         ``scene_frame``, ``immediate_problem``, ``player_involvement_reason``,
         ``first_choices``, ``tension_level``, ``time_of_day``, ``weather``.
     """
-    opening = setup.get("opening") or {}
+    setup = _safe_dict(setup)
+    opening = _safe_dict(setup.get("opening"))
     inferred = infer_default_opening(setup)
+    
+    starting_npc_ids = _safe_list(setup.get("starting_npc_ids"))
+    opening_present = _safe_list(opening.get("present_npc_ids"))
+    inferred_present = _safe_list(inferred.get("present_npc_ids"))
+
+    merged_present = []
+    seen = set()
+    for npc_id in opening_present + starting_npc_ids + inferred_present:
+        npc_id = str(npc_id).strip()
+        if npc_id and npc_id not in seen:
+            seen.add(npc_id)
+            merged_present.append(npc_id)
 
     return {
         "location_id": opening.get("location_id") or inferred.get("location_id", ""),
         "location_name": opening.get("location_name") or inferred.get("location_name", ""),
-        "present_npc_ids": opening.get("present_npc_ids") or inferred.get("present_npc_ids", []),
+        "present_npc_ids": merged_present,
         "scene_frame": opening.get("scene_frame") or inferred.get("scene_frame", ""),
         "immediate_problem": opening.get("immediate_problem") or inferred.get("immediate_problem", ""),
         "player_involvement_reason": opening.get("player_involvement_reason") or inferred.get("player_involvement_reason", ""),

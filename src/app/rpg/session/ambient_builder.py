@@ -89,6 +89,7 @@ def ensure_ambient_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any
         "suppressed": 0,
         "coalesced": 0,
     })
+    runtime_state.setdefault("known_npc_ids", [])
     return runtime_state
 
 

@@ -224,6 +224,113 @@ def _safe_str(v: Any) -> str:
     return str(v)
 
 
+def _derive_present_npc_ids(simulation_state: dict, runtime_state: dict, setup_payload: dict) -> list[str]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    setup_payload = _safe_dict(setup_payload)
+
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    opening = _safe_dict(setup_payload.get("opening"))
+
+    nearby_ids = [str(x) for x in _safe_list(player_state.get("nearby_npc_ids")) if str(x).strip()]
+    opening_ids = [str(x) for x in _safe_list(opening.get("present_npc_ids")) if str(x).strip()]
+
+    present = []
+    seen = set()
+    for npc_id in nearby_ids + opening_ids:
+        if npc_id and npc_id not in seen:
+            seen.add(npc_id)
+            present.append(npc_id)
+    return present
+
+
+def _derive_known_npc_ids(simulation_state: dict, runtime_state: dict) -> list[str]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    known_ids = []
+    seen = set()
+
+    # Only use runtime known/discovered memory
+    discovered = _safe_list(runtime_state.get("known_npc_ids"))
+    for npc_id in discovered:
+        npc_id = str(npc_id).strip()
+        if npc_id and npc_id not in seen:
+            seen.add(npc_id)
+            known_ids.append(npc_id)
+
+    return known_ids
+
+
+def _derive_npc_live_state(npc_id: str, simulation_state: dict, runtime_state: dict) -> dict:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    npc_info = _safe_dict(npc_index.get(npc_id))
+    npc_minds = _safe_dict(simulation_state.get("npc_minds"))
+    mind = _safe_dict(npc_minds.get(npc_id))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+
+    nearby_ids = set(str(x) for x in _safe_list(player_state.get("nearby_npc_ids")))
+    player_loc = _safe_str(player_state.get("location_id"))
+    npc_loc = _safe_str(npc_info.get("location_id"))
+
+    beliefs = _safe_dict(mind.get("beliefs"))
+    player_belief = _safe_dict(beliefs.get("player"))
+    trust = float(player_belief.get("trust", 0) or 0)
+    hostility = float(player_belief.get("hostility", 0) or 0)
+
+    relation = "neutral"
+    if hostility > 0.5:
+        relation = "hostile"
+    elif trust > 0.5:
+        relation = "friendly"
+    elif trust > 0.2:
+        relation = "warm"
+    elif hostility > 0.2:
+        relation = "uneasy"
+
+    goals = _safe_list(mind.get("goals"))
+    current_activity = _safe_str(npc_info.get("current_activity"))
+    if not current_activity:
+        current_activity = _safe_str(goals[0]) if goals else "observing the situation"
+
+    mood = _safe_str(npc_info.get("mood"))
+    if not mood:
+        if hostility > 0.6:
+            mood = "angry"
+        elif hostility > 0.25:
+            mood = "suspicious"
+        elif trust > 0.5:
+            mood = "calm"
+        else:
+            mood = "guarded"
+
+    focus = _safe_str(npc_info.get("focus"))
+    if not focus:
+        if hostility > 0.4 or trust > 0.3:
+            focus = "player"
+        else:
+            focus = _safe_str(current_scene.get("scene_id")) or "the area"
+
+    last_action = _safe_str(npc_info.get("last_action"))
+    if not last_action:
+        last_action = current_activity
+
+    return {
+        "is_nearby": npc_id in nearby_ids,
+        "is_present": npc_loc == player_loc or npc_id in nearby_ids,
+        "location_id": npc_loc,
+        "current_activity": current_activity,
+        "mood": mood,
+        "focus": focus,
+        "relation_to_player": relation,
+        "last_action": last_action,
+    }
+
+
 def _first_non_empty(*values: Any) -> str:
     for value in values:
         text = _safe_str(value).strip()
@@ -493,12 +600,55 @@ async def presentation_speakers(request: Request):
     scene_state = _safe_dict(data.get("scene_state"))
     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
     simulation_state = ensure_player_party(simulation_state)
-    cards = build_speaker_cards(simulation_state, scene_state)
+    all_cards = build_speaker_cards(simulation_state, scene_state)
     runtime_payload = build_runtime_presentation_payload(simulation_state)
     orchestration_payload = build_orchestration_presentation_payload(simulation_state)
     live_provider_payload = build_live_provider_presentation_payload(simulation_state)
     inspector_overlay_payload = build_player_inspector_overlay_payload(simulation_state, runtime_payload, orchestration_payload, live_provider_payload)
-    return _jsonify({"ok": True, "speaker_cards": cards, "runtime": runtime_payload, "orchestration": orchestration_payload, "live_provider": live_provider_payload, "player_overlay": inspector_overlay_payload.get("player_overlay", {})})
+
+    all_cards_by_id = {
+        _safe_str(card.get("npc_id")): card
+        for card in _safe_list(all_cards)
+        if _safe_str(card.get("npc_id"))
+    }
+
+    session = _safe_dict(data.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    present_ids = _derive_present_npc_ids(simulation_state, runtime_state, setup_payload)
+    known_ids = _derive_known_npc_ids(simulation_state, runtime_state)
+
+    present_character_cards = []
+    for npc_id in present_ids:
+        card = dict(_safe_dict(all_cards_by_id.get(npc_id)))
+        if not card:
+            continue
+        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, runtime_state)
+        present_character_cards.append(card)
+
+    known_character_cards = []
+    present_set = set(present_ids)
+    for npc_id in known_ids:
+        if npc_id in present_set:
+            continue
+        card = dict(_safe_dict(all_cards_by_id.get(npc_id)))
+        if not card:
+            continue
+        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, runtime_state)
+        known_character_cards.append(card)
+
+    return _jsonify({
+        "ok": True,
+        "speaker_cards": present_character_cards,
+        "character_cards": present_character_cards,
+        "present_character_cards": present_character_cards,
+        "known_character_cards": known_character_cards,
+        "present_npc_ids": present_ids,
+        "known_npc_ids": known_ids,
+        "runtime": runtime_payload,
+        "orchestration": orchestration_payload,
+        "live_provider": live_provider_payload,
+        "player_overlay": inspector_overlay_payload.get("player_overlay", {})
+    })
 
 
 # ---- Setup Flow ----

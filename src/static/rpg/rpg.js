@@ -2168,6 +2168,13 @@
         container._fadeTimer = window.setTimeout(function () {
             container.classList.add('rpg-ambient-scene-faded');
         }, 8000);
+
+        window.clearTimeout(container._removeTimer);
+        container._removeTimer = window.setTimeout(function () {
+            if (container && container.parentNode) {
+                container.parentNode.removeChild(container);
+            }
+        }, 20000);
     }
 
     function appendAmbientUpdate(update) {

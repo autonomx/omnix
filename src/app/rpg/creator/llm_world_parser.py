@@ -1,11 +1,10 @@
 """Parse and normalize LLM-generated world bootstrap content."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-import hashlib
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Bounds constants

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import uuid
 
-from .schema import ContentBalance, PacingProfile, SafetyConstraint, normalize_world_behavior_config
+from .schema import (
+    ContentBalance,
+    PacingProfile,
+    SafetyConstraint,
+    normalize_world_behavior_config,
+)
 
 
 def default_pacing_profile() -> PacingProfile:

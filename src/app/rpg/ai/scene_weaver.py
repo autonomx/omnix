@@ -1,6 +1,7 @@
 """Scene weaver — builds short NPC-to-NPC scene threads."""
 
 from __future__ import annotations
+
 from typing import Any, Dict, List, Optional, Tuple
 
 

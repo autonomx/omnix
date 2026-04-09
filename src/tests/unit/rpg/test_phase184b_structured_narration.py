@@ -1,4 +1,7 @@
-from app.rpg.ai.world_scene_narrator import build_structured_narration, apply_narration_emphasis
+from app.rpg.ai.world_scene_narrator import (
+    apply_narration_emphasis,
+    build_structured_narration,
+)
 
 
 def test_build_structured_narration_includes_required_blocks():

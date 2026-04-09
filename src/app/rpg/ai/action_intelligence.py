@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-
 _ALLOWED_ACTION_TYPES = {
     "attack_melee",
     "attack_ranged",

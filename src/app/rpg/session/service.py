@@ -3,13 +3,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.session.ambient_builder import (
+    ensure_ambient_runtime_state,
+    normalize_ambient_state,
+)
 from app.rpg.session.durable_store import (
     archive_session_on_disk,
     list_sessions_from_disk,
     load_session_from_disk,
     save_session_to_disk,
 )
-from app.rpg.session.ambient_builder import ensure_ambient_runtime_state, normalize_ambient_state
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.package_bridge import package_to_session, session_to_package
 from app.rpg.validation.integrity import (

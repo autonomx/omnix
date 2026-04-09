@@ -198,7 +198,10 @@ def generate_world_bootstrap_proposal(
             },
         }
     """
-    from .llm_world_parser import normalize_generated_world_package, parse_world_bootstrap_response
+    from .llm_world_parser import (
+        normalize_generated_world_package,
+        parse_world_bootstrap_response,
+    )
 
     prefs = dict(preferences or {})
     generated_at = datetime.now(timezone.utc).isoformat()

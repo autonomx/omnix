@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 _SKILL_XP_ACTION_ALLOWLIST = {
     "attack_melee",
     "attack_ranged",

@@ -137,19 +137,28 @@ class TestNormalizeAmbientState:
     """Verify bounded trimming."""
 
     def test_queue_trimmed_to_max(self):
-        from app.rpg.session.ambient_builder import normalize_ambient_state, _MAX_AMBIENT_QUEUE
+        from app.rpg.session.ambient_builder import (
+            _MAX_AMBIENT_QUEUE,
+            normalize_ambient_state,
+        )
         state = {"ambient_queue": [{"seq": i} for i in range(50)]}
         result = normalize_ambient_state(state)
         assert len(result["ambient_queue"]) <= _MAX_AMBIENT_QUEUE
 
     def test_recent_ids_trimmed(self):
-        from app.rpg.session.ambient_builder import normalize_ambient_state, _MAX_RECENT_AMBIENT_IDS
+        from app.rpg.session.ambient_builder import (
+            _MAX_RECENT_AMBIENT_IDS,
+            normalize_ambient_state,
+        )
         state = {"recent_ambient_ids": [f"id:{i}" for i in range(100)]}
         result = normalize_ambient_state(state)
         assert len(result["recent_ambient_ids"]) <= _MAX_RECENT_AMBIENT_IDS
 
     def test_cooldowns_trimmed(self):
-        from app.rpg.session.ambient_builder import normalize_ambient_state, _MAX_AMBIENT_COOLDOWNS
+        from app.rpg.session.ambient_builder import (
+            _MAX_AMBIENT_COOLDOWNS,
+            normalize_ambient_state,
+        )
         state = {"ambient_cooldowns": {f"key:{i}": i for i in range(100)}}
         result = normalize_ambient_state(state)
         assert len(result["ambient_cooldowns"]) <= _MAX_AMBIENT_COOLDOWNS
@@ -296,7 +305,10 @@ class TestAmbientQueue:
     """Verify queue operations."""
 
     def test_enqueue_assigns_seq(self):
-        from app.rpg.session.ambient_builder import enqueue_ambient_updates, ensure_ambient_runtime_state
+        from app.rpg.session.ambient_builder import (
+            enqueue_ambient_updates,
+            ensure_ambient_runtime_state,
+        )
         state = ensure_ambient_runtime_state({})
         updates = [_make_update(kind="world_event", text="Test")]
         state = enqueue_ambient_updates(state, updates)
@@ -305,7 +317,10 @@ class TestAmbientQueue:
         assert state["ambient_queue"][0]["ambient_id"] == "ambient:1"
 
     def test_enqueue_increments_seq(self):
-        from app.rpg.session.ambient_builder import enqueue_ambient_updates, ensure_ambient_runtime_state
+        from app.rpg.session.ambient_builder import (
+            enqueue_ambient_updates,
+            ensure_ambient_runtime_state,
+        )
         state = ensure_ambient_runtime_state({"ambient_seq": 10})
         updates = [_make_update(kind="world_event", text="A"), _make_update(kind="arrival", text="B")]
         state = enqueue_ambient_updates(state, updates)
@@ -313,14 +328,22 @@ class TestAmbientQueue:
         assert len(state["ambient_queue"]) == 2
 
     def test_queue_bounded(self):
-        from app.rpg.session.ambient_builder import enqueue_ambient_updates, ensure_ambient_runtime_state, _MAX_AMBIENT_QUEUE
+        from app.rpg.session.ambient_builder import (
+            _MAX_AMBIENT_QUEUE,
+            enqueue_ambient_updates,
+            ensure_ambient_runtime_state,
+        )
         state = ensure_ambient_runtime_state({})
         big_batch = [_make_update(kind="world_event", text=f"E{i}") for i in range(50)]
         state = enqueue_ambient_updates(state, big_batch)
         assert len(state["ambient_queue"]) <= _MAX_AMBIENT_QUEUE
 
     def test_get_pending_after_seq(self):
-        from app.rpg.session.ambient_builder import enqueue_ambient_updates, ensure_ambient_runtime_state, get_pending_ambient_updates
+        from app.rpg.session.ambient_builder import (
+            enqueue_ambient_updates,
+            ensure_ambient_runtime_state,
+            get_pending_ambient_updates,
+        )
         state = ensure_ambient_runtime_state({})
         updates = [_make_update(kind="world_event", text=f"E{i}") for i in range(5)]
         state = enqueue_ambient_updates(state, updates)
@@ -330,7 +353,11 @@ class TestAmbientQueue:
         assert all(p["seq"] > 2 for p in pending)
 
     def test_get_pending_respects_limit(self):
-        from app.rpg.session.ambient_builder import enqueue_ambient_updates, ensure_ambient_runtime_state, get_pending_ambient_updates
+        from app.rpg.session.ambient_builder import (
+            enqueue_ambient_updates,
+            ensure_ambient_runtime_state,
+            get_pending_ambient_updates,
+        )
         state = ensure_ambient_runtime_state({})
         updates = [_make_update(kind="world_event", text=f"E{i}") for i in range(10)]
         state = enqueue_ambient_updates(state, updates)
@@ -339,14 +366,20 @@ class TestAmbientQueue:
         assert len(pending) == 3
 
     def test_acknowledge_updates(self):
-        from app.rpg.session.ambient_builder import acknowledge_ambient_updates, ensure_ambient_runtime_state
+        from app.rpg.session.ambient_builder import (
+            acknowledge_ambient_updates,
+            ensure_ambient_runtime_state,
+        )
         state = ensure_ambient_runtime_state({"ambient_seq": 10})
         session = {"runtime_state": state}
         session = acknowledge_ambient_updates(session, up_to_seq=7)
         assert session["runtime_state"]["subscription_state"]["last_polled_seq"] == 7
 
     def test_metrics_track_emitted(self):
-        from app.rpg.session.ambient_builder import enqueue_ambient_updates, ensure_ambient_runtime_state
+        from app.rpg.session.ambient_builder import (
+            enqueue_ambient_updates,
+            ensure_ambient_runtime_state,
+        )
         state = ensure_ambient_runtime_state({})
         updates = [_make_update(kind="world_event", text="Test")]
         state = enqueue_ambient_updates(state, updates)
@@ -716,12 +749,12 @@ class TestHardCaps:
 
     def test_caps_are_positive_integers(self):
         from app.rpg.session.ambient_builder import (
-            _MAX_AMBIENT_QUEUE,
-            _MAX_RECENT_AMBIENT_IDS,
-            _MAX_AMBIENT_COOLDOWNS,
-            _MAX_IDLE_TICKS_PER_REQUEST,
-            _MAX_RESUME_CATCHUP_TICKS,
             _MAX_AMBIENT_BATCH_PER_DELIVERY,
+            _MAX_AMBIENT_COOLDOWNS,
+            _MAX_AMBIENT_QUEUE,
+            _MAX_IDLE_TICKS_PER_REQUEST,
+            _MAX_RECENT_AMBIENT_IDS,
+            _MAX_RESUME_CATCHUP_TICKS,
         )
         for cap in [_MAX_AMBIENT_QUEUE, _MAX_RECENT_AMBIENT_IDS, _MAX_AMBIENT_COOLDOWNS,
                      _MAX_IDLE_TICKS_PER_REQUEST, _MAX_RESUME_CATCHUP_TICKS, _MAX_AMBIENT_BATCH_PER_DELIVERY]:
@@ -729,8 +762,10 @@ class TestHardCaps:
 
     def test_delivery_limit_respected(self):
         from app.rpg.session.ambient_builder import (
-            enqueue_ambient_updates, ensure_ambient_runtime_state,
-            get_pending_ambient_updates, _MAX_AMBIENT_BATCH_PER_DELIVERY,
+            _MAX_AMBIENT_BATCH_PER_DELIVERY,
+            enqueue_ambient_updates,
+            ensure_ambient_runtime_state,
+            get_pending_ambient_updates,
         )
         state = ensure_ambient_runtime_state({})
         updates = [_make_update(kind="world_event", text=f"E{i}") for i in range(20)]

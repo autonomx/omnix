@@ -18,32 +18,7 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 from app.rpg.action_resolver import resolve_player_action
-from app.rpg.ai.world_scene_narrator import narrate_scene
-from app.rpg.creator.defaults import apply_adventure_defaults
-from app.rpg.creator.world_player_actions import (
-    ESCALATE_CONFLICT,
-    INTERVENE_THREAD,
-    SUPPORT_FACTION,
-    apply_player_action,
-)
-from app.rpg.creator.world_scene_generator import generate_scenes_from_simulation
-from app.rpg.creator.world_simulation import (
-    build_initial_simulation_state,
-    step_simulation_state,
-    summarize_simulation_step,
-)
-from app.rpg.session.ambient_builder import (
-    _MAX_IDLE_TICKS_PER_REQUEST,
-    _MAX_RESUME_CATCHUP_TICKS,
-    build_ambient_updates,
-    coalesce_ambient_updates,
-    enqueue_ambient_updates,
-    ensure_ambient_runtime_state,
-    get_pending_ambient_updates,
-    is_player_visible_update,
-    normalize_ambient_state,
-    score_ambient_salience,
-)
+from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.ai.ambient_dialogue import (
     apply_dialogue_cooldowns,
     build_ambient_dialogue_candidates,
@@ -63,18 +38,21 @@ from app.rpg.ai.scene_weaver import (
     build_scene_candidates,
     select_scene_candidate,
 )
-from app.rpg.world.world_event_director import (
-    apply_world_behavior_to_events,
-    build_world_event_candidates,
-    convert_events_to_ambient_updates,
-    filter_world_events,
-)
-from app.rpg.ai.world_scene_narrator import narrate_ambient_update
-from app.rpg.session.ambient_policy import (
-    classify_ambient_delivery,
-    record_interrupt,
-)
+from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
+from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.schema import normalize_world_behavior_config
+from app.rpg.creator.world_player_actions import (
+    ESCALATE_CONFLICT,
+    INTERVENE_THREAD,
+    SUPPORT_FACTION,
+    apply_player_action,
+)
+from app.rpg.creator.world_scene_generator import generate_scenes_from_simulation
+from app.rpg.creator.world_simulation import (
+    build_initial_simulation_state,
+    step_simulation_state,
+    summarize_simulation_step,
+)
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
@@ -90,7 +68,6 @@ from app.rpg.items.world_items import (
     pickup_world_item,
 )
 from app.rpg.llm_app_gateway import build_app_llm_gateway
-from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.memory.actor_memory_state import ensure_actor_memory_state
 from app.rpg.memory.dialogue_context import (
     build_dialogue_memory_context,
@@ -119,8 +96,30 @@ from app.rpg.presentation.memory_inspector import build_memory_ui_summary
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_nearby_npc_cards
 from app.rpg.presentation.visual_state import ensure_visual_state
+from app.rpg.session.ambient_builder import (
+    _MAX_IDLE_TICKS_PER_REQUEST,
+    _MAX_RESUME_CATCHUP_TICKS,
+    build_ambient_updates,
+    coalesce_ambient_updates,
+    enqueue_ambient_updates,
+    ensure_ambient_runtime_state,
+    get_pending_ambient_updates,
+    is_player_visible_update,
+    normalize_ambient_state,
+    score_ambient_salience,
+)
+from app.rpg.session.ambient_policy import (
+    classify_ambient_delivery,
+    record_interrupt,
+)
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
+from app.rpg.world.world_event_director import (
+    apply_world_behavior_to_events,
+    build_world_event_candidates,
+    convert_events_to_ambient_updates,
+    filter_world_events,
+)
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
@@ -162,6 +161,7 @@ def _ensure_scene_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]
     scene_runtime["recent_scene_ids"] = _safe_list(scene_runtime.get("recent_scene_ids"))[-16:]
     scene_runtime.setdefault("recent_scene_pairs", [])
     scene_runtime["recent_scene_pairs"] = _safe_list(scene_runtime.get("recent_scene_pairs"))[-16:]
+    scene_runtime["last_scene_tick"] = int(scene_runtime.get("last_scene_tick", -999) or -999)
     runtime_state["scene_runtime"] = scene_runtime
     return runtime_state
 
@@ -346,6 +346,41 @@ def _check_opening_resolution(
     if resolved:
         opening_rt["opening_resolved"] = True
         opening_rt["active"] = False
+
+
+# ── Known NPC tracking ─────────────────────────────────────────────────────
+
+_MAX_KNOWN_NPC_IDS = 64
+
+def _update_known_npc_ids(runtime_state: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Update known NPC list from current player presence.
+    
+    Adds nearby NPCs to known list (append only, never remove).
+    Maintains hard cap to prevent unbounded growth.
+    Present NPCs are always drawn from current simulation state, not known list.
+    """
+    runtime_state = dict(runtime_state) if isinstance(runtime_state, dict) else {}
+    simulation_state = _safe_dict(simulation_state)
+    
+    known = _safe_list(runtime_state.get("known_npc_ids", []))
+    known_set = set(str(x).strip() for x in known if str(x).strip())
+    
+    # Add currently nearby NPCs
+    player = _safe_dict(simulation_state.get("player_state"))
+    nearby = _safe_list(player.get("nearby_npc_ids", []))
+    
+    for npc_id in nearby:
+        npc_id = _safe_str(npc_id)
+        if npc_id and npc_id not in known_set:
+            known.append(npc_id)
+            known_set.add(npc_id)
+    
+    # Cap to maximum size (keep most recent entries)
+    if len(known) > _MAX_KNOWN_NPC_IDS:
+        known = known[-_MAX_KNOWN_NPC_IDS:]
+    
+    runtime_state["known_npc_ids"] = known
+    return runtime_state
 
     return opening_rt
 
@@ -1133,6 +1168,10 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     session["runtime_state"] = runtime_state
     runtime_state["opening_runtime"] = _check_opening_resolution(session)
 
+    # Update known NPC list based on current presence
+    runtime_state = _update_known_npc_ids(runtime_state, after_state)
+    session["runtime_state"] = runtime_state
+    
     session["setup_payload"] = next_setup
     session["simulation_state"] = after_state
     session["runtime_state"] = runtime_state
@@ -1297,11 +1336,6 @@ def _apply_idle_tick_to_session(
     # Phase F4: apply world behavior bias to initiative candidates
     initiative_candidates = apply_world_behavior_bias(initiative_candidates, world_behavior)
     selected_initiative = select_npc_initiative_candidate(initiative_candidates, runtime_state)
-    if selected_initiative:
-        runtime_state = apply_initiative_cooldowns(runtime_state, selected_initiative)
-        raw_updates.append(
-            _make_initiative_update_from_candidate(selected_initiative)
-        )
 
     # ── Phase G: scene weaving ───────────────────────────────────────
     scene_candidates = build_scene_candidates(
@@ -1312,6 +1346,25 @@ def _apply_idle_tick_to_session(
 
     selected_scene = select_scene_candidate(scene_candidates, runtime_state)
     scene_beats = []
+    scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
+    current_tick = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
+    last_scene_tick = int(scene_runtime.get("last_scene_tick", -999) or -999)
+
+    # Simple scene cadence: no more than one scene every 2 ticks.
+    if selected_scene and (current_tick - last_scene_tick) < 2:
+        selected_scene = None
+
+    # Prevent the same NPC from both initiating solo and appearing in a scene this tick.
+    if selected_scene and selected_initiative:
+        scene_participants = set(_safe_list(selected_scene.get("participants")))
+        if _safe_str(selected_initiative.get("speaker_id")) in scene_participants:
+            selected_initiative = None
+
+    if selected_initiative:
+        runtime_state = apply_initiative_cooldowns(runtime_state, selected_initiative)
+        raw_updates.append(
+            _make_initiative_update_from_candidate(selected_initiative)
+        )
 
     if selected_scene:
         runtime_state = apply_scene_cooldowns(runtime_state, selected_scene)
@@ -1319,7 +1372,11 @@ def _apply_idle_tick_to_session(
             selected_scene,
             after_state,
             runtime_state,
-        )
+        )[:3]
+
+        scene_runtime = _safe_dict(runtime_state.get("scene_runtime"))
+        scene_runtime["last_scene_tick"] = current_tick
+        runtime_state["scene_runtime"] = scene_runtime
 
         for beat in scene_beats:
             raw_updates.append(_make_scene_update_from_beat(beat))
@@ -1417,6 +1474,10 @@ def _apply_idle_tick_to_session(
     }
     runtime_state["llm_records"].append(idle_record)
     runtime_state["llm_records_index"][idle_capture_key] = idle_record
+    session["runtime_state"] = runtime_state
+
+    # Update known NPC list after idle tick
+    runtime_state = _update_known_npc_ids(runtime_state, after_state)
     session["runtime_state"] = runtime_state
 
     return {
@@ -1696,7 +1757,10 @@ def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[s
     
     # If there were excess ticks, generate a summary update
     if excess_ticks > 0:
-        from app.rpg.session.ambient_builder import make_ambient_update, enqueue_ambient_updates
+        from app.rpg.session.ambient_builder import (
+            enqueue_ambient_updates,
+            make_ambient_update,
+        )
         session = _safe_dict(result.get("session"))
         runtime_state = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
         

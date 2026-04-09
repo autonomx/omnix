@@ -156,6 +156,30 @@ _WORLD_BEHAVIOR_DEFAULTS: dict[str, str] = {
 }
 
 
+_RESPONSE_LENGTH_ENUMS: dict[str, tuple[str, ...]] = {
+    "narrator_length": ("short", "medium", "long"),
+    "character_length": ("short", "medium", "long"),
+}
+
+_RESPONSE_LENGTH_DEFAULTS: dict[str, str] = {
+    "narrator_length": "medium",
+    "character_length": "medium",
+}
+
+
+def normalize_response_length_config(value: dict | None) -> dict:
+    if not isinstance(value, dict):
+        return dict(_RESPONSE_LENGTH_DEFAULTS)
+    result: dict[str, str] = {}
+    for key, allowed in _RESPONSE_LENGTH_ENUMS.items():
+        raw = value.get(key)
+        if isinstance(raw, str) and raw.strip().lower() in allowed:
+            result[key] = raw.strip().lower()
+        else:
+            result[key] = _RESPONSE_LENGTH_DEFAULTS[key]
+    return result
+
+
 def normalize_world_behavior_config(value: dict | None) -> dict:
     """Normalize a world_behavior config dict.
 
@@ -342,6 +366,9 @@ def normalize_creator_setup(payload: dict) -> dict:
     result["world_behavior"] = normalize_world_behavior_config(
         result.get("world_behavior")
     )
+    result["response_length"] = normalize_response_length_config(
+        result.get("response_length")
+    )
 
     return result
 
@@ -387,6 +414,7 @@ class AdventureSetup:
 
     # Phase F — World Behavior Customization
     world_behavior: dict[str, str] = field(default_factory=lambda: dict(_WORLD_BEHAVIOR_DEFAULTS))
+    response_length: dict[str, str] = field(default_factory=lambda: dict(_RESPONSE_LENGTH_DEFAULTS))
 
     def validate(self) -> None:
         if not self.setup_id:
@@ -510,6 +538,7 @@ class AdventureSetup:
         result.desired_content_mix = normalize_desired_content_mix(result.desired_content_mix)
         result.starting_resources = normalize_starting_resources(result.starting_resources)
         result.world_behavior = normalize_world_behavior_config(result.world_behavior)
+        result.response_length = normalize_response_length_config(result.response_length)
 
         return result
 
@@ -560,6 +589,7 @@ class AdventureSetup:
             "starting_resources": dict(self.starting_resources),
             "opening": dict(self.opening),
             "world_behavior": dict(self.world_behavior),
+            "response_length": dict(self.response_length),
         }
 
     @classmethod
@@ -604,4 +634,5 @@ class AdventureSetup:
             starting_resources=dict(data.get("starting_resources", {})),
             opening=dict(data.get("opening", {})),
             world_behavior=normalize_world_behavior_config(data.get("world_behavior")),
+            response_length=normalize_response_length_config(data.get("response_length")),
         )

@@ -1,1017 +1,424 @@
-Goal
-
-Transform RPG flow from:
-
-player acts
-world replies
-
-into:
-
-world keeps moving
-NPCs make decisions
-NPCs talk to each other
-NPCs talk to the player first
-ambient incidents happen
-the player can be interrupted
-all of it remains deterministic, bounded, replay-safe
-Design principles
-1. Simulation truth first
-
-Ambient activity must come from simulation state, not from the LLM inventing story.
-
-Correct split:
-
-simulation decides what happens
-dialogue/narration decides how it is expressed
-2. Server authoritative
-
-The frontend should never create world events or NPC initiative.
-It may only:
-
-request idle advancement
-subscribe to updates
-render results
-3. Bounded and replay-safe
-
-Everything must be:
-
-tick-based
-recorded
-capped
-deterministic in ordering
-fail-fast in replay when capture is missing
-4. Player relevance filter
-
-The world can be alive without spamming the player.
-Only player-relevant activity should surface to the feed.
-
-System overview
-
-Build this in five layers:
-
-Phase 1 — Ambient simulation advancement
-
-Idle ticks advance the world even when the player does nothing.
-
-Phase 2 — NPC initiative engine
-
-NPCs decide to speak, confront, warn, recruit, gossip, or react without player prompting.
-
-Phase 3 — Interruptions and delivery policy
-
-Urgent events can interrupt; low-priority activity is queued or badged.
-
-Phase 4 — Player-facing ambient feed
-
-The UI renders autonomous activity distinctly from direct turn responses.
-
-Phase 5 — Opening-aware ambient behavior
-
-The new setup/opening data drives early idle activity, so the first 5–10 minutes feel authored, not generic.
-
-Phase 1 — Ambient simulation advancement
-Objective
-
-Advance the world while idle, in a way that produces meaningful nearby activity.
-
-Files
-src/app/rpg/session/runtime.py
-src/app/rpg/session/ambient_builder.py
-src/app/rpg/session/ambient_policy.py
-src/app/rpg/api/rpg_session_routes.py
-What to add
-A. Idle tick cadence policy
-
-Use heartbeat-driven idle advancement, but make the server decide how much progression to apply.
-
-Add helper in runtime.py:
-
-def compute_idle_tick_count(
-    session: dict,
-    *,
-    elapsed_seconds: int,
-    reason: str = "heartbeat",
-) -> int:
-
-Rules:
-
-tab open heartbeat: usually 1 tick
-resume catch-up: capped batch
-active encounter: maybe suppress or reduce ambient chatter ticks
-recent player action: lower ambient aggression briefly
-B. Scene-aware idle advance
-
-Extend _apply_idle_tick_to_session() to build a local scene context after stepping simulation:
-
-current location
-present NPCs
-nearby active factions
-recent world events
-opening metadata from setup if still relevant
-C. Ambient extraction categories
-
-In ambient_builder.py, make sure build_ambient_updates() can emit:
-
-npc_to_player
-npc_to_npc
-world_event
-arrival
-departure
-warning
-combat_start
-quest_prompt
-companion_comment
-system_summary
-D. Salience scoring refinement
-
-Extend salience to account for:
-
-tied to opening conflict
-tied to campaign objective
-tied to player role/background
-repeated same speaker penalty
-repeated same kind penalty
-same location / same scene bonus
-Phase 2 — NPC initiative engine
-Objective
-
-NPCs act and speak first, based on beliefs, goals, tension, and context.
-
-Files
-src/app/rpg/ai/ambient_dialogue.py
-optionally new:
-src/app/rpg/ai/npc_initiative.py
-src/app/rpg/session/runtime.py
-What to add
-A. Split dialogue from initiative
-
-Right now ambient dialogue candidate generation is good, but you should separate:
-
-initiative decision: should this NPC act/talk now?
-dialogue phrasing: what words express that action?
-
-Create new helper file:
-
-src/app/rpg/ai/npc_initiative.py
-
-Add:
-
-def build_npc_initiative_candidates(
-    simulation_state: dict,
-    runtime_state: dict,
-    player_context: dict,
-) -> list[dict]:
-
-Each candidate should have:
-
-kind
-speaker_id
-target_id
-reason
-salience
-interrupt
-action_intent
-location_id
-
-Kinds:
-
-npc_to_player
-npc_to_npc
-warning
-demand
-taunt
-gossip
-companion_comment
-quest_prompt
-recruitment_offer
-plea_for_help
-B. Initiative rules
-
-Use rule-based triggers first.
-
-Examples:
-
-hostile NPC nearby + player idle → taunt/warning
-trusted NPC nearby + active conflict → advice/help
-faction pressure spike near player → messenger/warning
-objective-related NPC present → quest prompt
-companion present + salient event → companion comment
-recent incident + witness nearby → rumor or direct address
-opening hook still unresolved → bias activity toward it
-C. Cooldown model
-
-Keep your existing cooldown model, but expand keys:
-
-speaker:{id}
-kind:{kind}
-pair:{speaker}:{target}
-reason:{reason}
-opening:{hook_id}
-
-This prevents:
-
-same NPC spamming
-same conflict being restated every tick
-same hook firing too often
-D. Deterministic selection
-
-Sort by:
-
-salience descending
-interrupt True first
-opening relevance
-speaker_id
-target_id
-
-No uncontrolled randomness.
-
-Phase 3 — Interruptions and delivery policy
-Objective
-
-Make autonomous activity feel alive without being annoying.
-
-Files
-src/app/rpg/session/ambient_policy.py
-src/app/rpg/session/runtime.py
-src/static/rpg/rpg.js
-What to add
-A. Delivery classes
-
-Keep these three:
-
-interrupt
-badge
-silent
-
-But refine policy.
-
-B. Interrupt rules
-
-Interrupt only when one of these is true:
-
-direct threat
-combat starts
-urgent warning
-quest-critical direct address
-important arrival tied to opening/campaign objective
-companion urgent warning
-
-Everything else:
-
-badge if medium relevance
-silent if low relevance
-C. Player typing rules
-
-Do not make the backend depend on live typing state for truth.
-Let the backend classify urgency canonically.
-Let the frontend decide whether a badge waits while typing.
-
-D. Quiet-window after player action
-
-Add a small suppression window after player turns.
-
-In runtime state:
-
-"post_player_quiet_ticks": 0
-
-After apply_turn():
-
-set to 1 or 2
-
-During idle ticks:
-
-reduce low-priority initiative during quiet window
-still allow urgent interrupts
-
-This prevents ambient spam immediately after each player input.
-
-Phase 4 — Player-facing ambient feed
-Objective
-
-Make autonomous world activity legible and compelling.
-
-Files
-src/static/rpg/rpg.js
-src/static/rpg/rpgDialogueRenderer.js
-src/static/style.css
-What to add
-A. Message type rendering
-
-Render distinct cards for:
-
-narrator event
-NPC speaking to player
-NPC speaking to NPC
-faction/world event
-arrival/departure
-quest prompt
-urgent warning/combat
-B. Ambient thread grouping
-
-If 2–3 related updates happen near each other, group them visually.
-
-Example:
-
-“Raised voices near the gate”
-Bran to guard
-Bran to player
-
-Render as a compact scene thread rather than isolated spam cards.
-
-C. Unread ambient tray
-
-If player is typing, badge items should queue into:
-
-unread badge
-optional compact tray
-flush on blur/send
-D. Optional companion channel
-
-If companion comments become frequent, give them a slightly different style class so they feel helpful rather than noisy.
-
-Phase 5 — Opening-aware ambient behavior
-Objective
-
-Use the stronger setup/opening data so the first 5–10 minutes feel intentionally staged.
-
-Files
-src/app/rpg/session/runtime.py
-src/app/rpg/creator/defaults.py
-src/app/rpg/services/adventure_builder_service.py
-src/app/rpg/ai/npc_initiative.py
-src/app/rpg/session/ambient_builder.py
-What to add
-A. Opening pressure state
-
-When adventure launches, persist opening-aware runtime metadata:
-
-"opening_runtime": {
-    "active": True,
-    "scene_frame": ...,
-    "immediate_problem": ...,
-    "player_involvement_reason": ...,
-    "starter_conflict": ...,
-    "present_npc_ids": [...],
-    "first_choices": [...],
-    "opening_resolved": False,
-}
-B. Opening bias in initiative
-
-While opening_resolved == False:
-
-boost salience for NPCs tied to opening
-boost world events tied to starter conflict
-bias companion and witness dialogue toward opening problem
-suppress unrelated generic chatter unless very strong
-C. Opening resolution detection
-
-Add simple rule-based checks:
-
-player acted on opening conflict
-key opening NPC engaged
-opening location left
-first conflict escalated or resolved
-
-Then lower opening bias gradually.
-
-This makes the early game feel authored without railroading.
-
-Phase 6 — World event initiative
-Objective
-
-Let the world produce non-dialogue activity on its own.
-
-Files
-src/app/rpg/session/ambient_builder.py
-maybe new:
-src/app/rpg/world/world_event_director.py
-What to add
-A. Event classes
-
-World may autonomously surface:
-
-faction movement
-rumor spread
-resource shortage
-public disturbance
-weather/environment change
-patrol arrival
-market lockdown
-ritual/protest/ceremony
-accident/fire/explosion
-scouting report
-B. Event surfacing rules
-
-Only emit if:
-
-visible to player
-nearby or relevant to objective/opening
-sufficiently salient
-not duplicate of recent event
-C. Convert to player-facing forms
-
-Examples:
-
-narrator line
-NPC messenger
-scene change
-system summary
-Phase 7 — Quest prompting without hard rails
-Objective
-
-Make the world proactively offer direction without turning into scripted objective spam.
-
-Files
-src/app/rpg/ai/npc_initiative.py
-src/app/rpg/session/ambient_builder.py
-src/app/rpg/services/adventure_builder_service.py
-What to add
-A. Quest-prompt candidate type
-
-New initiative kind:
-
-quest_prompt
-
-Examples:
-
-a guard asks for help
-a companion suggests a lead
-a witness shares actionable info
-an employer arrives with a job
-a faction rep makes an offer
-B. Constraints
-
-Quest prompts must:
-
-tie to objective/opening/conflict
-not repeat too often
-not override player agency
-not fabricate impossible tasks
-C. UI rendering
-
-Quest prompts should feel like:
-
-actionable diegetic dialogue
-not MMO popups
-Phase 8 — Replay/capture safety
-Objective
-
-Keep ambient initiative and narration replay-safe.
-
-Files
-src/app/rpg/session/runtime.py
-src/app/rpg/ai/world_scene_narrator.py
-replay/capture helpers already in your codebase
-What to add
-A. Capture initiative decision
-
-For each idle tick, capture:
-
-selected initiative candidate
-selected dialogue candidate
-narrated update text if LLM used
-delivery classification
-B. Replay validation
-
-Replay must fail if expected ambient update or narrated text is missing.
-
-C. Do not regenerate during replay
-
-Never re-run LLM during replay.
-Never reselect candidates differently during replay.
-
-Phase 9 — Tests
-Backend tests
-
-Add tests for:
-
-idle tick emits initiative without player input
-hostile NPC can interrupt
-companion can comment
-opening-aware salience boosts work
-quiet window suppresses chatter after player turn
-unrelated chatter suppressed while opening unresolved
-world events are filtered by visibility
-queue remains bounded
-replay fails when ambient capture missing
-Frontend tests if available
-badge items queue while typing
-interrupt renders immediately
-unread flush works
-duplicate SSE/poll events not duplicated in feed
-File-by-file implementation map
-New files recommended
-src/app/rpg/ai/npc_initiative.py
-optional src/app/rpg/world/world_event_director.py
-Must modify
-src/app/rpg/session/runtime.py
-src/app/rpg/ai/ambient_dialogue.py
-src/app/rpg/session/ambient_builder.py
-src/app/rpg/session/ambient_policy.py
-src/app/rpg/api/rpg_session_routes.py
-src/static/rpg/rpg.js
-src/static/style.css
-Suggested implementation order for coding LLM
-Part 1
-
-Create npc_initiative.py, add initiative candidate building and selection.
-
-Part 2
-
-Wire initiative into idle tick runtime and opening-aware salience.
-
-Part 3
-
-Extend ambient builder and policy for quest prompts, world events, and quiet-window logic.
-
-Part 4
-
-Update frontend feed rendering, unread tray, and grouping.
-
-Part 5
-
-Add replay capture and tests.
-
-Literal instruction block for coding LLM
-
-Implement a world-acts-without-player-input system for the RPG as a deterministic server-authoritative ambient initiative layer. Add an NPC initiative engine that produces rule-based autonomous candidates such as NPC-to-player speech, NPC-to-NPC speech, warnings, taunts, companion comments, quest prompts, and recruitment/help requests based on beliefs, goals, faction pressure, nearby context, and opening-state relevance. Wire this into idle ticking so simulation advances without player input, candidate salience is scored deterministically, selected activity is narrated and queued as bounded ambient updates, and delivery is classified as interrupt, badge, or silent. Add opening-aware runtime bias so starter conflict, opening NPCs, and immediate problems dominate early idle behavior until resolved. Add quiet-window suppression after player turns, player-relevant world event surfacing, frontend ambient feed rendering with unread/badge behavior, replay-safe capture of initiative/narration decisions, and tests for autonomous activity, interruption policy, opening bias, bounded queues, and replay failure conditions.
-
-
-
-Phase F — World Behavior Customization / Director Controls
-
-This phase gives the player or creator control over how alive, aggressive, chatty, reactive, and story-directed the world feels.
-
-Without this phase, even a good ambient system can feel wrong because different players want very different experiences:
-
-some want constant interruptions
-some want a quieter exploration game
-some want heavy faction activity
-some want NPC banter but not forced quest prompting
-some want slow-burn realism
-some want high-drama story pressure
-
-So this phase should make the ambient system tunable, not one-size-fits-all.
-
-Phase F — World Behavior Customization / Director Controls
-Objective
-
-Let the creator and/or player customize:
-
-how often the world acts without input
-how often NPCs initiate
-how often interruptions happen
-how strongly the opening/conflict is pushed
-how much ambient dialogue vs world events appear
-how aggressive quest prompting is
-how reactive factions are
-how much the simulation pressures the player
-how noisy companions are
-how “story directed” vs “sandbox autonomous” the experience feels
-
-This should be available in a Settings / Director / World Behavior panel.
-
-Design principle
-
-These controls must bias the system, not override simulation truth.
-
-Correct model:
-
-settings affect salience, cooldowns, surfacing thresholds, pacing
-settings do not directly force impossible events
-settings do not let presentation invent truth
-
-So:
-
-“High NPC initiative” means lower cooldowns / higher candidate weights
-not “always make NPCs talk every tick”
-Where this belongs
-
-You can expose it in two places:
-
-Option A — Adventure Builder
-
-Good for creator-facing setup defaults.
-
-Put it under:
-
-Setting panel
-or a dedicated World Behavior / Director step
-Option B — In-game Settings
-
-Good for player live tuning during play.
-
-This is valuable because a player may start wanting “high drama” and later switch to “quieter sandbox”.
-
-Best approach
-
-Support both:
-
-builder default settings saved into the adventure
-runtime session override settings for current playthrough
-What should be customizable
-1. Ambient world activity
-
-How often non-player activity appears.
-
-Field:
-
-"ambient_activity": "low" | "medium" | "high"
-
-Effect:
-
-adjusts idle tick surfacing threshold
-adjusts world-event emission frequency
-adjusts coalescing sensitivity
-2. NPC initiative frequency
-
-How often NPCs speak or act first.
-
-Field:
-
-"npc_initiative": "low" | "medium" | "high"
-
-Effect:
-
-candidate salience bonus/penalty
-cooldown duration scaling
-per-scene chatter caps
-3. Interruption intensity
-
-How often the player gets interrupted.
-
-Field:
-
-"interruptions": "minimal" | "normal" | "frequent"
-
-Effect:
-
-interrupt threshold
-badge vs interrupt cutoff
-quiet-window strength
-4. Quest prompting strength
-
-How much the world proactively offers hooks/jobs/leads.
-
-Field:
-
-"quest_prompting": "off" | "light" | "guided" | "strong"
-
-Effect:
-
-enables/disables quest_prompt candidates
-changes salience of opening/objective prompts
-changes repeat cooldowns for lead-offers
-5. Companion talkativeness
-
-How much companions comment/react.
-
-Field:
-
-"companion_chatter": "quiet" | "normal" | "talkative"
-
-Effect:
-
-companion comment candidate weights
-companion cooldowns
-companion interruption permissions
-6. Faction/world pressure
-
-How strongly the world escalates while idle.
-
-Field:
-
-"world_pressure": "gentle" | "standard" | "harsh"
-
-Effect:
-
-faction pressure surfacing
-escalation salience
-urgency of hostile/world-event activity
-
-This should bias surfacing first, not directly rewrite simulation logic unless you explicitly want that later.
-
-7. Opening guidance strength
-
-How strongly the system keeps pushing the opening conflict.
-
-Field:
-
-"opening_guidance": "light" | "normal" | "strong"
-
-Effect:
-
-opening bias in early initiative scoring
-suppression of unrelated chatter
-quest prompt salience tied to starter conflict
-8. Story direction vs sandbox autonomy
-
-The most important tuning axis.
-
-Field:
-
-"play_style_bias": "sandbox" | "balanced" | "story_directed"
-
-Effect:
-
-sandbox:
-weaker opening/objective bias
-more incidental world behavior
-less proactive hook surfacing
-story_directed:
-stronger objective/opening bias
-more NPCs steering toward meaningful conflict
-more structured prompts and interruptions
-
-This should be a bias, not a rail.
-
-9. Content mix influence on ambient behavior
-
-You already added desired_content_mix. Use it at runtime too.
-
-Effect:
-
-mystery-heavy → more rumors, witnesses, clues, quiet pressure
-combat-heavy → more threat/warning/combat-start surfacing
-intrigue-heavy → more faction messengers, offers, political whispers
-exploration-heavy → more environmental/world-event surfacing
-
-This is a strong bridge between builder setup and ambient runtime.
-
-Data model changes
-Builder / canonical setup
-
-Add a structured config object:
-
-File
-
-src/app/rpg/creator/schema.py
-
-"world_behavior": {
-    "ambient_activity": "medium",
-    "npc_initiative": "medium",
-    "interruptions": "normal",
-    "quest_prompting": "guided",
-    "companion_chatter": "normal",
-    "world_pressure": "standard",
-    "opening_guidance": "normal",
-    "play_style_bias": "balanced",
-}
-
-Add normalization helper:
-
-def normalize_world_behavior_config(value: dict) -> dict:
-
-Allowed enums only. Fill defaults if missing.
-
-Also add to AdventureSetup.
-
-Runtime session state
-
-Allow runtime override:
-
-File
-
-src/app/rpg/session/runtime.py
-
-"world_behavior_override": {}
-
-At runtime, effective config should be:
-
-effective_world_behavior = merge(setup.world_behavior, runtime_override)
-
-Runtime override should be optional and session-local.
-
-Backend implementation plan
-F1 — Schema + defaults
-Files
-src/app/rpg/creator/schema.py
-src/app/rpg/creator/defaults.py
-Add
-normalized world_behavior
-genre-sensitive defaults if desired
-
-Example defaults:
-
-mystery/noir → lower ambient activity, stronger quest prompting, stronger opening guidance
-fantasy adventure → medium everything
-grimdark/survival → high world pressure, lower chatter, stronger interruptions
-political/intrigue → higher NPC initiative, lower combat surfacing, strong faction activity
-F2 — Builder UI controls
-Files
-src/static/rpg/adventureBuilderState.js
-src/static/rpg/adventureBuilder.js
-Add panel
-
-Either:
-
-World Behavior section under Settings
-or
-Director Controls section
-
-Controls:
-
-dropdowns or segmented toggles for each behavior axis
-short explanatory help text
-
-Example UI copy:
-
-Ambient Activity: how often the world advances visibly without your input
-NPC Initiative: how often nearby NPCs speak or act first
-Interruptions: how often urgent events interrupt your flow
-Play Style Bias: sandbox vs story-directed
-F3 — Runtime effective config helper
-File
-
-src/app/rpg/session/runtime.py
-
-Add:
-
-def get_effective_world_behavior(session: dict) -> dict:
-
-This should merge:
-
-setup config
-runtime override
-
-Use it inside idle tick path.
-
-F4 — Apply behavior config to initiative scoring
-Files
-src/app/rpg/ai/npc_initiative.py
-src/app/rpg/session/ambient_builder.py
-src/app/rpg/session/ambient_policy.py
-Examples
-Ambient activity
-low: require higher salience to emit
-high: lower threshold, but still bounded
-NPC initiative
-low: longer speaker cooldowns
-high: shorter cooldowns and slight salience boost
-Interruptions
-minimal: more badge, less interrupt
-frequent: lower interrupt threshold
-Quest prompting
-off/light: suppress many quest_prompt candidates
-strong: boost objective-tied prompts
-Companion chatter
-quiet: companion candidate penalty
-talkative: companion salience boost, shorter cooldown
-Opening guidance
-strong: opening-tied candidates boosted for more ticks
-light: opening bias decays faster
-Play style bias
-sandbox: bonus for incidental world activity, penalty for explicit steering
-story_directed: bonus for objective/opening-tied candidates, stronger hook surfacing
-F5 — Add runtime settings route
-File
-
-src/app/rpg/api/rpg_session_routes.py
-
-Add endpoint:
-
-POST /api/rpg/session/world_behavior
-
-Request:
-
-{
-  "session_id": "...",
-  "world_behavior_override": {
-    "interruptions": "minimal",
-    "npc_initiative": "high"
-  }
-}
-
-Response:
-
-{
-  "ok": true,
-  "world_behavior": {...effective config...}
-}
-
-This allows live tuning during play.
-
-F6 — Add frontend in-game settings UI
-Files
-src/static/rpg/rpg.js
-maybe settings modal component if you have one
-
-Add a small panel or modal:
-
-Ambient Activity
-NPC Initiative
-Interruptions
-Quest Prompting
-Companion Chatter
-Play Style Bias
-
-This can be lightweight at first.
-
-Interaction with ambient system
-
-This new phase should plug directly into the “world acts without player input” system.
-
-Example mapping
-Low-interruption sandbox
-{
-  "ambient_activity": "medium",
-  "npc_initiative": "low",
-  "interruptions": "minimal",
-  "quest_prompting": "light",
-  "companion_chatter": "quiet",
-  "world_pressure": "standard",
-  "opening_guidance": "light",
-  "play_style_bias": "sandbox"
-}
-Story-heavy dramatic campaign
-{
-  "ambient_activity": "high",
-  "npc_initiative": "high",
-  "interruptions": "frequent",
-  "quest_prompting": "strong",
-  "companion_chatter": "normal",
-  "world_pressure": "harsh",
-  "opening_guidance": "strong",
-  "play_style_bias": "story_directed"
-}
-Balanced default
-{
-  "ambient_activity": "medium",
-  "npc_initiative": "medium",
-  "interruptions": "normal",
-  "quest_prompting": "guided",
-  "companion_chatter": "normal",
-  "world_pressure": "standard",
-  "opening_guidance": "normal",
-  "play_style_bias": "balanced"
-}
-Validation rules
-File
-
-src/app/rpg/creator/validation.py
-
-Add validation for world_behavior:
-
-unknown enum values
-incompatible combinations only as notices, not errors
-
-Examples:
-
-ambient_activity=low + interruptions=frequent → notice: contradictory feel
-sandbox + strong opening guidance → notice, not block
-quest_prompting=off + weak premise/opening → notice: player may lack direction
-Preview integration
-File
-
-src/app/rpg/services/adventure_builder_service.py
-
-In preview, add:
-
-"world_behavior_preview": {
-    "summary": "This adventure is configured as a story-directed, moderately reactive world with frequent NPC initiative and light companion chatter."
-}
-
-This helps the player understand how the world will behave before launch.
-
-Tests
-Backend
-
-Add tests for:
-
-normalization of world_behavior
-effective config merge with runtime override
-initiative scoring changes by config
-interruption classification changes by config
-opening bias changes by config
-invalid values normalized safely
-Frontend if available
-settings persist in builder state
-runtime override requests send correctly
-settings modal reflects current values
-Phase list now
-
-Phase A — Stronger creator inputs
-Phase B — Launch-quality opening builder
-Phase C — Semantic validation
-Phase D — Better preview
-Phase E — LLM-generated unique world bootstrap
-Phase F — World Behavior Customization / Director Controls
-Phase G — World acts without player input
-
-That order is better than putting customization after the ambient system, because Phase F gives you the knobs the ambient system should respect from day one.
-
-Recommendation on naming
-
-I would call the UI section:
-
-World Behavior for player-facing simplicity
-
-and internally maybe:
-
-director_settings or world_behavior
-
-Avoid “director” in the visible UI unless you want a more GM/dev-oriented tone.
-
-Literal instruction block for coding LLM
-
-Add a new Phase F before or alongside the ambient initiative system that introduces structured world-behavior customization settings in the builder and runtime. Add a normalized world_behavior config to adventure setup and optional runtime override settings for ambient activity, NPC initiative, interruptions, quest prompting, companion chatter, world pressure, opening guidance, and play-style bias. Expose these in the adventure builder Settings or World Behavior panel and add an in-game session override endpoint and UI. Then wire the effective behavior config into idle tick surfacing, initiative candidate scoring, cooldown scaling, interruption thresholds, quest prompt frequency, companion comment frequency, opening-bias strength, and sandbox-vs-story-directed behavior, while keeping all effects deterministic, bounded, and bias-only rather than forcing impossible world events.
+1) Split present vs known character cards in presentation payload
+File: src/app/rpg/api/rpg_presentation_routes.py
+diff --git a/src/app/rpg/api/rpg_presentation_routes.py b/src/app/rpg/api/rpg_presentation_routes.py
+--- a/src/app/rpg/api/rpg_presentation_routes.py
++++ b/src/app/rpg/api/rpg_presentation_routes.py
+@@
+ def _safe_str(v):
+     if v is None:
+         return ""
+     return str(v) if not isinstance(v, str) else v
++
++
++def _derive_present_npc_ids(simulation_state: dict, runtime_state: dict, setup_payload: dict) -> list[str]:
++    simulation_state = _safe_dict(simulation_state)
++    runtime_state = _safe_dict(runtime_state)
++    setup_payload = _safe_dict(setup_payload)
++
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    opening = _safe_dict(setup_payload.get("opening"))
++
++    nearby_ids = [str(x).strip() for x in _safe_list(player_state.get("nearby_npc_ids")) if str(x).strip()]
++    opening_ids = [str(x).strip() for x in _safe_list(opening.get("present_npc_ids")) if str(x).strip()]
++
++    result = []
++    seen = set()
++    for npc_id in nearby_ids + opening_ids:
++        if npc_id and npc_id not in seen:
++            seen.add(npc_id)
++            result.append(npc_id)
++    return result
++
++
++def _derive_known_npc_ids(simulation_state: dict, runtime_state: dict) -> list[str]:
++    runtime_state = _safe_dict(runtime_state)
++    known = []
++    seen = set()
++    for npc_id in _safe_list(runtime_state.get("known_npc_ids")):
++        npc_id = str(npc_id).strip()
++        if npc_id and npc_id not in seen:
++            seen.add(npc_id)
++            known.append(npc_id)
++    return known
++
++
++def _derive_npc_live_state(npc_id: str, simulation_state: dict, runtime_state: dict) -> dict:
++    simulation_state = _safe_dict(simulation_state)
++    runtime_state = _safe_dict(runtime_state)
++    npc_index = _safe_dict(simulation_state.get("npc_index"))
++    npc_info = _safe_dict(npc_index.get(npc_id))
++    npc_minds = _safe_dict(simulation_state.get("npc_minds"))
++    mind = _safe_dict(npc_minds.get(npc_id))
++    player_state = _safe_dict(simulation_state.get("player_state"))
++
++    nearby_ids = set(str(x).strip() for x in _safe_list(player_state.get("nearby_npc_ids")))
++    player_loc = _safe_str(player_state.get("location_id"))
++    npc_loc = _safe_str(npc_info.get("location_id"))
++
++    player_belief = _safe_dict(_safe_dict(mind.get("beliefs")).get("player"))
++    trust = float(player_belief.get("trust", 0) or 0)
++    hostility = float(player_belief.get("hostility", 0) or 0)
++
++    relation = "neutral"
++    if hostility > 0.5:
++        relation = "hostile"
++    elif trust > 0.5:
++        relation = "friendly"
++    elif trust > 0.2:
++        relation = "warm"
++    elif hostility > 0.2:
++        relation = "uneasy"
++
++    goals = _safe_list(mind.get("goals"))
++    current_activity = _safe_str(npc_info.get("current_activity")) or (_safe_str(goals[0]) if goals else "observing the situation")
++    mood = _safe_str(npc_info.get("mood"))
++    if not mood:
++        if hostility > 0.6:
++            mood = "angry"
++        elif hostility > 0.25:
++            mood = "suspicious"
++        elif trust > 0.5:
++            mood = "calm"
++        else:
++            mood = "guarded"
++
++    focus = _safe_str(npc_info.get("focus")) or ("player" if hostility > 0.4 or trust > 0.3 else "the area")
++    last_action = _safe_str(npc_info.get("last_action")) or current_activity
++
++    return {
++        "is_nearby": npc_id in nearby_ids,
++        "is_present": npc_loc == player_loc or npc_id in nearby_ids,
++        "location_id": npc_loc,
++        "current_activity": current_activity,
++        "mood": mood,
++        "focus": focus,
++        "relation_to_player": relation,
++        "last_action": last_action,
++    }
+@@
+-    character_cards = build_character_cards_payload(simulation_state, setup_payload, runtime_state)
++    all_cards = _safe_list(build_character_cards_payload(simulation_state, setup_payload, runtime_state))
++    cards_by_id = {
++        _safe_str(card.get("npc_id")): _safe_dict(card)
++        for card in all_cards
++        if _safe_str(card.get("npc_id"))
++    }
++
++    present_ids = _derive_present_npc_ids(simulation_state, runtime_state, setup_payload)
++    known_ids = _derive_known_npc_ids(simulation_state, runtime_state)
++
++    present_character_cards = []
++    for npc_id in present_ids:
++        card = dict(_safe_dict(cards_by_id.get(npc_id)))
++        if not card:
++            continue
++        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, runtime_state)
++        present_character_cards.append(card)
++
++    known_character_cards = []
++    present_set = set(present_ids)
++    for npc_id in known_ids:
++        if npc_id in present_set:
++            continue
++        card = dict(_safe_dict(cards_by_id.get(npc_id)))
++        if not card:
++            continue
++        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, runtime_state)
++        known_character_cards.append(card)
+@@
+-        "character_cards": character_cards,
++        "character_cards": present_character_cards,
++        "present_character_cards": present_character_cards,
++        "known_character_cards": known_character_cards,
++        "present_npc_ids": present_ids,
++        "known_npc_ids": known_ids,
+2) Make starting NPCs mean initially present only
+File: src/app/rpg/services/adventure_builder_service.py
+diff --git a/src/app/rpg/services/adventure_builder_service.py b/src/app/rpg/services/adventure_builder_service.py
+--- a/src/app/rpg/services/adventure_builder_service.py
++++ b/src/app/rpg/services/adventure_builder_service.py
+@@
+ def build_opening_context(setup: dict) -> dict:
+     setup = _safe_dict(setup)
+     opening = _safe_dict(setup.get("opening"))
++    starting_npc_ids = _safe_list(setup.get("starting_npc_ids"))
++    opening_present = _safe_list(opening.get("present_npc_ids"))
++
++    merged_present = []
++    seen = set()
++    for npc_id in opening_present + starting_npc_ids:
++        npc_id = str(npc_id).strip()
++        if npc_id and npc_id not in seen:
++            seen.add(npc_id)
++            merged_present.append(npc_id)
+ 
+     return {
+         "location_id": _safe_str(opening.get("location_id")),
+-        "present_npc_ids": _safe_list(opening.get("present_npc_ids")),
++        "present_npc_ids": merged_present,
+         "scene_frame": _safe_str(opening.get("scene_frame")),
+         "immediate_problem": _safe_str(opening.get("immediate_problem")),
+         "player_involvement_reason": _safe_str(opening.get("player_involvement_reason")),
+3) Render only present cards in main panel, add live fields + known section
+File: src/static/rpg/rpgPresentationRenderer.js
+diff --git a/src/static/rpg/rpgPresentationRenderer.js b/src/static/rpg/rpgPresentationRenderer.js
+--- a/src/static/rpg/rpgPresentationRenderer.js
++++ b/src/static/rpg/rpgPresentationRenderer.js
+@@
+-    var cards = payload.character_cards || [];
++    var cards = payload.present_character_cards || payload.character_cards || [];
++    var knownCards = payload.known_character_cards || [];
+@@
+ function renderCharacterCard(card) {
++    var live = card.live_state || {};
++    var badges = [];
++    if (live.is_nearby) badges.push('nearby');
++    if (live.relation_to_player) badges.push(live.relation_to_player);
++
+     return '' +
+         '<div class="rpg-character-card" data-npc-id="' + escapeHtml(card.npc_id || '') + '">' +
+         '  <div class="rpg-character-card__header">' +
+         '    <div class="rpg-character-card__name">' + escapeHtml(card.name || 'Unknown') + '</div>' +
+         '    <div class="rpg-character-card__role">' + escapeHtml(card.role || '') + '</div>' +
+         '  </div>' +
++        '  <div class="rpg-character-card__badges">' +
++             badges.map(function (b) {
++                 return '<span class="rpg-character-card__badge">' + escapeHtml(b) + '</span>';
++             }).join('') +
++        '  </div>' +
+         '  <div class="rpg-character-card__body">' +
+         '    <div class="rpg-character-card__description">' + escapeHtml(card.description || '') + '</div>' +
++        '    <div class="rpg-character-card__live">' +
++        '      <div><strong>Doing:</strong> ' + escapeHtml(live.current_activity || '—') + '</div>' +
++        '      <div><strong>Mood:</strong> ' + escapeHtml(live.mood || '—') + '</div>' +
++        '      <div><strong>Focus:</strong> ' + escapeHtml(live.focus || '—') + '</div>' +
++        '      <div><strong>Last:</strong> ' + escapeHtml(live.last_action || '—') + '</div>' +
++        '    </div>' +
+         '  </div>' +
+         '</div>';
+ }
+@@
+-    cardsHtml = cards.map(renderCharacterCard).join('');
+-    container.innerHTML = cardsHtml;
++    cardsHtml = cards.map(renderCharacterCard).join('');
++    var knownHtml = knownCards.length
++        ? (
++            '<div class="rpg-known-characters">' +
++            '  <h4>Known Characters</h4>' +
++            knownCards.map(renderCharacterCard).join('') +
++            '</div>'
++        )
++        : '';
++    container.innerHTML = cardsHtml + knownHtml;
+4) Track present/known IDs on frontend payload application
+File: src/static/rpg/rpg.js
+diff --git a/src/static/rpg/rpg.js b/src/static/rpg/rpg.js
+--- a/src/static/rpg/rpg.js
++++ b/src/static/rpg/rpg.js
+@@
+     function applyPresentationPayload(payload) {
+         if (!payload) return;
++        rpgState.presentNpcIds = Array.isArray(payload.present_npc_ids) ? payload.present_npc_ids.slice() : [];
++        rpgState.knownNpcIds = Array.isArray(payload.known_npc_ids) ? payload.known_npc_ids.slice() : [];
+         if (window.RpgPresentationRenderer && window.RpgPresentationRenderer.render) {
+             window.RpgPresentationRenderer.render(payload);
+         }
+     }
+5) Character-card styles for badges/live state
+File: src/static/style.css
+diff --git a/src/static/style.css b/src/static/style.css
+--- a/src/static/style.css
++++ b/src/static/style.css
+@@
++.rpg-character-card__badges {
++    display: flex;
++    gap: 6px;
++    flex-wrap: wrap;
++    margin: 6px 0;
++}
++
++.rpg-character-card__badge {
++    font-size: 0.72rem;
++    padding: 2px 8px;
++    border-radius: 999px;
++    background: rgba(255,255,255,0.08);
++    opacity: 0.9;
++}
++
++.rpg-character-card__live {
++    margin-top: 8px;
++    font-size: 0.88rem;
++    line-height: 1.35;
++    opacity: 0.92;
++}
++
++.rpg-known-characters {
++    margin-top: 16px;
++    padding-top: 12px;
++    border-top: 1px solid rgba(255,255,255,0.08);
++}
+6) NPC “Fill with AI” backend helper
+File: src/app/rpg/creator/llm_world_generator.py
+diff --git a/src/app/rpg/creator/llm_world_generator.py b/src/app/rpg/creator/llm_world_generator.py
+--- a/src/app/rpg/creator/llm_world_generator.py
++++ b/src/app/rpg/creator/llm_world_generator.py
+@@
+ def generate_world_bootstrap_proposal(
+@@
+     return result
++
++
++def generate_npc_seed_enrichment(
++    setup: Dict[str, Any],
++    npc_seed: Dict[str, Any],
++    *,
++    llm_gateway: Any = None,
++) -> Dict[str, Any]:
++    setup = _safe_dict(setup)
++    npc_seed = _safe_dict(npc_seed)
++
++    name = _safe_str(npc_seed.get("name"))
++    role = _safe_str(npc_seed.get("role"))
++    description = _safe_str(npc_seed.get("description"))
++
++    prompt = f"""
++You are enriching a single RPG NPC seed into a richer structured character.
++
++Setup:
++- genre: {_safe_str(setup.get("genre"))}
++- premise: {_safe_str(setup.get("premise"))}
++- lore: {_safe_list(setup.get("lore_constraints"))}
++- opening: {_safe_dict(setup.get("opening"))}
++
++Current NPC seed:
++- name: {name}
++- role: {role}
++- description: {description}
++
++Return strict JSON:
++{{
++  "name": "...",
++  "role": "...",
++  "description": "...",
++  "personality_summary": "...",
++  "history": "...",
++  "traits": ["...", "..."],
++  "motives": ["...", "..."],
++  "hooks": ["...", "..."]
++}}
++
++Rules:
++- If fields are empty, invent grounded values from setup.
++- If description exists, preserve its core and deepen it.
++- Be concise but rich.
++"""
++
++    if llm_gateway is not None:
++        try:
++            raw = _call_app_llm(llm_gateway, prompt, setup)
++            parsed = parse_world_bootstrap_response(raw)
++            parsed = _safe_dict(parsed)
++            return {
++                "name": _safe_str(parsed.get("name")) or name,
++                "role": _safe_str(parsed.get("role")) or role,
++                "description": _safe_str(parsed.get("description")) or description,
++                "personality_summary": _safe_str(parsed.get("personality_summary")),
++                "history": _safe_str(parsed.get("history")),
++                "traits": _safe_list(parsed.get("traits"))[:6],
++                "motives": _safe_list(parsed.get("motives"))[:6],
++                "hooks": _safe_list(parsed.get("hooks"))[:6],
++            }
++        except Exception:
++            logger.warning("NPC enrichment failed", exc_info=True)
++
++    return {
++        "name": name or "Wandering Healer",
++        "role": role or "healer",
++        "description": description or "A capable healer shaped by distance, loss, and survival.",
++        "personality_summary": "Guarded but compassionate, with a practical streak.",
++        "history": "They left home under difficult circumstances and rebuilt their life by helping others where they could.",
++        "traits": ["kind", "guarded", "practical"],
++        "motives": ["stay free", "protect the vulnerable"],
++        "hooks": ["knows more than they first admit"],
++    }
+7) NPC “Fill with AI” endpoint
+File: src/app/rpg/api/rpg_adventure_routes.py
+diff --git a/src/app/rpg/api/rpg_adventure_routes.py b/src/app/rpg/api/rpg_adventure_routes.py
+--- a/src/app/rpg/api/rpg_adventure_routes.py
++++ b/src/app/rpg/api/rpg_adventure_routes.py
+@@
+ @rpg_adventure_bp.post("/api/rpg/adventure/fill_npc")
+ async def adventure_fill_npc(request: Request):
+-    pass
++    from app.rpg.creator.llm_world_generator import generate_npc_seed_enrichment
++    from app.rpg.shared.llm_gateway import build_app_llm_gateway
++
++    data = await request.json()
++    setup = _safe_dict(data.get("setup"))
++    npc_seed = _safe_dict(data.get("npc_seed"))
++
++    gateway = build_app_llm_gateway()
++    enriched = generate_npc_seed_enrichment(setup, npc_seed, llm_gateway=gateway)
++    return {
++        "ok": True,
++        "npc_seed": enriched,
++    }
+8) NPC “Fill with AI” button in Adventure Setup
+File: src/static/rpg/adventureBuilder.js
+diff --git a/src/static/rpg/adventureBuilder.js b/src/static/rpg/adventureBuilder.js
+--- a/src/static/rpg/adventureBuilder.js
++++ b/src/static/rpg/adventureBuilder.js
+@@
+ function _renderNpcSeedCard(npc, index) {
+     return '' +
+         '<div class="ab-card ab-npc-card" data-npc-index="' + index + '">' +
+         '  ... existing fields ...' +
++        '  <button type="button" class="btn btn-secondary ab-fill-npc-btn" data-npc-index="' + index + '">Fill with AI</button>' +
+         '</div>';
+ }
+@@
+ function _attachNpcSeedHandlers(body) {
+     ...
++    body.querySelectorAll('.ab-fill-npc-btn').forEach(function(btn) {
++        btn.addEventListener('click', function() {
++            var idx = parseInt(btn.getAttribute('data-npc-index'), 10);
++            if (isNaN(idx)) return;
++
++            var npc = (setup.npc_seeds || [])[idx] || {};
++            btn.disabled = true;
++            btn.textContent = 'Filling...';
++
++            fetch('/api/rpg/adventure/fill_npc', {
++                method: 'POST',
++                headers: { 'Content-Type': 'application/json' },
++                body: JSON.stringify({
++                    setup: setup,
++                    npc_seed: npc
++                })
++            }).then(function(r) { return r.json(); }).then(function(data) {
++                if (data.ok && data.npc_seed) {
++                    setup.npc_seeds[idx] = Object.assign({}, setup.npc_seeds[idx] || {}, data.npc_seed);
++                    renderCurrentStep();
++                } else {
++                    alert('Unable to fill NPC');
++                }
++            }).catch(function() {
++                alert('Unable to fill NPC');
++            }).finally(function() {
++                btn.disabled = false;
++                btn.textContent = 'Fill with AI';
++            });
++        });
++    });
+ }
+
+With those patches, you’ll meet the remaining requirements:
+
+main panel only shows nearby/present NPC cards
+cards update dynamically as NPCs arrive/leave
+known characters are preserved separately
+cards show richer live state without per-tick LLM load
+setup “starting NPCs” means initially present
+setup NPC editor gets AI fill/enrichment
+
+The only runtime-side fix you already identified and should keep is the apply_turn() reassignment after _update_known_npc_ids(...).

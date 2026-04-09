@@ -11,6 +11,10 @@ from typing import Any, Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.rpg.session.ambient_builder import (
+    ensure_ambient_runtime_state,
+    get_pending_ambient_updates,
+)
 from app.rpg.session.runtime import (
     apply_idle_ticks,
     apply_resume_catchup,
@@ -18,10 +22,6 @@ from app.rpg.session.runtime import (
     build_frontend_bootstrap_payload,
     load_runtime_session,
     save_runtime_session,
-)
-from app.rpg.session.ambient_builder import (
-    ensure_ambient_runtime_state,
-    get_pending_ambient_updates,
 )
 
 rpg_session_bp = APIRouter()
@@ -483,7 +483,10 @@ async def get_world_behavior(request: Request):
 @rpg_session_bp.post("/api/rpg/session/world_behavior/update")
 async def update_world_behavior(request: Request):
     """Update in-game world behavior overrides."""
-    from app.rpg.creator.schema import _WORLD_BEHAVIOR_ENUMS, normalize_world_behavior_config
+    from app.rpg.creator.schema import (
+        _WORLD_BEHAVIOR_ENUMS,
+        normalize_world_behavior_config,
+    )
     from app.rpg.session.runtime import get_effective_world_behavior
 
     data = await request.json()
