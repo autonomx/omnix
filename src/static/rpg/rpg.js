@@ -98,7 +98,38 @@
         heartbeatTimer: null,
         pollTimer: null,
         ambientFeedBuffer: [],
+        // Settings and world events (Living World v2)
+        settings: {},
+        worldEventsView: {
+            local_events: [],
+            global_events: [],
+            director_pressure: [],
+            recent_changes: [],
+        },
+        worldEventsSummary: {},
     };
+
+    // ─── Console Debug Logger ──────────────────────────────────────────────────
+
+    function rpgDebugEnabled() {
+        return !!(rpgState && rpgState.settings && rpgState.settings.console_debug_enabled);
+    }
+
+    function rpgDebug(tag, payload) {
+        if (!rpgDebugEnabled()) return;
+        try {
+            console.groupCollapsed('[RPG][' + tag + ']');
+            console.log(payload);
+            console.groupEnd();
+        } catch (e) {
+            console.log('[RPG][' + tag + ']', payload);
+        }
+    }
+
+    function markRealPlayerActivity(reason) {
+        window.omnix_rpg_last_activity = Date.now();
+        rpgDebug('Activity', { reason: reason, at: window.omnix_rpg_last_activity });
+    }
 
     // TTS settings
     let ttsEnabled = false;
@@ -1001,6 +1032,7 @@
 
     async function handleRPGInput(input, structuredAction) {
         if (!input || rpgState.isLoading) return;
+        markRealPlayerActivity('send_turn');
 
         appendMessage({ type: 'player', content: input });
         setLoading(true);
@@ -2015,19 +2047,21 @@
             es.onmessage = function (event) {
                 try {
                     var data = JSON.parse(event.data);
+                    rpgDebug('SSE:Message', data);
                     if (data.type === 'ambient' && data.update) {
+                        rpgDebug('Ambient:SSE', data.update);
                         handleAmbientUpdate(data.update);
                     } else if (data.type === 'heartbeat') {
-                        // Heartbeat — update latest seq if we missed anything
                         var serverSeq = parseInt(data.latest_seq, 10) || 0;
                         if (serverSeq > rpgState.ambientSeq) {
                             pollAmbientUpdates();
                         }
                     }
-                } catch (e) { /* ignore parse errors */ }
+                } catch (e) { rpgDebug('SSE:ParseError', e); }
             };
 
             es.onerror = function () {
+                rpgDebug('SSE:Error', { attempts: _ambientReconnectAttempts });
                 disconnectSessionStream();
                 _ambientReconnectAttempts++;
                 if (_ambientReconnectAttempts < _maxReconnectAttempts) {
@@ -2036,6 +2070,7 @@
             };
 
             es.onopen = function () {
+                rpgDebug('SSE:Open', { sessionId: rpgState.sessionId });
                 _ambientReconnectAttempts = 0;
             };
         } catch (e) {
@@ -2060,7 +2095,9 @@
         rpgState.heartbeatTimer = setInterval(function () {
             if (!rpgState.sessionId) { stopAmbientHeartbeat(); return; }
             if (document.hidden) return; // Don't tick when tab is hidden
-            localStorage.setItem('omnix_rpg_last_activity', String(Date.now()));
+            // Do NOT update last_activity here — only real player actions should
+
+            rpgDebug('IdleTick:Request', { sessionId: rpgState.sessionId, reason: 'heartbeat' });
 
             fetch('/api/rpg/session/idle_tick', {
                 method: 'POST',
@@ -2072,10 +2109,17 @@
                 }),
             }).then(function (r) { return r.json(); })
               .then(function (data) {
+                rpgDebug('IdleTick:Response', data);
                 if (data.ok && data.updates && data.updates.length) {
                     data.updates.forEach(function (u) { handleAmbientUpdate(u); });
                 }
-            }).catch(function () { /* ignore heartbeat failures */ });
+                // Update settings from server echo
+                if (data.settings) {
+                    updateState({ settings: data.settings });
+                }
+            }).catch(function (err) {
+                rpgDebug('IdleTick:Error', err);
+            });
         }, HEARTBEAT_INTERVAL_MS);
     }
 
@@ -2132,6 +2176,15 @@
         // Dedup: skip if already seen
         if (seq <= rpgState.ambientSeq) return;
         updateState({ ambientSeq: seq });
+
+        rpgDebug('Ambient:Decision', {
+            seq: seq,
+            kind: update.kind,
+            delivery: update.delivery,
+            isTyping: rpgState.isTyping,
+            is_reaction: update.is_reaction,
+            is_idle_conversation: update.is_idle_conversation,
+        });
 
         // Handle scene weaver beats
         if (update.source === 'scene_weaver') {
@@ -2307,6 +2360,22 @@
                 content = '\uD83D\uDE24 <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
                     + '<span class="rpg-ambient-text">' + escapeHtml(update.text || 'Someone taunts you.') + '</span>';
                 break;
+            case 'follow_reaction':
+                content = '\uD83C\uDFC3 <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text">' + escapeHtml(update.text || 'Someone hurries after you.') + '</span>';
+                break;
+            case 'caution_reaction':
+                content = '\u26A0\uFE0F <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text rpg-ambient-urgent">' + escapeHtml(update.text || 'Someone urges caution.') + '</span>';
+                break;
+            case 'assist_reaction':
+                content = '\uD83E\uDD1D <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
+                    + '<span class="rpg-ambient-text">' + escapeHtml(update.text || 'Someone moves to assist you.') + '</span>';
+                break;
+            case 'idle_check_in':
+                content = '\uD83D\uDCAC <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'Companion') + '</span>: '
+                    + '<em class="rpg-ambient-text">"' + escapeHtml(update.text || '') + '"</em>';
+                break;
             case 'gossip':
                 content = '\uD83D\uDDE3\uFE0F <span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span>: '
                     + '<em class="rpg-ambient-text rpg-ambient-gossip">"' + escapeHtml(update.text || '') + '"</em>';
@@ -2352,6 +2421,95 @@
         buffer.forEach(function (u) { appendAmbientUpdate(u); });
     }
 
+    // ── World Events Panel ───────────────────────────────────────────────────
+
+    function fetchWorldEvents() {
+        if (!rpgState.sessionId) return;
+        fetch('/api/rpg/inspect/world_events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                setup_payload: {},
+                runtime_state: {},
+            }),
+        }).then(function (r) { return r.json(); })
+          .then(function (data) {
+            rpgDebug('WorldEvents:Response', data);
+            if (data.ok && data.world_events) {
+                updateState({ worldEventsView: data.world_events });
+                renderWorldEventsPanel();
+            }
+        }).catch(function (err) {
+            rpgDebug('WorldEvents:Error', err);
+        });
+    }
+
+    function renderWorldEventsPanel() {
+        var panel = el('rpgWorldEventsPanel');
+        if (!panel) return;
+
+        var view = rpgState.worldEventsView || {};
+        var localEvents = view.local_events || [];
+        var globalEvents = view.global_events || [];
+        var directorPressure = view.director_pressure || [];
+
+        var html = '';
+
+        if (localEvents.length) {
+            html += '<div class="rpg-we-section"><h4>Local Events</h4>';
+            localEvents.forEach(function (row) {
+                html += _renderWorldEventCard(row);
+            });
+            html += '</div>';
+        }
+
+        if (globalEvents.length) {
+            html += '<div class="rpg-we-section"><h4>Global Events</h4>';
+            globalEvents.forEach(function (row) {
+                html += _renderWorldEventCard(row);
+            });
+            html += '</div>';
+        }
+
+        if (directorPressure.length) {
+            html += '<div class="rpg-we-section rpg-we-director"><h4>Director Pressure</h4>';
+            html += '<p class="rpg-we-director-note">Narrative Bias / Setup</p>';
+            directorPressure.forEach(function (row) {
+                html += _renderWorldEventCard(row);
+            });
+            html += '</div>';
+        }
+
+        if (!html) {
+            html = '<p class="rpg-we-empty">No world events yet.</p>';
+        }
+
+        panel.innerHTML = html;
+    }
+
+    function _renderWorldEventCard(row) {
+        var scope = escapeHtml(row.scope || 'local');
+        var kind = escapeHtml((row.kind || '').replace(/_/g, ' '));
+        var title = escapeHtml(row.title || kind || 'Event');
+        var summary = escapeHtml(row.summary || '');
+        var tick = row.tick || '?';
+        var status = escapeHtml(row.status || '');
+        var source = escapeHtml(row.source || '');
+        var actors = (row.actors || []).map(function (a) { return escapeHtml(a); }).join(', ');
+        var isDirector = scope === 'director';
+
+        return '<div class="rpg-we-card rpg-we-card--' + scope + (isDirector ? ' rpg-we-card--bias' : '') + '">'
+            + '<div class="rpg-we-card-title">' + title + '</div>'
+            + '<div class="rpg-we-card-summary">' + summary + '</div>'
+            + '<div class="rpg-we-card-meta">'
+            + '<span>tick ' + tick + '</span>'
+            + (status ? ' <span class="rpg-we-status">' + status + '</span>' : '')
+            + (source ? ' <span class="rpg-we-source">' + source + '</span>' : '')
+            + (actors ? ' <span class="rpg-we-actors">' + actors + '</span>' : '')
+            + '</div>'
+            + '</div>';
+    }
+
     // ── Phase 10: Typing detection for ambient flow ──────────────────────────
 
     function _setupTypingDetection() {
@@ -2360,14 +2518,15 @@
 
         inputEl.addEventListener('focus', function () {
             updateState({ isTyping: true });
+            markRealPlayerActivity('input_focus');
         });
         inputEl.addEventListener('blur', function () {
             updateState({ isTyping: false });
-            // Flush queued ambient on blur
             flushAmbientBuffer();
         });
         inputEl.addEventListener('input', function () {
             updateState({ isTyping: true });
+            markRealPlayerActivity('input_typing');
         });
     }
 
@@ -2443,6 +2602,8 @@
                 locations: res.locations || [],
                 factions: res.factions || [],
                 npcs: res.npcs || [],
+                settings: res.settings || rpgState.settings || {},
+                worldEventsSummary: res.world_events_summary || {},
             });
 
             if (res.opening && res.opening.trim()) {
