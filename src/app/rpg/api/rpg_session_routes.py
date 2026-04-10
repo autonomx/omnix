@@ -22,6 +22,7 @@ from app.rpg.session.runtime import (
     build_frontend_bootstrap_payload,
     load_runtime_session,
     save_runtime_session,
+    _normalize_runtime_settings,
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
@@ -240,11 +241,11 @@ async def update_rpg_session_settings(request: Request):
     existing = _safe_dict(runtime_state.get("settings"))
     merged = dict(existing)
     merged.update(settings)
-    runtime_state["settings"] = merged
+    runtime_state["settings"] = _normalize_runtime_settings(merged)
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
 
-    return {"ok": True}
+    return {"ok": True, "settings": runtime_state["settings"]}
 
 
 @rpg_session_bp.post("/api/rpg/session/delete")
@@ -354,6 +355,10 @@ async def idle_tick_rpg_session(request: Request):
         "updates": _safe_list(result.get("updates")),
         "latest_seq": int(result.get("latest_seq", 0) or 0),
         "ticks_applied": int(result.get("ticks_applied", 0) or 0),
+        "idle_debug_trace": result.get("idle_debug_trace", {}),
+        "idle_seconds": result.get("idle_seconds", 0),
+        "idle_gate_open": result.get("idle_gate_open", False),
+        "settings": result.get("settings", {}),
     }
 
 
@@ -480,7 +485,26 @@ async def resume_rpg_session(request: Request):
     }
 
 
-# ── Phase F — World behavior settings endpoints ──────────────────────────
+# ── World Events endpoint ────────────────────────────────────────────────
+
+
+@rpg_session_bp.post("/api/rpg/session/world_events")
+async def get_rpg_session_world_events(request: Request):
+    """Return cached recent world event rows from runtime state."""
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    return {
+        "ok": True,
+        "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-48:],
+    }
 
 
 @rpg_session_bp.post("/api/rpg/session/world_behavior")
