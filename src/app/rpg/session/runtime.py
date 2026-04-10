@@ -137,7 +137,149 @@ _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
 
 # Phase F — quiet-window ticks after player action
-_DEFAULT_POST_PLAYER_QUIET_TICKS = 2
+_DEFAULT_POST_PLAYER_QUIET_TICKS = 1
+
+_ALLOWED_IDLE_SECONDS = (30, 60, 300, 600)
+_ALLOWED_REACTION_STYLES = ("minimal", "normal", "lively")
+_MAX_RECENT_WORLD_EVENT_ROWS = 64
+
+
+def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize runtime settings to allowed values only."""
+    if not isinstance(value, dict):
+        value = {}
+    result: Dict[str, Any] = {}
+    # response_length: keep existing semantics
+    rl = value.get("response_length")
+    result["response_length"] = rl if isinstance(rl, str) and rl.strip().lower() in ("short", "medium", "long") else "short"
+    # idle_conversation_seconds: only allowed values
+    ics = value.get("idle_conversation_seconds")
+    try:
+        ics = int(ics)
+    except (TypeError, ValueError):
+        ics = 60
+    result["idle_conversation_seconds"] = ics if ics in _ALLOWED_IDLE_SECONDS else 60
+    # booleans
+    for bkey in (
+        "idle_conversations_enabled",
+        "idle_npc_to_player_enabled",
+        "idle_npc_to_npc_enabled",
+        "follow_reactions_enabled",
+        "console_debug_enabled",
+        "world_events_panel_enabled",
+    ):
+        result[bkey] = bool(value.get(bkey, True))
+    # reaction_style: only allowed enum
+    rs = value.get("reaction_style")
+    result["reaction_style"] = rs if isinstance(rs, str) and rs.strip().lower() in _ALLOWED_REACTION_STYLES else "normal"
+    return result
+
+
+def _record_real_player_activity(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Record real player activity timestamp and reset idle streak."""
+    runtime_state["last_real_player_activity_at"] = _utc_now_iso()
+    runtime_state["idle_streak"] = 0
+    return runtime_state
+
+
+_CRITICAL_REACTION_KINDS = frozenset({"follow_reaction", "caution_reaction", "assist_reaction", "warning"})
+_MOVEMENT_RUSH_KEYWORDS = frozenset({"run", "sprint", "rush", "charge", "hurry", "dash", "race"})
+_MOVEMENT_ADVANCE_KEYWORDS = frozenset({"walk", "move", "go", "continue", "advance", "proceed", "head", "enter", "step"})
+_MOVEMENT_RETREAT_KEYWORDS = frozenset({"retreat", "flee", "escape", "back", "withdraw", "fall back", "run away"})
+_MOVEMENT_INSPECT_KEYWORDS = frozenset({"look", "inspect", "examine", "investigate", "search", "study", "check", "peer"})
+_MOVEMENT_WAIT_KEYWORDS = frozenset({"wait", "pause", "hold", "stay", "rest", "stop"})
+_MOVEMENT_TALK_KEYWORDS = frozenset({"talk", "speak", "ask", "tell", "say", "greet", "address", "chat"})
+_MOVEMENT_ATTACK_KEYWORDS = frozenset({"attack", "strike", "fight", "hit", "slash", "stab", "shoot", "cast"})
+_MOVEMENT_APPROACH_KEYWORDS = frozenset({"approach", "near", "toward", "towards", "close"})
+
+_HIGH_RISK_KEYWORDS = frozenset({"attack", "fight", "charge", "rush", "strike", "slash", "stab", "shoot", "cast", "confront"})
+_MEDIUM_RISK_KEYWORDS = frozenset({"investigate", "enter", "approach", "sneak", "climb", "jump", "cross"})
+
+
+def _classify_player_action_context(
+    player_input: str,
+    resolved_result: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Classify player action into a bounded deterministic context dict.
+
+    Uses simple keyword-based classification. No LLM call.
+    """
+    player_input = _safe_str(player_input).strip()
+    resolved_result = _safe_dict(resolved_result)
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    words = set(player_input.lower().split())
+    text_lower = player_input.lower()
+
+    # Determine movement intent
+    movement_intent = "unknown"
+    if words & _MOVEMENT_RUSH_KEYWORDS or any(k in text_lower for k in ("run toward", "sprint to", "rush to")):
+        movement_intent = "rush"
+    elif words & _MOVEMENT_RETREAT_KEYWORDS or "fall back" in text_lower or "run away" in text_lower:
+        movement_intent = "retreat"
+    elif words & _MOVEMENT_APPROACH_KEYWORDS or "toward" in text_lower:
+        movement_intent = "approach"
+    elif words & _MOVEMENT_ATTACK_KEYWORDS:
+        movement_intent = "attack"
+    elif words & _MOVEMENT_TALK_KEYWORDS:
+        movement_intent = "talk"
+    elif words & _MOVEMENT_INSPECT_KEYWORDS:
+        movement_intent = "inspect"
+    elif words & _MOVEMENT_WAIT_KEYWORDS:
+        movement_intent = "wait"
+    elif words & _MOVEMENT_ADVANCE_KEYWORDS:
+        movement_intent = "advance"
+
+    # Determine risk level
+    risk_level = "low"
+    if words & _HIGH_RISK_KEYWORDS:
+        risk_level = "high"
+    elif words & _MEDIUM_RISK_KEYWORDS:
+        risk_level = "medium"
+
+    # Determine urgency
+    urgency = "low"
+    if movement_intent in ("rush", "attack"):
+        urgency = "high"
+    elif movement_intent in ("approach", "retreat"):
+        urgency = "medium"
+
+    action_type = _safe_str(resolved_result.get("action_type"))
+    target_id = _safe_str(resolved_result.get("target_id"))
+    target_name = _safe_str(resolved_result.get("target_name"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    location_id = _safe_str(player_state.get("location_id"))
+    tick = int(simulation_state.get("tick", runtime_state.get("tick", 0)) or 0)
+
+    return {
+        "tick": tick,
+        "player_input": player_input[:200],
+        "action_type": action_type,
+        "movement_intent": movement_intent,
+        "risk_level": risk_level,
+        "urgency": urgency,
+        "target_id": target_id,
+        "target_name": target_name,
+        "location_id": location_id,
+    }
+
+
+def _seconds_since_iso(iso_str: str) -> int:
+    """Return seconds elapsed since an ISO timestamp. Returns 9999 if invalid."""
+    iso_str = _safe_str(iso_str).strip()
+    if not iso_str:
+        return 9999
+    try:
+        dt = datetime.fromisoformat(iso_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - dt
+        return max(0, int(delta.total_seconds()))
+    except Exception:
+        return 9999
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -782,6 +924,14 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "voice_assignments": {},
             "settings": {
                 "response_length": "short",
+                "idle_conversation_seconds": 60,
+                "idle_conversations_enabled": True,
+                "idle_npc_to_player_enabled": True,
+                "idle_npc_to_npc_enabled": True,
+                "follow_reactions_enabled": True,
+                "reaction_style": "normal",
+                "console_debug_enabled": True,
+                "world_events_panel_enabled": True,
             },
             # Living-world ambient state (Phase 0.2)
             "ambient_queue": [],
@@ -794,6 +944,10 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "pending_interrupt": None,
             "subscription_state": {"last_polled_seq": 0},
             "ambient_metrics": {"emitted": 0, "suppressed": 0, "coalesced": 0},
+            "last_real_player_activity_at": "",
+            "last_player_action_context": {},
+            "idle_debug_trace": {},
+            "recent_world_event_rows": [],
         },
     }
     return session
@@ -850,6 +1004,10 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "level_up": _safe_list(turn_result.get("level_up")),
         "skill_level_ups": _safe_list(turn_result.get("skill_level_ups")),
         "presentation": build_runtime_presentation_payload(simulation_state),
+        "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("settings"))),
+        "world_events_summary": {
+            "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-12:],
+        },
     }
 
 
@@ -1176,8 +1334,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     # Living-world: record player turn timing, reset idle streak
     runtime_state = ensure_ambient_runtime_state(runtime_state)
     runtime_state["last_player_turn_at"] = _utc_now_iso()
-    runtime_state["idle_streak"] = 0
-    # Phase 3D: quiet-window suppression after player action
+    runtime_state = _record_real_player_activity(runtime_state)
+    # Classify player action context for reaction lane
+    runtime_state["last_player_action_context"] = _classify_player_action_context(
+        player_input, resolved_result, after_state, runtime_state,
+    )
+    # Phase 3D: quiet-window suppression after player action (idle chatter only)
     runtime_state["post_player_quiet_ticks"] = _DEFAULT_POST_PLAYER_QUIET_TICKS
     # Phase 5C: check if opening is resolved after player acts
     session["runtime_state"] = runtime_state
@@ -1335,6 +1497,29 @@ def _apply_idle_tick_to_session(
     session["runtime_state"] = runtime_state
     world_behavior = get_effective_world_behavior(session)
 
+    # Debug trace for full observability
+    debug_trace: Dict[str, Any] = {
+        "reason": reason,
+        "tick_before": int(before_state.get("tick", 0) or 0),
+        "quiet_ticks_before": int(runtime_state.get("post_player_quiet_ticks", 0) or 0),
+        "world_behavior": dict(world_behavior),
+        "last_player_action_context": _safe_dict(runtime_state.get("last_player_action_context")),
+        "raw_counts": {},
+        "selected": {},
+        "visibility": {},
+        "delivery": {},
+        "filters": [],
+    }
+
+    # Real idle-seconds calculation
+    idle_seconds = _seconds_since_iso(_safe_str(runtime_state.get("last_real_player_activity_at")))
+    settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("settings")))
+    conversation_idle_seconds = int(settings.get("idle_conversation_seconds", 60) or 60)
+    idle_gate_open = bool(settings.get("idle_conversations_enabled")) and idle_seconds >= conversation_idle_seconds
+    debug_trace["idle_seconds"] = idle_seconds
+    debug_trace["idle_gate_open"] = idle_gate_open
+    debug_trace["conversation_idle_seconds"] = conversation_idle_seconds
+
     player_context = _build_idle_player_context(after_state, runtime_state)
     context = {
         "player_location": _safe_str(player_context.get("player_location")),
@@ -1425,9 +1610,41 @@ def _apply_idle_tick_to_session(
     event_updates = convert_events_to_ambient_updates(filtered_events, runtime_state)
     raw_updates.extend(event_updates)
 
-    # Phase G / ambient dialogue (existing system)
-    dialogue_candidates = build_ambient_dialogue_candidates(after_state, runtime_state, player_context)
-    selected_dialogue = select_ambient_dialogue_candidate(dialogue_candidates, runtime_state)
+    # ── Reaction lane: immediate NPC reactions to player actions ──
+    reaction_candidates = build_ambient_dialogue_candidates(
+        after_state, runtime_state, player_context, lane="reaction",
+    )
+    reaction_initiative = build_npc_initiative_candidates(
+        after_state, runtime_state, player_context, lane="reaction",
+    )
+    reaction_initiative = apply_world_behavior_bias(reaction_initiative, world_behavior)
+    reaction_candidates.extend(reaction_initiative)
+    selected_reaction = select_ambient_dialogue_candidate(reaction_candidates, runtime_state)
+    if selected_reaction and quiet_ticks > 0:
+        # Reaction lane bypasses quiet suppression for important kinds
+        rk = _safe_str(selected_reaction.get("kind"))
+        if rk not in _CRITICAL_REACTION_KINDS:
+            selected_reaction = None
+    if selected_reaction:
+        runtime_state = apply_dialogue_cooldowns(runtime_state, selected_reaction)
+        raw_updates.append(
+            _make_dialogue_update_from_candidate(
+                selected_reaction,
+                {
+                    "scene_id": _safe_str(player_context.get("scene_id")),
+                    "world_summary": _safe_str(player_context.get("world_summary")),
+                },
+            )
+        )
+
+    # ── Idle conversation lane: only if idle gate is open ──
+    idle_dialogue_candidates: List[Dict[str, Any]] = []
+    selected_dialogue = None
+    if idle_gate_open:
+        idle_dialogue_candidates = build_ambient_dialogue_candidates(
+            after_state, runtime_state, player_context, lane="idle",
+        )
+        selected_dialogue = select_ambient_dialogue_candidate(idle_dialogue_candidates, runtime_state)
     if selected_dialogue:
         runtime_state = apply_dialogue_cooldowns(runtime_state, selected_dialogue)
         raw_updates.append(
@@ -1440,10 +1657,30 @@ def _apply_idle_tick_to_session(
             )
         )
 
+    # Record debug trace counts
+    debug_trace["raw_counts"] = {
+        "ambient_updates": len(raw_updates),
+        "initiative_candidates": len(initiative_candidates),
+        "reaction_candidates": len(reaction_candidates),
+        "idle_dialogue_candidates": len(idle_dialogue_candidates),
+        "scene_beats": len(scene_beats) if scene_beats else 0,
+        "world_event_candidates": len(world_event_candidates),
+    }
+    debug_trace["selected"] = {
+        "initiative": _safe_dict(selected_initiative) if selected_initiative else {},
+        "reaction": _safe_dict(selected_reaction) if selected_reaction else {},
+        "idle_dialogue": _safe_dict(selected_dialogue) if selected_dialogue else {},
+        "scene": _safe_dict(selected_scene) if selected_scene else {},
+    }
+
     visible = [u for u in raw_updates if is_player_visible_update(u, session)]
     for u in visible:
         u["priority"] = score_ambient_salience(u, context)
     coalesced = coalesce_ambient_updates(visible, runtime_state)
+    debug_trace["visibility"] = {
+        "visible_count": len(visible),
+        "coalesced_count": len(coalesced),
+    }
 
     runtime_state = enqueue_ambient_updates(runtime_state, coalesced)
 
@@ -1523,6 +1760,20 @@ def _apply_idle_tick_to_session(
 
     # Update known NPC list after idle tick
     runtime_state = _update_known_npc_ids(runtime_state, after_state)
+
+    # Record debug trace
+    runtime_state["idle_debug_trace"] = debug_trace
+
+    # Update recent world event rows for frontend
+    try:
+        from app.rpg.analytics.world_events import build_incremental_world_event_rows
+        new_rows = build_incremental_world_event_rows(after_state, runtime_state, debug_trace)
+        existing_rows = _safe_list(runtime_state.get("recent_world_event_rows"))
+        existing_rows.extend(new_rows)
+        runtime_state["recent_world_event_rows"] = existing_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+    except (ImportError, AttributeError):
+        pass  # world_events module may not be available yet
+
     session["runtime_state"] = runtime_state
 
     return {
@@ -1531,6 +1782,10 @@ def _apply_idle_tick_to_session(
         "updates": final_updates,
         "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
         "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+        "idle_debug_trace": _safe_dict(runtime_state.get("idle_debug_trace")),
+        "idle_seconds": idle_seconds,
+        "idle_gate_open": idle_gate_open,
+        "settings": settings,
     }
 
 
@@ -1729,6 +1984,10 @@ def apply_idle_tick(session_id: str, *, reason: str = "heartbeat") -> Dict[str, 
         "updates": _safe_list(result.get("updates")),
         "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
         "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+        "idle_debug_trace": result.get("idle_debug_trace", {}),
+        "idle_seconds": result.get("idle_seconds", 0),
+        "idle_gate_open": result.get("idle_gate_open", False),
+        "settings": result.get("settings", {}),
     }
 
 
