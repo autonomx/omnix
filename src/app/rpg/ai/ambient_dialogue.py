@@ -354,7 +354,10 @@ def build_ambient_dialogue_candidates(
     if lane == "reaction":
         return _build_player_reaction_candidates(simulation_state, runtime_state, player_context)
     if lane == "idle":
-        return _build_idle_conversation_candidates(simulation_state, runtime_state, player_context)
+        # Idle includes both new idle-specific candidates and original candidates
+        result = _build_idle_conversation_candidates(simulation_state, runtime_state, player_context)
+        result.extend(_build_original_candidates(simulation_state, runtime_state, player_context))
+        return result
     # "all" — combine both
     result = _build_player_reaction_candidates(simulation_state, runtime_state, player_context)
     result.extend(_build_idle_conversation_candidates(simulation_state, runtime_state, player_context))
