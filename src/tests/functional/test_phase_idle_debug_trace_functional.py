@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 import os
 import sys
+import types
 
 SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, SRC_DIR)
@@ -30,8 +31,22 @@ _defaults = _load("app.rpg.creator.defaults", "app/rpg/creator/defaults.py")
 _amb_builder = _load("app.rpg.session.ambient_builder", "app/rpg/session/ambient_builder.py")
 _amb_dialogue = _load("app.rpg.ai.ambient_dialogue", "app/rpg/ai/ambient_dialogue.py")
 _npc_init = _load("app.rpg.ai.npc_initiative", "app/rpg/ai/npc_initiative.py")
+_runtime = _load("app.rpg.session.runtime", "app/rpg/session/runtime.py")
+_policy = _load("app.rpg.session.ambient_policy", "app/rpg/session/ambient_policy.py")
+_narrator = _load("app.rpg.ai.world_scene_narrator", "app/rpg/ai/world_scene_narrator.py")
+classify_ambient_delivery = _policy.classify_ambient_delivery
+_make_dialogue_update_from_candidate = _runtime._make_dialogue_update_from_candidate
+build_structured_narration = _narrator.build_structured_narration
 build_ambient_dialogue_candidates = _amb_dialogue.build_ambient_dialogue_candidates
 build_npc_initiative_candidates = _npc_init.build_npc_initiative_candidates
+
+
+def _session() -> dict:
+    return {
+        "player_location": "loc:inn",
+        "nearby_npc_ids": ["npc:bran", "npc:elara"],
+        "recent_ambient_ids": [],
+    }
 
 
 class TestDebugTraceStructure:
@@ -145,3 +160,60 @@ class TestReactionUpdateClassification:
 
     def test_interrupt_flag_makes_reaction(self):
         assert _is_reaction_update({"kind": "npc_to_player", "interrupt": True}) is True
+
+
+def test_idle_dialogue_update_preserves_lane_for_frontend_visibility():
+    candidate = {
+        "lane": "idle",
+        "kind": "npc_to_npc",
+        "speaker_id": "npc:bran",
+        "speaker_name": "Bran",
+        "target_id": "npc:elara",
+        "target_name": "Elara",
+        "salience": 0.52,
+        "text_hint": 'Bran says quietly to Elara, "Keep your voice down."',
+        "emotion": "neutral",
+        "location_id": "loc:inn",
+        "tick": 5,
+    }
+
+    update = _make_dialogue_update_from_candidate(candidate, {"scene_id": "scene:inn", "world_summary": ""})
+
+    assert update["lane"] == "idle"
+    assert update["structured"]["lane"] == "idle"
+
+
+def test_idle_npc_to_npc_is_tagged_as_idle_conversation():
+    session = _session()
+    update = {
+        "kind": "npc_to_npc",
+        "lane": "idle",
+        "priority": 0.52,
+    }
+
+    delivery = classify_ambient_delivery(session, update, is_typing=False)
+    assert delivery in ("badge", "silent", "interrupt")
+    assert update["is_idle_conversation"] is True
+
+
+def test_structured_narration_uses_deterministic_reward_block_not_raw_llm_reward():
+    scene = {"title": "The Rusty Flagon Tavern", "location_name": "The Rusty Flagon Tavern"}
+    narration_context = {
+        "resolved_result": {},
+        "xp_result": {"player_xp": 0},
+        "skill_xp_result": {"awards": {"intimidation": 5}},
+        "level_up": [],
+        "skill_level_ups": [],
+    }
+    llm_text = (
+        "NARRATOR: The tavern falls quiet.\n"
+        "ACTION: Several patrons turn their heads toward you.\n"
+        "NPC: Bran the Innkeeper: \"The greatest, eh?\"\n"
+        "REWARD: 5xp"
+    )
+
+    structured = build_structured_narration(scene, narration_context, llm_text)
+
+    assert structured["action_result_line"] == "Several patrons turn their heads toward you."
+    assert "+5 intimidation XP" in structured["rewards_block"]
+    assert "5xp" not in structured["rewards_block"]

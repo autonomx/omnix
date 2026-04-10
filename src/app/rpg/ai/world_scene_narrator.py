@@ -434,25 +434,27 @@ def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[st
     parsed = _with_scene_response_defaults(parse_scene_response(llm_narrative))
     npc = _normalize_speaker_block(parsed.get("npc"))
     npc_text = npc.get("text", "")
+    action_text = _safe_str(parsed.get("action")).strip() or _build_action_result_line(narration_context)
+    rewards_text = _build_rewards_block(narration_context)
     speaker_turns = _build_speaker_turns(parsed)
 
     blocks = {
         "scene_summary": parsed["narrator"],
-        "action_result_line": parsed["action"],
+        "action_result_line": action_text,
         "npc_reply_block": npc_text,
-        "rewards_block": parsed["reward"],
+        "rewards_block": rewards_text,
     }
     emphasis_markers = _collect_emphasis_markers(scene, narration_context, blocks)
 
     ordered = [
         parsed["narrator"],
-        parsed["action"],
+        f"**Action:** {action_text}" if action_text else "",
         (
-            f"**{npc['name'] or 'Character'}:** {npc['text']}"
+            f"**Reply:** {npc['name'] or 'Character'}: {npc['text']}"
             if npc.get("text")
             else ""
         ),
-        f"**Reward:** {parsed['reward']}" if parsed["reward"] else "",
+        f"**Reward:** {rewards_text}" if rewards_text else "",
     ]
     markdown = "\n\n".join(filter(None, ordered))
     markdown = apply_narration_emphasis(markdown, emphasis_markers)
@@ -466,13 +468,13 @@ def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[st
 
     return {
         "scene_summary": apply_narration_emphasis(parsed["narrator"], emphasis_markers),
-        "action_result_line": apply_narration_emphasis(parsed["action"], emphasis_markers),
+        "action_result_line": apply_narration_emphasis(action_text, emphasis_markers),
         "npc_reply_block": apply_narration_emphasis(npc_text, emphasis_markers),
         "npc": {
             **npc,
             "text": apply_narration_emphasis(npc_text, emphasis_markers),
         },
-        "rewards_block": apply_narration_emphasis(parsed["reward"], emphasis_markers),
+        "rewards_block": apply_narration_emphasis(rewards_text, emphasis_markers),
         "emphasis_markers": emphasis_markers,
         "speaker_turns": speaker_turns,
         "markdown": markdown,
@@ -520,24 +522,24 @@ def _response_length_prompt_rules(response_length: str) -> str:
 
     if response_length == "long":
         return (
-            "NARRATOR: 3 to 5 sentences describing the scene.\n"
-            "ACTION: 3 to 5 sentences describing the result of the player's action.\n"
-            "NPC: <npc_name>: \"1 to 3 sentences\" (omit if none)\n"
+            "NARRATOR: 5 to 7 sentences describing the scene.\n"
+            "ACTION: 5 to 7 sentences describing the result of the player's action.\n"
+            "NPC: <npc_name>: \"5 to 7 sentences\" (omit if none)\n"
             "REWARD: <xp/items if any, else omit>"
         )
 
     if response_length == "medium":
         return (
-            "NARRATOR: 2 to 3 sentences describing the scene.\n"
-            "ACTION: 2 to 3 sentences describing the result of the player's action.\n"
-            "NPC: <npc_name>: \"1 to 2 short sentences\" (omit if none)\n"
+            "NARRATOR: 3 to 5 sentences describing the scene.\n"
+            "ACTION: 3 to 5 sentences describing the result of the player's action.\n"
+            "NPC: <npc_name>: \"3 to 5 short sentences\" (omit if none)\n"
             "REWARD: <xp/items if any, else omit>"
         )
 
     return (
-        "NARRATOR: 1 short sentence describing the scene.\n"
-        "ACTION: 1 short sentence describing the result of the player's action.\n"
-        "NPC: <npc_name>: \"1 short reply\" (omit if none)\n"
+        "NARRATOR: 2 to 3 short sentence describing the scene.\n"
+        "ACTION: 2 to 3 short sentence describing the result of the player's action.\n"
+        "NPC: <npc_name>: \"2 - 3 short reply\" (omit if none)\n"
         "REWARD: <xp/items if any, else omit>"
     )
 

@@ -139,7 +139,7 @@ _MAX_HISTORY = 64
 # Phase F — quiet-window ticks after player action
 _DEFAULT_POST_PLAYER_QUIET_TICKS = 1
 
-_ALLOWED_IDLE_SECONDS = (30, 60, 300, 600)
+_ALLOWED_IDLE_SECONDS = (15, 30, 60, 300, 600)
 _ALLOWED_REACTION_STYLES = ("minimal", "normal", "lively")
 _MAX_RECENT_WORLD_EVENT_ROWS = 64
 
@@ -166,8 +166,8 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     try:
         ics = int(ics)
     except (TypeError, ValueError):
-        ics = 60
-    result["idle_conversation_seconds"] = ics if ics in _ALLOWED_IDLE_SECONDS else 60
+        ics = 15
+    result["idle_conversation_seconds"] = ics if ics in _ALLOWED_IDLE_SECONDS else 15
     # booleans
     for bkey in (
         "idle_conversations_enabled",
@@ -313,6 +313,97 @@ def _utc_now_iso() -> str:
 
 def _copy_dict(value: Any) -> Dict[str, Any]:
     return dict(_safe_dict(value))
+
+
+def _stable_unique_labeled_items(values: List[Any], limit: int) -> List[str]:
+    seen = set()
+    out: List[str] = []
+    for raw in _safe_list(values):
+        if isinstance(raw, dict):
+            value = (
+                _safe_str(raw.get("summary")).strip()
+                or _safe_str(raw.get("description")).strip()
+                or _safe_str(raw.get("title")).strip()
+                or _safe_str(raw.get("label")).strip()
+                or _safe_str(raw.get("name")).strip()
+            )
+        else:
+            value = _safe_str(raw).strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+        if len(out) >= limit:
+            break
+    return out
+
+def _build_world_advance_recap(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    debug_trace: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    debug_trace = _safe_dict(debug_trace)
+
+    additional_moments = int(
+        debug_trace.get("advance_ticks")
+        or debug_trace.get("additional_moments")
+        or runtime_state.get("resume_advance_ticks")
+        or runtime_state.get("world_advance_count")
+        or 0
+    )
+
+    world_events = _stable_unique_labeled_items(
+        simulation_state.get("recent_events")
+        or simulation_state.get("world_events")
+        or runtime_state.get("recent_world_events")
+        or [],
+        5,
+    )
+    consequences = _stable_unique_labeled_items(
+        simulation_state.get("recent_consequences")
+        or runtime_state.get("recent_consequences")
+        or [],
+        5,
+    )
+    threads = _stable_unique_labeled_items(
+        simulation_state.get("active_threads")
+        or simulation_state.get("threads")
+        or runtime_state.get("active_threads")
+        or [],
+        4,
+    )
+    npc_updates = _stable_unique_labeled_items(
+        runtime_state.get("npc_updates")
+        or simulation_state.get("npc_updates")
+        or simulation_state.get("npc_states")
+        or [],
+        4,
+    )
+    director_activity = _stable_unique_labeled_items(
+        runtime_state.get("director_log")
+        or runtime_state.get("director_activity")
+        or debug_trace.get("director_activity")
+        or [],
+        4,
+    )
+
+    return {
+        "kind": "world_advance_recap",
+        "summary": _safe_str(debug_trace.get("summary")).strip()
+        or (
+            f"📜 While you were away, the world advanced through {additional_moments} additional moments. Much has changed."
+            if additional_moments > 0
+            else "📜 While you were away, the world shifted."
+        ),
+        "additional_moments": additional_moments,
+        "world_events": world_events,
+        "consequences": consequences,
+        "threads": threads,
+        "npc_updates": npc_updates,
+        "director_activity": director_activity,
+    }
 
 
 def _stable_unique_strs(values: List[Any]) -> List[str]:
@@ -658,14 +749,14 @@ def _update_known_npc_ids(runtime_state: Dict[str, Any], simulation_state: Dict[
     simulation_state = _safe_dict(simulation_state)
     
     known = _safe_list(runtime_state.get("known_npc_ids", []))
-    known_set = set(str(x).strip() for x in known if str(x).strip())
+    known_set = set(known)
     
     # Add currently nearby NPCs
     player = _safe_dict(simulation_state.get("player_state"))
     nearby = _safe_list(player.get("nearby_npc_ids", []))
     
     for npc_id in nearby:
-        npc_id = _safe_str(npc_id)
+        npc_id = _safe_str(npc_id).strip()
         if npc_id and npc_id not in known_set:
             known.append(npc_id)
             known_set.add(npc_id)
@@ -1075,7 +1166,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "voice_assignments": {},
             "settings": {
                 "response_length": "short",
-                "idle_conversation_seconds": 60,
+                "idle_conversation_seconds": 15,
                 "idle_conversations_enabled": True,
                 "idle_npc_to_player_enabled": True,
                 "idle_npc_to_npc_enabled": True,
@@ -1678,10 +1769,19 @@ def _apply_idle_tick_to_session(
     # Real idle-seconds calculation
     idle_seconds = _seconds_since_iso(_safe_str(runtime_state.get("last_real_player_activity_at")))
     settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("settings")))
-    conversation_idle_seconds = int(settings.get("idle_conversation_seconds", 60) or 60)
-    idle_gate_open = bool(settings.get("idle_conversations_enabled")) and idle_seconds >= conversation_idle_seconds
+    conversation_idle_seconds = int(settings.get("idle_conversation_seconds", 15) or 15)
+    prior_idle_streak = int(runtime_state.get("idle_streak", 0) or 0)
+    idle_gate_open = bool(settings.get("idle_conversations_enabled")) and (
+        idle_seconds >= conversation_idle_seconds
+        or prior_idle_streak >= 2
+    )
     debug_trace["idle_seconds"] = idle_seconds
     debug_trace["idle_gate_open"] = idle_gate_open
+    debug_trace["idle_gate_reason"] = (
+        "time_threshold"
+        if idle_seconds >= conversation_idle_seconds else
+        ("idle_streak" if prior_idle_streak >= 2 else "closed")
+    )
     debug_trace["conversation_idle_seconds"] = conversation_idle_seconds
 
     player_context = _build_idle_player_context(after_state, runtime_state)
@@ -1953,6 +2053,50 @@ def _apply_idle_tick_to_session(
     }
 
 
+def _build_world_advance_recap(simulation_state, runtime_state, debug_trace):
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    # Pull recent world signals
+    world_events = _safe_list(simulation_state.get("recent_events"))
+    consequences = _safe_list(simulation_state.get("recent_consequences"))
+    threads = _safe_list(simulation_state.get("active_threads"))
+    npcs = _safe_list(simulation_state.get("npc_states"))
+
+    # Trim for UI (bounded)
+    world_events = world_events[:5]
+    consequences = consequences[:5]
+    threads = threads[:4]
+    npcs = npcs[:4]
+
+    def _label(x):
+        if isinstance(x, dict):
+            return (
+                _safe_str(x.get("summary")) or
+                _safe_str(x.get("description")) or
+                _safe_str(x.get("title")) or
+                _safe_str(x.get("name"))
+            )
+        return _safe_str(x)
+
+    recap = {
+        "kind": "world_advance_recap",
+        "summary": debug_trace.get("summary") or "The world shifted while you were away.",
+        "additional_moments": debug_trace.get("advance_ticks", 0),
+
+        # 🔥 THIS IS WHAT UI NEEDS
+        "world_events": [_label(x) for x in world_events],
+        "consequences": [_label(x) for x in consequences],
+        "threads": [_label(x) for x in threads],
+        "npc_updates": [_label(x) for x in npcs],
+
+        # optional
+        "director_activity": _safe_list(runtime_state.get("director_log"))[:4],
+    }
+
+    return recap
+
+
 def _make_dialogue_update_from_candidate(
     candidate: Dict[str, Any],
     session_context: Dict[str, Any],
@@ -1972,11 +2116,13 @@ def _make_dialogue_update_from_candidate(
         "text": _safe_str(req.get("text_hint")),
         "structured": {
             "emotion": _safe_str(req.get("emotion")),
+            "lane": _safe_str(candidate.get("lane") or "idle"),
             "world_context": _safe_str(req.get("world_context")),
         },
         "source_event_ids": [],
         "source": "dialogue",
         "created_at": _utc_now_iso(),
+        "lane": _safe_str(candidate.get("lane") or "idle"),
     }
 
 
@@ -2244,7 +2390,7 @@ def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[s
         session = save_runtime_session(session)
         all_updates.append(summary)
     
-    return {
+    response = {
         "ok": True,
         "session": _safe_dict(result.get("session")) if not excess_ticks else session,
         "updates": all_updates,
@@ -2252,3 +2398,14 @@ def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[s
         "ticks_applied": capped_ticks,
         "excess_summarized": excess_ticks,
     }
+
+    if excess_ticks > 0:
+        debug_trace = {
+            "summary": f"While you were away, the world advanced through {excess_ticks} additional moments. Much has changed.",
+            "advance_ticks": excess_ticks,
+        }
+        sim_state = _safe_dict(session.get("simulation_state"))
+        runtime_state = _safe_dict(session.get("runtime_state"))
+        response["world_advance_recap"] = _build_world_advance_recap(sim_state, runtime_state, debug_trace)
+
+    return response

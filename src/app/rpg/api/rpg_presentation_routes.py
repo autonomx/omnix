@@ -620,15 +620,15 @@ async def presentation_speakers(request: Request):
 
     session = _safe_dict(data.get("session"))
     runtime_state = _safe_dict(session.get("runtime_state"))
-    present_ids = _derive_present_npc_ids(simulation_state, runtime_state, setup_payload)
-    known_ids = _derive_known_npc_ids(simulation_state, runtime_state)
+    present_ids = _derive_present_npc_ids(simulation_state, data.get("runtime_state") or {}, setup_payload)
+    known_ids = _derive_known_npc_ids(simulation_state, data.get("runtime_state") or {})
 
     present_character_cards = []
     for npc_id in present_ids:
         card = dict(_safe_dict(all_cards_by_id.get(npc_id)))
         if not card:
             continue
-        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, runtime_state)
+        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, data.get("runtime_state") or {})
         present_character_cards.append(card)
 
     known_character_cards = []
@@ -639,7 +639,7 @@ async def presentation_speakers(request: Request):
         card = dict(_safe_dict(all_cards_by_id.get(npc_id)))
         if not card:
             continue
-        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, runtime_state)
+        card["live_state"] = _derive_npc_live_state(npc_id, simulation_state, data.get("runtime_state") or {})
         known_character_cards.append(card)
 
     return _jsonify({

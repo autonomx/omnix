@@ -39,6 +39,7 @@
     const DICE_HIDE_DELAY   = 4000;  // ms per roll display
     const DICE_ANIM_FRAMES  = 12;    // number of random-number frames before final
     const DICE_ANIM_INTERVAL = 50;   // ms between animation frames
+    const TYPING_IDLE_MS = 1500;
     // Defer init slightly past chat.js (which defers 500 ms) so that the chat
     // module's event listeners are already attached before we add ours in
     // capture phase.  650 ms > 500 ms + parse time.
@@ -109,6 +110,8 @@
         worldEventsSummary: {},
     };
 
+    let typingIdleTimer = null;
+
     // ─── Console Debug Logger ──────────────────────────────────────────────────
 
     function rpgDebugEnabled() {
@@ -124,6 +127,161 @@
         } catch (e) {
             console.log('[RPG][' + tag + ']', payload);
         }
+    }
+
+    function _safeArray(v) {
+        return Array.isArray(v) ? v : [];
+    }
+
+    function _safeObj(v) {
+        return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+    }
+
+    function _safeStr(v) {
+        return (v == null) ? '' : String(v);
+    }
+
+    function _nonEmptySection(lines) {
+        return _safeArray(lines).filter(Boolean);
+    }
+
+    function _coerceWorldAdvanceRecap(payload) {
+        payload = _safeObj(payload);
+
+        var nested =
+            _safeObj(payload.world_advance_recap).summary ? _safeObj(payload.world_advance_recap) :
+            _safeObj(payload.resume_recap).summary ? _safeObj(payload.resume_recap) :
+            _safeObj(payload.recap).summary ? _safeObj(payload.recap) :
+            _safeObj(payload.resume_summary).summary ? _safeObj(payload.resume_summary) :
+            {};
+
+        if (Object.keys(nested).length) {
+            payload = Object.assign({}, payload, nested);
+        }
+
+        return {
+            summary: _safeStr(payload.summary || payload.message || payload.text),
+            additional_moments: payload.additional_moments || payload.advanced_moments || payload.world_advance_count || payload.moments || 0,
+            director_activity: _safeArray(payload.director_activity),
+            director_notes: _safeArray(payload.director_notes),
+            world_events: _safeArray(payload.world_events || payload.recent_world_events),
+            incidents: _safeArray(payload.incidents || payload.recent_incidents),
+            consequences: _safeArray(payload.consequences || payload.recent_consequences),
+            threads: _safeArray(payload.threads || payload.active_threads),
+            factions: _safeArray(payload.factions || payload.faction_activity),
+            npc_updates: _safeArray(payload.npc_updates || payload.character_updates),
+            location_updates: _safeArray(payload.location_updates),
+            changes: _safeArray(payload.changes),
+        };
+    }
+
+    function _takeTextList(items, limit) {
+        return _safeArray(items)
+            .map(function (item) {
+                if (typeof item === 'string') return item.trim();
+                item = _safeObj(item);
+                return (
+                    _safeStr(item.summary).trim() ||
+                    _safeStr(item.text).trim() ||
+                    _safeStr(item.label).trim() ||
+                    _safeStr(item.title).trim() ||
+                    _safeStr(item.name).trim() ||
+                    _safeStr(item.description).trim()
+                );
+            })
+            .filter(Boolean)
+            .slice(0, limit || 5);
+    }
+
+    function _renderBulletSection(title, lines) {
+        lines = _nonEmptySection(lines);
+        if (!lines.length) return '';
+        return '**' + title + ':**\n' + lines.map(function (x) {
+            return '- ' + x;
+        }).join('\n');
+    }
+
+    function buildWorldAdvanceRecapMarkdown(payload) {
+        var recap = _coerceWorldAdvanceRecap(payload);
+        var moments = parseInt(
+            recap.additional_moments || recap.moments || recap.advanced_moments || 0,
+            10
+        ) || 0;
+
+        var summary =
+            _safeStr(recap.summary).trim() ||
+            (moments > 0
+                ? '📜 While you were away, the world advanced through ' + moments + ' additional moments.'
+                : '📜 While you were away, the world advanced.');
+
+        var directorLines = _takeTextList(
+            recap.director_activity.length ? recap.director_activity : recap.director_notes,
+            4
+        );
+        var eventLines = _takeTextList(
+            recap.world_events.length ? recap.world_events :
+            (recap.incidents.length ? recap.incidents : recap.consequences),
+            5
+        );
+        var threadLines = _takeTextList(
+            recap.threads.length ? recap.threads : recap.factions,
+            4
+        );
+        var npcLines = _takeTextList(
+            recap.npc_updates.length ? recap.npc_updates : recap.location_updates,
+            4
+        );
+        var changeLines = _takeTextList(recap.changes, 5);
+
+        var parts = [summary];
+
+        if (moments > 0) {
+            parts.push('**World Advance:** ' + moments + ' moments');
+        }
+
+        var directorSection = _renderBulletSection('Director Activity', directorLines);
+        var eventSection = _renderBulletSection('World Events', eventLines);
+        var threadSection = _renderBulletSection('Active Threads', threadLines);
+        var npcSection = _renderBulletSection('Notable Changes', npcLines);
+        var changeSection = _renderBulletSection('Additional Changes', changeLines);
+
+        if (directorSection) parts.push(directorSection);
+        if (eventSection) parts.push(eventSection);
+        if (threadSection) parts.push(threadSection);
+        if (npcSection) parts.push(npcSection);
+        if (changeSection) parts.push(changeSection);
+
+        return parts.filter(Boolean).join('\n\n').trim();
+    }
+
+    function isWorldAdvanceRecapPayload(payload) {
+        payload = _safeObj(payload);
+        if (!payload) return false;
+
+        if (payload.kind === 'world_advance_recap' || payload.kind === 'resume_recap') {
+            return true;
+        }
+
+        if (payload.world_advance_recap || payload.resume_recap || payload.resume_summary || payload.recap) {
+            return true;
+        }
+
+        if (
+            payload.additional_moments ||
+            payload.advanced_moments ||
+            payload.world_advance_count ||
+            payload.director_activity ||
+            payload.director_notes ||
+            payload.world_events ||
+            payload.recent_world_events ||
+            payload.active_threads ||
+            payload.npc_updates ||
+            payload.location_updates
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     function markRealPlayerActivity(reason) {
@@ -163,13 +321,13 @@
             parts.push(sn.scene_summary);
         }
         if (sn.action_result_line) {
-            parts.push(sn.action_result_line);
+            parts.push('**Action:** ' + sn.action_result_line);
         }
         if (sn.npc_reply_block) {
             parts.push('**Reply:** ' + sn.npc_reply_block);
         }
         if (sn.rewards_block) {
-            parts.push('**Rewards:** ' + sn.rewards_block);
+            parts.push('**Reward:** ' + sn.rewards_block);
         }
         return parts.join('\n\n').trim();
     }
@@ -180,6 +338,11 @@
             return structured;
         }
         return String((update && update.narration) || '');
+    }
+
+    function appendSystemRecapMessage(markdown) {
+        if (!markdown) return;
+        appendMessage({ type: 'system', content: markdown });
     }
 
     function processDiceQueue() {
@@ -1004,14 +1167,38 @@
     function transformResponse(data) {
         var messages = [];
 
+        if (!data || typeof data !== 'object') {
+            return messages;
+        }
+
+        if (isWorldAdvanceRecapPayload(data)) {
+            messages.push({
+                type: 'system',
+                content: buildWorldAdvanceRecapMarkdown(data)
+            });
+        }
+
+        _safeArray(data.resume_events).forEach(function (ev) {
+            if (isWorldAdvanceRecapPayload(ev)) {
+                messages.push({
+                    type: 'system',
+                    content: buildWorldAdvanceRecapMarkdown(ev)
+                });
+            }
+        });
+
+        _safeArray(data.events).forEach(function (ev) {
+            if (isWorldAdvanceRecapPayload(ev)) {
+                messages.push({ type: 'system', content: buildWorldAdvanceRecapMarkdown(ev) });
+            }
+        });
+
         if (data.narration) {
             messages.push({ type: 'narration', content: getNarrationMarkdown(data) });
         }
-
-        if (Array.isArray(data.events)) {
-            data.events.forEach(function (ev) {
-                var text = ev.description || ev.type || JSON.stringify(ev);
-                messages.push({ type: 'event', content: text });
+        if (Array.isArray(data.ambient_updates) && data.ambient_updates.length) {
+            data.ambient_updates.forEach(function (u) {
+                messages.push({ type: 'event', content: (u && u.text) ? u.text : JSON.stringify(u) });
             });
         }
 
@@ -1035,6 +1222,40 @@
             worldEvents: data.world_events || [],
             player:      data.player       || null,
         };
+    }
+
+    function handleResumePayload(data) {
+        data = _safeObj(data);
+
+        if (isWorldAdvanceRecapPayload(data)) {
+            appendSystemRecapMessage(buildWorldAdvanceRecapMarkdown(data));
+        }
+
+        _safeArray(data.resume_events).forEach(function (ev) {
+            if (isWorldAdvanceRecapPayload(ev)) {
+                appendSystemRecapMessage(buildWorldAdvanceRecapMarkdown(ev));
+            }
+        });
+    }
+
+    function onSessionLoaded(data) {
+        if (!data) return;
+
+        handleResumePayload(data);
+
+        var messages = transformResponse(data);
+        messages.forEach(function (msg) {
+            appendMessage(msg);
+        });
+    }
+
+    function handleStreamEventPayload(payload) {
+        payload = _safeObj(payload);
+        if (isWorldAdvanceRecapPayload(payload)) {
+            appendSystemRecapMessage(buildWorldAdvanceRecapMarkdown(payload));
+            return true;
+        }
+        return false;
     }
 
     // ─── Input handler ─────────────────────────────────────────────────────────
@@ -2056,6 +2277,9 @@
             es.onmessage = function (event) {
                 try {
                     var data = JSON.parse(event.data);
+                    if (handleStreamEventPayload(data)) {
+                        return;
+                    }
                     rpgDebug('SSE:Message', data);
                     if (data.type === 'ambient' && data.update) {
                         rpgDebug('Ambient:SSE', data.update);
@@ -2082,6 +2306,20 @@
                 rpgDebug('SSE:Open', { sessionId: rpgState.sessionId });
                 _ambientReconnectAttempts = 0;
             };
+
+            es.addEventListener('resume_recap', function (event) {
+                var payload = JSON.parse(event.data);
+                if (handleStreamEventPayload(payload)) {
+                    return;
+                }
+            });
+
+            es.addEventListener('world_advance_recap', function (event) {
+                var payload = JSON.parse(event.data);
+                if (handleStreamEventPayload(payload)) {
+                    return;
+                }
+            });
         } catch (e) {
             // SSE not supported — fall back to polling
             startAmbientPolling();
@@ -2208,7 +2446,17 @@
             (kind === 'taunt' && update.interrupt) ||
             (kind === 'quest_prompt' && update.interrupt);
 
-        if (rpgState.isTyping && !isUrgent) {
+        // Idle chatter should stay visible in the feed even while the input is focused.
+        // Only buffer non-idle ambient updates while the user is actively typing.
+        var isIdleConversation =
+            !!update.is_idle_conversation ||
+            update.lane === 'idle' ||
+            (update.structured && update.structured.lane === 'idle') ||
+            kind === 'idle_check_in' ||
+            kind === 'gossip' ||
+            kind === 'npc_to_npc';
+
+        if (rpgState.isTyping && !isUrgent && !isIdleConversation) {
             // Queue as unread
             rpgState.ambientFeedBuffer.push(update);
             updateState({ unreadAmbient: rpgState.unreadAmbient + 1 });
@@ -2216,6 +2464,7 @@
             return;
         }
 
+        // Idle NPC chatter renders immediately.
         appendAmbientUpdate(update);
     }
 
@@ -2525,17 +2774,36 @@
         var inputEl = el('userInput') || el('chatInput');
         if (!inputEl) return;
 
+        function clearTypingSoon() {
+            window.clearTimeout(typingIdleTimer);
+            typingIdleTimer = window.setTimeout(function () {
+                updateState({ isTyping: false });
+                flushAmbientBuffer();
+            }, TYPING_IDLE_MS);
+        }
+
         inputEl.addEventListener('focus', function () {
             updateState({ isTyping: true });
             markRealPlayerActivity('input_focus');
+            clearTypingSoon();
         });
         inputEl.addEventListener('blur', function () {
+            window.clearTimeout(typingIdleTimer);
             updateState({ isTyping: false });
             flushAmbientBuffer();
         });
         inputEl.addEventListener('input', function () {
             updateState({ isTyping: true });
             markRealPlayerActivity('input_typing');
+            clearTypingSoon();
+        });
+        inputEl.addEventListener('keydown', function () {
+            updateState({ isTyping: true });
+            clearTypingSoon();
+        });
+        inputEl.addEventListener('paste', function () {
+            updateState({ isTyping: true });
+            clearTypingSoon();
         });
     }
 

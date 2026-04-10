@@ -170,9 +170,13 @@ def classify_ambient_delivery(
     
     should_int = should_interrupt_player(session, update)
     kind = _safe_str(update.get("kind"))
+    lane = _safe_str(update.get("lane") or _safe_dict(update.get("structured")).get("lane"))
     priority = float(update.get("priority", 0) or 0)
     is_reaction = _is_reaction_update(update)
-    is_idle = _safe_str(update.get("lane")) == "idle" or kind in ("idle_check_in", "gossip")
+    is_idle = (
+        lane == "idle"
+        or kind in ("idle_check_in", "gossip", "npc_to_npc")
+    )
     
     # Tag delivery metadata on the update itself
     update["is_reaction"] = is_reaction
