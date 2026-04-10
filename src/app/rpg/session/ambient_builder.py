@@ -482,6 +482,14 @@ def score_ambient_salience(update: Dict[str, Any], context: Dict[str, Any]) -> f
         score += 0.05
     elif kind in ("conversation_line",):
         score += 0.15
+    elif kind in ("follow_reaction",):
+        score += 0.35
+    elif kind in ("caution_reaction",):
+        score += 0.3
+    elif kind in ("assist_reaction",):
+        score += 0.25
+    elif kind in ("idle_check_in",):
+        score += 0.1
 
     # Interrupt flag
     if update.get("interrupt"):

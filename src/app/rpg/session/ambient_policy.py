@@ -27,6 +27,23 @@ def _safe_list(v: Any) -> List[Any]:
 _MIN_TICKS_BETWEEN_INTERRUPTS = 3
 _MAX_PENDING_INTERRUPTS = 2
 
+# Reaction kinds that bypass quiet-window suppression
+_REACTION_KINDS = frozenset({
+    "follow_reaction",
+    "caution_reaction",
+    "assist_reaction",
+    "warning",
+    "combat_start",
+})
+
+
+def _is_reaction_update(update: Dict[str, Any]) -> bool:
+    """Check if update is a reaction kind that should bypass quiet window."""
+    return (
+        _safe_str(update.get("kind")) in _REACTION_KINDS
+        or bool(update.get("interrupt"))
+    )
+
 
 # ── Main interruption policy ─────────────────────────────────────────────
 
@@ -57,11 +74,13 @@ def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> 
     priority = float(update.get("priority", 0) or 0)
     target_id = _safe_str(update.get("target_id"))
     
-    # Phase 3D: quiet-window suppression (unless truly urgent)
+    # Phase 3D: quiet-window suppression (unless truly urgent or reaction)
     quiet_ticks = int(runtime.get("post_player_quiet_ticks", 0) or 0)
     if quiet_ticks > 0:
-        # Only combat_start can break the quiet window
-        if kind == "combat_start" and priority >= 0.9:
+        # Reaction kinds and combat bypass the quiet window
+        if _is_reaction_update(update):
+            pass  # Allow through
+        elif kind == "combat_start" and priority >= 0.9:
             pass  # Allow through
         else:
             return False
@@ -101,6 +120,10 @@ def should_interrupt_player(session: Dict[str, Any], update: Dict[str, Any]) -> 
     if kind == "companion_comment" and priority >= 0.6:
         return True
     
+    # Reaction kinds: follow/caution/assist
+    if kind in ("follow_reaction", "caution_reaction", "assist_reaction"):
+        return priority >= 0.5
+    
     # Arrivals with high priority (important NPC)
     if kind == "arrival" and priority >= 0.6:
         return True
@@ -139,6 +162,8 @@ def classify_ambient_delivery(
     - "interrupt" — display immediately, even if typing
     - "badge" — show unread badge, queue for later
     - "silent" — add to feed without notification
+    
+    Also tags the update dict in-place with delivery metadata.
     """
     session = _safe_dict(session)
     update = _safe_dict(update)
@@ -146,17 +171,27 @@ def classify_ambient_delivery(
     should_int = should_interrupt_player(session, update)
     kind = _safe_str(update.get("kind"))
     priority = float(update.get("priority", 0) or 0)
+    is_reaction = _is_reaction_update(update)
+    is_idle = _safe_str(update.get("lane")) == "idle" or kind in ("idle_check_in", "gossip")
+    
+    # Tag delivery metadata on the update itself
+    update["is_reaction"] = is_reaction
+    update["is_idle_conversation"] = is_idle
     
     if should_int:
         # If typing and it's not truly urgent, downgrade to badge
         if is_typing and kind not in ("combat_start",) and priority < 0.9:
+            update["delivery_reason"] = "downgraded_typing"
             return "badge"
+        update["delivery_reason"] = "interrupt_policy"
         return "interrupt"
     
     # Medium priority → badge
     if priority >= 0.4:
+        update["delivery_reason"] = "medium_priority"
         return "badge"
     
+    update["delivery_reason"] = "low_priority"
     return "silent"
 
 

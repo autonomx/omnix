@@ -166,6 +166,12 @@ _RESPONSE_LENGTH_DEFAULTS: dict[str, str] = {
     "character_length": "medium",
 }
 
+# ── Idle / reaction settings constants ────────────────────────────────────
+# Shared enum values for backend validation and frontend UI.
+
+_IDLE_CONVERSATION_SECONDS_ALLOWED: tuple[int, ...] = (30, 60, 300, 600)
+_REACTION_STYLE_ENUMS: tuple[str, ...] = ("minimal", "normal", "lively")
+
 
 def normalize_response_length_config(value: dict | None) -> dict:
     if not isinstance(value, dict):

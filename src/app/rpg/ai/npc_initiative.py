@@ -37,6 +37,9 @@ CANDIDATE_KINDS = (
     "quest_prompt",
     "recruitment_offer",
     "plea_for_help",
+    "follow_reaction",
+    "caution_reaction",
+    "assist_reaction",
 )
 
 # ── Cooldown constants ────────────────────────────────────────────────────
@@ -96,17 +99,131 @@ def _personality_bias(npc_info: Dict[str, Any], kind: str) -> float:
     return 0.0
 
 
+# ── Reaction-lane initiative builder ──────────────────────────────────────
+
+def _build_reaction_initiative_candidates(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    player_context: Dict[str, Any],
+    *,
+    npc_index: Dict[str, Any],
+    npc_minds: Dict[str, Any],
+    nearby_ids: Set[str],
+    player_loc: str,
+    party_ids: Set[str],
+    tick: int,
+    encounter_active: bool,
+) -> List[Dict[str, Any]]:
+    """Build initiative candidates for the reaction lane — immediate responses to player action."""
+    action_ctx = _safe_dict(runtime_state.get("last_player_action_context"))
+    if not action_ctx:
+        return []
+
+    movement_intent = _safe_str(action_ctx.get("movement_intent"))
+    risk_level = _safe_str(action_ctx.get("risk_level"))
+    urgency = _safe_str(action_ctx.get("urgency"))
+    candidates: List[Dict[str, Any]] = []
+
+    for npc_id in sorted(npc_index.keys()):
+        npc_info = _safe_dict(npc_index.get(npc_id))
+        npc_name = _safe_str(npc_info.get("name") or npc_id)
+        npc_loc = _safe_str(npc_info.get("location_id"))
+        if npc_id not in nearby_ids and npc_loc != player_loc:
+            continue
+
+        mind = _safe_dict(npc_minds.get(npc_id))
+        beliefs = _safe_dict(mind.get("beliefs"))
+        player_belief = _safe_dict(beliefs.get("player"))
+        trust = float(player_belief.get("trust", 0) or 0)
+        hostility = float(player_belief.get("hostility", 0) or 0)
+
+        role = _safe_str(npc_info.get("role")).lower()
+        is_companion = (
+            role in ("companion", "ally", "follower", "support", "guard", "scout", "party_member")
+            or npc_id in party_ids
+            or bool(npc_info.get("is_companion"))
+        )
+
+        # Companion/ally follow initiative for rush/advance
+        if is_companion and movement_intent in ("rush", "advance", "retreat"):
+            action_family = "follow_player" if movement_intent != "retreat" else "cover_retreat"
+            salience = 0.65
+            if urgency == "high":
+                salience += 0.1
+            candidates.append({
+                "kind": "follow_reaction",
+                "speaker_id": npc_id,
+                "speaker_name": npc_name,
+                "target_id": "player",
+                "target_name": "you",
+                "reason": action_family,
+                "salience": min(salience, 1.0),
+                "interrupt": False,
+                "action_intent": "keep_pace",
+                "initiative_reason": f"companion reacts to player {movement_intent}",
+                "source_lane": "reaction",
+                "action_family": action_family,
+                "location_id": npc_loc,
+                "tick": tick,
+            })
+
+        # Cautious NPC warning on risky moves
+        if risk_level in ("medium", "high") and trust > 0.1 and not is_companion:
+            salience = 0.5 + (0.1 if risk_level == "high" else 0.0)
+            candidates.append({
+                "kind": "caution_reaction",
+                "speaker_id": npc_id,
+                "speaker_name": npc_name,
+                "target_id": "player",
+                "target_name": "you",
+                "reason": "object_to_risk",
+                "salience": min(salience, 1.0),
+                "interrupt": False,
+                "action_intent": "call_out_warning",
+                "initiative_reason": f"caution about player {movement_intent} (risk={risk_level})",
+                "source_lane": "reaction",
+                "action_family": "call_out_warning",
+                "location_id": npc_loc,
+                "tick": tick,
+            })
+
+        # Assist on inspect
+        if movement_intent == "inspect" and is_companion:
+            candidates.append({
+                "kind": "assist_reaction",
+                "speaker_id": npc_id,
+                "speaker_name": npc_name,
+                "target_id": "player",
+                "target_name": "you",
+                "reason": "assist_investigation",
+                "salience": 0.5,
+                "interrupt": False,
+                "action_intent": "assist_investigation",
+                "initiative_reason": "companion assists player inspection",
+                "source_lane": "reaction",
+                "action_family": "assist_investigation",
+                "location_id": npc_loc,
+                "tick": tick,
+            })
+
+    return candidates[:MAX_INITIATIVE_CANDIDATES]
+
+
 # ── Build candidates ──────────────────────────────────────────────────────
 
 def build_npc_initiative_candidates(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
     player_context: Dict[str, Any],
+    *,
+    lane: str = "idle",
 ) -> List[Dict[str, Any]]:
     """Build a list of possible NPC initiative candidates from simulation state.
 
     Considers NPC beliefs, goals, relationships, faction pressure, opening
     state, and player context to generate rule-based autonomous candidates.
+
+    lane: "reaction" | "idle" | "all"
     """
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
@@ -133,6 +250,16 @@ def build_npc_initiative_candidates(
         simulation_state.get("encounter_active")
         or simulation_state.get("active_encounter")
     )
+
+    # ── Reaction lane: immediate NPC action-like reactions ──
+    if lane == "reaction":
+        return _build_reaction_initiative_candidates(
+            simulation_state, runtime_state, player_context,
+            npc_index=npc_index, npc_minds=npc_minds,
+            nearby_ids=nearby_ids, player_loc=player_loc,
+            party_ids=party_ids, tick=tick,
+            encounter_active=encounter_active,
+        )
 
     opening_runtime = _safe_dict(runtime_state.get("opening_runtime"))
     opening_active = bool(opening_runtime.get("active"))

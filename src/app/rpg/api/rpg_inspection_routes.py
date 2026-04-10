@@ -6,6 +6,7 @@ from app.rpg.analytics import (
     build_tick_diff,
     build_timeline_row_diff,
     build_timeline_summary,
+    build_world_events_view,
     get_timeline_tick,
     gm_append_debug_note,
     gm_force_faction_trend,
@@ -129,4 +130,16 @@ def gm_debug_note():
     return jsonify({
         "ok": True,
         "setup_payload": setup_payload,
+    })
+
+
+@rpg_inspection_bp.post("/api/rpg/inspect/world_events")
+def inspect_world_events():
+    data = request.get_json(silent=True) or {}
+    setup_payload = dict(data.get("setup_payload") or {})
+    simulation_state = _get_simulation_state(setup_payload)
+    runtime_state = dict(data.get("runtime_state") or {})
+    return jsonify({
+        "ok": True,
+        "world_events": build_world_events_view(simulation_state, runtime_state),
     })
