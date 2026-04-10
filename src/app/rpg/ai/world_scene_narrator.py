@@ -560,7 +560,20 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     # ✅ Get final values from authoritative grounded state
     title = _safe_str(scene.get("title") or grounded.get("scene_title")).strip() or "Current Scene"
     summary = _safe_str(scene.get("summary") or grounded.get("scene_summary")).strip()
-    actors = _safe_list(scene.get("actors") or grounded.get("present_actor_names"))
+    
+    # ✅ Normalize actors: convert dicts to names, always have safe fallback
+    raw_actors = _safe_list(scene.get("actors") or grounded.get("present_actor_names"))
+    actors = []
+    for a in raw_actors:
+        if isinstance(a, dict):
+            actors.append(_safe_str(a.get("name") or a.get("id") or "Unknown"))
+        else:
+            actors.append(_safe_str(a))
+    
+    # ✅ Hard fallback: Actors present is never empty
+    if not actors:
+        actors = ["Other people nearby"]
+    
     raw_location = _safe_str(scene.get("location_name") or turn_result.get("location_name")).strip()
     location = _normalize_prompt_location_name(raw_location, _safe_str(grounded.get("location_name"))) or "Current Location"
     stakes = scene.get("stakes", "much is at stake")

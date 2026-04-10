@@ -37,8 +37,15 @@ def build_dialogue_prompt(
     # Inject character length setting
     runtime_state = _safe_dict(runtime_state or player_state.get("runtime_state"))
     settings = _safe_dict(runtime_state.get("settings"))
-    rl = _safe_dict(settings.get("response_length"))
-    char_len = rl.get("character_length", "medium")
+    rl = settings.get("response_length")
+    if isinstance(rl, str) and rl.strip().lower() in ("short", "medium", "long"):
+        char_len = rl.strip().lower()
+    elif isinstance(rl, dict):
+        char_len = _safe_str(
+            rl.get("character_length") or rl.get("narrator_length") or "medium"
+        ).strip().lower()
+    else:
+        char_len = "medium"
 
     char_instruction = {
         "short": "Keep dialogue brief and direct.",

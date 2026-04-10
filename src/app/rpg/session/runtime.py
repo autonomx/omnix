@@ -151,7 +151,16 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
     # response_length: keep existing semantics
     rl = value.get("response_length")
-    result["response_length"] = rl if isinstance(rl, str) and rl.strip().lower() in ("short", "medium", "long") else "short"
+    if isinstance(rl, str):
+        rl_value = rl.strip().lower()
+        result["response_length"] = rl_value if rl_value in ("short", "medium", "long") else "short"
+    elif isinstance(rl, dict):
+        # Backward compatibility for older/broken frontend payloads that posted:
+        # {"response_length": {"narrator_length": "...", "character_length": "..."}}
+        fallback = str(rl.get("narrator_length") or rl.get("character_length") or "").strip().lower()
+        result["response_length"] = fallback if fallback in ("short", "medium", "long") else "short"
+    else:
+        result["response_length"] = "short"
     # idle_conversation_seconds: only allowed values
     ics = value.get("idle_conversation_seconds")
     try:

@@ -328,6 +328,10 @@ def _build_idle_conversation_candidates(
                 else:
                     text_content = f'{npc_name} says quietly to {other_name}, "We should keep an eye on this."'
                 
+                # Boost salience when 2+ NPCs are present so it wins over gossip
+                npc_count = len([x for x in nearby_ids if x != npc_id])
+                base_salience = 0.52 if npc_count >= 2 else 0.45
+                
                 candidates.append({
                     "lane": "idle",
                     "kind": "npc_to_npc",
@@ -335,7 +339,7 @@ def _build_idle_conversation_candidates(
                     "speaker_name": npc_name,
                     "target_id": other_id,
                     "target_name": other_name,
-                    "salience": 0.45,
+                    "salience": base_salience,
                     "text_hint": text_content,
                     "emotion": "neutral",
                     "location_id": npc_loc,

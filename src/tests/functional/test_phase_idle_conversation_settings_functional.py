@@ -134,6 +134,23 @@ class TestSettingsNormalization:
         result = _normalize_runtime_settings({"response_length": "long"})
         assert result["response_length"] == "long"
 
+    def test_response_length_medium_preserved(self):
+        result = _normalize_runtime_settings({"response_length": "medium"})
+        assert result["response_length"] == "medium"
+
+    def test_response_length_legacy_dict_uses_narrator_length(self):
+        result = _normalize_runtime_settings({
+            "response_length": {
+                "narrator_length": "long",
+                "character_length": "short",
+            }
+        })
+        assert result["response_length"] == "long"
+
+    def test_response_length_legacy_dict_invalid_defaults_to_short(self):
+        result = _normalize_runtime_settings({"response_length": {"narrator_length": "verbose"}})
+        assert result["response_length"] == "short"
+
 
 class TestRealPlayerActivity:
     def test_records_timestamp(self):
