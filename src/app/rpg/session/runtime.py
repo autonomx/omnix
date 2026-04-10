@@ -306,6 +306,148 @@ def _copy_dict(value: Any) -> Dict[str, Any]:
     return dict(_safe_dict(value))
 
 
+def _stable_unique_strs(values: List[Any]) -> List[str]:
+    seen = set()
+    out: List[str] = []
+    for raw in values:
+        value = _safe_str(raw).strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
+def _normalize_prompt_location_name(value: str, grounded_fallback: str) -> str:
+    value = _safe_str(value).strip()
+    if not value:
+        return grounded_fallback
+    if value.startswith("scene:tick:"):
+        return grounded_fallback
+    return value
+
+
+def _resolve_location_name(
+    simulation_state: Dict[str, Any],
+    location_id: str,
+    fallback_name: str = "",
+) -> str:
+    simulation_state = _safe_dict(simulation_state)
+    location_id = _safe_str(location_id).strip()
+    if not location_id:
+        return _safe_str(fallback_name).strip()
+
+    # Normalize location id (handle both colon and underscore formats)
+    normalized_id = location_id.replace(":", "_").replace("-", "_").lower()
+    
+    # Modern format: locations is object dict keyed by location_id
+    locations_map = _safe_dict(simulation_state.get("locations"))
+    for key in locations_map:
+        key_normalized = key.replace(":", "_").replace("-", "_").lower()
+        if key_normalized == normalized_id:
+            loc = _safe_dict(locations_map[key])
+            return _safe_str(loc.get("name") or loc.get("title") or fallback_name or location_id)
+    
+    # Legacy format: locations is list
+    for loc in _safe_list(simulation_state.get("locations")):
+        loc = _safe_dict(loc)
+        loc_id = _safe_str(loc.get("location_id") or loc.get("id")).replace(":", "_").replace("-", "_").lower()
+        if loc_id == normalized_id:
+            return _safe_str(loc.get("name") or loc.get("title") or fallback_name or location_id)
+    
+    final_fallback = _safe_str(fallback_name).strip() or location_id
+    return final_fallback if final_fallback else "Current Location"
+
+
+def _resolve_actor_names(simulation_state: Dict[str, Any], actor_ids: List[str]) -> List[str]:
+    simulation_state = _safe_dict(simulation_state)
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    names: List[str] = []
+    for actor_id in _stable_unique_strs(actor_ids):
+        npc = _safe_dict(npc_index.get(actor_id))
+        names.append(_safe_str(npc.get("name") or actor_id))
+    return names
+
+
+def _derive_grounded_scene_context(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    turn_result: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    turn_result = _safe_dict(turn_result)
+
+    opening_text = _safe_str(runtime_state.get("opening"))
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+
+    player_loc_id = _safe_str(player_state.get("location_id")).strip()
+    nearby_ids = _safe_list(player_state.get("nearby_npc_ids"))
+    present_scene_ids = _safe_list(current_scene.get("present_npc_ids"))
+    actor_objs = _safe_list(current_scene.get("actors"))
+    actor_obj_ids = [
+        _safe_str(_safe_dict(a).get("id") or _safe_dict(a).get("npc_id") or _safe_dict(a).get("name"))
+        for a in actor_objs
+    ]
+
+    location_id = (
+        player_loc_id
+        or _safe_str(current_scene.get("location_id"))
+        or _safe_str(turn_result.get("location_id"))
+    ).strip()
+    location_name = _resolve_location_name(
+        simulation_state,
+        location_id,
+        _safe_str(current_scene.get("location_name")).strip(),
+    )
+
+    present_actor_ids = _stable_unique_strs(nearby_ids + present_scene_ids + actor_obj_ids)
+    present_actor_names = _resolve_actor_names(simulation_state, present_actor_ids)
+
+    scene_title = (
+        _safe_str(current_scene.get("title")).strip()
+        or _safe_str(current_scene.get("scene_title")).strip()
+        or location_name
+        or "Current Scene"
+    )
+    scene_summary = (
+        _safe_str(current_scene.get("summary")).strip()
+        or _safe_str(current_scene.get("scene")).strip()
+        or opening_text.strip()
+        or "Your adventure continues."
+    )
+
+    return {
+        "scene_title": scene_title,
+        "location_id": location_id,
+        "location_name": location_name or "Current Location",
+        "scene_summary": scene_summary,
+        "present_actor_ids": present_actor_ids,
+        "present_actor_names": present_actor_names,
+    }
+
+
+def _apply_grounded_scene_overlay(scene: Dict[str, Any], grounded: Dict[str, Any]) -> Dict[str, Any]:
+    scene = _copy_dict(_safe_dict(scene))
+    grounded = _safe_dict(grounded)
+
+    scene["title"] = _safe_str(scene.get("title")).strip() or _safe_str(grounded.get("scene_title")) or "Current Scene"
+    scene["location_id"] = _safe_str(scene.get("location_id")).strip() or _safe_str(grounded.get("location_id"))
+    scene["location_name"] = _safe_str(scene.get("location_name")).strip() or _safe_str(grounded.get("location_name")) or "Current Location"
+    scene["summary"] = _safe_str(scene.get("summary")).strip() or _safe_str(grounded.get("scene_summary")) or "Your adventure continues."
+
+    actor_names = _safe_list(grounded.get("present_actor_names"))
+    if actor_names:
+        scene["actors"] = actor_names
+
+    present_ids = _safe_list(grounded.get("present_actor_ids"))
+    if present_ids and not _safe_list(scene.get("present_npc_ids")):
+        scene["present_npc_ids"] = present_ids
+
+    return scene
+
+
 def _ensure_scene_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     return ensure_persistent_scene_runtime_state(runtime_state)
 
@@ -964,6 +1106,14 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     turn_result = _safe_dict(runtime_state.get("last_turn_result"))
     player_state = _safe_dict(simulation_state.get("player_state"))
 
+    # Ensure grounded scene context is always available
+    if not runtime_state.get("grounded_scene_context"):
+        grounded = _derive_grounded_scene_context(simulation_state, runtime_state)
+        current_scene = _safe_dict(runtime_state.get("current_scene"))
+        current_scene = _apply_grounded_scene_overlay(current_scene, grounded)
+        runtime_state["grounded_scene_context"] = grounded
+        runtime_state["current_scene"] = current_scene
+
     current_scene = _safe_dict(runtime_state.get("current_scene"))
     narration = _safe_str(turn_result.get("narration")) or opening
 
@@ -1008,6 +1158,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "world_events_summary": {
             "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-12:],
         },
+        "grounded_scene_context": _safe_dict(runtime_state.get("grounded_scene_context")),
     }
 
 
@@ -1303,6 +1454,13 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
 
     llm_gateway = build_app_llm_gateway()
     gateway_available = bool(llm_gateway)
+    # ✅ FIX: Always apply authoritative grounded scene overlay before narration
+    grounded = _derive_grounded_scene_context(after_state, runtime_state, resolved_result)
+    current_scene = _apply_grounded_scene_overlay(current_scene, grounded)
+    runtime_state["grounded_scene_context"] = grounded
+    runtime_state["current_scene"] = current_scene
+    runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
+
     narration_result = narrate_scene(
         current_scene,
         narration_context,
@@ -1312,9 +1470,6 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     if gateway_available and not narration_result.get("used_llm"):
         logger.error("RPG narration fallback occurred despite gateway availability")
     summary = summarize_simulation_step(step_result)
-
-    runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
-    runtime_state["current_scene"] = current_scene
     runtime_state["last_turn_result"] = {
         "player_input": player_input,
         "action": action,

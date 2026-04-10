@@ -17,11 +17,11 @@ from .base import (
     ProviderConfig,
     ProviderError,
 )
+from .registry import ProviderRegistry, get_registry, list_available_providers
 from .cerebras_provider import CerebrasProvider
 from .llamacpp_provider import LlamaCppProvider
 from .lmstudio_provider import LMStudioProvider
 from .openrouter_provider import OpenRouterProvider
-from .registry import ProviderRegistry, get_registry, list_available_providers
 
 __all__ = [
     'ProviderRegistry',

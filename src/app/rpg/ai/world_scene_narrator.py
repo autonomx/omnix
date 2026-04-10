@@ -508,16 +508,61 @@ class NarrativeResult:
 # Prompt builders
 # ---------------------------------------------------------------------------
 
+def _normalize_response_length(value: Any) -> str:
+    value = str(value or "").strip().lower()
+    if value in ("short", "medium", "long"):
+        return value
+    return "short"
+
+
+def _response_length_prompt_rules(response_length: str) -> str:
+    response_length = _normalize_response_length(response_length)
+
+    if response_length == "long":
+        return (
+            "NARRATOR: 3 to 5 sentences describing the scene.\n"
+            "ACTION: 3 to 5 sentences describing the result of the player's action.\n"
+            "NPC: <npc_name>: \"1 to 3 sentences\" (omit if none)\n"
+            "REWARD: <xp/items if any, else omit>"
+        )
+
+    if response_length == "medium":
+        return (
+            "NARRATOR: 2 to 3 sentences describing the scene.\n"
+            "ACTION: 2 to 3 sentences describing the result of the player's action.\n"
+            "NPC: <npc_name>: \"1 to 2 short sentences\" (omit if none)\n"
+            "REWARD: <xp/items if any, else omit>"
+        )
+
+    return (
+        "NARRATOR: 1 short sentence describing the scene.\n"
+        "ACTION: 1 short sentence describing the result of the player's action.\n"
+        "NPC: <npc_name>: \"1 short reply\" (omit if none)\n"
+        "REWARD: <xp/items if any, else omit>"
+    )
+
+
 def build_scene_prompt(scene, narration_context, tone="dramatic"):
     """Build an LLM prompt to narrate a scene with strict structured output format.
 
     Returns:
         Prompt string for the LLM.
     """
-    title = scene.get("title", "Untitled Scene")
-    summary = scene.get("summary", "")
-    actors = scene.get("actors", [])
-    location = scene.get("location_name") or scene.get("location") or "unknown location"
+    # ✅ Apply scene grounding FIRST before any prompt construction
+    from app.rpg.session.runtime import _derive_grounded_scene_context, _apply_grounded_scene_overlay, _normalize_prompt_location_name
+    simulation_state = narration_context.get("simulation_state") or {}
+    runtime_state = narration_context.get("runtime_state") or {}
+    turn_result = narration_context.get("resolved_result") or {}
+    
+    grounded = _derive_grounded_scene_context(simulation_state, runtime_state, turn_result)
+    scene = _apply_grounded_scene_overlay(scene, grounded)
+    
+    # ✅ Get final values from authoritative grounded state
+    title = _safe_str(scene.get("title") or grounded.get("scene_title")).strip() or "Current Scene"
+    summary = _safe_str(scene.get("summary") or grounded.get("scene_summary")).strip()
+    actors = _safe_list(scene.get("actors") or grounded.get("present_actor_names"))
+    raw_location = _safe_str(scene.get("location_name") or turn_result.get("location_name")).strip()
+    location = _normalize_prompt_location_name(raw_location, _safe_str(grounded.get("location_name"))) or "Current Location"
     stakes = scene.get("stakes", "much is at stake")
     tension = scene.get("tension", "moderate")
 
@@ -531,14 +576,11 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
             actor_list = str(actors)
 
     settings = _safe_dict(narration_context.get("settings"))
-    rl = _safe_dict(settings.get("response_length"))
-    length = rl.get("narrator_length", "medium")
-
-    length_instruction = {
-        "short": "Keep narration concise (max 1 paragraph).",
-        "medium": "Use moderate detail (1–2 paragraphs).",
-        "long": "Use rich, immersive detail (2–4 paragraphs).",
-    }.get(length, "")
+    response_length = _normalize_response_length(settings.get("response_length"))
+    length_rules = _response_length_prompt_rules(response_length)
+    
+    print("[RPG LENGTH DEBUG] response_length =", response_length)
+    print("[RPG LENGTH DEBUG] length_rules =", length_rules)
 
     safe_context = _build_safe_prompt_context(scene, narration_context)
     logger.debug("[RPG PROMPT] Scene title: %s, location: %s", title, location)
@@ -551,10 +593,7 @@ YOUR ONLY TASK: Generate narration for a player's action in an RPG.
 
 STRICT OUTPUT FORMAT (follow exactly):
 
-NARRATOR: <1 short sentence describing the scene>
-ACTION: <1 short sentence describing the player's action result>
-NPC: <npc_name>: "<short reply>" (omit if none)
-REWARD: <xp/items if any, else omit>
+{length_rules}
 
 IMPORTANT RULES:
 - Output ONLY the 4 lines shown above
@@ -563,7 +602,6 @@ IMPORTANT RULES:
 - NO markdown, formatting, or special characters
 - NO content about ticks, time, or system messages
 - Just the structured response
-{length_instruction}
 
 SCENE:
 Title: {title}

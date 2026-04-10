@@ -295,11 +295,55 @@ def _build_idle_conversation_candidates(
 
         # NPC-to-NPC idle talk
         if idle_npc_to_npc:
+            action_ctx = _safe_dict(runtime_state.get("last_player_action_context"))
+            risk_level = _safe_str(action_ctx.get("risk_level"))
+            
             for other_id in sorted(npc_index.keys()):
                 if other_id == npc_id:
                     continue
+                if other_id not in nearby_ids:
+                    continue
+                
                 other_info = _safe_dict(npc_index.get(other_id))
                 other_loc = _safe_str(other_info.get("location_id"))
+                
+                # Only generate for NPCs at same location as player
+                if npc_loc != player_loc or other_loc != player_loc:
+                    continue
+                
+                other_name = _safe_str(other_info.get("name") or other_id)
+                
+                # Generate deterministic dialogue based on roles and context
+                text_content = ""
+                if risk_level == "high":
+                    text_content = f'{npc_name} says quietly to {other_name}, "Something about this place feels wrong."'
+                elif role in ("merchant", "vendor", "trader"):
+                    text_content = f'{npc_name} mentions to {other_name}, "Business has been slow lately. Travelers are few."'
+                elif role in ("guard", "captain", "soldier"):
+                    text_content = f'{npc_name} warns {other_name}, "Keep your eyes open. We don\'t know who might be watching."'
+                elif is_companion:
+                    text_content = f'{npc_name} says quietly to {other_name}, "We should keep an eye on this one."'
+                elif trust > 0.3:
+                    text_content = f'{npc_name} remarks to {other_name}, "Did you notice that? Something is off today."'
+                else:
+                    text_content = f'{npc_name} says quietly to {other_name}, "We should keep an eye on this."'
+                
+                candidates.append({
+                    "lane": "idle",
+                    "kind": "npc_to_npc",
+                    "speaker_id": npc_id,
+                    "speaker_name": npc_name,
+                    "target_id": other_id,
+                    "target_name": other_name,
+                    "salience": 0.45,
+                    "text_hint": text_content,
+                    "emotion": "neutral",
+                    "location_id": npc_loc,
+                    "tick": tick,
+                })
+                
+                # Only one NPC↔NPC candidate per speaker per idle tick
+                break
                 if npc_loc != player_loc or other_loc != player_loc:
                     continue
                 other_belief = _safe_dict(beliefs.get(other_id))

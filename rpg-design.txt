@@ -1,1875 +1,797 @@
-Below is a literal apply-this-patch diff spec by file for the new conversation system, including the later expansion. It is written as an implementation-ready patch plan for a coding LLM.
-
-This is organized into:
-
-Phase A — Foundation
-Phase B — Core integration
-Phase C — Player intervention + UI
-Phase D — Optional replay-safe LLM line expansion
-Phase E — Later expansion (offscreen / rumors / factions / crowd chatter / analytics / persistence)
-
-The design preserves your architecture:
-
-simulation truth stores conversation state, participants, topic anchors, turn counts, consequences
-presentation/runtime state stores rendered lines, intervention options, optional recorded LLM lines
-bounded state
-deterministic / replay-safe
-fail-hard if replay-required generated lines are missing
-Phase A — Foundation
-File 1: src/app/rpg/social/npc_conversations.py
-Status
-
-NEW FILE
-
-Purpose
-
-Canonical conversation state models + bounded storage helpers.
-
-Apply-this-patch
-from __future__ import annotations
-
-from hashlib import sha1
-from typing import Any, Dict, List, Optional
-
-
-_MAX_ACTIVE_CONVERSATIONS = 4
-_MAX_RECENT_CONVERSATIONS = 60
-_MAX_LINES_PER_CONVERSATION = 12
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _stable_id(prefix: str, *parts: Any) -> str:
-    raw = "|".join(_safe_str(p) for p in parts)
-    digest = sha1(raw.encode("utf-8")).hexdigest()[:12]
-    return f"{prefix}:{digest}"
-
-
-def _trim_list(rows: List[Any], max_items: int) -> List[Any]:
-    rows = list(rows or [])
-    if len(rows) <= max_items:
-        return rows
-    return rows[-max_items:]
-
-
-def ensure_conversation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(simulation_state, dict):
-        simulation_state = {}
-    social_state = simulation_state.setdefault("social_state", {})
-    if not isinstance(social_state, dict):
-        social_state = {}
-        simulation_state["social_state"] = social_state
-
-    conversations = social_state.setdefault("conversations", {})
-    if not isinstance(conversations, dict):
-        conversations = {}
-        social_state["conversations"] = conversations
-
-    active = conversations.setdefault("active", [])
-    recent = conversations.setdefault("recent", [])
-    lines_by_conversation = conversations.setdefault("lines_by_conversation", {})
-
-    if not isinstance(active, list):
-        conversations["active"] = []
-    if not isinstance(recent, list):
-        conversations["recent"] = []
-    if not isinstance(lines_by_conversation, dict):
-        conversations["lines_by_conversation"] = {}
-
-    return simulation_state
-
-
-def build_conversation_topic(
-    topic_type: str,
-    anchor: str,
-    summary: str,
-    stance: str = "",
-) -> Dict[str, Any]:
-    return {
-        "type": _safe_str(topic_type),
-        "anchor": _safe_str(anchor),
-        "summary": _safe_str(summary),
-        "stance": _safe_str(stance),
-    }
-
-
-def build_conversation_state(
-    *,
-    kind: str,
-    location_id: str,
-    participants: List[str],
-    initiator_id: str,
-    topic: Dict[str, Any],
-    max_turns: int,
-    player_can_intervene: bool,
-    player_present: bool,
-    tick: int,
-) -> Dict[str, Any]:
-    participants = [p for p in (_safe_str(x) for x in participants) if p]
-    participants = sorted(dict.fromkeys(participants))
-    topic = _safe_dict(topic)
-    conversation_id = _stable_id(
-        "conv",
-        kind,
-        location_id,
-        ",".join(participants),
-        topic.get("type"),
-        topic.get("anchor"),
-        tick,
-    )
-    return {
-        "conversation_id": conversation_id,
-        "kind": _safe_str(kind),
-        "status": "active",
-        "location_id": _safe_str(location_id),
-        "participants": participants,
-        "initiator_id": _safe_str(initiator_id),
-        "topic": topic,
-        "turn_count": 0,
-        "max_turns": int(max_turns or 1),
-        "player_can_intervene": bool(player_can_intervene),
-        "player_present": bool(player_present),
-        "created_tick": int(tick or 0),
-        "updated_tick": int(tick or 0),
-        "last_speaker_id": "",
-        "intervention_pending": False,
-        "line_source": "template",
-    }
-
-
-def build_conversation_line(
-    *,
-    conversation_id: str,
-    turn: int,
-    speaker: str,
-    text: str,
-    kind: str,
-    created_tick: int,
-    source: str = "template",
-) -> Dict[str, Any]:
-    return {
-        "conversation_id": _safe_str(conversation_id),
-        "turn": int(turn or 0),
-        "speaker": _safe_str(speaker),
-        "text": _safe_str(text),
-        "kind": _safe_str(kind) or "statement",
-        "created_tick": int(created_tick or 0),
-        "source": _safe_str(source) or "template",
-    }
-
-
-def list_active_conversations(simulation_state: Dict[str, Any], location_id: str = "") -> List[Dict[str, Any]]:
-    ensure_conversation_state(simulation_state)
-    rows = _safe_list(simulation_state["social_state"]["conversations"]["active"])
-    if not location_id:
-        return [dict(x) for x in rows if isinstance(x, dict)]
-    return [dict(x) for x in rows if isinstance(x, dict) and _safe_str(x.get("location_id")) == _safe_str(location_id)]
-
-
-def list_recent_conversations(simulation_state: Dict[str, Any], location_id: str = "") -> List[Dict[str, Any]]:
-    ensure_conversation_state(simulation_state)
-    rows = _safe_list(simulation_state["social_state"]["conversations"]["recent"])
-    if not location_id:
-        return [dict(x) for x in rows if isinstance(x, dict)]
-    return [dict(x) for x in rows if isinstance(x, dict) and _safe_str(x.get("location_id")) == _safe_str(location_id)]
-
-
-def get_conversation(simulation_state: Dict[str, Any], conversation_id: str) -> Optional[Dict[str, Any]]:
-    ensure_conversation_state(simulation_state)
-    conversation_id = _safe_str(conversation_id)
-    rows = (
-        _safe_list(simulation_state["social_state"]["conversations"]["active"]) +
-        _safe_list(simulation_state["social_state"]["conversations"]["recent"])
-    )
-    for row in rows:
-        row = _safe_dict(row)
-        if _safe_str(row.get("conversation_id")) == conversation_id:
-            return dict(row)
-    return None
-
-
-def upsert_conversation(simulation_state: Dict[str, Any], conversation: Dict[str, Any]) -> Dict[str, Any]:
-    ensure_conversation_state(simulation_state)
-    conversation = _safe_dict(conversation)
-    cid = _safe_str(conversation.get("conversation_id"))
-    if not cid:
-        return simulation_state
-
-    conversations = simulation_state["social_state"]["conversations"]
-    active = _safe_list(conversations.get("active"))
-    replaced = False
-    new_active: List[Dict[str, Any]] = []
-    for row in active:
-        row = _safe_dict(row)
-        if _safe_str(row.get("conversation_id")) == cid:
-            new_active.append(dict(conversation))
-            replaced = True
-        else:
-            new_active.append(dict(row))
-    if not replaced and _safe_str(conversation.get("status")) == "active":
-        new_active.append(dict(conversation))
-
-    new_active = sorted(
-        new_active,
-        key=lambda x: (
-            int(_safe_dict(x).get("updated_tick", 0) or 0),
-            _safe_str(_safe_dict(x).get("conversation_id")),
-        ),
-    )
-    conversations["active"] = _trim_list(new_active, _MAX_ACTIVE_CONVERSATIONS)
-    return simulation_state
-
-
-def append_conversation_line(simulation_state: Dict[str, Any], conversation_id: str, line: Dict[str, Any]) -> Dict[str, Any]:
-    ensure_conversation_state(simulation_state)
-    conversation_id = _safe_str(conversation_id)
-    line = _safe_dict(line)
-    lines_by_conversation = simulation_state["social_state"]["conversations"]["lines_by_conversation"]
-    rows = _safe_list(lines_by_conversation.get(conversation_id))
-    rows.append(dict(line))
-    lines_by_conversation[conversation_id] = _trim_list(rows, _MAX_LINES_PER_CONVERSATION)
-    return simulation_state
-
-
-def get_conversation_lines(simulation_state: Dict[str, Any], conversation_id: str) -> List[Dict[str, Any]]:
-    ensure_conversation_state(simulation_state)
-    rows = _safe_list(
-        simulation_state["social_state"]["conversations"]["lines_by_conversation"].get(_safe_str(conversation_id))
-    )
-    return [dict(x) for x in rows if isinstance(x, dict)]
-
-
-def close_conversation(simulation_state: Dict[str, Any], conversation_id: str, reason: str = "") -> Dict[str, Any]:
-    ensure_conversation_state(simulation_state)
-    conversation_id = _safe_str(conversation_id)
-    conversations = simulation_state["social_state"]["conversations"]
-    active = _safe_list(conversations.get("active"))
-    recent = _safe_list(conversations.get("recent"))
-
-    kept_active: List[Dict[str, Any]] = []
-    moved: Optional[Dict[str, Any]] = None
-    for row in active:
-        row = _safe_dict(row)
-        if _safe_str(row.get("conversation_id")) == conversation_id:
-            row["status"] = "closed"
-            row["close_reason"] = _safe_str(reason)
-            moved = dict(row)
-        else:
-            kept_active.append(dict(row))
-
-    conversations["active"] = kept_active
-    if moved:
-        recent.append(moved)
-        recent = sorted(
-            recent,
-            key=lambda x: (
-                int(_safe_dict(x).get("updated_tick", 0) or 0),
-                _safe_str(_safe_dict(x).get("conversation_id")),
-            ),
-        )
-        conversations["recent"] = _trim_list(recent, _MAX_RECENT_CONVERSATIONS)
-    return simulation_state
-
-
-def trim_conversation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    ensure_conversation_state(simulation_state)
-    conversations = simulation_state["social_state"]["conversations"]
-    conversations["active"] = _trim_list(_safe_list(conversations.get("active")), _MAX_ACTIVE_CONVERSATIONS)
-    conversations["recent"] = _trim_list(_safe_list(conversations.get("recent")), _MAX_RECENT_CONVERSATIONS)
-
-    lines_by_conversation = _safe_dict(conversations.get("lines_by_conversation"))
-    normalized: Dict[str, List[Dict[str, Any]]] = {}
-    for cid, rows in sorted(lines_by_conversation.items()):
-        normalized[_safe_str(cid)] = _trim_list(
-            [dict(x) for x in _safe_list(rows) if isinstance(x, dict)],
-            _MAX_LINES_PER_CONVERSATION,
-        )
-    conversations["lines_by_conversation"] = normalized
-    return simulation_state
-Add tests
-
-tests/rpg/test_npc_conversations_state.py
-
-Test:
-
-ensure state init
-open/upsert/close
-trim bounds
-line cap
-stable deterministic IDs
-File 2: src/app/rpg/social/conversation_settings.py
-Status
-
-NEW FILE
-
-Purpose
-
-Centralized settings.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_bool(value: Any, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    return default
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def get_default_conversation_settings() -> Dict[str, Any]:
-    return {
-        "ambient_conversations_enabled": True,
-        "party_reaction_interrupts_enabled": True,
-        "player_intervention_enabled": True,
-        "avg_conversation_turns": 4,
-        "max_conversation_turns": 8,
-        "min_ticks_between_ambient_conversations_per_location": 2,
-        "max_active_conversations_per_location": 1,
-        "llm_expand_npc_conversations": False,
-    }
-
-
-def resolve_conversation_settings(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    defaults = get_default_conversation_settings()
-    sim_settings = _safe_dict(_safe_dict(simulation_state).get("conversation_settings"))
-    runtime_settings = _safe_dict(_safe_dict(runtime_state).get("conversation_settings"))
-
-    merged = dict(defaults)
-    merged.update(sim_settings)
-    merged.update(runtime_settings)
-
-    return {
-        "ambient_conversations_enabled": _safe_bool(merged.get("ambient_conversations_enabled"), True),
-        "party_reaction_interrupts_enabled": _safe_bool(merged.get("party_reaction_interrupts_enabled"), True),
-        "player_intervention_enabled": _safe_bool(merged.get("player_intervention_enabled"), True),
-        "avg_conversation_turns": max(1, _safe_int(merged.get("avg_conversation_turns"), 4)),
-        "max_conversation_turns": max(1, _safe_int(merged.get("max_conversation_turns"), 8)),
-        "min_ticks_between_ambient_conversations_per_location": max(0, _safe_int(merged.get("min_ticks_between_ambient_conversations_per_location"), 2)),
-        "max_active_conversations_per_location": max(1, _safe_int(merged.get("max_active_conversations_per_location"), 1)),
-        "llm_expand_npc_conversations": _safe_bool(merged.get("llm_expand_npc_conversations"), False),
-    }
-Add tests
-
-tests/rpg/test_conversation_settings.py
-
-File 3: src/app/rpg/social/conversation_topics.py
-Status
-
-NEW FILE
-
-Purpose
-
-Topic candidate generation.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return default
-
-
-def _topic_sort_key(topic: Dict[str, Any]):
-    return (
-        -_safe_float(topic.get("priority"), 0.0),
-        _safe_str(topic.get("type")),
-        _safe_str(topic.get("anchor")),
-    )
-
-
-def _recent_events_for_location(simulation_state: Dict[str, Any], location_id: str) -> List[Dict[str, Any]]:
-    rows = []
-    for raw in _safe_list(simulation_state.get("events"))[-24:]:
-        row = _safe_dict(raw)
-        if _safe_str(row.get("location_id")) == _safe_str(location_id):
-            rows.append(row)
-    return rows
-
-
-def _participant_roles(simulation_state: Dict[str, Any], participant_ids: List[str]) -> Dict[str, str]:
-    npc_index = _safe_dict(simulation_state.get("npc_index"))
-    out: Dict[str, str] = {}
-    for npc_id in participant_ids:
-        row = _safe_dict(npc_index.get(npc_id))
-        out[npc_id] = _safe_str(row.get("role")).lower()
-    return out
-
-
-def _build_event_commentary_topic(event: Dict[str, Any]) -> Dict[str, Any]:
-    event = _safe_dict(event)
-    event_id = _safe_str(event.get("event_id"))
-    event_type = _safe_str(event.get("type")).lower()
-    summary = _safe_str(event.get("summary") or event.get("description"))
-    return {
-        "type": "event_commentary",
-        "anchor": event_id,
-        "summary": summary or f"NPCs discuss a recent {event_type}.",
-        "stance": "comment",
-        "priority": 0.60,
-        "reason": "recent event",
-    }
-
-
-def _build_local_incident_topic(event: Dict[str, Any]) -> Dict[str, Any]:
-    event = _safe_dict(event)
-    event_id = _safe_str(event.get("event_id"))
-    return {
-        "type": "local_incident",
-        "anchor": event_id,
-        "summary": _safe_str(event.get("summary") or "NPCs react to a nearby disturbance."),
-        "stance": "concern",
-        "priority": 0.72,
-        "reason": "local disturbance",
-    }
-
-
-def _build_plan_reaction_topic(player_action: Dict[str, Any]) -> Dict[str, Any]:
-    player_action = _safe_dict(player_action)
-    action_text = _safe_str(player_action.get("text") or player_action.get("summary") or player_action.get("action"))
-    return {
-        "type": "plan_reaction",
-        "anchor": _safe_str(player_action.get("action_id") or action_text),
-        "summary": f"NPCs react to the player's plan: {action_text}".strip(),
-        "stance": "react",
-        "priority": 0.82,
-        "reason": "player plan",
-    }
-
-
-def _build_moral_conflict_topic(npc_a: str, npc_b: str) -> Dict[str, Any]:
-    return {
-        "type": "moral_conflict",
-        "anchor": f"{npc_a}:{npc_b}:morality",
-        "summary": f"{npc_a} questions {npc_b}'s morality.",
-        "stance": "disagree",
-        "priority": 0.78,
-        "reason": "personality conflict",
-    }
-
-
-def _build_risk_conflict_topic(anchor: str) -> Dict[str, Any]:
-    return {
-        "type": "risk_conflict",
-        "anchor": anchor,
-        "summary": "NPCs disagree about a risky course of action.",
-        "stance": "disagree",
-        "priority": 0.76,
-        "reason": "risk tolerance conflict",
-    }
-
-
-def _dedupe_topics(topics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen = set()
-    out = []
-    for topic in sorted(topics, key=_topic_sort_key):
-        key = (_safe_str(topic.get("type")), _safe_str(topic.get("anchor")))
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(topic)
-    return out
-
-
-def build_conversation_topic_candidates(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    location_id: str,
-    participant_ids: List[str],
-    tick: int,
-) -> List[Dict[str, Any]]:
-    simulation_state = _safe_dict(simulation_state)
-    runtime_state = _safe_dict(runtime_state)
-    participant_ids = [x for x in (_safe_str(p) for p in participant_ids) if x]
-    topics: List[Dict[str, Any]] = []
-
-    recent_events = _recent_events_for_location(simulation_state, location_id)
-    for event in recent_events[-8:]:
-        event_type = _safe_str(event.get("type")).lower()
-        if event_type in {"attack", "threaten", "retaliate", "incident", "destabilize", "sabotage"}:
-            topics.append(_build_local_incident_topic(event))
-        elif event_type:
-            topics.append(_build_event_commentary_topic(event))
-
-    last_player_action = _safe_dict(runtime_state.get("last_player_action"))
-    if last_player_action:
-        topics.append(_build_plan_reaction_topic(last_player_action))
-
-    roles = _participant_roles(simulation_state, participant_ids)
-    role_values = sorted(set(v for v in roles.values() if v))
-    if "thief" in role_values and any(v in {"guard", "innkeeper", "priest", "paladin"} for v in role_values):
-        a = participant_ids[0] if participant_ids else ""
-        b = participant_ids[1] if len(participant_ids) > 1 else ""
-        if a and b:
-            topics.append(_build_moral_conflict_topic(a, b))
-
-    if last_player_action and _safe_str(last_player_action.get("text")).lower().find("cave") >= 0:
-        topics.append(_build_risk_conflict_topic("player_plan:cave"))
-
-    return _dedupe_topics(topics)[:8]
-Add tests
-
-tests/rpg/test_conversation_topics.py
-
-Test:
-
-event commentary
-local incident
-plan reaction
-morality conflict
-deterministic sorting/dedupe
-File 4: src/app/rpg/social/conversation_participants.py
-Status
-
-NEW FILE
-
-Purpose
-
-Pick groups, initiator, next speaker.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return default
-
-
-def _speaker_weight(npc_row: Dict[str, Any]) -> float:
-    npc_row = _safe_dict(npc_row)
-    role = _safe_str(npc_row.get("role")).lower()
-    base = 0.10
-    if role in {"leader", "guard", "innkeeper", "merchant", "priest"}:
-        base += 0.20
-    if role in {"bard", "noble", "thief"}:
-        base += 0.10
-    base += _safe_float(npc_row.get("assertiveness"), 0.0) * 0.20
-    return base
-
-
-def find_candidate_conversation_groups(simulation_state: Dict[str, Any], location_id: str, tick: int) -> List[List[str]]:
-    npc_index = _safe_dict(_safe_dict(simulation_state).get("npc_index"))
-    present = []
-    for npc_id, raw in sorted(npc_index.items()):
-        row = _safe_dict(raw)
-        if _safe_str(row.get("location_id")) == _safe_str(location_id):
-            present.append(_safe_str(npc_id))
-
-    groups: List[List[str]] = []
-    for i in range(len(present)):
-        for j in range(i + 1, len(present)):
-            groups.append([present[i], present[j]])
-    return groups[:6]
-
-
-def select_initiator(simulation_state: Dict[str, Any], participants: List[str]) -> str:
-    npc_index = _safe_dict(_safe_dict(simulation_state).get("npc_index"))
-    weighted = []
-    for npc_id in participants:
-        row = _safe_dict(npc_index.get(npc_id))
-        weighted.append((-_speaker_weight(row), _safe_str(npc_id)))
-    weighted.sort()
-    return weighted[0][1] if weighted else ""
-
-
-def select_next_speaker(conversation: Dict[str, Any], simulation_state: Dict[str, Any]) -> str:
-    conversation = _safe_dict(conversation)
-    participants = [x for x in (_safe_str(p) for p in conversation.get("participants") or []) if x]
-    last_speaker_id = _safe_str(conversation.get("last_speaker_id"))
-    if not participants:
-        return ""
-    if last_speaker_id and last_speaker_id in participants:
-        idx = participants.index(last_speaker_id)
-        return participants[(idx + 1) % len(participants)]
-    initiator = _safe_str(conversation.get("initiator_id"))
-    if initiator and initiator in participants:
-        return initiator
-    return participants[0]
-Add tests
-
-tests/rpg/test_conversation_participants.py
-
-File 5: src/app/rpg/social/conversation_templates.py
-Status
-
-NEW FILE
-
-Purpose
-
-Deterministic baseline line generator.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict
-
-
-_MAX_LINE_LEN = 220
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _truncate_line(text: str) -> str:
-    text = _safe_str(text).strip()
-    if len(text) <= _MAX_LINE_LEN:
-        return text
-    return text[: _MAX_LINE_LEN - 1].rstrip() + "…"
-
-
-def _speaker_role(simulation_state: Dict[str, Any], speaker_id: str) -> str:
-    npc_index = _safe_dict(_safe_dict(simulation_state).get("npc_index"))
-    row = _safe_dict(npc_index.get(speaker_id))
-    return _safe_str(row.get("role")).lower()
-
-
-def _speaker_name(simulation_state: Dict[str, Any], speaker_id: str) -> str:
-    npc_index = _safe_dict(_safe_dict(simulation_state).get("npc_index"))
-    row = _safe_dict(npc_index.get(speaker_id))
-    return _safe_str(row.get("name")) or _safe_str(speaker_id)
-
-
-def build_template_line(conversation: Dict[str, Any], speaker_id: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    conversation = _safe_dict(conversation)
-    topic = _safe_dict(conversation.get("topic"))
-    topic_type = _safe_str(topic.get("type")).lower()
-    stance = _safe_str(topic.get("stance")).lower()
-    summary = _safe_str(topic.get("summary"))
-    role = _speaker_role(simulation_state, speaker_id)
-    name = _speaker_name(simulation_state, speaker_id)
-
-    text = ""
-    kind = "statement"
-
-    if topic_type == "plan_reaction":
-        if role in {"guard", "innkeeper", "priest"}:
-            text = "You are certain this plan is wise?"
-            kind = "question"
-        elif role in {"thief", "mercenary", "adventurer"}:
-            text = "Why not? We will learn more inside than standing here."
-            kind = "challenge"
-        else:
-            text = "If we are doing this, we should do it with open eyes."
-            kind = "statement"
-    elif topic_type == "moral_conflict":
-        if role in {"innkeeper", "guard", "priest"}:
-            text = "You speak lightly of theft, but towns are not held together by excuses."
-            kind = "challenge"
-        elif role == "thief":
-            text = "Morality is easy to praise when your stomach is full."
-            kind = "challenge"
-        else:
-            text = "There is more at stake here than easy judgment."
-            kind = "statement"
-    elif topic_type == "risk_conflict":
-        if stance == "disagree":
-            text = "Rushing into danger without a better plan is a fine way to get buried."
-            kind = "warning"
-        else:
-            text = "Danger does not lessen because we stare at it from afar."
-            kind = "challenge"
-    elif topic_type in {"local_incident", "event_commentary"}:
-        text = summary or "Something about this does not sit right."
-        kind = "statement"
-    else:
-        text = "There is something we should discuss before we move on."
-        kind = "statement"
-
-    return {
-        "speaker": _safe_str(speaker_id),
-        "text": _truncate_line(text),
-        "kind": kind,
-        "speaker_name": name,
-    }
-Add tests
-
-tests/rpg/test_conversation_templates.py
-
-File 6: src/app/rpg/social/player_interventions.py
-Status
-
-NEW FILE
-
-Purpose
-
-Generate/resolve intervention options.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def build_intervention_options(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    conversation = _safe_dict(conversation)
-    participants = [x for x in (_safe_str(p) for p in conversation.get("participants") or []) if x]
-    if not conversation.get("player_can_intervene") or len(participants) < 2:
-        return []
-
-    a = participants[0]
-    b = participants[1]
-
-    return [
-        {"id": f"support:{a}", "text": f"Support {a}"},
-        {"id": f"support:{b}", "text": f"Support {b}"},
-        {"id": "clarify", "text": "Ask for clarification"},
-        {"id": "end_discussion", "text": "End the discussion"},
-        {"id": "continue", "text": "Keep listening"},
-    ]
-
-
-def apply_player_intervention(conversation_id: str, option_id: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    runtime_state = runtime_state if isinstance(runtime_state, dict) else {}
-    runtime_state["last_conversation_intervention"] = {
-        "conversation_id": _safe_str(conversation_id),
-        "option_id": _safe_str(option_id),
-        "tick": int(tick or 0),
-    }
-    return {
-        "success": True,
-        "conversation_id": _safe_str(conversation_id),
-        "option_id": _safe_str(option_id),
-        "tick": int(tick or 0),
-    }
-Add tests
-
-tests/rpg/test_player_interventions.py
-
-File 7: src/app/rpg/social/conversation_presentation.py
-Status
-
-NEW FILE
-
-Purpose
-
-Build payload for API/UI.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-from .npc_conversations import (
-    get_conversation_lines,
-    list_active_conversations,
-    list_recent_conversations,
-)
-from .player_interventions import build_intervention_options
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def build_conversation_payload(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], location_id: str = "") -> Dict[str, Any]:
-    active = list_active_conversations(simulation_state, location_id=location_id)
-    recent = list_recent_conversations(simulation_state, location_id=location_id)
-
-    active_payload: List[Dict[str, Any]] = []
-    for conv in active:
-        cid = conv.get("conversation_id")
-        active_payload.append({
-            "conversation_id": cid,
-            "kind": conv.get("kind"),
-            "topic": conv.get("topic"),
-            "participants": conv.get("participants") or [],
-            "turn_count": int(conv.get("turn_count", 0) or 0),
-            "max_turns": int(conv.get("max_turns", 0) or 0),
-            "player_can_intervene": bool(conv.get("player_can_intervene")),
-            "lines": get_conversation_lines(simulation_state, cid),
-            "intervention_options": build_intervention_options(conv, simulation_state, runtime_state),
-        })
-
-    recent_payload: List[Dict[str, Any]] = []
-    for conv in recent[-10:]:
-        cid = conv.get("conversation_id")
-        recent_payload.append({
-            "conversation_id": cid,
-            "kind": conv.get("kind"),
-            "topic": conv.get("topic"),
-            "participants": conv.get("participants") or [],
-            "lines": get_conversation_lines(simulation_state, cid),
-            "close_reason": conv.get("close_reason", ""),
-        })
-
-    return {
-        "active_conversations": active_payload,
-        "recent_conversations": recent_payload,
-    }
-Add tests
-
-tests/rpg/test_conversation_presentation.py
-
-File 8: src/app/rpg/social/conversation_engine.py
-Status
-
-NEW FILE
-
-Purpose
-
-Open/advance/close conversations.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-from .conversation_participants import (
-    find_candidate_conversation_groups,
-    select_initiator,
-    select_next_speaker,
-)
-from .conversation_settings import resolve_conversation_settings
-from .conversation_templates import build_template_line
-from .conversation_topics import build_conversation_topic_candidates
-from .npc_conversations import (
-    append_conversation_line,
-    build_conversation_line,
-    build_conversation_state,
-    close_conversation,
-    ensure_conversation_state,
-    list_active_conversations,
-    trim_conversation_state,
-    upsert_conversation,
-)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _player_location(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> str:
-    runtime_state = _safe_dict(runtime_state)
-    simulation_state = _safe_dict(simulation_state)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    return _safe_str(runtime_state.get("current_location_id") or player_state.get("location_id"))
-
-
-def _conversation_exists_for_group(simulation_state: Dict[str, Any], location_id: str, participants: List[str], topic_anchor: str) -> bool:
-    target = sorted([_safe_str(x) for x in participants if _safe_str(x)])
-    for conv in list_active_conversations(simulation_state, location_id=location_id):
-        if sorted(conv.get("participants") or []) == target:
-            topic = _safe_dict(conv.get("topic"))
-            if _safe_str(topic.get("anchor")) == _safe_str(topic_anchor):
-                return True
-    return False
-
-
-def open_conversation(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    *,
-    kind: str,
-    location_id: str,
-    participants: List[str],
-    topic: Dict[str, Any],
-    tick: int,
-) -> Dict[str, Any]:
-    settings = resolve_conversation_settings(simulation_state, runtime_state)
-    initiator_id = select_initiator(simulation_state, participants)
-    player_loc = _player_location(simulation_state, runtime_state)
-    conversation = build_conversation_state(
-        kind=kind,
-        location_id=location_id,
-        participants=participants,
-        initiator_id=initiator_id,
-        topic=topic,
-        max_turns=min(
-            settings["max_conversation_turns"],
-            max(2, settings["avg_conversation_turns"]),
-        ),
-        player_can_intervene=settings["player_intervention_enabled"],
-        player_present=(player_loc == location_id),
-        tick=tick,
-    )
-    upsert_conversation(simulation_state, conversation)
-    return conversation
-
-
-def build_next_conversation_line(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    speaker_id = select_next_speaker(conversation, simulation_state)
-    line_payload = build_template_line(conversation, speaker_id, simulation_state, runtime_state)
-    return build_conversation_line(
-        conversation_id=conversation.get("conversation_id"),
-        turn=int(conversation.get("turn_count", 0) or 0) + 1,
-        speaker=speaker_id,
-        text=line_payload.get("text", ""),
-        kind=line_payload.get("kind", "statement"),
-        created_tick=tick,
-        source="template",
-    )
-
-
-def should_close_conversation(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> bool:
-    conversation = _safe_dict(conversation)
-    if _safe_str(conversation.get("status")) != "active":
-        return True
-    if int(conversation.get("turn_count", 0) or 0) >= int(conversation.get("max_turns", 1) or 1):
-        return True
-    return False
-
-
-def try_start_ambient_conversations(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    settings = resolve_conversation_settings(simulation_state, runtime_state)
-    if not settings["ambient_conversations_enabled"]:
-        return simulation_state
-
-    ensure_conversation_state(simulation_state)
-    player_loc = _player_location(simulation_state, runtime_state)
-    candidate_groups = find_candidate_conversation_groups(simulation_state, player_loc, tick)
-
-    for group in candidate_groups:
-        topics = build_conversation_topic_candidates(simulation_state, runtime_state, player_loc, group, tick)
-        if not topics:
-            continue
-        topic = topics[0]
-        if _conversation_exists_for_group(simulation_state, player_loc, group, topic.get("anchor", "")):
-            continue
-        open_conversation(
-            simulation_state,
-            runtime_state,
-            kind="ambient_npc_conversation",
-            location_id=player_loc,
-            participants=group,
-            topic=topic,
-            tick=tick,
-        )
-        break
-    return simulation_state
-
-
-def try_start_party_reaction_conversation(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], player_action: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    settings = resolve_conversation_settings(simulation_state, runtime_state)
-    if not settings["party_reaction_interrupts_enabled"]:
-        return simulation_state
-
-    runtime_state["last_player_action"] = dict(player_action or {})
-    player_loc = _player_location(simulation_state, runtime_state)
-    groups = find_candidate_conversation_groups(simulation_state, player_loc, tick)
-    if not groups:
-        return simulation_state
-
-    group = groups[0]
-    topics = build_conversation_topic_candidates(simulation_state, runtime_state, player_loc, group, tick)
-    topics = [t for t in topics if _safe_str(_safe_dict(t).get("type")) in {"plan_reaction", "risk_conflict"}]
-    if not topics:
-        return simulation_state
-
-    topic = topics[0]
-    if not _conversation_exists_for_group(simulation_state, player_loc, group, topic.get("anchor", "")):
-        open_conversation(
-            simulation_state,
-            runtime_state,
-            kind="party_reaction",
-            location_id=player_loc,
-            participants=group,
-            topic=topic,
-            tick=tick,
-        )
-    return simulation_state
-
-
-def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    for conv in list_active_conversations(simulation_state):
-        conv = dict(conv)
-        if should_close_conversation(conv, simulation_state, runtime_state, tick):
-            close_conversation(simulation_state, conv.get("conversation_id"), reason="completed")
-            continue
-
-        line = build_next_conversation_line(conv, simulation_state, runtime_state, tick)
-        append_conversation_line(simulation_state, conv.get("conversation_id"), line)
-
-        conv["turn_count"] = int(conv.get("turn_count", 0) or 0) + 1
-        conv["updated_tick"] = int(tick or 0)
-        conv["last_speaker_id"] = _safe_str(line.get("speaker"))
-        conv["intervention_pending"] = bool(conv.get("player_can_intervene") and conv.get("player_present"))
-        upsert_conversation(simulation_state, conv)
-
-        if should_close_conversation(conv, simulation_state, runtime_state, tick):
-            close_conversation(simulation_state, conv.get("conversation_id"), reason="completed")
-
-    trim_conversation_state(simulation_state)
-    return simulation_state
-
-
-def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    ensure_conversation_state(simulation_state)
-    try_start_ambient_conversations(simulation_state, runtime_state, tick)
-    advance_active_conversations(simulation_state, runtime_state, tick)
-    trim_conversation_state(simulation_state)
-    return simulation_state
-Add tests
-
-tests/rpg/test_conversation_engine.py
-
-Test:
-
-ambient open
-party reaction open
-turn advance
-close after cap
-no duplicate same group/topic every tick
-Phase B — Core integration
-File 9: src/app/rpg/creator/world_simulation.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Run conversation system after NPC decision/events.
-
-Apply-this-patch
-
-Add imports:
-
-from app.rpg.social.conversation_engine import (
-    run_conversation_tick,
-    try_start_party_reaction_conversation,
-)
-
-After NPC events are appended and before returning state:
-
-history_state = run_conversation_tick(
-    history_state,
-    history_state.get("runtime_state") or {},
-    next_tick,
-)
-
-Where player action/intent is applied, after runtime_state["last_player_action"] is known:
-
-runtime_state = history_state.setdefault("runtime_state", {})
-runtime_state["last_player_action"] = {
-    "action_id": f"player_action:{next_tick}",
-    "text": _safe_str_p6(player_action_text_or_summary),
-    "tick": int(next_tick),
-}
-history_state = try_start_party_reaction_conversation(
-    history_state,
-    runtime_state,
-    runtime_state["last_player_action"],
-    next_tick,
-)
-Requirements
-do not let conversation text become simulation truth beyond bounded conversation state
-keep order deterministic:
-NPC decisions
-event creation
-player action runtime update
-conversation open/advance
-trim
-Add tests
-
-tests/rpg/test_world_simulation_conversations.py
-
-File 10: src/app/rpg/session/ambient_builder.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Surface actual lines, not just Bran speaks with Elara.
-
-Apply-this-patch
-
-Add imports:
-
-from app.rpg.social.conversation_presentation import build_conversation_payload
-
-Add helper:
-
-def _conversation_to_ambient_updates(simulation_state, runtime_state, player_loc, tick):
-    payload = build_conversation_payload(simulation_state, runtime_state, location_id=player_loc)
-    updates = []
-    for conv in payload.get("active_conversations", []):
-        for line in conv.get("lines", [])[-2:]:
-            speaker = str(line.get("speaker_name") or line.get("speaker") or "").strip()
-            text = str(line.get("text") or "").strip()
-            if not text:
-                continue
-            updates.append(make_ambient_update(
-                tick=tick,
-                kind="conversation_line",
-                priority=0.7,
-                location_id=player_loc,
-                text=f"{speaker}: \"{text}\"" if speaker else text,
-                source_event_ids=[str(conv.get("conversation_id"))],
-                source="conversation",
-            ))
-    return updates
-
-In main build path, after world events are added:
-
-updates.extend(_conversation_to_ambient_updates(after_state, runtime_state, player_loc, tick))
-
-Also suppress plain negotiate/support summary updates when a matching conversation exists nearby.
-
-Add tests
-
-tests/rpg/test_ambient_builder_conversations.py
-
-File 11: src/app/rpg/api/rpg_session_routes.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Expose conversations + intervention endpoint.
-
-Apply-this-patch
-
-Add imports:
-
-from app.rpg.social.conversation_presentation import build_conversation_payload
-from app.rpg.social.player_interventions import apply_player_intervention
-
-In _build_turn_payload(...), add:
-
-runtime_state = _safe_dict(session.get("runtime_state"))
-location_id = _safe_str(runtime_state.get("current_location_id") or _safe_dict(session.get("player_state")).get("location_id"))
-conversation_payload = build_conversation_payload(sim, runtime_state, location_id=location_id)
-
-Add into payload:
-
-"active_conversations": conversation_payload.get("active_conversations", []),
-"recent_conversations": conversation_payload.get("recent_conversations", []),
-
-Add route:
-
-@rpg_session_bp.post("/api/rpg/session/conversation/intervene")
-async def rpg_session_conversation_intervene(request: Request):
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id"))
-    conversation_id = _safe_str(data.get("conversation_id"))
-    option_id = _safe_str(data.get("option_id"))
-
-    session = _get_session_or_404(session_id)
-    simulation_state = _safe_dict(session.get("simulation_state"))
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    tick = int(_safe_dict(simulation_state).get("tick", 0) or 0)
-
-    result = apply_player_intervention(conversation_id, option_id, simulation_state, runtime_state, tick)
-    session["simulation_state"] = simulation_state
-    session["runtime_state"] = runtime_state
-
-    payload = build_conversation_payload(
-        simulation_state,
-        runtime_state,
-        location_id=_safe_str(runtime_state.get("current_location_id")),
-    )
-    return JSONResponse({
-        "success": True,
-        "result": result,
-        "active_conversations": payload.get("active_conversations", []),
-        "recent_conversations": payload.get("recent_conversations", []),
-    })
-Add tests
-
-tests/rpg/test_rpg_session_conversation_routes.py
-
-Phase C — UI / presentation / inspector
-File 12: src/static/rpg/rpg.js
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Render active conversation cards + intervention buttons.
-
-Apply-this-patch
-
-Add functions:
-
-function renderConversations(conversations) {
-  const root = document.getElementById("rpg-conversations");
-  if (!root) return;
-  root.innerHTML = "";
-
-  (conversations || []).forEach((conv) => {
-    const card = document.createElement("div");
-    card.className = "rpg-conversation-card";
-
-    const title = document.createElement("div");
-    title.className = "rpg-conversation-title";
-    const topic = (conv.topic && conv.topic.summary) || "Conversation";
-    title.textContent = topic;
-    card.appendChild(title);
-
-    const body = document.createElement("div");
-    body.className = "rpg-conversation-lines";
-    (conv.lines || []).slice(-4).forEach((line) => {
-      const row = document.createElement("div");
-      row.className = "rpg-conversation-line";
-      const speaker = line.speaker_name || line.speaker || "Someone";
-      row.textContent = `${speaker}: "${line.text || ""}"`;
-      body.appendChild(row);
-    });
-    card.appendChild(body);
-
-    if (conv.player_can_intervene && (conv.intervention_options || []).length) {
-      const actions = document.createElement("div");
-      actions.className = "rpg-conversation-actions";
-      conv.intervention_options.forEach((opt) => {
-        const btn = document.createElement("button");
-        btn.className = "rpg-choice-btn";
-        btn.textContent = opt.text || opt.id;
-        btn.onclick = () => sendConversationIntervention(conv.conversation_id, opt.id);
-        actions.appendChild(btn);
-      });
-      card.appendChild(actions);
-    }
-
-    root.appendChild(card);
-  });
-}
-
-async function sendConversationIntervention(conversationId, optionId) {
-  const payload = {
-    session_id: window.rpgSessionId,
-    conversation_id: conversationId,
-    option_id: optionId,
-  };
-  const res = await fetch("/api/rpg/session/conversation/intervene", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (data && data.active_conversations) {
-    renderConversations(data.active_conversations);
-  }
-}
-
-Update main response render path:
-
-renderConversations(data.active_conversations || []);
-
-Add container in HTML template if needed:
-
-<div id="rpg-conversations"></div>
-File 13: src/static/rpg/rpgPresentationRenderer.js
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Inspector/GM overlay for conversation state.
-
-Apply-this-patch
-
-Add a conversation inspector section showing:
-
-active conversations
-topic type/anchor
-participants
-turn count
-last lines
-close reason for recent items
-
-Implementation can mirror existing inspector card patterns.
-
-File 14: src/app/rpg/presentation/personality_state.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Provide normalized accessors for templates/prompt builders.
-
-Apply-this-patch
-
-Add helper accessors:
-
-def get_personality_profile(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
-    simulation_state = simulation_state if isinstance(simulation_state, dict) else {}
-    presentation_state = simulation_state.get("presentation_state") if isinstance(simulation_state.get("presentation_state"), dict) else {}
-    personality_state = presentation_state.get("personality_state") if isinstance(presentation_state.get("personality_state"), dict) else {}
-    profiles = personality_state.get("profiles") if isinstance(personality_state.get("profiles"), dict) else {}
-    profile = profiles.get(str(npc_id))
-    return profile if isinstance(profile, dict) else {}
-
-def get_personality_tags(simulation_state: Dict[str, Any], npc_id: str) -> list[str]:
-    profile = get_personality_profile(simulation_state, npc_id)
-    tags = profile.get("style_tags")
-    return [str(x) for x in tags] if isinstance(tags, list) else []
-
-def get_voice_style(simulation_state: Dict[str, Any], npc_id: str) -> str:
-    profile = get_personality_profile(simulation_state, npc_id)
-    return str(profile.get("voice_style") or "").strip()
-Add tests
-
-tests/rpg/test_personality_conversation_accessors.py
-
-Phase D — Optional replay-safe LLM expansion
-File 15: src/app/rpg/ai/conversation_prompt_builder.py
-Status
-
-NEW FILE
-
-Purpose
-
-Build one-line structured prompts.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def build_npc_conversation_line_prompt(
-    conversation: Dict[str, Any],
-    speaker_id: str,
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    recent_lines: List[Dict[str, Any]],
-) -> str:
-    conversation = _safe_dict(conversation)
-    topic = _safe_dict(conversation.get("topic"))
-    lines_text = "\n".join(
-        f'- { _safe_str(line.get("speaker")) }: {_safe_str(line.get("text"))}'
-        for line in (recent_lines or [])[-4:]
-    )
-    return (
-        "Write exactly one NPC conversation line as JSON.\n"
-        "Schema: {\"speaker\": \"...\", \"text\": \"...\", \"kind\": \"statement|question|challenge|warning|agreement|interruption\"}\n"
-        f"Conversation kind: {_safe_str(conversation.get('kind'))}\n"
-        f"Topic type: {_safe_str(topic.get('type'))}\n"
-        f"Topic summary: {_safe_str(topic.get('summary'))}\n"
-        f"Speaker: {_safe_str(speaker_id)}\n"
-        f"Recent lines:\n{lines_text}\n"
-        "Constraints: one short line only, no narration, no markdown."
-    )
-File 16: src/app/rpg/ai/conversation_response_parser.py
-Status
-
-NEW FILE
-
-Apply-this-patch
-from __future__ import annotations
-
-import json
-from typing import Any, Dict
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def parse_conversation_line_response(text: str) -> Dict[str, Any]:
-    try:
-        data = json.loads(text)
-    except Exception:
-        return {}
-    data = _safe_dict(data)
-    return {
-        "speaker": _safe_str(data.get("speaker")),
-        "text": _safe_str(data.get("text")),
-        "kind": _safe_str(data.get("kind")) or "statement",
-    }
-
-
-def is_valid_conversation_line(parsed: Dict[str, Any]) -> bool:
-    parsed = _safe_dict(parsed)
-    return bool(_safe_str(parsed.get("speaker")) and _safe_str(parsed.get("text")))
-File 17: src/app/rpg/ai/conversation_gateway.py
-Status
-
-NEW FILE
-
-Purpose
-
-Replay-safe wrapper.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-from .conversation_prompt_builder import build_npc_conversation_line_prompt
-from .conversation_response_parser import (
-    is_valid_conversation_line,
-    parse_conversation_line_response,
-)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
-
-
-def generate_recorded_conversation_line(
-    llm_gateway: Any,
-    conversation: Dict[str, Any],
-    speaker_id: str,
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    recent_lines: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    prompt = build_npc_conversation_line_prompt(
-        conversation,
-        speaker_id,
-        simulation_state,
-        runtime_state,
-        recent_lines,
-    )
-    raw = llm_gateway.generate(prompt) if llm_gateway else ""
-    parsed = parse_conversation_line_response(raw)
-    if not is_valid_conversation_line(parsed):
-        return {}
-    return {
-        "prompt": prompt,
-        "raw": raw,
-        "parsed": parsed,
-        "source": "llm",
-    }
-File 18: src/app/rpg/social/conversation_engine.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Optional LLM expansion.
-
-Apply-this-patch
-
-Add import:
-
-from app.rpg.ai.conversation_gateway import generate_recorded_conversation_line
-from .npc_conversations import get_conversation_lines
-
-Update build_next_conversation_line(...):
-
-def build_next_conversation_line(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    settings = resolve_conversation_settings(simulation_state, runtime_state)
-    speaker_id = select_next_speaker(conversation, simulation_state)
-    recent_lines = get_conversation_lines(simulation_state, conversation.get("conversation_id"))
-    source = "template"
-
-    if settings.get("llm_expand_npc_conversations"):
-        llm_gateway = _safe_dict(runtime_state).get("llm_gateway")
-        record = generate_recorded_conversation_line(
-            llm_gateway,
-            conversation,
-            speaker_id,
-            simulation_state,
-            runtime_state,
-            recent_lines,
-        )
-        if record and _safe_dict(record).get("parsed"):
-            parsed = _safe_dict(record.get("parsed"))
-            return build_conversation_line(
-                conversation_id=conversation.get("conversation_id"),
-                turn=int(conversation.get("turn_count", 0) or 0) + 1,
-                speaker=parsed.get("speaker", speaker_id),
-                text=parsed.get("text", ""),
-                kind=parsed.get("kind", "statement"),
-                created_tick=tick,
-                source="llm",
-            )
-
-    line_payload = build_template_line(conversation, speaker_id, simulation_state, runtime_state)
-    return build_conversation_line(
-        conversation_id=conversation.get("conversation_id"),
-        turn=int(conversation.get("turn_count", 0) or 0) + 1,
-        speaker=speaker_id,
-        text=line_payload.get("text", ""),
-        kind=line_payload.get("kind", "statement"),
-        created_tick=tick,
-        source=source,
-    )
-Add tests
-template fallback on invalid LLM
-replay-safe path when recorded line exists
-Phase E — Later expansion
-File 19: src/app/rpg/social/offscreen_conversations.py
-Status
-
-NEW FILE
-
-Purpose
-
-Bounded offscreen conversation summaries, not full text by default.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def run_offscreen_conversation_pass(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
-    runtime_state = runtime_state if isinstance(runtime_state, dict) else {}
-    rows = runtime_state.setdefault("offscreen_conversation_summaries", [])
-    if not isinstance(rows, list):
-        rows = []
-        runtime_state["offscreen_conversation_summaries"] = rows
-
-    rows.append({
-        "tick": int(tick or 0),
-        "type": "offscreen_conversation",
-        "summary": "Two unseen NPCs discuss recent events.",
-    })
-    runtime_state["offscreen_conversation_summaries"] = rows[-40:]
-    return runtime_state
-File 20: src/app/rpg/social/rumor_from_conversations.py
-Status
-
-NEW FILE
-
-Purpose
-
-Convert notable conversations into rumors.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
-def conversation_can_generate_rumor(conversation: Dict[str, Any]) -> bool:
-    topic = _safe_dict(_safe_dict(conversation).get("topic"))
-    return _safe_str(topic.get("type")) in {"moral_conflict", "plan_reaction", "event_commentary", "faction_tension"}
-
-
-def build_rumor_from_conversation(conversation: Dict[str, Any]) -> Dict[str, Any]:
-    conversation = _safe_dict(conversation)
-    topic = _safe_dict(conversation.get("topic"))
-    return {
-        "type": "rumor",
-        "anchor": _safe_str(topic.get("anchor")),
-        "summary": _safe_str(topic.get("summary")) or "People are talking.",
-    }
-File 21: src/app/rpg/social/faction_conversations.py
-Status
-
-NEW FILE
-
-Purpose
-
-Higher-level planning.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def build_faction_topic_candidates(simulation_state: Dict[str, Any], faction_id: str) -> List[Dict[str, Any]]:
-    return [{
-        "type": "faction_tension",
-        "anchor": f"faction:{faction_id}",
-        "summary": "Faction members debate their next move.",
-        "stance": "plan",
-        "priority": 0.80,
-    }]
-File 22: src/app/rpg/social/crowd_conversations.py
-Status
-
-NEW FILE
-
-Purpose
-
-Light presentation-only chatter.
-
-Apply-this-patch
-from __future__ import annotations
-
-from typing import List
-
-
-def build_background_chatter_lines(location_id: str, recent_events: list[dict]) -> List[str]:
-    if recent_events:
-        return ["The crowd murmurs about what just happened."]
-    return []
-File 23: src/app/rpg/session/runtime.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Persist runtime conversation state.
-
-Apply-this-patch
-
-Ensure runtime has:
-
-runtime_state.setdefault("conversation_settings", {})
-runtime_state.setdefault("offscreen_conversation_summaries", [])
-runtime_state.setdefault("last_player_action", {})
-runtime_state.setdefault("last_conversation_intervention", {})
-
-Add save/load normalization for these keys.
-
-File 24: src/app/rpg/persistence/save_packaging.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Round-trip conversation state.
-
-Apply-this-patch
-
-Include:
-
-social_state.conversations
-runtime_state.conversation_settings
-runtime_state.offscreen_conversation_summaries
-runtime_state.last_player_action
-runtime_state.last_conversation_intervention
-
-Add migration-safe defaults if absent.
-
-File 25: src/app/rpg/analytics/tick_diff.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Diff conversation state.
-
-Apply-this-patch
-
-Add diff fields:
-
-new_conversations
-closed_conversations
-new_conversation_lines
-conversation_interventions
-
-Keep bounded.
-
-File 26: src/app/rpg/analytics/timeline.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Timeline rows for conversation actions.
-
-Apply-this-patch
-
-Add new row/event types:
-
-conversation_started
-conversation_line
-conversation_intervention
-conversation_closed
-File 27: src/app/rpg/api/rpg_presentation_routes.py
-Status
-
-MODIFY EXISTING
-
-Purpose
-
-Expose richer conversation blocks in presentation routes.
-
-Apply-this-patch
-
-Import build_conversation_payload(...) and include:
-
-payload["active_conversations"] = conversation_payload.get("active_conversations", [])
-payload["recent_conversations"] = conversation_payload.get("recent_conversations", [])
-Required validator / integration note
-
-You also need to ensure your existing NPC action pipeline accepts conversation-driving actions already in use:
-
-negotiate
-support
-warn
-retaliate
-investigate
-move
-
-If move is still not allowed in NPCDecisionValidator, add it there.
-
-Required test list
-
-Add these test files:
-
-tests/rpg/test_npc_conversations_state.py
-tests/rpg/test_conversation_settings.py
-tests/rpg/test_conversation_topics.py
-tests/rpg/test_conversation_participants.py
-tests/rpg/test_conversation_templates.py
-tests/rpg/test_player_interventions.py
-tests/rpg/test_conversation_presentation.py
-tests/rpg/test_conversation_engine.py
-tests/rpg/test_world_simulation_conversations.py
-tests/rpg/test_ambient_builder_conversations.py
-tests/rpg/test_rpg_session_conversation_routes.py
-tests/rpg/test_runtime_conversation_persistence.py
-tests/rpg/test_save_packaging_conversations.py
-tests/rpg/test_tick_diff_conversations.py
-tests/rpg/test_timeline_conversations.py
-Implementation order
-
-Apply in this exact order:
-
-social/npc_conversations.py
-social/conversation_settings.py
-social/conversation_topics.py
-social/conversation_participants.py
-social/conversation_templates.py
-social/player_interventions.py
-social/conversation_presentation.py
-social/conversation_engine.py
-integrate creator/world_simulation.py
-integrate session/ambient_builder.py
-integrate api/rpg_session_routes.py
-frontend static/rpg/rpg.js
-inspector static/rpg/rpgPresentationRenderer.js
-personality accessor updates
-optional LLM files
-later expansion files
-persistence + analytics + timeline + presentation routes
-Acceptance criteria
-
-This patch set is complete when all of the following work:
-
-nearby NPCs start topic-driven conversations
-conversations last multiple turns
-player sees actual spoken lines
-player can intervene
-party reaction conversation triggers after player plan/action
-conversation state is bounded
-save/load round-trips
-idle ticks do not duplicate same conversation endlessly
-later expansion files can produce offscreen summaries/rumors/faction discussion hooks
+Below is a strict unified diff-style patch for the exact files we discussed, based on the latest source shape you uploaded: runtime.py, rpg_session_routes.py, rpg_inspection_routes.py, rpg.js, plus the three new focused test files. The current repo still shows the old settings UI shape, early-gated debug logging, empty-payload world-events fetch, and under-grounded turn scene construction, which is why you still see no controls, no logs, and Untitled Scene / unknown location in narration.
+
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+index 9f780ded..c1c6a0aa 100644
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@
+ def _initial_scene_state(start_result: Dict[str, Any]) -> Dict[str, Any]:
+     start_result = _safe_dict(start_result)
+     current_scene = _safe_dict(start_result.get("current_scene"))
+@@
+     return {
+         "scene_id": _safe_str(current_scene.get("scene_id")),
+         "title": _safe_str(current_scene.get("title")),
+         "location_id": _safe_str(current_scene.get("location_id")),
+         "location_name": _safe_str(current_scene.get("location_name")),
+         "scene": _safe_str(current_scene.get("scene")),
+         "summary": _safe_str(current_scene.get("summary")),
+         "actors": _safe_list(current_scene.get("actors")),
+         "items": _safe_list(current_scene.get("items")),
+         "available_checks": _safe_list(current_scene.get("available_checks")),
+         "present_npc_ids": _safe_list(current_scene.get("present_npc_ids")),
+     }
++
++
++def _stable_unique_strs(values: List[Any]) -> List[str]:
++    seen = set()
++    out: List[str] = []
++    for raw in values:
++        value = _safe_str(raw).strip()
++        if not value or value in seen:
++            continue
++        seen.add(value)
++        out.append(value)
++    return out
++
++
++def _resolve_location_name(
++    simulation_state: Dict[str, Any],
++    location_id: str,
++    fallback_name: str = "",
++) -> str:
++    simulation_state = _safe_dict(simulation_state)
++    location_id = _safe_str(location_id).strip()
++    if not location_id:
++        return _safe_str(fallback_name).strip()
++
++    for loc in _safe_list(simulation_state.get("locations")):
++        loc = _safe_dict(loc)
++        if _safe_str(loc.get("location_id") or loc.get("id")) == location_id:
++            return _safe_str(loc.get("name") or loc.get("title") or fallback_name or location_id)
++    return _safe_str(fallback_name).strip() or location_id
++
++
++def _resolve_actor_names(simulation_state: Dict[str, Any], actor_ids: List[str]) -> List[str]:
++    simulation_state = _safe_dict(simulation_state)
++    npc_index = _safe_dict(simulation_state.get("npc_index"))
++    names: List[str] = []
++    for actor_id in _stable_unique_strs(actor_ids):
++        npc = _safe_dict(npc_index.get(actor_id))
++        names.append(_safe_str(npc.get("name") or actor_id))
++    return names
++
++
++def _derive_grounded_scene_context(
++    simulation_state: Dict[str, Any],
++    runtime_state: Dict[str, Any],
++    turn_result: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    runtime_state = _safe_dict(runtime_state)
++    turn_result = _safe_dict(turn_result)
++
++    opening_text = _safe_str(runtime_state.get("opening"))
++    current_scene = _safe_dict(runtime_state.get("current_scene"))
++    player_state = _safe_dict(simulation_state.get("player_state"))
++
++    player_loc_id = _safe_str(player_state.get("location_id")).strip()
++    nearby_ids = _safe_list(player_state.get("nearby_npc_ids"))
++    present_scene_ids = _safe_list(current_scene.get("present_npc_ids"))
++    actor_objs = _safe_list(current_scene.get("actors"))
++    actor_obj_ids = [
++        _safe_str(_safe_dict(a).get("id") or _safe_dict(a).get("npc_id") or _safe_dict(a).get("name"))
++        for a in actor_objs
++    ]
++
++    location_id = (
++        player_loc_id
++        or _safe_str(current_scene.get("location_id"))
++        or _safe_str(turn_result.get("location_id"))
++    ).strip()
++    location_name = _resolve_location_name(
++        simulation_state,
++        location_id,
++        _safe_str(current_scene.get("location_name")).strip(),
++    )
++
++    present_actor_ids = _stable_unique_strs(nearby_ids + present_scene_ids + actor_obj_ids)
++    present_actor_names = _resolve_actor_names(simulation_state, present_actor_ids)
++
++    scene_title = (
++        _safe_str(current_scene.get("title")).strip()
++        or _safe_str(current_scene.get("scene_title")).strip()
++        or location_name
++        or "Current Scene"
++    )
++    scene_summary = (
++        _safe_str(current_scene.get("summary")).strip()
++        or _safe_str(current_scene.get("scene")).strip()
++        or opening_text.strip()
++        or "Your adventure continues."
++    )
++
++    return {
++        "scene_title": scene_title,
++        "location_id": location_id,
++        "location_name": location_name or "unknown location",
++        "scene_summary": scene_summary,
++        "present_actor_ids": present_actor_ids,
++        "present_actor_names": present_actor_names,
++    }
++
++
++def _apply_grounded_scene_overlay(scene: Dict[str, Any], grounded: Dict[str, Any]) -> Dict[str, Any]:
++    scene = _copy_dict(_safe_dict(scene))
++    grounded = _safe_dict(grounded)
++
++    scene["title"] = _safe_str(scene.get("title")).strip() or _safe_str(grounded.get("scene_title")) or "Current Scene"
++    scene["location_id"] = _safe_str(scene.get("location_id")).strip() or _safe_str(grounded.get("location_id"))
++    scene["location_name"] = _safe_str(scene.get("location_name")).strip() or _safe_str(grounded.get("location_name")) or "unknown location"
++    scene["summary"] = _safe_str(scene.get("summary")).strip() or _safe_str(grounded.get("scene_summary")) or "Your adventure continues."
++
++    actor_names = _safe_list(grounded.get("present_actor_names"))
++    if actor_names:
++        scene["actors"] = actor_names
++
++    present_ids = _safe_list(grounded.get("present_actor_ids"))
++    if present_ids and not _safe_list(scene.get("present_npc_ids")):
++        scene["present_npc_ids"] = present_ids
++
++    return scene
+@@
+ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result: Dict[str, Any]) -> Dict[str, Any]:
+@@
+         "runtime_state": {
+@@
+             "last_real_player_activity_at": "",
+             "last_player_action_context": {},
+             "idle_debug_trace": {},
+             "recent_world_event_rows": [],
++            "grounded_scene_context": {},
+         },
+     }
+     return session
+@@
+ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
+@@
+     current_scene = _safe_dict(runtime_state.get("current_scene"))
++    grounded_scene_context = _derive_grounded_scene_context(simulation_state, runtime_state, turn_result)
+@@
+     return {
+@@
+         "scene": {
+             "scene_id": _safe_str(current_scene.get("scene_id")),
++            "title": _safe_str(current_scene.get("title") or grounded_scene_context.get("scene_title")),
++            "location_id": _safe_str(current_scene.get("location_id") or grounded_scene_context.get("location_id")),
++            "location_name": _safe_str(current_scene.get("location_name") or grounded_scene_context.get("location_name")),
+             "items": _safe_list(current_scene.get("items")),
+             "available_checks": _safe_list(current_scene.get("available_checks")),
+-            "present_npc_ids": _safe_list(current_scene.get("present_npc_ids")),
++            "present_npc_ids": _safe_list(current_scene.get("present_npc_ids") or grounded_scene_context.get("present_actor_ids")),
++            "actors": _safe_list(grounded_scene_context.get("present_actor_names")),
+         },
+@@
+         "presentation": build_runtime_presentation_payload(simulation_state),
+         "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("settings"))),
++        "grounded_scene_context": grounded_scene_context,
+         "world_events_summary": {
+             "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-12:],
+         },
+     }
+@@
+ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None = None) -> Dict[str, Any]:
+@@
+-    current_scene = _safe_dict(scenes[0]) if scenes else _fallback_scene(after_state, player_input)
++    current_scene = _safe_dict(scenes[0]) if scenes else _fallback_scene(after_state, player_input)
+     current_scene["items"] = _safe_list(current_scene.get("items")) or build_scene_items(after_state)
+     current_scene["nearby_npcs"] = build_nearby_npc_cards(after_state, runtime_state)
++    grounded_scene_context = _derive_grounded_scene_context(after_state, runtime_state, resolved_result)
++    current_scene = _apply_grounded_scene_overlay(current_scene, grounded_scene_context)
+@@
+     runtime_state["current_scene"] = current_scene
++    runtime_state["grounded_scene_context"] = grounded_scene_context
+     runtime_state["last_player_turn_at"] = _utc_now_iso()
+@@
+ def _apply_idle_tick_to_session(
+     session: Dict[str, Any],
+     *,
+     reason: str = "heartbeat",
+ ) -> Dict[str, Any]:
+@@
+     if idle_gate_open:
+         idle_dialogue_candidates = build_ambient_dialogue_candidates(
+             after_state, runtime_state, player_context, lane="idle",
+         )
+         selected_dialogue = select_ambient_dialogue_candidate(idle_dialogue_candidates, runtime_state)
+     if selected_dialogue:
+         runtime_state = apply_dialogue_cooldowns(runtime_state, selected_dialogue)
+         raw_updates.append(
+             _make_dialogue_update_from_candidate(
+                 selected_dialogue,
+                 {
+                     "scene_id": _safe_str(player_context.get("scene_id")),
+                     "world_summary": _safe_str(player_context.get("world_summary")),
+                 },
+             )
+         )
++
++    if idle_gate_open and not raw_updates:
++        nearby_ids = _safe_list(_safe_dict(after_state.get("player_state")).get("nearby_npc_ids"))
++        npc_index = _safe_dict(after_state.get("npc_index"))
++        fallback_npc_id = ""
++        fallback_npc_name = ""
++        for npc_id in nearby_ids:
++            npc_id = _safe_str(npc_id).strip()
++            if not npc_id:
++                continue
++            npc = _safe_dict(npc_index.get(npc_id))
++            fallback_npc_id = npc_id
++            fallback_npc_name = _safe_str(npc.get("name") or npc_id)
++            if fallback_npc_name:
++                break
++        if fallback_npc_id:
++            raw_updates.append({
++                "tick": int(after_state.get("tick", 0) or 0),
++                "kind": "idle_check_in",
++                "priority": 0.35,
++                "interrupt": False,
++                "speaker_id": fallback_npc_id,
++                "speaker_name": fallback_npc_name,
++                "target_id": "player",
++                "target_name": "you",
++                "text": f"{fallback_npc_name} breaks the silence and checks in with you.",
++                "lane": "idle",
++                "source": "debug_idle_fallback",
++                "location_id": _safe_str(_safe_dict(after_state.get("player_state")).get("location_id")),
++            })
++            debug_trace.setdefault("filters", []).append("debug_idle_fallback_emitted")
+diff --git a/src/app/rpg/api/rpg_session_routes.py b/src/app/rpg/api/rpg_session_routes.py
+index 6c36c801..f5c421d8 100644
+--- a/src/app/rpg/api/rpg_session_routes.py
++++ b/src/app/rpg/api/rpg_session_routes.py
+@@
+ @rpg_session_bp.post("/api/rpg/session/get")
+ async def get_rpg_session(request: Request):
+@@
+     payload = build_frontend_bootstrap_payload(session)
+     payload["ok"] = True
+     return payload
++
++
++@rpg_session_bp.post("/api/rpg/session/inspect_state")
++async def inspect_rpg_session_state(request: Request):
++    data = await request.json()
++    session_id = _safe_str(data.get("session_id")).strip()
++    if not session_id:
++        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
++
++    session = load_runtime_session(session_id)
++    if session is None:
++        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
++
++    runtime_state = _safe_dict(session.get("runtime_state"))
++    return {
++        "ok": True,
++        "runtime_state": runtime_state,
++        "settings": _safe_dict(runtime_state.get("settings")),
++        "grounded_scene_context": _safe_dict(runtime_state.get("grounded_scene_context")),
++        "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-48:],
++    }
+@@
+ @rpg_session_bp.post("/api/rpg/session/resume")
+ async def resume_rpg_session(request: Request):
+@@
+-    return {
++    session = load_runtime_session(session_id)
++    runtime_state = _safe_dict(_safe_dict(session).get("runtime_state")) if session else {}
++    return {
+         "ok": True,
+         "updates": _safe_list(result.get("updates")),
+         "latest_seq": int(result.get("latest_seq", 0) or 0),
+         "ticks_applied": int(result.get("ticks_applied", 0) or 0),
+         "excess_summarized": int(result.get("excess_summarized", 0) or 0),
++        "settings": _safe_dict(runtime_state.get("settings")),
++        "grounded_scene_context": _safe_dict(runtime_state.get("grounded_scene_context")),
++        "world_events_summary": {
++            "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-12:],
++        },
+     }
+diff --git a/src/app/rpg/api/rpg_inspection_routes.py b/src/app/rpg/api/rpg_inspection_routes.py
+index 48eaca7b..1e38828e 100644
+--- a/src/app/rpg/api/rpg_inspection_routes.py
++++ b/src/app/rpg/api/rpg_inspection_routes.py
+@@
+ from app.rpg.analytics import (
+     build_tick_diff,
+     build_timeline_row_diff,
+     build_timeline_summary,
+     build_world_events_view,
+@@
+ )
++from app.rpg.session.runtime import load_runtime_session
+@@
+ @rpg_inspection_bp.post("/api/rpg/inspect/world_events")
+ def inspect_world_events():
+@@
+     return jsonify({
+         "ok": True,
+         "world_events": build_world_events_view(simulation_state, runtime_state),
+     })
++
++
++@rpg_inspection_bp.post("/api/rpg/inspect/world_events_for_session")
++def inspect_world_events_for_session():
++    data = request.get_json(silent=True) or {}
++    session_id = str(data.get("session_id") or "").strip()
++    if not session_id:
++        return jsonify({"ok": False, "error": "session_id_required"}), 400
++
++    session = load_runtime_session(session_id)
++    if session is None:
++        return jsonify({"ok": False, "error": "session_not_found"}), 404
++
++    simulation_state = dict(_safe_dict(session).get("simulation_state") or {})
++    runtime_state = dict(_safe_dict(session).get("runtime_state") or {})
++    return jsonify({
++        "ok": True,
++        "world_events": build_world_events_view(simulation_state, runtime_state),
++    })
+diff --git a/src/static/rpg/rpg.js b/src/static/rpg/rpg.js
+index 7ff4e4e7..e3f4d210 100644
+--- a/src/static/rpg/rpg.js
++++ b/src/static/rpg/rpg.js
+@@
+         ambientFeedBuffer: [],
+         // Settings and world events (Living World v2)
+         settings: {},
++        groundedSceneContext: {},
++        runtimeState: {},
+         worldEventsView: {
+             local_events: [],
+             global_events: [],
+             director_pressure: [],
+             recent_changes: [],
+         },
+         worldEventsSummary: {},
+     };
+@@
+     function rpgDebugEnabled() {
+-        return !!(rpgState && rpgState.settings && rpgState.settings.console_debug_enabled);
++        if (!rpgState) return true;
++        if (!rpgState.settings || Object.keys(rpgState.settings).length === 0) return true;
++        return !!rpgState.settings.console_debug_enabled;
+     }
+@@
+     function markRealPlayerActivity(reason) {
+         window.omnix_rpg_last_activity = Date.now();
+         rpgDebug('Activity', { reason: reason, at: window.omnix_rpg_last_activity });
+     }
++
++    console.log('[RPG] Debug bootstrap', {
++        settings: (rpgState && rpgState.settings) || {},
++        sessionId: (rpgState && rpgState.sessionId) || null,
++    });
+@@
+     function startAmbientHeartbeat() {
+@@
+             }).then(function (r) { return r.json(); })
+               .then(function (data) {
++                console.log('[RPG][IdleTick:Response]', data);
+                 rpgDebug('IdleTick:Response', data);
+                 if (data.ok && data.updates && data.updates.length) {
+                     data.updates.forEach(function (u) { handleAmbientUpdate(u); });
+                 }
+                 // Update settings from server echo
+                 if (data.settings) {
+                     updateState({ settings: data.settings });
+                 }
+             }).catch(function (err) {
+                 rpgDebug('IdleTick:Error', err);
+             });
+         }, HEARTBEAT_INTERVAL_MS);
+     }
+@@
+     function handleAmbientUpdate(update) {
+         if (!update) return;
+         var seq = parseInt(update.seq, 10) || 0;
+         if (seq <= rpgState.ambientSeq) return;
+         updateState({ ambientSeq: seq });
+@@
+         rpgDebug('Ambient:Decision', {
+             seq: seq,
+             kind: update.kind,
+             delivery: update.delivery,
+             isTyping: rpgState.isTyping,
+             is_reaction: update.is_reaction,
+             is_idle_conversation: update.is_idle_conversation,
+         });
++        console.log('[RPG][Ambient:Decision]', {
++            seq: seq,
++            kind: update.kind,
++            delivery: update.delivery,
++            isTyping: rpgState.isTyping,
++            is_reaction: update.is_reaction,
++            is_idle_conversation: update.is_idle_conversation,
++            speaker: update.speaker_name || '',
++            text: update.text || '',
++        });
+@@
+     function fetchWorldEvents() {
+         if (!rpgState.sessionId) return;
+-        fetch('/api/rpg/inspect/world_events', {
++        if (rpgState.settings && rpgState.settings.world_events_panel_enabled === false) return;
++        fetch('/api/rpg/inspect/world_events_for_session', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+-                setup_payload: {},
+-                runtime_state: {},
++                session_id: rpgState.sessionId,
+             }),
+         }).then(function (r) { return r.json(); })
+           .then(function (data) {
+             rpgDebug('WorldEvents:Response', data);
+             if (data.ok && data.world_events) {
+                 updateState({ worldEventsView: data.world_events });
+                 renderWorldEventsPanel();
+             }
+         }).catch(function (err) {
+             rpgDebug('WorldEvents:Error', err);
+         });
+     }
++
++    function fetchSessionInspectState() {
++        if (!rpgState.sessionId) return Promise.resolve(null);
++        return fetch('/api/rpg/session/inspect_state', {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ session_id: rpgState.sessionId }),
++        }).then(function (r) { return r.json(); })
++          .then(function (data) {
++            console.log('[RPG] Inspect state response', data);
++            if (data && data.ok) {
++                updateState({
++                    runtimeState: data.runtime_state || {},
++                    settings: data.settings || rpgState.settings || {},
++                    groundedSceneContext: data.grounded_scene_context || {},
++                    worldEventsSummary: {
++                        recent_world_event_rows: data.recent_world_event_rows || []
++                    },
++                });
++            }
++            return data;
++        });
++    }
+@@
+     function showSettingsPanel() {
+@@
+-        // Response Length Settings
+-        var responseSection = document.createElement('div');
+-        responseSection.innerHTML = '<h4>Response Length</h4>';
+-        var responseLength = (rpgState.worldBehavior && rpgState.worldBehavior.response_length) || {};
+-        responseSection.innerHTML += ''
+-            + '<label>Narrator Length: <select id="rpgNarratorLength">'
+-            + '<option value="short"' + ((responseLength.narrator_length || 'medium') === 'short' ? ' selected' : '') + '>Short</option>'
+-            + '<option value="medium"' + ((responseLength.narrator_length || 'medium') === 'medium' ? ' selected' : '') + '>Medium</option>'
+-            + '<option value="long"' + ((responseLength.narrator_length || 'medium') === 'long' ? ' selected' : '') + '>Long</option>'
+-            + '</select></label><br>'
+-            + '<label>Character Length: <select id="rpgCharacterLength">'
+-            + '<option value="short"' + ((responseLength.character_length || 'medium') === 'short' ? ' selected' : '') + '>Short</option>'
+-            + '<option value="medium"' + ((responseLength.character_length || 'medium') === 'medium' ? ' selected' : '') + '>Medium</option>'
+-            + '<option value="long"' + ((responseLength.character_length || 'medium') === 'long' ? ' selected' : '') + '>Long</option>'
+-            + '</select></label><br>';
+-        var saveResponseBtn = document.createElement('button');
+-        saveResponseBtn.className = 'btn btn-secondary';
+-        saveResponseBtn.textContent = 'Save Response Length';
+-        saveResponseBtn.addEventListener('click', function() {
+-            if (!rpgState.sessionId) {
+-                alert('No active game to save settings to');
+-                return;
+-            }
+-            fetch('/api/rpg/session/settings', {
+-                method: 'POST',
+-                headers: { 'Content-Type': 'application/json' },
+-                body: JSON.stringify({
+-                    session_id: rpgState.sessionId,
+-                    settings: {
+-                        response_length: {
+-                            narrator_length: document.getElementById('rpgNarratorLength').value || 'medium',
+-                            character_length: document.getElementById('rpgCharacterLength').value || 'medium'
+-                        }
+-                    }
+-                }),
+-            }).then(function(r) { return r.json(); })
+-              .then(function(data) {
+-                  if (data.ok) alert('Response length saved');
+-                  else alert('Failed to save response length');
+-              }).catch(function() {
+-                  alert('Failed to save response length');
+-              });
+-        });
+-        responseSection.appendChild(saveResponseBtn);
+-        body.appendChild(responseSection);
++        var livingWorldSection = document.createElement('div');
++        livingWorldSection.innerHTML = '<h4>Living World</h4>';
++        var currentSettings = rpgState.settings || {};
++        livingWorldSection.innerHTML += ''
++            + '<label style="display:block;margin-bottom:6px;">'
++            + '<input type="checkbox" id="rpgIdleConversationsEnabled"' + (currentSettings.idle_conversations_enabled ? ' checked' : '') + '> '
++            + 'Enable Idle Conversations'
++            + '</label>'
++            + '<label style="display:block;margin-bottom:6px;">Idle Delay: '
++            + '<select id="rpgIdleConversationSeconds">'
++            + '<option value="30"' + (String(currentSettings.idle_conversation_seconds) === '30' ? ' selected' : '') + '>30 seconds</option>'
++            + '<option value="60"' + (String(currentSettings.idle_conversation_seconds || 60) === '60' ? ' selected' : '') + '>1 minute</option>'
++            + '<option value="300"' + (String(currentSettings.idle_conversation_seconds) === '300' ? ' selected' : '') + '>5 minutes</option>'
++            + '<option value="600"' + (String(currentSettings.idle_conversation_seconds) === '600' ? ' selected' : '') + '>10 minutes</option>'
++            + '</select></label>'
++            + '<label style="display:block;margin-bottom:6px;">'
++            + '<input type="checkbox" id="rpgIdleNpcToPlayerEnabled"' + (currentSettings.idle_npc_to_player_enabled ? ' checked' : '') + '> '
++            + 'NPCs talk to you when idle'
++            + '</label>'
++            + '<label style="display:block;margin-bottom:6px;">'
++            + '<input type="checkbox" id="rpgIdleNpcToNpcEnabled"' + (currentSettings.idle_npc_to_npc_enabled ? ' checked' : '') + '> '
++            + 'NPCs talk to each other when idle'
++            + '</label>'
++            + '<label style="display:block;margin-bottom:6px;">'
++            + '<input type="checkbox" id="rpgFollowReactionsEnabled"' + (currentSettings.follow_reactions_enabled ? ' checked' : '') + '> '
++            + 'Follow Reactions'
++            + '</label>'
++            + '<label style="display:block;margin-bottom:6px;">Reaction Style: '
++            + '<select id="rpgReactionStyle">'
++            + '<option value="minimal"' + (currentSettings.reaction_style === 'minimal' ? ' selected' : '') + '>Minimal</option>'
++            + '<option value="normal"' + ((currentSettings.reaction_style || 'normal') === 'normal' ? ' selected' : '') + '>Normal</option>'
++            + '<option value="lively"' + (currentSettings.reaction_style === 'lively' ? ' selected' : '') + '>Lively</option>'
++            + '</select></label>'
++            + '<label style="display:block;margin-bottom:6px;">'
++            + '<input type="checkbox" id="rpgConsoleDebugEnabled"' + (currentSettings.console_debug_enabled ? ' checked' : '') + '> '
++            + 'Console Debug'
++            + '</label>'
++            + '<label style="display:block;margin-bottom:6px;">'
++            + '<input type="checkbox" id="rpgWorldEventsPanelEnabled"' + (currentSettings.world_events_panel_enabled ? ' checked' : '') + '> '
++            + 'World Events Panel'
++            + '</label>';
++        var saveLivingWorldBtn = document.createElement('button');
++        saveLivingWorldBtn.className = 'btn btn-primary';
++        saveLivingWorldBtn.textContent = 'Save Living World Settings';
++        saveLivingWorldBtn.addEventListener('click', function() {
++            if (!rpgState.sessionId) {
++                alert('No active game to save settings to');
++                return;
++            }
++            fetch('/api/rpg/session/settings', {
++                method: 'POST',
++                headers: { 'Content-Type': 'application/json' },
++                body: JSON.stringify({
++                    session_id: rpgState.sessionId,
++                    settings: {
++                        idle_conversations_enabled: !!document.getElementById('rpgIdleConversationsEnabled').checked,
++                        idle_conversation_seconds: parseInt(document.getElementById('rpgIdleConversationSeconds').value, 10) || 60,
++                        idle_npc_to_player_enabled: !!document.getElementById('rpgIdleNpcToPlayerEnabled').checked,
++                        idle_npc_to_npc_enabled: !!document.getElementById('rpgIdleNpcToNpcEnabled').checked,
++                        follow_reactions_enabled: !!document.getElementById('rpgFollowReactionsEnabled').checked,
++                        reaction_style: document.getElementById('rpgReactionStyle').value || 'normal',
++                        console_debug_enabled: !!document.getElementById('rpgConsoleDebugEnabled').checked,
++                        world_events_panel_enabled: !!document.getElementById('rpgWorldEventsPanelEnabled').checked
++                    }
++                }),
++            }).then(function(r) { return r.json(); })
++              .then(function(data) {
++                  console.log('[RPG] Settings save response', data);
++                  if (data.ok && data.settings) {
++                      updateState({ settings: data.settings });
++                      alert('Living world settings saved');
++                  } else {
++                      alert('Failed to save settings');
++                  }
++              }).catch(function() {
++                  alert('Failed to save settings');
++              });
++        });
++        livingWorldSection.appendChild(document.createElement('br'));
++        livingWorldSection.appendChild(saveLivingWorldBtn);
++        body.appendChild(livingWorldSection);
++
++        var grounded = rpgState.groundedSceneContext || {};
++        var groundedSection = document.createElement('div');
++        groundedSection.innerHTML =
++            '<h4>Current Scene Grounding</h4>'
++            + '<p><strong>Scene:</strong> ' + escapeHtml(grounded.scene_title || '') + '</p>'
++            + '<p><strong>Location:</strong> ' + escapeHtml(grounded.location_name || '') + '</p>'
++            + '<p><strong>Actors:</strong> ' + escapeHtml((grounded.present_actor_names || []).join(', ')) + '</p>';
++        body.appendChild(groundedSection);
+@@
+     function startLivingWorld() {
+         if (!rpgState.sessionId) return;
+@@
+-        // Record current activity time
++        // Record local resume timestamp only; active idle gating is handled server-side
+         localStorage.setItem('omnix_rpg_last_activity', String(now));
+@@
+             }).then(function (r) { return r.json(); })
+               .then(function (data) {
+                 if (data.ok && data.updates && data.updates.length) {
+                     data.updates.forEach(function (u) { appendAmbientUpdate(u); });
+                     updateState({ ambientSeq: data.latest_seq || rpgState.ambientSeq });
+                 }
++                if (data.settings) {
++                    updateState({ settings: data.settings });
++                }
++                if (data.grounded_scene_context) {
++                    updateState({ groundedSceneContext: data.grounded_scene_context });
++                }
++                if (data.world_events_summary) {
++                    updateState({ worldEventsSummary: data.world_events_summary });
++                }
++                console.log('[RPG] Loaded session settings', rpgState.settings);
++                console.log('[RPG] Grounded scene context', rpgState.groundedSceneContext);
+             }).catch(function () { /* ignore resume errors */ });
+         }
+ 
+         startAmbientHeartbeat();
+         connectSessionStream();
+         _setupTypingDetection();
++        fetchSessionInspectState().then(function() {
++            fetchWorldEvents();
++        });
+         console.log('[RPG] Living world started (session=' + rpgState.sessionId + ', seq=' + rpgState.ambientSeq + ')');
+     }
+@@
+         window._onAdventureBuilderLaunch = function(res) {
+             if (!res || !res.session_id) return;
+             updateState({
+                 sessionId: res.session_id,
+                 opening: res.opening || '',
+                 world: res.world || {},
+                 player: res.player || {},
+                 locations: res.locations || [],
+                 factions: res.factions || [],
+                 npcs: res.npcs || [],
+                 settings: res.settings || rpgState.settings || {},
++                groundedSceneContext: res.grounded_scene_context || {},
++                runtimeState: res.runtime_state || {},
+                 worldEventsSummary: res.world_events_summary || {},
+             });
+diff --git a/src/tests/functional/test_phase_scene_grounding_functional.py b/src/tests/functional/test_phase_scene_grounding_functional.py
+new file mode 100644
+index 00000000..45b2cb11
+--- /dev/null
++++ b/src/tests/functional/test_phase_scene_grounding_functional.py
+@@
++from app.rpg.session.runtime import (
++    _apply_grounded_scene_overlay,
++    _derive_grounded_scene_context,
++    build_frontend_bootstrap_payload,
++)
++
++
++def test_grounded_scene_context_uses_player_location_and_nearby_npcs():
++    simulation_state = {
++        "locations": [{"location_id": "loc:tavern", "name": "The Rusty Flagon Tavern"}],
++        "npc_index": {
++            "npc:bran": {"name": "Bran the Innkeeper"},
++            "npc:elara": {"name": "Elara the Merchant"},
++        },
++        "player_state": {
++            "location_id": "loc:tavern",
++            "nearby_npc_ids": ["npc:bran", "npc:elara"],
++        },
++    }
++    runtime_state = {"current_scene": {}}
++    grounded = _derive_grounded_scene_context(simulation_state, runtime_state, {})
++    assert grounded["location_name"] == "The Rusty Flagon Tavern"
++    assert grounded["present_actor_names"] == ["Bran the Innkeeper", "Elara the Merchant"]
++
++
++def test_apply_grounded_scene_overlay_fills_missing_title_location_actors():
++    grounded = {
++        "scene_title": "The Rusty Flagon Tavern",
++        "location_id": "loc:tavern",
++        "location_name": "The Rusty Flagon Tavern",
++        "scene_summary": "A lively tavern scene.",
++        "present_actor_ids": ["npc:bran"],
++        "present_actor_names": ["Bran the Innkeeper"],
++    }
++    scene = _apply_grounded_scene_overlay({}, grounded)
++    assert scene["title"] == "The Rusty Flagon Tavern"
++    assert scene["location_name"] == "The Rusty Flagon Tavern"
++    assert scene["actors"] == ["Bran the Innkeeper"]
++
++
++def test_bootstrap_payload_includes_grounded_scene_context():
++    session = {
++        "simulation_state": {
++            "locations": [{"location_id": "loc:tavern", "name": "The Rusty Flagon Tavern"}],
++            "npc_index": {"npc:bran": {"name": "Bran the Innkeeper"}},
++            "player_state": {"location_id": "loc:tavern", "nearby_npc_ids": ["npc:bran"]},
++        },
++        "runtime_state": {"current_scene": {}, "turn_result": {}},
++    }
++    payload = build_frontend_bootstrap_payload(session)
++    assert "grounded_scene_context" in payload
++    assert payload["grounded_scene_context"]["location_name"] == "The Rusty Flagon Tavern"
++
++
++def test_grounded_scene_context_avoids_unknown_location_when_opening_exists():
++    simulation_state = {"player_state": {}, "npc_index": {}}
++    runtime_state = {
++        "opening": "The story opens in The Rusty Flagon Tavern.",
++        "current_scene": {"location_name": "The Rusty Flagon Tavern"},
++    }
++    grounded = _derive_grounded_scene_context(simulation_state, runtime_state, {})
++    assert grounded["location_name"] == "The Rusty Flagon Tavern"
+diff --git a/src/tests/functional/test_phase_session_inspect_state_functional.py b/src/tests/functional/test_phase_session_inspect_state_functional.py
+new file mode 100644
+index 00000000..ed8d45fe
+--- /dev/null
++++ b/src/tests/functional/test_phase_session_inspect_state_functional.py
+@@
++from app.rpg.api.rpg_session_routes import rpg_session_bp
++
++
++def test_inspect_state_requires_session_id(client):
++    res = client.post("/api/rpg/session/inspect_state", json={})
++    assert res.status_code == 400
++
++
++def test_inspect_state_missing_session_returns_404(client):
++    res = client.post("/api/rpg/session/inspect_state", json={"session_id": "missing"})
++    assert res.status_code == 404
+diff --git a/src/tests/functional/test_phase_world_events_session_route_functional.py b/src/tests/functional/test_phase_world_events_session_route_functional.py
+new file mode 100644
+index 00000000..07c4b0c0
+--- /dev/null
++++ b/src/tests/functional/test_phase_world_events_session_route_functional.py
+@@
++def test_world_events_for_session_requires_session_id(client):
++    res = client.post("/api/rpg/inspect/world_events_for_session", json={})
++    assert res.status_code == 400
++
++
++def test_world_events_for_session_missing_session_returns_404(client):
++    res = client.post("/api/rpg/inspect/world_events_for_session", json={"session_id": "missing"})
++    assert res.status_code == 404
+Completion checklist
+
+Mark each item pass/fail after implementation.
+
+Runtime / grounding
+ runtime_state includes grounded_scene_context.
+ build_frontend_bootstrap_payload() returns grounded_scene_context.
+ apply_turn() computes grounded context and overlays it onto current_scene.
+ Turn prompt no longer shows Untitled Scene when opening/current scene has a real title.
+ Turn prompt no longer shows unknown location when opening/current state has a location.
+ If nearby NPCs exist, Actors present: is no longer empty. This is the current break visible in your logs.
+Idle visibility / debug
+ Browser console prints [RPG][IdleTick:Response] on every heartbeat.
+ Browser console prints [RPG][Ambient:Decision] when ambient arrives.
+ rpgDebugEnabled() logs before settings are loaded.
+ After idle threshold, at least one idle_check_in appears if the normal lane still emits nothing.
+Settings UI
+ Settings modal shows a Living World section.
+ Idle Conversations checkbox is visible.
+ Idle Delay dropdown is visible.
+ NPC→player idle toggle is visible.
+ NPC→NPC idle toggle is visible.
+ Follow Reactions toggle is visible.
+ Reaction Style dropdown is visible.
+ Console Debug toggle is visible.
+ World Events Panel toggle is visible.
+ Saving settings updates rpgState.settings from backend echo.
+World Events
+ Frontend no longer posts empty { setup_payload: {}, runtime_state: {} } to fetch world events.
+ /api/rpg/inspect/world_events_for_session exists.
+ /api/rpg/session/inspect_state exists.
+ fetchSessionInspectState() hydrates settings, groundedSceneContext, and worldEventsSummary.
+ fetchWorldEvents() uses session_id.
+ World Events panel renders from real session-backed data.
+Manual verification
+ Start a new adventure in The Rusty Flagon Tavern.
+ Open settings and confirm the new Living World controls are present.
+ Console shows debug bootstrap, idle tick responses, and ambient decisions.
+ First turn prompt stays grounded in tavern context rather than jumping to generic cavern text.
+ After chosen idle delay, you see NPC idle chatter or the deterministic fallback check-in.
+ World Events fetch returns non-empty structured payload for the active session.
+
+The strongest evidence that these are the right fixes is the current mismatch between the live behavior and the latest source: idle routes are firing repeatedly, but the frontend still lacks the controls and real session-backed world-events wiring, and the narrator is still being fed under-grounded scene fields.
