@@ -1,7 +1,7 @@
 _ALLOWED_INTENTS = {
     "observe", "support", "confront", "avoid",
     "investigate", "negotiate", "stabilize",
-    "retaliate", "wait"
+    "retaliate", "wait", "move",
 }
 
 _ALLOWED_ACTIONS = _ALLOWED_INTENTS

@@ -19,6 +19,28 @@ class NPCDecision:
         return self.__dict__.copy()
 
     @classmethod
+    def fallback(
+        cls,
+        npc_id: str,
+        tick: int,
+        location_id: str = "",
+        reason: str = "No active goals",
+    ) -> "NPCDecision":
+        """Return a safe idle decision when no goal is available."""
+        return cls(
+            npc_id=npc_id,
+            tick=tick,
+            intent="wait",
+            action_type="wait",
+            target_id="",
+            target_kind="",
+            location_id=location_id,
+            reason=reason,
+            dialogue_hint="The NPC waits and reassesses.",
+            urgency=0.0,
+        )
+
+    @classmethod
     def from_dict(cls, data: Dict[str, Any] | None):
         data = data or {}
         return cls(

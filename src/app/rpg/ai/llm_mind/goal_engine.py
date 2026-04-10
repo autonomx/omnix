@@ -310,10 +310,12 @@ class GoalEngine:
                 priority=0.60 + min(trust * 0.20, 0.20),
                 reason="Player is viewed as trustworthy",
             ))
-        elif nearby_npcs:
-            # CRITICAL:
-            # If another NPC is nearby, prefer social interaction over passive
-            # observation so the world remains active even in quiet scenes.
+
+        # HARD FALLBACK — nearby-NPC social interaction.
+        # This block is unconditional: if *any* NPC shares the location, a
+        # negotiate goal is always emitted so passive observe can never be
+        # the dominant behaviour when NPCs are co-located.
+        if nearby_npcs:
             other = nearby_npcs[0]
             other_id = _safe_str(other.get("npc_id"))
             if other_id:
@@ -321,10 +323,13 @@ class GoalEngine:
                     npc_id=npc_id,
                     goal_type="negotiate_with_nearby_npc",
                     target_id=other_id,
-                    priority=0.45,
-                    reason="Force social interaction",
+                    priority=0.55,
+                    reason="Force social interaction — nearby NPC present",
                 ))
-        else:
+
+        # Passive observe is the absolute last resort and may only appear
+        # when no other NPC is nearby at all.
+        if not nearby_npcs:
             goals.append(self._make_goal(
                 npc_id=npc_id,
                 goal_type="observe",

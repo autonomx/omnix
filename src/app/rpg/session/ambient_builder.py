@@ -90,8 +90,13 @@ def _is_low_value_internal_npc_event(event: Dict[str, Any], player_loc: str) -> 
     if target_id == "player":
         return False
 
-    # Suppress low-value maintenance loops, especially off-screen.
-    if event_type in {"observe", "watch", "support", "stabilize", "avoid", "retreat", "withdraw"}:
+    # Suppress observe/watch everywhere (including on-screen) — they are
+    # passive bookkeeping, never meaningful to the player.
+    if event_type in {"observe", "watch"}:
+        return True
+
+    # Suppress other low-value maintenance loops when off-screen.
+    if event_type in {"support", "stabilize", "avoid", "retreat", "withdraw"}:
         if not event_loc or not player_loc or event_loc != player_loc:
             return True
 
@@ -361,6 +366,27 @@ def build_ambient_updates(
                     target_id=target_id,
                     location_id=npc_loc,
                     text=_safe_str(decision.get("text") or f"{npc_name} {'attacks' if action == 'attack' else 'warns'} you!"),
+                    source="simulation",
+                ))
+        elif action in ("negotiate", "support"):
+            target_id = _safe_str(decision.get("target_id"))
+            if npc_id in nearby and target_id and target_id != "player":
+                target_info = _safe_dict(npc_index.get(target_id))
+                target_name = _safe_str(target_info.get("name") or target_id)
+                if action == "negotiate":
+                    text = f"{npc_name} speaks with {target_name}."
+                else:
+                    text = f"{npc_name} checks in with {target_name}."
+                updates.append(make_ambient_update(
+                    tick=tick,
+                    kind="npc_to_npc",
+                    priority=0.45,
+                    speaker_id=npc_id,
+                    speaker_name=npc_name,
+                    target_id=target_id,
+                    target_name=target_name,
+                    location_id=npc_loc,
+                    text=text,
                     source="simulation",
                 ))
 
