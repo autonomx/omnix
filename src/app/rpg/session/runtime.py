@@ -354,56 +354,56 @@ def _build_world_advance_recap(
         or 0
     )
 
-    world_events = _stable_unique_labeled_items(
-        simulation_state.get("recent_events")
-        or simulation_state.get("world_events")
-        or runtime_state.get("recent_world_events")
-        or [],
-        5,
-    )
-    consequences = _stable_unique_labeled_items(
-        simulation_state.get("recent_consequences")
-        or runtime_state.get("recent_consequences")
-        or [],
-        5,
-    )
-    threads = _stable_unique_labeled_items(
-        simulation_state.get("active_threads")
-        or simulation_state.get("threads")
-        or runtime_state.get("active_threads")
-        or [],
-        4,
-    )
-    npc_updates = _stable_unique_labeled_items(
-        runtime_state.get("npc_updates")
-        or simulation_state.get("npc_updates")
-        or simulation_state.get("npc_states")
-        or [],
-        4,
-    )
-    director_activity = _stable_unique_labeled_items(
-        runtime_state.get("director_log")
-        or runtime_state.get("director_activity")
-        or debug_trace.get("director_activity")
-        or [],
-        4,
-    )
+    world_events = _safe_list(simulation_state.get("recent_events"))
+    consequences = _safe_list(simulation_state.get("recent_consequences"))
+    threads = _safe_list(simulation_state.get("active_threads"))
+    npcs = _safe_list(simulation_state.get("npc_states"))
 
-    return {
+    # Fallbacks for current engine state shape.
+    if not world_events:
+        world_events = (
+            _safe_list(simulation_state.get("events")) or
+            _safe_list(simulation_state.get("world_events")) or
+            _safe_list(runtime_state.get("world_events")) or
+            _safe_list(runtime_state.get("recent_events"))
+        )
+    if not consequences:
+        consequences = (
+            _safe_list(simulation_state.get("effects")) or
+            _safe_list(simulation_state.get("recent_changes")) or
+            _safe_list(runtime_state.get("recent_changes"))
+        )
+    if not threads:
+        threads = (
+            _safe_list(simulation_state.get("threads")) or
+            _safe_list(simulation_state.get("story_threads")) or
+            _safe_list(runtime_state.get("threads"))
+        )
+    if not npcs:
+        npcs = (
+            _safe_list(simulation_state.get("actors")) or
+            _safe_list(simulation_state.get("npcs")) or
+            _safe_list(runtime_state.get("npc_states"))
+        )
+
+    world_events_out = _coerce_recap_labels(world_events, limit=5)
+    consequences_out = _coerce_recap_labels(consequences, limit=5)
+    threads_out = _coerce_recap_labels(threads, limit=4)
+    npc_updates_out = _coerce_recap_labels(npcs, limit=4)
+    director_activity_out = _coerce_recap_labels(runtime_state.get("director_log"), limit=4)
+
+    recap = {
         "kind": "world_advance_recap",
-        "summary": _safe_str(debug_trace.get("summary")).strip()
-        or (
-            f"📜 While you were away, the world advanced through {additional_moments} additional moments. Much has changed."
-            if additional_moments > 0
-            else "📜 While you were away, the world shifted."
-        ),
-        "additional_moments": additional_moments,
-        "world_events": world_events,
-        "consequences": consequences,
-        "threads": threads,
-        "npc_updates": npc_updates,
-        "director_activity": director_activity,
+        "summary": _safe_str(debug_trace.get("summary")) or "The world shifted while you were away.",
+        "additional_moments": int(debug_trace.get("advance_ticks", 0) or 0),
+        "world_events": world_events_out,
+        "consequences": consequences_out,
+        "threads": threads_out,
+        "npc_updates": npc_updates_out,
+        "director_activity": director_activity_out,
     }
+
+    return recap
 
 
 def _stable_unique_strs(values: List[Any]) -> List[str]:
@@ -2053,48 +2053,86 @@ def _apply_idle_tick_to_session(
     }
 
 
-def _build_world_advance_recap(simulation_state, runtime_state, debug_trace):
-    simulation_state = _safe_dict(simulation_state)
-    runtime_state = _safe_dict(runtime_state)
 
-    # Pull recent world signals
-    world_events = _safe_list(simulation_state.get("recent_events"))
-    consequences = _safe_list(simulation_state.get("recent_consequences"))
-    threads = _safe_list(simulation_state.get("active_threads"))
-    npcs = _safe_list(simulation_state.get("npc_states"))
 
-    # Trim for UI (bounded)
-    world_events = world_events[:5]
-    consequences = consequences[:5]
-    threads = threads[:4]
-    npcs = npcs[:4]
 
-    def _label(x):
-        if isinstance(x, dict):
-            return (
-                _safe_str(x.get("summary")) or
-                _safe_str(x.get("description")) or
-                _safe_str(x.get("title")) or
-                _safe_str(x.get("name"))
+def _coerce_recap_labels(items, limit=5):
+    out = []
+    seen = set()
+    for item in _safe_list(items):
+        label = ""
+        if isinstance(item, dict):
+            label = (
+                _safe_str(item.get("summary")) or
+                _safe_str(item.get("description")) or
+                _safe_str(item.get("title")) or
+                _safe_str(item.get("name")) or
+                _safe_str(item.get("label")) or
+                _safe_str(item.get("text"))
             )
-        return _safe_str(x)
+        else:
+            label = _safe_str(item)
+        label = label.strip()
+        if label and label not in seen:
+            seen.add(label)
+            out.append(label)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _build_resume_fallback_recap(session, runtime_state, excess_ticks):
+    session = _safe_dict(session)
+    runtime_state = _safe_dict(runtime_state)
+    simulation_state = _safe_dict(session.get("simulation_state"))
+
+    scene = _safe_dict(session.get("scene"))
+    world = _safe_dict(session.get("world"))
+    npcs = _safe_list(session.get("npcs"))
+
+    scene_title = (
+        _safe_str(scene.get("title")) or
+        _safe_str(simulation_state.get("scene_title")) or
+        _safe_str(world.get("title")) or
+        "The world moved on in your absence."
+    )
+    location_name = (
+        _safe_str(scene.get("location")) or
+        _safe_str(simulation_state.get("location_name")) or
+        _safe_str(world.get("setting"))
+    )
+
+    npc_updates = _coerce_recap_labels(npcs, limit=4)
+    director_activity = _coerce_recap_labels(runtime_state.get("director_log"), limit=4)
+
+    summary_bits = [f"The world advanced by {int(excess_ticks or 0)} ticks while you were away."]
+    if scene_title:
+        summary_bits.append(f"Current scene: {scene_title}.")
+    if location_name:
+        summary_bits.append(f"Location: {location_name}.")
 
     recap = {
         "kind": "world_advance_recap",
-        "summary": debug_trace.get("summary") or "The world shifted while you were away.",
-        "additional_moments": debug_trace.get("advance_ticks", 0),
-
-        # 🔥 THIS IS WHAT UI NEEDS
-        "world_events": [_label(x) for x in world_events],
-        "consequences": [_label(x) for x in consequences],
-        "threads": [_label(x) for x in threads],
-        "npc_updates": [_label(x) for x in npcs],
-
-        # optional
-        "director_activity": _safe_list(runtime_state.get("director_log"))[:4],
+        "summary": " ".join(summary_bits).strip(),
+        "additional_moments": int(excess_ticks or 0),
+        "world_events": [],
+        "consequences": [],
+        "threads": [],
+        "npc_updates": npc_updates,
+        "director_activity": director_activity,
     }
 
     return recap
+
+
+def _recap_has_renderable_content(recap):
+    recap = _safe_dict(recap)
+    if not recap:
+        return False
+    for key in ("world_events", "consequences", "threads", "npc_updates", "director_activity"):
+        if _safe_list(recap.get(key)):
+            return True
+    return bool(_safe_str(recap.get("summary")))
 
 
 def _make_dialogue_update_from_candidate(
@@ -2366,46 +2404,55 @@ def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[s
     result = apply_idle_ticks(session_id, capped_ticks, reason="resume_catchup")
     if not result.get("ok"):
         return result
-    
+
+    excess_ticks = int(result.get("excess_summarized", 0) or 0)
+    ticks_applied = int(result.get("ticks_applied", 0) or 0)
     all_updates = _safe_list(result.get("updates"))
-    
-    # If there were excess ticks, generate a summary update
-    if excess_ticks > 0:
-        from app.rpg.session.ambient_builder import (
-            enqueue_ambient_updates,
-            make_ambient_update,
-        )
+    recap = {}
+
+    # If the world advanced at all, build a resume recap
+    if ticks_applied > 0:
         session = _safe_dict(result.get("session"))
         runtime_state = ensure_ambient_runtime_state(_safe_dict(session.get("runtime_state")))
-        
-        summary = make_ambient_update(
-            tick=int(runtime_state.get("tick", 0) or 0),
-            kind="system_summary",
-            priority=0.5,
-            text=f"While you were away, the world advanced through {excess_ticks} additional moments. Much has changed.",
-            source="simulation",
-        )
-        runtime_state = enqueue_ambient_updates(runtime_state, [summary])
+
+        # Preserve bounded resume metadata for the richer recap payload, but do
+        # not enqueue the old one-line system_summary update. The frontend will
+        # render the recap block from world_advance_recap instead.
+        runtime_state["resume_advance_ticks"] = ticks_applied
         session["runtime_state"] = runtime_state
         session = save_runtime_session(session)
-        all_updates.append(summary)
-    
+
+        # 🔥 BUILD RECAP (THIS WAS MISSING)
+        simulation_state = _safe_dict(session.get("simulation_state"))
+
+        print("DEBUG SIM STATE recent_events =", simulation_state.get("recent_events"))
+        print("DEBUG SIM STATE recent_consequences =", simulation_state.get("recent_consequences"))
+        print("DEBUG SIM STATE active_threads =", simulation_state.get("active_threads"))
+        print("DEBUG SIM STATE npc_states =", simulation_state.get("npc_states"))
+
+        recap = _build_world_advance_recap(
+            simulation_state,
+            runtime_state,
+            {
+                "advance_ticks": ticks_applied,
+                "summary": f"The world advanced by {ticks_applied} ticks while you were away."
+            }
+        )
+
+        if not _recap_has_renderable_content(recap):
+            recap = _build_resume_fallback_recap(session, runtime_state, ticks_applied)
+
+        result["world_advance_recap"] = recap
+        print("DEBUG BUILT RECAP:", recap)
+
     response = {
         "ok": True,
-        "session": _safe_dict(result.get("session")) if not excess_ticks else session,
+        "session": session if ticks_applied > 0 else _safe_dict(result.get("session")),
         "updates": all_updates,
         "latest_seq": int(result.get("latest_seq", 0) or 0),
-        "ticks_applied": capped_ticks,
+        "ticks_applied": ticks_applied,
         "excess_summarized": excess_ticks,
+        "world_advance_recap": _safe_dict(recap) if ticks_applied > 0 else _safe_dict(result.get("world_advance_recap")),
     }
-
-    if excess_ticks > 0:
-        debug_trace = {
-            "summary": f"While you were away, the world advanced through {excess_ticks} additional moments. Much has changed.",
-            "advance_ticks": excess_ticks,
-        }
-        sim_state = _safe_dict(session.get("simulation_state"))
-        runtime_state = _safe_dict(session.get("runtime_state"))
-        response["world_advance_recap"] = _build_world_advance_recap(sim_state, runtime_state, debug_trace)
 
     return response

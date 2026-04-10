@@ -524,7 +524,7 @@ def _response_length_prompt_rules(response_length: str) -> str:
         return (
             "NARRATOR: 5 to 7 sentences describing the scene.\n"
             "ACTION: 5 to 7 sentences describing the result of the player's action.\n"
-            "NPC: <npc_name>: \"5 to 7 sentences\" (omit if none)\n"
+            "NPC: <npc_name>: \"no restrictions on length\" (omit if none)\n"
             "REWARD: <xp/items if any, else omit>"
         )
 

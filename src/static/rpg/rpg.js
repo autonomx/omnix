@@ -202,86 +202,56 @@
     }
 
     function buildWorldAdvanceRecapMarkdown(payload) {
-        var recap = _coerceWorldAdvanceRecap(payload);
-        var moments = parseInt(
-            recap.additional_moments || recap.moments || recap.advanced_moments || 0,
-            10
-        ) || 0;
+        payload = _safeObj(payload);
+        if (!payload) return '📜 While you were away, the world advanced.';
 
-        var summary =
-            _safeStr(recap.summary).trim() ||
-            (moments > 0
-                ? '📜 While you were away, the world advanced through ' + moments + ' additional moments.'
-                : '📜 While you were away, the world advanced.');
+        var lines = [];
+        var summary = _safeStr(payload.summary);
+        var moments = Number(payload.additional_moments || 0);
 
-        var directorLines = _takeTextList(
-            recap.director_activity.length ? recap.director_activity : recap.director_notes,
-            4
-        );
-        var eventLines = _takeTextList(
-            recap.world_events.length ? recap.world_events :
-            (recap.incidents.length ? recap.incidents : recap.consequences),
-            5
-        );
-        var threadLines = _takeTextList(
-            recap.threads.length ? recap.threads : recap.factions,
-            4
-        );
-        var npcLines = _takeTextList(
-            recap.npc_updates.length ? recap.npc_updates : recap.location_updates,
-            4
-        );
-        var changeLines = _takeTextList(recap.changes, 5);
-
-        var parts = [summary];
-
-        if (moments > 0) {
-            parts.push('**World Advance:** ' + moments + ' moments');
+        if (summary) {
+            lines.push('📜 ' + summary);
+        } else if (moments > 0) {
+            lines.push('📜 While you were away, the world advanced through ' + moments + ' additional moments.');
+        } else {
+            lines.push('📜 While you were away, the world advanced.');
         }
 
-        var directorSection = _renderBulletSection('Director Activity', directorLines);
-        var eventSection = _renderBulletSection('World Events', eventLines);
-        var threadSection = _renderBulletSection('Active Threads', threadLines);
-        var npcSection = _renderBulletSection('Notable Changes', npcLines);
-        var changeSection = _renderBulletSection('Additional Changes', changeLines);
+        function pushSection(title, items) {
+            items = _safeArray(items);
+            if (!items.length) return;
+            lines.push('');
+            lines.push('**' + title + '**');
+            items.forEach(function (item) {
+                var text = _safeStr(item);
+                if (text) lines.push('- ' + text);
+            });
+        }
 
-        if (directorSection) parts.push(directorSection);
-        if (eventSection) parts.push(eventSection);
-        if (threadSection) parts.push(threadSection);
-        if (npcSection) parts.push(npcSection);
-        if (changeSection) parts.push(changeSection);
+        pushSection('World Events', payload.world_events);
+        pushSection('Consequences', payload.consequences);
+        pushSection('Threads', payload.threads);
+        pushSection('NPC Activity', payload.npc_updates);
+        pushSection('Director Activity', payload.director_activity);
 
-        return parts.filter(Boolean).join('\n\n').trim();
+        return lines.join('\n');
     }
 
     function isWorldAdvanceRecapPayload(payload) {
         payload = _safeObj(payload);
         if (!payload) return false;
+        if (_safeStr(payload.kind) !== 'world_advance_recap') return false;
 
-        if (payload.kind === 'world_advance_recap' || payload.kind === 'resume_recap') {
-            return true;
-        }
+        var hasSummary = !!_safeStr(payload.summary);
+        var hasMoments = Number(payload.additional_moments || 0) > 0;
+        var hasSections =
+            _safeArray(payload.world_events).length > 0 ||
+            _safeArray(payload.consequences).length > 0 ||
+            _safeArray(payload.threads).length > 0 ||
+            _safeArray(payload.npc_updates).length > 0 ||
+            _safeArray(payload.director_activity).length > 0;
 
-        if (payload.world_advance_recap || payload.resume_recap || payload.resume_summary || payload.recap) {
-            return true;
-        }
-
-        if (
-            payload.additional_moments ||
-            payload.advanced_moments ||
-            payload.world_advance_count ||
-            payload.director_activity ||
-            payload.director_notes ||
-            payload.world_events ||
-            payload.recent_world_events ||
-            payload.active_threads ||
-            payload.npc_updates ||
-            payload.location_updates
-        ) {
-            return true;
-        }
-
-        return false;
+        return hasSummary || hasMoments || hasSections;
     }
 
     function markRealPlayerActivity(reason) {
@@ -298,6 +268,7 @@
 
     /** Atomic state updater — increments version, merges patch. */
     function updateState(patch) {
+        console.log("🔄 STATE UPDATE:", patch, "→ NEW STATE:", Object.assign({}, rpgState, patch));
         stateVersion++;
         rpgState = Object.assign({}, rpgState, patch, { _v: stateVersion });
     }
@@ -1227,6 +1198,30 @@
     function handleResumePayload(data) {
         data = _safeObj(data);
 
+        console.log("🔄 RESUME PAYLOAD DEBUG:", {
+            hasWorldAdvanceRecap: !!data.world_advance_recap,
+            hasResumeRecap: !!data.resume_recap,
+            hasResumeSummary: !!data.resume_summary,
+            hasRecap: !!data.recap,
+            excessSummarized: data.excess_summarized,
+            ticksApplied: data.ticks_applied,
+            updatesCount: _safeArray(data.updates).length,
+            fullData: data
+        });
+
+        var recap =
+            _safeObj(data.world_advance_recap) ||
+            _safeObj(data.resume_recap) ||
+            _safeObj(data.resume_summary) ||
+            _safeObj(data.recap);
+
+        if (isWorldAdvanceRecapPayload(recap)) {
+            console.log("📜 WORLD ADVANCE RECAP:", recap);
+            appendSystemRecapMessage(buildWorldAdvanceRecapMarkdown(recap));
+        } else {
+            console.log("❌ NO VALID RECAP FOUND");
+        }
+
         if (isWorldAdvanceRecapPayload(data)) {
             appendSystemRecapMessage(buildWorldAdvanceRecapMarkdown(data));
         }
@@ -1238,8 +1233,32 @@
         });
     }
 
+    function _resumeHasRecap(data) {
+        data = _safeObj(data);
+        if (!data) return false;
+        if (isWorldAdvanceRecapPayload(data.world_advance_recap)) return true;
+        if (isWorldAdvanceRecapPayload(data.resume_recap)) return true;
+        if (isWorldAdvanceRecapPayload(data.resume_summary)) return true;
+        if (isWorldAdvanceRecapPayload(data.recap)) return true;
+        if (isWorldAdvanceRecapPayload(data)) return true;
+        return _safeArray(data.resume_events).some(function (ev) {
+            return isWorldAdvanceRecapPayload(ev);
+        });
+    }
+
     function onSessionLoaded(data) {
         if (!data) return;
+
+        console.log("🎮 SESSION LOADED:", {
+            sessionId: data.session_id,
+            player: data.player,
+            worldEvents: data.world_events,
+            messagesCount: _safeArray(data.messages).length,
+            memoryCount: _safeArray(data.memory).length,
+            simulationState: !!data.simulation_state,
+            runtimeState: !!data.runtime_state,
+            fullData: data
+        });
 
         handleResumePayload(data);
 
@@ -1428,6 +1447,7 @@
     // ─── Rendering: Narrative Feed ─────────────────────────────────────────────
 
     function appendMessage(msg) {
+        console.log("💬 APPEND MESSAGE:", msg);
         var feed = el('rpgNarrativeFeed');
         if (!feed) return;
 
@@ -2410,7 +2430,10 @@
         }).then(function (r) { return r.json(); })
           .then(function (data) {
             if (data.ok && data.updates && data.updates.length) {
+                console.log("🌍 POLLED AMBIENT UPDATES:", data.updates.length, data.updates);
                 data.updates.forEach(function (u) { handleAmbientUpdate(u); });
+            } else {
+                console.log("🌍 NO NEW AMBIENT UPDATES");
             }
         }).catch(function () { /* ignore poll failures */ });
     }
@@ -2541,6 +2564,7 @@
     }
 
     function appendAmbientUpdate(update) {
+        console.log("🌍 AMBIENT UPDATE:", update);
         var feed = el('rpgNarrativeFeed');
         if (!feed) return;
 
@@ -2811,6 +2835,7 @@
 
     function startLivingWorld() {
         if (!rpgState.sessionId) return;
+        console.log("🌍 STARTING LIVING WORLD for session:", rpgState.sessionId);
         // Resume catch-up: compute elapsed seconds since last activity
         var lastActivity = parseInt(localStorage.getItem('omnix_rpg_last_activity') || '0', 10);
         var now = Date.now();
@@ -2829,8 +2854,21 @@
                 }),
             }).then(function (r) { return r.json(); })
               .then(function (data) {
-                if (data.ok && data.updates && data.updates.length) {
-                    data.updates.forEach(function (u) { appendAmbientUpdate(u); });
+                console.log("RESUME RESPONSE", data);
+                console.log("RESUME RECAP", data && data.world_advance_recap);
+                if (data.ok) {
+                    handleResumePayload(data);
+
+                    var hasRecap = _resumeHasRecap(data);
+                    var updates = _safeArray(data.updates);
+
+                    if (hasRecap) {
+                        updates = updates.filter(function (u) {
+                            return _safeStr(_safeObj(u).kind) !== 'system_summary';
+                        });
+                    }
+
+                    updates.forEach(function (u) { appendAmbientUpdate(u); });
                     updateState({ ambientSeq: data.latest_seq || rpgState.ambientSeq });
                 }
             }).catch(function () { /* ignore resume errors */ });
@@ -3062,5 +3100,18 @@
         stopLivingWorld:  stopLivingWorld,
         flushAmbient:     flushAmbientBuffer,
         pollAmbient:      pollAmbientUpdates,
+        // Debug logging
+        debugDump: function() {
+            console.group("🎮 RPG DEBUG DUMP");
+            console.log("📊 STATE:", rpgState);
+            console.log("💬 MESSAGES:", rpgState.messages);
+            console.log("🌍 WORLD EVENTS:", rpgState.worldEvents);
+            console.log("🧠 MEMORY:", rpgState.memory);
+            console.log("🎲 ROLLS:", rpgState.rolls);
+            console.log("⚙️  SETTINGS:", rpgState.settings);
+            console.log("👤 PLAYER:", rpgState.player);
+            console.groupEnd();
+            return rpgState;
+        }
     };
 }());

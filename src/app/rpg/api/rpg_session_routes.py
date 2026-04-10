@@ -476,12 +476,19 @@ async def resume_rpg_session(request: Request):
         status = 404 if err == "session_not_found" else 500
         return JSONResponse({"ok": False, "error": err}, status_code=status)
 
+    # Debug: check if recap is generated
+    if result.get("world_advance_recap"):
+        print("DEBUG RECAP:", result.get("world_advance_recap"))
+    else:
+        print("DEBUG RECAP: None")
+
     return {
         "ok": True,
         "updates": _safe_list(result.get("updates")),
         "latest_seq": int(result.get("latest_seq", 0) or 0),
         "ticks_applied": int(result.get("ticks_applied", 0) or 0),
         "excess_summarized": int(result.get("excess_summarized", 0) or 0),
+        "world_advance_recap": _safe_dict(result.get("world_advance_recap")),
     }
 
 
