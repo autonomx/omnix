@@ -49,7 +49,11 @@ def _infer_actor_from_text(proposal: Dict[str, Any], simulation_state: Dict[str,
     return ""
 
 
-def normalize_semantic_state_change_llm_output(raw_output: Any) -> List[Dict[str, Any]]:
+def normalize_semantic_state_change_llm_output(
+    raw_output: Any,
+    simulation_state: Dict[str, Any] | None = None,
+    runtime_state: Dict[str, Any] | None = None,
+) -> List[Dict[str, Any]]:
     raw_text = _normalize_provider_text(raw_output)
     text = _extract_json_payload(raw_text)
     if not text:
@@ -70,6 +74,9 @@ def normalize_semantic_state_change_llm_output(raw_output: Any) -> List[Dict[str
     else:
         return []
 
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = runtime_mod._ensure_semantic_pipeline_state(_safe_dict(runtime_state))
+
     normalized: List[Dict[str, Any]] = []
     for proposal in proposals:
         proposal = _safe_dict(proposal)
@@ -85,9 +92,8 @@ def normalize_semantic_state_change_llm_output(raw_output: Any) -> List[Dict[str
             elif semantic_action == "observe":
                 delta = {"activity": "observing", "engagement": "focused"}
 
-        normalized.append(
-            {
-                "proposal_id": _safe_str(proposal.get("proposal_id")) or f"llm_{actor_id}",
+        normalized_proposal = {
+                "proposal_id": _safe_str(proposal.get("proposal_id")),
                 "actor_id": actor_id,
                 "proposal_kind": _safe_str(proposal.get("proposal_kind")) or "state_delta",
                 "semantic_action": semantic_action,
@@ -98,7 +104,17 @@ def normalize_semantic_state_change_llm_output(raw_output: Any) -> List[Dict[str
                 "priority": int(proposal.get("priority") or 50),
                 "delta": delta,
                 "tags": _safe_list(proposal.get("tags")),
-            }
+        }
+        normalized_proposal["proposal_id"] = (
+            _safe_str(normalized_proposal.get("proposal_id"))
+            or runtime_mod._stable_semantic_state_change_proposal_id(
+                normalized_proposal,
+                simulation_state,
+                runtime_state,
+            )
+        )
+        normalized.append(
+            normalized_proposal
         )
     return normalized
 
@@ -308,7 +324,11 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
 
     print("SEMANTIC CAPTURE raw_output =", repr(raw_output)[:1000])
 
-    normalized = normalize_semantic_state_change_llm_output(raw_output)
+    normalized = normalize_semantic_state_change_llm_output(
+        raw_output,
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+    )
     print("SEMANTIC CAPTURE normalized_count =", len(normalized))
     print("SEMANTIC CAPTURE normalized =", normalized[:3])
 

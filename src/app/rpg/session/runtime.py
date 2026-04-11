@@ -459,6 +459,42 @@ def _normalize_semantic_state_change_proposal(proposal: Dict[str, Any]) -> Dict[
     return out
 
 
+def _stable_semantic_state_change_proposal_id(
+    proposal: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> str:
+    """
+    Build a deterministic per-tick proposal identity.
+
+    IMPORTANT:
+    - proposal_id must NOT be a constant like "llm_<actor_id>"
+    - otherwise applied_proposal_ids suppress all future proposals for that actor
+    - identity must vary across ticks / payload changes but remain deterministic
+    """
+    proposal = _normalize_semantic_state_change_proposal(proposal)
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _ensure_semantic_pipeline_state(runtime_state)
+    tick = int(
+        simulation_state.get("current_tick", 0)
+        or simulation_state.get("tick", 0)
+        or runtime_state.get("tick", 0)
+        or 0
+    )
+    payload = {
+        "tick": tick,
+        "actor_id": _safe_str(proposal.get("actor_id")),
+        "semantic_action": _safe_str(proposal.get("semantic_action")),
+        "summary": _safe_str(proposal.get("summary")),
+        "beat_summary": _safe_str(proposal.get("beat_summary")),
+        "target_id": _safe_str(proposal.get("target_id")),
+        "target_location_id": _safe_str(proposal.get("target_location_id")),
+        "delta": _safe_dict(proposal.get("delta")),
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return "semantic_proposal_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
 def _ensure_semantic_pipeline_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_ambient_runtime_state(_safe_dict(runtime_state))
     runtime_state.setdefault("semantic_state_change_proposals", [])
@@ -682,6 +718,15 @@ def enqueue_semantic_state_change_proposal(runtime_state: Dict[str, Any], propos
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     proposal = _normalize_semantic_state_change_proposal(proposal)
     items = _safe_list(runtime_state.get("semantic_state_change_proposals"))
+    # Do not allow empty / constant IDs to poison proposal replay suppression.
+    # Proposal IDs should already be stamped upstream with a deterministic
+    # per-tick identity, but preserve any explicit ID here.
+    proposal_id = _safe_str(proposal.get("proposal_id"))
+    if not proposal_id:
+        proposal = dict(proposal)
+        proposal["proposal_id"] = "semantic_proposal_" + hashlib.sha1(
+            json.dumps(proposal, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()[:12]
     items.append(proposal)
     runtime_state["semantic_state_change_proposals"] = items[-_MAX_SEMANTIC_PROPOSALS:]
     return runtime_state
@@ -802,9 +847,16 @@ def compile_semantic_state_change_to_canonical_delta(
         else:
             beat_summary = _safe_str(proposal.get("summary"))
 
+    current_tick = _safe_int(
+        simulation_state.get("current_tick")
+        or simulation_state.get("tick")
+        or runtime_state.get("tick"),
+        0,
+    )
+
     canonical_event = {
         "event_id": "",
-        "tick": int(simulation_state.get("tick", 0) or 0),
+        "tick": current_tick,
         "proposal_id": _safe_str(proposal.get("proposal_id")),
         "actor_id": _safe_str(proposal.get("actor_id")),
         "semantic_action": semantic_action,
@@ -820,6 +872,20 @@ def compile_semantic_state_change_to_canonical_delta(
         },
     }
     canonical_event["event_id"] = _stable_state_change_event_id(canonical_event)
+    assert canonical_event["tick"] == _safe_int(simulation_state.get("tick"), 0)
+
+    print(
+        "DEBUG SEMANTIC EVENT CREATED =",
+        {
+            "event_id": canonical_event.get("event_id"),
+            "tick": canonical_event.get("tick"),
+            "proposal_id": canonical_event.get("proposal_id"),
+            "actor_id": canonical_event.get("actor_id"),
+            "summary": canonical_event.get("summary"),
+            "location_id": canonical_event.get("location_id"),
+        },
+    )
+
     return canonical_event
 
 
@@ -987,6 +1053,15 @@ def process_semantic_state_change_proposals(
             simulation_state,
             runtime_state,
             event,
+        )
+
+        print(
+            "DEBUG SEMANTIC EVENT APPEND accepted_state_change_events =",
+            {
+                "existing_count": len(_safe_list(runtime_state.get("accepted_state_change_events"))),
+                "event_id": event.get("event_id"),
+                "tick": event.get("tick"),
+            },
         )
 
         runtime_state = _record_accepted_state_change_event(runtime_state, event)
@@ -1251,8 +1326,8 @@ def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state
         if not actor_id:
             continue
 
-        normalized.append({
-            "proposal_id": _safe_str(p.get("proposal_id")) or f"llm_{actor_id}",
+        normalized_proposal = {
+            "proposal_id": _safe_str(p.get("proposal_id")),
             "actor_id": actor_id,
             "proposal_kind": _safe_str(p.get("proposal_kind")) or "state_delta",
             "semantic_action": _safe_str(p.get("semantic_action")),
@@ -1263,7 +1338,16 @@ def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state
             "priority": int(p.get("priority") or 50),
             "delta": _safe_dict(p.get("delta")),
             "tags": _safe_list(p.get("tags")),
-        })
+        }
+        normalized_proposal["proposal_id"] = (
+            _safe_str(normalized_proposal.get("proposal_id"))
+            or _stable_semantic_state_change_proposal_id(
+                normalized_proposal,
+                simulation_state,
+                {},
+            )
+        )
+        normalized.append(normalized_proposal)
 
     return normalized
 
@@ -3405,7 +3489,25 @@ def _apply_idle_tick_to_session(
     try:
         from app.rpg.analytics.world_events import build_incremental_world_event_rows
         new_rows = build_incremental_world_event_rows(after_state, runtime_state, debug_trace)
+
+        print(
+            "DEBUG WORLD EVENTS MERGE new_rows =",
+            {
+                "count": len(_safe_list(new_rows)),
+                "event_ids": [_safe_str(r.get("event_id")) for r in _safe_list(new_rows)],
+            },
+        )
+
         existing_rows = _safe_list(runtime_state.get("recent_world_event_rows"))
+
+        print(
+            "DEBUG WORLD EVENTS MERGE existing_rows_before =",
+            {
+                "count": len(_safe_list(existing_rows)),
+                "event_ids": [_safe_str(r.get("event_id")) for r in _safe_list(existing_rows)],
+            },
+        )
+
         merged_rows = existing_rows + new_rows
         deduped_rows: List[Dict[str, Any]] = []
         seen_event_ids = set()
@@ -3421,6 +3523,18 @@ def _apply_idle_tick_to_session(
             deduped_rows.append(row)
         deduped_rows.reverse()
         runtime_state["recent_world_event_rows"] = deduped_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+
+        print(
+            "DEBUG WORLD EVENTS MERGE final_rows =",
+            {
+                "count": len(_safe_list(runtime_state.get("recent_world_event_rows"))),
+                "event_ids": [
+                    _safe_str(r.get("event_id"))
+                    for r in _safe_list(runtime_state.get("recent_world_event_rows"))
+                ],
+            },
+        )
+
     except (ImportError, AttributeError):
         pass  # world_events module may not be available yet
 

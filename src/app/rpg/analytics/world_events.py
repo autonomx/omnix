@@ -326,6 +326,16 @@ def build_incremental_world_event_rows(
     runtime_state = _safe_dict(runtime_state)
     tick = _safe_int(simulation_state.get("tick"), 0)
 
+    print(
+        "DEBUG WORLD EVENTS BUILD START =",
+        {
+            "tick": tick,
+            "ambient_queue_count": len(_safe_list(runtime_state.get("ambient_queue"))),
+            "accepted_state_change_events_count": len(_safe_list(runtime_state.get("accepted_state_change_events"))),
+            "recent_scene_beats_count": len(_safe_list(runtime_state.get("recent_scene_beats"))),
+        },
+    )
+
     rows: List[Dict[str, Any]] = []
     seen_event_ids: set[str] = set()
 
@@ -368,7 +378,26 @@ def build_incremental_world_event_rows(
     for event in _safe_list(runtime_state.get("accepted_state_change_events"))[-8:]:
         event = _safe_dict(event)
         etick = _safe_int(event.get("tick"), 0)
+
+        print(
+            "DEBUG WORLD EVENTS CHECK accepted_state_change_event =",
+            {
+                "event_id": _safe_str(event.get("event_id")),
+                "event_tick": etick,
+                "current_tick": tick,
+                "summary": _safe_str(event.get("summary")),
+            },
+        )
+
         if etick < tick - 1:
+            print(
+                "DEBUG WORLD EVENTS SKIP accepted_state_change_event old_tick =",
+                {
+                    "event_id": _safe_str(event.get("event_id")),
+                    "event_tick": etick,
+                    "current_tick": tick,
+                },
+            )
             continue
         beat = _safe_dict(event.get("beat"))
         summary = (
@@ -377,6 +406,16 @@ def build_incremental_world_event_rows(
             or "A character changes behavior."
         )
         location_id = _safe_str(event.get("location_id"))
+
+        print(
+            "DEBUG WORLD EVENTS APPEND accepted_state_change_event =",
+            {
+                "event_id": _safe_str(event.get("event_id")),
+                "event_tick": etick,
+                "summary": summary,
+            },
+        )
+
         _append_row(_make_event_row(
             event_id=_safe_str(event.get("event_id")) or f"state_change:{etick}:{len(rows)}",
             scope="local" if location_id else "global",
@@ -397,17 +436,54 @@ def build_incremental_world_event_rows(
     for beat in _safe_list(runtime_state.get("recent_scene_beats"))[-8:]:
         beat = _safe_dict(beat)
         btick = _safe_int(beat.get("tick"), 0)
+
+        print(
+            "DEBUG WORLD EVENTS CHECK scene_beat =",
+            {
+                "event_id": _safe_str(beat.get("beat_id")) or f"scene_beat:{btick}",
+                "beat_tick": btick,
+                "current_tick": tick,
+                "kind": _safe_str(beat.get("kind")),
+                "summary": _safe_str(beat.get("summary")),
+            },
+        )
+
         if btick < tick - 1:
+            print(
+                "DEBUG WORLD EVENTS SKIP scene_beat old_tick =",
+                {
+                    "event_id": _safe_str(beat.get("beat_id")) or f"scene_beat:{btick}",
+                    "beat_tick": btick,
+                    "current_tick": tick,
+                },
+            )
             continue
         kind = _safe_str(beat.get("kind"))
         if not kind:
             continue
         if kind not in ("state_change_beat", "world_event", "director_pressure", "incident", "consequence"):
+            print(
+                "DEBUG WORLD EVENTS SKIP scene_beat disallowed_kind =",
+                {
+                    "event_id": _safe_str(beat.get("beat_id")) or f"scene_beat:{btick}",
+                    "kind": kind,
+                },
+            )
             continue
         summary = _safe_str(beat.get("summary")).strip()
         if not summary:
             continue
         location_id = _safe_str(beat.get("location_id"))
+
+        print(
+            "DEBUG WORLD EVENTS APPEND scene_beat =",
+            {
+                "event_id": _safe_str(beat.get("beat_id")) or f"scene_beat:{btick}",
+                "beat_tick": btick,
+                "summary": summary,
+            },
+        )
+
         _append_row(_make_event_row(
             event_id=_safe_str(beat.get("beat_id")) or f"scene_beat:{btick}:{len(rows)}",
             scope="local" if location_id else "global",
@@ -423,4 +499,12 @@ def build_incremental_world_event_rows(
         ))
 
     rows.sort(key=_row_sort_key)
+    print(
+        "DEBUG WORLD EVENTS BUILD END =",
+        {
+            "tick": tick,
+            "row_count": len(rows),
+            "row_event_ids": [_safe_str(r.get("event_id")) for r in rows],
+        },
+    )
     return rows[:8]

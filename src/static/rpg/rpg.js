@@ -691,6 +691,28 @@
         });
     }
 
+    // ─── World Events panel ───────────────────────────────────────────────────
+
+    function showWorldEventsPanel() {
+        closeAllPanels();
+        var panel = el('rpgWorldEventsPanel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'rpgWorldEventsPanel';
+            panel.className = 'modal'; // Use app's modal style
+            panel.innerHTML = '<div class="modal-content" id="rpgWorldEventsContent"></div>';
+            document.body.appendChild(panel);
+            // Close on backdrop click
+            panel.addEventListener('click', function(e) {
+                if (e.target === panel) panel.classList.remove('active');
+            });
+        }
+        var content = el('rpgWorldEventsContent');
+        content.innerHTML = '<div class="modal-header"><h3>World Events</h3><button class="modal-close" onclick="document.getElementById(\'rpgWorldEventsPanel\').classList.remove(\'active\');">&times;</button></div><div class="modal-body" id="rpgWorldEventsBody" style="max-height: 70vh; overflow-y: auto;"></div>';
+        panel.classList.add('active');
+        renderWorldEventsPanel();
+    }
+
     // ─── Settings panel ───────────────────────────────────────────────────────
 
     function showSettingsPanel() {
@@ -2027,6 +2049,9 @@
             var voiceBtn = el('rpgVoiceBtn');
             if (voiceBtn) voiceBtn.addEventListener('click', showVoicePanel);
 
+            var worldEventsBtn = el('rpgWorldEventsBtn');
+            if (worldEventsBtn) worldEventsBtn.addEventListener('click', showWorldEventsPanel);
+
             var settingsBtn = el('rpgSettingsBtn');
             if (settingsBtn) settingsBtn.addEventListener('click', showSettingsPanel);
         } else {
@@ -2386,6 +2411,9 @@
                 if (data.settings) {
                     updateState({ settings: data.settings });
                 }
+
+                // 🔥 CRITICAL: refresh world events after each tick
+                fetchWorldEvents();
             }).catch(function (err) {
                 rpgDebug('IdleTick:Error', err);
             });
@@ -2781,16 +2809,24 @@
             }),
         }).then(function (r) { return r.json(); })
           .then(function (data) {
+            console.log("DEBUG FRONTEND RECEIVED world_events", data);
+            console.log('DEBUG fetchWorldEvents response', data);
+            console.log(
+                'DEBUG fetchWorldEvents rows',
+                Array.isArray(data && data.recent_world_event_rows) ? data.recent_world_event_rows : []
+            );
             rpgDebug('WorldEvents:Response', data);
             if (data.ok) {
                 var rows = _safeArray(data.recent_world_event_rows);
+                console.log("DEBUG world events rows", rows);
                 updateState({
-                    worldEventsSummary: Object.assign({}, rpgState.worldEventsSummary || {}, {
-                        recent_world_event_rows: rows,
-                    }),
-                    worldEventsView: _groupRecentWorldEventRows(rows),
+                    worldEventsSummary: {
+                        recent_world_event_rows: rows
+                    },
+                    worldEventsView: _groupRecentWorldEventRows(rows)
                 });
-                renderWorldEventsPanel();
+                console.log("DEBUG world events rows", rows);
+                if (el('rpgWorldEventsBody')) renderWorldEventsPanel();
             }
         }).catch(function (err) {
             rpgDebug('WorldEvents:Error', err);
@@ -2798,8 +2834,20 @@
     }
 
     function renderWorldEventsPanel() {
-        var panel = el('rpgWorldEventsPanel');
-        if (!panel) return;
+        console.log("DEBUG renderWorldEventsPanel CALLED");
+        console.log("DEBUG RENDER INPUT", {
+            view: rpgState.worldEventsView,
+            summary: rpgState.worldEventsSummary
+        });
+        console.log('DEBUG renderWorldEventsPanel start', {
+            worldEventsView: rpgState.worldEventsView,
+            worldEventsSummary: rpgState.worldEventsSummary
+        });
+        const panel = el('rpgWorldEventsBody');
+
+        console.log('DEBUG panel lookup', panel);
+
+        if (!panel) return; // Modal not open
 
         var view = _safeObj(rpgState.worldEventsView);
         var summary = _safeObj(rpgState.worldEventsSummary);
@@ -2812,7 +2860,19 @@
         var globalEvents = _safeArray(view.global_events);
         var directorPressure = _safeArray(view.director_pressure);
 
+        console.log('DEBUG renderWorldEventsPanel arrays', {
+            localCount: localEvents.length,
+            globalCount: globalEvents.length,
+            directorCount: directorPressure.length,
+        });
+
+        console.log('DEBUG renderWorldEventsPanel sample local', localEvents.slice(0, 2));
+
+        console.log('DEBUG renderWorldEventsPanel panel before', panel);
+
         var html = '';
+
+        console.log('DEBUG renderWorldEventsPanel html before assign', html);
 
         if (localEvents.length) {
             html += '<div class="rpg-we-section"><h4>Local Events</h4>';
@@ -2839,48 +2899,56 @@
             html += '</div>';
         }
 
+        if (globalEvents.length) {
+            html += '<li class="rpg-we-section"><h4>Global Events</h4></li>';
+            globalEvents.forEach(function (row) {
+                html += _renderWorldEventCard(row);
+            });
+        }
+
+        if (directorPressure.length) {
+            html += '<li class="rpg-we-section rpg-we-director"><h4>Director Pressure</h4></li>';
+            html += '<li style="list-style:none;"><p class="rpg-we-director-note">Narrative Bias / Setup</p></li>';
+            directorPressure.forEach(function (row) {
+                html += '<li>' + _renderWorldEventCard(row) + '</li>';
+            });
+        }
+
         if (!html) {
             html = '<p class="rpg-we-empty">No world events yet.</p>';
         }
 
+        console.log('DEBUG renderWorldEventsPanel html_length', html.length);
+        console.log('DEBUG renderWorldEventsPanel panel_element', panel);
+
         panel.innerHTML = html;
+
+        console.log('DEBUG renderWorldEventsPanel panel after', panel.innerHTML);
+
+        setTimeout(() => {
+            console.log('DEBUG panel after 100ms', panel.innerHTML);
+        }, 100);
+
+        console.log('DEBUG renderWorldEventsPanel final_dom', panel.innerHTML);
+
+        console.log('DEBUG panel computed style', getComputedStyle(panel));
     }
 
     function _renderWorldEventCard(row) {
-        var scope = escapeHtml(row.scope || 'local');
-        var kind = escapeHtml((row.kind || '').replace(/_/g, ' '));
-        var title = escapeHtml(row.title || kind || 'Event');
+        var title = escapeHtml(row.title || 'Event');
         var summary = escapeHtml(row.summary || '');
         var tickLabel = escapeHtml(row.tick_label || 'Tick ?');
         var status = escapeHtml(row.status || '');
         var source = escapeHtml(row.source || '');
         var actors = escapeHtml(row.actor_text || '');
-        var subtitle = escapeHtml(row.subtitle || '');
-        var isDirector = scope === 'director';
 
-        var chipsHtml = '';
-        if (row.chips && Array.isArray(row.chips)) {
-            chipsHtml = row.chips.map(function (chip) {
-                if (chip && chip.label) {
-                    return ' <span class="rpg-we-chip">' + escapeHtml(chip.label) + '</span>';
-                }
-                return '';
-            }).join('');
-        }
-
-        var subtitleHtml = subtitle ? '<div class="rpg-we-card-subtitle">' + subtitle + '</div>' : '';
-
-        return '<div class="rpg-we-card rpg-we-card--' + scope + (isDirector ? ' rpg-we-card--bias' : '') + '">'
-            + '<div class="rpg-we-card-title">' + title + '</div>'
-            + subtitleHtml
-            + '<div class="rpg-we-card-summary">' + summary + '</div>'
-            + '<div class="rpg-we-card-meta">'
-            + '<span>' + tickLabel + '</span>'
-            + (status ? ' <span class="rpg-we-status">' + status + '</span>' : '')
-            + (source ? ' <span class="rpg-we-source">' + source + '</span>' : '')
-            + (actors ? ' <span class="rpg-we-actors">' + actors + '</span>' : '')
-            + chipsHtml
-            + '</div>'
+        return '<div style="border:1px solid #555; border-radius:4px; padding:12px; margin:8px 0; background:#333; color:#fff;">'
+            + '<div style="font-weight:bold; margin-bottom:4px; color:#fff;">' + title + '</div>'
+            + '<div style="margin-bottom:4px; color:#ccc;">' + summary + '</div>'
+            + '<div style="font-size:0.9em; color:#888;">' + tickLabel
+            + (status ? ' | ' + status : '')
+            + (source ? ' | ' + source : '')
+            + (actors ? ' | ' + actors : '') + '</div>'
             + '</div>';
     }
 
