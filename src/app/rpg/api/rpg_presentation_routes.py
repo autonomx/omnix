@@ -225,6 +225,17 @@ def _safe_str(v: Any) -> str:
     return str(v)
 
 
+def _safe_int(v: Any, default: int = 0) -> int:
+    if v is None:
+        return default
+    if isinstance(v, int):
+        return v
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
 def _derive_present_npc_ids(simulation_state: dict, runtime_state: dict, setup_payload: dict) -> list[str]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
@@ -428,6 +439,40 @@ def _safe_world_inspector_state(v: Any) -> Dict[str, Any]:
     return {"summary": summary, "threads": threads, "thread_count": thread_count, "factions": factions, "locations": locations}
 
 
+def _build_actor_activity_context(runtime_state: dict, actor_id: str) -> dict:
+    runtime_state = _safe_dict(runtime_state)
+    actor_id = _safe_str(actor_id)
+    activity = _safe_dict(_safe_dict(runtime_state.get("actor_activities")).get(actor_id))
+    if not activity:
+        return {}
+    return {
+        "activity_id": _safe_str(activity.get("activity_id")),
+        "kind": _safe_str(activity.get("kind")),
+        "summary": _safe_str(activity.get("summary")),
+        "intent": _safe_str(activity.get("intent")),
+        "location_id": _safe_str(activity.get("location_id")),
+        "started_tick": _safe_int(activity.get("started_tick"), 0),
+        "updated_tick": _safe_int(activity.get("updated_tick"), 0),
+        "status": _safe_str(activity.get("status")),
+        "world_tags": _safe_list(activity.get("world_tags")),
+    }
+
+
+def _maybe_answer_from_activity(player_text: str, activity: dict, actor_name: str) -> str:
+    t = _safe_str(player_text).lower()
+    if not activity:
+        return ""
+    if any(x in t for x in ["what are you doing", "what're you doing", "what are you watching", "what's going on", "why are you here"]):
+        summary = _safe_str(activity.get("summary"))
+        intent = _safe_str(activity.get("intent"))
+        if summary:
+            # short grounded answer
+            return summary
+        if intent:
+            return f"{actor_name} says: {intent}"
+    return ""
+
+
 def _ensure_actor_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return ensure_actor_memory_state(_safe_dict(simulation_state))
 
@@ -573,10 +618,14 @@ async def presentation_dialogue(request: Request):
     simulation_state = ensure_world_memory_state(simulation_state)
     actor_ids = []
     speaker = payload.get("speaker") if isinstance(payload, dict) else None
+    speaker_id = ""
     if isinstance(speaker, dict):
         speaker_id = _safe_str(speaker.get("actor_id")).strip()
         if speaker_id:
             actor_ids.append(speaker_id)
+    runtime_state = _safe_dict(data.get("runtime_state"))
+    dialogue_activity_context = _build_actor_activity_context(runtime_state, speaker_id)
+    payload["dialogue_activity_context"] = dialogue_activity_context
     character_ui_state = _extract_character_ui_state(simulation_state)
     characters = character_ui_state.get("characters") if isinstance(character_ui_state, dict) else []
     if isinstance(characters, list):
@@ -592,6 +641,7 @@ async def presentation_dialogue(request: Request):
     player_text = _safe_str(data.get("text") or data.get("message")).strip()
     simulation_state = apply_dialogue_memory_hooks(simulation_state, actor_id=primary_actor_id, player_text=player_text)
     dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_id=primary_actor_id, actor_ids=actor_ids)
+    dialogue_memory_context["activity"] = dialogue_activity_context
     memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
     response = {"ok": True, "presentation": payload, "character_ui_state": _extract_character_ui_state(simulation_state), "character_inspector_state": _extract_character_inspector_state(simulation_state), "world_inspector_state": _extract_world_inspector_state(simulation_state), "visual_state": _extract_visual_state(simulation_state), "memory_state": _safe_dict(simulation_state.get("memory_state")), "dialogue_memory_context": dialogue_memory_context, "llm_memory_prompt_block": memory_prompt_block, "gm_memory_visibility": {"actor_id": primary_actor_id, "actor_memory_count": len(dialogue_memory_context.get("actor_memory", [])), "world_rumor_count": len(dialogue_memory_context.get("world_rumors", []))}}
     return _jsonify(_add_content_pack_data(response, simulation_state))

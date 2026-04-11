@@ -108,6 +108,7 @@
             recent_changes: [],
         },
         worldEventsSummary: {},
+        worldEventsTab: 'local',
     };
 
     let typingIdleTimer = null;
@@ -2758,11 +2759,20 @@
             }
         }
 
+        // For merged activity rows, trim leading repeated actor label more aggressively
+        if (kind === 'world_view_activity' && actorLabel) {
+            var loweredSummary = summary.toLowerCase();
+            var loweredActor = actorLabel.toLowerCase();
+            if (loweredSummary.indexOf(loweredActor + ' ') === 0) {
+                summary = summary.substring(actorLabel.length + 1);
+                if (summary.length) {
+                    summary = summary.charAt(0).toUpperCase() + summary.slice(1);
+                }
+            }
+        }
+
         // Hide technical sources
         var displaySource = '';
-        if (source && !['semantic_runtime', 'scene_beats', 'ambient_runtime'].includes(source)) {
-            displaySource = source;
-        }
 
         return {
             event_id: _safeStr(row.event_id || ''),
@@ -2780,9 +2790,7 @@
             priority_label: priority > 0 ? String(priority) : '',
             status: status,
             source: displaySource,
-            chips: [
-                status === 'active' ? null : { label: status },
-            ].filter(Boolean),
+            chips: [],
         };
 
     }
@@ -2843,20 +2851,33 @@
             if (data.ok) {
                 var rawRows = _safeArray(data.recent_world_event_rows);
                 var playerRows = _safeArray(data.player_world_view_rows);
-                console.log("DEBUG world events rows", rawRows, playerRows);
+                var playerLocalRows = _safeArray(data.player_local_world_view_rows);
+                var playerGlobalRows = _safeArray(data.player_global_world_view_rows);
                 updateState({
                     worldEventsSummary: {
                         recent_world_event_rows: rawRows,
                         player_world_view_rows: playerRows,
+                        player_local_world_view_rows: playerLocalRows,
+                        player_global_world_view_rows: playerGlobalRows,
                     },
-                    worldEventsView: _groupPlayerWorldViewRows(playerRows)
+                    worldEventsView: {
+                        local_events: _groupPlayerWorldViewRows(playerLocalRows).local_events,
+                        global_events: _groupPlayerWorldViewRows(playerGlobalRows).global_events,
+                        director_pressure: [],
+                        recent_changes: playerRows,
+                    },
+                    worldEventsTab: rpgState.worldEventsTab || 'local',
                 });
-                console.log("DEBUG world events rows", rawRows, playerRows);
                 if (el('rpgWorldEventsBody')) renderWorldEventsPanel();
             }
         }).catch(function (err) {
             rpgDebug('WorldEvents:Error', err);
         });
+    }
+
+    function setWorldEventsTab(tab) {
+        updateState({ worldEventsTab: tab === 'global' ? 'global' : 'local' });
+        renderWorldEventsPanel();
     }
 
     function renderWorldEventsPanel() {
@@ -2896,47 +2917,21 @@
 
         console.log('DEBUG renderWorldEventsPanel panel before', panel);
 
+        var activeTab = _safeStr(rpgState.worldEventsTab || 'local');
+        var visibleRows = activeTab === 'global' ? globalEvents : localEvents;
+
         var html = '';
+
+        html += '<div class="rpg-we-tabs">'
+            + '<button class="rpg-we-tab' + (activeTab === 'local' ? ' is-active' : '') + '" onclick="window.setWorldEventsTab && window.setWorldEventsTab(\'local\')">Local</button>'
+            + '<button class="rpg-we-tab' + (activeTab === 'global' ? ' is-active' : '') + '" onclick="window.setWorldEventsTab && window.setWorldEventsTab(\'global\')">Global</button>'
+            + '</div>';
 
         console.log('DEBUG renderWorldEventsPanel html before assign', html);
 
-        if (localEvents.length) {
-            html += '<div class="rpg-we-section"><h4>Local Events</h4>';
-            localEvents.forEach(function (row) {
+        if (visibleRows.length) {
+            visibleRows.forEach(function (row) {
                 html += _renderWorldEventCard(row);
-            });
-            html += '</div>';
-        }
-
-        if (globalEvents.length) {
-            html += '<div class="rpg-we-section"><h4>Global Events</h4>';
-            globalEvents.forEach(function (row) {
-                html += _renderWorldEventCard(row);
-            });
-            html += '</div>';
-        }
-
-        if (directorPressure.length) {
-            html += '<div class="rpg-we-section rpg-we-director"><h4>Director Pressure</h4>';
-            html += '<p class="rpg-we-director-note">Narrative Bias / Setup</p>';
-            directorPressure.forEach(function (row) {
-                html += _renderWorldEventCard(row);
-            });
-            html += '</div>';
-        }
-
-        if (globalEvents.length) {
-            html += '<li class="rpg-we-section"><h4>Global Events</h4></li>';
-            globalEvents.forEach(function (row) {
-                html += _renderWorldEventCard(row);
-            });
-        }
-
-        if (directorPressure.length) {
-            html += '<li class="rpg-we-section rpg-we-director"><h4>Director Pressure</h4></li>';
-            html += '<li style="list-style:none;"><p class="rpg-we-director-note">Narrative Bias / Setup</p></li>';
-            directorPressure.forEach(function (row) {
-                html += '<li>' + _renderWorldEventCard(row) + '</li>';
             });
         }
 
@@ -3286,6 +3281,8 @@
         stopLivingWorld:  stopLivingWorld,
         flushAmbient:     flushAmbientBuffer,
         pollAmbient:      pollAmbientUpdates,
+        // World events tab helper
+        setWorldEventsTab: setWorldEventsTab,
         // Debug logging
         debugDump: function() {
             console.group("🎮 RPG DEBUG DUMP");

@@ -368,6 +368,319 @@ def _ensure_recent_scene_beats(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     return runtime_state
 
 
+# ── Active NPC activity state ────────────────────────────────────────────────
+
+_MAX_ACTIVE_ACTIVITIES = 64
+
+
+def _stable_activity_id(actor_id: str, tick: int, kind: str, location_id: str, target_id: str = "") -> str:
+    actor_id = _safe_str(actor_id)
+    kind = _safe_str(kind)
+    location_id = _safe_str(location_id)
+    target_id = _safe_str(target_id)
+    raw = f"{actor_id}|{tick}|{kind}|{location_id}|{target_id}"
+    return "activity_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _normalize_activity_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    record = _safe_dict(record)
+    return {
+        "activity_id": _safe_str(record.get("activity_id")),
+        "kind": _safe_str(record.get("kind")),
+        "summary": _safe_str(record.get("summary")),
+        "location_id": _safe_str(record.get("location_id")),
+        "target_id": _safe_str(record.get("target_id")),
+        "target_label": _safe_str(record.get("target_label")),
+        "started_tick": _safe_int(record.get("started_tick"), 0),
+        "updated_tick": _safe_int(record.get("updated_tick"), 0),
+        "expected_duration": max(1, _safe_int(record.get("expected_duration"), 1)),
+        "status": _safe_str(record.get("status")) or "active",
+        "intent": _safe_str(record.get("intent")),
+        "world_tags": [str(x).strip() for x in _safe_list(record.get("world_tags")) if str(x).strip()],
+    }
+
+
+def ensure_actor_activity_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    actor_activities = _safe_dict(runtime_state.get("actor_activities"))
+    normalized: Dict[str, Any] = {}
+    for actor_id, rec in actor_activities.items():
+        actor_id = _safe_str(actor_id)
+        if not actor_id:
+            continue
+        normalized[actor_id] = _normalize_activity_record(rec)
+    runtime_state["actor_activities"] = normalized
+    return runtime_state
+
+
+def get_actor_activity(runtime_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+    runtime_state = ensure_actor_activity_state(runtime_state)
+    return _safe_dict(_safe_dict(runtime_state.get("actor_activities")).get(_safe_str(actor_id)))
+
+
+def set_actor_activity(runtime_state: Dict[str, Any], actor_id: str, activity: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = ensure_actor_activity_state(runtime_state)
+    actor_id = _safe_str(actor_id)
+    if not actor_id:
+        return runtime_state
+    actor_activities = _safe_dict(runtime_state.get("actor_activities"))
+    actor_activities[actor_id] = _normalize_activity_record(activity)
+    # bounded by actor count naturally, but normalize anyway
+    runtime_state["actor_activities"] = dict(list(actor_activities.items())[-_MAX_ACTIVE_ACTIVITIES:])
+    return runtime_state
+
+
+# ── Living world activity planner ────────────────────────────────────────────
+
+_LOCAL_ACTIVITY_KINDS = (
+    "patrol",
+    "watch_crowd",
+    "trade",
+    "gossip",
+    "serve",
+    "clean",
+    "rest",
+    "question_patron",
+)
+
+_GLOBAL_ACTIVITY_KINDS = (
+    "move_goods",
+    "spread_rumor",
+    "scout_route",
+    "increase_patrols",
+    "organize_watch",
+)
+
+def _sorted_npc_entities(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    out: List[Dict[str, Any]] = []
+
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    for npc_id, npc in npc_index.items():
+        npc = _safe_dict(npc)
+        rec = dict(npc)
+        if not _safe_str(rec.get("id")):
+            rec["id"] = _safe_str(npc_id)
+        out.append(rec)
+
+    if not out:
+        for npc in _safe_list(simulation_state.get("npcs")):
+            npc = _safe_dict(npc)
+            if _safe_str(npc.get("id")):
+                out.append(npc)
+
+    out.sort(key=lambda x: (_safe_str(x.get("location_id")), _safe_str(x.get("name")), _safe_str(x.get("id"))))
+    return out
+
+
+def _choose_activity_kind_for_actor(actor: Dict[str, Any], tick: int) -> str:
+    actor = _safe_dict(actor)
+    actor_id = _safe_str(actor.get("id"))
+    name = _safe_str(actor.get("name"))
+    seed = f"{actor_id}|{name}|{tick}"
+    options = _LOCAL_ACTIVITY_KINDS
+    idx = int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:8], 16) % len(options)
+    return options[idx]
+
+
+def _build_activity_summary(actor: Dict[str, Any], kind: str) -> str:
+    actor = _safe_dict(actor)
+    actor_name = _safe_str(actor.get("name")) or _safe_str(actor.get("id")) or "Someone"
+    if kind == "patrol":
+        return f"{actor_name} patrols nearby, watching for trouble."
+    if kind == "watch_crowd":
+        return f"{actor_name} keeps a close eye on the crowd."
+    if kind == "trade":
+        return f"{actor_name} haggles over goods and prices."
+    if kind == "gossip":
+        return f"{actor_name} trades rumors with the locals."
+    if kind == "serve":
+        return f"{actor_name} serves people and keeps things moving."
+    if kind == "clean":
+        return f"{actor_name} tidies up and keeps the place in order."
+    if kind == "rest":
+        return f"{actor_name} takes a quiet moment to rest and observe."
+    if kind == "question_patron":
+        return f"{actor_name} questions someone about suspicious behavior."
+    return f"{actor_name} is busy with local matters."
+
+
+def _build_activity_intent(kind: str) -> str:
+    if kind in ("patrol", "watch_crowd", "question_patron"):
+        return "Maintain order and watch for trouble."
+    if kind == "trade":
+        return "Make a profitable exchange."
+    if kind == "gossip":
+        return "Learn and spread useful rumors."
+    if kind == "serve":
+        return "Keep customers attended to."
+    if kind == "clean":
+        return "Keep the area in good condition."
+    if kind == "rest":
+        return "Recover while staying aware."
+    return "Pursue current routine."
+
+
+def _build_activity_tags(kind: str) -> List[str]:
+    if kind in ("patrol", "watch_crowd", "question_patron"):
+        return ["security", "local"]
+    if kind == "trade":
+        return ["commerce", "local"]
+    if kind == "gossip":
+        return ["rumor", "social", "local"]
+    if kind == "serve":
+        return ["service", "local"]
+    if kind == "clean":
+        return ["maintenance", "local"]
+    if kind == "rest":
+        return ["idle", "local"]
+    return ["local"]
+
+
+def advance_actor_activities_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = ensure_actor_activity_state(runtime_state)
+    tick = _safe_int(simulation_state.get("tick"), 0)
+    npcs = _sorted_npc_entities(simulation_state)
+    if not npcs:
+        return runtime_state
+
+    # bounded deterministic rotation
+    start = tick % len(npcs)
+    selected = []
+    for offset in range(min(3, len(npcs))):
+        selected.append(npcs[(start + offset) % len(npcs)])
+
+    for actor in selected:
+        actor_id = _safe_str(actor.get("id"))
+        if not actor_id:
+            continue
+        current = get_actor_activity(runtime_state, actor_id)
+        location_id = _safe_str(actor.get("location_id")) or _safe_str(actor.get("current_location_id"))
+        if current and _safe_str(current.get("status")) == "active":
+            age = tick - _safe_int(current.get("started_tick"), tick)
+            duration = _safe_int(current.get("expected_duration"), 1)
+            if age < duration:
+                current["updated_tick"] = tick
+                runtime_state = set_actor_activity(runtime_state, actor_id, current)
+                continue
+
+        kind = _choose_activity_kind_for_actor(actor, tick)
+        activity = {
+            "activity_id": _stable_activity_id(actor_id, tick, kind, location_id),
+            "kind": kind,
+            "summary": _build_activity_summary(actor, kind),
+            "location_id": location_id,
+            "target_id": "",
+            "target_label": "",
+            "started_tick": tick,
+            "updated_tick": tick,
+            "expected_duration": 2 + (tick % 3),
+            "status": "active",
+            "intent": _build_activity_intent(kind),
+            "world_tags": _build_activity_tags(kind),
+        }
+        runtime_state = set_actor_activity(runtime_state, actor_id, activity)
+
+    return runtime_state
+
+
+# ── Activity beats ──────────────────────────────────────────────────────────
+
+_MAX_ACTIVITY_SCENE_BEATS = 64
+_MAX_GLOBAL_WORLD_BEATS = 64
+
+
+def _stable_world_beat_id(prefix: str, actor_id: str, tick: int, summary: str) -> str:
+    raw = f"{prefix}|{actor_id}|{tick}|{summary}"
+    return prefix + "_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def emit_activity_beats_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = ensure_actor_activity_state(runtime_state)
+    tick = _safe_int(simulation_state.get("tick"), 0)
+
+    recent_scene_beats = _safe_list(runtime_state.get("recent_scene_beats"))
+    recent_world_event_rows = _safe_list(runtime_state.get("recent_world_event_rows"))
+    global_world_beats = _safe_list(runtime_state.get("global_world_beats"))
+
+    actor_activities = _safe_dict(runtime_state.get("actor_activities"))
+    for actor_id, activity in sorted(actor_activities.items()):
+        activity = _normalize_activity_record(activity)
+        if _safe_str(activity.get("status")) != "active":
+            continue
+        if _safe_int(activity.get("updated_tick"), 0) != tick:
+            continue
+
+        summary = _safe_str(activity.get("summary"))
+        location_id = _safe_str(activity.get("location_id"))
+        tags = _safe_list(activity.get("world_tags"))
+        beat_id = _stable_world_beat_id("activity_beat", actor_id, tick, summary)
+
+        scene_beat = {
+            "beat_id": beat_id,
+            "tick": tick,
+            "kind": "activity_beat",
+            "summary": summary,
+            "location_id": location_id,
+            "actor_id": actor_id,
+            "priority": 40,
+            "tags": tags,
+        }
+        recent_scene_beats.append(scene_beat)
+
+        recent_world_event_rows.append({
+            "event_id": beat_id,
+            "scope": "local",
+            "kind": "activity_beat",
+            "title": "Local Activity",
+            "summary": summary,
+            "tick": tick,
+            "actors": [actor_id],
+            "actor_id": actor_id,
+            "location_id": location_id,
+            "priority": 0.7,
+            "status": "active",
+            "source": "activity_runtime",
+        })
+
+        # Some activity kinds also create broader world beats
+        kind = _safe_str(activity.get("kind"))
+        if kind in ("gossip", "trade", "question_patron", "patrol"):
+            global_summary = ""
+            if kind == "gossip":
+                global_summary = "Rumors circulate more quickly through local taverns."
+            elif kind == "trade":
+                global_summary = "Trade activity shifts prices and availability in the area."
+            elif kind == "question_patron":
+                global_summary = "The local watch grows more alert after suspicious behavior."
+            elif kind == "patrol":
+                global_summary = "Watch presence remains noticeable in nearby streets."
+
+            if global_summary:
+                global_id = _stable_world_beat_id("global_beat", actor_id, tick, global_summary)
+                global_world_beats.append({
+                    "event_id": global_id,
+                    "scope": "global",
+                    "kind": "world_event",
+                    "title": "World Event",
+                    "summary": global_summary,
+                    "tick": tick,
+                    "actors": [actor_id],
+                    "actor_id": actor_id,
+                    "location_id": "",
+                    "priority": 0.6,
+                    "status": "active",
+                    "source": "activity_runtime",
+                })
+
+    runtime_state["recent_scene_beats"] = recent_scene_beats[-_MAX_ACTIVITY_SCENE_BEATS:]
+    runtime_state["recent_world_event_rows"] = recent_world_event_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+    runtime_state["global_world_beats"] = global_world_beats[-_MAX_GLOBAL_WORLD_BEATS:]
+    return runtime_state
+
+
 def emit_scene_beat(
     runtime_state: Dict[str, Any],
     *,
@@ -497,6 +810,7 @@ def _stable_semantic_state_change_proposal_id(
 
 def _ensure_semantic_pipeline_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_ambient_runtime_state(_safe_dict(runtime_state))
+    runtime_state = ensure_actor_activity_state(runtime_state)
     runtime_state.setdefault("semantic_state_change_proposals", [])
     runtime_state.setdefault("accepted_state_change_events", [])
     runtime_state.setdefault("rejected_state_change_events", [])
@@ -3420,6 +3734,10 @@ def _apply_idle_tick_to_session(
     runtime_state["last_idle_tick_at"] = _utc_now_iso()
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
     runtime_state = normalize_ambient_state(runtime_state)
+
+    # Advance living-world activities
+    runtime_state = advance_actor_activities_for_tick(after_state, runtime_state)
+    runtime_state = emit_activity_beats_for_tick(after_state, runtime_state)
 
     # Use the advanced simulation state for emitted scene beats.
     simulation_state = after_state

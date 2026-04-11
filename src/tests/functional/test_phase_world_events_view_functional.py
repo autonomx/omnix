@@ -348,3 +348,67 @@ class TestWorldEventsRoute:
             assert len(response["player_world_view_rows"]) == 1
         finally:
             ACTIVE_RPG_SESSIONS.pop(session_id, None)
+
+
+class TestLivingWorldActivityState:
+    def test_npc_active_activity_persists_across_ticks(self):
+        from app.rpg.session.runtime import advance_actor_activities_for_tick, get_actor_activity
+        sim = _sim_state(tick=100, npc_index={"npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric", "location_id": "loc_tavern"}})
+        rt = _runtime_state()
+        rt = advance_actor_activities_for_tick(sim, rt)
+        first = get_actor_activity(rt, "npc_guard_captain")
+        assert first["status"] == "active"
+
+        sim["tick"] = 101
+        rt = advance_actor_activities_for_tick(sim, rt)
+        second = get_actor_activity(rt, "npc_guard_captain")
+        assert second["activity_id"] == first["activity_id"]
+
+    def test_multiple_npcs_can_have_distinct_local_activities(self):
+        from app.rpg.session.runtime import advance_actor_activities_for_tick
+        sim = _sim_state(
+            tick=100,
+            npc_index={
+                "npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric", "location_id": "loc_tavern"},
+                "npc_innkeeper": {"id": "npc_innkeeper", "name": "Bran", "location_id": "loc_tavern"},
+                "npc_merchant": {"id": "npc_merchant", "name": "Elara", "location_id": "loc_tavern"},
+            },
+        )
+        rt = _runtime_state()
+        rt = advance_actor_activities_for_tick(sim, rt)
+        actor_activities = rt.get("actor_activities", {})
+        assert len(actor_activities) >= 2
+        summaries = sorted([_we._safe_str(_we._safe_dict(v).get("summary")) for v in actor_activities.values()])
+        assert len(set(summaries)) >= 2
+
+    def test_activity_can_generate_world_consequence(self):
+        from app.rpg.session.runtime import advance_actor_activities_for_tick, emit_activity_beats_for_tick
+        sim = _sim_state(
+            tick=100,
+            npc_index={"npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric", "location_id": "loc_tavern"}}
+        )
+        rt = _runtime_state()
+        rt = advance_actor_activities_for_tick(sim, rt)
+        rt = emit_activity_beats_for_tick(sim, rt)
+        assert len(_we._safe_list(rt.get("recent_world_event_rows"))) >= 1
+
+    def test_session_world_events_route_returns_local_and_global_player_rows(self):
+        from app.rpg.session.runtime import ACTIVE_RPG_SESSIONS
+        session_id = "test_world_events_local_global_route"
+        ACTIVE_RPG_SESSIONS[session_id] = {
+            "simulation_state": _sim_state(
+                npc_index={"npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric", "location_id": "loc_tavern"}}
+            ),
+            "runtime_state": _runtime_state(
+                recent_world_event_rows=[
+                    {"event_id": "local1", "scope": "local", "kind": "state_change", "title": "NPC Activity", "summary": "Captain Aldric keeps watch.", "tick": 100, "actors": ["npc_guard_captain"], "location_id": "loc_tavern", "priority": 1.0, "status": "active", "source": "semantic_runtime"},
+                ],
+            ),
+        }
+        try:
+            response = asyncio.run(get_rpg_session_world_events(_DummyRequest({"session_id": session_id})))
+            assert response["ok"] is True
+            assert "player_local_world_view_rows" in response
+            assert "player_global_world_view_rows" in response
+        finally:
+            ACTIVE_RPG_SESSIONS.pop(session_id, None)

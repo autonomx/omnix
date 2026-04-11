@@ -593,8 +593,14 @@ async def get_rpg_session_world_events(request: Request):
     runtime_state = _safe_dict(session.get("runtime_state"))
     recent_rows = _safe_list(runtime_state.get("recent_world_event_rows"))[-48:]
 
-    from app.rpg.analytics.world_events import build_player_world_view_rows
+    from app.rpg.analytics.world_events import (
+        build_player_world_view_rows,
+        build_player_local_world_view_rows,
+        build_player_global_world_view_rows,
+    )
     player_world_view_rows = build_player_world_view_rows(simulation_state, runtime_state)
+    player_local_world_view_rows = build_player_local_world_view_rows(simulation_state, runtime_state)
+    player_global_world_view_rows = build_player_global_world_view_rows(simulation_state, runtime_state)
 
     print(
         "DEBUG WORLD EVENTS ROUTE RESPONSE =",
@@ -610,9 +616,13 @@ async def get_rpg_session_world_events(request: Request):
         "ok": True,
         "recent_world_event_rows": recent_rows,
         "player_world_view_rows": player_world_view_rows,
+        "player_local_world_view_rows": player_local_world_view_rows,
+        "player_global_world_view_rows": player_global_world_view_rows,
         "debug_world_events": {
             "recent_world_event_rows_count": len(recent_rows),
             "player_world_view_rows_count": len(player_world_view_rows),
+            "player_local_world_view_rows_count": len(player_local_world_view_rows),
+            "player_global_world_view_rows_count": len(player_global_world_view_rows),
             "recent_world_event_row_ids": [_safe_str(r.get("event_id")) for r in recent_rows],
         },
     }
