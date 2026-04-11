@@ -327,6 +327,15 @@ def build_incremental_world_event_rows(
     tick = _safe_int(simulation_state.get("tick"), 0)
 
     rows: List[Dict[str, Any]] = []
+    seen_event_ids: set[str] = set()
+
+    def _append_row(row: Dict[str, Any]) -> None:
+        row = _safe_dict(row)
+        event_id = _safe_str(row.get("event_id")).strip()
+        if not event_id or event_id in seen_event_ids:
+            return
+        seen_event_ids.add(event_id)
+        rows.append(row)
 
     # Pull from ambient queue — only recent items at current tick
     for update in _safe_list(runtime_state.get("ambient_queue"))[-8:]:
@@ -340,7 +349,7 @@ def build_incremental_world_event_rows(
         scope = "local"
         if kind in ("world_event",) and not _safe_str(update.get("location_id")):
             scope = "global"
-        rows.append(_make_event_row(
+        _append_row(_make_event_row(
             event_id=_safe_str(update.get("ambient_id")) or f"inc_row:{tick}:{len(rows)}",
             scope=scope,
             kind=kind,
@@ -351,6 +360,66 @@ def build_incremental_world_event_rows(
             location_id=_safe_str(update.get("location_id")),
             priority=float(update.get("priority", 0.3) or 0.3),
             source="ambient_runtime",
+        ))
+
+    # Pull from accepted semantic state-change events — these are canonical
+    # post-LLM events already accepted by the runtime and should surface in
+    # the incremental world events feed.
+    for event in _safe_list(runtime_state.get("accepted_state_change_events"))[-8:]:
+        event = _safe_dict(event)
+        etick = _safe_int(event.get("tick"), 0)
+        if etick < tick - 1:
+            continue
+        beat = _safe_dict(event.get("beat"))
+        summary = (
+            _safe_str(event.get("summary")).strip()
+            or _safe_str(beat.get("summary")).strip()
+            or "A character changes behavior."
+        )
+        location_id = _safe_str(event.get("location_id"))
+        _append_row(_make_event_row(
+            event_id=_safe_str(event.get("event_id")) or f"state_change:{etick}:{len(rows)}",
+            scope="local" if location_id else "global",
+            kind="state_change",
+            title="NPC Activity",
+            summary=summary[:200],
+            tick=etick,
+            actors=[_safe_str(event.get("actor_id"))] if _safe_str(event.get("actor_id")) else [],
+            location_id=location_id,
+            priority=float(beat.get("priority", 0.65) or 0.65),
+            status="active",
+            source="semantic_runtime",
+        ))
+
+    # Pull from recent scene beats — especially state_change_beat entries
+    # emitted during idle/world advancement. These are presentation-facing
+    # beats and should appear in the recent feed.
+    for beat in _safe_list(runtime_state.get("recent_scene_beats"))[-8:]:
+        beat = _safe_dict(beat)
+        btick = _safe_int(beat.get("tick"), 0)
+        if btick < tick - 1:
+            continue
+        kind = _safe_str(beat.get("kind"))
+        if not kind:
+            continue
+        if kind not in ("state_change_beat", "world_event", "director_pressure", "incident", "consequence"):
+            continue
+        summary = _safe_str(beat.get("summary")).strip()
+        if not summary:
+            continue
+        location_id = _safe_str(beat.get("location_id"))
+        _append_row(_make_event_row(
+            event_id=_safe_str(beat.get("beat_id")) or f"scene_beat:{btick}:{len(rows)}",
+            scope="local" if location_id else "global",
+            kind=kind,
+            title="Scene Development",
+            summary=summary[:200],
+            tick=btick,
+            actors=[_safe_str(beat.get("actor_id"))] if _safe_str(beat.get("actor_id")) else [],
+            location_id=location_id,
+            priority=float(beat.get("priority", 0.55) or 0.55),
+            status="active",
+            source="scene_beats",
         ))
 
     rows.sort(key=_row_sort_key)

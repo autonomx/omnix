@@ -2707,20 +2707,89 @@
 
     // ── World Events Panel ───────────────────────────────────────────────────
 
+    function _adaptRecentWorldEventRowForPanel(row) {
+        row = _safeObj(row);
+
+        var actors = _safeArray(row.actors).filter(Boolean);
+        var actorText = actors.length ? actors.join(', ') : '';
+        var title = _safeStr(row.title || row.kind || 'Event');
+        var summary = _safeStr(row.summary || '');
+        var tick = Number(row.tick || 0);
+        var locationId = _safeStr(row.location_id || '');
+        var kind = _safeStr(row.kind || 'event');
+        var scope = _safeStr(row.scope || 'local');
+        var priority = Number(row.priority || 0);
+        var status = _safeStr(row.status || 'active');
+        var source = _safeStr(row.source || '');
+
+        return {
+            event_id: _safeStr(row.event_id || ''),
+            scope: scope,
+            kind: kind,
+            title: title,
+            summary: summary,
+            subtitle: actorText || locationId || '',
+            tick: tick,
+            tick_label: tick > 0 ? ('Tick ' + tick) : '',
+            actors: actors,
+            actor_text: actorText,
+            location_id: locationId,
+            priority: priority,
+            priority_label: priority > 0 ? String(priority) : '',
+            status: status,
+            source: source,
+            chips: [
+                kind ? { label: kind.replace(/_/g, ' ') } : null,
+                status ? { label: status } : null,
+                source ? { label: source } : null,
+            ].filter(Boolean),
+        };
+    }
+
+    function _groupRecentWorldEventRows(rows) {
+        rows = _safeArray(rows);
+        var grouped = {
+            local_events: [],
+            global_events: [],
+            director_pressure: [],
+            recent_changes: [],
+        };
+
+        rows.forEach(function (rawRow) {
+            var row = _adaptRecentWorldEventRowForPanel(rawRow);
+            grouped.recent_changes.push(row);
+
+            if (row.scope === 'director') {
+                grouped.director_pressure.push(row);
+            } else if (row.scope === 'global') {
+                grouped.global_events.push(row);
+            } else {
+                grouped.local_events.push(row);
+            }
+        });
+
+        return grouped;
+    }
+
     function fetchWorldEvents() {
         if (!rpgState.sessionId) return;
-        fetch('/api/rpg/inspect/world_events', {
+        fetch('/api/rpg/session/world_events', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                setup_payload: {},
-                runtime_state: {},
+                session_id: rpgState.sessionId,
             }),
         }).then(function (r) { return r.json(); })
           .then(function (data) {
             rpgDebug('WorldEvents:Response', data);
-            if (data.ok && data.world_events) {
-                updateState({ worldEventsView: data.world_events });
+            if (data.ok) {
+                var rows = _safeArray(data.recent_world_event_rows);
+                updateState({
+                    worldEventsSummary: Object.assign({}, rpgState.worldEventsSummary || {}, {
+                        recent_world_event_rows: rows,
+                    }),
+                    worldEventsView: _groupRecentWorldEventRows(rows),
+                });
                 renderWorldEventsPanel();
             }
         }).catch(function (err) {
@@ -2732,10 +2801,16 @@
         var panel = el('rpgWorldEventsPanel');
         if (!panel) return;
 
-        var view = rpgState.worldEventsView || {};
-        var localEvents = view.local_events || [];
-        var globalEvents = view.global_events || [];
-        var directorPressure = view.director_pressure || [];
+        var view = _safeObj(rpgState.worldEventsView);
+        var summary = _safeObj(rpgState.worldEventsSummary);
+        if ((!view.local_events && !view.global_events && !view.director_pressure) &&
+            _safeArray(summary.recent_world_event_rows).length) {
+            view = _groupRecentWorldEventRows(summary.recent_world_event_rows);
+        }
+
+        var localEvents = _safeArray(view.local_events);
+        var globalEvents = _safeArray(view.global_events);
+        var directorPressure = _safeArray(view.director_pressure);
 
         var html = '';
 
@@ -2776,20 +2851,35 @@
         var kind = escapeHtml((row.kind || '').replace(/_/g, ' '));
         var title = escapeHtml(row.title || kind || 'Event');
         var summary = escapeHtml(row.summary || '');
-        var tick = row.tick || '?';
+        var tickLabel = escapeHtml(row.tick_label || 'Tick ?');
         var status = escapeHtml(row.status || '');
         var source = escapeHtml(row.source || '');
-        var actors = (row.actors || []).map(function (a) { return escapeHtml(a); }).join(', ');
+        var actors = escapeHtml(row.actor_text || '');
+        var subtitle = escapeHtml(row.subtitle || '');
         var isDirector = scope === 'director';
+
+        var chipsHtml = '';
+        if (row.chips && Array.isArray(row.chips)) {
+            chipsHtml = row.chips.map(function (chip) {
+                if (chip && chip.label) {
+                    return ' <span class="rpg-we-chip">' + escapeHtml(chip.label) + '</span>';
+                }
+                return '';
+            }).join('');
+        }
+
+        var subtitleHtml = subtitle ? '<div class="rpg-we-card-subtitle">' + subtitle + '</div>' : '';
 
         return '<div class="rpg-we-card rpg-we-card--' + scope + (isDirector ? ' rpg-we-card--bias' : '') + '">'
             + '<div class="rpg-we-card-title">' + title + '</div>'
+            + subtitleHtml
             + '<div class="rpg-we-card-summary">' + summary + '</div>'
             + '<div class="rpg-we-card-meta">'
-            + '<span>tick ' + tick + '</span>'
+            + '<span>' + tickLabel + '</span>'
             + (status ? ' <span class="rpg-we-status">' + status + '</span>' : '')
             + (source ? ' <span class="rpg-we-source">' + source + '</span>' : '')
             + (actors ? ' <span class="rpg-we-actors">' + actors + '</span>' : '')
+            + chipsHtml
             + '</div>'
             + '</div>';
     }

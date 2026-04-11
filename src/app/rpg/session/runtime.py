@@ -804,7 +804,7 @@ def compile_semantic_state_change_to_canonical_delta(
 
     canonical_event = {
         "event_id": "",
-        "tick": int(runtime_state.get("tick", 0) or 0),
+        "tick": int(simulation_state.get("tick", 0) or 0),
         "proposal_id": _safe_str(proposal.get("proposal_id")),
         "actor_id": _safe_str(proposal.get("actor_id")),
         "semantic_action": semantic_action,
@@ -3406,8 +3406,21 @@ def _apply_idle_tick_to_session(
         from app.rpg.analytics.world_events import build_incremental_world_event_rows
         new_rows = build_incremental_world_event_rows(after_state, runtime_state, debug_trace)
         existing_rows = _safe_list(runtime_state.get("recent_world_event_rows"))
-        existing_rows.extend(new_rows)
-        runtime_state["recent_world_event_rows"] = existing_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+        merged_rows = existing_rows + new_rows
+        deduped_rows: List[Dict[str, Any]] = []
+        seen_event_ids = set()
+        for row in reversed(merged_rows):
+            row = _safe_dict(row)
+            event_id = _safe_str(row.get("event_id")).strip()
+            if not event_id:
+                event_id = f"recent_world_event:{len(deduped_rows)}"
+                row["event_id"] = event_id
+            if event_id in seen_event_ids:
+                continue
+            seen_event_ids.add(event_id)
+            deduped_rows.append(row)
+        deduped_rows.reverse()
+        runtime_state["recent_world_event_rows"] = deduped_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
     except (ImportError, AttributeError):
         pass  # world_events module may not be available yet
 
