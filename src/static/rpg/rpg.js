@@ -2878,6 +2878,7 @@
     function setWorldEventsTab(tab) {
         updateState({ worldEventsTab: tab === 'global' ? 'global' : 'local' });
         renderWorldEventsPanel();
+        return false;
     }
 
     function renderWorldEventsPanel() {
@@ -2920,11 +2921,9 @@
         var activeTab = _safeStr(rpgState.worldEventsTab || 'local');
         var visibleRows = activeTab === 'global' ? globalEvents : localEvents;
 
-        var html = '';
-
-        html += '<div class="rpg-we-tabs">'
-            + '<button class="rpg-we-tab' + (activeTab === 'local' ? ' is-active' : '') + '" onclick="window.setWorldEventsTab && window.setWorldEventsTab(\'local\')">Local</button>'
-            + '<button class="rpg-we-tab' + (activeTab === 'global' ? ' is-active' : '') + '" onclick="window.setWorldEventsTab && window.setWorldEventsTab(\'global\')">Global</button>'
+        var html = '<div class="rpg-we-tabs">'
+            + '<button class="rpg-we-tab' + (activeTab === 'local' ? ' is-active' : '') + '" onclick="return window.setWorldEventsTab && window.setWorldEventsTab(\'local\')">Local</button>'
+            + '<button class="rpg-we-tab' + (activeTab === 'global' ? ' is-active' : '') + '" onclick="return window.setWorldEventsTab && window.setWorldEventsTab(\'global\')">Global</button>'
             + '</div>';
 
         console.log('DEBUG renderWorldEventsPanel html before assign', html);
@@ -2933,6 +2932,8 @@
             visibleRows.forEach(function (row) {
                 html += _renderWorldEventCard(row);
             });
+        } else {
+            html += '<p class="rpg-we-empty">No world events yet.</p>';
         }
 
         if (!html) {
@@ -3297,4 +3298,8 @@
             return rpgState;
         }
     };
+
+    if (typeof window !== 'undefined') {
+        window.setWorldEventsTab = setWorldEventsTab;
+    }
 }());
