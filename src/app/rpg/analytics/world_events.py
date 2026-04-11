@@ -11,12 +11,14 @@ Hard-capped per section.
 """
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, List
 
 _MAX_LOCAL = 12
 _MAX_GLOBAL = 12
 _MAX_DIRECTOR = 12
 _MAX_RECENT = 12
+_MAX_PLAYER_WORLD_VIEW_ROWS = 8
 
 _SCOPE_ORDER = {"local": 0, "global": 1, "director": 2}
 
@@ -42,6 +44,240 @@ def _safe_int(v: Any, default: int = 0) -> int:
         return default
 
 
+def _safe_float(v: Any, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except Exception:
+        return default
+
+
+# ── World View normalization helpers ─────────────────────────────────────────
+
+def _normalize_world_view_text(text: str) -> str:
+    """Create a deterministic normalized text for duplicate detection."""
+    text = _safe_str(text)
+    text = text.lower()
+    text = " ".join(text.split())  # collapse repeated spaces
+    text = text.rstrip(".,!?;:")  # remove trailing punctuation
+    return text
+
+
+def _world_view_actor_label(row: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> str:
+    """Return the best human-readable actor label."""
+    row = _safe_dict(row)
+    actors = _safe_list(row.get("actors", []))
+    if actors:
+        for actor_id in actors:
+            name = _lookup_actor_name(_safe_str(actor_id), simulation_state, runtime_state)
+            if name:
+                return name
+    actor_id = _safe_str(row.get("actor_id"))
+    if actor_id:
+        name = _lookup_actor_name(actor_id, simulation_state, runtime_state)
+        if name:
+            return name
+    return ""
+
+
+def _lookup_actor_name(actor_id: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> str:
+    """Lookup human-readable name for actor_id from simulation state."""
+    if not actor_id:
+        return ""
+
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    def _name_from_entity(entity: Dict[str, Any]) -> str:
+        entity = _safe_dict(entity)
+        return _safe_str(entity.get("name") or entity.get("display_name") or entity.get("label") or "")
+
+    # Check npc_index first if present
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    entity = _safe_dict(npc_index.get(actor_id))
+    if entity:
+        name = _name_from_entity(entity)
+        if name:
+            return name
+
+    # Check npcs when stored as dict
+    npcs_dict = _safe_dict(simulation_state.get("npcs"))
+    entity = _safe_dict(npcs_dict.get(actor_id))
+    if entity:
+        name = _name_from_entity(entity)
+        if name:
+            return name
+    for npc_id, npc in npcs_dict.items():
+        npc = _safe_dict(npc)
+        if npc_id == actor_id or _safe_str(npc.get("id")) == actor_id:
+            name = _name_from_entity(npc)
+            if name:
+                return name
+
+    # Check npcs when stored as list
+    for npc in _safe_list(simulation_state.get("npcs")):
+        npc = _safe_dict(npc)
+        if _safe_str(npc.get("id")) == actor_id:
+            name = _name_from_entity(npc)
+            if name:
+                return name
+
+    # Check actor_states when present
+    for actor in _safe_list(runtime_state.get("actor_states")):
+        actor = _safe_dict(actor)
+        if _safe_str(actor.get("id")) == actor_id:
+            name = _name_from_entity(actor)
+            if name:
+                return name
+    # Check player if applicable
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    if _safe_str(player_state.get("actor_id")) == actor_id:
+        return _safe_str(player_state.get("name") or "Player")
+    # Fallback to cleaned actor_id if it looks like a readable name, otherwise empty
+    if actor_id.startswith("npc_"):
+        return actor_id.replace("npc_", "").replace("_", " ").title()
+    return ""
+
+
+def _world_view_group_key(row: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> str:
+    """Group rows that represent the same underlying beat."""
+    row = _safe_dict(row)
+    tick = _safe_int(row.get("tick"), 0)
+    location_id = _safe_str(row.get("location_id"))
+    normalized_summary = _normalize_world_view_text(_safe_str(row.get("summary")))
+    actor_label = _world_view_actor_label(row, simulation_state, runtime_state)
+    kind = _safe_str(row.get("kind"))
+    # Only merge state_change and state_change_beat
+    merge_kind = "merged" if kind in ("state_change", "state_change_beat") else kind
+    # Stable key
+    key_parts = [str(tick), location_id, normalized_summary, actor_label, merge_kind]
+    return "|".join(key_parts)
+
+
+def _merge_world_view_rows(rows: List[Dict[str, Any]], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Collapse paired duplicate rows into one player-facing row."""
+    if not rows:
+        return []
+    rows = [_safe_dict(r) for r in rows]
+    if len(rows) == 1:
+        row = rows[0]
+        return [_make_merged_row([row], simulation_state, runtime_state)]
+    # Group by key
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        key = _world_view_group_key(row, simulation_state, runtime_state)
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(row)
+    # Merge groups
+    merged = []
+    for group_rows in groups.values():
+        merged.append(_make_merged_row(group_rows, simulation_state, runtime_state))
+    return merged
+
+
+def _make_merged_row(group_rows: List[Dict[str, Any]], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a single merged row from a group of similar rows."""
+    if not group_rows:
+        return {}
+    # Sort by kind priority: prefer state_change over state_change_beat
+    group_rows.sort(key=lambda r: 0 if _safe_str(r.get("kind")) == "state_change" else 1)
+    primary_row = group_rows[0]
+    # Collect all event_ids for deterministic merged ID
+    event_ids = sorted([_safe_str(r.get("event_id")) for r in group_rows if _safe_str(r.get("event_id"))])
+    merged_id = f"world_view_merged_{hashlib.sha1('|'.join(event_ids).encode('utf-8')).hexdigest()[:16]}"
+    # Determine merged properties
+    actor_label = _world_view_actor_label(primary_row, simulation_state, runtime_state)
+    title = actor_label or _safe_str(primary_row.get("title")) or "World Update"
+    # Preferred summary: state_change summary first
+    summary = ""
+    for row in group_rows:
+        if _safe_str(row.get("kind")) == "state_change" and _safe_str(row.get("summary")):
+            summary = _safe_str(row.get("summary"))
+            break
+    if not summary:
+        for row in group_rows:
+            if _safe_str(row.get("summary")):
+                summary = _safe_str(row.get("summary"))
+                break
+    # Source
+    sources = set(_safe_str(r.get("source")) for r in group_rows)
+    source = "world_view_merged" if len(sources) > 1 else next(iter(sources), "simulation")
+    # Kind
+    kinds = set(_safe_str(r.get("kind")) for r in group_rows)
+    if kinds == {"state_change", "state_change_beat"}:
+        kind = "world_view_activity"
+    else:
+        kind = next(iter(kinds), "world_event")
+    return _make_event_row(
+        event_id=merged_id,
+        scope=_safe_str(primary_row.get("scope")),
+        kind=kind,
+        title=title,
+        summary=summary,
+        tick=_safe_int(primary_row.get("tick"), 0),
+        actors=_safe_list(primary_row.get("actors")),
+        actor_label=actor_label,
+        location_id=_safe_str(primary_row.get("location_id")),
+        priority=_safe_float(primary_row.get("priority") or 0.5),
+        status=_safe_str(primary_row.get("status")) or "active",
+        source=source,
+    )
+
+
+def _suppress_repetitive_world_view_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Reduce spam from nearly identical consecutive patrol/watch beats."""
+    if not rows:
+        return rows
+    # Group by suppression key
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        key = _world_view_suppression_key(row)
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(row)
+    # For each group, sort newest first, keep only the newest, suppress others within 4 ticks
+    suppressed = []
+    for group in groups.values():
+        if not group:
+            continue
+        # Sort newest first
+        group.sort(key=lambda r: (-_safe_int(r.get("tick"), 0), _safe_str(r.get("event_id"))))
+        # Keep the newest
+        suppressed.append(group[0])
+        # Suppress others if within 4 ticks of the newest
+        newest_tick = _safe_int(group[0].get("tick"), 0)
+        for row in group[1:]:
+            tick = _safe_int(row.get("tick"), 0)
+            if newest_tick - tick > 4:
+                suppressed.append(row)
+    return suppressed
+
+
+def _world_view_suppression_key(row: Dict[str, Any]) -> str:
+    """Generate suppression key for near-identical detection."""
+    row = _safe_dict(row)
+    actor_label = _safe_str(row.get("actor_label"))
+    location_id = _safe_str(row.get("location_id"))
+    normalized_summary = _normalize_world_view_text(_safe_str(row.get("summary")))
+    kind_bucket = "world_view_activity" if _safe_str(row.get("kind")) == "world_view_activity" else _safe_str(row.get("kind"))
+    return f"{actor_label}|{location_id}|{normalized_summary}|{kind_bucket}"
+
+
+def build_player_world_view_rows(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Single public builder for the player-facing World View feed."""
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    raw_rows = _safe_list(runtime_state.get("recent_world_event_rows"))
+    # Merge duplicates
+    merged_rows = _merge_world_view_rows(raw_rows, simulation_state, runtime_state)
+    # Suppress repetitive
+    suppressed_rows = _suppress_repetitive_world_view_rows(merged_rows)
+    # Sort newest first
+    suppressed_rows.sort(key=lambda r: (-_safe_int(r.get("tick"), 0), _safe_str(r.get("event_id"))))
+    # Cap
+    return suppressed_rows[:_MAX_PLAYER_WORLD_VIEW_ROWS]
+
+
 def _row_sort_key(row: Dict[str, Any]) -> tuple:
     scope = _safe_str(row.get("scope"))
     return (
@@ -61,6 +297,7 @@ def _make_event_row(
     summary: str,
     tick: int = 0,
     actors: List[str] | None = None,
+    actor_label: str = "",
     location_id: str = "",
     priority: float = 0.0,
     status: str = "active",
@@ -74,6 +311,7 @@ def _make_event_row(
         "summary": summary,
         "tick": tick,
         "actors": actors or [],
+        "actor_label": actor_label,
         "location_id": location_id,
         "priority": max(0.0, min(priority, 1.0)),
         "status": status,

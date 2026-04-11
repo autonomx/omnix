@@ -1,6 +1,7 @@
 """Functional tests — World Events view builder."""
 from __future__ import annotations
 
+import asyncio
 import importlib
 import importlib.util
 import os
@@ -23,10 +24,13 @@ def _load(mod_name: str, rel_path: str):
     return mod
 
 
+_routes = _load("app.rpg.api.rpg_session_routes", "app/rpg/api/rpg_session_routes.py")
 _we = _load("app.rpg.analytics.world_events", "app/rpg/analytics/world_events.py")
 
 build_world_events_view = _we.build_world_events_view
 build_incremental_world_event_rows = _we.build_incremental_world_event_rows
+build_player_world_view_rows = _we.build_player_world_view_rows
+get_rpg_session_world_events = _routes.get_rpg_session_world_events
 
 
 def _sim_state(**overrides):
@@ -175,3 +179,172 @@ class TestIncrementalRows:
         sim = _sim_state()
         rows = build_incremental_world_event_rows(sim, rt, {})
         assert len(rows) <= 8
+
+
+class TestPlayerWorldViewNormalization:
+    def test_build_player_world_view_rows_merges_state_change_and_scene_beat_pair(self):
+        sim = _sim_state(npcs={"npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric"}})
+        rt = _runtime_state(recent_world_event_rows=[
+            {
+                "event_id": "state1",
+                "scope": "local",
+                "kind": "state_change",
+                "title": "NPC Activity",
+                "summary": "Captain Aldric scans the tavern crowd with a watchful eye.",
+                "tick": 100,
+                "actors": ["npc_guard_captain"],
+                "location_id": "loc_tavern",
+                "priority": 0.65,
+                "source": "semantic_runtime",
+            },
+            {
+                "event_id": "scene1",
+                "scope": "local",
+                "kind": "state_change_beat",
+                "title": "Scene Development",
+                "summary": "Captain Aldric scans the tavern crowd with a watchful eye.",
+                "tick": 100,
+                "actors": ["npc_guard_captain"],
+                "location_id": "loc_tavern",
+                "priority": 0.55,
+                "source": "scene_beats",
+            },
+        ])
+        rows = build_player_world_view_rows(sim, rt)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["kind"] == "world_view_activity"
+        assert row["title"] == "Captain Aldric"
+        assert row["summary"] == "Captain Aldric scans the tavern crowd with a watchful eye."
+        assert row["source"] == "world_view_merged"
+        assert "actor_label" in row
+        assert row["actor_label"] == "Captain Aldric"
+
+    def test_build_player_world_view_rows_suppresses_near_identical_repetition(self):
+        sim = _sim_state()
+        rt = _runtime_state(recent_world_event_rows=[
+            {
+                "event_id": "e1",
+                "scope": "local",
+                "kind": "world_view_activity",
+                "title": "Captain Aldric",
+                "summary": "scans the tavern crowd",
+                "tick": 104,
+                "actor_label": "Captain Aldric",
+                "location_id": "loc_tavern",
+                "priority": 0.6,
+            },
+            {
+                "event_id": "e2",
+                "scope": "local",
+                "kind": "world_view_activity",
+                "title": "Captain Aldric",
+                "summary": "scans the tavern crowd",
+                "tick": 102,
+                "actor_label": "Captain Aldric",
+                "location_id": "loc_tavern",
+                "priority": 0.6,
+            },
+            {
+                "event_id": "e3",
+                "scope": "local",
+                "kind": "world_view_activity",
+                "title": "Captain Aldric",
+                "summary": "scans the tavern crowd",
+                "tick": 100,
+                "actor_label": "Captain Aldric",
+                "location_id": "loc_tavern",
+                "priority": 0.6,
+            },
+        ])
+        rows = build_player_world_view_rows(sim, rt)
+        assert len(rows) == 1
+        assert rows[0]["tick"] == 104  # newest
+
+    def test_build_player_world_view_rows_keeps_meaningfully_different_events(self):
+        sim = _sim_state()
+        rt = _runtime_state(recent_world_event_rows=[
+            {
+                "event_id": "e1",
+                "scope": "local",
+                "kind": "world_view_activity",
+                "title": "Captain Aldric",
+                "summary": "scans the tavern crowd",
+                "tick": 110,
+                "actor_label": "Captain Aldric",
+                "location_id": "loc_tavern",
+            },
+            {
+                "event_id": "e2",
+                "scope": "local",
+                "kind": "world_view_activity",
+                "title": "Captain Aldric",
+                "summary": "surveys the tavern floor",
+                "tick": 105,
+                "actor_label": "Captain Aldric",
+                "location_id": "loc_tavern",
+            },
+        ])
+        rows = build_player_world_view_rows(sim, rt)
+        assert len(rows) == 2
+
+    def test_build_player_world_view_rows_capped_to_8(self):
+        sim = _sim_state()
+        rows = [
+            {
+                "event_id": f"e{i}",
+                "scope": "local",
+                "kind": "world_view_activity",
+                "title": f"Event {i}",
+                "summary": f"Summary {i}",
+                "tick": 100 + i,
+                "actor_label": "",
+                "location_id": "loc_tavern",
+            }
+            for i in range(15)
+        ]
+        rt = _runtime_state(recent_world_event_rows=rows)
+        result = build_player_world_view_rows(sim, rt)
+        assert len(result) <= 8
+
+    def test_build_player_world_view_rows_newest_first(self):
+        sim = _sim_state()
+        rt = _runtime_state(recent_world_event_rows=[
+            {"event_id": "e1", "tick": 100, "scope": "local", "kind": "world_view_activity", "title": "Old", "summary": "old", "actor_label": "", "location_id": ""},
+            {"event_id": "e2", "tick": 110, "scope": "local", "kind": "world_view_activity", "title": "New", "summary": "new", "actor_label": "", "location_id": ""},
+        ])
+        rows = build_player_world_view_rows(sim, rt)
+        assert rows[0]["tick"] == 110
+        assert rows[1]["tick"] == 100
+
+
+class _DummyRequest:
+    def __init__(self, payload):
+        self._payload = payload
+
+    async def json(self):
+        return self._payload
+
+
+class TestWorldEventsRoute:
+    def test_session_world_events_route_returns_player_world_view_rows(self):
+        from app.rpg.session.runtime import ACTIVE_RPG_SESSIONS
+
+        session_id = "test_world_events_route"
+        ACTIVE_RPG_SESSIONS[session_id] = {
+            "simulation_state": _sim_state(
+                npcs={"npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric"}}
+            ),
+            "runtime_state": _runtime_state(recent_world_event_rows=[
+                {"event_id": "scene1", "scope": "local", "kind": "state_change_beat", "title": "Scene Development", "summary": "Captain Aldric scans the tavern crowd with a watchful eye.", "tick": 100, "actors": [], "location_id": "loc_tavern", "priority": 1.0, "status": "active", "source": "scene_beats"},
+                {"event_id": "state1", "scope": "local", "kind": "state_change", "title": "NPC Activity", "summary": "Captain Aldric scans the tavern crowd with a watchful eye.", "tick": 100, "actors": ["npc_guard_captain"], "location_id": "loc_tavern", "priority": 1.0, "status": "active", "source": "semantic_runtime"},
+            ]),
+        }
+        try:
+            response = asyncio.run(get_rpg_session_world_events(_DummyRequest({"session_id": session_id})))
+            assert response["ok"] is True
+            assert "recent_world_event_rows" in response
+            assert "player_world_view_rows" in response
+            assert len(response["player_world_view_rows"]) == 1
+        finally:
+            ACTIVE_RPG_SESSIONS.pop(session_id, None)

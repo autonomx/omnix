@@ -2735,20 +2735,34 @@
 
     // ── World Events Panel ───────────────────────────────────────────────────
 
-    function _adaptRecentWorldEventRowForPanel(row) {
+    function _adaptPlayerWorldViewRowForPanel(row) {
         row = _safeObj(row);
 
         var actors = _safeArray(row.actors).filter(Boolean);
-        var actorText = actors.length ? actors.join(', ') : '';
-        var title = _safeStr(row.title || row.kind || 'Event');
+        var actorLabel = _safeStr(row.actor_label || '');
+        var title = actorLabel || _safeStr(row.title || 'Event');
         var summary = _safeStr(row.summary || '');
         var tick = Number(row.tick || 0);
         var locationId = _safeStr(row.location_id || '');
+        var locationLabel = _getLocationDisplayName(locationId);
         var kind = _safeStr(row.kind || 'event');
         var scope = _safeStr(row.scope || 'local');
         var priority = Number(row.priority || 0);
         var status = _safeStr(row.status || 'active');
         var source = _safeStr(row.source || '');
+
+        // For world_view_activity, ensure title is actor-focused
+        if (kind === 'world_view_activity') {
+            if (actorLabel && summary.startsWith(actorLabel + ' ')) {
+                summary = summary.substring(actorLabel.length + 1);
+            }
+        }
+
+        // Hide technical sources
+        var displaySource = '';
+        if (source && !['semantic_runtime', 'scene_beats', 'ambient_runtime'].includes(source)) {
+            displaySource = source;
+        }
 
         return {
             event_id: _safeStr(row.event_id || ''),
@@ -2756,25 +2770,35 @@
             kind: kind,
             title: title,
             summary: summary,
-            subtitle: actorText || locationId || '',
+            subtitle: locationLabel || '',
             tick: tick,
             tick_label: tick > 0 ? ('Tick ' + tick) : '',
             actors: actors,
-            actor_text: actorText,
+            actor_text: actorLabel,
             location_id: locationId,
             priority: priority,
             priority_label: priority > 0 ? String(priority) : '',
             status: status,
-            source: source,
+            source: displaySource,
             chips: [
-                kind ? { label: kind.replace(/_/g, ' ') } : null,
-                status ? { label: status } : null,
-                source ? { label: source } : null,
+                status === 'active' ? null : { label: status },
             ].filter(Boolean),
         };
+
     }
 
-    function _groupRecentWorldEventRows(rows) {
+    function _getLocationDisplayName(locationId) {
+        // Placeholder for location label mapping
+        if (!locationId) return '';
+        var mapping = {
+            'loc_tavern': 'Tavern',
+            'loc_town_square': 'Town Square',
+            // Add more as needed
+        };
+        return mapping[locationId] || locationId.replace('loc_', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    function _groupPlayerWorldViewRows(rows) {
         rows = _safeArray(rows);
         var grouped = {
             local_events: [],
@@ -2784,7 +2808,7 @@
         };
 
         rows.forEach(function (rawRow) {
-            var row = _adaptRecentWorldEventRowForPanel(rawRow);
+            var row = _adaptPlayerWorldViewRowForPanel(rawRow);
             grouped.recent_changes.push(row);
 
             if (row.scope === 'director') {
@@ -2817,15 +2841,17 @@
             );
             rpgDebug('WorldEvents:Response', data);
             if (data.ok) {
-                var rows = _safeArray(data.recent_world_event_rows);
-                console.log("DEBUG world events rows", rows);
+                var rawRows = _safeArray(data.recent_world_event_rows);
+                var playerRows = _safeArray(data.player_world_view_rows);
+                console.log("DEBUG world events rows", rawRows, playerRows);
                 updateState({
                     worldEventsSummary: {
-                        recent_world_event_rows: rows
+                        recent_world_event_rows: rawRows,
+                        player_world_view_rows: playerRows,
                     },
-                    worldEventsView: _groupRecentWorldEventRows(rows)
+                    worldEventsView: _groupPlayerWorldViewRows(playerRows)
                 });
-                console.log("DEBUG world events rows", rows);
+                console.log("DEBUG world events rows", rawRows, playerRows);
                 if (el('rpgWorldEventsBody')) renderWorldEventsPanel();
             }
         }).catch(function (err) {
@@ -2852,8 +2878,8 @@
         var view = _safeObj(rpgState.worldEventsView);
         var summary = _safeObj(rpgState.worldEventsSummary);
         if ((!view.local_events && !view.global_events && !view.director_pressure) &&
-            _safeArray(summary.recent_world_event_rows).length) {
-            view = _groupRecentWorldEventRows(summary.recent_world_event_rows);
+            _safeArray(summary.player_world_view_rows).length) {
+            view = _groupPlayerWorldViewRows(summary.player_world_view_rows);
         }
 
         var localEvents = _safeArray(view.local_events);
