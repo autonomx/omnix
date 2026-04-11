@@ -24,6 +24,13 @@ def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _score_memory(item: Dict[str, Any]) -> tuple:
     item = _safe_dict(item)
     strength = float(item.get("strength") or 0.0)
@@ -125,6 +132,26 @@ def build_llm_memory_prompt_block(dialogue_memory_context: Dict[str, Any]) -> st
         for c in recent_consequences[:3]:
             c = _safe_dict(c)
             lines.append(f"- {_safe_str(c.get('summary'))}")
+
+    local_pressure = _safe_list(_safe_dict(dialogue_memory_context.get("consequences")).get("local_pressure"))
+    if local_pressure:
+        lines.append("Local pressure:")
+        for p in local_pressure[:3]:
+            p = _safe_dict(p)
+            summary = _safe_str(p.get("summary"))
+            value = _safe_int(p.get("value"), 0)
+            if summary:
+                lines.append(f"- {summary} (level {value})")
+
+    local_conditions = _safe_list(_safe_dict(dialogue_memory_context.get("consequences")).get("local_conditions"))
+    if local_conditions:
+        lines.append("Local conditions:")
+        for c in local_conditions[:3]:
+            c = _safe_dict(c)
+            summary = _safe_str(c.get("summary"))
+            severity = _safe_int(c.get("severity"), 0)
+            if summary:
+                lines.append(f"- {summary} (severity {severity})")
 
     if len(lines) == 1:
         lines.append("- none")

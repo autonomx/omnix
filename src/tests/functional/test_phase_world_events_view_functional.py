@@ -26,11 +26,24 @@ def _load(mod_name: str, rel_path: str):
 
 _routes = _load("app.rpg.api.rpg_session_routes", "app/rpg/api/rpg_session_routes.py")
 _we = _load("app.rpg.analytics.world_events", "app/rpg/analytics/world_events.py")
+_rt = _load("app.rpg.session.runtime", "app/rpg/session/runtime.py")
+_rp = _load("app.rpg.api.rpg_presentation_routes", "app/rpg/api/rpg_presentation_routes.py")
 
 build_world_events_view = _we.build_world_events_view
 build_incremental_world_event_rows = _we.build_incremental_world_event_rows
 build_player_world_view_rows = _we.build_player_world_view_rows
 get_rpg_session_world_events = _routes.get_rpg_session_world_events
+_build_recent_consequence_context = _rp._build_recent_consequence_context
+_append_world_rumor = _rt._append_world_rumor
+_append_world_pressure = _rt._append_world_pressure
+_append_world_consequence = _rt._append_world_consequence
+_append_location_condition = _rt._append_location_condition
+decay_world_consequences_for_tick = _rt.decay_world_consequences_for_tick
+_emit_consequence_world_rows = _rt._emit_consequence_world_rows
+_safe_list = _rt._safe_list
+_safe_str = _rt._safe_str
+_safe_int = _rt._safe_int
+_stable_consequence_id = _rt._stable_consequence_id
 
 
 def _sim_state(**overrides):
@@ -502,3 +515,204 @@ def test_feedback_loop_biases_activity_choice():
     ])
     kind = _choose_activity_kind_for_actor(actor, 101, rt)
     assert kind in ("patrol", "watch_crowd", "question_patron")
+
+
+def test_rumor_aggregation_increases_strength():
+    rt = _runtime_state()
+    rumor = {
+        "rumor_id": "r1",
+        "summary": "Rumors spread among the locals.",
+        "scope": "local",
+        "location_id": "loc_tavern",
+        "source_actor_id": "npc_innkeeper",
+        "source_kind": "gossip",
+        "started_tick": 100,
+        "updated_tick": 100,
+        "strength": 1,
+        "tags": ["rumor"],
+    }
+    rt = _append_world_rumor(rt, rumor)
+    rt = _append_world_rumor(rt, dict(rumor, rumor_id="r2", updated_tick=101, strength=1))
+    rumors = _safe_list(rt.get("world_rumors"))
+    assert len(rumors) == 1
+    assert _safe_int(rumors[0].get("strength"), 0) >= 2
+
+
+def test_pressure_aggregation_increases_value():
+    rt = _runtime_state()
+    pressure = {
+        "pressure_id": "p1",
+        "kind": "security_presence",
+        "scope": "local",
+        "location_id": "loc_tavern",
+        "value": 1,
+        "started_tick": 100,
+        "updated_tick": 100,
+        "summary": "The local watch grows more visible and alert.",
+        "tags": ["security"],
+    }
+    rt = _append_world_pressure(rt, pressure)
+    rt = _append_world_pressure(rt, dict(pressure, pressure_id="p2", updated_tick=101, value=1))
+    pressures = _safe_list(rt.get("world_pressure"))
+    assert len(pressures) == 1
+    assert _safe_int(pressures[0].get("value"), 0) >= 2
+
+
+def test_rumor_decay_reduces_strength():
+    sim = _sim_state(tick=110)
+    rt = _runtime_state(world_rumors=[
+        {
+            "rumor_id": "r1",
+            "summary": "Rumors spread among the locals.",
+            "scope": "local",
+            "location_id": "loc_tavern",
+            "source_actor_id": "npc_innkeeper",
+            "source_kind": "gossip",
+            "started_tick": 100,
+            "updated_tick": 100,
+            "strength": 2,
+            "tags": ["rumor"],
+        }
+    ])
+    rt = decay_world_consequences_for_tick(sim, rt)
+    rumors = _safe_list(rt.get("world_rumors"))
+    assert len(rumors) == 1
+    assert _safe_int(rumors[0].get("strength"), 0) == 1
+
+
+def test_pressure_decay_reduces_value():
+    sim = _sim_state(tick=110)
+    rt = _runtime_state(world_pressure=[
+        {
+            "pressure_id": "p1",
+            "kind": "security_presence",
+            "scope": "local",
+            "location_id": "loc_tavern",
+            "value": 2,
+            "started_tick": 100,
+            "updated_tick": 100,
+            "summary": "The local watch grows more visible and alert.",
+            "tags": ["security"],
+        }
+    ])
+    rt = decay_world_consequences_for_tick(sim, rt)
+    pressures = _safe_list(rt.get("world_pressure"))
+    assert len(pressures) == 1
+    assert _safe_int(pressures[0].get("value"), 0) == 1
+
+
+def test_consequence_feed_rows_update_in_place():
+    rt = _runtime_state(recent_world_event_rows=[])
+    consequence = {
+        "consequence_id": "c1",
+        "kind": "security_pressure",
+        "scope": "local",
+        "location_id": "loc_tavern",
+        "summary": "The local watch grows more visible and alert.",
+        "source_actor_id": "npc_guard_captain",
+        "source_activity_id": "a1",
+        "tick": 100,
+        "priority": 2,
+        "tags": ["security"],
+    }
+    rt = _emit_consequence_world_rows(rt, consequence)
+    rt = _emit_consequence_world_rows(rt, dict(consequence, tick=101))
+    rows = _safe_list(rt.get("recent_world_event_rows"))
+    assert len(rows) == 1
+    assert _safe_int(rows[0].get("tick"), 0) == 101
+
+
+def test_world_consequence_aggregation_merges_same_summary_and_scope():
+    rt = _runtime_state()
+    consequence = {
+        "consequence_id": "c1",
+        "kind": "security_pressure",
+        "scope": "local",
+        "location_id": "loc_tavern",
+        "summary": "The local watch grows more visible and alert.",
+        "source_actor_id": "npc_guard_captain",
+        "tick": 100,
+        "priority": 2,
+        "tags": ["security"],
+    }
+    rt = _append_world_consequence(rt, consequence)
+    rt = _append_world_consequence(rt, dict(consequence, consequence_id="c2", tick=101, priority=3))
+    consequences = _safe_list(rt.get("world_consequences"))
+    assert len(consequences) == 1
+    assert _safe_int(consequences[0].get("priority"), 0) >= 3
+
+
+def test_location_condition_aggregation_refreshes_existing_condition():
+    rt = _runtime_state()
+    condition = {
+        "condition_id": "cond1",
+        "location_id": "loc_tavern",
+        "kind": "orderly",
+        "summary": "The area feels more orderly and well-kept.",
+        "severity": 1,
+        "started_tick": 100,
+        "updated_tick": 100,
+        "status": "active",
+        "tags": ["order"],
+    }
+    rt = _append_location_condition(rt, condition)
+    rt = _append_location_condition(rt, dict(condition, condition_id="cond2", updated_tick=101, severity=2))
+    conditions = _safe_list(rt.get("location_conditions"))
+    assert len(conditions) == 1
+    assert _safe_int(conditions[0].get("severity"), 0) >= 2
+
+
+def test_consequence_decay_eventually_removes_stale_records():
+    sim = _sim_state(tick=120)  # 20 ticks later
+    rt = _runtime_state(world_consequences=[
+        {
+            "consequence_id": "c1",
+            "kind": "security_pressure",
+            "scope": "local",
+            "location_id": "loc_tavern",
+            "summary": "The local watch grows more visible and alert.",
+            "tick": 100,
+            "priority": 2,
+            "tags": ["security"],
+        }
+    ])
+    rt = decay_world_consequences_for_tick(sim, rt)
+    consequences = _safe_list(rt.get("world_consequences"))
+    assert len(consequences) == 0  # Should be decayed away
+
+
+def test_recent_consequence_context_includes_local_pressure_and_conditions():
+    rt = _runtime_state()
+    # Add some test data
+    rt["world_pressure"] = [{
+        "kind": "security_presence",
+        "location_id": "loc_tavern",
+        "value": 3,
+        "summary": "High security presence",
+    }]
+    rt["location_conditions"] = [{
+        "kind": "orderly",
+        "location_id": "loc_tavern",
+        "severity": 2,
+        "summary": "Area is well-maintained",
+    }]
+    rt["world_consequences"] = [{
+        "kind": "test",
+        "location_id": "loc_tavern",
+        "summary": "Test consequence",
+        "tick": 100,
+    }]
+
+    context = _build_recent_consequence_context(rt, "actor1", "loc_tavern")
+    assert "recent_consequences" in context
+    assert "local_pressure" in context
+    assert "local_conditions" in context
+    assert len(context["local_pressure"]) > 0
+    assert len(context["local_conditions"]) > 0
+
+
+def test_consequence_ids_are_stable_for_same_logical_event():
+    # Test that same logical consequence gets same ID
+    id1 = _rt._stable_consequence_id("consequence", 100, "local", "tavern", "watch alert")
+    id2 = _rt._stable_consequence_id("consequence", 101, "local", "tavern", "watch alert")
+    assert id1 == id2  # Should be stable despite different ticks

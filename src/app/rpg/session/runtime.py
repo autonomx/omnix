@@ -146,6 +146,10 @@ _MAX_WORLD_RUMORS = 64
 _MAX_WORLD_PRESSURE = 64
 _MAX_LOCATION_CONDITIONS = 64
 _MAX_WORLD_CONSEQUENCES = 128
+_WORLD_RUMOR_DECAY_TICKS = 6
+_WORLD_PRESSURE_DECAY_TICKS = 4
+_LOCATION_CONDITION_DECAY_TICKS = 8
+_WORLD_CONSEQUENCE_DECAY_TICKS = 6
 _MAX_AMBIENT_UPDATES = 64
 _MAX_RECENT_EVENTS = 24
 _MAX_RECENT_CHANGES = 24
@@ -375,7 +379,11 @@ def _ensure_recent_scene_beats(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
 # ── World consequence state ──────────────────────────────────────────────────
 
 def _stable_consequence_id(prefix: str, tick: int, scope: str, key: str, summary: str) -> str:
-    raw = f"{prefix}|{tick}|{scope}|{key}|{summary}"
+    # For mergeable consequences, use content-based ID, not tick-based
+    if prefix in ("rumor", "pressure", "condition", "consequence"):
+        raw = f"{prefix}|{scope}|{key}|{summary}"
+    else:
+        raw = f"{prefix}|{tick}|{scope}|{key}|{summary}"
     return prefix + "_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -439,6 +447,50 @@ def _normalize_world_consequence(record: Dict[str, Any]) -> Dict[str, Any]:
         "priority": max(1, _safe_int(record.get("priority"), 1)),
         "tags": [str(x).strip() for x in _safe_list(record.get("tags")) if str(x).strip()],
     }
+
+
+def _normalize_consequence_text(text: str) -> str:
+    text = _safe_str(text).lower()
+    text = " ".join(text.split())
+    text = text.rstrip(".,!?;:")
+    return text
+
+
+def _world_rumor_key(record: Dict[str, Any]) -> str:
+    record = _normalize_world_rumor(record)
+    return "|".join([
+        _safe_str(record.get("scope")),
+        _safe_str(record.get("location_id")),
+        _normalize_consequence_text(_safe_str(record.get("summary"))),
+        _safe_str(record.get("source_kind")),
+    ])
+
+
+def _world_pressure_key(record: Dict[str, Any]) -> str:
+    record = _normalize_pressure_record(record)
+    return "|".join([
+        _safe_str(record.get("scope")),
+        _safe_str(record.get("location_id")),
+        _safe_str(record.get("kind")),
+    ])
+
+
+def _location_condition_key(record: Dict[str, Any]) -> str:
+    record = _normalize_location_condition(record)
+    return "|".join([
+        _safe_str(record.get("location_id")),
+        _safe_str(record.get("kind")),
+    ])
+
+
+def _world_consequence_key(record: Dict[str, Any]) -> str:
+    record = _normalize_world_consequence(record)
+    return "|".join([
+        _safe_str(record.get("scope")),
+        _safe_str(record.get("location_id")),
+        _safe_str(record.get("kind")),
+        _normalize_consequence_text(_safe_str(record.get("summary"))),
+    ])
 
 
 def ensure_world_consequence_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -581,10 +633,18 @@ def _choose_activity_kind_for_actor(actor: Dict[str, Any], tick: int, runtime_st
         if _safe_str(r.get("location_id")) == location_id:
             local_rumors += _safe_int(r.get("strength"), 0)
 
-    if local_pressure >= 2:
-        options = ("patrol", "watch_crowd", "question_patron", "watch_crowd", "patrol")
+    if local_pressure >= 3:
+        # High pressure: bias heavily toward security activities
+        options = ("patrol", "watch_crowd", "question_patron", "patrol", "watch_crowd", "serve", "clean")
+    elif local_pressure >= 2:
+        # Medium pressure: bias toward security but allow variety
+        options = ("patrol", "watch_crowd", "trade", "serve", "clean", "gossip", "question_patron")
+    elif local_rumors >= 3:
+        # High rumors: bias toward social activities
+        options = ("gossip", "gossip", "trade", "serve", "watch_crowd")
     elif local_rumors >= 2:
-        options = ("gossip", "gossip", "trade", "watch_crowd", "serve")
+        # Medium rumors: bias toward social but allow variety
+        options = ("gossip", "trade", "serve", "watch_crowd", "clean", "patrol")
     else:
         options = _LOCAL_ACTIVITY_KINDS
 
@@ -795,33 +855,125 @@ def emit_activity_beats_for_tick(simulation_state: Dict[str, Any], runtime_state
 
 def _append_world_rumor(runtime_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
+    rumor = _normalize_world_rumor(rumor)
+    rumor_key = _world_rumor_key(rumor)
+
     rumors = _safe_list(runtime_state.get("world_rumors"))
-    rumors.append(_normalize_world_rumor(rumor))
-    runtime_state["world_rumors"] = rumors[-_MAX_WORLD_RUMORS:]
+    updated = False
+    merged: List[Dict[str, Any]] = []
+
+    for existing in rumors:
+        existing = _normalize_world_rumor(existing)
+        if _world_rumor_key(existing) == rumor_key:
+            existing["updated_tick"] = max(_safe_int(existing.get("updated_tick"), 0), _safe_int(rumor.get("updated_tick"), 0))
+            existing["strength"] = min(10, _safe_int(existing.get("strength"), 1) + max(1, _safe_int(rumor.get("strength"), 1)))
+            existing_tags = set(_safe_list(existing.get("tags")))
+            for tag in _safe_list(rumor.get("tags")):
+                existing_tags.add(_safe_str(tag))
+            existing["tags"] = sorted([t for t in existing_tags if t])
+            merged.append(existing)
+            updated = True
+        else:
+            merged.append(existing)
+
+    if not updated:
+        merged.append(rumor)
+
+    runtime_state["world_rumors"] = merged[-_MAX_WORLD_RUMORS:]
     return runtime_state
 
 
 def _append_world_pressure(runtime_state: Dict[str, Any], pressure: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
+    pressure = _normalize_pressure_record(pressure)
+    pressure_key = _world_pressure_key(pressure)
+
     items = _safe_list(runtime_state.get("world_pressure"))
-    items.append(_normalize_pressure_record(pressure))
-    runtime_state["world_pressure"] = items[-_MAX_WORLD_PRESSURE:]
+    updated = False
+    merged: List[Dict[str, Any]] = []
+
+    for existing in items:
+        existing = _normalize_pressure_record(existing)
+        if _world_pressure_key(existing) == pressure_key:
+            existing["updated_tick"] = max(_safe_int(existing.get("updated_tick"), 0), _safe_int(pressure.get("updated_tick"), 0))
+            existing["value"] = min(10, _safe_int(existing.get("value"), 0) + max(1, _safe_int(pressure.get("value"), 0)))
+            existing["summary"] = _safe_str(pressure.get("summary")) or _safe_str(existing.get("summary"))
+            existing_tags = set(_safe_list(existing.get("tags")))
+            for tag in _safe_list(pressure.get("tags")):
+                existing_tags.add(_safe_str(tag))
+            existing["tags"] = sorted([t for t in existing_tags if t])
+            merged.append(existing)
+            updated = True
+        else:
+            merged.append(existing)
+
+    if not updated:
+        merged.append(pressure)
+
+    runtime_state["world_pressure"] = merged[-_MAX_WORLD_PRESSURE:]
     return runtime_state
 
 
 def _append_location_condition(runtime_state: Dict[str, Any], condition: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
+    condition = _normalize_location_condition(condition)
+    condition_key = _location_condition_key(condition)
+
     items = _safe_list(runtime_state.get("location_conditions"))
-    items.append(_normalize_location_condition(condition))
-    runtime_state["location_conditions"] = items[-_MAX_LOCATION_CONDITIONS:]
+    updated = False
+    merged: List[Dict[str, Any]] = []
+
+    for existing in items:
+        existing = _normalize_location_condition(existing)
+        if _location_condition_key(existing) == condition_key:
+            existing["updated_tick"] = max(_safe_int(existing.get("updated_tick"), 0), _safe_int(condition.get("updated_tick"), 0))
+            existing["severity"] = min(10, max(_safe_int(existing.get("severity"), 1), _safe_int(condition.get("severity"), 1)))
+            existing["summary"] = _safe_str(condition.get("summary")) or _safe_str(existing.get("summary"))
+            existing["status"] = _safe_str(condition.get("status")) or _safe_str(existing.get("status")) or "active"
+            existing_tags = set(_safe_list(existing.get("tags")))
+            for tag in _safe_list(condition.get("tags")):
+                existing_tags.add(_safe_str(tag))
+            existing["tags"] = sorted([t for t in existing_tags if t])
+            merged.append(existing)
+            updated = True
+        else:
+            merged.append(existing)
+
+    if not updated:
+        merged.append(condition)
+
+    runtime_state["location_conditions"] = merged[-_MAX_LOCATION_CONDITIONS:]
     return runtime_state
 
 
 def _append_world_consequence(runtime_state: Dict[str, Any], consequence: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
+    consequence = _normalize_world_consequence(consequence)
+    consequence_key = _world_consequence_key(consequence)
+
     items = _safe_list(runtime_state.get("world_consequences"))
-    items.append(_normalize_world_consequence(consequence))
-    runtime_state["world_consequences"] = items[-_MAX_WORLD_CONSEQUENCES:]
+    updated = False
+    merged: List[Dict[str, Any]] = []
+
+    for existing in items:
+        existing = _normalize_world_consequence(existing)
+        if _world_consequence_key(existing) == consequence_key:
+            existing["tick"] = max(_safe_int(existing.get("tick"), 0), _safe_int(consequence.get("tick"), 0))
+            existing["priority"] = min(10, max(_safe_int(existing.get("priority"), 1), _safe_int(consequence.get("priority"), 1)))
+            existing["summary"] = _safe_str(consequence.get("summary")) or _safe_str(existing.get("summary"))
+            existing_tags = set(_safe_list(existing.get("tags")))
+            for tag in _safe_list(consequence.get("tags")):
+                existing_tags.add(_safe_str(tag))
+            existing["tags"] = sorted([t for t in existing_tags if t])
+            merged.append(existing)
+            updated = True
+        else:
+            merged.append(existing)
+
+    if not updated:
+        merged.append(consequence)
+
+    runtime_state["world_consequences"] = merged[-_MAX_WORLD_CONSEQUENCES:]
     return runtime_state
 
 
@@ -829,21 +981,49 @@ def _emit_consequence_world_rows(runtime_state: Dict[str, Any], consequence: Dic
     runtime_state = _safe_dict(runtime_state)
     rows = _safe_list(runtime_state.get("recent_world_event_rows"))
     consequence = _normalize_world_consequence(consequence)
-    rows.append({
-        "event_id": _safe_str(consequence.get("consequence_id")),
-        "scope": _safe_str(consequence.get("scope")) or "local",
-        "kind": _safe_str(consequence.get("kind")) or "world_consequence",
-        "title": "World Consequence",
-        "summary": _safe_str(consequence.get("summary")),
-        "tick": _safe_int(consequence.get("tick"), 0),
-        "actors": [_safe_str(consequence.get("source_actor_id"))] if _safe_str(consequence.get("source_actor_id")) else [],
-        "actor_id": _safe_str(consequence.get("source_actor_id")),
-        "location_id": _safe_str(consequence.get("location_id")),
-        "priority": min(1.0, 0.4 + (0.1 * _safe_int(consequence.get("priority"), 1))),
-        "status": "active",
-        "source": "consequence_runtime",
-    })
-    runtime_state["recent_world_event_rows"] = rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+
+    event_id = _safe_str(consequence.get("consequence_id"))
+    replaced = False
+    merged_rows: List[Dict[str, Any]] = []
+
+    for row in rows:
+        row = _safe_dict(row)
+        if _safe_str(row.get("event_id")) == event_id:
+            merged_rows.append({
+                "event_id": event_id,
+                "scope": _safe_str(consequence.get("scope")) or "local",
+                "kind": _safe_str(consequence.get("kind")) or "world_consequence",
+                "title": "World Consequence",
+                "summary": _safe_str(consequence.get("summary")),
+                "tick": _safe_int(consequence.get("tick"), 0),
+                "actors": [_safe_str(consequence.get("source_actor_id"))] if _safe_str(consequence.get("source_actor_id")) else [],
+                "actor_id": _safe_str(consequence.get("source_actor_id")),
+                "location_id": _safe_str(consequence.get("location_id")),
+                "priority": min(1.0, 0.4 + (0.1 * _safe_int(consequence.get("priority"), 1))),
+                "status": "active",
+                "source": "consequence_runtime",
+            })
+            replaced = True
+        else:
+            merged_rows.append(row)
+
+    if not replaced:
+        merged_rows.append({
+            "event_id": event_id,
+            "scope": _safe_str(consequence.get("scope")) or "local",
+            "kind": _safe_str(consequence.get("kind")) or "world_consequence",
+            "title": "World Consequence",
+            "summary": _safe_str(consequence.get("summary")),
+            "tick": _safe_int(consequence.get("tick"), 0),
+            "actors": [_safe_str(consequence.get("source_actor_id"))] if _safe_str(consequence.get("source_actor_id")) else [],
+            "actor_id": _safe_str(consequence.get("source_actor_id")),
+            "location_id": _safe_str(consequence.get("location_id")),
+            "priority": min(1.0, 0.4 + (0.1 * _safe_int(consequence.get("priority"), 1))),
+            "status": "active",
+            "source": "consequence_runtime",
+        })
+
+    runtime_state["recent_world_event_rows"] = merged_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
     return runtime_state
 
 
@@ -975,6 +1155,62 @@ def propagate_activity_consequences_for_tick(simulation_state: Dict[str, Any], r
             runtime_state = _append_location_condition(runtime_state, condition)
             runtime_state = _append_world_consequence(runtime_state, consequence)
             runtime_state = _emit_consequence_world_rows(runtime_state, consequence)
+
+    return runtime_state
+
+
+def decay_world_consequences_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    tick = _safe_int(simulation_state.get("tick"), 0)
+
+    # Rumors decay by strength, then disappear
+    rumors_out: List[Dict[str, Any]] = []
+    for rumor in _safe_list(runtime_state.get("world_rumors")):
+        rumor = _normalize_world_rumor(rumor)
+        age = tick - _safe_int(rumor.get("updated_tick"), 0)
+        strength = _safe_int(rumor.get("strength"), 1)
+        if age >= _WORLD_RUMOR_DECAY_TICKS:
+            strength -= 1
+        if strength > 0:
+            rumor["strength"] = strength
+            rumors_out.append(rumor)
+    runtime_state["world_rumors"] = rumors_out[-_MAX_WORLD_RUMORS:]
+
+    # Pressure decays by value, then disappears
+    pressure_out: List[Dict[str, Any]] = []
+    for pressure in _safe_list(runtime_state.get("world_pressure")):
+        pressure = _normalize_pressure_record(pressure)
+        age = tick - _safe_int(pressure.get("updated_tick"), 0)
+        value = _safe_int(pressure.get("value"), 0)
+        if age >= _WORLD_PRESSURE_DECAY_TICKS:
+            value -= 1
+        if value > 0:
+            pressure["value"] = value
+            pressure_out.append(pressure)
+    runtime_state["world_pressure"] = pressure_out[-_MAX_WORLD_PRESSURE:]
+
+    # Location conditions cool and eventually resolve
+    condition_out: List[Dict[str, Any]] = []
+    for condition in _safe_list(runtime_state.get("location_conditions")):
+        condition = _normalize_location_condition(condition)
+        age = tick - _safe_int(condition.get("updated_tick"), 0)
+        severity = _safe_int(condition.get("severity"), 1)
+        if age >= _LOCATION_CONDITION_DECAY_TICKS:
+            severity -= 1
+        if severity > 0:
+            condition["severity"] = severity
+            condition_out.append(condition)
+    runtime_state["location_conditions"] = condition_out[-_MAX_LOCATION_CONDITIONS:]
+
+    # Consequences fade out of active memory if stale
+    consequence_out: List[Dict[str, Any]] = []
+    for consequence in _safe_list(runtime_state.get("world_consequences")):
+        consequence = _normalize_world_consequence(consequence)
+        age = tick - _safe_int(consequence.get("tick"), 0)
+        if age < _WORLD_CONSEQUENCE_DECAY_TICKS:
+            consequence_out.append(consequence)
+    runtime_state["world_consequences"] = consequence_out[-_MAX_WORLD_CONSEQUENCES:]
 
     return runtime_state
 
@@ -4038,6 +4274,7 @@ def _apply_idle_tick_to_session(
     runtime_state = advance_actor_activities_for_tick(after_state, runtime_state)
     runtime_state = emit_activity_beats_for_tick(after_state, runtime_state)
     runtime_state = propagate_activity_consequences_for_tick(after_state, runtime_state)
+    runtime_state = decay_world_consequences_for_tick(after_state, runtime_state)
 
     # Use the advanced simulation state for emitted scene beats.
     simulation_state = after_state

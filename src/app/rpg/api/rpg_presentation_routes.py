@@ -475,6 +475,27 @@ def _build_recent_consequence_context(runtime_state: dict, actor_id: str, locati
             recent.append(consequence)
 
     recent = recent[-4:]
+
+    local_pressure = []
+    for p in _safe_list(runtime_state.get("world_pressure")):
+        p = _safe_dict(p)
+        if location_id and _safe_str(p.get("location_id")) == location_id:
+            local_pressure.append({
+                "kind": _safe_str(p.get("kind")),
+                "value": _safe_int(p.get("value"), 0),
+                "summary": _safe_str(p.get("summary")),
+            })
+
+    local_conditions = []
+    for c in _safe_list(runtime_state.get("location_conditions")):
+        c = _safe_dict(c)
+        if location_id and _safe_str(c.get("location_id")) == location_id:
+            local_conditions.append({
+                "kind": _safe_str(c.get("kind")),
+                "severity": _safe_int(c.get("severity"), 0),
+                "summary": _safe_str(c.get("summary")),
+            })
+
     return {
         "recent_consequences": [
             {
@@ -485,7 +506,9 @@ def _build_recent_consequence_context(runtime_state: dict, actor_id: str, locati
                 "location_id": _safe_str(c.get("location_id")),
             }
             for c in recent
-        ]
+        ],
+        "local_pressure": local_pressure[:4],
+        "local_conditions": local_conditions[:4],
     }
 
 
