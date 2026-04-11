@@ -228,6 +228,7 @@
             });
         }
 
+        pushSection('Scene Developments', payload.scene_beats);
         pushSection('World Events', payload.world_events);
         pushSection('Consequences', payload.consequences);
         pushSection('Threads', payload.threads);
@@ -245,6 +246,7 @@
         var hasSummary = !!_safeStr(payload.summary);
         var hasMoments = Number(payload.additional_moments || 0) > 0;
         var hasSections =
+            _safeArray(payload.scene_beats).length > 0 ||
             _safeArray(payload.world_events).length > 0 ||
             _safeArray(payload.consequences).length > 0 ||
             _safeArray(payload.threads).length > 0 ||
