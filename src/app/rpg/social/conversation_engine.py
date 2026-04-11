@@ -95,7 +95,9 @@ def build_next_conversation_line(conversation: Dict[str, Any], simulation_state:
 
     if settings.get("llm_expand_npc_conversations"):
         try:
-            from app.rpg.ai.conversation_gateway import generate_recorded_conversation_line
+            from app.rpg.ai.conversation_gateway import (
+                generate_recorded_conversation_line,
+            )
             from app.rpg.llm_app_gateway import build_app_llm_gateway
             llm_gateway = build_app_llm_gateway()
             mode = _safe_str(_safe_dict(runtime_state).get("mode")).strip().lower() or "live"

@@ -151,7 +151,8 @@ _MAX_SEMANTIC_PROPOSALS = 32
 _MAX_ACCEPTED_STATE_CHANGE_EVENTS = 64
 _MAX_APPLIED_PROPOSAL_IDS = 128
 _MAX_LLM_PROPOSAL_CANDIDATES = 8
-_SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS = 6
+_SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS = 1
+_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS = 8
 
 
 def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
@@ -465,6 +466,10 @@ def _ensure_semantic_pipeline_state(runtime_state: Dict[str, Any]) -> Dict[str, 
     runtime_state.setdefault("rejected_state_change_events", [])
     runtime_state.setdefault("applied_semantic_proposal_ids", [])
     runtime_state.setdefault("last_semantic_llm_tick", -999999)
+    runtime_state.setdefault("recorded_semantic_llm_proposals", [])
+    runtime_state.setdefault("recorded_semantic_llm_prompt", "")
+    runtime_state.setdefault("recorded_semantic_llm_raw_output", "")
+    runtime_state.setdefault("recorded_semantic_llm_capture_tick", -999999)
     runtime_state["semantic_state_change_proposals"] = _safe_list(
         runtime_state.get("semantic_state_change_proposals")
     )[-_MAX_SEMANTIC_PROPOSALS:]
@@ -477,6 +482,14 @@ def _ensure_semantic_pipeline_state(runtime_state: Dict[str, Any]) -> Dict[str, 
     runtime_state["applied_semantic_proposal_ids"] = [
         _safe_str(x) for x in _safe_list(runtime_state.get("applied_semantic_proposal_ids")) if _safe_str(x)
     ][-_MAX_APPLIED_PROPOSAL_IDS:]
+    runtime_state["recorded_semantic_llm_proposals"] = [
+        _normalize_semantic_state_change_proposal(x)
+        for x in _safe_list(runtime_state.get("recorded_semantic_llm_proposals"))
+        if _safe_dict(x)
+    ][-_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS:]
+    runtime_state["recorded_semantic_llm_prompt"] = _safe_str(runtime_state.get("recorded_semantic_llm_prompt"))
+    runtime_state["recorded_semantic_llm_raw_output"] = _safe_str(runtime_state.get("recorded_semantic_llm_raw_output"))
+    runtime_state["recorded_semantic_llm_capture_tick"] = _safe_int(runtime_state.get("recorded_semantic_llm_capture_tick", -999999), -999999)
     runtime_state["last_semantic_llm_tick"] = _safe_int(runtime_state.get("last_semantic_llm_tick", -999999), -999999)
     return runtime_state
 
@@ -503,11 +516,32 @@ def _applied_semantic_proposal_ids(runtime_state: Dict[str, Any]) -> set[str]:
 
 def _safe_actor_states(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    if npc_index:
+        derived: List[Dict[str, Any]] = []
+        for npc_id, npc in npc_index.items():
+            npc = _safe_dict(npc)
+            actor_id = _safe_str(npc_id)
+            if not actor_id:
+                continue
+            derived.append(
+                {
+                    "id": actor_id,
+                    "name": _safe_str(npc.get("name")) or actor_id,
+                    "location_id": _safe_str(npc.get("location_id")),
+                    "activity": _safe_str(npc.get("activity")),
+                    "availability": _safe_str(npc.get("availability")),
+                    "mood": _safe_str(npc.get("mood")),
+                    "intent": _safe_str(npc.get("intent")),
+                    "engagement": _safe_str(npc.get("engagement")),
+                }
+            )
+        return derived
     actor_states = _safe_list(simulation_state.get("actor_states"))
     if actor_states:
-        return [ _safe_dict(x) for x in actor_states if _safe_dict(x) ]
+        return [_safe_dict(x) for x in actor_states if _safe_dict(x)]
     npc_states = _safe_list(simulation_state.get("npc_states"))
-    return [ _safe_dict(x) for x in npc_states if _safe_dict(x) ]
+    return [_safe_dict(x) for x in npc_states if _safe_dict(x)]
 
 
 def _write_actor_states(simulation_state: Dict[str, Any], actor_states: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -564,6 +598,65 @@ def _allowed_semantic_actions() -> Dict[str, Dict[str, str]]:
     }
 
 
+def record_semantic_llm_capture(
+    runtime_state: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    *,
+    prompt: str,
+    raw_output: Any,
+    proposals: List[Dict[str, Any]],
+    tick: int,
+) -> Dict[str, Any]:
+    print("SEMANTIC RECORD prompt_present =", bool(prompt))
+    print("SEMANTIC RECORD raw_output_present =", bool(_normalize_llm_text_output(raw_output)))
+    print("SEMANTIC RECORD proposal_count =", len(proposals))
+    print("SEMANTIC RECORD proposals =", proposals[:3])
+    runtime_state = _ensure_semantic_pipeline_state(runtime_state)
+    normalized = [
+        _normalize_semantic_state_change_proposal(x)
+        for x in _safe_list(proposals)
+        if _safe_dict(x)
+    ][-_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS:]
+
+    # Hard filter: only allow actors in active interactions if any exist
+    interactions = _normalize_active_interactions(simulation_state, runtime_state)
+    if interactions:
+        allowed_actor_ids = set()
+        for i in interactions:
+            for p in i.get("participants") or []:
+                allowed_actor_ids.add(_safe_str(p))
+        if allowed_actor_ids:
+            normalized = [p for p in normalized if p.get("actor_id") in allowed_actor_ids]
+
+    # Fallback: if no proposals, keep one actor active to prevent dead world
+    if not normalized:
+        actor_states = _safe_actor_states(simulation_state)
+        if actor_states:
+            actor = actor_states[0]
+            normalized = [{
+                "actor_id": actor.get("id"),
+                "proposal_kind": "state_delta",
+                "semantic_action": "continue_activity",
+                "delta": {
+                    "activity": _safe_str(actor.get("activity")) or "active",
+                    "engagement": "ongoing"
+                },
+                "beat_summary": f"{_safe_str(actor.get('name'))} continues their current activity."
+            }]
+
+    runtime_state["recorded_semantic_llm_prompt"] = _safe_str(prompt)
+    runtime_state["recorded_semantic_llm_raw_output"] = _normalize_llm_text_output(raw_output)
+    runtime_state["recorded_semantic_llm_proposals"] = normalized[:_MAX_RECORDED_SEMANTIC_LLM_PROPOSALS]
+    runtime_state["recorded_semantic_llm_capture_tick"] = int(tick or 0)
+    return runtime_state
+
+
+def clear_recorded_semantic_llm_capture(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _ensure_semantic_pipeline_state(runtime_state)
+    runtime_state["recorded_semantic_llm_proposals"] = []
+    return runtime_state
+
+
 def _build_location_id_index(simulation_state: Dict[str, Any]) -> set[str]:
     simulation_state = _safe_dict(simulation_state)
     ids = {
@@ -612,6 +705,10 @@ def validate_semantic_state_change_proposal(
     actor_states = _safe_actor_states(simulation_state)
     actor = _find_actor_state(actor_states, proposal["actor_id"])
     if not actor:
+        known_ids = [str(_safe_dict(x).get("id") or "").strip() for x in actor_states if _safe_dict(x)]
+        print("SEMANTIC VALIDATOR known_actor_ids =", known_ids[:20])
+        print("SEMANTIC VALIDATOR incoming_actor_id =", proposal.get("actor_id"))
+        print("SEMANTIC VALIDATOR npc_index_keys =", list(_safe_dict(simulation_state.get("npc_index")).keys())[:20])
         errors.append("unknown_actor")
 
     delta = _safe_dict(proposal.get("delta"))
@@ -817,6 +914,9 @@ def process_semantic_state_change_proposals(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
 ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    print("SEMANTIC PROCESS queued =", runtime_state.get("semantic_state_change_proposals"))
+    print("SEMANTIC PROCESS accepted =", runtime_state.get("accepted_state_change_events"))
+    print("SEMANTIC PROCESS rejected =", runtime_state.get("rejected_state_change_events"))
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
 
@@ -927,6 +1027,30 @@ def _build_semantic_state_change_prompt_contract(
         for x in _normalize_active_interactions(simulation_state, runtime_state)
     ]
 
+    interacting_actor_ids = []
+    seen_actor_ids = set()
+    for row in interaction_rows:
+        for actor_id in row.get("participants") or []:
+            actor_id = _safe_str(actor_id)
+            if actor_id and actor_id not in seen_actor_ids:
+                seen_actor_ids.add(actor_id)
+                interacting_actor_ids.append(actor_id)
+
+    interacting_actor_rows = [
+        {
+            "id": _safe_str(a.get("id")),
+            "name": _safe_str(a.get("name")),
+            "activity": _safe_str(a.get("activity")),
+            "availability": _safe_str(a.get("availability")),
+            "location_id": _safe_str(a.get("location_id")),
+            "mood": _safe_str(a.get("mood")),
+            "intent": _safe_str(a.get("intent")),
+            "engagement": _safe_str(a.get("engagement")),
+        }
+        for a in actor_states
+        if _safe_str(a.get("id")) in set(interacting_actor_ids)
+    ][: _MAX_LLM_PROPOSAL_CANDIDATES]
+
     prompt_payload = {
         "scene_title": _safe_str(simulation_state.get("scene_title")),
         "location_name": _safe_str(simulation_state.get("location_name")),
@@ -947,38 +1071,45 @@ def _build_semantic_state_change_prompt_contract(
         ],
         "locations": location_rows[:12],
         "active_interactions": interaction_rows[:8],
+        "interacting_actor_ids": interacting_actor_ids[:_MAX_LLM_PROPOSAL_CANDIDATES],
+        "interacting_actors": interacting_actor_rows,
     }
 
     return (
-        "You are a deterministic RPG semantic state-change proposal generator.\n"
-        "Your task is to propose at most 3 bounded semantic state changes for NPCs.\n"
-        "Do NOT narrate. Do NOT mutate state directly. Output JSON only.\n\n"
+        "You are a deterministic state-change generator for an RPG simulation.\n\n"
+        "OUTPUT FORMAT REQUIREMENTS (MANDATORY):\n"
+        "- Output ONLY valid JSON\n"
+        "- No explanations\n"
+        "- No thinking\n"
+        "- No commentary\n"
+        "- No markdown\n"
+        "- No text outside JSON\n"
+        "- JSON MUST be inside <RESPONSE> ... </RESPONSE>\n\n"
+        "REQUIRED JSON STRUCTURE:\n\n"
+        "<RESPONSE>{\n"
+        '  "actor_id": "<npc_id>",\n'
+        '  "proposal_kind": "state_delta",\n'
+        '  "semantic_action": "<action>",\n'
+        '  "delta": {\n'
+        '    "activity": "<non-empty>",\n'
+        '    "engagement": "<non-empty>"\n'
+        '  },\n'
+        '  "beat_summary": "<short sentence>"\n'
+        "}</RESPONSE>\n\n"
         "RULES:\n"
-        "- Only propose changes for actors listed in the input.\n"
-        "- Use proposal_kind='state_delta'.\n"
-        "- semantic_action may be predefined or open-ended, but open-ended actions must compile into bounded delta fields.\n"
-        "- delta may ONLY include: activity, availability, location_id, mood, intent, engagement.\n"
-        "- Do not move actors to unknown locations.\n"
-        "- Do not propose take_break, wash_up, or leave_scene for actors currently locked in active unresolved interactions.\n"
-        "- If no meaningful state change should happen, output an empty array.\n\n"
-        "OUTPUT FORMAT:\n"
-        "[\n"
-        "  {\n"
-        '    "actor_id": "npc_merchant",\n'
-        '    "proposal_kind": "state_delta",\n'
-        '    "semantic_action": "wash_up",\n'
-        '    "target_location_id": "loc_upstairs_room",\n'
-        '    "summary": "Elara heads upstairs to wash up after the road.",\n'
-        '    "beat_summary": "Elara slips upstairs to wash up.",\n'
-        '    "priority": 55,\n'
-        '    "delta": {\n'
-        '      "activity": "washing_up",\n'
-        '      "availability": "occupied",\n'
-        '      "location_id": "loc_upstairs_room"\n'
-        '    },\n'
-        '    "tags": ["npc", "state_change"]\n'
-        "  }\n"
-        "]\n\n"
+        '- "delta" MUST NOT be empty\n'
+        '- "activity" MUST be meaningful (not "active")\n'
+        '- "engagement" MUST be meaningful (not "ongoing")\n'
+        "- Choose actions based on scene context\n"
+        "- Prefer interaction, movement, or reactions over idle\n\n"
+        "EXAMPLES OF GOOD ACTIONS:\n"
+        "- argue\n"
+        "- observe\n"
+        "- investigate\n"
+        "- negotiate\n"
+        "- rest\n"
+        "- trade\n"
+        "- react_to_player\n\n"
         "INPUT:\n"
         + json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True)
     )
@@ -1051,7 +1182,7 @@ def preview_semantic_state_change_prompt(
     return _build_semantic_state_change_prompt_contract(simulation_state, runtime_state)
 
 
-def normalize_semantic_state_change_llm_output(raw_output: Any) -> List[Dict[str, Any]]:
+def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Helper for an upstream recorded LLM boundary.
 
@@ -1062,20 +1193,79 @@ def normalize_semantic_state_change_llm_output(raw_output: Any) -> List[Dict[str
     - normalized proposals are written to runtime_state["recorded_semantic_llm_proposals"]
     """
     raw_text = _normalize_llm_text_output(raw_output)
-    parsed = _extract_json_array(raw_text)
-    out: List[Dict[str, Any]] = []
-    seen = set()
-    for item in parsed[:3]:
-        proposal = _normalize_semantic_state_change_proposal(_safe_dict(item))
-        proposal_id = _safe_str(proposal.get("proposal_id"))
-        if proposal_id and proposal_id in seen:
+    if not raw_text:
+        return []
+
+    import json
+    import re
+
+    text = str(raw_text)
+
+    # 1. Extract <RESPONSE> block if present
+    import re
+
+    match = re.search(r"<RESPONSE>(.*?)</RESPONSE>", text, re.DOTALL)
+
+    if match:
+        text = match.group(1)
+    else:
+        # 🔥 HARD FAIL instead of parsing garbage
+        print("SEMANTIC CAPTURE no valid RESPONSE block")
+        return []
+
+    text = text.strip()
+
+    try:
+        data = json.loads(text)
+    except Exception:
+        return []
+
+    # 🔥 HANDLE ALL VALID SHAPES
+    proposals = []
+
+    # Case 1: wrapped
+    if isinstance(data, dict) and "state_changes" in data:
+        proposals = data.get("state_changes") or []
+
+    # Case 2: single proposal object
+    elif isinstance(data, dict):
+        proposals = [data]
+
+    # Case 3: already a list
+    elif isinstance(data, list):
+        proposals = data
+
+    else:
+        return []
+
+    normalized = []
+
+    for p in proposals:
+        p = _safe_dict(p)
+
+        actor_id = _safe_str(p.get("actor_id"))
+        if not actor_id:
+            # fallback: assign first actor in scene
+            actor_id = next(iter(simulation_state.get("npc_index", {}).keys()), "")
+
+        if not actor_id:
             continue
-        if proposal_id:
-            seen.add(proposal_id)
-        if not proposal.get("actor_id"):
-            continue
-        out.append(proposal)
-    return out
+
+        normalized.append({
+            "proposal_id": _safe_str(p.get("proposal_id")) or f"llm_{actor_id}",
+            "actor_id": actor_id,
+            "proposal_kind": _safe_str(p.get("proposal_kind")) or "state_delta",
+            "semantic_action": _safe_str(p.get("semantic_action")),
+            "target_id": _safe_str(p.get("target_id")),
+            "target_location_id": _safe_str(p.get("target_location_id")),
+            "summary": _safe_str(p.get("summary")),
+            "beat_summary": _safe_str(p.get("beat_summary")),
+            "priority": int(p.get("priority") or 50),
+            "delta": _safe_dict(p.get("delta")),
+            "tags": _safe_list(p.get("tags")),
+        })
+
+    return normalized
 
 
 def _should_generate_llm_semantic_proposals(
@@ -1084,12 +1274,16 @@ def _should_generate_llm_semantic_proposals(
 ) -> bool:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
-    if _safe_list(runtime_state.get("semantic_state_change_proposals")):
+    # Keep activity generation alive at a low rate even if a small number of
+    # queued proposals already exist.
+    if len(_safe_list(runtime_state.get("semantic_state_change_proposals"))) > 2:
         return False
     if _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
         return True
-    if _normalize_active_interactions(simulation_state, runtime_state):
-        return False
+
+    # Active interactions are explicitly allowed. NPCs should remain visibly
+    # active during them, and the LLM proposal layer should be able to describe
+    # that bounded behavior.
     actor_states = _safe_actor_states(simulation_state)
     if not actor_states:
         return False
@@ -1102,6 +1296,7 @@ def maybe_enqueue_llm_semantic_state_change_proposals(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
 ) -> Dict[str, Any]:
+    print("SEMANTIC ENQUEUE recorded =", runtime_state.get("recorded_semantic_llm_proposals"))
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     if not _should_generate_llm_semantic_proposals(simulation_state, runtime_state):
@@ -1113,8 +1308,10 @@ def maybe_enqueue_llm_semantic_state_change_proposals(
         consumed_any = True
     # Consume recorded proposals exactly once.
     if _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
-        runtime_state["recorded_semantic_llm_proposals"] = []
+        runtime_state = clear_recorded_semantic_llm_capture(runtime_state)
         consumed_any = True
+    print("SEMANTIC ENQUEUE consumed_any =", consumed_any)
+    print("SEMANTIC ENQUEUE last_tick =", runtime_state.get("last_semantic_llm_tick"))
     if consumed_any:
         runtime_state["last_semantic_llm_tick"] = _safe_int(runtime_state.get("tick", 0), 0)
     return runtime_state
@@ -3140,9 +3337,8 @@ def _apply_idle_tick_to_session(
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
     runtime_state = normalize_ambient_state(runtime_state)
 
-    # Re-read the current simulation state AFTER tick advancement so emitted
-    # scene beats reflect the newly advanced interaction state.
-    simulation_state = _safe_dict(session.get("simulation_state"))
+    # Use the advanced simulation state for emitted scene beats.
+    simulation_state = after_state
 
     # Derive replay-safe, player-facing scene beats AFTER tick advancement so
     # the emitted beats reflect the newly advanced interaction state.
@@ -3216,6 +3412,32 @@ def _apply_idle_tick_to_session(
         pass  # world_events module may not be available yet
 
     session["runtime_state"] = runtime_state
+
+    # Force authoritative tick persistence
+    after_state = _safe_dict(after_state)
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    authoritative_tick = (
+        int(after_state.get("tick", 0) or 0)
+        or int(after_state.get("current_tick", 0) or 0)
+        or int(simulation_state.get("tick", 0) or 0)
+        or int(simulation_state.get("current_tick", 0) or 0)
+        or int(runtime_state.get("tick", 0) or 0)
+    )
+
+    simulation_state["tick"] = authoritative_tick
+    simulation_state["current_tick"] = authoritative_tick
+    runtime_state["tick"] = authoritative_tick
+
+    session["simulation_state"] = simulation_state
+    session["runtime_state"] = runtime_state
+
+    # Debug prints
+    print("END-IDLE authoritative_tick =", authoritative_tick)
+    print("END-IDLE simulation_state.tick =", simulation_state.get("tick"))
+    print("END-IDLE simulation_state.current_tick =", simulation_state.get("current_tick"))
+    print("END-IDLE runtime_state.tick =", runtime_state.get("tick"))
 
     return {
         "ok": True,
@@ -3658,12 +3880,17 @@ def apply_idle_ticks(session_id: str, count: int, *, reason: str = "heartbeat") 
         ticks_applied += 1
 
     session = save_runtime_session(session)
+    runtime_state = _safe_dict(session.get("runtime_state"))
     return {
         "ok": True,
         "session": session,
         "updates": all_updates,
-        "latest_seq": int(_safe_dict(session.get("runtime_state")).get("ambient_seq", 0) or 0),
-        "ticks_applied": ticks_applied,
+        "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+        "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+        "idle_debug_trace": result.get("idle_debug_trace", {}),
+        "idle_seconds": result.get("idle_seconds", 0),
+        "idle_gate_open": result.get("idle_gate_open", False),
+        "settings": result.get("settings", {}),
     }
 
 

@@ -32,7 +32,6 @@ from app.rpg.ai.llm_mind.npc_decision import NPCDecision
 from app.rpg.ai.llm_mind.npc_decision_validator import NPCDecisionValidator
 from app.rpg.social.conversation_topics import build_conversation_topic_candidates
 
-
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _sim_state(
@@ -575,7 +574,10 @@ class TestConversationEngineAmbientStarts:
 
     def test_two_ambient_conversations_can_start(self):
         from app.rpg.social.conversation_engine import try_start_ambient_conversations
-        from app.rpg.social.npc_conversations import ensure_conversation_state, list_active_conversations
+        from app.rpg.social.npc_conversations import (
+            ensure_conversation_state,
+            list_active_conversations,
+        )
         sim = {
             "player_state": {"location_id": "loc:market", "nearby_npc_ids": ["npc:a", "npc:b", "npc:c", "npc:d"]},
             "npc_index": {
@@ -597,7 +599,10 @@ class TestConversationEngineAmbientStarts:
     def test_bounded_at_two(self):
         """Even with many candidate groups, at most 2 conversations start."""
         from app.rpg.social.conversation_engine import try_start_ambient_conversations
-        from app.rpg.social.npc_conversations import ensure_conversation_state, list_active_conversations
+        from app.rpg.social.npc_conversations import (
+            ensure_conversation_state,
+            list_active_conversations,
+        )
         sim = {
             "player_state": {
                 "location_id": "loc:market",
@@ -618,6 +623,7 @@ class TestConversationEngineAmbientStarts:
     def test_no_debug_print(self):
         """conversation_engine should not have print() debug output."""
         import inspect
+
         from app.rpg.social import conversation_engine
         source = inspect.getsource(conversation_engine.try_start_ambient_conversations)
         assert "print(" not in source, "Debug print() must be removed"

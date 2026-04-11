@@ -29,12 +29,6 @@ from typing import Any
 
 from app.rpg.ai.llm_mind import NPCMind
 from app.rpg.persistence.save_schema import CURRENT_RPG_SCHEMA_VERSION, ENGINE_VERSION
-from app.rpg.social.conversation_engine import (
-    run_conversation_tick,
-    try_start_party_reaction_conversation,
-)
-from app.rpg.social.offscreen_conversations import run_offscreen_conversation_pass
-from app.rpg.social.rumor_from_conversations import collect_rumors_from_recent_conversations
 from app.rpg.sandbox import (
     build_world_consequences,
     project_outcomes_from_state,
@@ -49,6 +43,14 @@ from app.rpg.social import (
     GroupDecisionEngine,
     ReputationGraph,
     RumorSystem,
+)
+from app.rpg.social.conversation_engine import (
+    run_conversation_tick,
+    try_start_party_reaction_conversation,
+)
+from app.rpg.social.offscreen_conversations import run_offscreen_conversation_pass
+from app.rpg.social.rumor_from_conversations import (
+    collect_rumors_from_recent_conversations,
 )
 
 from .world_debug import summarize_tick_changes

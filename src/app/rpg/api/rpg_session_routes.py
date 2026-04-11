@@ -11,18 +11,21 @@ from typing import Any, Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.rpg.ai.semantic_state_change_capture import (
+    capture_semantic_state_change_proposals_for_session,
+)
 from app.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
     get_pending_ambient_updates,
 )
 from app.rpg.session.runtime import (
+    _normalize_runtime_settings,
     apply_idle_ticks,
     apply_resume_catchup,
     apply_turn,
     build_frontend_bootstrap_payload,
     load_runtime_session,
     save_runtime_session,
-    _normalize_runtime_settings,
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
@@ -344,11 +347,50 @@ async def idle_tick_rpg_session(request: Request):
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
 
+    # Upstream recorded LLM semantic proposal capture.
+    session = load_runtime_session(session_id)
+    if session:
+        rt = _safe_dict(session.get("runtime_state"))
+        print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
+        print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
+        print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
+        session = capture_semantic_state_change_proposals_for_session(session)
+        try:
+            save_runtime_session(session)
+        except Exception:
+            # Capture is best-effort; authoritative runtime validation still
+            # guards all proposals before state mutation.
+            pass
+
     result = apply_idle_ticks(session_id, count, reason=reason)
     if not result.get("ok"):
         err = _safe_str(result.get("error") or "idle_tick_failed")
         status = 404 if err == "session_not_found" else 500
         return JSONResponse({"ok": False, "error": err}, status_code=status)
+
+    # Debug: verify the saved session exposes the advanced authoritative tick.
+    session = load_runtime_session(session_id)
+    if session:
+        sim = _safe_dict(session.get("simulation_state"))
+        rt = _safe_dict(session.get("runtime_state"))
+        print("POST-IDLE SIM TICK =", sim.get("tick"), sim.get("current_tick"))
+        print("POST-IDLE RUNTIME TICK =", rt.get("tick"))
+
+    # Post-advance capture: lets the LLM observe newly advanced state so the
+    # next cycle has fresh recorded proposals grounded in what just changed.
+    session = load_runtime_session(session_id)
+    if session:
+        runtime_state = _safe_dict(session.get("runtime_state"))
+        if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
+            rt = _safe_dict(session.get("runtime_state"))
+            print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
+            print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
+            print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
+            session = capture_semantic_state_change_proposals_for_session(session)
+            try:
+                save_runtime_session(session)
+            except Exception:
+                pass
 
     return {
         "ok": True,
@@ -470,11 +512,44 @@ async def resume_rpg_session(request: Request):
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
 
+    # Upstream recorded LLM semantic proposal capture before catch-up/resume.
+    session = load_runtime_session(session_id)
+    if session:
+        session = capture_semantic_state_change_proposals_for_session(session)
+        try:
+            save_runtime_session(session)
+        except Exception:
+            pass
+
     result = apply_resume_catchup(session_id, elapsed_seconds=elapsed_seconds)
     if not result.get("ok"):
         err = _safe_str(result.get("error") or "resume_failed")
         status = 404 if err == "session_not_found" else 500
         return JSONResponse({"ok": False, "error": err}, status_code=status)
+
+    # Debug: verify the saved session exposes the advanced authoritative tick.
+    session = load_runtime_session(session_id)
+    if session:
+        sim = _safe_dict(session.get("simulation_state"))
+        rt = _safe_dict(session.get("runtime_state"))
+        print("POST-RESUME SIM TICK =", sim.get("tick"), sim.get("current_tick"))
+        print("POST-RESUME RUNTIME TICK =", rt.get("tick"))
+
+    # Post-catchup capture: after resume advances the world, capture again so
+    # recorded proposals reflect the newly advanced scene state.
+    session = load_runtime_session(session_id)
+    if session:
+        runtime_state = _safe_dict(session.get("runtime_state"))
+        if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
+            rt = _safe_dict(session.get("runtime_state"))
+            print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
+            print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
+            print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
+            session = capture_semantic_state_change_proposals_for_session(session)
+            try:
+                save_runtime_session(session)
+            except Exception:
+                pass
 
     # Debug: check if recap is generated
     if result.get("world_advance_recap"):

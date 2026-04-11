@@ -1,6 +1,8 @@
 """Validator - Safety layer to prevent LLM chaos. TIER 19."""
 from __future__ import annotations
+
 from .narrative_brain import NarrativeDecision
+
 MAX_TD, MAX_EV = 0.2, 3
 VALID_PACING = {"slow", "normal", "fast"}
 class BrainOutputValidator:

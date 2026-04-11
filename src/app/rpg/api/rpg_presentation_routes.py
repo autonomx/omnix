@@ -85,7 +85,6 @@ from app.rpg.presentation.gm_tooling import build_gm_tooling_payload
 from app.rpg.presentation.memory_inspector import build_memory_inspector_payload
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.speaker_cards import build_speaker_cards
-from app.rpg.social.conversation_presentation import build_conversation_payload
 
 # Phase 12.15 — Visual inspector
 from app.rpg.presentation.visual_inspector import build_visual_inspector_payload
@@ -154,6 +153,7 @@ from app.rpg.setup.wizard_state import (
     build_wizard_setup_payload,
     normalize_wizard_state,
 )
+from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.templates.campaign_templates import (
     build_campaign_template,
     build_template_start_payload,

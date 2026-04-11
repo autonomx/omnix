@@ -76,7 +76,11 @@ def apply_player_intervention(conversation_id: str, option_id: str, simulation_s
     }
 
     # Find the conversation to get participants
-    from .npc_conversations import ensure_conversation_state, get_conversation, close_conversation
+    from .npc_conversations import (
+        close_conversation,
+        ensure_conversation_state,
+        get_conversation,
+    )
     ensure_conversation_state(simulation_state)
     conv = _safe_dict(get_conversation(simulation_state, conversation_id))
     participants = [x for x in (_safe_str(p) for p in conv.get("participants") or []) if x]

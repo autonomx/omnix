@@ -3,7 +3,6 @@ from __future__ import annotations
 from hashlib import sha1
 from typing import Any, Dict, List, Optional
 
-
 _MAX_ACTIVE_CONVERSATIONS = 4
 _MAX_RECENT_CONVERSATIONS = 60
 _MAX_LINES_PER_CONVERSATION = 12

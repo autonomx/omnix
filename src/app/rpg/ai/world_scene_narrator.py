@@ -551,7 +551,11 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         Prompt string for the LLM.
     """
     # ✅ Apply scene grounding FIRST before any prompt construction
-    from app.rpg.session.runtime import _derive_grounded_scene_context, _apply_grounded_scene_overlay, _normalize_prompt_location_name
+    from app.rpg.session.runtime import (
+        _apply_grounded_scene_overlay,
+        _derive_grounded_scene_context,
+        _normalize_prompt_location_name,
+    )
     simulation_state = narration_context.get("simulation_state") or {}
     runtime_state = narration_context.get("runtime_state") or {}
     turn_result = narration_context.get("resolved_result") or {}
