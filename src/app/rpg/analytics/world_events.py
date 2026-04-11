@@ -51,6 +51,22 @@ def _safe_float(v: Any, default: float = 0.0) -> float:
         return default
 
 
+def _normalize_world_consequence(record: Dict[str, Any]) -> Dict[str, Any]:
+    record = _safe_dict(record)
+    return {
+        "consequence_id": _safe_str(record.get("consequence_id")),
+        "kind": _safe_str(record.get("kind")),
+        "scope": _safe_str(record.get("scope")) or "local",
+        "location_id": _safe_str(record.get("location_id")),
+        "summary": _safe_str(record.get("summary")),
+        "source_actor_id": _safe_str(record.get("source_actor_id")),
+        "source_activity_id": _safe_str(record.get("source_activity_id")),
+        "tick": _safe_int(record.get("tick"), 0),
+        "priority": max(1, _safe_int(record.get("priority"), 1)),
+        "tags": [str(x).strip() for x in _safe_list(record.get("tags")) if str(x).strip()],
+    }
+
+
 def _lookup_location_label(location_id: str, simulation_state: Dict[str, Any]) -> str:
     simulation_state = _safe_dict(simulation_state)
     location_id = _safe_str(location_id)
@@ -226,11 +242,15 @@ def _make_merged_row(group_rows: List[Dict[str, Any]], simulation_state: Dict[st
     kinds = set(_safe_str(r.get("kind")) for r in group_rows)
     if kinds == {"state_change", "state_change_beat"} or "activity_beat" in kinds:
         kind = "world_view_activity"
+    elif "security_pressure" in kinds or "market_shift" in kinds or "location_condition" in kinds or "rumor" in kinds:
+        kind = "world_view_consequence"
     else:
         kind = next(iter(kinds), "world_event")
     # Title
     if kind == "world_view_activity":
         title = actor_label or "Local Activity"
+    elif kind == "world_view_consequence":
+        title = _safe_str(primary_row.get("title")) or "World Consequence"
     else:
         title = actor_label or _safe_str(primary_row.get("title")) or "World Update"
     return _make_event_row(
@@ -305,6 +325,27 @@ def build_player_global_world_view_rows(simulation_state: Dict[str, Any], runtim
     rows = []
     rows.extend([_safe_dict(r) for r in _safe_list(runtime_state.get("global_world_beats"))])
     rows.extend([r for r in _safe_list(runtime_state.get("recent_world_event_rows")) if _safe_str(_safe_dict(r).get("scope")) == "global"])
+
+    # Also include recent global consequences directly
+    for consequence in _safe_list(runtime_state.get("world_consequences"))[-16:]:
+        consequence = _normalize_world_consequence(consequence)
+        if _safe_str(consequence.get("scope")) != "global":
+            continue
+        rows.append({
+            "event_id": _safe_str(consequence.get("consequence_id")),
+            "scope": "global",
+            "kind": _safe_str(consequence.get("kind")) or "world_consequence",
+            "title": "World Consequence",
+            "summary": _safe_str(consequence.get("summary")),
+            "tick": _safe_int(consequence.get("tick"), 0),
+            "actors": [_safe_str(consequence.get("source_actor_id"))] if _safe_str(consequence.get("source_actor_id")) else [],
+            "actor_id": _safe_str(consequence.get("source_actor_id")),
+            "location_id": _safe_str(consequence.get("location_id")),
+            "priority": min(1.0, 0.4 + (0.1 * _safe_int(consequence.get("priority"), 1))),
+            "status": "active",
+            "source": "consequence_runtime",
+        })
+
     merged_rows = _merge_world_view_rows(rows, simulation_state, runtime_state)
     suppressed_rows = _suppress_repetitive_world_view_rows(merged_rows)
     suppressed_rows.sort(key=lambda r: (-_safe_int(r.get("tick"), 0), _safe_str(r.get("event_id"))))

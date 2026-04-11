@@ -119,6 +119,13 @@ def build_llm_memory_prompt_block(dialogue_memory_context: Dict[str, Any]) -> st
             if text:
                 lines.append(f"- {text}")
 
+    recent_consequences = _safe_list(_safe_dict(dialogue_memory_context.get("consequences")).get("recent_consequences"))
+    if recent_consequences:
+        lines.append("Recent world consequences:")
+        for c in recent_consequences[:3]:
+            c = _safe_dict(c)
+            lines.append(f"- {_safe_str(c.get('summary'))}")
+
     if len(lines) == 1:
         lines.append("- none")
 

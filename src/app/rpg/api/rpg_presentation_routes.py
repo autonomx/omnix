@@ -458,6 +458,37 @@ def _build_actor_activity_context(runtime_state: dict, actor_id: str) -> dict:
     }
 
 
+def _build_recent_consequence_context(runtime_state: dict, actor_id: str, location_id: str = "") -> dict:
+    runtime_state = _safe_dict(runtime_state)
+    actor_id = _safe_str(actor_id)
+    location_id = _safe_str(location_id)
+
+    recent = []
+    for consequence in _safe_list(runtime_state.get("world_consequences"))[-12:]:
+        consequence = _safe_dict(consequence)
+        c_actor = _safe_str(consequence.get("source_actor_id"))
+        c_loc = _safe_str(consequence.get("location_id"))
+        if actor_id and c_actor == actor_id:
+            recent.append(consequence)
+            continue
+        if location_id and c_loc == location_id:
+            recent.append(consequence)
+
+    recent = recent[-4:]
+    return {
+        "recent_consequences": [
+            {
+                "kind": _safe_str(c.get("kind")),
+                "summary": _safe_str(c.get("summary")),
+                "tick": _safe_int(c.get("tick"), 0),
+                "scope": _safe_str(c.get("scope")),
+                "location_id": _safe_str(c.get("location_id")),
+            }
+            for c in recent
+        ]
+    }
+
+
 def _resolve_authoritative_runtime_state(data: dict) -> dict:
     """
     Prefer authoritative runtime state from the active session when possible,
@@ -662,9 +693,17 @@ async def presentation_dialogue(request: Request):
     dialogue_activity_context = _build_actor_activity_context(runtime_state, speaker_id or primary_actor_id)
     payload["dialogue_activity_context"] = dialogue_activity_context
 
+    dialogue_consequence_context = _build_recent_consequence_context(
+        runtime_state,
+        speaker_id or primary_actor_id,
+        _safe_str(dialogue_activity_context.get("location_id")),
+    )
+    payload["dialogue_consequence_context"] = dialogue_consequence_context
+
     simulation_state = apply_dialogue_memory_hooks(simulation_state, actor_id=primary_actor_id, player_text=player_text)
     dialogue_memory_context = build_dialogue_memory_context(simulation_state, actor_id=primary_actor_id, actor_ids=actor_ids)
     dialogue_memory_context["activity"] = dialogue_activity_context
+    dialogue_memory_context["consequences"] = dialogue_consequence_context
     memory_prompt_block = build_llm_memory_prompt_block(dialogue_memory_context)
 
     grounded_activity_reply = _maybe_answer_from_activity(

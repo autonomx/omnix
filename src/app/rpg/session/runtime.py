@@ -142,6 +142,10 @@ _DEFAULT_POST_PLAYER_QUIET_TICKS = 1
 _ALLOWED_IDLE_SECONDS = (15, 30, 60, 300, 600)
 _ALLOWED_REACTION_STYLES = ("minimal", "normal", "lively")
 _MAX_RECENT_WORLD_EVENT_ROWS = 64
+_MAX_WORLD_RUMORS = 64
+_MAX_WORLD_PRESSURE = 64
+_MAX_LOCATION_CONDITIONS = 64
+_MAX_WORLD_CONSEQUENCES = 128
 _MAX_AMBIENT_UPDATES = 64
 _MAX_RECENT_EVENTS = 24
 _MAX_RECENT_CHANGES = 24
@@ -368,6 +372,90 @@ def _ensure_recent_scene_beats(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     return runtime_state
 
 
+# ── World consequence state ──────────────────────────────────────────────────
+
+def _stable_consequence_id(prefix: str, tick: int, scope: str, key: str, summary: str) -> str:
+    raw = f"{prefix}|{tick}|{scope}|{key}|{summary}"
+    return prefix + "_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _normalize_world_rumor(record: Dict[str, Any]) -> Dict[str, Any]:
+    record = _safe_dict(record)
+    return {
+        "rumor_id": _safe_str(record.get("rumor_id")),
+        "summary": _safe_str(record.get("summary")),
+        "scope": _safe_str(record.get("scope")) or "local",
+        "location_id": _safe_str(record.get("location_id")),
+        "source_actor_id": _safe_str(record.get("source_actor_id")),
+        "source_kind": _safe_str(record.get("source_kind")),
+        "started_tick": _safe_int(record.get("started_tick"), 0),
+        "updated_tick": _safe_int(record.get("updated_tick"), 0),
+        "strength": max(1, _safe_int(record.get("strength"), 1)),
+        "tags": [str(x).strip() for x in _safe_list(record.get("tags")) if str(x).strip()],
+    }
+
+
+def _normalize_pressure_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    record = _safe_dict(record)
+    return {
+        "pressure_id": _safe_str(record.get("pressure_id")),
+        "kind": _safe_str(record.get("kind")),
+        "scope": _safe_str(record.get("scope")) or "local",
+        "location_id": _safe_str(record.get("location_id")),
+        "value": max(0, _safe_int(record.get("value"), 0)),
+        "started_tick": _safe_int(record.get("started_tick"), 0),
+        "updated_tick": _safe_int(record.get("updated_tick"), 0),
+        "summary": _safe_str(record.get("summary")),
+        "tags": [str(x).strip() for x in _safe_list(record.get("tags")) if str(x).strip()],
+    }
+
+
+def _normalize_location_condition(record: Dict[str, Any]) -> Dict[str, Any]:
+    record = _safe_dict(record)
+    return {
+        "condition_id": _safe_str(record.get("condition_id")),
+        "location_id": _safe_str(record.get("location_id")),
+        "kind": _safe_str(record.get("kind")),
+        "summary": _safe_str(record.get("summary")),
+        "severity": max(1, _safe_int(record.get("severity"), 1)),
+        "started_tick": _safe_int(record.get("started_tick"), 0),
+        "updated_tick": _safe_int(record.get("updated_tick"), 0),
+        "status": _safe_str(record.get("status")) or "active",
+        "tags": [str(x).strip() for x in _safe_list(record.get("tags")) if str(x).strip()],
+    }
+
+
+def _normalize_world_consequence(record: Dict[str, Any]) -> Dict[str, Any]:
+    record = _safe_dict(record)
+    return {
+        "consequence_id": _safe_str(record.get("consequence_id")),
+        "kind": _safe_str(record.get("kind")),
+        "scope": _safe_str(record.get("scope")) or "local",
+        "location_id": _safe_str(record.get("location_id")),
+        "summary": _safe_str(record.get("summary")),
+        "source_actor_id": _safe_str(record.get("source_actor_id")),
+        "source_activity_id": _safe_str(record.get("source_activity_id")),
+        "tick": _safe_int(record.get("tick"), 0),
+        "priority": max(1, _safe_int(record.get("priority"), 1)),
+        "tags": [str(x).strip() for x in _safe_list(record.get("tags")) if str(x).strip()],
+    }
+
+
+def ensure_world_consequence_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+
+    rumors = [_normalize_world_rumor(x) for x in _safe_list(runtime_state.get("world_rumors"))]
+    pressures = [_normalize_pressure_record(x) for x in _safe_list(runtime_state.get("world_pressure"))]
+    conditions = [_normalize_location_condition(x) for x in _safe_list(runtime_state.get("location_conditions"))]
+    consequences = [_normalize_world_consequence(x) for x in _safe_list(runtime_state.get("world_consequences"))]
+
+    runtime_state["world_rumors"] = rumors[-_MAX_WORLD_RUMORS:]
+    runtime_state["world_pressure"] = pressures[-_MAX_WORLD_PRESSURE:]
+    runtime_state["location_conditions"] = conditions[-_MAX_LOCATION_CONDITIONS:]
+    runtime_state["world_consequences"] = consequences[-_MAX_WORLD_CONSEQUENCES:]
+    return runtime_state
+
+
 # ── Active NPC activity state ────────────────────────────────────────────────
 
 _MAX_ACTIVE_ACTIVITIES = 64
@@ -473,12 +561,34 @@ def _sorted_npc_entities(simulation_state: Dict[str, Any]) -> List[Dict[str, Any
     return out
 
 
-def _choose_activity_kind_for_actor(actor: Dict[str, Any], tick: int) -> str:
+def _choose_activity_kind_for_actor(actor: Dict[str, Any], tick: int, runtime_state: Dict[str, Any] | None = None) -> str:
     actor = _safe_dict(actor)
+    runtime_state = ensure_world_consequence_state(_safe_dict(runtime_state))
     actor_id = _safe_str(actor.get("id"))
     name = _safe_str(actor.get("name"))
-    seed = f"{actor_id}|{name}|{tick}"
-    options = _LOCAL_ACTIVITY_KINDS
+    location_id = _safe_str(actor.get("location_id")) or _safe_str(actor.get("current_location_id"))
+
+    # Feedback bias from local conditions / pressure / rumors
+    local_pressure = 0
+    for p in _safe_list(runtime_state.get("world_pressure")):
+        p = _normalize_pressure_record(p)
+        if _safe_str(p.get("location_id")) == location_id and _safe_str(p.get("kind")) == "security_presence":
+            local_pressure += _safe_int(p.get("value"), 0)
+
+    local_rumors = 0
+    for r in _safe_list(runtime_state.get("world_rumors")):
+        r = _normalize_world_rumor(r)
+        if _safe_str(r.get("location_id")) == location_id:
+            local_rumors += _safe_int(r.get("strength"), 0)
+
+    if local_pressure >= 2:
+        options = ("patrol", "watch_crowd", "question_patron", "watch_crowd", "patrol")
+    elif local_rumors >= 2:
+        options = ("gossip", "gossip", "trade", "watch_crowd", "serve")
+    else:
+        options = _LOCAL_ACTIVITY_KINDS
+
+    seed = f"{actor_id}|{name}|{tick}|{location_id}|{local_pressure}|{local_rumors}"
     idx = int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:8], 16) % len(options)
     return options[idx]
 
@@ -565,7 +675,7 @@ def advance_actor_activities_for_tick(simulation_state: Dict[str, Any], runtime_
                 runtime_state = set_actor_activity(runtime_state, actor_id, current)
                 continue
 
-        kind = _choose_activity_kind_for_actor(actor, tick)
+        kind = _choose_activity_kind_for_actor(actor, tick, runtime_state)
         activity = {
             "activity_id": _stable_activity_id(actor_id, tick, kind, location_id),
             "kind": kind,
@@ -678,6 +788,194 @@ def emit_activity_beats_for_tick(simulation_state: Dict[str, Any], runtime_state
     runtime_state["recent_scene_beats"] = recent_scene_beats[-_MAX_ACTIVITY_SCENE_BEATS:]
     runtime_state["recent_world_event_rows"] = recent_world_event_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
     runtime_state["global_world_beats"] = global_world_beats[-_MAX_GLOBAL_WORLD_BEATS:]
+    return runtime_state
+
+
+# ── Consequence propagation ──────────────────────────────────────────────────
+
+def _append_world_rumor(runtime_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    rumors = _safe_list(runtime_state.get("world_rumors"))
+    rumors.append(_normalize_world_rumor(rumor))
+    runtime_state["world_rumors"] = rumors[-_MAX_WORLD_RUMORS:]
+    return runtime_state
+
+
+def _append_world_pressure(runtime_state: Dict[str, Any], pressure: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    items = _safe_list(runtime_state.get("world_pressure"))
+    items.append(_normalize_pressure_record(pressure))
+    runtime_state["world_pressure"] = items[-_MAX_WORLD_PRESSURE:]
+    return runtime_state
+
+
+def _append_location_condition(runtime_state: Dict[str, Any], condition: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    items = _safe_list(runtime_state.get("location_conditions"))
+    items.append(_normalize_location_condition(condition))
+    runtime_state["location_conditions"] = items[-_MAX_LOCATION_CONDITIONS:]
+    return runtime_state
+
+
+def _append_world_consequence(runtime_state: Dict[str, Any], consequence: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    items = _safe_list(runtime_state.get("world_consequences"))
+    items.append(_normalize_world_consequence(consequence))
+    runtime_state["world_consequences"] = items[-_MAX_WORLD_CONSEQUENCES:]
+    return runtime_state
+
+
+def _emit_consequence_world_rows(runtime_state: Dict[str, Any], consequence: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    rows = _safe_list(runtime_state.get("recent_world_event_rows"))
+    consequence = _normalize_world_consequence(consequence)
+    rows.append({
+        "event_id": _safe_str(consequence.get("consequence_id")),
+        "scope": _safe_str(consequence.get("scope")) or "local",
+        "kind": _safe_str(consequence.get("kind")) or "world_consequence",
+        "title": "World Consequence",
+        "summary": _safe_str(consequence.get("summary")),
+        "tick": _safe_int(consequence.get("tick"), 0),
+        "actors": [_safe_str(consequence.get("source_actor_id"))] if _safe_str(consequence.get("source_actor_id")) else [],
+        "actor_id": _safe_str(consequence.get("source_actor_id")),
+        "location_id": _safe_str(consequence.get("location_id")),
+        "priority": min(1.0, 0.4 + (0.1 * _safe_int(consequence.get("priority"), 1))),
+        "status": "active",
+        "source": "consequence_runtime",
+    })
+    runtime_state["recent_world_event_rows"] = rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+    return runtime_state
+
+
+def propagate_activity_consequences_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    runtime_state = ensure_actor_activity_state(runtime_state)
+
+    tick = _safe_int(simulation_state.get("tick"), 0)
+    actor_activities = _safe_dict(runtime_state.get("actor_activities"))
+
+    for actor_id, activity in sorted(actor_activities.items()):
+        activity = _normalize_activity_record(activity)
+        if _safe_str(activity.get("status")) != "active":
+            continue
+        if _safe_int(activity.get("updated_tick"), 0) != tick:
+            continue
+
+        kind = _safe_str(activity.get("kind"))
+        location_id = _safe_str(activity.get("location_id"))
+        summary = _safe_str(activity.get("summary"))
+        activity_id = _safe_str(activity.get("activity_id"))
+
+        # Gossip creates rumors
+        if kind == "gossip":
+            rumor_summary = f"Rumors spread that {summary[:1].lower() + summary[1:]}" if summary else "Rumors spread among the locals."
+            rumor = {
+                "rumor_id": _stable_consequence_id("rumor", tick, "local", location_id, rumor_summary),
+                "summary": rumor_summary,
+                "scope": "local",
+                "location_id": location_id,
+                "source_actor_id": actor_id,
+                "source_kind": kind,
+                "started_tick": tick,
+                "updated_tick": tick,
+                "strength": 1,
+                "tags": ["rumor", "social"],
+            }
+            consequence = {
+                "consequence_id": _stable_consequence_id("consequence", tick, "local", location_id, rumor_summary),
+                "kind": "rumor",
+                "scope": "local",
+                "location_id": location_id,
+                "summary": rumor_summary,
+                "source_actor_id": actor_id,
+                "source_activity_id": activity_id,
+                "tick": tick,
+                "priority": 2,
+                "tags": ["rumor", "social"],
+            }
+            runtime_state = _append_world_rumor(runtime_state, rumor)
+            runtime_state = _append_world_consequence(runtime_state, consequence)
+            runtime_state = _emit_consequence_world_rows(runtime_state, consequence)
+
+        # Patrol / questioning increases security pressure
+        elif kind in ("patrol", "watch_crowd", "question_patron"):
+            pressure_summary = "The local watch grows more visible and alert."
+            pressure = {
+                "pressure_id": _stable_consequence_id("pressure", tick, "local", location_id, pressure_summary),
+                "kind": "security_presence",
+                "scope": "local",
+                "location_id": location_id,
+                "value": 1,
+                "started_tick": tick,
+                "updated_tick": tick,
+                "summary": pressure_summary,
+                "tags": ["security", "watch"],
+            }
+            consequence = {
+                "consequence_id": _stable_consequence_id("consequence", tick, "local", location_id, pressure_summary),
+                "kind": "security_pressure",
+                "scope": "local",
+                "location_id": location_id,
+                "summary": pressure_summary,
+                "source_actor_id": actor_id,
+                "source_activity_id": activity_id,
+                "tick": tick,
+                "priority": 2,
+                "tags": ["security", "watch"],
+            }
+            runtime_state = _append_world_pressure(runtime_state, pressure)
+            runtime_state = _append_world_consequence(runtime_state, consequence)
+            runtime_state = _emit_consequence_world_rows(runtime_state, consequence)
+
+        # Trade creates a global market consequence
+        elif kind == "trade":
+            consequence_summary = "Trade shifts local prices and availability."
+            consequence = {
+                "consequence_id": _stable_consequence_id("consequence", tick, "global", "trade", consequence_summary),
+                "kind": "market_shift",
+                "scope": "global",
+                "location_id": "",
+                "summary": consequence_summary,
+                "source_actor_id": actor_id,
+                "source_activity_id": activity_id,
+                "tick": tick,
+                "priority": 2,
+                "tags": ["commerce", "market"],
+            }
+            runtime_state = _append_world_consequence(runtime_state, consequence)
+            runtime_state = _emit_consequence_world_rows(runtime_state, consequence)
+
+        # Cleaning / service can improve local condition
+        elif kind in ("clean", "serve"):
+            cond_summary = "The area feels more orderly and well-kept."
+            condition = {
+                "condition_id": _stable_consequence_id("condition", tick, "local", location_id, cond_summary),
+                "location_id": location_id,
+                "kind": "orderly",
+                "summary": cond_summary,
+                "severity": 1,
+                "started_tick": tick,
+                "updated_tick": tick,
+                "status": "active",
+                "tags": ["order", "service"],
+            }
+            consequence = {
+                "consequence_id": _stable_consequence_id("consequence", tick, "local", location_id, cond_summary),
+                "kind": "location_condition",
+                "scope": "local",
+                "location_id": location_id,
+                "summary": cond_summary,
+                "source_actor_id": actor_id,
+                "source_activity_id": activity_id,
+                "tick": tick,
+                "priority": 1,
+                "tags": ["order", "service"],
+            }
+            runtime_state = _append_location_condition(runtime_state, condition)
+            runtime_state = _append_world_consequence(runtime_state, consequence)
+            runtime_state = _emit_consequence_world_rows(runtime_state, consequence)
+
     return runtime_state
 
 
@@ -811,6 +1109,7 @@ def _stable_semantic_state_change_proposal_id(
 def _ensure_semantic_pipeline_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = ensure_ambient_runtime_state(_safe_dict(runtime_state))
     runtime_state = ensure_actor_activity_state(runtime_state)
+    runtime_state = ensure_world_consequence_state(runtime_state)
     runtime_state.setdefault("semantic_state_change_proposals", [])
     runtime_state.setdefault("accepted_state_change_events", [])
     runtime_state.setdefault("rejected_state_change_events", [])
@@ -3738,6 +4037,7 @@ def _apply_idle_tick_to_session(
     # Advance living-world activities
     runtime_state = advance_actor_activities_for_tick(after_state, runtime_state)
     runtime_state = emit_activity_beats_for_tick(after_state, runtime_state)
+    runtime_state = propagate_activity_consequences_for_tick(after_state, runtime_state)
 
     # Use the advanced simulation state for emitted scene beats.
     simulation_state = after_state

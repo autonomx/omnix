@@ -412,3 +412,93 @@ class TestLivingWorldActivityState:
             assert "player_global_world_view_rows" in response
         finally:
             ACTIVE_RPG_SESSIONS.pop(session_id, None)
+
+
+def test_gossip_activity_creates_rumor_consequence():
+    from app.rpg.session.runtime import set_actor_activity, propagate_activity_consequences_for_tick
+    sim = _sim_state(tick=100)
+    rt = _runtime_state()
+    rt = set_actor_activity(rt, "npc_innkeeper", {
+        "activity_id": "activity_test_gossip",
+        "kind": "gossip",
+        "summary": "Bran trades rumors with the locals.",
+        "location_id": "loc_tavern",
+        "target_id": "",
+        "target_label": "",
+        "started_tick": 100,
+        "updated_tick": 100,
+        "expected_duration": 2,
+        "status": "active",
+        "intent": "Learn and spread useful rumors.",
+        "world_tags": ["rumor", "social"],
+    })
+    rt = propagate_activity_consequences_for_tick(sim, rt)
+    rumors = _safe_list(rt.get("world_rumors"))
+    consequences = _safe_list(rt.get("world_consequences"))
+    assert len(rumors) >= 1
+    assert any(_safe_str(x.get("kind")) == "rumor" for x in consequences)
+
+
+def test_patrol_activity_creates_security_pressure():
+    from app.rpg.session.runtime import set_actor_activity, propagate_activity_consequences_for_tick
+    sim = _sim_state(tick=100)
+    rt = _runtime_state()
+    rt = set_actor_activity(rt, "npc_guard_captain", {
+        "activity_id": "activity_test_patrol",
+        "kind": "patrol",
+        "summary": "Captain Aldric patrols nearby, watching for trouble.",
+        "location_id": "loc_tavern",
+        "target_id": "",
+        "target_label": "",
+        "started_tick": 100,
+        "updated_tick": 100,
+        "expected_duration": 2,
+        "status": "active",
+        "intent": "Maintain order and watch for trouble.",
+        "world_tags": ["security", "local"],
+    })
+    rt = propagate_activity_consequences_for_tick(sim, rt)
+    pressures = _safe_list(rt.get("world_pressure"))
+    assert any(_safe_str(x.get("kind")) == "security_presence" for x in pressures)
+
+
+def test_global_world_view_rows_include_global_consequences():
+    from app.rpg.analytics.world_events import build_player_global_world_view_rows
+    sim = _sim_state()
+    rt = _runtime_state(world_consequences=[
+        {
+            "consequence_id": "c1",
+            "kind": "market_shift",
+            "scope": "global",
+            "location_id": "",
+            "summary": "Trade shifts local prices and availability.",
+            "source_actor_id": "npc_merchant",
+            "source_activity_id": "a1",
+            "tick": 120,
+            "priority": 2,
+            "tags": ["commerce"],
+        }
+    ])
+    rows = build_player_global_world_view_rows(sim, rt)
+    assert len(rows) >= 1
+    assert any(_safe_str(r.get("summary")) == "Trade shifts local prices and availability." for r in rows)
+
+
+def test_feedback_loop_biases_activity_choice():
+    from app.rpg.session.runtime import _choose_activity_kind_for_actor
+    actor = {"id": "npc_guard_captain", "name": "Captain Aldric", "location_id": "loc_tavern"}
+    rt = _runtime_state(world_pressure=[
+        {
+            "pressure_id": "p1",
+            "kind": "security_presence",
+            "scope": "local",
+            "location_id": "loc_tavern",
+            "value": 3,
+            "started_tick": 100,
+            "updated_tick": 100,
+            "summary": "The local watch grows more visible and alert.",
+            "tags": ["security"],
+        }
+    ])
+    kind = _choose_activity_kind_for_actor(actor, 101, rt)
+    assert kind in ("patrol", "watch_crowd", "question_patron")

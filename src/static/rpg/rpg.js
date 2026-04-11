@@ -2771,6 +2771,19 @@
             }
         }
 
+        var displayTitle = title;
+        if (kind === 'world_view_consequence') {
+            displayTitle = _safeStr(row.title || 'World Consequence');
+        }
+
+        var subtitle = locationLabel || '';
+        if (kind === 'world_view_activity') {
+            subtitle = locationLabel || '';
+        }
+        if (kind === 'world_view_consequence') {
+            subtitle = locationLabel || '';
+        }
+
         // Hide technical sources
         var displaySource = '';
 
@@ -2778,9 +2791,9 @@
             event_id: _safeStr(row.event_id || ''),
             scope: scope,
             kind: kind,
-            title: title,
+            title: displayTitle,
             summary: summary,
-            subtitle: locationLabel || '',
+            subtitle: subtitle,
             tick: tick,
             tick_label: tick > 0 ? ('Tick ' + tick) : '',
             actors: actors,
