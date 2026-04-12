@@ -41,10 +41,10 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
     return session
 
 
-def save_session(session: Dict[str, Any]) -> Dict[str, Any]:
+def save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
     session = create_or_normalize_session(session)
     assert_session_integrity(session)
-    return save_session_to_disk(session)
+    return save_session_to_disk(session, compact=compact)
 
 
 def load_session(session_id: str) -> Dict[str, Any]:

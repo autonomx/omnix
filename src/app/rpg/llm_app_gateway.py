@@ -71,6 +71,7 @@ class AppLLMGateway:
         prompt: str,
         *,
         context: Optional[Dict[str, Any]] = None,
+        timeout_s: Optional[float] = None,
     ) -> str:
         logger.debug("[RPG GATEWAY] Calling provider.chat_completion")
         messages = self._build_messages(prompt, context=context)
@@ -130,12 +131,10 @@ def build_app_llm_gateway() -> Optional[AppLLMGateway]:
 
         provider = shared.get_provider()
         if not provider:
-            print("\033[93m[RPG DEBUG] ❌ LLM Gateway UNAVAILABLE - no provider returned\033[0m")
-            logger.warning("RPG LLM gateway unavailable: app.shared.get_provider() returned no provider")
+            logger.debug("RPG LLM gateway unavailable: app.shared.get_provider() returned no provider")
             return None
 
-        print("\033[92m[RPG DEBUG] ✅ LLM Gateway created successfully\033[0m")
-        logger.info("RPG LLM gateway created successfully using centralized app provider")
+        logger.debug("RPG LLM gateway created successfully using centralized app provider")
 
         global_system_prompt = ""
         try:
