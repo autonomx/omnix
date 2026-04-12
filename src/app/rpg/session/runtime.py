@@ -2677,6 +2677,28 @@ def _build_semantic_state_change_prompt_contract(
         if _safe_str(a.get("id")) in set(interacting_actor_ids)
     ][: _MAX_LLM_PROPOSAL_CANDIDATES]
 
+    # ── Recent player action context ────────────────────────────────────────
+    last_player_action = _safe_dict(runtime_state.get("last_player_action"))
+    player_action_context: Dict[str, Any] = {}
+    if _safe_str(last_player_action.get("text")):
+        player_action_context = {
+            "action_type": _safe_str(last_player_action.get("action_type")),
+            "text": _safe_str(last_player_action.get("text"))[:200],
+            "target_id": _safe_str(last_player_action.get("target_id")),
+        }
+
+    # ── Recent scene context (player-driven beats) ───────────────────────
+    recent_beats_context: List[Dict[str, str]] = []
+    for beat in _safe_list(runtime_state.get("recent_scene_beats"))[-6:]:
+        beat = _safe_dict(beat)
+        summary = _safe_str(beat.get("summary")).strip()
+        if not summary:
+            continue
+        recent_beats_context.append({
+            "kind": _safe_str(beat.get("kind")),
+            "summary": summary[:200],
+        })
+
     prompt_payload = {
         "scene_title": _safe_str(simulation_state.get("scene_title")),
         "location_name": _safe_str(simulation_state.get("location_name")),
@@ -2700,6 +2722,21 @@ def _build_semantic_state_change_prompt_contract(
         "interacting_actor_ids": interacting_actor_ids[:_MAX_LLM_PROPOSAL_CANDIDATES],
         "interacting_actors": interacting_actor_rows,
     }
+    if player_action_context:
+        prompt_payload["recent_player_action"] = player_action_context
+    if recent_beats_context:
+        prompt_payload["recent_scene_beats"] = recent_beats_context[-4:]
+
+    player_context_instruction = ""
+    if player_action_context:
+        player_context_instruction = (
+            "IMPORTANT — REACT TO PLAYER ACTION:\n"
+            "The player recently performed an action (see recent_player_action in INPUT).\n"
+            "NPCs MUST react to the player's action rather than continuing generic routines.\n"
+            "- NPCs nearby should watch, react, comment, or be affected by what the player is doing.\n"
+            "- Do NOT generate generic patrol/observe/tidy actions when a notable player action is happening.\n"
+            "- beat_summary MUST reference the player's ongoing activity, not routine NPC behavior.\n\n"
+        )
 
     return (
         "You are a deterministic state-change generator for an RPG simulation.\n\n"
@@ -2722,12 +2759,14 @@ def _build_semantic_state_change_prompt_contract(
         '  },\n'
         '  "beat_summary": "<short sentence>"\n'
         "}</RESPONSE>\n\n"
-        "RULES:\n"
+        + player_context_instruction
+        + "RULES:\n"
         '- "delta" MUST NOT be empty\n'
         '- "activity" MUST be meaningful (not "active")\n'
         '- "engagement" MUST be meaningful (not "ongoing")\n'
         "- Choose actions based on scene context\n"
-        "- Prefer interaction, movement, or reactions over idle\n\n"
+        "- Prefer interaction, movement, or reactions over idle\n"
+        "- When a player action is happening, NPCs should react to it\n\n"
         "EXAMPLES OF GOOD ACTIONS:\n"
         "- argue\n"
         "- observe\n"
