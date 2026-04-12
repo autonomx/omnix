@@ -353,7 +353,7 @@ def build_player_local_world_view_rows(simulation_state: Dict[str, Any], runtime
     # --- Active player interactions (arm wrestling, contests, etc.) ---
     for item in _safe_list(simulation_state.get("active_interactions")):
         item = _safe_dict(item)
-        if _safe_str(item.get("resolved")) in ("True", "true", "1") or item.get("resolved") is True:
+        if item.get("resolved"):
             continue
         state = _safe_dict(item.get("state"))
         activity_label = _safe_str(state.get("activity_label") or item.get("subtype") or item.get("action_type") or "interaction")
