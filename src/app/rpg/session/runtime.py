@@ -214,6 +214,52 @@ def _ensure_semantic_action_runtime_state(runtime_state: Dict[str, Any]) -> Dict
     return runtime_state
 
 
+def _build_last_player_action_record(
+    *,
+    tick: int,
+    player_input: str,
+    action: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+) -> Dict[str, Any]:
+    action = _safe_dict(action)
+    semantic_action_record = _safe_dict(semantic_action_record)
+    return {
+        "action_id": f"player_action:{int(tick or 0)}",
+        "tick": int(tick or 0),
+        "text": _safe_str(player_input).strip()[:200],
+        "action_type": _safe_str(
+            semantic_action_record.get("action_type")
+            or action.get("action_type")
+        ).strip(),
+        "target_id": _safe_str(
+            semantic_action_record.get("target_id")
+            or action.get("target_id")
+            or action.get("npc_id")
+        ).strip(),
+        "semantic_action_id": _safe_str(
+            semantic_action_record.get("semantic_action_id")
+        ).strip(),
+    }
+
+
+def _clear_stale_last_player_action(
+    runtime_state: Dict[str, Any],
+    current_tick: int,
+    max_age_ticks: int = 2,
+) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    last_player_action = _safe_dict(runtime_state.get("last_player_action"))
+    if not last_player_action:
+        return runtime_state
+    action_tick = _safe_int(last_player_action.get("tick"), -999999)
+    if action_tick < 0:
+        runtime_state["last_player_action"] = {}
+        return runtime_state
+    if _safe_int(current_tick, 0) - action_tick > max_age_ticks:
+        runtime_state["last_player_action"] = {}
+    return runtime_state
+
+
 def _prune_llm_records_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     records = _safe_list(runtime_state.get("llm_records"))[-_MAX_RUNTIME_LLM_RECORDS:]
@@ -4621,6 +4667,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     action_metadata = _safe_dict(action.get("metadata"))
     action_metadata["semantic_action"] = semantic_action_record
     action["metadata"] = action_metadata
+    runtime_state["last_player_action"] = _build_last_player_action_record(
+        tick=current_tick,
+        player_input=player_input,
+        action=action,
+        semantic_action_record=semantic_action_record,
+    )
 
     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
@@ -4696,6 +4748,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "summary": summary[:8],
         "narration": _safe_str(narration_result.get("narrative")),
     }
+    runtime_state = _clear_stale_last_player_action(runtime_state, _safe_int(runtime_state.get("tick"), current_tick))
     turn_history = _safe_list(runtime_state.get("turn_history"))
     turn_history.append(_copy_dict(runtime_state["last_turn_result"]))
     runtime_state["turn_history"] = turn_history[-_MAX_HISTORY:]
@@ -5237,6 +5290,7 @@ def _apply_idle_tick_to_session(
     simulation_state["tick"] = authoritative_tick
     simulation_state["current_tick"] = authoritative_tick
     runtime_state["tick"] = authoritative_tick
+    runtime_state = _clear_stale_last_player_action(runtime_state, authoritative_tick)
 
     session["simulation_state"] = simulation_state
     session["runtime_state"] = runtime_state

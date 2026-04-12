@@ -322,3 +322,37 @@ class TestPlayerWorldViewWithActiveAction:
                     generic_idx = i
         if player_idx is not None and generic_idx is not None:
             assert player_idx < generic_idx, "Player-action events should appear before generic NPC beats"
+
+
+class TestRuntimeLastPlayerActionWriteThrough:
+    def test_build_last_player_action_record(self):
+        record = _rt._build_last_player_action_record(
+            tick=12,
+            player_input="I challenge Bran to arm wrestling",
+            action={"action_type": "social_activity", "target_id": "npc_innkeeper"},
+            semantic_action_record={
+                "semantic_action_id": "semantic_action_abc123",
+                "action_type": "social_competition",
+                "target_id": "npc_innkeeper",
+            },
+        )
+        assert record["tick"] == 12
+        assert record["text"] == "I challenge Bran to arm wrestling"
+        assert record["action_type"] == "social_competition"
+        assert record["target_id"] == "npc_innkeeper"
+        assert record["semantic_action_id"] == "semantic_action_abc123"
+
+    def test_clear_stale_last_player_action(self):
+        runtime_state = {
+            "last_player_action": {
+                "action_id": "player_action:10",
+                "tick": 10,
+                "text": "I arm wrestle Bran",
+                "action_type": "social_competition",
+                "target_id": "npc_innkeeper",
+            }
+        }
+        fresh = _rt._clear_stale_last_player_action(runtime_state, 11)
+        assert fresh["last_player_action"]["text"] == "I arm wrestle Bran"
+        stale = _rt._clear_stale_last_player_action(runtime_state, 13)
+        assert stale["last_player_action"] == {}
