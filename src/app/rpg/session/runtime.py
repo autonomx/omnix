@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time as _time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -235,6 +236,102 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     result["reaction_style"] = rs if isinstance(rs, str) and rs.strip().lower() in _ALLOWED_REACTION_STYLES else "normal"
     result["verbose_semantic_trace"] = _safe_bool(value.get("verbose_semantic_trace"), False)
     return result
+
+
+# ── Fast-turn performance helpers ─────────────────────────────────────────
+
+_FAST_TURN_DEFAULTS = {
+    "enable_action_advisory": False,
+    "enable_semantic_action_advisory": False,
+    "enable_narration": True,
+    "enable_narration_retry": False,
+    "compact_save": True,
+}
+
+
+def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the effective performance settings for this turn.
+
+    When ``fast_turn_mode`` is enabled, individual flags default to the
+    fast-turn defaults but can still be overridden explicitly.
+    """
+    perf = {}
+    if isinstance(runtime_state, dict):
+        perf = dict(runtime_state.get("performance") or {})
+    fast = bool(perf.get("fast_turn_mode", False))
+    defaults = _FAST_TURN_DEFAULTS if fast else {
+        "enable_action_advisory": True,
+        "enable_semantic_action_advisory": True,
+        "enable_narration": True,
+        "enable_narration_retry": True,
+        "compact_save": False,
+    }
+    result: Dict[str, Any] = {"fast_turn_mode": fast}
+    for key, default_val in defaults.items():
+        val = perf.get(key)
+        result[key] = bool(val) if val is not None else default_val
+    return result
+
+
+def _runtime_fast_turn_enabled(runtime_state: Dict[str, Any]) -> bool:
+    return bool((_safe_dict(runtime_state).get("performance") or {}).get("fast_turn_mode", False))
+
+
+def _runtime_action_advisory_enabled(runtime_state: Dict[str, Any]) -> bool:
+    return _normalize_performance_settings(runtime_state)["enable_action_advisory"]
+
+
+def _runtime_semantic_advisory_enabled(runtime_state: Dict[str, Any]) -> bool:
+    return _normalize_performance_settings(runtime_state)["enable_semantic_action_advisory"]
+
+
+def _runtime_narration_enabled(runtime_state: Dict[str, Any]) -> bool:
+    return _normalize_performance_settings(runtime_state)["enable_narration"]
+
+
+def _runtime_narration_retry_enabled(runtime_state: Dict[str, Any]) -> bool:
+    return _normalize_performance_settings(runtime_state)["enable_narration_retry"]
+
+
+def _runtime_compact_save_enabled(runtime_state: Dict[str, Any]) -> bool:
+    return _normalize_performance_settings(runtime_state)["compact_save"]
+
+
+def _build_fast_semantic_action_record(
+    player_input: str,
+    action: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build a deterministic semantic action record without LLM advisory."""
+    action = _safe_dict(action)
+    simulation_state = _safe_dict(simulation_state)
+    action_type = _safe_str(action.get("action_type")).strip().lower() or "observe"
+    target_id = _safe_str(action.get("target_id")).strip()
+    tick = int(simulation_state.get("tick", 0) or 0) + 1
+    return {
+        "semantic_action_id": f"fast:{tick}:{action_type}",
+        "tick": tick,
+        "player_input": _safe_str(player_input).strip(),
+        "action_type": action_type,
+        "semantic_family": "observation",
+        "interaction_mode": "direct" if target_id else "solo",
+        "activity_label": action_type,
+        "target_id": target_id,
+        "target_name": _safe_str(action.get("target_name")).strip() or target_id,
+        "secondary_actor_ids": [],
+        "location_id": _safe_str(
+            _safe_dict(simulation_state.get("player_state")).get("location_id")
+        ),
+        "visibility": "local",
+        "intensity": 1,
+        "stakes": 1,
+        "social_axes": [],
+        "observer_hooks": [],
+        "scene_impact": "none",
+        "reason": "",
+        "summary": _safe_str(player_input).strip()[:160] or action_type,
+        "tags": sorted(["player_action", "observation", action_type, action_type]),
+    }
 
 
 def _ensure_semantic_action_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -5168,11 +5265,12 @@ def load_runtime_session(session_id: str) -> Dict[str, Any] | None:
     return load_canonical_session(session_id)
 
 
-def save_runtime_session(session: Dict[str, Any]) -> Dict[str, Any]:
-    return save_canonical_session(session)
+def save_runtime_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
+    return save_canonical_session(session, compact=compact)
 
 
 def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    _t0 = _time.monotonic()
     session = load_runtime_session(session_id)
     if session is None:
         return {"ok": False, "error": "session_not_found"}
@@ -5182,6 +5280,11 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     runtime_state = _copy_dict(session.get("runtime_state"))
     setup = apply_adventure_defaults(_copy_dict(session.get("setup_payload")))
     simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
+    _t_load = _time.monotonic()
+
+    # ── Performance settings ──────────────────────────────────────────────
+    perf = _normalize_performance_settings(runtime_state)
+    runtime_state["performance"] = perf
 
     player_input = _safe_str(player_input).strip()
     action = _normalize_structured_action(action, player_input)
@@ -5198,7 +5301,14 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         player_input = _structured_action_prompt(action)
     player_input = player_input or action_type.replace("_", " ").strip() or "Wait"
 
-    llm_gateway = build_app_llm_gateway()
+    # ── Lazy LLM gateway (built at most once per turn) ────────────────────
+    _llm_gw_cache: List[Any] = []  # mutable holder for nonlocal-style access
+
+    def _get_llm_gateway():
+        if not _llm_gw_cache:
+            _llm_gw_cache.append(build_app_llm_gateway())
+        return _llm_gw_cache[0]
+
     advisory = {}
     semantic_advisory = {}
     semantic_action_record = {}
@@ -5218,76 +5328,96 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "target_id": _safe_str(action.get("target_id")) if isinstance(action, dict) else "",
     }
 
+    # ── Advisory phase (gated by performance settings) ────────────────────
     if mode == "live":
-        advisory = get_action_advisory(
-            llm_gateway=llm_gateway,
-            player_input=player_input,
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=action,
-        )
-        record = {
-            "type": "action_advisory",
-            "tick": current_tick,
-            "player_input": player_input,
-            "candidate_action": {
-                "action_type": _safe_str(action.get("action_type")),
-                "target_id": _safe_str(action.get("target_id")),
-                "npc_id": _safe_str(action.get("npc_id")),
-                "item_id": _safe_str(action.get("item_id")),
-            },
-            "output": _safe_dict(advisory),
-        }
-        runtime_state["llm_records"].append(record)
-        runtime_state["llm_records_index"][
-            f"action_advisory:{current_tick}"
-        ] = record
+        if perf["enable_action_advisory"]:
+            advisory = get_action_advisory(
+                llm_gateway=_get_llm_gateway(),
+                player_input=player_input,
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                candidate_action=action,
+            )
+            record = {
+                "type": "action_advisory",
+                "tick": current_tick,
+                "player_input": player_input,
+                "candidate_action": {
+                    "action_type": _safe_str(action.get("action_type")),
+                    "target_id": _safe_str(action.get("target_id")),
+                    "npc_id": _safe_str(action.get("npc_id")),
+                    "item_id": _safe_str(action.get("item_id")),
+                },
+                "output": _safe_dict(advisory),
+            }
+            runtime_state["llm_records"].append(record)
+            runtime_state["llm_records_index"][
+                f"action_advisory:{current_tick}"
+            ] = record
 
-        semantic_advisory = get_semantic_action_advisory(
-            llm_gateway=llm_gateway,
-            player_input=player_input,
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=action,
-        )
-        semantic_record_capture = {
-            "type": "semantic_action_advisory",
-            "tick": current_tick,
-            "player_input": player_input,
-            "candidate_action": {
-                "action_type": _safe_str(action.get("action_type")),
-                "target_id": _safe_str(action.get("target_id")),
-            },
-            "output": _safe_dict(semantic_advisory),
-        }
-        runtime_state["llm_records"].append(semantic_record_capture)
-        runtime_state["llm_records_index"][f"semantic_action_advisory:{current_tick}"] = semantic_record_capture
+        if perf["enable_semantic_action_advisory"]:
+            semantic_advisory = get_semantic_action_advisory(
+                llm_gateway=_get_llm_gateway(),
+                player_input=player_input,
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                candidate_action=action,
+            )
+            semantic_record_capture = {
+                "type": "semantic_action_advisory",
+                "tick": current_tick,
+                "player_input": player_input,
+                "candidate_action": {
+                    "action_type": _safe_str(action.get("action_type")),
+                    "target_id": _safe_str(action.get("target_id")),
+                },
+                "output": _safe_dict(semantic_advisory),
+            }
+            runtime_state["llm_records"].append(semantic_record_capture)
+            runtime_state["llm_records_index"][f"semantic_action_advisory:{current_tick}"] = semantic_record_capture
         runtime_state = _prune_llm_records_state(runtime_state)
     else:
+        # Replay mode — only expect records that were actually captured
         key = f"action_advisory:{current_tick}"
         record = _safe_dict(runtime_state.get("llm_records_index")).get(key)
-        if not record:
-            raise RuntimeError(f"missing_replay_action_advisory_for_tick:{current_tick}")
-        advisory = _safe_dict(record.get("output"))
+        if record:
+            advisory = _safe_dict(record.get("output"))
+        else:
+            # The record may legitimately be absent when fast-turn mode
+            # disabled advisory during the original live capture.
+            recorded_perf = _safe_dict(runtime_state.get("performance"))
+            if recorded_perf.get("enable_action_advisory", True):
+                raise RuntimeError(f"missing_replay_action_advisory_for_tick:{current_tick}")
 
         semantic_key = f"semantic_action_advisory:{current_tick}"
         semantic_record = _safe_dict(runtime_state.get("llm_records_index")).get(semantic_key)
-        if not semantic_record:
-            raise RuntimeError(f"missing_replay_semantic_action_advisory_for_tick:{current_tick}")
-        semantic_advisory = _safe_dict(semantic_record.get("output"))
+        if semantic_record:
+            semantic_advisory = _safe_dict(semantic_record.get("output"))
+        else:
+            recorded_perf = _safe_dict(runtime_state.get("performance"))
+            if recorded_perf.get("enable_semantic_action_advisory", True):
+                raise RuntimeError(f"missing_replay_semantic_action_advisory_for_tick:{current_tick}")
+    _t_advisory = _time.monotonic()
+
     if advisory:
         action = merge_action_advisory(action, advisory)
         action_type = _safe_str(action.get("action_type")).strip()
 
+    # ── Semantic action compilation ───────────────────────────────────────
     semantic_compiled_key = f"semantic_action_compiled:{current_tick}"
     if mode == "live":
-        semantic_action_record = _compile_semantic_action_record(
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            player_input=player_input,
-            action=action,
-            semantic_advisory=semantic_advisory,
-        )
+        if perf["enable_semantic_action_advisory"]:
+            semantic_action_record = _compile_semantic_action_record(
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                player_input=player_input,
+                action=action,
+                semantic_advisory=semantic_advisory,
+            )
+        else:
+            semantic_action_record = _build_fast_semantic_action_record(
+                player_input, action, simulation_state,
+            )
         semantic_compiled_capture = {
             "type": "semantic_action_compiled",
             "tick": current_tick,
@@ -5302,6 +5432,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         if not semantic_compiled_record:
             raise RuntimeError(f"missing_replay_semantic_action_compiled_for_tick:{current_tick}")
         semantic_action_record = _safe_dict(semantic_compiled_record.get("output"))
+    _t_semantic = _time.monotonic()
 
     action_metadata = _safe_dict(action.get("metadata"))
     action_metadata["semantic_action"] = semantic_action_record
@@ -5317,6 +5448,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)
+    _t_authoritative = _time.monotonic()
 
     progression = _award_progression(after_action_state, resolved_result)
     after_progression_state = _ensure_simulation_state(_safe_dict(progression.get("simulation_state")))
@@ -5331,6 +5463,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
 
     # step_simulation_state does not carry over runtime-level active_interactions.
     after_state["active_interactions"] = _safe_list(after_progression_state.get("active_interactions"))
+    _t_step = _time.monotonic()
 
     _log_interaction_trace(
         "apply_turn_before_semantic_apply",
@@ -5407,8 +5540,9 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "settings": runtime_state.get("runtime_settings", {}),
     }
 
-    llm_gateway = build_app_llm_gateway()
-    gateway_available = bool(llm_gateway)
+    narration_enabled = perf["enable_narration"]
+    narration_gw = _get_llm_gateway() if narration_enabled else None
+    gateway_available = bool(narration_gw)
     # ✅ FIX: Always apply authoritative grounded scene overlay before narration
     grounded = _derive_grounded_scene_context(after_state, runtime_state, resolved_result)
     current_scene = _apply_grounded_scene_overlay(current_scene, grounded)
@@ -5419,9 +5553,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     narration_result = narrate_scene(
         current_scene,
         narration_context,
-        llm_gateway=llm_gateway,
+        llm_gateway=narration_gw,
         tone="dramatic",
+        retry_on_invalid=perf["enable_narration_retry"],
     )
+    _t_narration = _time.monotonic()
+
     if gateway_available and not narration_result.get("used_llm"):
         logger.error("RPG narration fallback occurred despite gateway availability")
     summary = summarize_simulation_step(step_result)
@@ -5476,7 +5613,27 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     session["setup_payload"] = next_setup
     manifest["updated_at"] = _utc_now_iso()
     session["manifest"] = manifest
-    session = save_runtime_session(session)
+    session = save_runtime_session(session, compact=perf["compact_save"])
+    _t_save = _time.monotonic()
+
+    # ── Lightweight timing diagnostics ────────────────────────────────────
+    _t_total = _t_save - _t0
+    perf_entry = {
+        "tick": current_tick,
+        "t_load": round(_t_load - _t0, 4),
+        "t_advisory": round(_t_advisory - _t_load, 4),
+        "t_semantic": round(_t_semantic - _t_advisory, 4),
+        "t_authoritative": round(_t_authoritative - _t_semantic, 4),
+        "t_step": round(_t_step - _t_authoritative, 4),
+        "t_narration": round(_t_narration - _t_step, 4),
+        "t_save": round(_t_save - _t_narration, 4),
+        "t_total": round(_t_total, 4),
+        "fast_turn_mode": perf["fast_turn_mode"],
+    }
+    runtime_state.setdefault("perf_trace", [])
+    runtime_state["perf_trace"].append(perf_entry)
+    runtime_state["perf_trace"] = runtime_state["perf_trace"][-20:]
+    session["runtime_state"] = runtime_state
 
     return {
         "ok": True,
@@ -5498,6 +5655,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
             "raw_llm_narrative": _safe_str(narration_result.get("raw_llm_narrative")),
             "response_length": _safe_str(runtime_state.get("runtime_settings", {}).get("response_length", "short")),
             "presentation": build_runtime_presentation_payload(after_state),
+            "perf_trace": perf_entry,
         },
     }
 

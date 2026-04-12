@@ -41,6 +41,12 @@ _tts_provider_name = None
 _stt_provider_instance = None
 _stt_provider_name = None
 
+# LLM provider cache — avoids repeated construction in hot loops (RPG turns).
+_PROVIDER_CACHE: Dict[str, Any] = {
+    "key": None,
+    "instance": None,
+}
+
 # Provider system
 from app.providers import BaseProvider, ProviderConfig, get_registry
 from app.providers.audio_registry import (
@@ -211,13 +217,34 @@ def extract_thinking(content):
     
     return "", content
 
+def _build_provider_cache_key(provider_name: str, provider_config: "ProviderConfig") -> str:
+    """Build a stable cache key from provider configuration."""
+    parts = [
+        provider_name,
+        getattr(provider_config, "base_url", "") or "",
+        getattr(provider_config, "model", "") or "",
+        getattr(provider_config, "api_key", "") or "",
+    ]
+    return "|".join(parts)
+
+
+def invalidate_provider_cache() -> None:
+    """Clear the cached LLM provider so the next get_provider() builds fresh."""
+    _PROVIDER_CACHE["key"] = None
+    _PROVIDER_CACHE["instance"] = None
+
+
 def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
     """
     Get a provider instance based on settings.
-    
+
+    Uses a lightweight cache keyed on (provider, base_url, model, api_key)
+    so that repeated calls within the same process (e.g. multiple RPG turn
+    phases) return the same instance instead of rebuilding from scratch.
+
     Args:
         provider_name: Optional provider name override, otherwise uses settings
-        
+
     Returns:
         BaseProvider instance or None if not available
     """
@@ -273,10 +300,19 @@ def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
                 base_url=ls_settings.get('base_url', 'http://localhost:1234'),
                 model=ls_settings.get('model', '')
             )
-        
+
+        # Check cache before creating a new provider instance
+        cache_key = _build_provider_cache_key(provider, provider_config)
+        if _PROVIDER_CACHE["key"] == cache_key and _PROVIDER_CACHE["instance"] is not None:
+            return _PROVIDER_CACHE["instance"]
+
         # Create provider instance using registry
         registry = get_registry()
         provider_instance = registry.create_provider(provider, provider_config=provider_config)
+
+        # Store in cache
+        _PROVIDER_CACHE["key"] = cache_key
+        _PROVIDER_CACHE["instance"] = provider_instance
         return provider_instance
         
     except Exception as e:
