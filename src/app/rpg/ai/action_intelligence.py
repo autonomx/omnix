@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 _ALLOWED_ACTION_TYPES = {
     "attack_melee",
     "attack_ranged",
+    "attack_unarmed",
     "block",
     "dodge",
     "parry",
@@ -21,6 +22,15 @@ _ALLOWED_ACTION_TYPES = {
     "drop_item",
     "equip_item",
     "unequip_item",
+    "observe",
+    "social_activity",
+    "social_competition",
+    "social_affection",
+    "social_performance",
+    "trade",
+    "ritual",
+    "exploration",
+    "threat",
 }
 
 _ALLOWED_DIFFICULTIES = {"trivial", "easy", "normal", "hard", "extreme"}
@@ -35,6 +45,9 @@ _ALLOWED_SKILLS = {
     "investigation",
     "magic",
     "hacking",
+    "performance",
+    "barter",
+    "ritual",
 }
 
 

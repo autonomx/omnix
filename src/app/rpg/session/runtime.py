@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 from app.rpg.action_resolver import resolve_player_action
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
+from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.ai.ambient_dialogue import (
     apply_dialogue_cooldowns,
     build_ambient_dialogue_candidates,
@@ -161,6 +162,8 @@ _MAX_APPLIED_PROPOSAL_IDS = 128
 _MAX_LLM_PROPOSAL_CANDIDATES = 8
 _SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS = 1
 _MAX_RECORDED_SEMANTIC_LLM_PROPOSALS = 8
+_MAX_SEMANTIC_ACTION_RECORDS = 64
+_MAX_RUNTIME_LLM_RECORDS = 256
 
 
 def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
@@ -201,6 +204,705 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     rs = value.get("reaction_style")
     result["reaction_style"] = rs if isinstance(rs, str) and rs.strip().lower() in _ALLOWED_REACTION_STYLES else "normal"
     return result
+
+
+def _ensure_semantic_action_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    runtime_state.setdefault("semantic_action_records", [])
+    runtime_state.setdefault("semantic_action_index", {})
+    return runtime_state
+
+
+def _prune_llm_records_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    records = _safe_list(runtime_state.get("llm_records"))[-_MAX_RUNTIME_LLM_RECORDS:]
+    new_index: Dict[str, Any] = {}
+    for item in records:
+        item = _safe_dict(item)
+        record_type = _safe_str(item.get("type")).strip()
+        tick = _safe_int(item.get("tick"), -1)
+        if tick < 0 or not record_type:
+            continue
+        new_index[f"{record_type}:{tick}"] = item
+    runtime_state["llm_records"] = records
+    runtime_state["llm_records_index"] = new_index
+    return runtime_state
+
+
+def _stable_semantic_action_id(tick: int, player_input: str, action_type: str, target_id: str, activity_label: str) -> str:
+    material = json.dumps(
+        {
+            "tick": int(tick or 0),
+            "player_input": _safe_str(player_input).strip(),
+            "action_type": _safe_str(action_type).strip(),
+            "target_id": _safe_str(target_id).strip(),
+            "activity_label": _safe_str(activity_label).strip(),
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    return "semantic_action_" + hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
+
+
+def _find_npc_target_by_name(simulation_state: Dict[str, Any], text: str) -> str:
+    simulation_state = _safe_dict(simulation_state)
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    text_lc = _safe_str(text).strip().lower()
+    if not text_lc:
+        return ""
+
+    candidates: List[tuple[str, str]] = []
+    for npc_id, raw in sorted(npc_index.items()):
+        npc = _safe_dict(raw)
+        name = _safe_str(npc.get("name")).strip().lower()
+        role = _safe_str(npc.get("role")).strip().lower()
+        title = _safe_str(npc.get("title")).strip().lower()
+        stable_id = _safe_str(npc.get("id") or npc_id)
+        if stable_id and name:
+            candidates.append((stable_id, name))
+        if stable_id and role:
+            candidates.append((stable_id, role))
+        if stable_id and title:
+            candidates.append((stable_id, title))
+
+    candidates.sort(key=lambda item: (-len(item[1]), item[1], item[0]))
+    for npc_id, npc_name in candidates:
+        if npc_name in text_lc:
+            return npc_id
+    return ""
+
+
+def _coerce_action_target(simulation_state: Dict[str, Any], action: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+    action = _safe_dict(action)
+    target_id = _safe_str(action.get("target_id") or action.get("npc_id")).strip()
+    if not target_id:
+        target_id = _find_npc_target_by_name(simulation_state, player_input)
+    if target_id and not _safe_str(action.get("target_id")).strip():
+        action["target_id"] = target_id
+    return action
+
+
+def _normalize_social_axes(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for item in _safe_list(items)[:4]:
+        item = _safe_dict(item)
+        axis = _safe_str(item.get("axis")).strip().lower()
+        delta = _safe_int(item.get("delta"), 0)
+        if not axis or delta == 0:
+            continue
+        if delta > 2:
+            delta = 2
+        if delta < -2:
+            delta = -2
+        key = (axis, delta)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"axis": axis, "delta": delta})
+    return out
+
+
+def _compile_semantic_action_record(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    player_input: str,
+    action: Dict[str, Any],
+    semantic_advisory: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    action = _safe_dict(action)
+    semantic_advisory = _safe_dict(semantic_advisory)
+
+    tick = int(simulation_state.get("tick", runtime_state.get("tick", 0)) or 0) + 1
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+
+    target_id = _safe_str(semantic_advisory.get("target_id")).strip()
+    if not target_id:
+        target_id = _safe_str(action.get("target_id")).strip()
+    if not target_id:
+        target_id = _find_npc_target_by_name(simulation_state, player_input)
+
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    target_npc = _safe_dict(npc_index.get(target_id))
+    target_name = _safe_str(
+        semantic_advisory.get("target_name")
+        or target_npc.get("name")
+        or action.get("target_name")
+        or target_id
+    ).strip()
+
+    action_type = _safe_str(semantic_advisory.get("action_type") or action.get("action_type")).strip().lower() or "observe"
+    semantic_family = _safe_str(semantic_advisory.get("semantic_family")).strip().lower() or "observation"
+    interaction_mode = _safe_str(semantic_advisory.get("interaction_mode")).strip().lower() or ("direct" if target_id else "solo")
+    activity_label = _safe_str(semantic_advisory.get("activity_label")).strip().lower().replace(" ", "_") or action_type
+    visibility = _safe_str(semantic_advisory.get("visibility")).strip().lower() or "local"
+    intensity = max(0, min(3, _safe_int(semantic_advisory.get("intensity"), 1)))
+    stakes = max(0, min(3, _safe_int(semantic_advisory.get("stakes"), 1)))
+    social_axes = _normalize_social_axes(_safe_list(semantic_advisory.get("social_axes")))
+    observer_hooks = [str(x).strip().lower() for x in _safe_list(semantic_advisory.get("observer_hooks")) if str(x).strip()][:4]
+    scene_impact = _safe_str(semantic_advisory.get("scene_impact")).strip().lower() or "none"
+
+    location_id = _safe_str(
+        current_scene.get("location_id")
+        or player_state.get("location_id")
+        or _safe_dict(target_npc).get("location_id")
+    )
+
+    semantic_action_id = _stable_semantic_action_id(
+        tick=tick,
+        player_input=player_input,
+        action_type=action_type,
+        target_id=target_id,
+        activity_label=activity_label,
+    )
+
+    summary_parts = []
+    if target_name:
+        summary_parts.append(target_name)
+    if activity_label:
+        summary_parts.append(activity_label.replace("_", " "))
+    summary = " / ".join(summary_parts).strip() or _safe_str(player_input).strip()[:120]
+
+    return {
+        "semantic_action_id": semantic_action_id,
+        "tick": tick,
+        "player_input": _safe_str(player_input).strip(),
+        "action_type": action_type,
+        "semantic_family": semantic_family,
+        "interaction_mode": interaction_mode,
+        "activity_label": activity_label,
+        "target_id": target_id,
+        "target_name": target_name,
+        "secondary_actor_ids": [str(x).strip() for x in _safe_list(semantic_advisory.get("secondary_actor_ids")) if str(x).strip()][:4],
+        "location_id": location_id,
+        "visibility": visibility,
+        "intensity": intensity,
+        "stakes": stakes,
+        "social_axes": social_axes,
+        "observer_hooks": observer_hooks,
+        "scene_impact": scene_impact,
+        "reason": _safe_str(semantic_advisory.get("reason")).strip()[:200],
+        "summary": summary[:160],
+        "tags": sorted(list({
+            "player_action",
+            semantic_family or "semantic",
+            action_type or "action",
+            activity_label or "activity",
+        })),
+    }
+
+
+def _append_simulation_semantic_event(simulation_state: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    record = _safe_dict(record)
+    if not record:
+        return simulation_state
+
+    event_history = _safe_list(simulation_state.get("event_history"))
+    tick = _safe_int(record.get("tick"), 0)
+    event_id = f"semantic_event:{_safe_str(record.get('semantic_action_id'))}"
+    for existing in event_history:
+        existing = _safe_dict(existing)
+        if _safe_str(existing.get("id")) == event_id:
+            return simulation_state
+    event = {
+        "id": event_id,
+        "tick": tick,
+        "type": "player_semantic_action",
+        "category": "player_action",
+        "source": "semantic_action_bridge",
+        "location_id": _safe_str(record.get("location_id")),
+        "actor_ids": ["player"] + ([_safe_str(record.get("target_id"))] if _safe_str(record.get("target_id")) else []),
+        "payload": {
+            "semantic_action_id": _safe_str(record.get("semantic_action_id")),
+            "action_type": _safe_str(record.get("action_type")),
+            "semantic_family": _safe_str(record.get("semantic_family")),
+            "interaction_mode": _safe_str(record.get("interaction_mode")),
+            "activity_label": _safe_str(record.get("activity_label")),
+            "target_id": _safe_str(record.get("target_id")),
+            "target_name": _safe_str(record.get("target_name")),
+            "visibility": _safe_str(record.get("visibility")),
+            "intensity": _safe_int(record.get("intensity"), 1),
+            "stakes": _safe_int(record.get("stakes"), 1),
+            "social_axes": _safe_list(record.get("social_axes")),
+            "observer_hooks": _safe_list(record.get("observer_hooks")),
+            "scene_impact": _safe_str(record.get("scene_impact")),
+            "summary": _safe_str(record.get("summary")),
+            "tags": _safe_list(record.get("tags")),
+        },
+    }
+    event_history.append(event)
+    simulation_state["event_history"] = event_history[-256:]
+    return simulation_state
+
+
+def _append_semantic_action_record(runtime_state: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _ensure_semantic_action_runtime_state(runtime_state)
+    record = _safe_dict(record)
+    items = _safe_list(runtime_state.get("semantic_action_records"))
+    index = _safe_dict(runtime_state.get("semantic_action_index"))
+    record_id = _safe_str(record.get("semantic_action_id")).strip()
+    if not record_id:
+        return runtime_state
+    if record_id in index:
+        return runtime_state
+    items.append(record)
+    index[record_id] = record
+    runtime_state["semantic_action_records"] = items[-_MAX_SEMANTIC_ACTION_RECORDS:]
+    runtime_state["semantic_action_index"] = index
+    return runtime_state
+
+
+def _semantic_activity_kind(record: Dict[str, Any]) -> str:
+    record = _safe_dict(record)
+    action_type = _safe_str(record.get("action_type"))
+    semantic_family = _safe_str(record.get("semantic_family"))
+    if action_type == "social_competition":
+        return "player_social_competition"
+    if action_type == "social_affection":
+        return "player_social_affection"
+    if action_type == "social_performance":
+        return "player_social_performance"
+    if action_type == "trade":
+        return "player_trade"
+    if action_type == "ritual":
+        return "player_ritual"
+    if semantic_family == "social":
+        return "player_social_activity"
+    return "player_engaged"
+
+
+def _semantic_consequence_summary(record: Dict[str, Any]) -> str:
+    record = _safe_dict(record)
+    target_name = _safe_str(record.get("target_name"))
+    activity_label = _safe_str(record.get("activity_label")).replace("_", " ")
+    action_type = _safe_str(record.get("action_type"))
+    visibility = _safe_str(record.get("visibility"))
+
+    if action_type == "social_competition":
+        return f"A {activity_label or 'contest'} between the player and {target_name or 'someone'} draws a crowd."
+    if action_type == "social_affection":
+        return f"{target_name or 'Someone'} reacts warmly to the player."
+    if action_type == "social_performance":
+        return f"The player's {activity_label or 'performance'} shifts the local mood."
+    if action_type == "trade":
+        return f"The player's {activity_label or 'exchange'} changes the local social flow."
+    if action_type == "ritual":
+        return f"The player's {activity_label or 'ritual'} leaves a noticeable impression."
+    if visibility == "public":
+        return f"The player's {activity_label or 'action'} becomes the center of attention."
+    return f"The player's {activity_label or 'action'} affects the immediate scene."
+
+
+def _safe_relationship_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    relationships = _safe_dict(simulation_state.get("relationship_state"))
+    simulation_state["relationship_state"] = relationships
+    return relationships
+
+
+def _relationship_bucket_key(a: str, b: str) -> str:
+    left = _safe_str(a).strip()
+    right = _safe_str(b).strip()
+    ordered = sorted([left, right])
+    return f"{ordered[0]}::{ordered[1]}"
+
+
+def _apply_semantic_social_axes_to_relationships(
+    simulation_state: Dict[str, Any],
+    record: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    record = _safe_dict(record)
+    target_id = _safe_str(record.get("target_id")).strip()
+    if not target_id:
+        return simulation_state
+
+    relationships = _safe_relationship_state(simulation_state)
+    rel_key = _relationship_bucket_key("player", target_id)
+    rel = _safe_dict(relationships.get(rel_key))
+    axes = _safe_dict(rel.get("axes"))
+
+    for item in _safe_list(record.get("social_axes")):
+        item = _safe_dict(item)
+        axis = _safe_str(item.get("axis")).strip().lower()
+        delta = _safe_int(item.get("delta"), 0)
+        if not axis or delta == 0:
+            continue
+        current = _safe_int(axes.get(axis), 0)
+        next_value = current + delta
+        if next_value > 10:
+            next_value = 10
+        if next_value < -10:
+            next_value = -10
+        axes[axis] = next_value
+
+    rel["pair"] = ["player", target_id]
+    rel["axes"] = axes
+    rel["updated_tick"] = _safe_int(record.get("tick"), 0)
+    relationships[rel_key] = rel
+    simulation_state["relationship_state"] = relationships
+    return simulation_state
+
+
+def _derive_semantic_observer_ids(
+    simulation_state: Dict[str, Any],
+    record: Dict[str, Any],
+) -> List[str]:
+    simulation_state = _safe_dict(simulation_state)
+    record = _safe_dict(record)
+    target_id = _safe_str(record.get("target_id")).strip()
+    location_id = _safe_str(record.get("location_id")).strip()
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+
+    observer_ids: List[str] = []
+    for npc_id, raw in sorted(npc_index.items()):
+        npc = _safe_dict(raw)
+        stable_id = _safe_str(npc.get("id") or npc_id).strip()
+        if not stable_id or stable_id == target_id:
+            continue
+        npc_location = _safe_str(npc.get("location_id")).strip()
+        if location_id and npc_location and npc_location != location_id:
+            continue
+        observer_ids.append(stable_id)
+    return observer_ids[:4]
+
+
+def _build_observer_activity_summary(
+    observer_name: str,
+    record: Dict[str, Any],
+) -> str:
+    record = _safe_dict(record)
+    action_type = _safe_str(record.get("action_type"))
+    activity_label = _safe_str(record.get("activity_label")).replace("_", " ")
+    target_name = _safe_str(record.get("target_name")) or "someone"
+
+    if action_type == "social_competition":
+        return f"{observer_name} watches the {activity_label or 'contest'} with {target_name} closely."
+    if action_type == "social_performance":
+        return f"{observer_name} pays attention to the player's {activity_label or 'performance'}."
+    if action_type == "social_affection":
+        return f"{observer_name} notices the warm exchange between the player and {target_name}."
+    return f"{observer_name} reacts to the player's action nearby."
+
+
+def _apply_semantic_observer_reactions(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    record: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = ensure_actor_activity_state(runtime_state)
+    record = _safe_dict(record)
+
+    hooks = [str(x).strip().lower() for x in _safe_list(record.get("observer_hooks")) if str(x).strip()]
+    if not any(h in {"spectacle", "crowd_attention", "authority_notice", "conversation_seed", "relationship_shift", "rumor_seed"} for h in hooks):
+        return runtime_state
+
+    tick = _safe_int(record.get("tick"), 0)
+    location_id = _safe_str(record.get("location_id"))
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+
+    for observer_id in _derive_semantic_observer_ids(simulation_state, record):
+        npc = _safe_dict(npc_index.get(observer_id))
+        observer_name = _safe_str(npc.get("name") or observer_id)
+        activity_kind = "observer_reaction"
+        if "authority_notice" in hooks and ("guard" in observer_name.lower() or "captain" in observer_name.lower() or "watch" in observer_name.lower()):
+            activity_kind = "authority_observation"
+
+        runtime_state = set_actor_activity(
+            runtime_state,
+            observer_id,
+            _normalize_activity_record(
+                {
+                    "activity_id": _stable_activity_id(observer_id, tick, activity_kind, location_id),
+                    "kind": activity_kind,
+                    "subtype": _safe_str(record.get("activity_label")),
+                    "summary": _build_observer_activity_summary(observer_name, record),
+                    "location_id": location_id,
+                    "target_id": _safe_str(record.get("target_id")),
+                    "target_label": _safe_str(record.get("target_name")),
+                    "started_tick": tick,
+                    "updated_tick": tick,
+                    "expected_duration": 2,
+                    "status": "active",
+                    "intent": "React to a notable player-driven local event.",
+                    "world_tags": _safe_list(record.get("tags")) + ["observer_reaction"],
+                    "priority": 4,
+                }
+            ),
+        )
+
+    return runtime_state
+
+
+def _append_semantic_world_pressure(runtime_state: Dict[str, Any], pressure: Dict[str, Any]) -> Dict[str, Any]:
+    items = _safe_list(runtime_state.get("world_pressure"))
+    pressure = _safe_dict(pressure)
+    pressure_id = _safe_str(pressure.get("pressure_id")).strip()
+    if pressure_id and any(_safe_str(_safe_dict(existing).get("pressure_id")) == pressure_id for existing in items):
+        return runtime_state
+    items.append(pressure)
+    runtime_state["world_pressure"] = items[-64:]
+    return runtime_state
+
+
+def _append_semantic_world_rumor(runtime_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
+    items = _safe_list(runtime_state.get("world_rumors"))
+    rumor = _safe_dict(rumor)
+    rumor_id = _safe_str(rumor.get("rumor_id")).strip()
+    if rumor_id and any(_safe_str(_safe_dict(existing).get("rumor_id")) == rumor_id for existing in items):
+        return runtime_state
+    items.append(rumor)
+    runtime_state["world_rumors"] = items[-64:]
+    return runtime_state
+
+
+def _apply_semantic_world_propagation(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    record: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    record = _safe_dict(record)
+    hooks = [str(x).strip().lower() for x in _safe_list(record.get("observer_hooks")) if str(x).strip()]
+    tick = _safe_int(record.get("tick"), 0)
+    location_id = _safe_str(record.get("location_id"))
+    action_type = _safe_str(record.get("action_type"))
+    activity_label = _safe_str(record.get("activity_label")).replace("_", " ")
+    target_name = _safe_str(record.get("target_name"))
+    intensity = max(0, min(3, _safe_int(record.get("intensity"), 1)))
+    visibility = _safe_str(record.get("visibility"))
+
+    simulation_state = _apply_semantic_social_axes_to_relationships(simulation_state, record)
+    runtime_state = _apply_semantic_observer_reactions(simulation_state, runtime_state, record)
+
+    if visibility == "public" or "crowd_attention" in hooks or "spectacle" in hooks:
+        runtime_state = _append_world_pressure(
+            runtime_state,
+            {
+                "pressure_id": f"semantic_pressure:{_safe_str(record.get('semantic_action_id'))}",
+                "tick": tick,
+                "kind": "local_attention",
+                "location_id": location_id,
+                "summary": f"Attention builds around the player's {activity_label or 'action'}.",
+                "intensity": intensity,
+                "tags": _safe_list(record.get("tags")) + ["crowd_attention"],
+            },
+        )
+
+    if "rumor_seed" in hooks or (visibility == "public" and action_type in {"social_competition", "social_performance", "threat"}):
+        runtime_state = _append_world_rumor(
+            runtime_state,
+            {
+                "rumor_id": f"semantic_rumor:{_safe_str(record.get('semantic_action_id'))}",
+                "tick": tick,
+                "location_id": location_id,
+                "summary": (
+                    f"People start talking about the player's {activity_label or 'action'}"
+                    + (f" with {target_name}" if target_name else "")
+                    + "."
+                ),
+                "intensity": intensity,
+                "tags": _safe_list(record.get("tags")) + ["rumor_seed"],
+            },
+        )
+
+    if _safe_str(record.get("scene_impact")) in {"gathers_attention", "changes_mood", "disrupts_flow"}:
+        consequence_summary = {
+            "gathers_attention": f"The scene grows more focused on the player's {activity_label or 'action'}.",
+            "changes_mood": f"The mood shifts after the player's {activity_label or 'action'}.",
+            "disrupts_flow": f"The usual rhythm of the area is disrupted by the player's {activity_label or 'action'}.",
+        }.get(_safe_str(record.get("scene_impact")), "")
+        if consequence_summary:
+            runtime_state = _append_semantic_world_consequence(
+                runtime_state,
+                {
+                    "consequence_id": _stable_consequence_id(
+                        "consequence",
+                        tick,
+                        "local" if location_id else "global",
+                        location_id or "player",
+                        consequence_summary,
+                    ),
+                    "kind": "semantic_scene_impact",
+                    "scope": "local" if location_id else "global",
+                    "location_id": location_id,
+                    "summary": consequence_summary,
+                    "source_actor_id": _safe_str(record.get("target_id")),
+                    "tick": tick,
+                    "priority": 0.7,
+                    "tags": _safe_list(record.get("tags")) + ["scene_impact"],
+                },
+            )
+
+    return simulation_state, runtime_state
+
+
+def _append_world_event_row(runtime_state: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    rows = _safe_list(runtime_state.get("recent_world_event_rows"))
+    row = _safe_dict(row)
+    row_id = _safe_str(row.get("event_id")).strip()
+    if row_id and any(_safe_str(_safe_dict(existing).get("event_id")) == row_id for existing in rows):
+        return runtime_state
+    rows.append(row)
+    runtime_state["recent_world_event_rows"] = rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+    return runtime_state
+
+
+def _append_semantic_world_consequence(runtime_state: Dict[str, Any], consequence: Dict[str, Any]) -> Dict[str, Any]:
+    items = _safe_list(runtime_state.get("world_consequences"))
+    consequence = _safe_dict(consequence)
+    consequence_id = _safe_str(consequence.get("consequence_id")).strip()
+    if consequence_id and any(_safe_str(_safe_dict(existing).get("consequence_id")) == consequence_id for existing in items):
+        return runtime_state
+    items.append(consequence)
+    runtime_state["world_consequences"] = items[-_MAX_WORLD_CONSEQUENCES:]
+    return runtime_state
+
+
+def _emit_scene_beat_from_semantic_action(runtime_state: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+    beats = _safe_list(runtime_state.get("recent_scene_beats"))
+    record = _safe_dict(record)
+    tick = _safe_int(record.get("tick"), 0)
+    beat_id = f"semantic_beat:{_safe_str(record.get('semantic_action_id'))}"
+    if any(_safe_str(_safe_dict(existing).get("beat_id")) == beat_id for existing in beats):
+        return runtime_state
+    beat = {
+        "beat_id": beat_id,
+        "tick": tick,
+        "kind": "interaction_beat",
+        "summary": _safe_str(record.get("summary")) or _safe_str(record.get("player_input")),
+        "priority": 0.8 if _safe_str(record.get("action_type")) == "social_competition" else 0.68,
+        "scene_id": _safe_str(_safe_dict(runtime_state.get("current_scene")).get("scene_id")),
+        "interaction_id": f"semantic_interaction:{_safe_str(record.get('semantic_action_id'))}",
+        "actors": ["player"] + ([_safe_str(record.get("target_id"))] if _safe_str(record.get("target_id")) else []),
+        "location_id": _safe_str(record.get("location_id")),
+        "recap_level": "major" if _safe_str(record.get("action_type")) in ("social_competition", "social_performance") else "notable",
+        "tags": _safe_list(record.get("tags")),
+    }
+    beats.append(beat)
+    runtime_state["recent_scene_beats"] = beats[-_MAX_RECENT_SCENE_BEATS:]
+    return runtime_state
+
+
+def _apply_semantic_action_to_runtime(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    record: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = ensure_world_consequence_state(runtime_state)
+    runtime_state = ensure_actor_activity_state(runtime_state)
+    runtime_state = _ensure_semantic_action_runtime_state(runtime_state)
+    record = _safe_dict(record)
+    if not record:
+        return simulation_state, runtime_state
+
+    target_id = _safe_str(record.get("target_id"))
+    target_name = _safe_str(record.get("target_name") or target_id)
+    tick = _safe_int(record.get("tick"), 0)
+    location_id = _safe_str(record.get("location_id"))
+    activity_kind = _semantic_activity_kind(record)
+
+    if target_id:
+        runtime_state = set_actor_activity(
+            runtime_state,
+            target_id,
+            _normalize_activity_record(
+                {
+                    "activity_id": _stable_activity_id(target_id, tick, activity_kind, location_id),
+                    "kind": activity_kind,
+                    "subtype": _safe_str(record.get("activity_label")),
+                    "summary": (
+                        f"{target_name} is engaged in { _safe_str(record.get('activity_label')).replace('_', ' ') } with the player."
+                        if _safe_str(record.get("activity_label"))
+                        else f"{target_name} is focused on the player."
+                    ),
+                    "location_id": location_id,
+                    "target_id": "player",
+                    "target_label": "Player",
+                    "started_tick": tick,
+                    "updated_tick": tick,
+                    "expected_duration": 2 if _safe_str(record.get("action_type")) != "social_competition" else 3,
+                    "status": "active",
+                    "intent": "Respond directly to the player's immediate action.",
+                    "world_tags": _safe_list(record.get("tags")) + ["player_engaged"],
+                    "priority": 5 if _safe_str(record.get("action_type")) == "social_competition" else 4,
+                }
+            ),
+        )
+
+    if _safe_str(record.get("action_type")) == "social_competition" and target_id:
+        interactions = _safe_list(simulation_state.get("active_interactions"))
+        interaction_id = f"interaction:{_safe_str(record.get('activity_label') or 'contest')}:{tick}:{target_id}"
+        if not any(_safe_str(_safe_dict(x).get("id")) == interaction_id for x in interactions):
+            interactions.append(
+                {
+                    "id": interaction_id,
+                    "type": "social_interaction",
+                    "subtype": _safe_str(record.get("activity_label") or "contest"),
+                    "display_name": target_name,
+                    "participants": ["player", target_id],
+                    "location_id": location_id,
+                    "scene_id": _safe_str(_safe_dict(runtime_state.get("current_scene")).get("scene_id")),
+                    "phase": "opening",
+                    "resolved": False,
+                    "state": {"started_tick": tick},
+                }
+            )
+        simulation_state["active_interactions"] = interactions[-8:]
+
+    consequence_summary = _semantic_consequence_summary(record)
+    consequence = {
+        "consequence_id": _stable_consequence_id(
+            "consequence",
+            tick,
+            "local" if location_id else "global",
+            location_id or target_id or "player",
+            consequence_summary,
+        ),
+        "kind": "player_action_consequence",
+        "scope": "local" if location_id else "global",
+        "location_id": location_id,
+        "summary": consequence_summary,
+        "source_actor_id": target_id,
+        "tick": tick,
+        "priority": 0.8 if _safe_str(record.get("action_type")) in ("social_competition", "social_performance") else 0.65,
+        "tags": _safe_list(record.get("tags")),
+    }
+    runtime_state = _append_world_consequence(runtime_state, consequence)
+    runtime_state = _append_world_event_row(
+        runtime_state,
+        {
+            "event_id": f"semantic_action_row:{_safe_str(record.get('semantic_action_id'))}",
+            "scope": "local" if location_id else "global",
+            "kind": "player_action_consequence",
+            "title": "World Consequence",
+            "summary": consequence_summary,
+            "tick": tick,
+            "actors": [target_id] if target_id else [],
+            "actor_id": target_id,
+            "location_id": location_id,
+            "priority": consequence.get("priority"),
+            "status": "active",
+            "source": "semantic_player_runtime",
+            "tags": _safe_list(record.get("tags")),
+        },
+     )
+    simulation_state, runtime_state = _apply_semantic_world_propagation(
+        simulation_state,
+        runtime_state,
+        record,
+    )
+    simulation_state = _append_simulation_semantic_event(simulation_state, record)
+    runtime_state = _emit_scene_beat_from_semantic_action(runtime_state, record)
+    runtime_state = _append_semantic_action_record(runtime_state, record)
+    return simulation_state, runtime_state
 
 
 def _record_real_player_activity(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -3159,6 +3861,10 @@ def _normalize_structured_action(action: Any, player_input: str = "") -> Dict[st
             normalized["action_type"] = "persuade"
         elif action_type == "threaten":
             normalized["action_type"] = "intimidate"
+        elif action_type == "threat":
+            normalized["action_type"] = "threat"
+        elif action_type == "social":
+            normalized["action_type"] = "social_activity"
         normalized.setdefault(
             "target_id",
             _safe_str(normalized.get("target_id") or normalized.get("npc_id")).strip(),
@@ -3609,6 +4315,7 @@ def derive_player_action(simulation_state: Dict[str, Any], player_input: str) ->
 def derive_action_candidates(simulation_state, player_input):
     candidates = []
     text = str(player_input.get("text", "") if isinstance(player_input, dict) else player_input).lower()
+    target_id = _find_npc_target_by_name(simulation_state, text)
 
     # Passive observation: no XP path
     if any(w in text for w in ["look around", "look about", "observe", "glance", "scan", "take in"]):
@@ -3636,9 +4343,19 @@ def derive_action_candidates(simulation_state, player_input):
         candidates.append({"action_type": "dodge", "priority": 8})
     # Social
     if any(w in text for w in ["persuade", "convince", "talk", "negotiate"]):
-        candidates.append({"action_type": "persuade", "priority": 7})
+        candidates.append({"action_type": "persuade", "priority": 7, "target_id": target_id})
     if any(w in text for w in ["threaten", "intimidate", "scare"]):
-        candidates.append({"action_type": "intimidate", "priority": 7})
+        candidates.append({"action_type": "intimidate", "priority": 7, "target_id": target_id})
+
+    # Broad open-ended social / activity lane.
+    # The semantic action interpreter will determine whether this is darts,
+    # singing, drinking, hugging, competing, trading, ritual, etc.
+    if any(w in text for w in [
+        "play", "challenge", "invite", "join", "dance", "sing", "perform",
+        "hug", "embrace", "kiss", "toast", "drink with", "buy", "trade",
+        "bet", "gamble", "pray", "ritual", "compete", "contest",
+    ]):
+        candidates.append({"action_type": "social_activity", "priority": 8, "target_id": target_id})
     # Stealth
     if any(w in text for w in ["sneak", "hide", "stealth"]):
         candidates.append({"action_type": "sneak", "priority": 6})
@@ -3646,6 +4363,8 @@ def derive_action_candidates(simulation_state, player_input):
         candidates.append({"action_type": "hack", "priority": 6})
     if any(w in text for w in ["cast", "spell", "magic"]):
         candidates.append({"action_type": "cast_spell", "priority": 7})
+    if any(w in text for w in ["threat", "warn", "menace"]):
+        candidates.append({"action_type": "threat", "priority": 7, "target_id": target_id})
     # Items
     if any(w in text for w in ["pick up", "pickup", "grab", "take", "loot"]):
         candidates.append({"action_type": "pickup_item", "priority": 5})
@@ -3655,7 +4374,9 @@ def derive_action_candidates(simulation_state, player_input):
         candidates.append({"action_type": "use_item", "priority": 5})
 
     if not candidates:
-        candidates.append({"action_type": "observe", "priority": 1})
+        # Open-ended fallback: use observe as the safe minimum,
+        # then let the semantic layer refine this into a bounded semantic action.
+        candidates.append({"action_type": "observe", "priority": 1, "target_id": target_id})
 
     candidates.sort(key=lambda c: c.get("priority", 0), reverse=True)
     return candidates
@@ -3739,6 +4460,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
 
     player_input = _safe_str(player_input).strip()
     action = _normalize_structured_action(action, player_input)
+    action = _coerce_action_target(simulation_state, action, player_input)
 
     if not action:
         candidates = derive_action_candidates(simulation_state, player_input)
@@ -3753,6 +4475,8 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
 
     llm_gateway = build_app_llm_gateway()
     advisory = {}
+    semantic_advisory = {}
+    semantic_action_record = {}
     runtime_state.setdefault("llm_records", [])
     runtime_state["llm_records_index"] = _safe_dict(runtime_state.get("llm_records_index"))
     runtime_state.setdefault("conversation_settings", {})
@@ -3793,15 +4517,70 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         runtime_state["llm_records_index"][
             f"action_advisory:{current_tick}"
         ] = record
+
+        semantic_advisory = get_semantic_action_advisory(
+            llm_gateway=llm_gateway,
+            player_input=player_input,
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            candidate_action=action,
+        )
+        semantic_record_capture = {
+            "type": "semantic_action_advisory",
+            "tick": current_tick,
+            "player_input": player_input,
+            "candidate_action": {
+                "action_type": _safe_str(action.get("action_type")),
+                "target_id": _safe_str(action.get("target_id")),
+            },
+            "output": _safe_dict(semantic_advisory),
+        }
+        runtime_state["llm_records"].append(semantic_record_capture)
+        runtime_state["llm_records_index"][f"semantic_action_advisory:{current_tick}"] = semantic_record_capture
+        runtime_state = _prune_llm_records_state(runtime_state)
     else:
         key = f"action_advisory:{current_tick}"
         record = _safe_dict(runtime_state.get("llm_records_index")).get(key)
         if not record:
             raise RuntimeError(f"missing_replay_action_advisory_for_tick:{current_tick}")
         advisory = _safe_dict(record.get("output"))
+
+        semantic_key = f"semantic_action_advisory:{current_tick}"
+        semantic_record = _safe_dict(runtime_state.get("llm_records_index")).get(semantic_key)
+        if not semantic_record:
+            raise RuntimeError(f"missing_replay_semantic_action_advisory_for_tick:{current_tick}")
+        semantic_advisory = _safe_dict(semantic_record.get("output"))
     if advisory:
         action = merge_action_advisory(action, advisory)
         action_type = _safe_str(action.get("action_type")).strip()
+
+    semantic_compiled_key = f"semantic_action_compiled:{current_tick}"
+    if mode == "live":
+        semantic_action_record = _compile_semantic_action_record(
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            player_input=player_input,
+            action=action,
+            semantic_advisory=semantic_advisory,
+        )
+        semantic_compiled_capture = {
+            "type": "semantic_action_compiled",
+            "tick": current_tick,
+            "player_input": player_input,
+            "output": _safe_dict(semantic_action_record),
+        }
+        runtime_state["llm_records"].append(semantic_compiled_capture)
+        runtime_state["llm_records_index"][semantic_compiled_key] = semantic_compiled_capture
+        runtime_state = _prune_llm_records_state(runtime_state)
+    else:
+        semantic_compiled_record = _safe_dict(runtime_state.get("llm_records_index")).get(semantic_compiled_key)
+        if not semantic_compiled_record:
+            raise RuntimeError(f"missing_replay_semantic_action_compiled_for_tick:{current_tick}")
+        semantic_action_record = _safe_dict(semantic_compiled_record.get("output"))
+
+    action_metadata = _safe_dict(action.get("metadata"))
+    action_metadata["semantic_action"] = semantic_action_record
+    action["metadata"] = action_metadata
 
     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
@@ -3818,6 +4597,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     step_result = step_simulation_state(setup)
     next_setup = _safe_dict(step_result.get("next_setup")) or setup
     after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
+
+    after_state, runtime_state = _apply_semantic_action_to_runtime(
+        simulation_state=after_state,
+        runtime_state=runtime_state,
+        record=semantic_action_record,
+    )
 
 
 
@@ -3861,6 +4646,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     runtime_state["last_turn_result"] = {
         "player_input": player_input,
         "action": action,
+        "semantic_action": semantic_action_record,
         "resolved_result": resolved_result,
         "combat_result": _safe_dict(resolved_result.get("combat_result")),
         "xp_result": _safe_dict(progression.get("xp_result")),

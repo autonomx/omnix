@@ -313,6 +313,43 @@ def build_player_local_world_view_rows(simulation_state: Dict[str, Any], runtime
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
     rows = [r for r in _safe_list(runtime_state.get("recent_world_event_rows")) if _safe_str(_safe_dict(r).get("scope")) == "local"]
+
+    # --- Semantic world pressure (player-driven attention, tension, etc.) ---
+    for item in _safe_list(runtime_state.get("world_pressure")):
+        item = _safe_dict(item)
+        rows.append(
+            _make_event_row(
+                event_id=_safe_str(item.get("pressure_id")),
+                scope="local",
+                kind="world_pressure",
+                title="World Pressure",
+                summary=_safe_str(item.get("summary")),
+                tick=_safe_int(item.get("tick"), 0),
+                location_id=_safe_str(item.get("location_id")),
+                priority=_safe_int(item.get("intensity"), 1),
+                source="semantic_player_runtime",
+                tags=_safe_list(item.get("tags")),
+            )
+        )
+
+    # --- Semantic rumors ---
+    for item in _safe_list(runtime_state.get("world_rumors")):
+        item = _safe_dict(item)
+        rows.append(
+            _make_event_row(
+                event_id=_safe_str(item.get("rumor_id")),
+                scope="local",
+                kind="world_rumor",
+                title="Rumor",
+                summary=_safe_str(item.get("summary")),
+                tick=_safe_int(item.get("tick"), 0),
+                location_id=_safe_str(item.get("location_id")),
+                priority=_safe_int(item.get("intensity"), 1),
+                source="semantic_player_runtime",
+                tags=_safe_list(item.get("tags")),
+            )
+        )
+
     merged_rows = _merge_world_view_rows(rows, simulation_state, runtime_state)
     suppressed_rows = _suppress_repetitive_world_view_rows(merged_rows)
     suppressed_rows.sort(key=lambda r: (-_safe_int(r.get("tick"), 0), _safe_str(r.get("event_id"))))
@@ -356,18 +393,63 @@ def build_player_world_view_rows(simulation_state: Dict[str, Any], runtime_state
     local_rows = build_player_local_world_view_rows(simulation_state, runtime_state)
     global_rows = build_player_global_world_view_rows(simulation_state, runtime_state)
     rows = list(local_rows) + list(global_rows)
-    rows.sort(key=lambda r: (-_safe_int(r.get("tick"), 0), _safe_str(r.get("event_id"))))
+
+    # Deduplicate by event_id (semantic rows may overlap)
+    dedup = {}
+    for r in rows:
+        rid = _safe_str(_safe_dict(r).get("event_id"))
+        if not rid:
+            continue
+        if rid not in dedup:
+            dedup[rid] = r
+        else:
+            # keep highest priority / newest
+            existing = dedup[rid]
+            if _row_sort_key(r) < _row_sort_key(existing):
+                dedup[rid] = r
+
+    rows = list(dedup.values())
+
+    rows.sort(key=_row_sort_key)
     return rows[:_MAX_PLAYER_WORLD_VIEW_ROWS]
+
+
+def _player_bias(row: Dict[str, Any]) -> int:
+    row = _safe_dict(row)
+    tags = [str(x).strip() for x in _safe_list(row.get("tags")) if str(x).strip()]
+    source = _safe_str(row.get("source"))
+    if (
+        "player_action" in tags
+        or "crowd_attention" in tags
+        or "rumor_seed" in tags
+        or "scene_impact" in tags
+        or source == "semantic_player_runtime"
+    ):
+        return 1
+    return 0
 
 
 def _row_sort_key(row: Dict[str, Any]) -> tuple:
     scope = _safe_str(row.get("scope"))
     return (
+        -(_player_bias(row) * 10),  # HARD bias
         _SCOPE_ORDER.get(scope, 9),
         -float(row.get("priority", 0) or 0),
-        _safe_int(row.get("tick"), 0),
+        -_safe_int(row.get("tick"), 0),
         _safe_str(row.get("event_id")),
     )
+
+
+def get_recent_player_semantic_events(simulation_state: Dict[str, Any], limit: int = 20) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    events = []
+    for raw in _safe_list(simulation_state.get("event_history")):
+        event = _safe_dict(raw)
+        if _safe_str(event.get("type")) != "player_semantic_action":
+            continue
+        events.append(event)
+    events.sort(key=lambda e: (-_safe_int(e.get("tick"), 0), _safe_str(e.get("id"))))
+    return events[: max(1, int(limit or 20))]
 
 
 def _make_event_row(
@@ -385,6 +467,7 @@ def _make_event_row(
     status: str = "active",
     source: str = "simulation",
     location_label: str = "",
+    tags: List[str] | None = None,
 ) -> Dict[str, Any]:
     return {
         "event_id": event_id,
@@ -400,6 +483,7 @@ def _make_event_row(
         "status": status,
         "source": source,
         "location_label": location_label,
+        "tags": tags or [],
     }
 
 
@@ -783,7 +867,7 @@ def build_incremental_world_event_rows(
         kind = _safe_str(beat.get("kind"))
         if not kind:
             continue
-        if kind not in ("state_change_beat", "world_event", "director_pressure", "incident", "consequence"):
+        if kind not in ("state_change_beat", "world_event", "director_pressure", "incident", "consequence", "interaction_beat", "activity_beat"):
             print(
                 "DEBUG WORLD EVENTS SKIP scene_beat disallowed_kind =",
                 {

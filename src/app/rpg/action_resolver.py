@@ -32,6 +32,14 @@ _ACTION_PROFILES: Dict[str, Dict[str, str]] = {
     "pickup_item": {"stat": "dexterity", "skill": "investigation"},
     "equip_item": {"stat": "dexterity", "skill": "defense"},
     "unequip_item": {"stat": "dexterity", "skill": "defense"},
+    "social_activity": {"stat": "charisma", "skill": "persuasion"},
+    "social_competition": {"stat": "charisma", "skill": "persuasion"},
+    "social_affection": {"stat": "charisma", "skill": "persuasion"},
+    "social_performance": {"stat": "charisma", "skill": "persuasion"},
+    "trade": {"stat": "charisma", "skill": "persuasion"},
+    "ritual": {"stat": "intelligence", "skill": "magic"},
+    "exploration": {"stat": "intelligence", "skill": "investigation"},
+    "threat": {"stat": "charisma", "skill": "intimidation"},
     # Legacy aliases
     "attack": {"stat": "strength", "skill": "swordsmanship"},
     "steal": {"stat": "dexterity", "skill": "stealth"},
@@ -339,6 +347,21 @@ def resolve_player_action(
     difficulty = str(action.get("difficulty", "normal"))
     result = resolve_noncombat_check(player_state, action_type, difficulty, seed)
     result["target_name"] = _target_name(_safe_dict(action.get("target")))
+    if not result["target_name"]:
+        result["target_name"] = str(
+            action.get("target_name")
+            or action.get("npc_name")
+            or action.get("target_id")
+            or ""
+        )
+    result["target_id"] = str(
+        action.get("target_id")
+        or _safe_dict(action.get("target")).get("id")
+        or _safe_dict(action.get("target")).get("npc_id")
+        or ""
+    )
+    result["interaction"] = str(action.get("interaction", ""))
+    result["semantic_action"] = _safe_dict(action.get("semantic_action"))
 
     # Special handling for observation
     if action_type == "observe":
