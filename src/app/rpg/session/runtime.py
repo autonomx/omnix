@@ -165,6 +165,9 @@ _SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS = 1
 _MAX_RECORDED_SEMANTIC_LLM_PROPOSALS = 8
 _MAX_SEMANTIC_ACTION_RECORDS = 64
 _MAX_RUNTIME_LLM_RECORDS = 256
+_MAX_ACTIVE_INTERACTIONS = 8
+_DEFAULT_INTERACTION_DURATION_TICKS = 3
+_INTERACTION_STALE_GRACE_TICKS = 1
 
 
 def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
@@ -172,6 +175,23 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(value, dict):
         value = {}
     result: Dict[str, Any] = {}
+    # mode
+    result["mode"] = _safe_str(value.get("mode") or "live").strip().lower() or "live"
+    interaction_duration_mode = _safe_str(
+        value.get("interaction_duration_mode") or "ticks"
+    ).strip().lower()
+    if interaction_duration_mode not in {"ticks", "until_next_command"}:
+        interaction_duration_mode = "ticks"
+
+    interaction_duration_ticks = _safe_int(value.get("interaction_duration_ticks"), 5)
+    if interaction_duration_ticks < 1:
+        interaction_duration_ticks = 1
+    if interaction_duration_ticks > 20:
+        interaction_duration_ticks = 20
+
+    result["interaction_duration_mode"] = interaction_duration_mode
+    result["interaction_duration_ticks"] = interaction_duration_ticks
+    result["interaction_trace"] = _safe_bool(value.get("interaction_trace"), True)
     # response_length: keep existing semantics
     rl = value.get("response_length")
     if isinstance(rl, str):
@@ -204,6 +224,7 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     # reaction_style: only allowed enum
     rs = value.get("reaction_style")
     result["reaction_style"] = rs if isinstance(rs, str) and rs.strip().lower() in _ALLOWED_REACTION_STYLES else "normal"
+    result["verbose_semantic_trace"] = _safe_bool(value.get("verbose_semantic_trace"), False)
     return result
 
 
@@ -258,6 +279,312 @@ def _clear_stale_last_player_action(
     if _safe_int(current_tick, 0) - action_tick > max_age_ticks:
         runtime_state["last_player_action"] = {}
     return runtime_state
+
+
+def _ensure_active_interactions(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    interactions = _safe_list(simulation_state.get("active_interactions"))
+    simulation_state["active_interactions"] = interactions
+    return simulation_state
+
+
+def _semantic_action_starts_persistent_interaction(record: Dict[str, Any]) -> bool:
+    record = _safe_dict(record)
+    action_type = _safe_str(record.get("action_type")).strip().lower()
+    interaction_mode = _safe_str(record.get("interaction_mode")).strip().lower()
+    visibility = _safe_str(record.get("visibility")).strip().lower()
+    if action_type in {"social_competition", "social_affection", "social_performance", "threat"}:
+        return True
+    if interaction_mode in {"direct", "group", "public"} and visibility in {"local", "public"}:
+        return True
+    return False
+
+
+def _interaction_duration_for_record(record: Dict[str, Any]) -> int:
+    record = _safe_dict(record)
+    action_type = _safe_str(record.get("action_type")).strip().lower()
+    intensity = max(0, min(3, _safe_int(record.get("intensity"), 1)))
+    if action_type == "social_competition":
+        return _DEFAULT_INTERACTION_DURATION_TICKS + max(1, intensity)
+    if action_type in {"social_performance", "threat"}:
+        return _DEFAULT_INTERACTION_DURATION_TICKS + intensity
+    return _DEFAULT_INTERACTION_DURATION_TICKS
+
+
+def _get_interaction_duration_mode(runtime_state: Dict[str, Any]) -> str:
+    runtime_state = _safe_dict(runtime_state)
+    settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
+    return _safe_str(settings.get("interaction_duration_mode") or "ticks").strip().lower() or "ticks"
+
+
+def _get_interaction_duration_ticks(runtime_state: Dict[str, Any], record: Dict[str, Any]) -> int:
+    runtime_state = _safe_dict(runtime_state)
+    settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
+    configured = _safe_int(settings.get("interaction_duration_ticks"), 5)
+    if configured < 1:
+        configured = 1
+    if configured > 20:
+        configured = 20
+    return configured
+
+
+def _compute_interaction_expires_tick(
+    runtime_state: Dict[str, Any],
+    record: Dict[str, Any],
+    updated_tick: int,
+) -> int:
+    mode = _get_interaction_duration_mode(runtime_state)
+    if mode == "until_next_command":
+        # Large sentinel; explicit command transition / resolution will end it.
+        return 10**9
+    return _safe_int(updated_tick, 0) + _get_interaction_duration_ticks(runtime_state, record)
+
+
+def _build_active_interaction_from_semantic_action(
+    runtime_state: Dict[str, Any],
+    record: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    record = _safe_dict(record)
+    tick = _safe_int(record.get("tick"), 0)
+    target_id = _safe_str(record.get("target_id")).strip()
+    location_id = _safe_str(record.get("location_id")).strip()
+    action_type = _safe_str(record.get("action_type")).strip().lower()
+    activity_label = _safe_str(record.get("activity_label")).strip().lower() or action_type or "interaction"
+    scene_id = _safe_str(_safe_dict(runtime_state.get("current_scene")).get("scene_id"))
+    interaction_id = f"semantic_interaction:{_safe_str(record.get('semantic_action_id'))}"
+    return {
+        "id": interaction_id,
+        "type": "player_semantic_interaction",
+        "subtype": activity_label,
+        "semantic_action_id": _safe_str(record.get("semantic_action_id")),
+        "action_type": action_type,
+        "display_name": _safe_str(record.get("target_name") or activity_label.replace("_", " ")),
+        "participants": ["player"] + ([target_id] if target_id else []),
+        "location_id": location_id,
+        "scene_id": scene_id,
+        "phase": "active",
+        "resolved": False,
+        "started_tick": tick,
+        "updated_tick": tick,
+        "expires_tick": _compute_interaction_expires_tick(runtime_state, record, tick),
+        "state": {
+            "activity_label": activity_label,
+            "visibility": _safe_str(record.get("visibility")),
+            "intensity": _safe_int(record.get("intensity"), 1),
+            "stakes": _safe_int(record.get("stakes"), 1),
+            "summary": _safe_str(record.get("summary")),
+            "duration_mode": _get_interaction_duration_mode(runtime_state),
+            "duration_ticks": _get_interaction_duration_ticks(runtime_state, record),
+        },
+    }
+
+
+def _upsert_active_interaction_from_semantic_action(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    record: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = _ensure_active_interactions(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    record = _safe_dict(record)
+    if not _semantic_action_starts_persistent_interaction(record):
+        return simulation_state
+
+    new_interaction = _build_active_interaction_from_semantic_action(runtime_state, record)
+    semantic_action_id = _safe_str(record.get("semantic_action_id")).strip()
+    target_id = _safe_str(record.get("target_id")).strip()
+    action_type = _safe_str(record.get("action_type")).strip().lower()
+    location_id = _safe_str(record.get("location_id")).strip()
+    updated_tick = _safe_int(record.get("tick"), 0)
+
+    next_items = []
+    matched = False
+    for raw in _safe_list(simulation_state.get("active_interactions")):
+        item = _safe_dict(raw)
+        same_semantic = _safe_str(item.get("semantic_action_id")).strip() == semantic_action_id and semantic_action_id
+        same_shape = (
+            _safe_str(item.get("action_type")).strip().lower() == action_type
+            and _safe_str(item.get("location_id")).strip() == location_id
+            and target_id in _safe_list(item.get("participants"))
+        )
+        if same_semantic or same_shape:
+            item["updated_tick"] = updated_tick
+            item["expires_tick"] = _compute_interaction_expires_tick(runtime_state, record, updated_tick)
+            item["resolved"] = False
+            item["phase"] = "active"
+            state = _safe_dict(item.get("state"))
+            state["summary"] = _safe_str(record.get("summary")) or _safe_str(state.get("summary"))
+            state["activity_label"] = _safe_str(record.get("activity_label")) or _safe_str(state.get("activity_label"))
+            state["duration_mode"] = _get_interaction_duration_mode(runtime_state)
+            state["duration_ticks"] = _get_interaction_duration_ticks(runtime_state, record)
+            item["state"] = state
+            if semantic_action_id:
+                item["semantic_action_id"] = semantic_action_id
+            next_items.append(item)
+            matched = True
+        else:
+            next_items.append(item)
+
+    if not matched:
+        next_items.append(new_interaction)
+
+    next_items.sort(
+        key=lambda x: (
+            -_safe_int(_safe_dict(x).get("updated_tick"), 0),
+            _safe_str(_safe_dict(x).get("id")),
+        )
+    )
+    simulation_state["active_interactions"] = next_items[:_MAX_ACTIVE_INTERACTIONS]
+    _log_interaction_trace(
+        "upsert_active_interaction",
+        {
+            "tick": updated_tick,
+            "semantic_action_id": semantic_action_id,
+            "action_type": action_type,
+            "target_id": target_id,
+            "count": len(_safe_list(simulation_state.get("active_interactions"))),
+            "items": _compact_active_interactions(_safe_list(simulation_state.get("active_interactions"))),
+        },
+        runtime_state,
+    )
+    return simulation_state
+
+
+def _expire_stale_active_interactions(
+    simulation_state: Dict[str, Any],
+    current_tick: int,
+) -> Dict[str, Any]:
+    simulation_state = _ensure_active_interactions(simulation_state)
+    kept = []
+    expired = []
+    for raw in _safe_list(simulation_state.get("active_interactions")):
+        item = _safe_dict(raw)
+        expires_tick = _safe_int(item.get("expires_tick"), -999999)
+        if expires_tick >= _safe_int(current_tick, 0) - _INTERACTION_STALE_GRACE_TICKS:
+            kept.append(item)
+        else:
+            expired.append(
+                {
+                    "id": _safe_str(item.get("id")),
+                    "expires_tick": expires_tick,
+                    "current_tick": _safe_int(current_tick, 0),
+                    "reason": "stale",
+                }
+            )
+    simulation_state["active_interactions"] = kept[:_MAX_ACTIVE_INTERACTIONS]
+    if expired:
+        _log_interaction_trace(
+            "expire_active_interactions",
+            {
+                "tick": _safe_int(current_tick, 0),
+                "expired": expired,
+                "remaining_count": len(_safe_list(simulation_state.get("active_interactions"))),
+                "remaining": _compact_active_interactions(_safe_list(simulation_state.get("active_interactions"))),
+            },
+        )
+    return simulation_state
+
+
+def _build_active_interaction_prompt_context(
+    simulation_state: Dict[str, Any],
+    current_tick: int,
+) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    rows = []
+    for raw in _safe_list(simulation_state.get("active_interactions")):
+        item = _safe_dict(raw)
+        if _safe_bool(item.get("resolved"), False):
+            continue
+        expires_tick = _safe_int(item.get("expires_tick"), -999999)
+        if expires_tick < _safe_int(current_tick, 0) - _INTERACTION_STALE_GRACE_TICKS:
+            continue
+        rows.append(
+            {
+                "id": _safe_str(item.get("id")),
+                "type": _safe_str(item.get("type")),
+                "subtype": _safe_str(item.get("subtype")),
+                "action_type": _safe_str(item.get("action_type")),
+                "participants": _safe_list(item.get("participants"))[:4],
+                "location_id": _safe_str(item.get("location_id")),
+                "phase": _safe_str(item.get("phase")),
+                "summary": _safe_str(_safe_dict(item.get("state")).get("summary"))[:200],
+                "expires_tick": expires_tick,
+                "duration_mode": _safe_str(_safe_dict(item.get("state")).get("duration_mode")),
+                "duration_ticks": _safe_int(_safe_dict(item.get("state")).get("duration_ticks"), 0),
+            }
+        )
+    rows.sort(key=lambda x: (-_safe_int(x.get("expires_tick"), 0), _safe_str(x.get("id"))))
+    return rows[:4]
+
+
+def _semantic_action_matches_active_interaction(
+    interaction: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+) -> bool:
+    interaction = _safe_dict(interaction)
+    semantic_action_record = _safe_dict(semantic_action_record)
+    interaction_action_type = _safe_str(interaction.get("action_type")).strip().lower()
+    interaction_subtype = _safe_str(interaction.get("subtype")).strip().lower()
+    interaction_participants = set(str(x).strip() for x in _safe_list(interaction.get("participants")) if str(x).strip())
+
+    record_action_type = _safe_str(semantic_action_record.get("action_type")).strip().lower()
+    record_activity_label = _safe_str(semantic_action_record.get("activity_label")).strip().lower()
+    record_target_id = _safe_str(semantic_action_record.get("target_id")).strip()
+
+    if interaction_action_type and interaction_action_type == record_action_type:
+        if interaction_subtype and record_activity_label and interaction_subtype == record_activity_label:
+            if not record_target_id or record_target_id in interaction_participants:
+                return True
+
+    if record_target_id and record_target_id in interaction_participants and record_action_type == interaction_action_type:
+        return True
+
+    return False
+
+
+def _resolve_until_next_command_interactions(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    semantic_action_record: Dict[str, Any],
+    current_tick: int,
+) -> Dict[str, Any]:
+    simulation_state = _ensure_active_interactions(simulation_state)
+    mode = _get_interaction_duration_mode(runtime_state)
+    if mode != "until_next_command":
+        return simulation_state
+
+    semantic_action_record = _safe_dict(semantic_action_record)
+    next_items = []
+    resolved_ids = []
+    for raw in _safe_list(simulation_state.get("active_interactions")):
+        item = _safe_dict(raw)
+        if _safe_bool(item.get("resolved"), False):
+            next_items.append(item)
+            continue
+        if _semantic_action_matches_active_interaction(item, semantic_action_record):
+            next_items.append(item)
+            continue
+        item["resolved"] = True
+        item["phase"] = "resolved"
+        item["updated_tick"] = _safe_int(current_tick, 0)
+        item["expires_tick"] = _safe_int(current_tick, 0)
+        resolved_ids.append(_safe_str(item.get("id")))
+        next_items.append(item)
+    simulation_state["active_interactions"] = next_items[:_MAX_ACTIVE_INTERACTIONS]
+    if resolved_ids:
+        _log_interaction_trace(
+            "resolve_until_next_command",
+            {
+                "tick": _safe_int(current_tick, 0),
+                "new_action_type": _safe_str(semantic_action_record.get("action_type")),
+                "new_activity_label": _safe_str(semantic_action_record.get("activity_label")),
+                "resolved_ids": resolved_ids,
+                "remaining": _compact_active_interactions(_safe_list(simulation_state.get("active_interactions"))),
+            },
+            runtime_state,
+        )
+    return simulation_state
 
 
 def _prune_llm_records_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -884,25 +1211,11 @@ def _apply_semantic_action_to_runtime(
             ),
         )
 
-    if _safe_str(record.get("action_type")) == "social_competition" and target_id:
-        interactions = _safe_list(simulation_state.get("active_interactions"))
-        interaction_id = f"interaction:{_safe_str(record.get('activity_label') or 'contest')}:{tick}:{target_id}"
-        if not any(_safe_str(_safe_dict(x).get("id")) == interaction_id for x in interactions):
-            interactions.append(
-                {
-                    "id": interaction_id,
-                    "type": "social_interaction",
-                    "subtype": _safe_str(record.get("activity_label") or "contest"),
-                    "display_name": target_name,
-                    "participants": ["player", target_id],
-                    "location_id": location_id,
-                    "scene_id": _safe_str(_safe_dict(runtime_state.get("current_scene")).get("scene_id")),
-                    "phase": "opening",
-                    "resolved": False,
-                    "state": {"started_tick": tick},
-                }
-            )
-        simulation_state["active_interactions"] = interactions[-8:]
+    simulation_state = _upsert_active_interaction_from_semantic_action(
+        simulation_state,
+        runtime_state,
+        record,
+    )
 
     consequence_summary = _semantic_consequence_summary(record)
     consequence = {
@@ -2579,7 +2892,8 @@ def process_semantic_state_change_proposals(
     runtime_state: Dict[str, Any],
 ) -> tuple[Dict[str, Any], Dict[str, Any]]:
     print("SEMANTIC PROCESS queued =", runtime_state.get("semantic_state_change_proposals"))
-    print("SEMANTIC PROCESS accepted =", runtime_state.get("accepted_state_change_events"))
+    if _safe_bool(_safe_dict(runtime_state.get("runtime_settings")).get("verbose_semantic_trace"), False):
+        print("SEMANTIC PROCESS accepted =", runtime_state.get("accepted_state_change_events"))
     print("SEMANTIC PROCESS rejected =", runtime_state.get("rejected_state_change_events"))
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
@@ -2663,6 +2977,17 @@ def process_semantic_state_change_proposals(
         )
 
         runtime_state = _record_accepted_state_change_event(runtime_state, event)
+        _log_interaction_trace(
+            "semantic_accept",
+            {
+                "tick": _safe_int(event.get("tick"), 0),
+                "actor_id": _safe_str(event.get("actor_id")),
+                "semantic_action": _safe_str(event.get("semantic_action")),
+                "summary": _safe_str(event.get("summary"))[:160],
+                "interaction_count": len(_safe_list(simulation_state.get("active_interactions"))),
+            },
+            runtime_state,
+        )
         if event_id:
             accepted_ids.add(event_id)
         runtime_state = _record_applied_semantic_proposal_id(runtime_state, proposal_id)
@@ -2746,6 +3071,11 @@ def _build_semantic_state_change_prompt_contract(
             "summary": summary[:200],
         })
 
+    active_interactions_context = _build_active_interaction_prompt_context(
+        simulation_state,
+        _safe_int(simulation_state.get("tick"), 0),
+    )
+
     prompt_payload = {
         "scene_title": _safe_str(simulation_state.get("scene_title")),
         "location_name": _safe_str(simulation_state.get("location_name")),
@@ -2773,6 +3103,8 @@ def _build_semantic_state_change_prompt_contract(
         prompt_payload["recent_player_action"] = player_action_context
     if recent_beats_context:
         prompt_payload["recent_scene_beats"] = recent_beats_context[-_MAX_PROMPT_SCENE_BEATS:]
+    if active_interactions_context:
+        prompt_payload["active_interactions"] = active_interactions_context
 
     player_context_instruction = ""
     if player_action_context:
@@ -2784,6 +3116,30 @@ def _build_semantic_state_change_prompt_contract(
             "- Do NOT generate generic patrol/observe/tidy actions when a notable player action is happening.\n"
             "- beat_summary MUST reference the player's ongoing activity, not routine NPC behavior.\n\n"
         )
+
+    interaction_context_instruction = ""
+    if active_interactions_context:
+        interaction_context_instruction = (
+            "IMPORTANT — ACTIVE INTERACTION IS STILL ONGOING:\n"
+            "There is an unresolved active interaction in the scene (see active_interactions in INPUT).\n"
+            "NPCs nearby MUST continue reacting to that interaction until it expires or resolves.\n"
+            "- Do NOT revert to generic patrol, tidy, serve, or idle routines while the interaction is active.\n"
+            "- beat_summary should reference the ongoing contest / performance / confrontation when appropriate.\n"
+            "- Nearby authority figures should watch or react if the interaction is public.\n\n"
+        )
+
+    _log_interaction_trace(
+        "semantic_prompt_context",
+        {
+            "tick": _safe_int(simulation_state.get("tick"), 0),
+            "interaction_count": len(active_interactions_context),
+            "active_interactions": active_interactions_context,
+            "recent_player_action": player_action_context,
+            "recent_scene_beats_count": len(recent_beats_context),
+            "actor_count": len(_safe_list(simulation_state.get("actor_states"))),
+        },
+        runtime_state,
+    )
 
     return (
         "You are a deterministic state-change generator for an RPG simulation.\n\n"
@@ -2807,6 +3163,7 @@ def _build_semantic_state_change_prompt_contract(
         '  "beat_summary": "<short sentence>"\n'
         "}</RESPONSE>\n\n"
         + player_context_instruction
+        + interaction_context_instruction
         + "RULES:\n"
         '- "delta" MUST NOT be empty\n'
         '- "activity" MUST be meaningful (not "active")\n'
@@ -3039,10 +3396,63 @@ def maybe_enqueue_llm_semantic_state_change_proposals(
 
 
 def _safe_int(value, default=0):
+    if value is None:
+        return default
     try:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _safe_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "on")
+    try:
+        return bool(value)
+    except Exception:
+        return default
+
+
+def _interaction_trace_enabled(runtime_state: Dict[str, Any]) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
+    raw = settings.get("interaction_trace")
+    if raw is None:
+        return True
+    return _safe_bool(raw, True)
+
+
+def _compact_active_interactions(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out = []
+    for raw in _safe_list(items)[:8]:
+        item = _safe_dict(raw)
+        state = _safe_dict(item.get("state"))
+        out.append(
+            {
+                "id": _safe_str(item.get("id")),
+                "action_type": _safe_str(item.get("action_type")),
+                "subtype": _safe_str(item.get("subtype")),
+                "phase": _safe_str(item.get("phase")),
+                "resolved": _safe_bool(item.get("resolved"), False),
+                "updated_tick": _safe_int(item.get("updated_tick"), 0),
+                "expires_tick": _safe_int(item.get("expires_tick"), 0),
+                "participants": _safe_list(item.get("participants"))[:4],
+                "mode": _safe_str(state.get("duration_mode")),
+                "summary": _safe_str(state.get("summary"))[:120],
+            }
+        )
+    return out
+
+
+def _log_interaction_trace(label: str, payload: Dict[str, Any], runtime_state: Dict[str, Any] | None = None) -> None:
+    if runtime_state is not None and not _interaction_trace_enabled(runtime_state):
+        return
+    try:
+        print(f"INTERACTION TRACE {label} = {payload}")
+    except Exception:
+        pass
 
 
 def _utc_now_iso() -> str:
@@ -4695,7 +5105,27 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         runtime_state=runtime_state,
         record=semantic_action_record,
     )
-
+    _log_interaction_trace(
+        "apply_turn_after_semantic_apply",
+        {
+            "tick": _safe_int(after_state.get("tick"), current_tick),
+            "player_input": _safe_str(player_input)[:120],
+            "semantic_action_id": _safe_str(semantic_action_record.get("semantic_action_id")),
+            "action_type": _safe_str(semantic_action_record.get("action_type")),
+            "activity_label": _safe_str(semantic_action_record.get("activity_label")),
+            "target_id": _safe_str(semantic_action_record.get("target_id")),
+            "count": len(_safe_list(after_state.get("active_interactions"))),
+            "items": _compact_active_interactions(_safe_list(after_state.get("active_interactions"))),
+        },
+        runtime_state,
+    )
+    after_state = _resolve_until_next_command_interactions(
+        after_state,
+        runtime_state,
+        semantic_action_record,
+        current_tick,
+    )
+    after_state = _expire_stale_active_interactions(after_state, _safe_int(after_state.get("tick"), current_tick))
 
 
     scenes = generate_scenes_from_simulation(after_state)
@@ -4770,7 +5200,16 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     # Update known NPC list based on current presence
     runtime_state = _update_known_npc_ids(runtime_state, after_state)
     session["runtime_state"] = runtime_state
-    
+
+    _log_interaction_trace(
+        "apply_turn_before_session_save",
+        {
+            "tick": _safe_int(after_state.get("tick"), current_tick),
+            "count": len(_safe_list(after_state.get("active_interactions"))),
+            "items": _compact_active_interactions(_safe_list(after_state.get("active_interactions"))),
+        },
+        runtime_state,
+    )
     session["setup_payload"] = next_setup
     session["simulation_state"] = after_state
     session["runtime_state"] = runtime_state
@@ -4872,6 +5311,18 @@ def _apply_idle_tick_to_session(
     """
     session = _copy_dict(session)
     runtime_state = ensure_ambient_runtime_state(_copy_dict(session.get("runtime_state")))
+    simulation_state = _safe_dict(session.get("simulation_state"))
+
+    _log_interaction_trace(
+        "idle_tick_start",
+        {
+            "tick": _safe_int(simulation_state.get("tick"), 0),
+            "count": len(_safe_list(simulation_state.get("active_interactions"))),
+            "items": _compact_active_interactions(_safe_list(simulation_state.get("active_interactions"))),
+            "last_player_action": _safe_dict(runtime_state.get("last_player_action")),
+        },
+        runtime_state,
+    )
 
     mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
 
@@ -5289,6 +5740,7 @@ def _apply_idle_tick_to_session(
 
     simulation_state["tick"] = authoritative_tick
     simulation_state["current_tick"] = authoritative_tick
+    simulation_state = _expire_stale_active_interactions(simulation_state, authoritative_tick)
     runtime_state["tick"] = authoritative_tick
     runtime_state = _clear_stale_last_player_action(runtime_state, authoritative_tick)
 

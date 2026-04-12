@@ -93,6 +93,7 @@ build_player_world_view_rows = _we.build_player_world_view_rows
 build_player_local_world_view_rows = _we.build_player_local_world_view_rows
 _player_bias = _we._player_bias
 _row_sort_key = _we._row_sort_key
+_safe_dict = _rt._safe_dict
 
 
 def _sim(tick=10, **overrides):
@@ -356,3 +357,209 @@ class TestRuntimeLastPlayerActionWriteThrough:
         assert fresh["last_player_action"]["text"] == "I arm wrestle Bran"
         stale = _rt._clear_stale_last_player_action(runtime_state, 13)
         assert stale["last_player_action"] == {}
+
+
+class TestActiveInteractionPersistence:
+    def test_semantic_competition_creates_active_interaction(self):
+        sim = _sim(tick=20)
+        rt_state = _rt_state(tick=20)
+        record = {
+            "semantic_action_id": "semantic_action_match_1",
+            "tick": 21,
+            "action_type": "social_competition",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran",
+            "location_id": "loc_tavern",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "summary": "Bran / arm wrestling",
+        }
+        sim2 = _rt._upsert_active_interaction_from_semantic_action(sim, rt_state, record)
+        assert sim2["active_interactions"]
+        item = sim2["active_interactions"][0]
+        assert item["action_type"] == "social_competition"
+        assert item["subtype"] == "arm_wrestling"
+        assert "player" in item["participants"]
+        assert "npc_innkeeper" in item["participants"]
+        assert item["expires_tick"] >= 24
+
+    def test_semantic_competition_refreshes_existing_interaction(self):
+        sim = _sim(
+            tick=22,
+            active_interactions=[{
+                "id": "semantic_interaction:semantic_action_match_1",
+                "type": "player_semantic_interaction",
+                "subtype": "arm_wrestling",
+                "semantic_action_id": "semantic_action_match_1",
+                "action_type": "social_competition",
+                "participants": ["player", "npc_innkeeper"],
+                "location_id": "loc_tavern",
+                "phase": "active",
+                "resolved": False,
+                "started_tick": 21,
+                "updated_tick": 21,
+                "expires_tick": 24,
+                "state": {"summary": "Bran / arm wrestling"},
+            }],
+        )
+        rt_state = _rt_state(tick=22)
+        record = {
+            "semantic_action_id": "semantic_action_match_2",
+            "tick": 23,
+            "action_type": "social_competition",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran",
+            "location_id": "loc_tavern",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "summary": "Bran / arm wrestling",
+        }
+        sim2 = _rt._upsert_active_interaction_from_semantic_action(sim, rt_state, record)
+        assert len(sim2["active_interactions"]) == 1
+        assert sim2["active_interactions"][0]["updated_tick"] == 23
+        assert sim2["active_interactions"][0]["expires_tick"] > 24
+
+    def test_expire_stale_active_interactions(self):
+        sim = _sim(
+            tick=30,
+            active_interactions=[
+                {
+                    "id": "keep_me",
+                    "expires_tick": 30,
+                    "resolved": False,
+                },
+                {
+                    "id": "drop_me",
+                    "expires_tick": 26,
+                    "resolved": False,
+                },
+            ],
+        )
+        sim2 = _rt._expire_stale_active_interactions(sim, 30)
+        ids = [_safe_dict(x).get("id") for x in sim2["active_interactions"]]
+        assert "keep_me" in ids
+        assert "drop_me" not in ids
+
+    def test_prompt_context_includes_active_interactions(self):
+        sim = _sim(
+            tick=22,
+            active_interactions=[{
+                "id": "semantic_interaction:semantic_action_match_1",
+                "type": "player_semantic_interaction",
+                "subtype": "arm_wrestling",
+                "semantic_action_id": "semantic_action_match_1",
+                "action_type": "social_competition",
+                "participants": ["player", "npc_innkeeper"],
+                "location_id": "loc_tavern",
+                "phase": "active",
+                "resolved": False,
+                "started_tick": 21,
+                "updated_tick": 21,
+                "expires_tick": 25,
+                "state": {"summary": "Bran / arm wrestling"},
+            }],
+        )
+        rt_state = _rt_state(tick=22)
+        prompt = _build_semantic_state_change_prompt_contract(sim, rt_state)
+        assert "active_interactions" in prompt
+        assert "ACTIVE INTERACTION IS STILL ONGOING" in prompt
+
+
+class TestConfigurableInteractionDuration:
+    def test_ticks_mode_uses_runtime_setting(self):
+        sim = _sim(tick=20)
+        rt_state = _rt_state(tick=20)
+        rt_state["runtime_settings"] = {
+            "interaction_duration_mode": "ticks",
+            "interaction_duration_ticks": 9,
+        }
+        record = {
+            "semantic_action_id": "semantic_action_cfg_1",
+            "tick": 21,
+            "action_type": "social_competition",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran",
+            "location_id": "loc_tavern",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "summary": "Bran / arm wrestling",
+        }
+        sim2 = _rt._upsert_active_interaction_from_semantic_action(sim, rt_state, record)
+        item = sim2["active_interactions"][0]
+        assert item["expires_tick"] == 30
+        assert item["state"]["duration_mode"] == "ticks"
+        assert item["state"]["duration_ticks"] == 9
+
+    def test_until_next_command_mode_uses_sentinel_expiry(self):
+        sim = _sim(tick=20)
+        rt_state = _rt_state(tick=20)
+        rt_state["runtime_settings"] = {
+            "interaction_duration_mode": "until_next_command",
+            "interaction_duration_ticks": 5,
+        }
+        record = {
+            "semantic_action_id": "semantic_action_cfg_2",
+            "tick": 21,
+            "action_type": "social_competition",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran",
+            "location_id": "loc_tavern",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "summary": "Bran / arm wrestling",
+        }
+        sim2 = _rt._upsert_active_interaction_from_semantic_action(sim, rt_state, record)
+        item = sim2["active_interactions"][0]
+        assert item["expires_tick"] >= 10**9
+        assert item["state"]["duration_mode"] == "until_next_command"
+
+    def test_until_next_command_resolves_on_unrelated_next_command(self):
+        sim = _sim(
+            tick=25,
+            active_interactions=[{
+                "id": "semantic_interaction:semantic_action_cfg_2",
+                "type": "player_semantic_interaction",
+                "subtype": "arm_wrestling",
+                "semantic_action_id": "semantic_action_cfg_2",
+                "action_type": "social_competition",
+                "participants": ["player", "npc_innkeeper"],
+                "location_id": "loc_tavern",
+                "phase": "active",
+                "resolved": False,
+                "updated_tick": 24,
+                "expires_tick": 10**9,
+                "state": {
+                    "summary": "Bran / arm wrestling",
+                    "duration_mode": "until_next_command",
+                    "duration_ticks": 5,
+                },
+            }],
+        )
+        rt_state = _rt_state(tick=25)
+        rt_state["runtime_settings"] = {
+            "interaction_duration_mode": "until_next_command",
+            "interaction_duration_ticks": 5,
+        }
+        new_record = {
+            "semantic_action_id": "semantic_action_cfg_3",
+            "tick": 25,
+            "action_type": "observe",
+            "interaction_mode": "solo",
+            "activity_label": "look_around",
+            "target_id": "",
+            "location_id": "loc_tavern",
+        }
+        sim2 = _rt._resolve_until_next_command_interactions(sim, rt_state, new_record, 25)
+        assert sim2["active_interactions"][0]["resolved"] is True
