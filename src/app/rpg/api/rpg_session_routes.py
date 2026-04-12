@@ -6,6 +6,7 @@ Legacy /api/rpg/games* routes are retired from active registration.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -31,6 +32,7 @@ from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
 
 rpg_session_bp = APIRouter()
+_logger = logging.getLogger(__name__)
 
 
 
@@ -328,7 +330,7 @@ async def execute_rpg_session_turn_stream(request: Request):
                     session["runtime_state"] = rs
                     save_runtime_session(session)
         except Exception:
-            pass  # best-effort; apply_turn will use whatever is persisted
+            _logger.debug("Failed to merge performance overrides into session", exc_info=True)
 
     def generate():
         yield _sse({"type": "accepted"})

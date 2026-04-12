@@ -39,7 +39,7 @@ def save_session_to_disk(session: Dict[str, Any], *, compact: bool = False) -> D
     }
     path = _session_path(manifest.get("session_id") or manifest.get("id") or "session")
     if compact:
-        text = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     else:
         text = json.dumps(payload, indent=2, ensure_ascii=False)
     path.write_text(text, encoding="utf-8")

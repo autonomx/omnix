@@ -144,6 +144,7 @@ from app.rpg.world.world_event_director import (
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
+_MAX_PERF_TRACE_ENTRIES = 20
 
 # Phase F — quiet-window ticks after player action
 _DEFAULT_POST_PLAYER_QUIET_TICKS = 1
@@ -330,7 +331,7 @@ def _build_fast_semantic_action_record(
         "scene_impact": "none",
         "reason": "",
         "summary": _safe_str(player_input).strip()[:160] or action_type,
-        "tags": sorted(["player_action", "observation", action_type, action_type]),
+        "tags": sorted(list({"player_action", "observation", action_type})),
     }
 
 
@@ -5303,12 +5304,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     player_input = player_input or action_type.replace("_", " ").strip() or "Wait"
 
     # ── Lazy LLM gateway (built at most once per turn) ────────────────────
-    _llm_gw_cache: List[Any] = []  # mutable holder for nonlocal-style access
+    _llm_gw_holder: List[Any] = []  # mutable holder for nonlocal-style access
 
     def _get_llm_gateway():
-        if not _llm_gw_cache:
-            _llm_gw_cache.append(build_app_llm_gateway())
-        return _llm_gw_cache[0]
+        if not _llm_gw_holder:
+            _llm_gw_holder.append(build_app_llm_gateway())
+        return _llm_gw_holder[0]
 
     advisory = {}
     semantic_advisory = {}
@@ -5633,7 +5634,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     }
     runtime_state.setdefault("perf_trace", [])
     runtime_state["perf_trace"].append(perf_entry)
-    runtime_state["perf_trace"] = runtime_state["perf_trace"][-20:]
+    runtime_state["perf_trace"] = runtime_state["perf_trace"][-_MAX_PERF_TRACE_ENTRIES:]
     session["runtime_state"] = runtime_state
 
     return {
