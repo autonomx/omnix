@@ -86,3 +86,4 @@ voicebox/
 chatterbox/
 faster-qwen3-tts-main/
 tts/*.wav
+src/data/rpg_sessions/*.json
