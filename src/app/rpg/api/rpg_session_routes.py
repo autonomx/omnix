@@ -83,14 +83,10 @@ def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             player_input = action_type.replace("_", " ").strip()
 
-    # Optional performance overrides from the request payload
-    performance = _safe_dict(data.get("performance"))
-
     return {
         "session_id": _safe_str(data.get("session_id")).strip(),
         "player_input": player_input,
         "action": action,
-        "performance": performance,
     }
 
 
@@ -300,7 +296,6 @@ async def execute_rpg_session_turn_stream(request: Request):
     session_id = _safe_str(normalized.get("session_id")).strip()
     player_input = _safe_str(normalized.get("player_input")).strip()
     action = _safe_dict(normalized.get("action"))
-    request_performance = _safe_dict(normalized.get("performance"))
 
     sse_headers = {
         "Cache-Control": "no-cache",
@@ -312,48 +307,23 @@ async def execute_rpg_session_turn_stream(request: Request):
             yield _sse({"type": "error", "error": "session_id_required"})
         return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)
 
-    # Merge per-request performance overrides into session runtime state
-    if request_performance:
-        try:
-            session = load_runtime_session(session_id)
-            if session and isinstance(session, dict):
-                rs = session.get("runtime_state")
-                if isinstance(rs, dict):
-                    existing_perf = rs.get("performance") or {}
-                    if isinstance(existing_perf, dict):
-                        merged = {**existing_perf, **request_performance}
-                    else:
-                        merged = dict(request_performance)
-                    rs["performance"] = merged
-                    session["runtime_state"] = rs
-                    save_runtime_session(session)
-        except Exception:
-            pass  # best-effort; apply_turn will use whatever is persisted
+    result = apply_turn(session_id, player_input, action=action)
+
+    if not result.get("ok"):
+        err = _safe_str(result.get("error") or "turn_failed")
+        status = 404 if result.get("error") == "session_not_found" else 500
+        def error_gen():
+            yield _sse({"type": "error", "error": err})
+        return StreamingResponse(error_gen(), status_code=status, media_type="text/event-stream", headers=sse_headers)
+
+    payload = _build_turn_payload(result)
+    narration = _safe_str(payload.get("narration"))
 
     def generate():
-        yield _sse({"type": "accepted"})
-        yield _sse({"type": "processing", "stage": "turn"})
-
-        result = apply_turn(session_id, player_input, action=action)
-
-        if not result.get("ok"):
-            err = _safe_str(result.get("error") or "turn_failed")
-            yield _sse({"type": "error", "error": err})
-            return
-
-        payload = _build_turn_payload(result)
-        narration = _safe_str(payload.get("narration"))
-
-        # In fast-turn mode return narration in one shot; otherwise word-stream
-        perf = _safe_dict(_safe_dict(result.get("session", {})).get("runtime_state", {}).get("performance"))
-        if perf.get("fast_turn_mode"):
-            if narration:
-                yield _sse({"type": "token", "text": narration})
-        else:
-            words = narration.split()
-            for idx, word in enumerate(words):
-                chunk = word + (" " if idx < len(words) - 1 else "")
-                yield _sse({"type": "token", "text": chunk})
+        words = narration.split()
+        for idx, word in enumerate(words):
+            chunk = word + (" " if idx < len(words) - 1 else "")
+            yield _sse({"type": "token", "text": chunk})
 
         final_payload = dict(payload)
         final_payload["type"] = "done"

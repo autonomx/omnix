@@ -28,7 +28,7 @@ def _session_path(session_id: str) -> Path:
     return ensure_session_dir() / f"{safe_id}.json"
 
 
-def save_session_to_disk(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
+def save_session_to_disk(session: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize, migrate, and persist session to disk-backed JSON."""
     session = _normalize_session(session)
     session = migrate_session_payload(session)
@@ -38,11 +38,7 @@ def save_session_to_disk(session: Dict[str, Any], *, compact: bool = False) -> D
         "session": session,
     }
     path = _session_path(manifest.get("session_id") or manifest.get("id") or "session")
-    if compact:
-        text = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    else:
-        text = json.dumps(payload, indent=2, ensure_ascii=False)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return session
 
 
