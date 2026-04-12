@@ -799,6 +799,16 @@
              rpgState.runtimeState.settings &&
              typeof rpgState.runtimeState.settings.response_length === 'string' &&
              rpgState.runtimeState.settings.response_length) || 'short';
+        var currentInteractionDurationMode =
+            (rpgState.runtimeState &&
+             rpgState.runtimeState.settings &&
+             typeof rpgState.runtimeState.settings.interaction_duration_mode === 'string' &&
+             rpgState.runtimeState.settings.interaction_duration_mode) || 'ticks';
+        var currentInteractionDurationTicks =
+            (rpgState.runtimeState &&
+             rpgState.runtimeState.settings &&
+             typeof rpgState.runtimeState.settings.interaction_duration_ticks === 'number' &&
+             rpgState.runtimeState.settings.interaction_duration_ticks) || 5;
         var responseLengthSelect = document.createElement('label');
         responseLengthSelect.innerHTML =
             'Response Length: <select id="rpgResponseLength">' +
@@ -807,11 +817,48 @@
             '<option value="long"' + (currentResponseLength === 'long' ? ' selected' : '') + '>Long</option>' +
             '</select>';
         settingsSection.appendChild(responseLengthSelect);
+        settingsSection.appendChild(document.createElement('br'));
+
+        var interactionDurationModeLabel = document.createElement('label');
+        interactionDurationModeLabel.textContent = 'Interaction Persistence: ';
+        var modeSelect = document.createElement('select');
+        modeSelect.id = 'rpgInteractionDurationMode';
+        var optionTicks = document.createElement('option');
+        optionTicks.value = 'ticks';
+        optionTicks.textContent = 'Ticks';
+        optionTicks.selected = currentInteractionDurationMode === 'ticks';
+        modeSelect.appendChild(optionTicks);
+        var optionUntil = document.createElement('option');
+        optionUntil.value = 'until_next_command';
+        optionUntil.textContent = 'Until next command';
+        optionUntil.selected = currentInteractionDurationMode === 'until_next_command';
+        modeSelect.appendChild(optionUntil);
+        interactionDurationModeLabel.appendChild(modeSelect);
+        settingsSection.appendChild(interactionDurationModeLabel);
+
+        var interactionDurationTicksLabel = document.createElement('label');
+        interactionDurationTicksLabel.textContent = 'Interaction Duration (ticks): ';
+        var ticksInput = document.createElement('input');
+        ticksInput.type = 'number';
+        ticksInput.id = 'rpgInteractionDurationTicks';
+        ticksInput.min = '1';
+        ticksInput.max = '20';
+        ticksInput.value = currentInteractionDurationTicks;
+        ticksInput.disabled = currentInteractionDurationMode === 'until_next_command';
+        interactionDurationTicksLabel.appendChild(ticksInput);
+        settingsSection.appendChild(interactionDurationTicksLabel);
+
+        // Add event listener to toggle disable on mode change
+        modeSelect.addEventListener('change', function() {
+            ticksInput.disabled = modeSelect.value === 'until_next_command';
+        });
         var saveBtn = document.createElement('button');
         saveBtn.className = 'btn btn-primary';
         saveBtn.textContent = 'Save Settings';
         saveBtn.addEventListener('click', function() {
             var responseLength = document.getElementById('rpgResponseLength').value;
+            var interactionDurationMode = document.getElementById('rpgInteractionDurationMode').value;
+            var interactionDurationTicks = parseInt(document.getElementById('rpgInteractionDurationTicks').value, 10);
             // Persist to server
             if (rpgState.sessionId) {
                 fetch('/api/rpg/session/settings', {
@@ -820,7 +867,9 @@
                     body: JSON.stringify({
                         session_id: rpgState.sessionId,
                         settings: {
-                            response_length: responseLength
+                            response_length: responseLength,
+                            interaction_duration_mode: interactionDurationMode,
+                            interaction_duration_ticks: interactionDurationTicks
                         },
                     }),
                 }).then(function(response) {

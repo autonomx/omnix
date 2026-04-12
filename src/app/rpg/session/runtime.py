@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 from app.rpg.action_resolver import resolve_player_action
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
-from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.ai.ambient_dialogue import (
     apply_dialogue_cooldowns,
     build_ambient_dialogue_candidates,
@@ -52,6 +51,7 @@ from app.rpg.ai.scene_weaver import (
     build_scene_candidates,
     select_scene_candidate,
 )
+from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.schema import normalize_world_behavior_config
@@ -449,6 +449,33 @@ def _upsert_active_interaction_from_semantic_action(
         runtime_state,
     )
     return simulation_state
+
+
+def _persist_player_interaction_state_after_turn(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    player_input: str,
+    semantic_action_record: Dict[str, Any],
+    current_tick: int,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state = _ensure_simulation_state(_safe_dict(simulation_state))
+    runtime_state = _copy_dict(runtime_state)
+    semantic_action_record = _safe_dict(semantic_action_record)
+
+    runtime_state["last_player_action"] = _build_last_player_action_record(
+        tick=current_tick,
+        player_input=player_input,
+        action={"action_type": _safe_str(semantic_action_record.get("action_type")), "target_id": _safe_str(semantic_action_record.get("target_id"))},
+        semantic_action_record=semantic_action_record,
+    )
+
+    simulation_state = _upsert_active_interaction_from_semantic_action(
+        simulation_state,
+        runtime_state,
+        semantic_action_record,
+    )
+
+    return simulation_state, runtime_state
 
 
 def _expire_stale_active_interactions(
@@ -3076,6 +3103,16 @@ def _build_semantic_state_change_prompt_contract(
         _safe_int(simulation_state.get("tick"), 0),
     )
 
+    _log_interaction_trace(
+        "semantic_prompt_context",
+        {
+            "tick": _safe_int(simulation_state.get("tick"), 0),
+            "interaction_count": len(active_interactions_context),
+            "interaction_ids": [_safe_str(x.get("id")) for x in active_interactions_context],
+        },
+        runtime_state,
+    )
+
     prompt_payload = {
         "scene_title": _safe_str(simulation_state.get("scene_title")),
         "location_name": _safe_str(simulation_state.get("location_name")),
@@ -3447,12 +3484,15 @@ def _compact_active_interactions(items: List[Dict[str, Any]]) -> List[Dict[str, 
 
 
 def _log_interaction_trace(label: str, payload: Dict[str, Any], runtime_state: Dict[str, Any] | None = None) -> None:
-    if runtime_state is not None and not _interaction_trace_enabled(runtime_state):
+    # Temporarily force these traces to always show for debugging
+    force_show = label in ("apply_turn_before_semantic_apply", "apply_turn_after_semantic_apply", "apply_turn_after_interaction_creation", "apply_turn_before_session_save", "idle_tick_start", "semantic_prompt_context")
+    if runtime_state is not None and not (_interaction_trace_enabled(runtime_state) or force_show):
         return
     try:
         print(f"INTERACTION TRACE {label} = {payload}")
     except Exception:
         pass
+
 
 
 def _utc_now_iso() -> str:
@@ -4408,6 +4448,7 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
     simulation_state = ensure_world_item_state(simulation_state)
+    simulation_state = _ensure_active_interactions(simulation_state)
 
     player_state = _safe_dict(simulation_state.get("player_state"))
     player_state = ensure_player_progression_state(player_state)
@@ -4634,7 +4675,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
 
     session = {
         "manifest": {
-            "id": setup_id,
+            "session_id": setup_id,
             "schema_version": _SCHEMA_VERSION,
             "title": _safe_str(setup.get("title") or world.get("title") or "Untitled Adventure"),
             "status": "active",
@@ -4664,6 +4705,8 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
                 "reaction_style": "normal",
                 "console_debug_enabled": True,
                 "world_events_panel_enabled": True,
+                "interaction_duration_mode": "ticks",
+                "interaction_duration_ticks": 5,
             },
             # Living-world ambient state (Phase 0.2)
             "ambient_queue": [],
@@ -4682,6 +4725,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "recent_world_event_rows": [],
         },
     }
+    session["session_id"] = setup_id
     return session
 
 
@@ -4744,7 +4788,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "level_up": _safe_list(turn_result.get("level_up")),
         "skill_level_ups": _safe_list(turn_result.get("skill_level_ups")),
         "presentation": build_runtime_presentation_payload(simulation_state),
-        "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("settings"))),
+        "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
         "world_events_summary": {
             "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-12:],
         },
@@ -5100,6 +5144,16 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     next_setup = _safe_dict(step_result.get("next_setup")) or setup
     after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
 
+    _log_interaction_trace(
+        "apply_turn_before_semantic_apply",
+        {
+            "tick": _safe_int(after_state.get("tick"), current_tick),
+            "last_player_action": _safe_dict(runtime_state.get("last_player_action")),
+            "count": len(_safe_list(after_state.get("active_interactions"))),
+            "items": _compact_active_interactions(_safe_list(after_state.get("active_interactions"))),
+        },
+        runtime_state,
+    )
     after_state, runtime_state = _apply_semantic_action_to_runtime(
         simulation_state=after_state,
         runtime_state=runtime_state,
@@ -5109,11 +5163,24 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "apply_turn_after_semantic_apply",
         {
             "tick": _safe_int(after_state.get("tick"), current_tick),
-            "player_input": _safe_str(player_input)[:120],
-            "semantic_action_id": _safe_str(semantic_action_record.get("semantic_action_id")),
-            "action_type": _safe_str(semantic_action_record.get("action_type")),
-            "activity_label": _safe_str(semantic_action_record.get("activity_label")),
-            "target_id": _safe_str(semantic_action_record.get("target_id")),
+            "last_player_action": _safe_dict(runtime_state.get("last_player_action")),
+            "count": len(_safe_list(after_state.get("active_interactions"))),
+            "items": _compact_active_interactions(_safe_list(after_state.get("active_interactions"))),
+        },
+        runtime_state,
+    )
+    after_state, runtime_state = _persist_player_interaction_state_after_turn(
+        after_state,
+        runtime_state,
+        player_input,
+        semantic_action_record,
+        current_tick,
+    )
+    _log_interaction_trace(
+        "apply_turn_after_interaction_creation",
+        {
+            "tick": _safe_int(after_state.get("tick"), current_tick),
+            "last_player_action": _safe_dict(runtime_state.get("last_player_action")),
             "count": len(_safe_list(after_state.get("active_interactions"))),
             "items": _compact_active_interactions(_safe_list(after_state.get("active_interactions"))),
         },
@@ -5144,7 +5211,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
         "level_up": _safe_list(progression.get("level_up")),
         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
-        "settings": runtime_state.get("settings", {}),
+        "settings": runtime_state.get("runtime_settings", {}),
     }
 
     llm_gateway = build_app_llm_gateway()
@@ -5205,14 +5272,15 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "apply_turn_before_session_save",
         {
             "tick": _safe_int(after_state.get("tick"), current_tick),
+            "last_player_action": _safe_dict(runtime_state.get("last_player_action")),
             "count": len(_safe_list(after_state.get("active_interactions"))),
             "items": _compact_active_interactions(_safe_list(after_state.get("active_interactions"))),
         },
         runtime_state,
     )
-    session["setup_payload"] = next_setup
     session["simulation_state"] = after_state
     session["runtime_state"] = runtime_state
+    session["setup_payload"] = next_setup
     manifest["updated_at"] = _utc_now_iso()
     session["manifest"] = manifest
     session = save_runtime_session(session)
@@ -5235,7 +5303,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
             "used_app_llm": bool(narration_result.get("used_llm")),
             "gateway_available": gateway_available,
             "raw_llm_narrative": _safe_str(narration_result.get("raw_llm_narrative")),
-            "response_length": _safe_str(runtime_state.get("settings", {}).get("response_length", "short")),
+            "response_length": _safe_str(runtime_state.get("runtime_settings", {}).get("response_length", "short")),
             "presentation": build_runtime_presentation_payload(after_state),
         },
     }
@@ -5387,7 +5455,7 @@ def _apply_idle_tick_to_session(
 
     # Real idle-seconds calculation
     idle_seconds = _seconds_since_iso(_safe_str(runtime_state.get("last_real_player_activity_at")))
-    settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("settings")))
+    settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
     conversation_idle_seconds = int(settings.get("idle_conversation_seconds", 15) or 15)
     prior_idle_streak = int(runtime_state.get("idle_streak", 0) or 0)
     idle_gate_open = bool(settings.get("idle_conversations_enabled")) and (

@@ -151,6 +151,35 @@ class TestSettingsNormalization:
         result = _normalize_runtime_settings({"response_length": {"narrator_length": "verbose"}})
         assert result["response_length"] == "short"
 
+    def test_interaction_duration_mode_ticks(self):
+        result = _normalize_runtime_settings({"interaction_duration_mode": "ticks"})
+        assert result["interaction_duration_mode"] == "ticks"
+
+    def test_interaction_duration_mode_until_next_command(self):
+        result = _normalize_runtime_settings({"interaction_duration_mode": "until_next_command"})
+        assert result["interaction_duration_mode"] == "until_next_command"
+
+    def test_interaction_duration_mode_invalid_defaults_to_ticks(self):
+        result = _normalize_runtime_settings({"interaction_duration_mode": "invalid"})
+        assert result["interaction_duration_mode"] == "ticks"
+
+    def test_interaction_duration_ticks_valid(self):
+        result = _normalize_runtime_settings({"interaction_duration_ticks": 10})
+        assert result["interaction_duration_ticks"] == 10
+
+    def test_interaction_duration_ticks_clamped_min(self):
+        result = _normalize_runtime_settings({"interaction_duration_ticks": 0})
+        assert result["interaction_duration_ticks"] == 1
+
+    def test_interaction_duration_ticks_clamped_max(self):
+        result = _normalize_runtime_settings({"interaction_duration_ticks": 25})
+        assert result["interaction_duration_ticks"] == 20
+
+    def test_interaction_duration_defaults(self):
+        result = _normalize_runtime_settings({})
+        assert result["interaction_duration_mode"] == "ticks"
+        assert result["interaction_duration_ticks"] == 5
+
 
 class TestRealPlayerActivity:
     def test_records_timestamp(self):

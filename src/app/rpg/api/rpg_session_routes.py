@@ -241,14 +241,14 @@ async def update_rpg_session_settings(request: Request):
         return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
 
     runtime_state = _safe_dict(session.get("runtime_state"))
-    existing = _safe_dict(runtime_state.get("settings"))
+    existing = _safe_dict(runtime_state.get("runtime_settings"))
     merged = dict(existing)
     merged.update(settings)
-    runtime_state["settings"] = _normalize_runtime_settings(merged)
+    runtime_state["runtime_settings"] = _normalize_runtime_settings(merged)
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
 
-    return {"ok": True, "settings": runtime_state["settings"]}
+    return {"ok": True, "settings": runtime_state["runtime_settings"]}
 
 
 @rpg_session_bp.post("/api/rpg/session/delete")
@@ -594,9 +594,9 @@ async def get_rpg_session_world_events(request: Request):
     recent_rows = _safe_list(runtime_state.get("recent_world_event_rows"))[-48:]
 
     from app.rpg.analytics.world_events import (
-        build_player_world_view_rows,
-        build_player_local_world_view_rows,
         build_player_global_world_view_rows,
+        build_player_local_world_view_rows,
+        build_player_world_view_rows,
     )
     player_world_view_rows = build_player_world_view_rows(simulation_state, runtime_state)
     player_local_world_view_rows = build_player_local_world_view_rows(simulation_state, runtime_state)

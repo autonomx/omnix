@@ -37,7 +37,7 @@ def save_session_to_disk(session: Dict[str, Any]) -> Dict[str, Any]:
         "save_version": _SAVE_VERSION,
         "session": session,
     }
-    path = _session_path(manifest.get("id", "session"))
+    path = _session_path(manifest.get("session_id", "session"))
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return session
 

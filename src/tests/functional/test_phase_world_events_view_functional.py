@@ -365,7 +365,10 @@ class TestWorldEventsRoute:
 
 class TestLivingWorldActivityState:
     def test_npc_active_activity_persists_across_ticks(self):
-        from app.rpg.session.runtime import advance_actor_activities_for_tick, get_actor_activity
+        from app.rpg.session.runtime import (
+            advance_actor_activities_for_tick,
+            get_actor_activity,
+        )
         sim = _sim_state(tick=100, npc_index={"npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric", "location_id": "loc_tavern"}})
         rt = _runtime_state()
         rt = advance_actor_activities_for_tick(sim, rt)
@@ -395,7 +398,10 @@ class TestLivingWorldActivityState:
         assert len(set(summaries)) >= 2
 
     def test_activity_can_generate_world_consequence(self):
-        from app.rpg.session.runtime import advance_actor_activities_for_tick, emit_activity_beats_for_tick
+        from app.rpg.session.runtime import (
+            advance_actor_activities_for_tick,
+            emit_activity_beats_for_tick,
+        )
         sim = _sim_state(
             tick=100,
             npc_index={"npc_guard_captain": {"id": "npc_guard_captain", "name": "Captain Aldric", "location_id": "loc_tavern"}}
@@ -428,7 +434,10 @@ class TestLivingWorldActivityState:
 
 
 def test_gossip_activity_creates_rumor_consequence():
-    from app.rpg.session.runtime import set_actor_activity, propagate_activity_consequences_for_tick
+    from app.rpg.session.runtime import (
+        propagate_activity_consequences_for_tick,
+        set_actor_activity,
+    )
     sim = _sim_state(tick=100)
     rt = _runtime_state()
     rt = set_actor_activity(rt, "npc_innkeeper", {
@@ -453,7 +462,10 @@ def test_gossip_activity_creates_rumor_consequence():
 
 
 def test_patrol_activity_creates_security_pressure():
-    from app.rpg.session.runtime import set_actor_activity, propagate_activity_consequences_for_tick
+    from app.rpg.session.runtime import (
+        propagate_activity_consequences_for_tick,
+        set_actor_activity,
+    )
     sim = _sim_state(tick=100)
     rt = _runtime_state()
     rt = set_actor_activity(rt, "npc_guard_captain", {
