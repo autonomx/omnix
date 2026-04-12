@@ -352,7 +352,8 @@ def build_player_local_world_view_rows(simulation_state: Dict[str, Any], runtime
 
     merged_rows = _merge_world_view_rows(rows, simulation_state, runtime_state)
     suppressed_rows = _suppress_repetitive_world_view_rows(merged_rows)
-    suppressed_rows.sort(key=lambda r: (-_safe_int(r.get("tick"), 0), _safe_str(r.get("event_id"))))
+    # Use _row_sort_key to prioritize player-action events via _player_bias
+    suppressed_rows.sort(key=_row_sort_key)
     return suppressed_rows[:_MAX_PLAYER_WORLD_VIEW_ROWS]
 
 
@@ -385,7 +386,7 @@ def build_player_global_world_view_rows(simulation_state: Dict[str, Any], runtim
 
     merged_rows = _merge_world_view_rows(rows, simulation_state, runtime_state)
     suppressed_rows = _suppress_repetitive_world_view_rows(merged_rows)
-    suppressed_rows.sort(key=lambda r: (-_safe_int(r.get("tick"), 0), _safe_str(r.get("event_id"))))
+    suppressed_rows.sort(key=_row_sort_key)
     return suppressed_rows[:_MAX_PLAYER_WORLD_VIEW_ROWS]
 
 
@@ -418,12 +419,15 @@ def _player_bias(row: Dict[str, Any]) -> int:
     row = _safe_dict(row)
     tags = [str(x).strip() for x in _safe_list(row.get("tags")) if str(x).strip()]
     source = _safe_str(row.get("source"))
+    kind = _safe_str(row.get("kind"))
     if (
         "player_action" in tags
+        or "player_engaged" in tags
         or "crowd_attention" in tags
         or "rumor_seed" in tags
         or "scene_impact" in tags
         or source == "semantic_player_runtime"
+        or kind in ("interaction_beat", "player_action_consequence", "world_pressure", "world_rumor")
     ):
         return 1
     return 0
@@ -903,6 +907,37 @@ def build_incremental_world_event_rows(
             status="active",
             source="scene_beats",
         ))
+
+    # ── Suppress generic NPC beats when player action is active ─────────
+    # When the player is actively doing something notable, demote routine
+    # NPC activity beats so player-action-related events surface first.
+    last_player_action = _safe_dict(runtime_state.get("last_player_action"))
+    player_action_active = bool(_safe_str(last_player_action.get("text")))
+    if player_action_active:
+        player_rows = []
+        generic_rows = []
+        for row in rows:
+            row = _safe_dict(row)
+            tags = [str(x).strip() for x in _safe_list(row.get("tags")) if str(x).strip()]
+            source = _safe_str(row.get("source"))
+            kind = _safe_str(row.get("kind"))
+            is_player_related = (
+                "player_action" in tags
+                or "player_engaged" in tags
+                or "crowd_attention" in tags
+                or "rumor_seed" in tags
+                or "scene_impact" in tags
+                or source == "semantic_player_runtime"
+                or kind in ("interaction_beat", "player_action_consequence", "world_pressure", "world_rumor")
+            )
+            if is_player_related:
+                player_rows.append(row)
+            else:
+                generic_rows.append(row)
+        # Keep all player-related rows, fill remaining slots with generic
+        player_rows.sort(key=_row_sort_key)
+        generic_rows.sort(key=_row_sort_key)
+        rows = player_rows + generic_rows
 
     rows.sort(key=_row_sort_key)
     print(
