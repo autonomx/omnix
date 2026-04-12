@@ -314,29 +314,19 @@ async def execute_rpg_session_turn_stream(request: Request):
             yield _sse({"type": "error", "error": "session_id_required"})
         return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)
 
-    # Merge per-request performance overrides into session runtime state
-    if request_performance:
-        try:
-            session = load_runtime_session(session_id)
-            if session and isinstance(session, dict):
-                rs = session.get("runtime_state")
-                if isinstance(rs, dict):
-                    existing_perf = rs.get("performance") or {}
-                    if isinstance(existing_perf, dict):
-                        merged = {**existing_perf, **request_performance}
-                    else:
-                        merged = dict(request_performance)
-                    rs["performance"] = merged
-                    session["runtime_state"] = rs
-                    save_runtime_session(session)
-        except Exception:
-            _logger.debug("Failed to merge performance overrides into session", exc_info=True)
-
     def generate():
         yield _sse({"type": "accepted"})
         yield _sse({"type": "processing", "stage": "turn"})
 
-        result = apply_turn(session_id, player_input, action=action)
+        # Thread performance override into apply_turn in-memory only;
+        # do NOT persist it to session before the turn so that a failed
+        # request cannot mutate durable session state.
+        result = apply_turn(
+            session_id,
+            player_input,
+            action=action,
+            performance_override=request_performance or None,
+        )
 
         if not result.get("ok"):
             err = _safe_str(result.get("error") or "turn_failed")

@@ -73,6 +73,10 @@ class AppLLMGateway:
         context: Optional[Dict[str, Any]] = None,
         timeout_s: Optional[float] = None,
     ) -> str:
+        # NOTE: timeout_s is accepted for forward-compatible API shape but is
+        # intentionally not wired to the underlying provider yet.  Callers may
+        # pass it to express intent; actual timeout enforcement will be added
+        # when the provider abstraction gains native support.
         logger.debug("[RPG GATEWAY] Calling provider.chat_completion")
         messages = self._build_messages(prompt, context=context)
         response = self.provider.chat_completion(messages=messages, stream=False)

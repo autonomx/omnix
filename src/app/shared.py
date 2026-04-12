@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -218,12 +219,18 @@ def extract_thinking(content):
     return "", content
 
 def _build_provider_cache_key(provider_name: str, provider_config: "ProviderConfig") -> str:
-    """Build a stable cache key from provider configuration."""
+    """Build a stable cache key from provider configuration.
+
+    Uses a SHA-256 hash of the API key rather than the raw secret so that
+    sensitive material is not held in a general-purpose cache key string.
+    """
+    raw_key = getattr(provider_config, "api_key", "") or ""
+    key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()[:16] if raw_key else ""
     parts = [
         provider_name,
         getattr(provider_config, "base_url", "") or "",
         getattr(provider_config, "model", "") or "",
-        getattr(provider_config, "api_key", "") or "",
+        key_hash,
     ]
     return "|".join(parts)
 
