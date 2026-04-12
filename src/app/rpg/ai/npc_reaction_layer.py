@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
 import hashlib
 import json
+from typing import Any, Dict, List
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -63,6 +63,29 @@ def _npc_role(npc: Dict[str, Any]) -> str:
     if "innkeeper" in name:
         return "innkeeper"
     return "civilian"
+
+
+_GUARD_STAGE_ORDER = {
+    "none": 0,
+    "observe": 1,
+    "warn": 2,
+    "intervene": 3,
+    "restrain": 4,
+}
+
+_CROWD_STAGE_ORDER = {
+    "none": 0,
+    "observe": 1,
+    "gather": 2,
+    "alarm": 3,
+    "panic": 4,
+}
+
+
+def _max_stage(current: str, candidate: str, order: Dict[str, int]) -> str:
+    current = _safe_str(current).strip().lower() or "none"
+    candidate = _safe_str(candidate).strip().lower() or "none"
+    return candidate if order.get(candidate, 0) > order.get(current, 0) else current
 
 
 def build_interaction_reaction_context(
@@ -127,13 +150,14 @@ def build_interaction_reaction_context(
     elif interaction_class in {"competition", "performance"}:
         signals.append("public_activity")
 
+    location_id = _safe_str(simulation_state.get("location_id")) or _safe_str(next((npc.get("location_id") for npc in simulation_state.get("npc_index", {}).values() if npc.get("location_id")), None))
     return {
         "interaction_id": _safe_str(interaction.get("id")),
         "semantic_action_id": _safe_str(interaction.get("semantic_action_id")),
         "interaction_class": interaction_class,
         "action_type": action_type,
         "subtype": subtype,
-        "location_id": _safe_str(interaction.get("location_id")),
+        "location_id": location_id,
         "participants": _safe_list(interaction.get("participants")),
         "visibility": visibility,
         "intensity": intensity,
@@ -148,6 +172,106 @@ def build_interaction_reaction_context(
     }
 
 
+def _reaction_state_map(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    items = _safe_list(runtime_state.get("interaction_reaction_state"))
+    result: Dict[str, Any] = {}
+    for raw in items:
+        item = _safe_dict(raw)
+        iid = _safe_str(item.get("interaction_id")).strip()
+        if iid:
+            result[iid] = item
+    return result
+
+
+def _reaction_state_list(state_map: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = [_safe_dict(v) for _, v in sorted(state_map.items())]
+    return rows[:16]
+
+
+def _interaction_stage_state(runtime_state: Dict[str, Any], interaction_id: str) -> Dict[str, Any]:
+    state_map = _reaction_state_map(runtime_state)
+    return _safe_dict(state_map.get(_safe_str(interaction_id).strip()))
+
+
+def _compute_guard_stage(context: Dict[str, Any], previous: Dict[str, Any]) -> str:
+    context = _safe_dict(context)
+    previous = _safe_dict(previous)
+    interaction_class = _safe_str(context.get("interaction_class"))
+    severity = _safe_int(context.get("severity"), 0)
+    lawfulness_risk = _safe_int(context.get("lawfulness_risk"), 0)
+    ticks_active = _safe_int(previous.get("ticks_active"), 0) + 1
+    current = _safe_str(previous.get("guard_stage")) or "none"
+
+    target = "none"
+    if interaction_class in {"competition", "performance"}:
+        target = "observe"
+    elif interaction_class == "threat":
+        target = "warn" if ticks_active <= 2 else "intervene"
+    elif interaction_class == "violence":
+        if severity >= 4 or lawfulness_risk >= 4:
+            target = "intervene" if ticks_active <= 1 else "restrain"
+        else:
+            target = "warn" if ticks_active <= 1 else "intervene"
+
+    return _max_stage(current, target, _GUARD_STAGE_ORDER)
+
+
+def _compute_crowd_stage(context: Dict[str, Any], previous: Dict[str, Any]) -> str:
+    context = _safe_dict(context)
+    previous = _safe_dict(previous)
+    interaction_class = _safe_str(context.get("interaction_class"))
+    spectacle_value = _safe_int(context.get("spectacle_value"), 0)
+    fear_value = _safe_int(context.get("fear_value"), 0)
+    ticks_active = _safe_int(previous.get("ticks_active"), 0) + 1
+    current = _safe_str(previous.get("crowd_stage")) or "none"
+
+    target = "none"
+    if interaction_class in {"competition", "performance"}:
+        target = "gather" if spectacle_value >= 2 else "observe"
+    elif interaction_class == "threat":
+        target = "alarm" if fear_value >= 2 else "observe"
+    elif interaction_class == "violence":
+        target = "alarm" if ticks_active <= 1 else "panic"
+
+    return _max_stage(current, target, _CROWD_STAGE_ORDER)
+
+
+def update_interaction_reaction_state(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    context: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    context = _safe_dict(context)
+
+    state_map = _reaction_state_map(runtime_state)
+    iid = _safe_str(context.get("interaction_id")).strip()
+    if not iid:
+        runtime_state["interaction_reaction_state"] = _reaction_state_list(state_map)
+        return runtime_state
+
+    previous = _safe_dict(state_map.get(iid))
+    tick = _safe_int(context.get("tick"), 0)
+    ticks_active = _safe_int(previous.get("ticks_active"), 0) + 1
+    if _safe_int(previous.get("last_tick"), -1) == tick:
+        ticks_active = _safe_int(previous.get("ticks_active"), 1)
+
+    guard_stage = _compute_guard_stage(context, previous)
+    crowd_stage = _compute_crowd_stage(context, previous)
+
+    state_map[iid] = {
+        "interaction_id": iid,
+        "guard_stage": guard_stage,
+        "crowd_stage": crowd_stage,
+        "ticks_active": ticks_active,
+        "last_tick": tick,
+    }
+    runtime_state["interaction_reaction_state"] = _reaction_state_list(state_map)
+    return runtime_state
+
+
 def build_npc_reaction_candidates(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
@@ -158,8 +282,10 @@ def build_npc_reaction_candidates(
     npc_index = _safe_dict(simulation_state.get("npc_index"))
     location_id = _safe_str(context.get("location_id"))
     participants = set(_safe_list(context.get("participants")))
-    signals = set(_safe_list(context.get("signals")))
     interaction_class = _safe_str(context.get("interaction_class"))
+    stage_state = _interaction_stage_state(runtime_state, _safe_str(context.get("interaction_id")))
+    guard_stage = _safe_str(stage_state.get("guard_stage")) or "none"
+    crowd_stage = _safe_str(stage_state.get("crowd_stage")) or "none"
 
     candidates: List[Dict[str, Any]] = []
 
@@ -178,19 +304,25 @@ def build_npc_reaction_candidates(
         pressure_delta = 0
 
         if role == "guard":
-            if "violence" in signals:
+            if guard_stage == "restrain":
+                reaction_type = "restrain"
+                priority = 110
+                summary = f"{_safe_str(npc.get('name'))} moves to physically restrain the disturbance."
+                pressure_topic = "law_enforcement"
+                pressure_delta = 3
+            elif guard_stage == "intervene":
                 reaction_type = "intervene"
                 priority = 100
                 summary = f"{_safe_str(npc.get('name'))} steps in to stop the violence."
                 pressure_topic = "law_enforcement"
                 pressure_delta = 2
-            elif "authority_attention" in signals or "public_disruption" in signals:
+            elif guard_stage == "warn":
                 reaction_type = "warn"
                 priority = 80
-                summary = f"{_safe_str(npc.get('name'))} moves closer, ready to intervene."
+                summary = f"{_safe_str(npc.get('name'))} issues a sharp warning and moves closer."
                 pressure_topic = "law_enforcement"
                 pressure_delta = 1
-            elif "spectacle" in signals:
+            elif guard_stage == "observe":
                 reaction_type = "observe"
                 priority = 60
                 summary = f"{_safe_str(npc.get('name'))} watches the scene closely."
@@ -204,7 +336,7 @@ def build_npc_reaction_candidates(
                 summary = f"{_safe_str(npc.get('name'))} shouts for help as the disturbance escalates."
                 pressure_topic = "tavern_tension"
                 pressure_delta = 2
-            elif interaction_class in {"competition", "performance"}:
+            elif interaction_class in {"competition", "performance"} and crowd_stage in {"observe", "gather"}:
                 reaction_type = "observe"
                 priority = 55
                 summary = f"{_safe_str(npc.get('name'))} keeps a close eye on the lively scene."
@@ -212,13 +344,19 @@ def build_npc_reaction_candidates(
                 pressure_delta = 1
 
         else:
-            if interaction_class == "violence":
+            if crowd_stage == "panic":
+                reaction_type = "panic"
+                priority = 90
+                summary = f"{_safe_str(npc.get('name'))} panics and tries to get clear of the chaos."
+                pressure_topic = "crowd_anxiety"
+                pressure_delta = 2
+            elif crowd_stage == "alarm":
                 reaction_type = "recoil"
                 priority = 70
-                summary = f"{_safe_str(npc.get('name'))} recoils from the sudden violence."
+                summary = f"{_safe_str(npc.get('name'))} recoils from the sudden danger."
                 pressure_topic = "crowd_anxiety"
                 pressure_delta = 1
-            elif interaction_class in {"competition", "performance"}:
+            elif crowd_stage in {"observe", "gather"} and interaction_class in {"competition", "performance"}:
                 reaction_type = "observe"
                 priority = 50
                 summary = f"{_safe_str(npc.get('name'))} pauses to watch the scene unfold."
@@ -248,7 +386,7 @@ def build_npc_reaction_candidates(
                 "summary": summary,
                 "pressure_topic": pressure_topic,
                 "pressure_delta": pressure_delta,
-                "tags": ["npc_reaction", interaction_class, reaction_type],
+                "tags": ["npc_reaction", "escalation", interaction_class, reaction_type, role],
                 "tick": _safe_int(context.get("tick"), 0),
             }
         )

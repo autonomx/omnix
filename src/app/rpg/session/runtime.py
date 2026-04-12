@@ -33,6 +33,13 @@ from app.rpg.ai.npc_initiative import (
     compute_opening_relevance,
     select_npc_initiative_candidate,
 )
+from app.rpg.ai.npc_reaction_layer import (
+    apply_npc_reactions,
+    build_interaction_reaction_context,
+    build_npc_reaction_candidates,
+    select_npc_reactions,
+    update_interaction_reaction_state,
+)
 from app.rpg.ai.scene_continuity import (
     advance_scene,
     build_continuation_beats,
@@ -52,12 +59,6 @@ from app.rpg.ai.scene_weaver import (
     select_scene_candidate,
 )
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
-from app.rpg.ai.npc_reaction_layer import (
-    apply_npc_reactions,
-    build_interaction_reaction_context,
-    build_npc_reaction_candidates,
-    select_npc_reactions,
-)
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.schema import normalize_world_behavior_config
@@ -175,6 +176,7 @@ _MAX_ACTIVE_INTERACTIONS = 8
 _DEFAULT_INTERACTION_DURATION_TICKS = 3
 _INTERACTION_STALE_GRACE_TICKS = 1
 _MAX_NPC_REACTION_RECORDS = 64
+_MAX_INTERACTION_REACTION_STATE = 16
 
 
 def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
@@ -245,8 +247,11 @@ def _ensure_semantic_action_runtime_state(runtime_state: Dict[str, Any]) -> Dict
 def _ensure_npc_reaction_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("npc_reaction_records", [])
+    runtime_state.setdefault("interaction_reaction_state", [])
     records = _safe_list(runtime_state.get("npc_reaction_records"))
     runtime_state["npc_reaction_records"] = records[-_MAX_NPC_REACTION_RECORDS:]
+    state_rows = _safe_list(runtime_state.get("interaction_reaction_state"))
+    runtime_state["interaction_reaction_state"] = state_rows[-_MAX_INTERACTION_REACTION_STATE:]
     return runtime_state
 
 
@@ -598,6 +603,7 @@ def _run_npc_reaction_pass(
             continue
         context = build_interaction_reaction_context(simulation_state, runtime_state, interaction)
         context["tick"] = _safe_int(current_tick, 0)
+        runtime_state = update_interaction_reaction_state(simulation_state, runtime_state, context)
         candidates = build_npc_reaction_candidates(simulation_state, runtime_state, context)
         reactions = select_npc_reactions(simulation_state, runtime_state, candidates)
         simulation_state, runtime_state = apply_npc_reactions(simulation_state, runtime_state, reactions)
@@ -775,6 +781,17 @@ def _clean_resolved_interaction_world_event_rows(
             continue
         kept_reaction_records.append(record)
     runtime_state["npc_reaction_records"] = kept_reaction_records[-_MAX_NPC_REACTION_RECORDS:]
+
+    # Clean escalation state tied to resolved interactions
+    reaction_state_rows = _safe_list(runtime_state.get("interaction_reaction_state"))
+    kept_reaction_state_rows: list[Dict[str, Any]] = []
+    for row in reaction_state_rows:
+        row = _safe_dict(row)
+        interaction_id = _safe_str(row.get("interaction_id")).strip()
+        if interaction_id and interaction_id in resolved_ids:
+            continue
+        kept_reaction_state_rows.append(row)
+    runtime_state["interaction_reaction_state"] = kept_reaction_state_rows[-_MAX_INTERACTION_REACTION_STATE:]
 
     return runtime_state
 
@@ -5351,11 +5368,6 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         after_state,
         _safe_int(after_state.get("tick"), current_tick),
     )
-    after_state, runtime_state = _run_npc_reaction_pass(
-        after_state,
-        runtime_state,
-        _safe_int(after_state.get("tick"), current_tick),
-    )
     _log_interaction_trace(
         "apply_turn_after_interaction_creation",
         {
@@ -5870,6 +5882,16 @@ def _apply_idle_tick_to_session(
     # Ask the LLM for bounded semantic state-change proposals only when there
     # is no active unresolved interaction and no queued proposals already.
     runtime_state = maybe_enqueue_llm_semantic_state_change_proposals(simulation_state, runtime_state)
+
+    # NPC reaction pass
+    authoritative_tick = current_tick
+    simulation_state, runtime_state = _run_npc_reaction_pass(
+        simulation_state,
+        runtime_state,
+        authoritative_tick,
+    )
+    session["simulation_state"] = simulation_state
+    session["runtime_state"] = runtime_state
 
     # Compile and apply structured semantic state-change proposals, then emit
     # beats from the accepted canonical deltas.

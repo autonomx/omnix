@@ -238,3 +238,190 @@ def test_reactions_do_not_duplicate_across_idle_ticks(monkeypatch):
     reaction_ids_2 = sorted(rt._safe_str(rt._safe_dict(r).get("event_id")) for r in reaction_rows_2)
 
     assert reaction_ids_1 == reaction_ids_2
+
+
+def test_violence_escalates_guard_from_intervene_to_restrain(monkeypatch):
+    def fake_semantic_advisory(*args, **kwargs):
+        text = kwargs.get("player_input", "")
+        return {
+            "action_type": "violence",
+            "semantic_family": "combat",
+            "interaction_mode": "direct",
+            "activity_label": "punching_in_the_face",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "visibility": "public",
+            "intensity": 3,
+            "stakes": 2,
+            "social_axes": [],
+            "observer_hooks": ["authority_attention", "crowd_attention"],
+            "scene_impact": "violence",
+            "reason": text,
+        }
+
+    monkeypatch.setattr(rt, "get_semantic_action_advisory", fake_semantic_advisory)
+    monkeypatch.setattr(rt, "build_app_llm_gateway", lambda: None)
+    monkeypatch.setattr(
+        rt,
+        "narrate_scene",
+        lambda *args, **kwargs: {"ok": True, "used_llm": False, "narrative": "Test", "reply": "Test"},
+    )
+
+    fake_store = {}
+
+    def _fake_save(session):
+        sid = rt._safe_dict(session.get("manifest")).get("session_id")
+        fake_store[sid] = session
+        return session
+
+    def _fake_load(session_id):
+        return fake_store.get(session_id)
+
+    monkeypatch.setattr(rt, "save_runtime_session", _fake_save)
+    monkeypatch.setattr(rt, "load_runtime_session", _fake_load)
+
+    session = rt.build_session_from_start_result({"title": "Test Tavern"}, _base_start_result())
+    sid = rt._safe_dict(session.get("manifest")).get("session_id")
+    session["runtime_state"]["runtime_settings"] = rt._normalize_runtime_settings(
+        {"interaction_duration_mode": "until_next_command", "interaction_duration_ticks": 5}
+    )
+    rt.save_runtime_session(session)
+
+    result = rt.apply_turn(sid, "I punch Bran in the face")
+    assert result["ok"] is True
+
+    saved = rt.load_runtime_session(sid)
+    idle_1 = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_1["ok"] is True
+    saved = idle_1["session"]
+
+    joined_1 = " || ".join(_summaries(saved)).lower()
+    assert "stop the violence" in joined_1 or "warning" in joined_1 or "moves closer" in joined_1
+
+    idle_2 = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_2["ok"] is True
+    saved = idle_2["session"]
+
+    joined_2 = " || ".join(_summaries(saved)).lower()
+    assert "restrain" in joined_2 or "physically restrain" in joined_2
+
+
+def test_competition_causes_crowd_gather_not_panic(monkeypatch):
+    def fake_semantic_advisory(*args, **kwargs):
+        text = kwargs.get("player_input", "")
+        return {
+            "action_type": "social_competition",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "social_axes": [],
+            "observer_hooks": ["spectacle", "crowd_attention"],
+            "scene_impact": "gathers_attention",
+            "reason": text,
+        }
+
+    monkeypatch.setattr(rt, "get_semantic_action_advisory", fake_semantic_advisory)
+    monkeypatch.setattr(rt, "build_app_llm_gateway", lambda: None)
+    monkeypatch.setattr(
+        rt,
+        "narrate_scene",
+        lambda *args, **kwargs: {"ok": True, "used_llm": False, "narrative": "Test", "reply": "Test"},
+    )
+
+    fake_store = {}
+
+    def _fake_save(session):
+        sid = rt._safe_dict(session.get("manifest")).get("session_id")
+        fake_store[sid] = session
+        return session
+
+    def _fake_load(session_id):
+        return fake_store.get(session_id)
+
+    monkeypatch.setattr(rt, "save_runtime_session", _fake_save)
+    monkeypatch.setattr(rt, "load_runtime_session", _fake_load)
+
+    session = rt.build_session_from_start_result({"title": "Test Tavern"}, _base_start_result())
+    sid = rt._safe_dict(session.get("manifest")).get("session_id")
+    session["runtime_state"]["runtime_settings"] = rt._normalize_runtime_settings(
+        {"interaction_duration_mode": "until_next_command", "interaction_duration_ticks": 5}
+    )
+    rt.save_runtime_session(session)
+
+    result = rt.apply_turn(sid, "I challenge Bran to arm wrestling")
+    assert result["ok"] is True
+
+    saved = rt.load_runtime_session(sid)
+    idle = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle["ok"] is True
+    saved = idle["session"]
+
+    joined = " || ".join(_summaries(saved)).lower()
+    assert "watch the scene" in joined or "watch the scene unfold" in joined or "watches the scene closely" in joined
+    assert "panic" not in joined
+
+
+def test_idle_tick_integration_no_variable_errors(monkeypatch):
+    """Test that _apply_idle_tick_to_session runs without variable-name or runtime errors."""
+    def fake_semantic_advisory(*args, **kwargs):
+        return {
+            "action_type": "violence",
+            "semantic_family": "combat",
+            "interaction_mode": "direct",
+            "activity_label": "punching_in_the_face",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "visibility": "public",
+            "intensity": 3,
+            "stakes": 2,
+            "social_axes": [],
+            "observer_hooks": ["authority_attention", "crowd_attention"],
+            "scene_impact": "violence",
+            "reason": "",
+        }
+
+    monkeypatch.setattr(rt, "get_semantic_action_advisory", fake_semantic_advisory)
+    monkeypatch.setattr(rt, "build_app_llm_gateway", lambda: None)
+    monkeypatch.setattr(
+        rt,
+        "narrate_scene",
+        lambda *args, **kwargs: {"ok": True, "used_llm": False, "narrative": "Test", "reply": "Test"},
+    )
+
+    fake_store = {}
+
+    def _fake_save(session):
+        sid = rt._safe_dict(session.get("manifest")).get("session_id")
+        fake_store[sid] = session
+        return session
+
+    def _fake_load(session_id):
+        return fake_store.get(session_id)
+
+    monkeypatch.setattr(rt, "save_runtime_session", _fake_save)
+    monkeypatch.setattr(rt, "load_runtime_session", _fake_load)
+
+    session = rt.build_session_from_start_result({"title": "Test Tavern"}, _base_start_result())
+    sid = rt._safe_dict(session.get("manifest")).get("session_id")
+    session["runtime_state"]["runtime_settings"] = rt._normalize_runtime_settings(
+        {"interaction_duration_mode": "until_next_command", "interaction_duration_ticks": 5}
+    )
+    rt.save_runtime_session(session)
+
+    result = rt.apply_turn(sid, "I punch Bran in the face")
+    assert result["ok"] is True
+
+    saved = rt.load_runtime_session(sid)
+    # Call the real _apply_idle_tick_to_session function
+    idle_result = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_result["ok"] is True
+    assert "session" in idle_result
+    # Ensure no KeyError or NameError by accessing key parts
+    updated_session = idle_result["session"]
+    assert "simulation_state" in updated_session
+    assert "runtime_state" in updated_session

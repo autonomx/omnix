@@ -462,6 +462,8 @@ def _player_bias(row: Dict[str, Any]) -> int:
         or kind in ("interaction_beat", "player_action_consequence", "world_pressure", "world_rumor", "npc_reaction_beat")
     ):
         return 1
+    if "escalation" in tags:
+        return 1
     return 0
 
 
