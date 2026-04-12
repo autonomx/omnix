@@ -40,7 +40,8 @@ def _normalize_session(value: Any) -> Dict[str, Any]:
     state = _safe_dict(data.get("state"))
     return {
         "manifest": {
-            "id": _safe_str(manifest.get("id")).strip(),
+            "id": _safe_str(manifest.get("id") or manifest.get("session_id")).strip(),
+            "session_id": _safe_str(manifest.get("session_id") or manifest.get("id")).strip(),
             "schema_version": int(manifest.get("schema_version") or 2),
             "title": _safe_str(manifest.get("title")).strip(),
             "status": _first_non_empty(manifest.get("status"), "active"),
