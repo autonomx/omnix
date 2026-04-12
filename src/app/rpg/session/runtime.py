@@ -160,6 +160,7 @@ _MAX_SEMANTIC_PROPOSALS = 32
 _MAX_ACCEPTED_STATE_CHANGE_EVENTS = 64
 _MAX_APPLIED_PROPOSAL_IDS = 128
 _MAX_LLM_PROPOSAL_CANDIDATES = 8
+_MAX_PROMPT_SCENE_BEATS = 4
 _SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS = 1
 _MAX_RECORDED_SEMANTIC_LLM_PROPOSALS = 8
 _MAX_SEMANTIC_ACTION_RECORDS = 64
@@ -2689,7 +2690,7 @@ def _build_semantic_state_change_prompt_contract(
 
     # ── Recent scene context (player-driven beats) ───────────────────────
     recent_beats_context: List[Dict[str, str]] = []
-    for beat in _safe_list(runtime_state.get("recent_scene_beats"))[-6:]:
+    for beat in _safe_list(runtime_state.get("recent_scene_beats"))[-_MAX_PROMPT_SCENE_BEATS:]:
         beat = _safe_dict(beat)
         summary = _safe_str(beat.get("summary")).strip()
         if not summary:
@@ -2725,7 +2726,7 @@ def _build_semantic_state_change_prompt_contract(
     if player_action_context:
         prompt_payload["recent_player_action"] = player_action_context
     if recent_beats_context:
-        prompt_payload["recent_scene_beats"] = recent_beats_context[-4:]
+        prompt_payload["recent_scene_beats"] = recent_beats_context[-_MAX_PROMPT_SCENE_BEATS:]
 
     player_context_instruction = ""
     if player_action_context:
