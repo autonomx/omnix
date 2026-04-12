@@ -614,6 +614,98 @@ def _resolve_until_next_command_interactions(
     return simulation_state
 
 
+def _clean_resolved_interaction_world_event_rows(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Remove recent_world_event_rows that reference resolved interactions."""
+    resolved_labels: set[str] = set()
+    resolved_ids: set[str] = set()
+    for raw in _safe_list(simulation_state.get("active_interactions")):
+        item = _safe_dict(raw)
+        if not _safe_bool(item.get("resolved"), False):
+            continue
+        state = _safe_dict(item.get("state"))
+        label = _safe_str(state.get("activity_label") or item.get("subtype") or "").strip().lower()
+        if label:
+            resolved_labels.add(label)
+        iid = _safe_str(item.get("id")).strip()
+        if iid:
+            resolved_ids.add(iid)
+        sid = _safe_str(item.get("semantic_action_id")).strip()
+        if sid:
+            resolved_ids.add(sid)
+
+    if not resolved_labels and not resolved_ids:
+        return runtime_state
+
+    def _row_references_resolved(row: Dict[str, Any]) -> bool:
+        row = _safe_dict(row)
+        eid = _safe_str(row.get("event_id")).strip().lower()
+        summary_lower = _safe_str(row.get("summary")).strip().lower()
+        # Normalize separators for matching
+        summary_normalized = summary_lower.replace("-", " ").replace("_", " ")
+        for label in resolved_labels:
+            label_normalized = label.replace("_", " ").replace("-", " ")
+            if label_normalized and (label_normalized in summary_lower or label_normalized in summary_normalized):
+                return True
+        for rid in resolved_ids:
+            if rid and rid.lower() in eid:
+                return True
+        return False
+
+    # Clean recent_world_event_rows
+    rows = _safe_list(runtime_state.get("recent_world_event_rows"))
+    kept: list[Dict[str, Any]] = []
+    for row in rows:
+        row = _safe_dict(row)
+        kind = _safe_str(row.get("kind")).strip().lower()
+        # Skip non-interaction row kinds — always keep simulation/global rows
+        if kind in ("world_event", "director_pressure"):
+            kept.append(row)
+            continue
+        if _row_references_resolved(row):
+            continue
+        kept.append(row)
+    runtime_state["recent_world_event_rows"] = kept[-_MAX_RECENT_WORLD_EVENT_ROWS:]
+
+    # Clean recent_scene_beats
+    beats = _safe_list(runtime_state.get("recent_scene_beats"))
+    kept_beats: list[Dict[str, Any]] = []
+    for beat in beats:
+        beat = _safe_dict(beat)
+        if _row_references_resolved(beat):
+            continue
+        kept_beats.append(beat)
+    runtime_state["recent_scene_beats"] = kept_beats[-_MAX_RECENT_SCENE_BEATS:]
+
+    # Clean world_consequences
+    consequences = _safe_list(runtime_state.get("world_consequences"))
+    kept_consequences: list[Dict[str, Any]] = []
+    for c in consequences:
+        if not _row_references_resolved(_safe_dict(c)):
+            kept_consequences.append(c)
+    runtime_state["world_consequences"] = kept_consequences[-_MAX_WORLD_CONSEQUENCES:]
+
+    # Clean world_rumors
+    rumors = _safe_list(runtime_state.get("world_rumors"))
+    kept_rumors: list[Dict[str, Any]] = []
+    for r in rumors:
+        if not _row_references_resolved(_safe_dict(r)):
+            kept_rumors.append(r)
+    runtime_state["world_rumors"] = kept_rumors[-_MAX_WORLD_RUMORS:]
+
+    # Clean world_pressure
+    pressure = _safe_list(runtime_state.get("world_pressure"))
+    kept_pressure: list[Dict[str, Any]] = []
+    for p in pressure:
+        if not _row_references_resolved(_safe_dict(p)):
+            kept_pressure.append(p)
+    runtime_state["world_pressure"] = kept_pressure[-_MAX_WORLD_PRESSURE:]
+
+    return runtime_state
+
+
 def _prune_llm_records_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     records = _safe_list(runtime_state.get("llm_records"))[-_MAX_RUNTIME_LLM_RECORDS:]
@@ -3889,6 +3981,9 @@ def _emit_scene_beats_from_active_interactions(
     tick = _safe_int(runtime_state.get("tick", 0), 0)
 
     for interaction in interactions:
+        # Skip resolved interactions — no new beats should be emitted for them.
+        if _safe_bool(interaction.get("resolved"), False):
+            continue
         key = _interaction_memory_key(interaction)
         prev_interaction = _safe_dict(prev_memory.get(key))
         changes = _detect_interaction_changes(prev_interaction, interaction)
@@ -5144,6 +5239,9 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     next_setup = _safe_dict(step_result.get("next_setup")) or setup
     after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
 
+    # step_simulation_state does not carry over runtime-level active_interactions.
+    after_state["active_interactions"] = _safe_list(after_progression_state.get("active_interactions"))
+
     _log_interaction_trace(
         "apply_turn_before_semantic_apply",
         {
@@ -5193,6 +5291,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         current_tick,
     )
     after_state = _expire_stale_active_interactions(after_state, _safe_int(after_state.get("tick"), current_tick))
+    runtime_state = _clean_resolved_interaction_world_event_rows(after_state, runtime_state)
 
 
     scenes = generate_scenes_from_simulation(after_state)
@@ -5328,6 +5427,11 @@ def _advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "hear
     step_result = step_simulation_state(setup)
     after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
     next_setup = _safe_dict(step_result.get("next_setup")) or setup
+
+    # step_simulation_state evolves factions/locations/events but does not
+    # know about runtime-level active_interactions.  Carry them forward from
+    # the pre-step simulation state so they survive idle ticks.
+    after_state["active_interactions"] = _safe_list(simulation_state.get("active_interactions"))
 
     return {
         "ok": True,

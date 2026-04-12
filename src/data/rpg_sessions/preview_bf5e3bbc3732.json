@@ -1,0 +1,2892 @@
+{
+  "save_version": "1.0",
+  "session": {
+    "manifest": {
+      "id": "session:unknown",
+      "session_id": "preview_bf5e3bbc3732",
+      "schema_version": 4,
+      "title": "Test Tavern",
+      "status": "active",
+      "created_at": "2026-04-12T07:35:35.876793+00:00",
+      "updated_at": "2026-04-12T07:35:35.909839+00:00",
+      "source_pack_id": "",
+      "source_template_id": "",
+      "archived": false
+    },
+    "state": {},
+    "setup_payload": {
+      "title": "Test Tavern",
+      "location_name": "Tavern",
+      "setup_id": "preview_bf5e3bbc3732",
+      "genre": "fantasy",
+      "setting": "A mysterious world",
+      "premise": "An adventure awaits",
+      "hard_rules": [],
+      "soft_tone_rules": [],
+      "lore_constraints": [],
+      "themes": [],
+      "forbidden_content": [],
+      "canon_notes": [],
+      "metadata": {
+        "simulation_state": {
+          "tick": 5,
+          "threads": {},
+          "factions": {
+            "faction_kings_guard": {
+              "pressure": 0,
+              "status": "stable"
+            },
+            "faction_rebels": {
+              "pressure": 0,
+              "status": "stable"
+            },
+            "faction_mages": {
+              "pressure": 0,
+              "status": "stable"
+            }
+          },
+          "locations": {
+            "loc_tavern": {
+              "heat": 5,
+              "status": "hot"
+            },
+            "loc_market": {
+              "heat": 5,
+              "status": "hot"
+            },
+            "loc_forest": {
+              "heat": 0,
+              "status": "quiet"
+            }
+          },
+          "history": [
+            {
+              "tick": 1,
+              "summary": [
+                "2 locations became active"
+              ],
+              "changes": {
+                "threads": 0,
+                "factions": 0,
+                "locations": 2,
+                "events": 0,
+                "consequences": 0,
+                "effects": 0,
+                "incidents": 0,
+                "reactions": 0
+              }
+            },
+            {
+              "tick": 2,
+              "summary": [
+                "1 location became active",
+                "1 location became hot"
+              ],
+              "changes": {
+                "threads": 0,
+                "factions": 0,
+                "locations": 2,
+                "events": 0,
+                "consequences": 0,
+                "effects": 0,
+                "incidents": 0,
+                "reactions": 0
+              }
+            },
+            {
+              "tick": 3,
+              "summary": [
+                "2 locations became hot"
+              ],
+              "changes": {
+                "threads": 0,
+                "factions": 0,
+                "locations": 2,
+                "events": 0,
+                "consequences": 0,
+                "effects": 0,
+                "incidents": 0,
+                "reactions": 0
+              }
+            },
+            {
+              "tick": 4,
+              "summary": [
+                "1 location became hot"
+              ],
+              "changes": {
+                "threads": 0,
+                "factions": 0,
+                "locations": 1,
+                "events": 0,
+                "consequences": 0,
+                "effects": 0,
+                "incidents": 0,
+                "reactions": 0
+              }
+            },
+            {
+              "tick": 5,
+              "summary": [],
+              "changes": {
+                "threads": 0,
+                "factions": 0,
+                "locations": 0,
+                "events": 0,
+                "consequences": 0,
+                "effects": 0,
+                "incidents": 0,
+                "reactions": 0
+              }
+            }
+          ],
+          "active_effects": [],
+          "incidents": [],
+          "policy_reactions": [],
+          "step_hash": "48ff97ae",
+          "events": [
+            {
+              "event_id": "npc_event:5:npc_guard_captain:support:faction_kings_guard",
+              "tick": 5,
+              "type": "support",
+              "actor": "npc_guard_captain",
+              "target_id": "faction_kings_guard",
+              "target_kind": "faction",
+              "location_id": "loc_tavern",
+              "faction_id": "faction_kings_guard",
+              "summary": "Captain Aldric checks in with faction_kings_guard.",
+              "internal_reason": "Faction loyalty baseline",
+              "salience": 0.22,
+              "source": "npc_mind"
+            },
+            {
+              "event_id": "npc_event:5:npc_innkeeper:observe:player",
+              "tick": 5,
+              "type": "observe",
+              "actor": "npc_innkeeper",
+              "target_id": "player",
+              "target_kind": "actor",
+              "location_id": "loc_tavern",
+              "faction_id": "",
+              "summary": "Bran the Innkeeper watches the situation carefully.",
+              "internal_reason": "Maintain awareness of player",
+              "salience": 0.2,
+              "source": "npc_mind"
+            },
+            {
+              "event_id": "npc_event:5:npc_merchant:observe:player",
+              "tick": 5,
+              "type": "observe",
+              "actor": "npc_merchant",
+              "target_id": "player",
+              "target_kind": "actor",
+              "location_id": "loc_market",
+              "faction_id": "",
+              "summary": "Elara the Merchant watches the situation carefully.",
+              "internal_reason": "Maintain awareness of player",
+              "salience": 0.2,
+              "source": "npc_mind"
+            }
+          ],
+          "consequences": [],
+          "npc_index": {
+            "npc_guard_captain": {
+              "npc_id": "npc_guard_captain",
+              "name": "Captain Aldric",
+              "role": "guard",
+              "faction_id": "faction_kings_guard",
+              "location_id": "loc_tavern"
+            },
+            "npc_innkeeper": {
+              "npc_id": "npc_innkeeper",
+              "name": "Bran the Innkeeper",
+              "role": "informant",
+              "faction_id": "",
+              "location_id": "loc_tavern"
+            },
+            "npc_merchant": {
+              "npc_id": "npc_merchant",
+              "name": "Elara the Merchant",
+              "role": "trader",
+              "faction_id": "",
+              "location_id": "loc_market"
+            }
+          },
+          "npc_minds": {
+            "npc_guard_captain": {
+              "npc_id": "npc_guard_captain",
+              "memory": {
+                "npc_id": "npc_guard_captain",
+                "entries": []
+              },
+              "beliefs": {
+                "beliefs": {}
+              },
+              "goals": {
+                "goals": [
+                  {
+                    "goal_id": "goal:npc_guard_captain:support_faction:faction_kings_guard",
+                    "type": "support_faction",
+                    "target_id": "faction_kings_guard",
+                    "priority": 0.22,
+                    "reason": "Faction loyalty baseline",
+                    "status": "active",
+                    "progress": 0.0
+                  },
+                  {
+                    "goal_id": "goal:npc_guard_captain:observe:player",
+                    "type": "observe",
+                    "target_id": "player",
+                    "priority": 0.05,
+                    "reason": "Maintain awareness of player",
+                    "status": "active",
+                    "progress": 0.0
+                  }
+                ],
+                "max_goals": 5
+              },
+              "last_decision": {
+                "npc_id": "npc_guard_captain",
+                "tick": 5,
+                "intent": "support",
+                "action_type": "support",
+                "target_id": "faction_kings_guard",
+                "target_kind": "faction",
+                "location_id": "loc_tavern",
+                "reason": "Faction loyalty baseline",
+                "dialogue_hint": "The NPC rallies support for their faction.",
+                "urgency": 0.22
+              },
+              "last_seen_tick": 5
+            },
+            "npc_innkeeper": {
+              "npc_id": "npc_innkeeper",
+              "memory": {
+                "npc_id": "npc_innkeeper",
+                "entries": []
+              },
+              "beliefs": {
+                "beliefs": {}
+              },
+              "goals": {
+                "goals": [
+                  {
+                    "goal_id": "goal:npc_innkeeper:observe:player",
+                    "type": "observe",
+                    "target_id": "player",
+                    "priority": 0.05,
+                    "reason": "Maintain awareness of player",
+                    "status": "active",
+                    "progress": 0.0
+                  }
+                ],
+                "max_goals": 5
+              },
+              "last_decision": {
+                "npc_id": "npc_innkeeper",
+                "tick": 5,
+                "intent": "observe",
+                "action_type": "observe",
+                "target_id": "player",
+                "target_kind": "actor",
+                "location_id": "loc_tavern",
+                "reason": "Maintain awareness of player",
+                "dialogue_hint": "The NPC watches closely.",
+                "urgency": 0.05
+              },
+              "last_seen_tick": 5
+            },
+            "npc_merchant": {
+              "npc_id": "npc_merchant",
+              "memory": {
+                "npc_id": "npc_merchant",
+                "entries": []
+              },
+              "beliefs": {
+                "beliefs": {}
+              },
+              "goals": {
+                "goals": [
+                  {
+                    "goal_id": "goal:npc_merchant:observe:player",
+                    "type": "observe",
+                    "target_id": "player",
+                    "priority": 0.05,
+                    "reason": "Maintain awareness of player",
+                    "status": "active",
+                    "progress": 0.0
+                  }
+                ],
+                "max_goals": 5
+              },
+              "last_decision": {
+                "npc_id": "npc_merchant",
+                "tick": 5,
+                "intent": "observe",
+                "action_type": "observe",
+                "target_id": "player",
+                "target_kind": "actor",
+                "location_id": "loc_market",
+                "reason": "Maintain awareness of player",
+                "dialogue_hint": "The NPC watches closely.",
+                "urgency": 0.05
+              },
+              "last_seen_tick": 5
+            }
+          },
+          "npc_decisions": {
+            "npc_guard_captain": {
+              "npc_id": "npc_guard_captain",
+              "tick": 5,
+              "intent": "support",
+              "action_type": "support",
+              "target_id": "faction_kings_guard",
+              "target_kind": "faction",
+              "location_id": "loc_tavern",
+              "reason": "Faction loyalty baseline",
+              "dialogue_hint": "The NPC rallies support for their faction.",
+              "urgency": 0.22
+            },
+            "npc_innkeeper": {
+              "npc_id": "npc_innkeeper",
+              "tick": 5,
+              "intent": "observe",
+              "action_type": "observe",
+              "target_id": "player",
+              "target_kind": "actor",
+              "location_id": "loc_tavern",
+              "reason": "Maintain awareness of player",
+              "dialogue_hint": "The NPC watches closely.",
+              "urgency": 0.05
+            },
+            "npc_merchant": {
+              "npc_id": "npc_merchant",
+              "tick": 5,
+              "intent": "observe",
+              "action_type": "observe",
+              "target_id": "player",
+              "target_kind": "actor",
+              "location_id": "loc_market",
+              "reason": "Maintain awareness of player",
+              "dialogue_hint": "The NPC watches closely.",
+              "urgency": 0.05
+            }
+          },
+          "social_state": {
+            "reputation": {},
+            "alliances": [],
+            "rumors": [],
+            "group_positions": {
+              "faction_kings_guard": {
+                "target_id": "player",
+                "stance": "watch",
+                "score": 0.0,
+                "updated_tick": 5
+              }
+            },
+            "conversations": {
+              "active": [],
+              "recent": [],
+              "lines_by_conversation": {}
+            }
+          },
+          "active_rumors": [],
+          "sandbox_state": {
+            "projected_outcomes": [
+              {
+                "type": "location_stabilization",
+                "target_id": "loc_tavern",
+                "location_id": "loc_tavern",
+                "summary": "Captain Aldric checks in with faction_kings_guard.",
+                "tick": 5
+              }
+            ],
+            "location_trends": {
+              "loc_tavern": {
+                "stability": 0.6,
+                "danger": 0.4,
+                "control_faction_id": "",
+                "updated_tick": 5
+              }
+            },
+            "thread_trends": {},
+            "faction_trends": {},
+            "world_consequences": [
+              {
+                "consequence_id": "wc:5:0",
+                "type": "location_shift",
+                "target_id": "loc_tavern",
+                "summary": "Captain Aldric checks in with faction_kings_guard.",
+                "severity": "positive",
+                "tick": 5
+              }
+            ]
+          },
+          "sandbox_summary": {
+            "projected_outcome_count": 1,
+            "world_consequence_count": 1
+          },
+          "save_meta": {
+            "schema_version": 7,
+            "engine_version": "phase_9_3"
+          },
+          "timeline": {
+            "ticks": [
+              {
+                "tick": 5,
+                "event_count": 3,
+                "consequence_count": 0,
+                "sandbox_summary": {
+                  "projected_outcome_count": 1,
+                  "world_consequence_count": 1
+                }
+              }
+            ]
+          },
+          "debug_meta": {
+            "conversation_debug": {
+              "tick": 5,
+              "active_conversation_count": 0,
+              "recent_event_types": [
+                "support",
+                "observe",
+                "observe"
+              ]
+            },
+            "last_step_reason": "manual_step",
+            "last_step_tick": 5,
+            "last_tick_changes": {
+              "tick_before": 4,
+              "tick_after": 5,
+              "new_events": [],
+              "new_consequences": []
+            }
+          }
+        },
+        "runtime_state": {
+          "offscreen_conversation_summaries": [
+            {
+              "tick": 1,
+              "type": "offscreen_conversation",
+              "location_id": "loc_tavern",
+              "participants": [
+                "npc_guard_captain",
+                "npc_innkeeper"
+              ],
+              "participant_names": [
+                "Captain Aldric",
+                "Bran the Innkeeper"
+              ],
+              "summary": "Captain Aldric and Bran the Innkeeper share observations about the area."
+            },
+            {
+              "tick": 2,
+              "type": "offscreen_conversation",
+              "location_id": "loc_tavern",
+              "participants": [
+                "npc_guard_captain",
+                "npc_innkeeper"
+              ],
+              "participant_names": [
+                "Captain Aldric",
+                "Bran the Innkeeper"
+              ],
+              "summary": "Captain Aldric and Bran the Innkeeper share observations about the area."
+            },
+            {
+              "tick": 3,
+              "type": "offscreen_conversation",
+              "location_id": "loc_tavern",
+              "participants": [
+                "npc_guard_captain",
+                "npc_innkeeper"
+              ],
+              "participant_names": [
+                "Captain Aldric",
+                "Bran the Innkeeper"
+              ],
+              "summary": "Captain Aldric and Bran the Innkeeper share observations about the area."
+            },
+            {
+              "tick": 4,
+              "type": "offscreen_conversation",
+              "location_id": "loc_tavern",
+              "participants": [
+                "npc_guard_captain",
+                "npc_innkeeper"
+              ],
+              "participant_names": [
+                "Captain Aldric",
+                "Bran the Innkeeper"
+              ],
+              "summary": "Captain Aldric and Bran the Innkeeper share observations about the area."
+            },
+            {
+              "tick": 5,
+              "type": "offscreen_conversation",
+              "location_id": "loc_tavern",
+              "participants": [
+                "npc_guard_captain",
+                "npc_innkeeper"
+              ],
+              "participant_names": [
+                "Captain Aldric",
+                "Bran the Innkeeper"
+              ],
+              "summary": "Captain Aldric and Bran the Innkeeper share observations about the area."
+            }
+          ]
+        }
+      },
+      "starting_npc_ids": [
+        "npc_innkeeper",
+        "npc_merchant",
+        "npc_guard_captain"
+      ],
+      "pacing": {
+        "style": "balanced",
+        "danger_level": "medium",
+        "mystery_weight": 0.25,
+        "combat_weight": 0.25,
+        "politics_weight": 0.15,
+        "social_weight": 0.35
+      },
+      "safety": {
+        "forbidden_themes": [],
+        "soft_avoid_themes": []
+      },
+      "content_balance": {
+        "mystery": 0.2,
+        "combat": 0.2,
+        "politics": 0.2,
+        "exploration": 0.2,
+        "social": 0.2
+      },
+      "locations": [
+        {
+          "location_id": "loc_tavern",
+          "name": "The Rusty Flagon Tavern",
+          "description": "A cozy tavern where travelers gather for news and rumors.",
+          "tags": [
+            "urban",
+            "safe",
+            "social"
+          ],
+          "metadata": {}
+        },
+        {
+          "location_id": "loc_market",
+          "name": "Central Market",
+          "description": "A bustling marketplace where goods and information are traded.",
+          "tags": [
+            "urban",
+            "social",
+            "commerce"
+          ],
+          "metadata": {}
+        },
+        {
+          "location_id": "loc_forest",
+          "name": "The Whispering Woods",
+          "description": "An ancient forest on the edge of civilization, full of mystery and danger.",
+          "tags": [
+            "wilderness",
+            "danger",
+            "mystery"
+          ],
+          "metadata": {}
+        }
+      ],
+      "factions": [
+        {
+          "faction_id": "faction_kings_guard",
+          "name": "The King's Guard",
+          "description": "Loyal soldiers sworn to protect the realm and uphold the crown.",
+          "goals": [
+            "maintain_order",
+            "protect_the_realm"
+          ],
+          "relationships": {
+            "faction_rebels": "hostile",
+            "faction_mages": "neutral"
+          },
+          "metadata": {}
+        },
+        {
+          "faction_id": "faction_rebels",
+          "name": "The Free Folk",
+          "description": "Rebels who believe the crown has grown corrupt and must be overthrown.",
+          "goals": [
+            "overthrow_crown",
+            "establish_freedom"
+          ],
+          "relationships": {
+            "faction_kings_guard": "hostile",
+            "faction_mages": "allied"
+          },
+          "metadata": {}
+        },
+        {
+          "faction_id": "faction_mages",
+          "name": "The Arcane Circle",
+          "description": "A secretive order of mages who seek to preserve magical knowledge.",
+          "goals": [
+            "preserve_magic",
+            "remain_independent"
+          ],
+          "relationships": {
+            "faction_kings_guard": "neutral",
+            "faction_rebels": "allied"
+          },
+          "metadata": {}
+        }
+      ],
+      "npc_seeds": [
+        {
+          "npc_id": "npc_innkeeper",
+          "name": "Bran the Innkeeper",
+          "role": "informant",
+          "description": "A friendly innkeeper who knows all the local rumors.",
+          "goals": [
+            "keep_tavern_running",
+            "gather_rumors"
+          ],
+          "faction_id": null,
+          "location_id": "loc_tavern",
+          "must_survive": false,
+          "metadata": {}
+        },
+        {
+          "npc_id": "npc_merchant",
+          "name": "Elara the Merchant",
+          "role": "trader",
+          "description": "A shrewd merchant looking for rare goods and profitable deals.",
+          "goals": [
+            "make_profit",
+            "find_rare_goods"
+          ],
+          "faction_id": null,
+          "location_id": "loc_market",
+          "must_survive": false,
+          "metadata": {}
+        },
+        {
+          "npc_id": "npc_guard_captain",
+          "name": "Captain Aldric",
+          "role": "guard",
+          "description": "A seasoned guard captain who has seen too many wars.",
+          "goals": [
+            "protect_the_town",
+            "find_the_traitor"
+          ],
+          "faction_id": "faction_kings_guard",
+          "location_id": "loc_tavern",
+          "must_survive": true,
+          "metadata": {}
+        }
+      ],
+      "starting_location_id": "loc_tavern",
+      "desired_content_mix": {
+        "combat": 0.25,
+        "exploration": 0.25,
+        "social": 0.2,
+        "mystery": 0.15,
+        "politics": 0.15
+      },
+      "starting_gear": [
+        {
+          "name": "Torch",
+          "description": "A simple torch for dark places"
+        },
+        {
+          "name": "Rope",
+          "description": "50 feet of sturdy hemp rope"
+        },
+        {
+          "name": "Rations",
+          "description": "Three days of dried travel rations"
+        },
+        {
+          "name": "Waterskin",
+          "description": "A leather waterskin, full"
+        }
+      ],
+      "starting_resources": {
+        "gold": 50,
+        "health_potions": 2
+      },
+      "opening": {
+        "present_npc_ids": [
+          "npc_innkeeper",
+          "npc_merchant",
+          "npc_guard_captain"
+        ],
+        "first_choices": [
+          "Investigate the rumor at the tavern",
+          "Seek out the local authority for information",
+          "Head into the wilds to see for yourself"
+        ],
+        "tension_level": "medium",
+        "location_id": "loc_tavern",
+        "location_name": "The Rusty Flagon Tavern",
+        "scene_frame": "The story opens as: A mysterious stranger arrives bearing an urgent warning",
+        "immediate_problem": "A local village is threatened and no one else will help",
+        "player_involvement_reason": "As a Wandering adventurer seeking fortune and glory, this situation demands your attention.",
+        "time_of_day": "evening",
+        "weather": "clear"
+      },
+      "world_behavior": {
+        "ambient_activity": "medium",
+        "npc_initiative": "medium",
+        "interruptions": "normal",
+        "quest_prompting": "guided",
+        "companion_chatter": "normal",
+        "world_pressure": "standard",
+        "opening_guidance": "normal",
+        "play_style_bias": "balanced"
+      },
+      "response_length": {
+        "narrator_length": "medium",
+        "character_length": "medium"
+      },
+      "player_role": "Wandering adventurer seeking fortune and glory",
+      "campaign_objective": "Uncover the source of the growing darkness and restore balance",
+      "opening_hook": "A mysterious stranger arrives bearing an urgent warning",
+      "starter_conflict": "A local village is threatened and no one else will help",
+      "genre_rules": [
+        "Magic always has a cost",
+        "Ancient prophecies may be misleading",
+        "The wilds are dangerous after dark"
+      ]
+    },
+    "simulation_state": {
+      "tick": 5,
+      "threads": {},
+      "factions": {
+        "faction_kings_guard": {
+          "pressure": 0,
+          "status": "stable"
+        },
+        "faction_rebels": {
+          "pressure": 0,
+          "status": "stable"
+        },
+        "faction_mages": {
+          "pressure": 0,
+          "status": "stable"
+        }
+      },
+      "locations": {
+        "loc_tavern": {
+          "heat": 5,
+          "status": "hot"
+        },
+        "loc_market": {
+          "heat": 5,
+          "status": "hot"
+        },
+        "loc_forest": {
+          "heat": 0,
+          "status": "quiet"
+        }
+      },
+      "history": [
+        {
+          "tick": 1,
+          "summary": [
+            "2 locations became active"
+          ],
+          "changes": {
+            "threads": 0,
+            "factions": 0,
+            "locations": 2,
+            "events": 0,
+            "consequences": 0,
+            "effects": 0,
+            "incidents": 0,
+            "reactions": 0
+          }
+        },
+        {
+          "tick": 2,
+          "summary": [
+            "1 location became active",
+            "1 location became hot"
+          ],
+          "changes": {
+            "threads": 0,
+            "factions": 0,
+            "locations": 2,
+            "events": 0,
+            "consequences": 0,
+            "effects": 0,
+            "incidents": 0,
+            "reactions": 0
+          }
+        },
+        {
+          "tick": 3,
+          "summary": [
+            "2 locations became hot"
+          ],
+          "changes": {
+            "threads": 0,
+            "factions": 0,
+            "locations": 2,
+            "events": 0,
+            "consequences": 0,
+            "effects": 0,
+            "incidents": 0,
+            "reactions": 0
+          }
+        },
+        {
+          "tick": 4,
+          "summary": [
+            "1 location became hot"
+          ],
+          "changes": {
+            "threads": 0,
+            "factions": 0,
+            "locations": 1,
+            "events": 0,
+            "consequences": 0,
+            "effects": 0,
+            "incidents": 0,
+            "reactions": 0
+          }
+        },
+        {
+          "tick": 5,
+          "summary": [],
+          "changes": {
+            "threads": 0,
+            "factions": 0,
+            "locations": 0,
+            "events": 0,
+            "consequences": 0,
+            "effects": 0,
+            "incidents": 0,
+            "reactions": 0
+          }
+        }
+      ],
+      "active_effects": [],
+      "incidents": [],
+      "policy_reactions": [],
+      "step_hash": "48ff97ae",
+      "events": [
+        {
+          "event_id": "npc_event:5:npc_guard_captain:support:faction_kings_guard",
+          "tick": 5,
+          "type": "support",
+          "actor": "npc_guard_captain",
+          "target_id": "faction_kings_guard",
+          "target_kind": "faction",
+          "location_id": "loc_tavern",
+          "faction_id": "faction_kings_guard",
+          "summary": "Captain Aldric checks in with faction_kings_guard.",
+          "internal_reason": "Faction loyalty baseline",
+          "salience": 0.22,
+          "source": "npc_mind"
+        },
+        {
+          "event_id": "npc_event:5:npc_innkeeper:observe:player",
+          "tick": 5,
+          "type": "observe",
+          "actor": "npc_innkeeper",
+          "target_id": "player",
+          "target_kind": "actor",
+          "location_id": "loc_tavern",
+          "faction_id": "",
+          "summary": "Bran the Innkeeper watches the situation carefully.",
+          "internal_reason": "Maintain awareness of player",
+          "salience": 0.2,
+          "source": "npc_mind"
+        },
+        {
+          "event_id": "npc_event:5:npc_merchant:observe:player",
+          "tick": 5,
+          "type": "observe",
+          "actor": "npc_merchant",
+          "target_id": "player",
+          "target_kind": "actor",
+          "location_id": "loc_market",
+          "faction_id": "",
+          "summary": "Elara the Merchant watches the situation carefully.",
+          "internal_reason": "Maintain awareness of player",
+          "salience": 0.2,
+          "source": "npc_mind"
+        }
+      ],
+      "consequences": [],
+      "npc_index": {
+        "npc_guard_captain": {
+          "npc_id": "npc_guard_captain",
+          "name": "Captain Aldric",
+          "role": "guard",
+          "faction_id": "faction_kings_guard",
+          "location_id": "loc_tavern"
+        },
+        "npc_innkeeper": {
+          "npc_id": "npc_innkeeper",
+          "name": "Bran the Innkeeper",
+          "role": "informant",
+          "faction_id": "",
+          "location_id": "loc_tavern"
+        },
+        "npc_merchant": {
+          "npc_id": "npc_merchant",
+          "name": "Elara the Merchant",
+          "role": "trader",
+          "faction_id": "",
+          "location_id": "loc_market"
+        }
+      },
+      "npc_minds": {
+        "npc_guard_captain": {
+          "npc_id": "npc_guard_captain",
+          "memory": {
+            "npc_id": "npc_guard_captain",
+            "entries": []
+          },
+          "beliefs": {
+            "beliefs": {}
+          },
+          "goals": {
+            "goals": [
+              {
+                "goal_id": "goal:npc_guard_captain:support_faction:faction_kings_guard",
+                "type": "support_faction",
+                "target_id": "faction_kings_guard",
+                "priority": 0.22,
+                "reason": "Faction loyalty baseline",
+                "status": "active",
+                "progress": 0.0
+              },
+              {
+                "goal_id": "goal:npc_guard_captain:observe:player",
+                "type": "observe",
+                "target_id": "player",
+                "priority": 0.05,
+                "reason": "Maintain awareness of player",
+                "status": "active",
+                "progress": 0.0
+              }
+            ],
+            "max_goals": 5
+          },
+          "last_decision": {
+            "npc_id": "npc_guard_captain",
+            "tick": 5,
+            "intent": "support",
+            "action_type": "support",
+            "target_id": "faction_kings_guard",
+            "target_kind": "faction",
+            "location_id": "loc_tavern",
+            "reason": "Faction loyalty baseline",
+            "dialogue_hint": "The NPC rallies support for their faction.",
+            "urgency": 0.22
+          },
+          "last_seen_tick": 5
+        },
+        "npc_innkeeper": {
+          "npc_id": "npc_innkeeper",
+          "memory": {
+            "npc_id": "npc_innkeeper",
+            "entries": []
+          },
+          "beliefs": {
+            "beliefs": {}
+          },
+          "goals": {
+            "goals": [
+              {
+                "goal_id": "goal:npc_innkeeper:observe:player",
+                "type": "observe",
+                "target_id": "player",
+                "priority": 0.05,
+                "reason": "Maintain awareness of player",
+                "status": "active",
+                "progress": 0.0
+              }
+            ],
+            "max_goals": 5
+          },
+          "last_decision": {
+            "npc_id": "npc_innkeeper",
+            "tick": 5,
+            "intent": "observe",
+            "action_type": "observe",
+            "target_id": "player",
+            "target_kind": "actor",
+            "location_id": "loc_tavern",
+            "reason": "Maintain awareness of player",
+            "dialogue_hint": "The NPC watches closely.",
+            "urgency": 0.05
+          },
+          "last_seen_tick": 5
+        },
+        "npc_merchant": {
+          "npc_id": "npc_merchant",
+          "memory": {
+            "npc_id": "npc_merchant",
+            "entries": []
+          },
+          "beliefs": {
+            "beliefs": {}
+          },
+          "goals": {
+            "goals": [
+              {
+                "goal_id": "goal:npc_merchant:observe:player",
+                "type": "observe",
+                "target_id": "player",
+                "priority": 0.05,
+                "reason": "Maintain awareness of player",
+                "status": "active",
+                "progress": 0.0
+              }
+            ],
+            "max_goals": 5
+          },
+          "last_decision": {
+            "npc_id": "npc_merchant",
+            "tick": 5,
+            "intent": "observe",
+            "action_type": "observe",
+            "target_id": "player",
+            "target_kind": "actor",
+            "location_id": "loc_market",
+            "reason": "Maintain awareness of player",
+            "dialogue_hint": "The NPC watches closely.",
+            "urgency": 0.05
+          },
+          "last_seen_tick": 5
+        }
+      },
+      "npc_decisions": {
+        "npc_guard_captain": {
+          "npc_id": "npc_guard_captain",
+          "tick": 5,
+          "intent": "support",
+          "action_type": "support",
+          "target_id": "faction_kings_guard",
+          "target_kind": "faction",
+          "location_id": "loc_tavern",
+          "reason": "Faction loyalty baseline",
+          "dialogue_hint": "The NPC rallies support for their faction.",
+          "urgency": 0.22
+        },
+        "npc_innkeeper": {
+          "npc_id": "npc_innkeeper",
+          "tick": 5,
+          "intent": "observe",
+          "action_type": "observe",
+          "target_id": "player",
+          "target_kind": "actor",
+          "location_id": "loc_tavern",
+          "reason": "Maintain awareness of player",
+          "dialogue_hint": "The NPC watches closely.",
+          "urgency": 0.05
+        },
+        "npc_merchant": {
+          "npc_id": "npc_merchant",
+          "tick": 5,
+          "intent": "observe",
+          "action_type": "observe",
+          "target_id": "player",
+          "target_kind": "actor",
+          "location_id": "loc_market",
+          "reason": "Maintain awareness of player",
+          "dialogue_hint": "The NPC watches closely.",
+          "urgency": 0.05
+        }
+      },
+      "social_state": {
+        "reputation": {},
+        "alliances": [],
+        "rumors": [],
+        "group_positions": {
+          "faction_kings_guard": {
+            "target_id": "player",
+            "stance": "watch",
+            "score": 0.0,
+            "updated_tick": 5
+          }
+        },
+        "conversations": {
+          "active": [],
+          "recent": [],
+          "lines_by_conversation": {}
+        }
+      },
+      "active_rumors": [],
+      "sandbox_state": {
+        "projected_outcomes": [
+          {
+            "type": "location_stabilization",
+            "target_id": "loc_tavern",
+            "location_id": "loc_tavern",
+            "summary": "Captain Aldric checks in with faction_kings_guard.",
+            "tick": 5
+          }
+        ],
+        "location_trends": {
+          "loc_tavern": {
+            "stability": 0.6,
+            "danger": 0.4,
+            "control_faction_id": "",
+            "updated_tick": 5
+          }
+        },
+        "thread_trends": {},
+        "faction_trends": {},
+        "world_consequences": [
+          {
+            "consequence_id": "wc:5:0",
+            "type": "location_shift",
+            "target_id": "loc_tavern",
+            "summary": "Captain Aldric checks in with faction_kings_guard.",
+            "severity": "positive",
+            "tick": 5
+          }
+        ]
+      },
+      "sandbox_summary": {
+        "projected_outcome_count": 1,
+        "world_consequence_count": 1
+      },
+      "save_meta": {
+        "schema_version": 7,
+        "engine_version": "phase_9_3"
+      },
+      "timeline": {
+        "ticks": [
+          {
+            "tick": 5,
+            "event_count": 3,
+            "consequence_count": 0,
+            "sandbox_summary": {
+              "projected_outcome_count": 1,
+              "world_consequence_count": 1
+            }
+          }
+        ]
+      },
+      "debug_meta": {
+        "conversation_debug": {
+          "tick": 5,
+          "active_conversation_count": 0,
+          "recent_event_types": [
+            "support",
+            "observe",
+            "observe"
+          ]
+        },
+        "last_step_reason": "manual_step",
+        "last_step_tick": 5,
+        "last_tick_changes": {
+          "tick_before": 4,
+          "tick_after": 5,
+          "new_events": [],
+          "new_consequences": []
+        }
+      },
+      "player_state": {
+        "current_scene_id": "",
+        "current_mode": "scene",
+        "active_npc_id": "",
+        "scene_history": [],
+        "journal_entries": [],
+        "codex": {
+          "npcs": {},
+          "factions": {},
+          "locations": {},
+          "threads": {}
+        },
+        "active_objectives": [],
+        "last_player_view": {},
+        "inventory_state": {
+          "items": [],
+          "equipment": {},
+          "capacity": 50,
+          "currency": {},
+          "last_loot": []
+        },
+        "party_state": {
+          "companions": [],
+          "max_size": 3
+        },
+        "name": "Player",
+        "class_id": "",
+        "background_id": "",
+        "species_id": "",
+        "level": 1,
+        "xp": 0,
+        "xp_to_next": 100,
+        "unspent_points": 0,
+        "unspent_skill_points": 0,
+        "combat_rating": 0,
+        "stats": {
+          "strength": 5,
+          "dexterity": 5,
+          "constitution": 5,
+          "intelligence": 5,
+          "wisdom": 5,
+          "charisma": 5
+        },
+        "skills": {
+          "swordsmanship": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "archery": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "firearms": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "defense": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "stealth": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "persuasion": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "intimidation": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "investigation": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "magic": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          },
+          "hacking": {
+            "level": 0,
+            "xp": 0,
+            "xp_to_next": 25
+          }
+        },
+        "perk_flags": [],
+        "progression_log": [],
+        "nearby_npc_ids": [],
+        "equipped_weapon_slot": "",
+        "equipped_armor_slots": [],
+        "available_checks": []
+      },
+      "memory_state": {
+        "short_term": [],
+        "long_term": [],
+        "world_memory": [],
+        "actor_memory": {},
+        "rumors": []
+      },
+      "presentation_state": {
+        "personality_state": {
+          "profiles": {}
+        },
+        "visual_state": {
+          "character_visual_identities": {},
+          "scene_illustrations": [],
+          "image_requests": [],
+          "visual_assets": [],
+          "appearance_profiles": {},
+          "appearance_events": {},
+          "defaults": {
+            "portrait_style": "rpg-portrait",
+            "scene_style": "rpg-scene",
+            "model": "default",
+            "fallback_portrait_url": "",
+            "fallback_scene_url": ""
+          }
+        }
+      },
+      "world_items": {
+        "by_location": {}
+      },
+      "active_interactions": [],
+      "current_tick": 5
+    },
+    "runtime_state": {
+      "tick": 5,
+      "opening": "Your adventure begins…",
+      "world": {
+        "title": "Test Tavern",
+        "genre": "fantasy",
+        "setting": "A mysterious world",
+        "premise": "An adventure awaits",
+        "summary": ""
+      },
+      "npcs": [],
+      "current_scene": {
+        "scene_id": "scene:tick:4",
+        "scene": "You act: I look around the tavern",
+        "summary": "You act: I look around the tavern",
+        "location_id": "",
+        "actors": [],
+        "options": [],
+        "meta": {
+          "origin": "fallback"
+        },
+        "metadata": {
+          "origin": "fallback"
+        },
+        "items": [],
+        "nearby_npcs": [],
+        "title": "Current Scene",
+        "location_name": "Current Location"
+      },
+      "last_turn_result": {
+        "player_input": "I look around the tavern",
+        "action": {
+          "action_type": "social_competition",
+          "priority": 4,
+          "target_id": "npc_innkeeper",
+          "target_name": "Bran the Innkeeper",
+          "metadata": {
+            "intent_tags": [],
+            "narrative_goal": "",
+            "llm_reason": "",
+            "llm_advisory": true,
+            "semantic_action": {
+              "semantic_action_id": "semantic_action_0bef284515afeb95",
+              "tick": 4,
+              "player_input": "I look around the tavern",
+              "action_type": "observe",
+              "semantic_family": "utility",
+              "interaction_mode": "solo",
+              "activity_label": "look_around",
+              "target_id": "npc_innkeeper",
+              "target_name": "Bran the Innkeeper",
+              "secondary_actor_ids": [],
+              "location_id": "loc_tavern",
+              "visibility": "local",
+              "intensity": 0,
+              "stakes": 0,
+              "social_axes": [],
+              "observer_hooks": [],
+              "scene_impact": "none",
+              "reason": "Unrelated follow-up input.",
+              "summary": "Bran the Innkeeper / look around",
+              "tags": [
+                "look_around",
+                "observe",
+                "player_action",
+                "utility"
+              ]
+            }
+          }
+        },
+        "semantic_action": {
+          "semantic_action_id": "semantic_action_0bef284515afeb95",
+          "tick": 4,
+          "player_input": "I look around the tavern",
+          "action_type": "observe",
+          "semantic_family": "utility",
+          "interaction_mode": "solo",
+          "activity_label": "look_around",
+          "target_id": "npc_innkeeper",
+          "target_name": "Bran the Innkeeper",
+          "secondary_actor_ids": [],
+          "location_id": "loc_tavern",
+          "visibility": "local",
+          "intensity": 0,
+          "stakes": 0,
+          "social_axes": [],
+          "observer_hooks": [],
+          "scene_impact": "none",
+          "reason": "Unrelated follow-up input.",
+          "summary": "Bran the Innkeeper / look around",
+          "tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility"
+          ]
+        },
+        "resolved_result": {
+          "outcome": "success",
+          "roll": 11,
+          "dc": 10,
+          "margin": 1,
+          "action_type": "social_competition",
+          "stat_used": "charisma",
+          "skill_id": "persuasion",
+          "difficulty": "normal",
+          "target_name": "Bran the Innkeeper",
+          "target_id": "npc_innkeeper",
+          "interaction": "",
+          "semantic_action": {}
+        },
+        "combat_result": {},
+        "xp_result": {
+          "player_xp": 0,
+          "base_player_xp": 0,
+          "explicit_player_xp": 0,
+          "computed_player_xp": 0,
+          "stat_bonus": 0
+        },
+        "skill_xp_result": {
+          "awards": {}
+        },
+        "level_up": [],
+        "skill_level_ups": [],
+        "summary": [],
+        "narration": "Test narration."
+      },
+      "turn_history": [
+        {
+          "player_input": "I challenge Bran to arm wrestling",
+          "action": {
+            "action_type": "social_competition",
+            "priority": 8,
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "metadata": {
+              "intent_tags": [],
+              "narrative_goal": "",
+              "llm_reason": "",
+              "llm_advisory": true,
+              "semantic_action": {
+                "semantic_action_id": "semantic_action_42de4d5b8549746a",
+                "tick": 1,
+                "player_input": "I challenge Bran to arm wrestling",
+                "action_type": "social_competition",
+                "semantic_family": "social",
+                "interaction_mode": "direct",
+                "activity_label": "arm_wrestling",
+                "target_id": "npc_innkeeper",
+                "target_name": "Bran the Innkeeper",
+                "secondary_actor_ids": [],
+                "location_id": "",
+                "visibility": "public",
+                "intensity": 2,
+                "stakes": 1,
+                "social_axes": [
+                  {
+                    "axis": "respect",
+                    "delta": 1
+                  }
+                ],
+                "observer_hooks": [
+                  "spectacle",
+                  "crowd_attention",
+                  "authority_notice"
+                ],
+                "scene_impact": "gathers_attention",
+                "reason": "Public tavern contest between player and Bran.",
+                "summary": "Bran the Innkeeper / arm wrestling",
+                "tags": [
+                  "arm_wrestling",
+                  "player_action",
+                  "social",
+                  "social_competition"
+                ]
+              }
+            }
+          },
+          "semantic_action": {
+            "semantic_action_id": "semantic_action_42de4d5b8549746a",
+            "tick": 1,
+            "player_input": "I challenge Bran to arm wrestling",
+            "action_type": "social_competition",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "secondary_actor_ids": [],
+            "location_id": "",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "social_axes": [
+              {
+                "axis": "respect",
+                "delta": 1
+              }
+            ],
+            "observer_hooks": [
+              "spectacle",
+              "crowd_attention",
+              "authority_notice"
+            ],
+            "scene_impact": "gathers_attention",
+            "reason": "Public tavern contest between player and Bran.",
+            "summary": "Bran the Innkeeper / arm wrestling",
+            "tags": [
+              "arm_wrestling",
+              "player_action",
+              "social",
+              "social_competition"
+            ]
+          },
+          "resolved_result": {
+            "outcome": "failure",
+            "roll": 3,
+            "dc": 10,
+            "margin": -7,
+            "action_type": "social_competition",
+            "stat_used": "charisma",
+            "skill_id": "persuasion",
+            "difficulty": "normal",
+            "target_name": "Bran the Innkeeper",
+            "target_id": "npc_innkeeper",
+            "interaction": "",
+            "semantic_action": {}
+          },
+          "combat_result": {},
+          "xp_result": {
+            "player_xp": 0,
+            "base_player_xp": 0,
+            "explicit_player_xp": 0,
+            "computed_player_xp": 0,
+            "stat_bonus": 0
+          },
+          "skill_xp_result": {
+            "awards": {}
+          },
+          "level_up": [],
+          "skill_level_ups": [],
+          "summary": [],
+          "narration": "Test narration."
+        },
+        {
+          "player_input": "I look around the tavern",
+          "action": {
+            "action_type": "social_competition",
+            "priority": 4,
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "metadata": {
+              "intent_tags": [],
+              "narrative_goal": "",
+              "llm_reason": "",
+              "llm_advisory": true,
+              "semantic_action": {
+                "semantic_action_id": "semantic_action_0bef284515afeb95",
+                "tick": 4,
+                "player_input": "I look around the tavern",
+                "action_type": "observe",
+                "semantic_family": "utility",
+                "interaction_mode": "solo",
+                "activity_label": "look_around",
+                "target_id": "npc_innkeeper",
+                "target_name": "Bran the Innkeeper",
+                "secondary_actor_ids": [],
+                "location_id": "loc_tavern",
+                "visibility": "local",
+                "intensity": 0,
+                "stakes": 0,
+                "social_axes": [],
+                "observer_hooks": [],
+                "scene_impact": "none",
+                "reason": "Unrelated follow-up input.",
+                "summary": "Bran the Innkeeper / look around",
+                "tags": [
+                  "look_around",
+                  "observe",
+                  "player_action",
+                  "utility"
+                ]
+              }
+            }
+          },
+          "semantic_action": {
+            "semantic_action_id": "semantic_action_0bef284515afeb95",
+            "tick": 4,
+            "player_input": "I look around the tavern",
+            "action_type": "observe",
+            "semantic_family": "utility",
+            "interaction_mode": "solo",
+            "activity_label": "look_around",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "secondary_actor_ids": [],
+            "location_id": "loc_tavern",
+            "visibility": "local",
+            "intensity": 0,
+            "stakes": 0,
+            "social_axes": [],
+            "observer_hooks": [],
+            "scene_impact": "none",
+            "reason": "Unrelated follow-up input.",
+            "summary": "Bran the Innkeeper / look around",
+            "tags": [
+              "look_around",
+              "observe",
+              "player_action",
+              "utility"
+            ]
+          },
+          "resolved_result": {
+            "outcome": "success",
+            "roll": 11,
+            "dc": 10,
+            "margin": 1,
+            "action_type": "social_competition",
+            "stat_used": "charisma",
+            "skill_id": "persuasion",
+            "difficulty": "normal",
+            "target_name": "Bran the Innkeeper",
+            "target_id": "npc_innkeeper",
+            "interaction": "",
+            "semantic_action": {}
+          },
+          "combat_result": {},
+          "xp_result": {
+            "player_xp": 0,
+            "base_player_xp": 0,
+            "explicit_player_xp": 0,
+            "computed_player_xp": 0,
+            "stat_bonus": 0
+          },
+          "skill_xp_result": {
+            "awards": {}
+          },
+          "level_up": [],
+          "skill_level_ups": [],
+          "summary": [],
+          "narration": "Test narration."
+        }
+      ],
+      "voice_assignments": {},
+      "settings": {
+        "response_length": "short",
+        "idle_conversation_seconds": 15,
+        "idle_conversations_enabled": true,
+        "idle_npc_to_player_enabled": true,
+        "idle_npc_to_npc_enabled": true,
+        "follow_reactions_enabled": true,
+        "reaction_style": "normal",
+        "console_debug_enabled": true,
+        "world_events_panel_enabled": true,
+        "interaction_duration_mode": "ticks",
+        "interaction_duration_ticks": 5
+      },
+      "ambient_queue": [],
+      "ambient_seq": 0,
+      "last_idle_tick_at": "2026-04-12T07:35:35.909242+00:00",
+      "last_player_turn_at": "2026-04-12T07:35:35.904703+00:00",
+      "idle_streak": 1,
+      "ambient_cooldowns": {},
+      "recent_ambient_ids": [],
+      "pending_interrupt": null,
+      "subscription_state": {
+        "last_polled_seq": 0,
+        "_surfaced_conversation_line_keys": []
+      },
+      "ambient_metrics": {
+        "emitted": 0,
+        "suppressed": 0,
+        "coalesced": 0
+      },
+      "last_real_player_activity_at": "2026-04-12T07:35:35.904710+00:00",
+      "last_player_action_context": {
+        "tick": 4,
+        "player_input": "I look around the tavern",
+        "action_type": "social_competition",
+        "movement_intent": "inspect",
+        "risk_level": "low",
+        "urgency": "low",
+        "target_id": "npc_innkeeper",
+        "target_name": "Bran the Innkeeper",
+        "location_id": ""
+      },
+      "idle_debug_trace": {
+        "reason": "heartbeat",
+        "tick_before": 4,
+        "quiet_ticks_before": 0,
+        "world_behavior": {
+          "ambient_activity": "medium",
+          "npc_initiative": "medium",
+          "interruptions": "normal",
+          "quest_prompting": "guided",
+          "companion_chatter": "normal",
+          "world_pressure": "standard",
+          "opening_guidance": "normal",
+          "play_style_bias": "balanced"
+        },
+        "last_player_action_context": {
+          "tick": 4,
+          "player_input": "I look around the tavern",
+          "action_type": "social_competition",
+          "movement_intent": "inspect",
+          "risk_level": "low",
+          "urgency": "low",
+          "target_id": "npc_innkeeper",
+          "target_name": "Bran the Innkeeper",
+          "location_id": ""
+        },
+        "raw_counts": {
+          "ambient_updates": 0,
+          "initiative_candidates": 0,
+          "reaction_candidates": 0,
+          "idle_dialogue_candidates": 0,
+          "scene_beats": 0,
+          "world_event_candidates": 0
+        },
+        "selected": {
+          "initiative": {},
+          "reaction": {},
+          "idle_dialogue": {},
+          "scene": {}
+        },
+        "visibility": {
+          "visible_count": 0,
+          "coalesced_count": 0
+        },
+        "delivery": {},
+        "filters": [],
+        "idle_seconds": 0,
+        "idle_gate_open": false,
+        "idle_gate_reason": "closed",
+        "conversation_idle_seconds": 15
+      },
+      "recent_world_event_rows": [
+        {
+          "event_id": "activity_beat_064b663bd8d2",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Local Activity",
+          "summary": "Captain Aldric serves people and keeps things moving.",
+          "tick": 3,
+          "actors": [
+            "npc_guard_captain"
+          ],
+          "actor_id": "npc_guard_captain",
+          "location_id": "loc_tavern",
+          "priority": 0.7,
+          "status": "active",
+          "source": "activity_runtime"
+        },
+        {
+          "event_id": "activity_beat_3eb9439f26f9",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Local Activity",
+          "summary": "Elara the Merchant takes a quiet moment to rest and observe.",
+          "tick": 3,
+          "actors": [
+            "npc_merchant"
+          ],
+          "actor_id": "npc_merchant",
+          "location_id": "loc_market",
+          "priority": 0.7,
+          "status": "active",
+          "source": "activity_runtime"
+        },
+        {
+          "event_id": "consequence_b4431313dbcb",
+          "scope": "local",
+          "kind": "location_condition",
+          "title": "World Consequence",
+          "summary": "The area feels more orderly and well-kept.",
+          "tick": 3,
+          "actors": [
+            "npc_guard_captain"
+          ],
+          "actor_id": "npc_guard_captain",
+          "location_id": "loc_tavern",
+          "priority": 0.5,
+          "status": "active",
+          "source": "consequence_runtime"
+        },
+        {
+          "event_id": "scene_beat:3:5",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Scene Development",
+          "summary": "Elara the Merchant takes a quiet moment to rest and observe.",
+          "tick": 3,
+          "actors": [],
+          "actor_label": "",
+          "location_id": "loc_market",
+          "priority": 1.0,
+          "status": "active",
+          "source": "scene_beats",
+          "location_label": "",
+          "tags": []
+        },
+        {
+          "event_id": "scene_beat:3:7",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Scene Development",
+          "summary": "Captain Aldric serves people and keeps things moving.",
+          "tick": 3,
+          "actors": [],
+          "actor_label": "",
+          "location_id": "loc_tavern",
+          "priority": 1.0,
+          "status": "active",
+          "source": "scene_beats",
+          "location_label": "",
+          "tags": []
+        },
+        {
+          "event_id": "semantic_action_row:semantic_action_0bef284515afeb95",
+          "scope": "local",
+          "kind": "player_action_consequence",
+          "title": "World Consequence",
+          "summary": "The player's look around affects the immediate scene.",
+          "tick": 4,
+          "actors": [
+            "npc_innkeeper"
+          ],
+          "actor_id": "npc_innkeeper",
+          "location_id": "loc_tavern",
+          "priority": 0.65,
+          "status": "active",
+          "source": "semantic_player_runtime",
+          "tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility"
+          ]
+        },
+        {
+          "event_id": "activity_beat_1b32d2139e89",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Local Activity",
+          "summary": "Captain Aldric haggles over goods and prices.",
+          "tick": 5,
+          "actors": [
+            "npc_guard_captain"
+          ],
+          "actor_id": "npc_guard_captain",
+          "location_id": "loc_tavern",
+          "priority": 0.7,
+          "status": "active",
+          "source": "activity_runtime"
+        },
+        {
+          "event_id": "activity_beat_0708a176008b",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Local Activity",
+          "summary": "Bran the Innkeeper is engaged in look around with the player.",
+          "tick": 5,
+          "actors": [
+            "npc_innkeeper"
+          ],
+          "actor_id": "npc_innkeeper",
+          "location_id": "loc_tavern",
+          "priority": 0.7,
+          "status": "active",
+          "source": "activity_runtime"
+        },
+        {
+          "event_id": "activity_beat_3228527795ec",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Local Activity",
+          "summary": "Elara the Merchant keeps a close eye on the crowd.",
+          "tick": 5,
+          "actors": [
+            "npc_merchant"
+          ],
+          "actor_id": "npc_merchant",
+          "location_id": "loc_market",
+          "priority": 0.7,
+          "status": "active",
+          "source": "activity_runtime"
+        },
+        {
+          "event_id": "consequence_7aa5df0c28aa",
+          "scope": "global",
+          "kind": "market_shift",
+          "title": "World Consequence",
+          "summary": "Trade shifts local prices and availability.",
+          "tick": 5,
+          "actors": [
+            "npc_guard_captain"
+          ],
+          "actor_id": "npc_guard_captain",
+          "location_id": "",
+          "priority": 0.6000000000000001,
+          "status": "active",
+          "source": "consequence_runtime"
+        },
+        {
+          "event_id": "consequence_4164ff674eaf",
+          "scope": "local",
+          "kind": "security_pressure",
+          "title": "World Consequence",
+          "summary": "The local watch grows more visible and alert.",
+          "tick": 5,
+          "actors": [
+            "npc_merchant"
+          ],
+          "actor_id": "npc_merchant",
+          "location_id": "loc_market",
+          "priority": 0.6000000000000001,
+          "status": "active",
+          "source": "consequence_runtime"
+        },
+        {
+          "event_id": "scene_beat:4:0",
+          "scope": "local",
+          "kind": "interaction_beat",
+          "title": "Scene Development",
+          "summary": "Bran the Innkeeper / look around",
+          "tick": 4,
+          "actors": [],
+          "actor_label": "",
+          "location_id": "loc_tavern",
+          "priority": 1.0,
+          "status": "active",
+          "source": "scene_beats",
+          "location_label": "",
+          "tags": []
+        },
+        {
+          "event_id": "scene_beat:5:1",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Scene Development",
+          "summary": "Captain Aldric haggles over goods and prices.",
+          "tick": 5,
+          "actors": [],
+          "actor_label": "",
+          "location_id": "loc_tavern",
+          "priority": 1.0,
+          "status": "active",
+          "source": "scene_beats",
+          "location_label": "",
+          "tags": []
+        },
+        {
+          "event_id": "scene_beat:5:2",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Scene Development",
+          "summary": "Elara the Merchant keeps a close eye on the crowd.",
+          "tick": 5,
+          "actors": [],
+          "actor_label": "",
+          "location_id": "loc_market",
+          "priority": 1.0,
+          "status": "active",
+          "source": "scene_beats",
+          "location_label": "",
+          "tags": []
+        },
+        {
+          "event_id": "scene_beat:5:3",
+          "scope": "local",
+          "kind": "activity_beat",
+          "title": "Scene Development",
+          "summary": "Bran the Innkeeper is engaged in look around with the player.",
+          "tick": 5,
+          "actors": [],
+          "actor_label": "",
+          "location_id": "loc_tavern",
+          "priority": 1.0,
+          "status": "active",
+          "source": "scene_beats",
+          "location_label": "",
+          "tags": []
+        }
+      ],
+      "runtime_settings": {
+        "mode": "live",
+        "interaction_duration_mode": "until_next_command",
+        "interaction_duration_ticks": 5,
+        "interaction_trace": false,
+        "response_length": "short",
+        "idle_conversation_seconds": 15,
+        "idle_conversations_enabled": true,
+        "idle_npc_to_player_enabled": true,
+        "idle_npc_to_npc_enabled": true,
+        "follow_reactions_enabled": true,
+        "console_debug_enabled": true,
+        "world_events_panel_enabled": true,
+        "reaction_style": "normal",
+        "verbose_semantic_trace": false
+      },
+      "known_npc_ids": [],
+      "llm_records": [
+        {
+          "type": "action_advisory",
+          "tick": 0,
+          "player_input": "I challenge Bran to arm wrestling",
+          "candidate_action": {
+            "action_type": "social_activity",
+            "target_id": "",
+            "npc_id": "",
+            "item_id": ""
+          },
+          "output": {
+            "action_type": "social_competition",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper"
+          }
+        },
+        {
+          "type": "semantic_action_advisory",
+          "tick": 0,
+          "player_input": "I challenge Bran to arm wrestling",
+          "candidate_action": {
+            "action_type": "social_activity",
+            "target_id": ""
+          },
+          "output": {
+            "action_type": "social_competition",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "social_axes": [
+              {
+                "axis": "respect",
+                "delta": 1
+              }
+            ],
+            "observer_hooks": [
+              "spectacle",
+              "crowd_attention",
+              "authority_notice"
+            ],
+            "scene_impact": "gathers_attention",
+            "reason": "Public tavern contest between player and Bran."
+          }
+        },
+        {
+          "type": "semantic_action_compiled",
+          "tick": 0,
+          "player_input": "I challenge Bran to arm wrestling",
+          "output": {
+            "semantic_action_id": "semantic_action_42de4d5b8549746a",
+            "tick": 1,
+            "player_input": "I challenge Bran to arm wrestling",
+            "action_type": "social_competition",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "secondary_actor_ids": [],
+            "location_id": "",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "social_axes": [
+              {
+                "axis": "respect",
+                "delta": 1
+              }
+            ],
+            "observer_hooks": [
+              "spectacle",
+              "crowd_attention",
+              "authority_notice"
+            ],
+            "scene_impact": "gathers_attention",
+            "reason": "Public tavern contest between player and Bran.",
+            "summary": "Bran the Innkeeper / arm wrestling",
+            "tags": [
+              "arm_wrestling",
+              "player_action",
+              "social",
+              "social_competition"
+            ]
+          }
+        },
+        {
+          "type": "idle_tick",
+          "tick": 2,
+          "reason": "heartbeat",
+          "updates": [],
+          "latest_seq": 0,
+          "idle_streak": 1,
+          "initiative_candidate": null,
+          "scene_candidate": null,
+          "scene_beats_emitted": 0,
+          "continuing_scene": null,
+          "world_events_emitted": 0,
+          "dialogue_candidate": null
+        },
+        {
+          "type": "idle_tick",
+          "tick": 3,
+          "reason": "heartbeat",
+          "updates": [],
+          "latest_seq": 0,
+          "idle_streak": 2,
+          "initiative_candidate": null,
+          "scene_candidate": null,
+          "scene_beats_emitted": 0,
+          "continuing_scene": null,
+          "world_events_emitted": 0,
+          "dialogue_candidate": null
+        },
+        {
+          "type": "action_advisory",
+          "tick": 3,
+          "player_input": "I look around the tavern",
+          "candidate_action": {
+            "action_type": "observe",
+            "target_id": "",
+            "npc_id": "",
+            "item_id": ""
+          },
+          "output": {
+            "action_type": "social_competition",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper"
+          }
+        },
+        {
+          "type": "semantic_action_advisory",
+          "tick": 3,
+          "player_input": "I look around the tavern",
+          "candidate_action": {
+            "action_type": "observe",
+            "target_id": ""
+          },
+          "output": {
+            "action_type": "observe",
+            "semantic_family": "utility",
+            "interaction_mode": "solo",
+            "activity_label": "look_around",
+            "target_id": "",
+            "target_name": "",
+            "visibility": "local",
+            "intensity": 0,
+            "stakes": 0,
+            "social_axes": [],
+            "observer_hooks": [],
+            "scene_impact": "none",
+            "reason": "Unrelated follow-up input."
+          }
+        },
+        {
+          "type": "semantic_action_compiled",
+          "tick": 3,
+          "player_input": "I look around the tavern",
+          "output": {
+            "semantic_action_id": "semantic_action_0bef284515afeb95",
+            "tick": 4,
+            "player_input": "I look around the tavern",
+            "action_type": "observe",
+            "semantic_family": "utility",
+            "interaction_mode": "solo",
+            "activity_label": "look_around",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "secondary_actor_ids": [],
+            "location_id": "loc_tavern",
+            "visibility": "local",
+            "intensity": 0,
+            "stakes": 0,
+            "social_axes": [],
+            "observer_hooks": [],
+            "scene_impact": "none",
+            "reason": "Unrelated follow-up input.",
+            "summary": "Bran the Innkeeper / look around",
+            "tags": [
+              "look_around",
+              "observe",
+              "player_action",
+              "utility"
+            ]
+          }
+        },
+        {
+          "type": "idle_tick",
+          "tick": 5,
+          "reason": "heartbeat",
+          "updates": [],
+          "latest_seq": 0,
+          "idle_streak": 1,
+          "initiative_candidate": null,
+          "scene_candidate": null,
+          "scene_beats_emitted": 0,
+          "continuing_scene": null,
+          "world_events_emitted": 0,
+          "dialogue_candidate": null
+        }
+      ],
+      "llm_records_index": {
+        "action_advisory:0": {
+          "type": "action_advisory",
+          "tick": 0,
+          "player_input": "I challenge Bran to arm wrestling",
+          "candidate_action": {
+            "action_type": "social_activity",
+            "target_id": "",
+            "npc_id": "",
+            "item_id": ""
+          },
+          "output": {
+            "action_type": "social_competition",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper"
+          }
+        },
+        "semantic_action_advisory:0": {
+          "type": "semantic_action_advisory",
+          "tick": 0,
+          "player_input": "I challenge Bran to arm wrestling",
+          "candidate_action": {
+            "action_type": "social_activity",
+            "target_id": ""
+          },
+          "output": {
+            "action_type": "social_competition",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "social_axes": [
+              {
+                "axis": "respect",
+                "delta": 1
+              }
+            ],
+            "observer_hooks": [
+              "spectacle",
+              "crowd_attention",
+              "authority_notice"
+            ],
+            "scene_impact": "gathers_attention",
+            "reason": "Public tavern contest between player and Bran."
+          }
+        },
+        "semantic_action_compiled:0": {
+          "type": "semantic_action_compiled",
+          "tick": 0,
+          "player_input": "I challenge Bran to arm wrestling",
+          "output": {
+            "semantic_action_id": "semantic_action_42de4d5b8549746a",
+            "tick": 1,
+            "player_input": "I challenge Bran to arm wrestling",
+            "action_type": "social_competition",
+            "semantic_family": "social",
+            "interaction_mode": "direct",
+            "activity_label": "arm_wrestling",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "secondary_actor_ids": [],
+            "location_id": "",
+            "visibility": "public",
+            "intensity": 2,
+            "stakes": 1,
+            "social_axes": [
+              {
+                "axis": "respect",
+                "delta": 1
+              }
+            ],
+            "observer_hooks": [
+              "spectacle",
+              "crowd_attention",
+              "authority_notice"
+            ],
+            "scene_impact": "gathers_attention",
+            "reason": "Public tavern contest between player and Bran.",
+            "summary": "Bran the Innkeeper / arm wrestling",
+            "tags": [
+              "arm_wrestling",
+              "player_action",
+              "social",
+              "social_competition"
+            ]
+          }
+        },
+        "idle_tick:2": {
+          "type": "idle_tick",
+          "tick": 2,
+          "reason": "heartbeat",
+          "updates": [],
+          "latest_seq": 0,
+          "idle_streak": 1,
+          "initiative_candidate": null,
+          "scene_candidate": null,
+          "scene_beats_emitted": 0,
+          "continuing_scene": null,
+          "world_events_emitted": 0,
+          "dialogue_candidate": null
+        },
+        "idle_tick:3": {
+          "type": "idle_tick",
+          "tick": 3,
+          "reason": "heartbeat",
+          "updates": [],
+          "latest_seq": 0,
+          "idle_streak": 2,
+          "initiative_candidate": null,
+          "scene_candidate": null,
+          "scene_beats_emitted": 0,
+          "continuing_scene": null,
+          "world_events_emitted": 0,
+          "dialogue_candidate": null
+        },
+        "action_advisory:3": {
+          "type": "action_advisory",
+          "tick": 3,
+          "player_input": "I look around the tavern",
+          "candidate_action": {
+            "action_type": "observe",
+            "target_id": "",
+            "npc_id": "",
+            "item_id": ""
+          },
+          "output": {
+            "action_type": "social_competition",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper"
+          }
+        },
+        "semantic_action_advisory:3": {
+          "type": "semantic_action_advisory",
+          "tick": 3,
+          "player_input": "I look around the tavern",
+          "candidate_action": {
+            "action_type": "observe",
+            "target_id": ""
+          },
+          "output": {
+            "action_type": "observe",
+            "semantic_family": "utility",
+            "interaction_mode": "solo",
+            "activity_label": "look_around",
+            "target_id": "",
+            "target_name": "",
+            "visibility": "local",
+            "intensity": 0,
+            "stakes": 0,
+            "social_axes": [],
+            "observer_hooks": [],
+            "scene_impact": "none",
+            "reason": "Unrelated follow-up input."
+          }
+        },
+        "semantic_action_compiled:3": {
+          "type": "semantic_action_compiled",
+          "tick": 3,
+          "player_input": "I look around the tavern",
+          "output": {
+            "semantic_action_id": "semantic_action_0bef284515afeb95",
+            "tick": 4,
+            "player_input": "I look around the tavern",
+            "action_type": "observe",
+            "semantic_family": "utility",
+            "interaction_mode": "solo",
+            "activity_label": "look_around",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+            "secondary_actor_ids": [],
+            "location_id": "loc_tavern",
+            "visibility": "local",
+            "intensity": 0,
+            "stakes": 0,
+            "social_axes": [],
+            "observer_hooks": [],
+            "scene_impact": "none",
+            "reason": "Unrelated follow-up input.",
+            "summary": "Bran the Innkeeper / look around",
+            "tags": [
+              "look_around",
+              "observe",
+              "player_action",
+              "utility"
+            ]
+          }
+        },
+        "idle_tick:4": {
+          "type": "idle_tick",
+          "tick": 5,
+          "reason": "heartbeat",
+          "updates": [],
+          "latest_seq": 0,
+          "idle_streak": 1,
+          "initiative_candidate": null,
+          "scene_candidate": null,
+          "scene_beats_emitted": 0,
+          "continuing_scene": null,
+          "world_events_emitted": 0,
+          "dialogue_candidate": null
+        }
+      },
+      "conversation_settings": {},
+      "offscreen_conversation_summaries": [],
+      "last_player_action": {
+        "action_id": "player_action:3",
+        "tick": 3,
+        "text": "I look around the tavern",
+        "action_type": "observe",
+        "target_id": "npc_innkeeper",
+        "semantic_action_id": "semantic_action_0bef284515afeb95"
+      },
+      "last_conversation_intervention": {},
+      "world_rumors": [],
+      "world_pressure": [
+        {
+          "pressure_id": "pressure_0801b93b6e55",
+          "kind": "security_presence",
+          "scope": "local",
+          "location_id": "loc_market",
+          "value": 1,
+          "started_tick": 5,
+          "updated_tick": 5,
+          "summary": "The local watch grows more visible and alert.",
+          "tags": [
+            "security",
+            "watch"
+          ]
+        }
+      ],
+      "location_conditions": [
+        {
+          "condition_id": "condition_2655ff579ff5",
+          "location_id": "loc_tavern",
+          "kind": "orderly",
+          "summary": "The area feels more orderly and well-kept.",
+          "severity": 1,
+          "started_tick": 3,
+          "updated_tick": 3,
+          "status": "active",
+          "tags": [
+            "order",
+            "service"
+          ]
+        }
+      ],
+      "world_consequences": [
+        {
+          "consequence_id": "consequence_b4431313dbcb",
+          "kind": "location_condition",
+          "scope": "local",
+          "location_id": "loc_tavern",
+          "summary": "The area feels more orderly and well-kept.",
+          "source_actor_id": "npc_guard_captain",
+          "source_activity_id": "activity_ca3da6b20815",
+          "tick": 3,
+          "priority": 1,
+          "tags": [
+            "order",
+            "service"
+          ]
+        },
+        {
+          "consequence_id": "consequence_62abb812840e",
+          "kind": "player_action_consequence",
+          "scope": "local",
+          "location_id": "loc_tavern",
+          "summary": "The player's look around affects the immediate scene.",
+          "source_actor_id": "npc_innkeeper",
+          "source_activity_id": "",
+          "tick": 4,
+          "priority": 1,
+          "tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility"
+          ]
+        },
+        {
+          "consequence_id": "consequence_7aa5df0c28aa",
+          "kind": "market_shift",
+          "scope": "global",
+          "location_id": "",
+          "summary": "Trade shifts local prices and availability.",
+          "source_actor_id": "npc_guard_captain",
+          "source_activity_id": "activity_0dcd204cd9da",
+          "tick": 5,
+          "priority": 2,
+          "tags": [
+            "commerce",
+            "market"
+          ]
+        },
+        {
+          "consequence_id": "consequence_4164ff674eaf",
+          "kind": "security_pressure",
+          "scope": "local",
+          "location_id": "loc_market",
+          "summary": "The local watch grows more visible and alert.",
+          "source_actor_id": "npc_merchant",
+          "source_activity_id": "activity_fc41656a1d68",
+          "tick": 5,
+          "priority": 2,
+          "tags": [
+            "security",
+            "watch"
+          ]
+        }
+      ],
+      "actor_activities": {
+        "npc_innkeeper": {
+          "activity_id": "activity_e86ab7f144ae",
+          "kind": "player_engaged",
+          "summary": "Bran the Innkeeper is engaged in look around with the player.",
+          "location_id": "loc_tavern",
+          "target_id": "player",
+          "target_label": "Player",
+          "started_tick": 4,
+          "updated_tick": 5,
+          "expected_duration": 2,
+          "status": "active",
+          "intent": "Respond directly to the player's immediate action.",
+          "world_tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility",
+            "player_engaged"
+          ]
+        },
+        "npc_guard_captain": {
+          "activity_id": "activity_0dcd204cd9da",
+          "kind": "trade",
+          "summary": "Captain Aldric haggles over goods and prices.",
+          "location_id": "loc_tavern",
+          "target_id": "",
+          "target_label": "",
+          "started_tick": 5,
+          "updated_tick": 5,
+          "expected_duration": 4,
+          "status": "active",
+          "intent": "Make a profitable exchange.",
+          "world_tags": [
+            "commerce",
+            "local"
+          ]
+        },
+        "npc_merchant": {
+          "activity_id": "activity_fc41656a1d68",
+          "kind": "watch_crowd",
+          "summary": "Elara the Merchant keeps a close eye on the crowd.",
+          "location_id": "loc_market",
+          "target_id": "",
+          "target_label": "",
+          "started_tick": 5,
+          "updated_tick": 5,
+          "expected_duration": 4,
+          "status": "active",
+          "intent": "Maintain order and watch for trouble.",
+          "world_tags": [
+            "security",
+            "local"
+          ]
+        }
+      },
+      "semantic_action_records": [
+        {
+          "semantic_action_id": "semantic_action_42de4d5b8549746a",
+          "tick": 1,
+          "player_input": "I challenge Bran to arm wrestling",
+          "action_type": "social_competition",
+          "semantic_family": "social",
+          "interaction_mode": "direct",
+          "activity_label": "arm_wrestling",
+          "target_id": "npc_innkeeper",
+          "target_name": "Bran the Innkeeper",
+          "secondary_actor_ids": [],
+          "location_id": "",
+          "visibility": "public",
+          "intensity": 2,
+          "stakes": 1,
+          "social_axes": [
+            {
+              "axis": "respect",
+              "delta": 1
+            }
+          ],
+          "observer_hooks": [
+            "spectacle",
+            "crowd_attention",
+            "authority_notice"
+          ],
+          "scene_impact": "gathers_attention",
+          "reason": "Public tavern contest between player and Bran.",
+          "summary": "Bran the Innkeeper / arm wrestling",
+          "tags": [
+            "arm_wrestling",
+            "player_action",
+            "social",
+            "social_competition"
+          ]
+        },
+        {
+          "semantic_action_id": "semantic_action_0bef284515afeb95",
+          "tick": 4,
+          "player_input": "I look around the tavern",
+          "action_type": "observe",
+          "semantic_family": "utility",
+          "interaction_mode": "solo",
+          "activity_label": "look_around",
+          "target_id": "npc_innkeeper",
+          "target_name": "Bran the Innkeeper",
+          "secondary_actor_ids": [],
+          "location_id": "loc_tavern",
+          "visibility": "local",
+          "intensity": 0,
+          "stakes": 0,
+          "social_axes": [],
+          "observer_hooks": [],
+          "scene_impact": "none",
+          "reason": "Unrelated follow-up input.",
+          "summary": "Bran the Innkeeper / look around",
+          "tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility"
+          ]
+        }
+      ],
+      "semantic_action_index": {
+        "semantic_action_42de4d5b8549746a": {
+          "semantic_action_id": "semantic_action_42de4d5b8549746a",
+          "tick": 1,
+          "player_input": "I challenge Bran to arm wrestling",
+          "action_type": "social_competition",
+          "semantic_family": "social",
+          "interaction_mode": "direct",
+          "activity_label": "arm_wrestling",
+          "target_id": "npc_innkeeper",
+          "target_name": "Bran the Innkeeper",
+          "secondary_actor_ids": [],
+          "location_id": "",
+          "visibility": "public",
+          "intensity": 2,
+          "stakes": 1,
+          "social_axes": [
+            {
+              "axis": "respect",
+              "delta": 1
+            }
+          ],
+          "observer_hooks": [
+            "spectacle",
+            "crowd_attention",
+            "authority_notice"
+          ],
+          "scene_impact": "gathers_attention",
+          "reason": "Public tavern contest between player and Bran.",
+          "summary": "Bran the Innkeeper / arm wrestling",
+          "tags": [
+            "arm_wrestling",
+            "player_action",
+            "social",
+            "social_competition"
+          ]
+        },
+        "semantic_action_0bef284515afeb95": {
+          "semantic_action_id": "semantic_action_0bef284515afeb95",
+          "tick": 4,
+          "player_input": "I look around the tavern",
+          "action_type": "observe",
+          "semantic_family": "utility",
+          "interaction_mode": "solo",
+          "activity_label": "look_around",
+          "target_id": "npc_innkeeper",
+          "target_name": "Bran the Innkeeper",
+          "secondary_actor_ids": [],
+          "location_id": "loc_tavern",
+          "visibility": "local",
+          "intensity": 0,
+          "stakes": 0,
+          "social_axes": [],
+          "observer_hooks": [],
+          "scene_impact": "none",
+          "reason": "Unrelated follow-up input.",
+          "summary": "Bran the Innkeeper / look around",
+          "tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility"
+          ]
+        }
+      },
+      "recent_scene_beats": [
+        {
+          "id": "scene_beat_358428de61aa",
+          "tick": 3,
+          "kind": "activity_beat",
+          "summary": "Elara the Merchant takes a quiet moment to rest and observe.",
+          "priority": 40,
+          "scene_id": "",
+          "interaction_id": "",
+          "actors": [],
+          "location_id": "loc_market",
+          "recap_level": "notable",
+          "tags": [
+            "idle",
+            "local"
+          ]
+        },
+        {
+          "id": "scene_beat_ebbf4f0e7205",
+          "tick": 3,
+          "kind": "activity_beat",
+          "summary": "Captain Aldric serves people and keeps things moving.",
+          "priority": 40,
+          "scene_id": "",
+          "interaction_id": "",
+          "actors": [],
+          "location_id": "loc_tavern",
+          "recap_level": "notable",
+          "tags": [
+            "service",
+            "local"
+          ]
+        },
+        {
+          "id": "scene_beat_b5fe4b61d2b0",
+          "tick": 4,
+          "kind": "interaction_beat",
+          "summary": "Bran the Innkeeper / look around",
+          "priority": 50,
+          "scene_id": "scene:tick:1",
+          "interaction_id": "semantic_interaction:semantic_action_0bef284515afeb95",
+          "actors": [
+            "player",
+            "npc_innkeeper"
+          ],
+          "location_id": "loc_tavern",
+          "recap_level": "notable",
+          "tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility"
+          ]
+        },
+        {
+          "id": "scene_beat_0b22667bcc89",
+          "tick": 5,
+          "kind": "activity_beat",
+          "summary": "Captain Aldric haggles over goods and prices.",
+          "priority": 40,
+          "scene_id": "",
+          "interaction_id": "",
+          "actors": [],
+          "location_id": "loc_tavern",
+          "recap_level": "notable",
+          "tags": [
+            "commerce",
+            "local"
+          ]
+        },
+        {
+          "id": "scene_beat_e1da1c22d9e3",
+          "tick": 5,
+          "kind": "activity_beat",
+          "summary": "Elara the Merchant keeps a close eye on the crowd.",
+          "priority": 40,
+          "scene_id": "",
+          "interaction_id": "",
+          "actors": [],
+          "location_id": "loc_market",
+          "recap_level": "notable",
+          "tags": [
+            "security",
+            "local"
+          ]
+        },
+        {
+          "id": "scene_beat_e51114e0cdb7",
+          "tick": 5,
+          "kind": "activity_beat",
+          "summary": "Bran the Innkeeper is engaged in look around with the player.",
+          "priority": 40,
+          "scene_id": "",
+          "interaction_id": "",
+          "actors": [],
+          "location_id": "loc_tavern",
+          "recap_level": "notable",
+          "tags": [
+            "look_around",
+            "observe",
+            "player_action",
+            "utility",
+            "player_engaged"
+          ]
+        }
+      ],
+      "grounded_scene_context": {
+        "scene_title": "Current Scene",
+        "location_id": "",
+        "location_name": "Current Location",
+        "scene_summary": "You act: I challenge Bran to arm wrestling",
+        "present_actor_ids": [],
+        "present_actor_names": []
+      },
+      "ambient_history": [],
+      "director_log": [],
+      "scene_beat_memory": {},
+      "post_player_quiet_ticks": 0,
+      "opening_runtime": {},
+      "scene_runtime": {
+        "active_scenes": [],
+        "recent_scene_ids": [],
+        "recent_scene_pairs": [],
+        "last_scene_tick": -999
+      },
+      "global_world_beats": [
+        {
+          "event_id": "global_beat_17f74f754c9c",
+          "scope": "global",
+          "kind": "world_event",
+          "title": "World Event",
+          "summary": "Trade activity shifts prices and availability in the area.",
+          "tick": 5,
+          "actors": [
+            "npc_guard_captain"
+          ],
+          "actor_id": "npc_guard_captain",
+          "location_id": "",
+          "priority": 0.6,
+          "status": "active",
+          "source": "activity_runtime"
+        }
+      ],
+      "semantic_state_change_proposals": [],
+      "accepted_state_change_events": [],
+      "rejected_state_change_events": [],
+      "applied_semantic_proposal_ids": [],
+      "last_semantic_llm_tick": -999999,
+      "recorded_semantic_llm_proposals": [],
+      "recorded_semantic_llm_prompt": "",
+      "recorded_semantic_llm_raw_output": "",
+      "recorded_semantic_llm_capture_tick": -999999
+    }
+  }
+}

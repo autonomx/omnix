@@ -350,6 +350,33 @@ def build_player_local_world_view_rows(simulation_state: Dict[str, Any], runtime
             )
         )
 
+    # --- Active player interactions (arm wrestling, contests, etc.) ---
+    for item in _safe_list(simulation_state.get("active_interactions")):
+        item = _safe_dict(item)
+        if _safe_str(item.get("resolved")) in ("True", "true", "1") or item.get("resolved") is True:
+            continue
+        state = _safe_dict(item.get("state"))
+        activity_label = _safe_str(state.get("activity_label") or item.get("subtype") or item.get("action_type") or "interaction")
+        summary = _safe_str(state.get("summary"))
+        if not summary:
+            display_name = _safe_str(item.get("display_name") or "")
+            summary = f"{activity_label.replace('_', ' ').title()} with {display_name}".strip() if display_name else activity_label.replace("_", " ").title()
+        rows.append(
+            _make_event_row(
+                event_id=_safe_str(item.get("id")) or f"interaction:{_safe_int(item.get('started_tick'), 0)}",
+                scope="local",
+                kind="interaction_beat",
+                title=activity_label.replace("_", " ").title(),
+                summary=summary,
+                tick=_safe_int(item.get("updated_tick") or item.get("started_tick"), 0),
+                actors=_safe_list(item.get("participants")),
+                location_id=_safe_str(item.get("location_id")),
+                priority=0.9,
+                source="semantic_player_runtime",
+                tags=["player_engaged", "player_action"],
+            )
+        )
+
     merged_rows = _merge_world_view_rows(rows, simulation_state, runtime_state)
     suppressed_rows = _suppress_repetitive_world_view_rows(merged_rows)
     # Use _row_sort_key to prioritize player-action events via _player_bias

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.rpg.analytics.world_events import build_player_world_view_rows
-from src.app.rpg.session import runtime as rt
+from app.rpg.session import runtime as rt
 
 
 def _base_start_result() -> Dict[str, Any]:
@@ -63,7 +63,10 @@ def test_arm_wrestling_event_stays_visible_in_world_events_until_next_unrelated_
 
     # --- Create deterministic semantic interpretation so the test does not depend on live LLM output.
     def fake_semantic_advisory(*args, **kwargs):
-        text = " ".join(str(x) for x in args if isinstance(x, str)).lower()
+        text = kwargs.get("player_input", "")
+        if not text:
+            text = " ".join(str(x) for x in args if isinstance(x, str))
+        text = text.lower()
         if "arm wrestle" in text or "arm wrestling" in text:
             return {
                 "action_type": "social_competition",
@@ -96,7 +99,7 @@ def test_arm_wrestling_event_stays_visible_in_world_events_until_next_unrelated_
             "reason": "Non-interaction follow-up.",
         }
 
-    monkeypatch.setattr("app.rpg.ai.semantic_action_intelligence.get_semantic_action_advisory", fake_semantic_advisory)
+    monkeypatch.setattr(rt, "get_semantic_action_advisory", fake_semantic_advisory)
 
     def fake_action_advisory(*args, **kwargs):
         return {
@@ -105,7 +108,7 @@ def test_arm_wrestling_event_stays_visible_in_world_events_until_next_unrelated_
             "target_name": "Bran the Innkeeper",
         }
 
-    monkeypatch.setattr("app.rpg.ai.action_intelligence.get_action_advisory", fake_action_advisory)
+    monkeypatch.setattr(rt, "get_action_advisory", fake_action_advisory)
 
     # Optional but useful: avoid any live narration/provider dependency if apply_turn touches it.
     def fake_narration(*args, **kwargs):
@@ -113,19 +116,29 @@ def test_arm_wrestling_event_stays_visible_in_world_events_until_next_unrelated_
             "ok": True,
             "used_llm": False,
             "raw_llm_narrative": "",
-            "narration": "Test narration.",
+            "narrative": "Test narration.",
             "reply": "Test reply.",
         }
 
-    if hasattr(rt, "run_turn_narration"):
-        monkeypatch.setattr(rt, "run_turn_narration", fake_narration)
-    if hasattr(rt, "generate_turn_narration"):
-        monkeypatch.setattr(rt, "generate_turn_narration", fake_narration)
+    monkeypatch.setattr(rt, "narrate_scene", fake_narration)
+
+    # Also prevent live LLM gateway usage.
+    monkeypatch.setattr(rt, "build_app_llm_gateway", lambda: None)
 
     # Mock session store for test isolation
     fake_session_store = {}
-    monkeypatch.setattr(rt, "load_runtime_session", lambda session_id: fake_session_store.get(session_id))
-    monkeypatch.setattr(rt, "save_runtime_session", lambda session: fake_session_store.__setitem__(session["session_id"], session) or session)
+
+    def _fake_save(session):
+        sid = rt._safe_dict(session.get("manifest")).get("session_id") or session.get("session_id", "")
+        if sid:
+            fake_session_store[sid] = session
+        return session
+
+    def _fake_load(session_id):
+        return fake_session_store.get(session_id)
+
+    monkeypatch.setattr(rt, "load_runtime_session", _fake_load)
+    monkeypatch.setattr(rt, "save_runtime_session", _fake_save)
 
     # --- Build and save a real session.
     session = rt.build_session_from_start_result(
@@ -158,7 +171,9 @@ def test_arm_wrestling_event_stays_visible_in_world_events_until_next_unrelated_
     assert rt._safe_list(saved_sim.get("active_interactions")), "active_interactions were not persisted"
 
     # --- Run an idle tick. The interaction should still be active before next unrelated command.
-    saved = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    idle_result = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_result.get("ok") is True, f"idle tick failed: {idle_result.get('error')}"
+    saved = idle_result["session"]
     rt.save_runtime_session(saved)
 
     summaries_after_idle = _world_summaries(saved)
@@ -172,7 +187,9 @@ def test_arm_wrestling_event_stays_visible_in_world_events_until_next_unrelated_
     ), f"Expected wrestling/contest-related world event, got: {summaries_after_idle}"
 
     # --- A second idle tick should STILL keep it visible in until_next_command mode.
-    saved = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    idle_result_2 = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_result_2.get("ok") is True, f"idle tick 2 failed: {idle_result_2.get('error')}"
+    saved = idle_result_2["session"]
     rt.save_runtime_session(saved)
 
     summaries_second_idle = _world_summaries(saved)
@@ -190,7 +207,9 @@ def test_arm_wrestling_event_stays_visible_in_world_events_until_next_unrelated_
     assert result_2["ok"] is True
 
     saved = rt.load_runtime_session(session_id)
-    saved = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    idle_result_3 = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_result_3.get("ok") is True, f"idle tick 3 failed: {idle_result_3.get('error')}"
+    saved = idle_result_3["session"]
     rt.save_runtime_session(saved)
 
     summaries_after_unrelated = _world_summaries(saved)

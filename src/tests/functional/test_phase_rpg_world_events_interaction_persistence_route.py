@@ -6,8 +6,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.app.rpg.api.rpg_session_routes import rpg_session_bp
-from src.app.rpg.session import runtime as rt
+from app.rpg.api.rpg_session_routes import rpg_session_bp
+from app.rpg.session import runtime as rt
 
 
 def _base_start_result() -> Dict[str, Any]:
@@ -53,7 +53,13 @@ def _make_app() -> TestClient:
 
 
 def _extract_summaries_from_world_events_payload(payload: Dict[str, Any]) -> list[str]:
-    rows = payload.get("rows") or payload.get("events") or payload.get("world_events") or []
+    rows = (
+        payload.get("player_world_view_rows")
+        or payload.get("rows")
+        or payload.get("events")
+        or payload.get("world_events")
+        or []
+    )
     out = []
     for row in rows:
         if isinstance(row, dict):
@@ -75,7 +81,10 @@ def test_world_events_route_keeps_interaction_visible_until_next_unrelated_input
 
     # Deterministic semantic advisory so test does not depend on live LLM output.
     def fake_semantic_advisory(*args, **kwargs):
-        lowered = " ".join(str(x) for x in args if isinstance(x, str)).lower()
+        lowered = kwargs.get("player_input", "")
+        if not lowered:
+            lowered = " ".join(str(x) for x in args if isinstance(x, str))
+        lowered = lowered.lower()
         if "arm wrestle" in lowered or "arm wrestling" in lowered:
             return {
                 "action_type": "social_competition",
@@ -108,7 +117,16 @@ def test_world_events_route_keeps_interaction_visible_until_next_unrelated_input
             "reason": "Unrelated follow-up input.",
         }
 
-    monkeypatch.setattr("app.rpg.ai.semantic_action_intelligence.get_semantic_action_advisory", fake_semantic_advisory)
+    monkeypatch.setattr(rt, "get_semantic_action_advisory", fake_semantic_advisory)
+
+    def fake_action_advisory(*args, **kwargs):
+        return {
+            "action_type": "social_competition",
+            "target_id": "npc_innkeeper",
+            "target_name": "Bran the Innkeeper",
+        }
+
+    monkeypatch.setattr(rt, "get_action_advisory", fake_action_advisory)
 
     # Avoid provider dependency if narration is hit by apply_turn.
     def fake_narration(*args, **kwargs):
@@ -120,7 +138,10 @@ def test_world_events_route_keeps_interaction_visible_until_next_unrelated_input
             "reply": "Test reply.",
         }
 
-    monkeypatch.setattr("app.rpg.ai.world_scene_narrator.narrate_scene", fake_narration)
+    monkeypatch.setattr(rt, "narrate_scene", fake_narration)
+
+    # Prevent live LLM gateway usage.
+    monkeypatch.setattr(rt, "build_app_llm_gateway", lambda: None)
 
     # Create and save a real session.
     session = rt.build_session_from_start_result(
@@ -151,7 +172,9 @@ def test_world_events_route_keeps_interaction_visible_until_next_unrelated_input
     assert rt._safe_list(rt._safe_dict(saved.get("simulation_state")).get("active_interactions"))
 
     # First idle tick.
-    saved = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    idle_result_1 = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_result_1.get("ok") is True, f"idle tick 1 failed: {idle_result_1.get('error')}"
+    saved = idle_result_1["session"]
     rt.save_runtime_session(saved)
 
     response = client.post(
@@ -171,7 +194,9 @@ def test_world_events_route_keeps_interaction_visible_until_next_unrelated_input
     ), f"Expected contest-related world event after idle, got: {summaries_after_idle}"
 
     # Second idle tick: should still persist because mode is until_next_command.
-    saved = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    idle_result_2 = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_result_2.get("ok") is True, f"idle tick 2 failed: {idle_result_2.get('error')}"
+    saved = idle_result_2["session"]
     rt.save_runtime_session(saved)
 
     response = client.post(
@@ -195,7 +220,9 @@ def test_world_events_route_keeps_interaction_visible_until_next_unrelated_input
     assert result_2["ok"] is True
 
     saved = rt.load_runtime_session(session_id)
-    saved = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    idle_result_3 = rt._apply_idle_tick_to_session(saved, reason="heartbeat")
+    assert idle_result_3.get("ok") is True, f"idle tick 3 failed: {idle_result_3.get('error')}"
+    saved = idle_result_3["session"]
     rt.save_runtime_session(saved)
 
     response = client.post(
