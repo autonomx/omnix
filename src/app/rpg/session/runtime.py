@@ -52,6 +52,12 @@ from app.rpg.ai.scene_weaver import (
     select_scene_candidate,
 )
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
+from app.rpg.ai.npc_reaction_layer import (
+    apply_npc_reactions,
+    build_interaction_reaction_context,
+    build_npc_reaction_candidates,
+    select_npc_reactions,
+)
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.schema import normalize_world_behavior_config
@@ -168,6 +174,7 @@ _MAX_RUNTIME_LLM_RECORDS = 256
 _MAX_ACTIVE_INTERACTIONS = 8
 _DEFAULT_INTERACTION_DURATION_TICKS = 3
 _INTERACTION_STALE_GRACE_TICKS = 1
+_MAX_NPC_REACTION_RECORDS = 64
 
 
 def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
@@ -232,6 +239,14 @@ def _ensure_semantic_action_runtime_state(runtime_state: Dict[str, Any]) -> Dict
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("semantic_action_records", [])
     runtime_state.setdefault("semantic_action_index", {})
+    return runtime_state
+
+
+def _ensure_npc_reaction_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    runtime_state.setdefault("npc_reaction_records", [])
+    records = _safe_list(runtime_state.get("npc_reaction_records"))
+    runtime_state["npc_reaction_records"] = records[-_MAX_NPC_REACTION_RECORDS:]
     return runtime_state
 
 
@@ -513,6 +528,29 @@ def _expire_stale_active_interactions(
     return simulation_state
 
 
+def _refresh_active_interactions_for_tick(
+    simulation_state: Dict[str, Any],
+    current_tick: int,
+) -> Dict[str, Any]:
+    """Keep unresolved interactions visually current across idle ticks.
+
+    This does not change lifecycle semantics. It only updates the interaction's
+    display freshness so world-events sorting does not bury an ongoing player
+    interaction under ambient activity rows.
+    """
+    simulation_state = _ensure_active_interactions(simulation_state)
+    refreshed: list[Dict[str, Any]] = []
+
+    for raw in _safe_list(simulation_state.get("active_interactions")):
+        item = _safe_dict(raw)
+        if not _safe_bool(item.get("resolved"), False):
+            item["updated_tick"] = _safe_int(current_tick, 0)
+        refreshed.append(item)
+
+    simulation_state["active_interactions"] = refreshed[:_MAX_ACTIVE_INTERACTIONS]
+    return simulation_state
+
+
 def _build_active_interaction_prompt_context(
     simulation_state: Dict[str, Any],
     current_tick: int,
@@ -543,6 +581,28 @@ def _build_active_interaction_prompt_context(
         )
     rows.sort(key=lambda x: (-_safe_int(x.get("expires_tick"), 0), _safe_str(x.get("id"))))
     return rows[:4]
+
+
+def _run_npc_reaction_pass(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    current_tick: int,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state = _ensure_simulation_state(_safe_dict(simulation_state))
+    runtime_state = _ensure_npc_reaction_runtime_state(_safe_dict(runtime_state))
+
+    interactions = _safe_list(simulation_state.get("active_interactions"))
+    for raw in interactions:
+        interaction = _safe_dict(raw)
+        if _safe_bool(interaction.get("resolved"), False):
+            continue
+        context = build_interaction_reaction_context(simulation_state, runtime_state, interaction)
+        context["tick"] = _safe_int(current_tick, 0)
+        candidates = build_npc_reaction_candidates(simulation_state, runtime_state, context)
+        reactions = select_npc_reactions(simulation_state, runtime_state, candidates)
+        simulation_state, runtime_state = apply_npc_reactions(simulation_state, runtime_state, reactions)
+
+    return simulation_state, runtime_state
 
 
 def _semantic_action_matches_active_interaction(
@@ -642,6 +702,7 @@ def _clean_resolved_interaction_world_event_rows(
     def _row_references_resolved(row: Dict[str, Any]) -> bool:
         row = _safe_dict(row)
         eid = _safe_str(row.get("event_id")).strip().lower()
+        row_id = _safe_str(row.get("reaction_id") or row.get("id")).strip().lower()
         summary_lower = _safe_str(row.get("summary")).strip().lower()
         # Normalize separators for matching
         summary_normalized = summary_lower.replace("-", " ").replace("_", " ")
@@ -649,8 +710,9 @@ def _clean_resolved_interaction_world_event_rows(
             label_normalized = label.replace("_", " ").replace("-", " ")
             if label_normalized and (label_normalized in summary_lower or label_normalized in summary_normalized):
                 return True
-        for rid in resolved_ids:
-            if rid and rid.lower() in eid:
+        for resolved_id in resolved_ids:
+            resolved_lower = resolved_id.lower()
+            if resolved_lower and (resolved_lower in eid or resolved_lower in row_id):
                 return True
         return False
 
@@ -702,6 +764,17 @@ def _clean_resolved_interaction_world_event_rows(
         if not _row_references_resolved(_safe_dict(p)):
             kept_pressure.append(p)
     runtime_state["world_pressure"] = kept_pressure[-_MAX_WORLD_PRESSURE:]
+
+    # Clean npc_reaction_records tied to resolved interactions
+    reaction_records = _safe_list(runtime_state.get("npc_reaction_records"))
+    kept_reaction_records: list[Dict[str, Any]] = []
+    for record in reaction_records:
+        record = _safe_dict(record)
+        interaction_id = _safe_str(record.get("interaction_id")).strip()
+        if interaction_id and interaction_id in resolved_ids:
+            continue
+        kept_reaction_records.append(record)
+    runtime_state["npc_reaction_records"] = kept_reaction_records[-_MAX_NPC_REACTION_RECORDS:]
 
     return runtime_state
 
@@ -5274,6 +5347,15 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         semantic_action_record,
         current_tick,
     )
+    after_state = _refresh_active_interactions_for_tick(
+        after_state,
+        _safe_int(after_state.get("tick"), current_tick),
+    )
+    after_state, runtime_state = _run_npc_reaction_pass(
+        after_state,
+        runtime_state,
+        _safe_int(after_state.get("tick"), current_tick),
+    )
     _log_interaction_trace(
         "apply_turn_after_interaction_creation",
         {
@@ -5912,8 +5994,14 @@ def _apply_idle_tick_to_session(
 
     simulation_state["tick"] = authoritative_tick
     simulation_state["current_tick"] = authoritative_tick
+    simulation_state = _refresh_active_interactions_for_tick(simulation_state, authoritative_tick)
     simulation_state = _expire_stale_active_interactions(simulation_state, authoritative_tick)
     runtime_state["tick"] = authoritative_tick
+    simulation_state, runtime_state = _run_npc_reaction_pass(
+        simulation_state,
+        runtime_state,
+        authoritative_tick,
+    )
     runtime_state = _clear_stale_last_player_action(runtime_state, authoritative_tick)
 
     session["simulation_state"] = simulation_state

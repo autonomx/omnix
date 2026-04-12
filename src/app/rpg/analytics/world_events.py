@@ -360,7 +360,11 @@ def build_player_local_world_view_rows(simulation_state: Dict[str, Any], runtime
         summary = _safe_str(state.get("summary"))
         if not summary:
             display_name = _safe_str(item.get("display_name") or "")
-            summary = f"{activity_label.replace('_', ' ').title()} with {display_name}".strip() if display_name else activity_label.replace("_", " ").title()
+            human_label = activity_label.replace("_", " ").strip()
+            if display_name:
+                summary = f"You are engaged in {human_label} with {display_name}."
+            else:
+                summary = f"You are engaged in {human_label}."
         rows.append(
             _make_event_row(
                 event_id=_safe_str(item.get("id")) or f"interaction:{_safe_int(item.get('started_tick'), 0)}",
@@ -371,7 +375,7 @@ def build_player_local_world_view_rows(simulation_state: Dict[str, Any], runtime
                 tick=_safe_int(item.get("updated_tick") or item.get("started_tick"), 0),
                 actors=_safe_list(item.get("participants")),
                 location_id=_safe_str(item.get("location_id")),
-                priority=0.9,
+                priority=100,
                 source="semantic_player_runtime",
                 tags=["player_engaged", "player_action"],
             )
@@ -454,16 +458,36 @@ def _player_bias(row: Dict[str, Any]) -> int:
         or "rumor_seed" in tags
         or "scene_impact" in tags
         or source == "semantic_player_runtime"
-        or kind in ("interaction_beat", "player_action_consequence", "world_pressure", "world_rumor")
+        or source == "npc_reaction_layer"
+        or kind in ("interaction_beat", "player_action_consequence", "world_pressure", "world_rumor", "npc_reaction_beat")
     ):
         return 1
     return 0
 
 
 def _row_sort_key(row: Dict[str, Any]) -> tuple:
-    scope = _safe_str(row.get("scope"))
+    row = _safe_dict(row)
+    scope = _safe_str(row.get("scope")).lower()
+    source = _safe_str(row.get("source")).lower()
+    tags = {str(x).strip().lower() for x in _safe_list(row.get("tags")) if str(x).strip()}
+
+    interaction_priority = 1 if (
+        source == "semantic_player_runtime"
+        or row.get("kind") == "interaction_beat"
+        or "player_engaged" in tags
+        or "player_action" in tags
+    ) else 0
+
+    reaction_priority = 1 if (
+        source == "npc_reaction_layer"
+        or row.get("kind") == "npc_reaction_beat"
+        or "npc_reaction" in tags
+    ) else 0
+
     return (
-        -(_player_bias(row) * 10),  # HARD bias
+        -interaction_priority,
+        -reaction_priority,
+        -(_player_bias(row) * 10),
         _SCOPE_ORDER.get(scope, 9),
         -float(row.get("priority", 0) or 0),
         -_safe_int(row.get("tick"), 0),
