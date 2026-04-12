@@ -803,7 +803,7 @@
             (rpgState.runtimeState &&
              rpgState.runtimeState.settings &&
              typeof rpgState.runtimeState.settings.interaction_duration_mode === 'string' &&
-             rpgState.runtimeState.settings.interaction_duration_mode) || 'ticks';
+             rpgState.runtimeState.settings.interaction_duration_mode) || 'until_next_command';
         var currentInteractionDurationTicks =
             (rpgState.runtimeState &&
              rpgState.runtimeState.settings &&

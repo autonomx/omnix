@@ -178,7 +178,7 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     # mode
     result["mode"] = _safe_str(value.get("mode") or "live").strip().lower() or "live"
     interaction_duration_mode = _safe_str(
-        value.get("interaction_duration_mode") or "ticks"
+        value.get("interaction_duration_mode") or "until_next_command"
     ).strip().lower()
     if interaction_duration_mode not in {"ticks", "until_next_command"}:
         interaction_duration_mode = "ticks"
@@ -314,7 +314,7 @@ def _interaction_duration_for_record(record: Dict[str, Any]) -> int:
 def _get_interaction_duration_mode(runtime_state: Dict[str, Any]) -> str:
     runtime_state = _safe_dict(runtime_state)
     settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
-    return _safe_str(settings.get("interaction_duration_mode") or "ticks").strip().lower() or "ticks"
+    return _safe_str(settings.get("interaction_duration_mode") or "until_next_command").strip().lower() or "until_next_command"
 
 
 def _get_interaction_duration_ticks(runtime_state: Dict[str, Any], record: Dict[str, Any]) -> int:
@@ -4800,7 +4800,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
                 "reaction_style": "normal",
                 "console_debug_enabled": True,
                 "world_events_panel_enabled": True,
-                "interaction_duration_mode": "ticks",
+                "interaction_duration_mode": "until_next_command",
                 "interaction_duration_ticks": 5,
             },
             # Living-world ambient state (Phase 0.2)
