@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time as _time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -369,6 +370,7 @@ def _mark_narration_job_status(
     turn_id: str,
     *,
     status: str,
+    worker_token: str = "",
     error: str = "",
 ) -> Dict[str, Any]:
     runtime_state = _ensure_narration_job_state(runtime_state)
@@ -388,6 +390,8 @@ def _mark_narration_job_status(
             "started_at": None,
             "completed_at": None,
             "error": "",
+            "attempts": 0,
+            "max_attempts": 3,
         }
 
     job["status"] = status
@@ -397,6 +401,8 @@ def _mark_narration_job_status(
         job["completed_at"] = _utc_now_iso()
     if error:
         job["error"] = _safe_str(error)
+    if worker_token:
+        job["worker_token"] = _safe_str(worker_token)
 
     return _upsert_narration_job(runtime_state, job)
 
@@ -418,6 +424,16 @@ def _enqueue_narration_request(
 
     runtime_state = _copy_dict(session.get("runtime_state"))
     runtime_state = _ensure_narration_job_state(runtime_state)
+
+    existing_job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
+    existing_status = _safe_str(existing_job.get("status")).strip().lower()
+    if existing_status in {"queued", "processing", "completed"}:
+        return {
+            "ok": True,
+            "status": existing_status or "queued",
+            "job": existing_job,
+            "session": session,
+        }
 
     existing_artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
     if existing_artifact:
@@ -441,6 +457,8 @@ def _enqueue_narration_request(
         "started_at": None,
         "completed_at": None,
         "error": "",
+        "attempts": 0,
+        "max_attempts": 3,
         "narration_request": narration_request,
     }
     runtime_state = _upsert_narration_job(runtime_state, job)
@@ -6013,11 +6031,45 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         session = save_runtime_session(session)
         return {"ok": True, "status": "stale", "turn_id": turn_id}
 
-    runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="processing")
+    worker_token = f"{_utc_now_iso()}:{os.getpid()}:{turn_id}"
+    runtime_state = _mark_narration_job_status(
+        runtime_state,
+        turn_id,
+        status="processing",
+        worker_token=worker_token,
+    )
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
 
-    narration_request = _safe_dict(queued_job.get("narration_request"))
+    # Re-read after claim and verify we still own the job before doing work.
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found_after_claim"}
+
+    claimed_job = _safe_dict(
+        _safe_dict(_safe_dict(session.get("runtime_state")).get("narration_jobs_by_turn")).get(turn_id)
+    )
+    if _safe_str(claimed_job.get("worker_token")) != worker_token:
+        return {"ok": False, "status": "claimed_elsewhere", "turn_id": turn_id}
+
+    narration_request = _safe_dict(claimed_job.get("narration_request") or queued_job.get("narration_request"))
+
+    if not narration_request or not narration_request.get("turn_id"):
+        runtime_state = _mark_narration_job_status(
+            runtime_state,
+            turn_id,
+            status="failed",
+            error="missing_narration_request",
+        )
+        session["runtime_state"] = runtime_state
+        session = save_runtime_session(session)
+        return {
+            "ok": False,
+            "status": "failed",
+            "turn_id": turn_id,
+            "error": "missing_narration_request",
+        }
+
     result = _generate_turn_narration_artifact(session_id, narration_request)
 
     session = load_runtime_session(session_id)
@@ -6037,19 +6089,38 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             "session": session,
         }
 
+    # Implement retry logic
+    current_job = _safe_dict(
+        _safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id)
+    )
+    attempts = int(current_job.get("attempts", 0)) + 1
+    max_attempts = int(current_job.get("max_attempts", 3))
+
+    if attempts >= max_attempts:
+        final_status = "failed"
+    else:
+        final_status = "queued"
+
     runtime_state = _mark_narration_job_status(
         runtime_state,
         turn_id,
-        status="failed",
-        error=_safe_str(result.get("error") or "narration_failed"),
+        status=final_status,
+        error=_safe_str(result.get("error") or "narration_failed") if final_status == "failed" else "",
     )
+
+    # Update attempts count
+    job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
+    job["attempts"] = attempts
+    runtime_state["narration_jobs_by_turn"][turn_id] = job
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
     return {
-        "ok": False,
-        "status": "failed",
+        "ok": False if final_status == "failed" else True,
+        "status": final_status,
         "turn_id": turn_id,
-        "error": _safe_str(result.get("error") or "narration_failed"),
+        "error": _safe_str(result.get("error") or "narration_failed") if final_status == "failed" else "",
+        "attempts": attempts,
+        "max_attempts": max_attempts,
         "artifact": result.get("artifact"),
         "session": session,
     }

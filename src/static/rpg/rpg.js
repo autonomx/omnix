@@ -1171,13 +1171,15 @@
         var feed = el('rpgNarrativeFeed');
         if (!feed) return;
 
-        // Find the last narration message (assuming it's the placeholder)
-        var msgs = feed.querySelectorAll('.rpg-msg--narration');
-        if (msgs.length === 0) return;
-        var lastMsg = msgs[msgs.length - 1];
+        var selector = '.rpg-msg--narration[data-turn-id="' + String(turnId).replace(/"/g, '&quot;') + '"]';
+        var msg = feed.querySelector(selector);
+        if (!msg) {
+            var msgs = feed.querySelectorAll('.rpg-msg--narration');
+            if (msgs.length === 0) return;
+            msg = msgs[msgs.length - 1];
+        }
 
-        // Update with final narration
-        lastMsg.innerHTML = (typeof marked !== 'undefined')
+        msg.innerHTML = (typeof marked !== 'undefined')
             ? marked.parse(narration)
             : escapeHtml(narration).replace(/\n/g, '<br>');
         feed.scrollTop = feed.scrollHeight;
@@ -1552,7 +1554,16 @@
                 }
 
                 // Show narration pending
-                appendMessage({ type: 'narration', content: data.fallback_narration || "Generating narration..." });
+                appendMessage({ type: 'narration', content: data.fallback_narration || "Generating narration...", turnId: turnId });
+
+                // Bind placeholder node to this turn id for safe later replacement
+                var feed = el('rpgNarrativeFeed');
+                if (feed) {
+                    var msgs = feed.querySelectorAll('.rpg-msg--narration');
+                    if (msgs.length > 0) {
+                        msgs[msgs.length - 1].setAttribute('data-turn-id', turnId);
+                    }
+                }
 
                 // Start background narration processing
                 queueNarrationWorker(rpgState.sessionId, turnId);
