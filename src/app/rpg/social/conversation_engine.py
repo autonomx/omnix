@@ -2,14 +2,40 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from .conversation_beats import (
+    append_beat,
+    build_beat_from_conversation_line,
+    compute_beat_caps,
+    ensure_beats_state,
+    trim_beats_state,
+)
 from .conversation_participants import (
     find_candidate_conversation_groups,
     select_initiator,
     select_next_speaker,
 )
-from .conversation_settings import resolve_conversation_settings
+from .conversation_pivots import evaluate_pivots
+from .conversation_scheduler import (
+    classify_thread_mode,
+    compute_thread_importance,
+    compute_world_effect_budget,
+    get_active_thread_summary,
+    PIVOT_TURN_EXTENSION,
+    thread_is_expired,
+    thread_is_stale,
+)
+from .conversation_settings import (
+    resolve_conversation_settings,
+    should_suppress_conversations,
+)
 from .conversation_templates import build_template_line
 from .conversation_topics import build_conversation_topic_candidates
+from .conversation_world_signals import (
+    apply_pending_signals,
+    ensure_signal_state,
+    enqueue_signals,
+    extract_signals_from_beat,
+)
 from .npc_conversations import (
     append_conversation_line,
     build_conversation_line,
@@ -244,16 +270,51 @@ def try_start_party_reaction_conversation(simulation_state: Dict[str, Any], runt
 
 
 def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+    ensure_beats_state(simulation_state)
+    ensure_signal_state(runtime_state)
+
     for conv in list_active_conversations(simulation_state):
         conv = dict(conv)
+        cid = _safe_str(conv.get("conversation_id"))
+
+        # Check expiry/stale
+        if thread_is_expired(conv, tick):
+            close_conversation(simulation_state, cid, reason="expired")
+            continue
+
+        if thread_is_stale(conv, tick):
+            close_conversation(simulation_state, cid, reason="stale")
+            continue
+
         if should_close_conversation(conv, simulation_state, runtime_state, tick):
             close_conversation(simulation_state, conv.get("conversation_id"), reason="completed")
+            continue
+
+        # Enforce beat cap for this mode
+        mode = _safe_str(conv.get("mode")) or "ambient"
+        _, max_beats = compute_beat_caps(mode)
+        beat_count = int(conv.get("beat_count", 0) or 0)
+        if beat_count >= max_beats:
+            close_conversation(simulation_state, cid, reason="beat_cap_reached")
             continue
 
         line = build_next_conversation_line(conv, simulation_state, runtime_state, tick)
         append_conversation_line(simulation_state, conv.get("conversation_id"), line)
 
+        # Build authoritative beat from line (thread_id == conversation_id)
+        beat = build_beat_from_conversation_line(conv, line, tick)
+        append_beat(simulation_state, beat)
+
+        # Extract world signals from beat
+        conv_settings = resolve_conversation_settings(simulation_state, runtime_state)
+        if conv_settings.get("allow_conversation_world_signals", True):
+            signals = extract_signals_from_beat(beat, conv)
+            if isinstance(signals, list) and signals:
+                enqueue_signals(runtime_state, signals)
+                conv["world_effects_emitted"] = int(conv.get("world_effects_emitted", 0) or 0) + len(signals)
+
         conv["turn_count"] = int(conv.get("turn_count", 0) or 0) + 1
+        conv["beat_count"] = int(conv.get("beat_count", 0) or 0) + 1
         conv["updated_tick"] = int(tick or 0)
         conv["last_speaker_id"] = _safe_str(line.get("speaker"))
         conv["intervention_pending"] = bool(conv.get("player_can_intervene") and conv.get("player_present"))
@@ -267,8 +328,86 @@ def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state
 
 
 def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+    """Sole authoritative conversation lifecycle entrypoint.
+
+    Pipeline:
+    1. Resolve canonical settings
+    2. Apply suppression checks (combat/stealth)
+    3. Start eligible ambient conversations
+    4. Advance active conversations (producing beats + signals)
+    5. Evaluate pivots (ambient → directed/group)
+    6. Update thread metadata (mode reclassification, importance)
+    7. Apply pending world signals
+    8. Trim conversation + beat state
+    """
     ensure_conversation_state(simulation_state)
+    ensure_beats_state(simulation_state)
+    ensure_signal_state(runtime_state)
+
+    # 1. Resolve canonical settings
+    settings = resolve_conversation_settings(simulation_state, runtime_state)
+
+    # 2. Check combat/stealth suppression
+    if should_suppress_conversations(simulation_state, settings):
+        trim_conversation_state(simulation_state)
+        return simulation_state
+
+    # 3. Start eligible ambient conversations
     try_start_ambient_conversations(simulation_state, runtime_state, tick)
+
+    # 4. Advance active conversations (beats + signals built inside)
     advance_active_conversations(simulation_state, runtime_state, tick)
+
+    # 5. Evaluate pivots after advancing
+    evaluate_pivots(simulation_state, runtime_state, tick)
+
+    # 6. Update thread metadata (mode, importance, budgets)
+    _update_thread_metadata(simulation_state, runtime_state)
+
+    # 7. Apply pending world signals
+    result = apply_pending_signals(simulation_state, runtime_state)
+    if isinstance(result, tuple) and len(result) == 2:
+        simulation_state, runtime_state = result
+
+    # 8. Trim state to bounded sizes
     trim_conversation_state(simulation_state)
+    trim_beats_state(simulation_state)
+
+    return simulation_state
+
+
+def _update_thread_metadata(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Update metadata on active threads (mode reclassification, importance recalc).
+
+    Uses helpers from conversation_scheduler.
+    """
+    for conv in list_active_conversations(simulation_state):
+        conv = dict(conv)
+        new_mode = classify_thread_mode(conv, simulation_state, runtime_state)
+        if new_mode != _safe_str(conv.get("mode")):
+            # Record pivot in history
+            pivot_history = conv.get("pivot_history") if isinstance(conv.get("pivot_history"), list) else []
+            pivot_history.append({
+                "from_mode": _safe_str(conv.get("mode")),
+                "to_mode": new_mode,
+                "at_beat": int(conv.get("beat_count", 0) or 0),
+            })
+            conv["pivot_history"] = pivot_history[-8:]  # bound history
+            conv["mode"] = new_mode
+
+            # Recalculate max_turns based on new mode
+            _, max_beats = compute_beat_caps(new_mode)
+            current_beats = int(conv.get("beat_count", 0) or 0)
+            conv["max_turns"] = max(
+                conv.get("max_turns", 0) or 0,
+                min(max_beats, current_beats + PIVOT_TURN_EXTENSION),
+            )
+
+        conv["importance"] = compute_thread_importance(conv)
+        conv["world_effect_budget"] = compute_world_effect_budget(conv)
+        upsert_conversation(simulation_state, conv)
+
     return simulation_state
