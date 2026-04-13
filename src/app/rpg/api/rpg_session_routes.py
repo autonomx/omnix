@@ -31,6 +31,7 @@ from app.rpg.session.runtime import (
     load_runtime_session,
     save_runtime_session,
 )
+from app.rpg.session.narration_worker import ensure_narration_worker_running
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
 
@@ -58,6 +59,10 @@ def _safe_str(value: Any) -> str:
 
 def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
+
+
+# Ensure narration worker is running on module load
+ensure_narration_worker_running()
 
 
 def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -366,6 +371,8 @@ async def execute_rpg_session_turn_stream(request: Request):
     return StreamingResponse(generate(), media_type="text/event-stream", headers=sse_headers)
 
 
+# Debug/manual trigger endpoint.
+# Normal gameplay should rely on the background worker manager instead.
 @rpg_session_bp.post("/api/rpg/session/process_narration")
 async def process_rpg_session_narration(request: Request):
     data = await request.json()
@@ -567,12 +574,6 @@ async def stream_rpg_session(request: Request):
                     "tick": int(runtime.get("tick", 0) or 0),
                 })
                 last_heartbeat = now
-
-                # Optional: process one narration job during heartbeat
-                try:
-                    process_next_narration_job(session_id)
-                except Exception:
-                    _logger.debug("Background narration processing failed during heartbeat", exc_info=True)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=sse_headers)
 

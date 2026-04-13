@@ -136,6 +136,7 @@ from app.rpg.session.ambient_policy import (
 )
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
+from app.rpg.session.narration_worker import signal_narration_work, ensure_narration_worker_running
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -428,6 +429,9 @@ def _enqueue_narration_request(
     existing_job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
     existing_status = _safe_str(existing_job.get("status")).strip().lower()
     if existing_status in {"queued", "processing", "completed"}:
+        if existing_status == "queued":
+            ensure_narration_worker_running()
+            signal_narration_work(session_id)
         return {
             "ok": True,
             "status": existing_status or "queued",
@@ -465,6 +469,8 @@ def _enqueue_narration_request(
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
 
+    ensure_narration_worker_running()
+    signal_narration_work(session_id)
     return {"ok": True, "status": "queued", "job": job, "session": session}
 
 

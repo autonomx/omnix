@@ -1154,18 +1154,7 @@
         return finalData;
     }
 
-    async function queueNarrationWorker(sessionId, turnId) {
-        try {
-            await fetch("/api/rpg/session/process_narration", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ session_id: sessionId }),
-            });
-        } catch (err) {
-            // Ignore; polling will still work on next heartbeat/manual retry.
-        }
-        pollNarrationStatus(sessionId, turnId);
-    }
+
 
     function renderTurnNarration(turnId, narration, options) {
         var feed = el('rpgNarrativeFeed');
@@ -1565,8 +1554,8 @@
                     }
                 }
 
-                // Start background narration processing
-                queueNarrationWorker(rpgState.sessionId, turnId);
+                // Background worker is server-driven now; just poll for completion.
+                pollNarrationStatus(rpgState.sessionId, turnId);
             } else {
                 // Legacy handling
                 var update = transformResponse(data);
