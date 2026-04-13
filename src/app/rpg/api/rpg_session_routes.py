@@ -6,6 +6,7 @@ Legacy /api/rpg/games* routes are retired from active registration.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -31,6 +32,7 @@ from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
 
 rpg_session_bp = APIRouter()
+_logger = logging.getLogger(__name__)
 
 
 
@@ -83,10 +85,14 @@ def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             player_input = action_type.replace("_", " ").strip()
 
+    # Optional performance overrides from the request payload
+    performance = _safe_dict(data.get("performance"))
+
     return {
         "session_id": _safe_str(data.get("session_id")).strip(),
         "player_input": player_input,
         "action": action,
+        "performance": performance,
     }
 
 
@@ -296,6 +302,7 @@ async def execute_rpg_session_turn_stream(request: Request):
     session_id = _safe_str(normalized.get("session_id")).strip()
     player_input = _safe_str(normalized.get("player_input")).strip()
     action = _safe_dict(normalized.get("action"))
+    request_performance = _safe_dict(normalized.get("performance"))
 
     sse_headers = {
         "Cache-Control": "no-cache",
@@ -307,23 +314,38 @@ async def execute_rpg_session_turn_stream(request: Request):
             yield _sse({"type": "error", "error": "session_id_required"})
         return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)
 
-    result = apply_turn(session_id, player_input, action=action)
-
-    if not result.get("ok"):
-        err = _safe_str(result.get("error") or "turn_failed")
-        status = 404 if result.get("error") == "session_not_found" else 500
-        def error_gen():
-            yield _sse({"type": "error", "error": err})
-        return StreamingResponse(error_gen(), status_code=status, media_type="text/event-stream", headers=sse_headers)
-
-    payload = _build_turn_payload(result)
-    narration = _safe_str(payload.get("narration"))
-
     def generate():
-        words = narration.split()
-        for idx, word in enumerate(words):
-            chunk = word + (" " if idx < len(words) - 1 else "")
-            yield _sse({"type": "token", "text": chunk})
+        yield _sse({"type": "accepted"})
+        yield _sse({"type": "processing", "stage": "turn"})
+
+        # Thread performance override into apply_turn in-memory only;
+        # do NOT persist it to session before the turn so that a failed
+        # request cannot mutate durable session state.
+        result = apply_turn(
+            session_id,
+            player_input,
+            action=action,
+            performance_override=request_performance or None,
+        )
+
+        if not result.get("ok"):
+            err = _safe_str(result.get("error") or "turn_failed")
+            yield _sse({"type": "error", "error": err})
+            return
+
+        payload = _build_turn_payload(result)
+        narration = _safe_str(payload.get("narration"))
+
+        # In fast-turn mode return narration in one shot; otherwise word-stream
+        perf = _safe_dict(_safe_dict(result.get("session", {})).get("runtime_state", {}).get("performance"))
+        if perf.get("fast_turn_mode"):
+            if narration:
+                yield _sse({"type": "token", "text": narration})
+        else:
+            words = narration.split()
+            for idx, word in enumerate(words):
+                chunk = word + (" " if idx < len(words) - 1 else "")
+                yield _sse({"type": "token", "text": chunk})
 
         final_payload = dict(payload)
         final_payload["type"] = "done"

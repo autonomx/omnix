@@ -1452,7 +1452,14 @@ class SceneNarrator:
 # Convenience functions (service layer)
 # ---------------------------------------------------------------------------
 
-def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_gateway: Any, tone: str = "dramatic") -> str:
+def _generate_live_narrative(
+    scene: Dict[str, Any],
+    narration_context: Dict[str, Any],
+    llm_gateway: Any,
+    tone: str = "dramatic",
+    retry_on_invalid: bool = True,
+    debug_logging: bool = False,
+) -> str:
     """Generate narrative using LLM."""
     # Inject player_input from narration_context into scene
     scene = dict(scene or {})
@@ -1462,11 +1469,18 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
             scene["player_input"] = str(pi)
 
     prompt = build_scene_prompt(scene, narration_context, tone=tone)
-    logger.warning("[RPG LLM PROMPT]\n%s", prompt)
-    for attempt in range(2):  # retry once
+    if debug_logging:
+        logger.warning("[RPG LLM PROMPT]\n%s", prompt)
+    else:
+        logger.debug("[RPG LLM PROMPT] prompt length: %d", len(prompt))
+    max_attempts = 2 if retry_on_invalid else 1
+    for attempt in range(max_attempts):
         try:
             response = _llm_text(llm_gateway, prompt, context={})
-            logger.warning("[RPG LLM RAW OUTPUT attempt %d]\n%s", attempt + 1, response)
+            if debug_logging:
+                logger.warning("[RPG LLM RAW OUTPUT attempt %d]\n%s", attempt + 1, response)
+            else:
+                logger.debug("[RPG LLM RAW OUTPUT attempt %d] length: %d", attempt + 1, len(str(response or "")))
 
             # Check if response contains invalid content (like ambient updates)
             response_lower = _safe_str(response).lower()
@@ -1480,10 +1494,13 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
                 continue
 
             parsed = parse_scene_response(response)
-            logger.warning("[RPG PARSED RESPONSE]\n%s", parsed)
+            if debug_logging:
+                logger.warning("[RPG PARSED RESPONSE]\n%s", parsed)
+            else:
+                logger.debug("[RPG PARSED RESPONSE] keys: %s", list(parsed.keys()) if isinstance(parsed, dict) else type(parsed))
 
             if _is_valid_scene_response(parsed):
-                logger.warning("LLM response validation successful")
+                logger.debug("LLM response validation successful")
                 return response
             else:
                 logger.error("LLM response failed validation, parsed: %s", parsed)
@@ -1491,7 +1508,7 @@ def _generate_live_narrative(scene: Dict[str, Any], narration_context: Dict[str,
             logger.exception("Exception during LLM narration")
 
     # fallback if LLM fails format
-    logger.error("Structured RPG narration LLM output failed validation after 2 attempts")
+    logger.error("Structured RPG narration LLM output failed validation after %d attempt(s)", max_attempts)
     return _structured_fallback_response()
 
 
@@ -1554,12 +1571,26 @@ def _simulate_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any]
     )
 
 
-def narrate_scene(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_gateway: Any | None = None, tone: str = "dramatic") -> Dict[str, Any]:
+def narrate_scene(
+    scene: Dict[str, Any],
+    narration_context: Dict[str, Any],
+    llm_gateway: Any | None = None,
+    tone: str = "dramatic",
+    retry_on_invalid: bool = True,
+    debug_logging: bool = False,
+) -> Dict[str, Any]:
     scene = _safe_dict(scene)
     narration_context = _safe_dict(narration_context)
 
     if llm_gateway:
-        llm_narrative = _generate_live_narrative(scene, narration_context, llm_gateway=llm_gateway, tone=tone)
+        llm_narrative = _generate_live_narrative(
+            scene,
+            narration_context,
+            llm_gateway=llm_gateway,
+            tone=tone,
+            retry_on_invalid=retry_on_invalid,
+            debug_logging=debug_logging,
+        )
         used_llm = "[ERROR:" not in llm_narrative
     else:
         llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
