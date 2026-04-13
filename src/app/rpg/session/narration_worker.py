@@ -6,6 +6,11 @@ synchronously or asynchronously depending on context.
 
 This module exists primarily to satisfy the import contract expected
 by runtime.py and rpg_session_routes.py.
+
+Note: Module-level state is designed for single-process use.
+In a multi-threaded environment, the queue.Queue is thread-safe,
+but the subscriber dict is not. For multi-process deployments,
+replace with an external message broker.
 """
 from __future__ import annotations
 

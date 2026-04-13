@@ -48,6 +48,9 @@ _PLAYER_RELEVANCE_THRESHOLD = 0.4     # world_signal_strength above which to con
 _MIN_BEATS_BEFORE_PIVOT = 1           # must have at least 1 beat before pivoting
 _MAX_PIVOTS_PER_THREAD = 2            # don't flip-flop modes
 _REPUTATION_PIVOT_THRESHOLD = 0.3     # NPC trust/respect that triggers pivot
+_MAX_GROUP_PARTICIPANTS = 6           # max participants in a group conversation
+_PIVOT_TURN_EXTENSION = 4             # additional turns granted after a mode pivot
+_MAX_PIVOT_HISTORY = 8                # max pivot records kept per thread
 
 
 # ── Pivot eligibility ─────────────────────────────────────────────────────
@@ -188,15 +191,15 @@ def apply_pivot_to_player(conversation: Dict[str, Any], tick: int) -> Dict[str, 
         "at_beat": _safe_int(conversation.get("beat_count"), 0),
         "trigger": "player_relevance",
     })
-    conversation["pivot_history"] = pivot_history[-8:]
+    conversation["pivot_history"] = pivot_history[-_MAX_PIVOT_HISTORY:]
 
     # Extend max_turns since directed conversations can go longer
     from .conversation_beats import compute_beat_caps
     _, max_beats = compute_beat_caps("directed_to_player")
     current_max = _safe_int(conversation.get("max_turns"), 1)
     beat_count = _safe_int(conversation.get("beat_count"), 0)
-    conversation["max_turns"] = max(current_max, min(max_beats, beat_count + 4))
-    conversation["expires_at_tick"] = tick + conversation["max_turns"] + 4
+    conversation["max_turns"] = max(current_max, min(max_beats, beat_count + _PIVOT_TURN_EXTENSION))
+    conversation["expires_at_tick"] = tick + conversation["max_turns"] + _PIVOT_TURN_EXTENSION
 
     # Recalculate importance
     conversation["importance"] = min(100, _safe_int(conversation.get("importance"), 0) + 30)
@@ -227,7 +230,7 @@ def apply_pivot_to_group(
         nid = _safe_str(nid)
         if nid and nid not in participants:
             participants.append(nid)
-    conversation["participants"] = sorted(participants)[:6]  # bound to 6 max
+    conversation["participants"] = sorted(participants)[:_MAX_GROUP_PARTICIPANTS]
 
     conversation["mode"] = "group"
 
@@ -240,15 +243,15 @@ def apply_pivot_to_group(
         "trigger": "group_expansion",
         "added": [_safe_str(x) for x in new_participant_ids],
     })
-    conversation["pivot_history"] = pivot_history[-8:]
+    conversation["pivot_history"] = pivot_history[-_MAX_PIVOT_HISTORY:]
 
     # Extend max_turns for group
     from .conversation_beats import compute_beat_caps
     _, max_beats = compute_beat_caps("group")
     current_max = _safe_int(conversation.get("max_turns"), 1)
     beat_count = _safe_int(conversation.get("beat_count"), 0)
-    conversation["max_turns"] = max(current_max, min(max_beats, beat_count + 4))
-    conversation["expires_at_tick"] = tick + conversation["max_turns"] + 4
+    conversation["max_turns"] = max(current_max, min(max_beats, beat_count + _PIVOT_TURN_EXTENSION))
+    conversation["expires_at_tick"] = tick + conversation["max_turns"] + _PIVOT_TURN_EXTENSION
 
     # Boost importance
     conversation["importance"] = min(100, _safe_int(conversation.get("importance"), 0) + 20)

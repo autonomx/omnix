@@ -52,6 +52,7 @@ _MAX_NEW_THREADS_PER_TICK = 1
 _AMBIENT_PRIORITY = 20
 _DIRECTED_PRIORITY = 80
 _GROUP_PRIORITY = 60
+_PIVOT_TURN_EXTENSION = 4   # additional turns granted after mode pivot or thread creation
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -143,9 +144,17 @@ def _should_start_new_thread(
     active_conversations: List[Dict[str, Any]],
     settings: Dict[str, Any],
 ) -> bool:
-    """Decide if a new conversation thread should start."""
+    """Decide if a new ambient conversation thread should start.
+
+    Only counts ambient-mode conversations against the concurrent limit,
+    since ``max_concurrent_ambient_threads`` specifically caps ambient threads.
+    """
     max_concurrent = _safe_int(settings.get("max_concurrent_ambient_threads"), _MAX_CONCURRENT_THREADS)
-    return len(active_conversations) < max_concurrent
+    ambient_count = sum(
+        1 for c in active_conversations
+        if _safe_str(_safe_dict(c).get("mode")) in {"ambient", ""}
+    )
+    return ambient_count < max_concurrent
 
 
 def _compute_thread_importance(conversation: Dict[str, Any]) -> int:
@@ -369,7 +378,7 @@ def _start_new_threads(
         conv["importance"] = _compute_thread_importance(conv)
         conv["world_effect_budget"] = _compute_world_effect_budget(conv)
         conv["max_turns"] = effective_max
-        conv["expires_at_tick"] = tick + effective_max + 4
+        conv["expires_at_tick"] = tick + effective_max + _PIVOT_TURN_EXTENSION
         upsert_conversation(simulation_state, conv)
 
         started += 1
@@ -399,7 +408,7 @@ def _update_thread_metadata(
             # Recalculate max_turns based on new mode
             _, max_beats = compute_beat_caps(new_mode)
             current_beats = _safe_int(conv.get("beat_count"), 0)
-            conv["max_turns"] = max(conv.get("max_turns", 0) or 0, min(max_beats, current_beats + 4))
+            conv["max_turns"] = max(conv.get("max_turns", 0) or 0, min(max_beats, current_beats + _PIVOT_TURN_EXTENSION))
 
         conv["importance"] = _compute_thread_importance(conv)
         upsert_conversation(simulation_state, conv)

@@ -167,6 +167,12 @@ def compute_beat_caps(mode: str) -> tuple:
     return MODE_BEAT_CAPS.get(_safe_str(mode), MODE_BEAT_CAPS["ambient"])
 
 
+_STOPWORDS = frozenset({
+    "the", "and", "for", "are", "was", "has", "but", "not", "you",
+    "they", "this", "that", "with", "from",
+})
+
+
 def extract_mentions_from_topic(topic: Dict[str, Any]) -> List[str]:
     """Extract entity mentions from a conversation topic."""
     topic = _safe_dict(topic)
@@ -178,7 +184,7 @@ def extract_mentions_from_topic(topic: Dict[str, Any]) -> List[str]:
     # Simple extraction: split on common delimiters, keep non-empty tokens
     for token in summary.replace(",", " ").replace(".", " ").split():
         token = token.strip().lower()
-        if len(token) > 2 and token not in {"the", "and", "for", "are", "was", "has", "but", "not", "you", "they", "this", "that", "with", "from"}:
+        if len(token) > 2 and token not in _STOPWORDS:
             if token not in mentions:
                 mentions.append(token)
             if len(mentions) >= _MAX_MENTIONS_PER_BEAT:
