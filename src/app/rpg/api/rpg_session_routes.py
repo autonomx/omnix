@@ -20,6 +20,8 @@ from app.rpg.session.ambient_builder import (
     get_pending_ambient_updates,
 )
 from app.rpg.session.runtime import (
+    _apply_turn_authoritative,
+    _generate_turn_narration_artifact,
     _normalize_runtime_settings,
     apply_idle_ticks,
     apply_resume_catchup,
@@ -316,41 +318,79 @@ async def execute_rpg_session_turn_stream(request: Request):
 
     def generate():
         yield _sse({"type": "accepted"})
-        yield _sse({"type": "processing", "stage": "turn"})
+        yield _sse({"type": "processing", "stage": "authoritative_turn"})
 
-        # Thread performance override into apply_turn in-memory only;
-        # do NOT persist it to session before the turn so that a failed
-        # request cannot mutate durable session state.
-        result = apply_turn(
+        authoritative_result = _apply_turn_authoritative(
             session_id,
             player_input,
             action=action,
             performance_override=request_performance or None,
         )
 
-        if not result.get("ok"):
-            err = _safe_str(result.get("error") or "turn_failed")
+        if not authoritative_result.get("ok"):
+            err = _safe_str(authoritative_result.get("error") or "turn_failed")
             yield _sse({"type": "error", "error": err})
             return
 
-        payload = _build_turn_payload(result)
-        narration = _safe_str(payload.get("narration"))
+        authoritative = _safe_dict(authoritative_result.get("authoritative"))
+        narration_request = _safe_dict(authoritative_result.get("narration_request"))
 
-        # In fast-turn mode return narration in one shot; otherwise word-stream
-        perf = _safe_dict(_safe_dict(result.get("session", {})).get("runtime_state", {}).get("performance"))
-        if perf.get("fast_turn_mode"):
-            if narration:
-                yield _sse({"type": "token", "text": narration})
+        yield _sse({
+            "type": "authoritative_result",
+            "turn_id": _safe_str(authoritative.get("turn_id")),
+            "tick": authoritative.get("tick"),
+            "resolved_result": authoritative.get("resolved_result"),
+            "summary": authoritative.get("summary"),
+            "presentation": authoritative.get("presentation"),
+            "response_length": authoritative.get("response_length"),
+            "fallback_narration": authoritative.get("deterministic_fallback_narration"),
+        })
+
+        yield _sse({"type": "processing", "stage": "narration"})
+
+        narration_result = _generate_turn_narration_artifact(
+            session_id,
+            narration_request,
+        )
+
+        if not narration_result.get("ok"):
+            yield _sse({
+                "type": "narration",
+                "turn_id": _safe_str(authoritative.get("turn_id")),
+                "tick": authoritative.get("tick"),
+                "text": _safe_str(authoritative.get("deterministic_fallback_narration")),
+                "used_llm": False,
+                "fallback": True,
+            })
+            yield _sse({"type": "done", "turn_id": _safe_str(authoritative.get("turn_id")), "tick": authoritative.get("tick")})
+            return
+
+        artifact = _safe_dict(narration_result.get("artifact"))
+        narration = _safe_str(artifact.get("narration"))
+
+        if narration:
+            yield _sse({
+                "type": "narration",
+                "turn_id": _safe_str(artifact.get("turn_id")),
+                "tick": artifact.get("tick"),
+                "text": narration,
+                "used_llm": bool(artifact.get("used_llm")),
+            })
         else:
-            words = narration.split()
-            for idx, word in enumerate(words):
-                chunk = word + (" " if idx < len(words) - 1 else "")
-                yield _sse({"type": "token", "text": chunk})
+            yield _sse({
+                "type": "narration",
+                "turn_id": _safe_str(authoritative.get("turn_id")),
+                "tick": authoritative.get("tick"),
+                "text": _safe_str(authoritative.get("deterministic_fallback_narration")),
+                "used_llm": False,
+                "fallback": True,
+            })
 
-        final_payload = dict(payload)
-        final_payload["type"] = "done"
-        final_payload["ok"] = True
-        yield _sse(final_payload)
+        yield _sse({
+            "type": "done",
+            "turn_id": _safe_str(authoritative.get("turn_id")),
+            "tick": authoritative.get("tick"),
+        })
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers=sse_headers)
 

@@ -1361,9 +1361,39 @@ async def save_rpg_session(request: Request):
     global _RPG_SESSION_ROOT_STATE
     data = await _get_json(request)
     session = _safe_dict(data.get("session"))
+    manifest = _safe_dict(session.get("manifest"))
+
+    save_label = _safe_str(data.get("save_label")).strip()
+    branch_note = _safe_str(data.get("branch_note")).strip()
+    branch_parent_session_id = _safe_str(data.get("branch_parent_session_id")).strip()
+
+    story_policy = _safe_dict(_safe_dict(session.get("runtime_state")).get("story_policy"))
+    if not story_policy:
+        story_policy = {
+            "save_load_stable": True,
+            "strict_replay": False,
+            "record_replay_artifacts": False,
+        }
+        session.setdefault("runtime_state", {})["story_policy"] = story_policy
+
+    manifest["save_kind"] = "manual"
+    if save_label:
+        manifest["save_label"] = save_label
+    if branch_note:
+        manifest["branch_note"] = branch_note
+    if branch_parent_session_id:
+        manifest["branch_parent_session_id"] = branch_parent_session_id
+    session["manifest"] = manifest
+
     _RPG_SESSION_ROOT_STATE = save_session(_RPG_SESSION_ROOT_STATE, session)
     save_session_to_disk(session)
-    return _jsonify({"ok": True, "sessions": list_sessions(_RPG_SESSION_ROOT_STATE)})
+    sessions = list_sessions(_RPG_SESSION_ROOT_STATE)
+    for s in sessions:
+        runtime_state = _safe_dict(s.get("runtime_state"))
+        narration_artifacts = _safe_list(runtime_state.get("narration_artifacts"))
+        s["narration_artifacts"] = narration_artifacts[-12:]
+        s["latest_narration_by_turn"] = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+    return _jsonify({"ok": True, "sessions": sessions})
 
 
 @rpg_presentation_bp.post("/api/rpg/session/list")

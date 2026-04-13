@@ -1600,11 +1600,12 @@ def narrate_scene(
 
     return {
         "narrative": _safe_str(structured.get("markdown")),
+        "narration": _safe_str(structured.get("markdown")),
         "structured_narration": structured,
         "speaker_turns": _safe_list(structured.get("speaker_turns")),
-        "raw_llm_narrative": llm_narrative,
         "used_llm": used_llm,
-        "llm_error": "[ERROR:" in llm_narrative,
+        "raw_llm_narrative": _safe_str(llm_narrative),
+        "llm_error": "[ERROR:" in _safe_str(llm_narrative),
     }
 
 

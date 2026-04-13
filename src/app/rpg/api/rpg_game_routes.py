@@ -463,77 +463,29 @@ async def get_history(session_id: str, limit: Optional[int] = None):
 
 @rpg_game_bp.get("/api/rpg/games/{session_id}/replay")
 async def get_replay(session_id: str, turn: Optional[int] = None):
-    """Get the deterministic replay log for a game session.
-
-    Query parameters:
-        turn (int, optional): Return only the log for a specific turn number.
-    """
-    try:
-        session = load_game(session_id)
-        if not session:
-            return _jsonify({"success": False, "error": "Game not found"}, status_code=404)
-
-        if turn is not None:
-            logs = [tl for tl in session.turn_logs if tl.turn == turn]
-            if not logs:
-                return _jsonify({"success": False, "error": f"No log for turn {turn}"}, status_code=404)
-            return _jsonify({
-                "success": True,
-                "turn_log": logs[0].to_dict(),
-            })
-
-        return _jsonify({
-            "success": True,
-            "turn_logs": [tl.to_dict() for tl in session.turn_logs],
-            "turn_count": session.turn_count,
-        })
-    except Exception as e:
-        logger.error(f"Error getting replay for game {session_id}: {e}", exc_info=True)
-        return _jsonify({"success": False, "error": str(e)}, status_code=500)
+    return _jsonify(
+        {
+            "success": False,
+            "error": "replay_disabled",
+            "message": (
+                "This RPG build is save/load-stable rather than replay-deterministic. "
+                "Use manual saves to branch from important choices."
+            ),
+        },
+        status_code=410,
+    )
 
 
 @rpg_game_bp.post("/api/rpg/games/{session_id}/replay")
 async def run_replay(session_id: str, request: Request):
-    """Re-execute a turn deterministically from its stored TurnLog.
-
-    Request body:
-        turn (int, required): The turn number to replay.
-    """
-    try:
-        session = load_game(session_id)
-        if not session:
-            return _jsonify({"success": False, "error": "Game not found"}, status_code=404)
-
-        data = await _get_json(request)
-        turn = data.get("turn")
-        if turn is None:
-            return _jsonify({"success": False, "error": "Missing 'turn' in request body"}, status_code=400)
-
-        try:
-            turn = int(turn)
-        except (TypeError, ValueError):
-            return _jsonify({"success": False, "error": "'turn' must be an integer"}, status_code=400)
-
-        logs = [tl for tl in session.turn_logs if tl.turn == turn]
-        if not logs:
-            return _jsonify({"success": False, "error": f"No log for turn {turn}"}, status_code=404)
-
-        result = replay_turn(logs[0], session)
-        save_game(session)
-
-        response = {
-            "success": result.error is None,
-            "narration": result.narration,
-            "turn": turn,
-            "state_changes": result.state_changes,
-            "events": [e.to_dict() for e in result.events],
-        }
-        if result.dice_roll:
-            response["dice_roll"] = result.dice_roll
-        if result.error:
-            response["error"] = result.error
-
-        return _jsonify(response)
-    except Exception as e:
-        logger.error(f"Error running replay for game {session_id}: {e}", exc_info=True)
-        return _jsonify({"success": False, "error": str(e)}, status_code=500)
+    return _jsonify(
+        {
+            "success": False,
+            "error": "replay_disabled",
+            "message": (
+                "Replay is disabled in save/load-stable mode. "
+                "Load a save to explore alternate story branches."
+            ),
+        },
+        status_code=410,
+    )
