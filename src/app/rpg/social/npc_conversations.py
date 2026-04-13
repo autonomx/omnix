@@ -117,6 +117,15 @@ def build_conversation_state(
         "last_speaker_id": "",
         "intervention_pending": False,
         "line_source": "template",
+        # 4C-A: Thread engine extensions
+        "mode": "ambient",           # ambient | directed_to_player | group
+        "audience": [],              # IDs of entities overhearing (e.g. player, nearby NPCs)
+        "importance": 0,             # 0-100, used for scheduling priority
+        "world_effect_budget": 0,    # max world signals this thread can emit
+        "world_effects_emitted": 0,  # signals emitted so far
+        "expires_at_tick": int(tick or 0) + int(max_turns or 1) + 4,
+        "beat_count": 0,             # authoritative beat count
+        "pivot_history": [],         # list of mode transitions
     }
 
 

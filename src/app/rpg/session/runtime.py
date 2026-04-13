@@ -5251,6 +5251,16 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
                 "world_events_panel_enabled": True,
                 "interaction_duration_mode": "until_next_command",
                 "interaction_duration_ticks": 5,
+                # 4C-F: NPC conversation settings
+                "ambient_conversations_enabled": True,
+                "ambient_delay_after_player_turn": 15,
+                "max_concurrent_ambient_threads": 3,
+                "max_beats_per_ambient_thread": 5,
+                "allow_npc_address_player": True,
+                "allow_conversation_world_signals": True,
+                "conversation_frequency": "normal",
+                "combat_suppression": True,
+                "stealth_suppression": True,
             },
             # Living-world ambient state (Phase 0.2)
             "ambient_queue": [],
@@ -5267,6 +5277,12 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "last_player_action_context": {},
             "idle_debug_trace": {},
             "recent_world_event_rows": [],
+            # 4C-E: Conversation world signals
+            "conversation_world_signals": {
+                "pending": [],
+                "applied": [],
+                "total_emitted": 0,
+            },
         },
     }
     session["session_id"] = setup_id

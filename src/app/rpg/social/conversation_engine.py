@@ -244,6 +244,20 @@ def try_start_party_reaction_conversation(simulation_state: Dict[str, Any], runt
 
 
 def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+    from .conversation_beats import (
+        append_beat,
+        build_beat_from_conversation_line,
+        ensure_beats_state,
+    )
+    from .conversation_world_signals import (
+        enqueue_signals,
+        ensure_signal_state,
+        extract_signals_from_beat,
+    )
+
+    ensure_beats_state(simulation_state)
+    ensure_signal_state(runtime_state)
+
     for conv in list_active_conversations(simulation_state):
         conv = dict(conv)
         if should_close_conversation(conv, simulation_state, runtime_state, tick):
@@ -253,7 +267,20 @@ def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state
         line = build_next_conversation_line(conv, simulation_state, runtime_state, tick)
         append_conversation_line(simulation_state, conv.get("conversation_id"), line)
 
+        # 4C-B: Build authoritative beat from line
+        beat = build_beat_from_conversation_line(conv, line, tick)
+        append_beat(simulation_state, beat)
+
+        # 4C-E: Extract world signals from beat
+        conv_settings = resolve_conversation_settings(simulation_state, runtime_state)
+        if conv_settings.get("allow_conversation_world_signals", True):
+            signals = extract_signals_from_beat(beat, conv)
+            if signals:
+                enqueue_signals(runtime_state, signals)
+                conv["world_effects_emitted"] = int(conv.get("world_effects_emitted", 0) or 0) + len(signals)
+
         conv["turn_count"] = int(conv.get("turn_count", 0) or 0) + 1
+        conv["beat_count"] = int(conv.get("beat_count", 0) or 0) + 1
         conv["updated_tick"] = int(tick or 0)
         conv["last_speaker_id"] = _safe_str(line.get("speaker"))
         conv["intervention_pending"] = bool(conv.get("player_can_intervene") and conv.get("player_present"))
@@ -267,8 +294,26 @@ def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state
 
 
 def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+    from .conversation_pivots import evaluate_pivots
+    from .conversation_settings import should_suppress_conversations
+    from .conversation_world_signals import apply_pending_signals
+
     ensure_conversation_state(simulation_state)
+
+    # 4C-F: Check combat/stealth suppression
+    settings = resolve_conversation_settings(simulation_state, runtime_state)
+    if should_suppress_conversations(simulation_state, settings):
+        trim_conversation_state(simulation_state)
+        return simulation_state
+
     try_start_ambient_conversations(simulation_state, runtime_state, tick)
     advance_active_conversations(simulation_state, runtime_state, tick)
+
+    # 4C-D: Evaluate pivots after advancing
+    evaluate_pivots(simulation_state, runtime_state, tick)
+
+    # 4C-E: Apply pending world signals
+    simulation_state, runtime_state = apply_pending_signals(simulation_state, runtime_state)
+
     trim_conversation_state(simulation_state)
     return simulation_state
