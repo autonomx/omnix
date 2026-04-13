@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.session.runtime import _maybe_enqueue_latest_ambient_conversation_narration
+
 from .conversation_beats import (
     append_beat,
     build_beat_from_conversation_line,
@@ -16,12 +18,11 @@ from .conversation_participants import (
 )
 from .conversation_pivots import evaluate_pivots
 from .conversation_scheduler import (
+    PIVOT_TURN_EXTENSION,
     classify_thread_mode,
     compute_thread_importance,
     compute_world_effect_budget,
-    get_active_thread_summary,
     should_start_new_thread,
-    PIVOT_TURN_EXTENSION,
     thread_is_expired,
     thread_is_stale,
 )
@@ -34,8 +35,8 @@ from .conversation_templates import build_template_line
 from .conversation_topics import build_conversation_topic_candidates
 from .conversation_world_signals import (
     apply_pending_signals,
-    ensure_signal_state,
     enqueue_signals,
+    ensure_signal_state,
     extract_signals_from_beat,
 )
 from .npc_conversations import (
@@ -439,6 +440,22 @@ def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[
     # 8. Trim state to bounded sizes
     trim_conversation_state(simulation_state)
     trim_beats_state(simulation_state)
+
+    session_id = _safe_str(runtime_state.get("session_id")).strip()
+    if session_id:
+        try:
+            ambient_result = _maybe_enqueue_latest_ambient_conversation_narration(
+                session_id,
+                simulation_state,
+                runtime_state,
+            )
+            updated_runtime_state = _safe_dict(ambient_result.get("runtime_state"))
+            if updated_runtime_state:
+                runtime_state.clear()
+                runtime_state.update(updated_runtime_state)
+        except Exception:
+            # Ambient narration is presentation-only; never fail the authoritative tick.
+            pass
 
     return simulation_state
 

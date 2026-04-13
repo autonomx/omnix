@@ -108,6 +108,64 @@ def _safe_list(value: Any) -> List[Any]:
     return list(value) if isinstance(value, list) else []
 
 
+def _title_case_token(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    return text.replace("_", " ").strip().title()
+
+
+def _build_ambient_conversation_line(narration_context: Dict[str, Any]) -> str:
+    narration_context = _safe_dict(narration_context)
+    beat = _safe_dict(narration_context.get("beat"))
+
+    speaker_id = _safe_str(beat.get("speaker_id")).strip() or "someone"
+    speaker = _title_case_token(speaker_id) or "Someone"
+
+    summary = _safe_str(beat.get("summary")).strip()
+    stance = _safe_str(beat.get("stance")).strip().lower()
+    addressed_to = [_title_case_token(x) for x in _safe_list(beat.get("addressed_to")) if _safe_str(x).strip()]
+    mentions = [_title_case_token(x) for x in _safe_list(beat.get("mentions")) if _safe_str(x).strip()]
+
+    summary = summary.rstrip(".!? ").strip()
+    if not summary:
+        summary = "says something under their breath"
+
+    prefix = f"{speaker}: "
+    if stance in {"warning", "cautious", "worried"}:
+        prefix = f"{speaker} lowers their voice. "
+    elif stance in {"challenge", "angry", "threat"}:
+        prefix = f"{speaker} snaps back. "
+    elif stance in {"friendly", "warm", "supportive"}:
+        prefix = f"{speaker} says warmly, "
+    elif stance in {"secretive", "whisper", "hushed"}:
+        prefix = f"{speaker} whispers, "
+
+    # Address target naturally if present.
+    if addressed_to:
+        if len(addressed_to) == 1:
+            target_phrase = f" to {addressed_to[0]}"
+        else:
+            target_phrase = f" to {', '.join(addressed_to[:2])}"
+    else:
+        target_phrase = ""
+
+    line = prefix
+    if prefix.endswith(": "):
+        line = f"{speaker}{target_phrase}: {summary}"
+    else:
+        line = f"{prefix}{summary}"
+
+    # Soft mention enrichment, bounded and presentation-only.
+    if mentions:
+        mention = mentions[0]
+        summary_lower = summary.lower()
+        if mention.lower() not in summary_lower:
+            line = f"{line} ({mention})"
+
+    return line.strip()
+
+
 def _bound_text(value: Any, limit: int = 180) -> str:
     text = _safe_str(value).strip()
     if len(text) > limit:
@@ -1504,7 +1562,7 @@ def _generate_live_narrative(
                 return response
             else:
                 logger.error("LLM response failed validation, parsed: %s", parsed)
-        except Exception as e:
+        except Exception:
             logger.exception("Exception during LLM narration")
 
     # fallback if LLM fails format
@@ -1581,6 +1639,17 @@ def narrate_scene(
 ) -> Dict[str, Any]:
     scene = _safe_dict(scene)
     narration_context = _safe_dict(narration_context)
+    if _safe_str(narration_context.get("mode")) == "ambient_conversation":
+        text = _build_ambient_conversation_line(narration_context)
+        return {
+            "narrative": text,
+            "narration": text,
+            "structured_narration": {"markdown": text, "speaker_turns": []},
+            "speaker_turns": [],
+            "used_llm": False,
+            "raw_llm_narrative": "",
+            "llm_error": False,
+        }
 
     if llm_gateway:
         llm_narrative = _generate_live_narrative(

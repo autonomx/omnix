@@ -32,7 +32,6 @@ from app.rpg.ai.npc_initiative import (
     apply_initiative_cooldowns,
     apply_world_behavior_bias,
     build_npc_initiative_candidates,
-    compute_opening_relevance,
     select_npc_initiative_candidate,
 )
 from app.rpg.ai.npc_reaction_layer import (
@@ -46,7 +45,6 @@ from app.rpg.ai.scene_continuity import (
     advance_scene,
     build_continuation_beats,
     compact_finished_scenes,
-    get_active_scene_candidates,
     maybe_build_scene_consequence,
     select_continuing_scene,
     start_persistent_scene,
@@ -68,7 +66,6 @@ from app.rpg.creator.world_player_actions import (
     ESCALATE_CONFLICT,
     INTERVENE_THREAD,
     SUPPORT_FACTION,
-    apply_player_action,
 )
 from app.rpg.creator.world_scene_generator import generate_scenes_from_simulation
 from app.rpg.creator.world_simulation import (
@@ -100,7 +97,6 @@ from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.player.player_progression_state import (
-    award_player_xp,
     award_skill_xp,
     ensure_player_progression_state,
     resolve_level_ups,
@@ -134,13 +130,13 @@ from app.rpg.session.ambient_policy import (
     classify_ambient_delivery,
     record_interrupt,
 )
-from app.rpg.session.service import load_session as load_canonical_session
-from app.rpg.session.service import save_session as save_canonical_session
 from app.rpg.session.narration_worker import (
-    signal_narration_work,
     ensure_narration_worker_running,
     publish_narration_event,
+    signal_narration_work,
 )
+from app.rpg.session.service import load_session as load_canonical_session
+from app.rpg.session.service import save_session as save_canonical_session
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -332,6 +328,181 @@ def _build_narration_job_id(turn_id: str) -> str:
     return f"narration:{turn_id}"
 
 
+def _build_ambient_turn_id(thread_id: str, beat_id: str) -> str:
+    thread_id = _safe_str(thread_id).strip() or "conv:unknown"
+    beat_id = _safe_str(beat_id).strip() or "beat:unknown"
+    return f"ambient:{thread_id}:{beat_id}"
+
+
+_AMBIENT_NARRATION_THREAD_COOLDOWN_TICKS = 2
+_MAX_AMBIENT_NARRATION_ENQUEUES_PER_TICK = 2
+
+
+def _ensure_ambient_narration_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    runtime_state.setdefault("ambient_narration_state", {})
+    ambient = _safe_dict(runtime_state.get("ambient_narration_state"))
+    ambient.setdefault("last_narrated_tick_by_thread", {})
+    ambient.setdefault("last_enqueued_turn_ids", [])
+    runtime_state["ambient_narration_state"] = ambient
+    return runtime_state
+
+
+def _get_last_ambient_narrated_tick(runtime_state: Dict[str, Any], thread_id: str) -> int:
+    runtime_state = _ensure_ambient_narration_state(runtime_state)
+    ambient = _safe_dict(runtime_state.get("ambient_narration_state"))
+    by_thread = _safe_dict(ambient.get("last_narrated_tick_by_thread"))
+    return int(by_thread.get(_safe_str(thread_id).strip(), -999999) or -999999)
+
+
+def _record_ambient_narration_enqueue(runtime_state: Dict[str, Any], thread_id: str, tick: int, turn_id: str) -> Dict[str, Any]:
+    runtime_state = _ensure_ambient_narration_state(runtime_state)
+    ambient = _safe_dict(runtime_state.get("ambient_narration_state"))
+
+    by_thread = _safe_dict(ambient.get("last_narrated_tick_by_thread"))
+    by_thread[_safe_str(thread_id).strip()] = int(tick or 0)
+    ambient["last_narrated_tick_by_thread"] = by_thread
+
+    recent_turn_ids = _safe_list(ambient.get("last_enqueued_turn_ids"))
+    recent_turn_ids.append(_safe_str(turn_id).strip())
+    ambient["last_enqueued_turn_ids"] = recent_turn_ids[-64:]
+
+    runtime_state["ambient_narration_state"] = ambient
+    return runtime_state
+
+
+def _has_narration_artifact_for_turn(runtime_state: Dict[str, Any], turn_id: str) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    by_turn = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+    return bool(_safe_dict(by_turn.get(_safe_str(turn_id).strip())))
+
+
+def _select_latest_ambient_conversation_beats_per_active_thread(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    conversations = _safe_dict(_safe_dict(simulation_state.get("social_state")).get("conversations"))
+    beats_by_thread = _safe_dict(conversations.get("beats_by_thread"))
+    if not beats_by_thread:
+        return []
+
+    active_ids = [
+        _safe_str(_safe_dict(c).get("conversation_id")).strip()
+        for c in _safe_list(conversations.get("active"))
+        if isinstance(c, dict)
+    ]
+
+    selected: List[Dict[str, Any]] = []
+    for thread_id in active_ids:
+        rows = [b for b in _safe_list(beats_by_thread.get(thread_id)) if isinstance(b, dict)]
+        if not rows:
+            continue
+        selected.append(_safe_dict(rows[-1]))
+
+    selected.sort(
+        key=lambda b: (
+            -int(_safe_dict(b).get("tick", 0) or 0),
+            _safe_str(_safe_dict(b).get("thread_id")),
+        )
+    )
+    return selected
+
+
+def _build_ambient_conversation_narration_request(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    beat: Dict[str, Any],
+) -> Dict[str, Any]:
+    beat = _safe_dict(beat)
+    if not beat:
+        return {}
+
+    thread_id = _safe_str(beat.get("thread_id")).strip()
+    beat_id = _safe_str(beat.get("beat_id")).strip()
+    turn_id = _build_ambient_turn_id(thread_id, beat_id)
+
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    return {
+        "turn_id": turn_id,
+        "tick": int(beat.get("tick", runtime_state.get("tick", 0)) or 0),
+        "session_id": _safe_str(runtime_state.get("session_id")),
+        "scene": current_scene,
+        "narration_context": {
+            "mode": "ambient_conversation",
+            "beat": beat,
+            "thread_id": thread_id,
+            "speaker_id": _safe_str(beat.get("speaker_id")),
+            "addressed_to": _safe_list(beat.get("addressed_to")),
+            "summary": _safe_str(beat.get("summary")),
+            "stance": _safe_str(beat.get("stance")),
+            "mentions": _safe_list(beat.get("mentions")),
+            "player_relevant": bool(beat.get("player_relevant")),
+        },
+        "performance": {
+            "enable_live_narration_llm": True,
+            "enable_narration_retry": False,
+        },
+        "job_kind": "ambient_conversation",
+        "priority": 20,
+    }
+
+
+def _maybe_enqueue_latest_ambient_conversation_narration(
+    session_id: str,
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_state = _ensure_ambient_narration_state(runtime_state)
+    settings = _safe_dict(runtime_state.get("conversation_settings"))
+    if not bool(settings.get("ambient_conversations_enabled", True)):
+        return {"ok": True, "status": "disabled", "enqueued": 0}
+
+    beats = _select_latest_ambient_conversation_beats_per_active_thread(simulation_state, runtime_state)
+    if not beats:
+        return {"ok": True, "status": "no_beats", "enqueued": 0}
+
+    enqueued = 0
+    results = []
+
+    for beat in beats:
+        if enqueued >= _MAX_AMBIENT_NARRATION_ENQUEUES_PER_TICK:
+            break
+
+        beat = _safe_dict(beat)
+        thread_id = _safe_str(beat.get("thread_id")).strip()
+        beat_tick = int(beat.get("tick", runtime_state.get("tick", 0)) or 0)
+
+        last_tick = _get_last_ambient_narrated_tick(runtime_state, thread_id)
+        if (beat_tick - last_tick) < _AMBIENT_NARRATION_THREAD_COOLDOWN_TICKS:
+            continue
+
+        request = _build_ambient_conversation_narration_request(simulation_state, runtime_state, beat)
+        turn_id = _safe_str(request.get("turn_id")).strip()
+        if not turn_id:
+            continue
+
+        if _has_narration_artifact_for_turn(runtime_state, turn_id):
+            continue
+
+        result = _enqueue_narration_request(session_id, request)
+        results.append(result)
+
+        if result.get("ok"):
+            enqueued += 1
+            runtime_state = _record_ambient_narration_enqueue(runtime_state, thread_id, beat_tick, turn_id)
+
+    return {
+        "ok": True,
+        "status": "processed",
+        "enqueued": enqueued,
+        "results": results,
+        "runtime_state": runtime_state,
+    }
+
+
 def _prune_narration_jobs(runtime_state: Dict[str, Any], max_items: int = 64) -> Dict[str, Any]:
     runtime_state = _ensure_narration_job_state(runtime_state)
     jobs = _safe_list(runtime_state.get("narration_jobs"))
@@ -419,6 +590,8 @@ def _enqueue_narration_request(
     narration_request = _safe_dict(narration_request)
     turn_id = _safe_str(narration_request.get("turn_id")).strip()
     tick = int(narration_request.get("tick", 0) or 0)
+    job_kind = _safe_str(narration_request.get("job_kind")).strip() or "player_turn"
+    priority = int(narration_request.get("priority", 100 if job_kind == "player_turn" else 20) or 0)
 
     if not turn_id:
         return {"ok": False, "error": "missing_turn_id"}
@@ -460,6 +633,8 @@ def _enqueue_narration_request(
         "job_id": _build_narration_job_id(turn_id),
         "turn_id": turn_id,
         "tick": tick,
+        "job_kind": job_kind,
+        "priority": priority,
         "status": "queued",
         "created_at": _utc_now_iso(),
         "started_at": None,
@@ -3849,7 +4024,6 @@ def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state
     text = str(raw_text)
 
     # 1. Extract <RESPONSE> block if present
-    import re
 
     match = re.search(r"<RESPONSE>(.*?)</RESPONSE>", text, re.DOTALL)
 
@@ -6047,13 +6221,18 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     runtime_state = _copy_dict(session.get("runtime_state"))
     runtime_state = _ensure_narration_job_state(runtime_state)
 
-    jobs = _safe_list(runtime_state.get("narration_jobs"))
+    jobs = [_safe_dict(j) for j in _safe_list(runtime_state.get("narration_jobs")) if isinstance(j, dict)]
+    queued = [j for j in jobs if _safe_str(j.get("status")) == "queued"]
     queued_job = None
-    for job in jobs:
-        j = _safe_dict(job)
-        if _safe_str(j.get("status")) == "queued":
-            queued_job = j
-            break
+    if queued:
+        queued.sort(
+            key=lambda j: (
+                -int(j.get("priority", 0) or 0),
+                -int(j.get("tick", 0) or 0),
+                _safe_str(j.get("created_at")),
+            )
+        )
+        queued_job = queued[0]
 
     if not queued_job:
         return {"ok": True, "status": "idle"}
@@ -6145,23 +6324,38 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         session = save_runtime_session(session)
         
         artifact = _safe_dict(result.get("artifact"))
-        publish_narration_event(
-            session_id,
-            {
-                "type": "narration_artifact",
-                "session_id": session_id,
-                "turn_id": turn_id,
-                "tick": artifact.get("tick"),
-                "text": _safe_str(artifact.get("narration")),
-                "used_llm": bool(artifact.get("used_llm")),
-            },
-        )
-        
+        job_kind = _safe_str(_safe_dict(queued_job).get("job_kind")).strip() or "player_turn"
+        if job_kind == "ambient_conversation":
+            publish_narration_event(
+                session_id,
+                {
+                    "type": "ambient_conversation_artifact",
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "tick": artifact.get("tick"),
+                    "text": _safe_str(artifact.get("narration")),
+                    "used_llm": bool(artifact.get("used_llm")),
+                    "speaker_id": _safe_str(_safe_dict(_safe_dict(queued_job).get("narration_request")).get("narration_context", {}).get("speaker_id")),
+                    "thread_id": _safe_str(_safe_dict(_safe_dict(queued_job).get("narration_request")).get("narration_context", {}).get("thread_id")),
+                },
+            )
+        else:
+            publish_narration_event(
+                session_id,
+                {
+                    "type": "narration_artifact",
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "tick": artifact.get("tick"),
+                    "text": _safe_str(artifact.get("narration")),
+                    "used_llm": bool(artifact.get("used_llm")),
+                },
+            )
         return {
             "ok": True,
             "status": "completed",
             "turn_id": turn_id,
-            "artifact": result.get("artifact"),
+            "artifact": artifact,
             "session": session,
         }
 

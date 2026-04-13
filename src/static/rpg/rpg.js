@@ -2851,10 +2851,11 @@
                     + '<em class="rpg-ambient-text">"' + escapeHtml(update.text || '') + '"</em>';
                 break;
             case 'npc_to_npc':
-                content = '<span class="rpg-ambient-speaker">' + escapeHtml(update.speaker_name || 'NPC') + '</span> '
-                    + '<span class="rpg-ambient-says">speaks to '
-                    + escapeHtml(update.target_name || 'someone') + ':</span> '
-                    + '<em class="rpg-ambient-text">"' + escapeHtml(update.text || '') + '"</em>';
+                content = 
+                    '<div class="rpg-ambient-line" style="opacity:.82;font-size:.92em;border-left:3px solid rgba(255,255,255,.18);padding-left:8px;">' +
+                    '<div style="font-size:.72em;text-transform:uppercase;letter-spacing:.08em;opacity:.65;margin-bottom:2px;">Overheard</div>' +
+                    '<div><strong>' + escapeHtml(update.speaker_name || 'Someone') + '</strong>: ' + escapeHtml(update.text || '') + '</div>' +
+                    '</div>';
                 break;
             case 'arrival':
                 content = '\uD83D\uDEB6 <span class="rpg-ambient-text">' + escapeHtml(update.text || 'Someone arrives.') + '</span>';

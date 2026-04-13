@@ -131,6 +131,7 @@ conversation_pivots = _load("app.rpg.social.conversation_pivots")
 conversation_scheduler = _load("app.rpg.social.conversation_scheduler")
 conversation_engine = _load("app.rpg.social.conversation_engine")
 narration_worker = _load("app.rpg.session.narration_worker")
+runtime = _load("app.rpg.session.runtime")
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +161,10 @@ def _sim_state(location_id: str = "market_square", npcs: int = 3) -> Dict[str, A
         "npc_minds": {},
         "active_interactions": [],
     }
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _runtime_state() -> Dict[str, Any]:
@@ -1234,6 +1239,76 @@ class TestArchitecturalUnification:
             "ambient_delay_after_player_turn",
             "max_concurrent_ambient_threads",
             "max_beats_per_ambient_thread",
+        }
+
+
+class TestAmbientNarrationMultiThreadCooldown:
+    def test_selects_latest_beat_per_active_thread(self):
+        sim = _sim_state(npcs=4)
+        rt = _runtime_state()
+        rt["session_id"] = "sess_multi"
+        rt["current_scene"] = {"title": "Market Square"}
+
+        conv1 = _open_conversation(sim, rt, participants=["npc_0", "npc_1"], mode="ambient")
+        conv2 = _open_conversation(sim, rt, participants=["npc_2", "npc_3"], mode="ambient")
+
+        line1 = {"speaker": "npc_0", "text": "Road looks dangerous.", "kind": "warning"}
+        line2 = {"speaker": "npc_2", "text": "Market prices are rising.", "kind": "statement"}
+
+        npc_conversations.append_conversation_line(sim, conv1["conversation_id"], line1)
+        npc_conversations.append_conversation_line(sim, conv2["conversation_id"], line2)
+
+        beat1 = conversation_beats.build_beat_from_conversation_line(conv1, line1, 10)
+        beat2 = conversation_beats.build_beat_from_conversation_line(conv2, line2, 11)
+        conversation_beats.append_beat(sim, beat1)
+        conversation_beats.append_beat(sim, beat2)
+
+        beats = runtime._select_latest_ambient_conversation_beats_per_active_thread(sim, rt)
+        thread_ids = {_safe_dict(b).get("thread_id") for b in beats}
+        assert conv1["conversation_id"] in thread_ids
+        assert conv2["conversation_id"] in thread_ids
+
+    def test_cooldown_blocks_same_thread_reenqueue(self):
+        sim = _sim_state()
+        rt = _runtime_state()
+        rt["session_id"] = "sess_cooldown"
+        rt["current_scene"] = {"title": "Market Square"}
+
+        conv = _open_conversation(sim, rt, participants=["npc_0", "npc_1"], mode="ambient")
+        line = {"speaker": "npc_0", "text": "Keep your voice down.", "kind": "warning"}
+        npc_conversations.append_conversation_line(sim, conv["conversation_id"], line)
+
+        beat = conversation_beats.build_beat_from_conversation_line(conv, line, 10)
+        conversation_beats.append_beat(sim, beat)
+
+        turn_id = runtime._build_ambient_turn_id(conv["conversation_id"], beat["beat_id"])
+        rt = runtime._record_ambient_narration_enqueue(rt, conv["conversation_id"], 10, turn_id)
+
+        result = runtime._maybe_enqueue_latest_ambient_conversation_narration("sess_cooldown", sim, rt)
+        assert result["enqueued"] == 0
+
+    def test_max_ambient_enqueues_per_tick_is_bounded(self):
+        sim = _sim_state(npcs=6)
+        rt = _runtime_state()
+        rt["session_id"] = "sess_bound"
+        rt["current_scene"] = {"title": "Market Square"}
+
+        convs = [
+            _open_conversation(sim, rt, participants=["npc_0", "npc_1"], mode="ambient"),
+            _open_conversation(sim, rt, participants=["npc_2", "npc_3"], mode="ambient"),
+            _open_conversation(sim, rt, participants=["npc_4", "npc_5"], mode="ambient"),
+        ]
+
+        for i, conv in enumerate(convs):
+            line = {"speaker": conv["participants"][0], "text": f"Line {i}", "kind": "statement"}
+            npc_conversations.append_conversation_line(sim, conv["conversation_id"], line)
+            beat = conversation_beats.build_beat_from_conversation_line(conv, line, 10 + i)
+            conversation_beats.append_beat(sim, beat)
+
+        result = runtime._maybe_enqueue_latest_ambient_conversation_narration("sess_bound", sim, rt)
+        assert result["enqueued"] <= runtime._MAX_AMBIENT_NARRATION_ENQUEUES_PER_TICK
+        
+        required = {
             "allow_npc_address_player",
             "allow_conversation_world_signals",
             "conversation_frequency",
