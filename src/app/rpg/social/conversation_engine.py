@@ -20,11 +20,13 @@ from .conversation_scheduler import (
     compute_thread_importance,
     compute_world_effect_budget,
     get_active_thread_summary,
+    should_start_new_thread,
     PIVOT_TURN_EXTENSION,
     thread_is_expired,
     thread_is_stale,
 )
 from .conversation_settings import (
+    get_frequency_multiplier,
     resolve_conversation_settings,
     should_suppress_conversations,
 )
@@ -273,11 +275,13 @@ def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state
     ensure_beats_state(simulation_state)
     ensure_signal_state(runtime_state)
 
+    settings = resolve_conversation_settings(simulation_state, runtime_state)
+
     for conv in list_active_conversations(simulation_state):
         conv = dict(conv)
         cid = _safe_str(conv.get("conversation_id"))
 
-        # Check expiry/stale
+        # Expiry / staleness
         if thread_is_expired(conv, tick):
             close_conversation(simulation_state, cid, reason="expired")
             continue
@@ -286,11 +290,7 @@ def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state
             close_conversation(simulation_state, cid, reason="stale")
             continue
 
-        if should_close_conversation(conv, simulation_state, runtime_state, tick):
-            close_conversation(simulation_state, conv.get("conversation_id"), reason="completed")
-            continue
-
-        # Enforce beat cap for this mode
+        # Beat cap
         mode = _safe_str(conv.get("mode")) or "ambient"
         _, max_beats = compute_beat_caps(mode)
         beat_count = int(conv.get("beat_count", 0) or 0)
@@ -298,32 +298,95 @@ def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state
             close_conversation(simulation_state, cid, reason="beat_cap_reached")
             continue
 
+        # Generate next line
         line = build_next_conversation_line(conv, simulation_state, runtime_state, tick)
-        append_conversation_line(simulation_state, conv.get("conversation_id"), line)
+        append_conversation_line(simulation_state, cid, line)
 
-        # Build authoritative beat from line (thread_id == conversation_id)
+        # Build beat
         beat = build_beat_from_conversation_line(conv, line, tick)
         append_beat(simulation_state, beat)
 
-        # Extract world signals from beat
-        conv_settings = resolve_conversation_settings(simulation_state, runtime_state)
-        if conv_settings.get("allow_conversation_world_signals", True):
+        # Signals
+        if settings.get("allow_conversation_world_signals", True):
             signals = extract_signals_from_beat(beat, conv)
-            if isinstance(signals, list) and signals:
+            if signals:
                 enqueue_signals(runtime_state, signals)
                 conv["world_effects_emitted"] = int(conv.get("world_effects_emitted", 0) or 0) + len(signals)
 
+        # Update state
         conv["turn_count"] = int(conv.get("turn_count", 0) or 0) + 1
         conv["beat_count"] = int(conv.get("beat_count", 0) or 0) + 1
         conv["updated_tick"] = int(tick or 0)
         conv["last_speaker_id"] = _safe_str(line.get("speaker"))
-        conv["intervention_pending"] = bool(conv.get("player_can_intervene") and conv.get("player_present"))
+
         upsert_conversation(simulation_state, conv)
 
-        if should_close_conversation(conv, simulation_state, runtime_state, tick):
-            close_conversation(simulation_state, conv.get("conversation_id"), reason="completed")
-
     trim_conversation_state(simulation_state)
+    return simulation_state
+
+
+def _post_player_ambient_delay_active(runtime_state: Dict[str, Any], settings: Dict[str, Any], tick: int) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    settings = _safe_dict(settings)
+
+    delay_ticks = int(settings.get("ambient_delay_after_player_turn", 0) or 0)
+    if delay_ticks <= 0:
+        return False
+
+    last_turn = _safe_dict(runtime_state.get("last_turn_result"))
+    if not last_turn:
+        return False
+
+    last_player_tick = int(last_turn.get("tick", runtime_state.get("tick", 0)) or 0)
+    return (int(tick or 0) - last_player_tick) < delay_ticks
+
+
+def _should_attempt_ambient_start(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    tick: int,
+    settings: Dict[str, Any],
+) -> bool:
+    if not settings.get("ambient_conversations_enabled", True):
+        return False
+
+    if _post_player_ambient_delay_active(runtime_state, settings, tick):
+        return False
+
+    active_conversations = list_active_conversations(simulation_state)
+    if not should_start_new_thread(active_conversations, settings):
+        return False
+
+    frequency = _safe_str(settings.get("conversation_frequency")).strip().lower() or "normal"
+    multiplier = float(get_frequency_multiplier(settings))
+
+    # Deterministic cadence gate:
+    # sparse  -> start only every 4 ticks
+    # normal  -> every 2 ticks
+    # lively  -> every tick
+    cadence = 2
+    if frequency == "sparse":
+        cadence = 4
+    elif frequency == "lively":
+        cadence = 1
+
+    if cadence > 1 and (int(tick or 0) % cadence) != 0:
+        return False
+
+    return True
+
+
+def _trim_ambient_overflow(simulation_state: Dict[str, Any], settings: Dict[str, Any]) -> Dict[str, Any]:
+    max_ambient = int(settings.get("max_concurrent_ambient_threads", 1) or 1)
+    ambient = [dict(c) for c in list_active_conversations(simulation_state) if _safe_str(dict(c).get("mode")) in {"", "ambient"}]
+    if len(ambient) <= max_ambient:
+        return simulation_state
+
+    # Close oldest/least recently updated overflow threads deterministically.
+    ambient_sorted = sorted(ambient, key=lambda c: int(dict(c).get("updated_tick", 0) or 0))
+    overflow = ambient_sorted[:-max_ambient]
+    for conv in overflow:
+        close_conversation(simulation_state, conv.get("conversation_id"), reason="ambient_capacity_trim")
     return simulation_state
 
 
@@ -352,8 +415,12 @@ def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[
         trim_conversation_state(simulation_state)
         return simulation_state
 
-    # 3. Start eligible ambient conversations
-    try_start_ambient_conversations(simulation_state, runtime_state, tick)
+    # 3. Start eligible ambient conversations, respecting canonical settings.
+    if _should_attempt_ambient_start(simulation_state, runtime_state, tick, settings):
+        try_start_ambient_conversations(simulation_state, runtime_state, tick)
+
+    # Enforce ambient capacity after any start pass.
+    _trim_ambient_overflow(simulation_state, settings)
 
     # 4. Advance active conversations (beats + signals built inside)
     advance_active_conversations(simulation_state, runtime_state, tick)

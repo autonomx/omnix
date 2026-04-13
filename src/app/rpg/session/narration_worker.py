@@ -19,6 +19,7 @@ external message broker.
 from __future__ import annotations
 
 import asyncio
+import time
 import logging
 import threading
 from typing import Any, Dict, List, Optional, Set
@@ -33,10 +34,16 @@ _MAX_SUBSCRIBERS_PER_SESSION = 16
 # ── In-process state ──────────────────────────────────────────────────────
 
 _worker_running = False
+_worker_thread: Optional[threading.Thread] = None
 _worker_lock = threading.Lock()
 _pending_sessions: Set[str] = set()
 _pending_lock = threading.Lock()
 _subscribers: Dict[str, List[asyncio.Queue]] = {}
+_stop_requested = False
+
+_WORKER_IDLE_SLEEP_SECONDS = 0.50
+_WORKER_ACTIVE_SLEEP_SECONDS = 0.10
+_MAX_SESSIONS_PER_WAKE = 8
 
 
 # ── Worker lifecycle ──────────────────────────────────────────────────────
@@ -48,9 +55,24 @@ def ensure_narration_worker_running() -> None:
     as active.  A future multi-threaded implementation would start
     the background thread here.
     """
-    global _worker_running
+    global _worker_running, _worker_thread, _stop_requested
     with _worker_lock:
+        if _worker_running and _worker_thread is not None and _worker_thread.is_alive():
+            return
         _worker_running = True
+        _stop_requested = False
+        _worker_thread = threading.Thread(
+            target=_worker_loop,
+            name="rpg-narration-worker",
+            daemon=True,
+        )
+        _worker_thread.start()
+
+
+def request_narration_worker_stop() -> None:
+    global _stop_requested
+    with _worker_lock:
+        _stop_requested = True
 
 
 def signal_narration_work(session_id: Any) -> bool:
@@ -79,6 +101,51 @@ def drain_pending_sessions() -> List[str]:
         sessions = sorted(_pending_sessions)
         _pending_sessions.clear()
     return sessions
+
+
+# ── Internal worker loop ──────────────────────────────────────────────────
+
+def _is_stop_requested() -> bool:
+    with _worker_lock:
+        return bool(_stop_requested)
+
+
+def _worker_loop() -> None:
+    # Import lazily to avoid circular imports at module import time.
+    from app.rpg.session.runtime import process_next_narration_job
+
+    while True:
+        if _is_stop_requested():
+            return
+
+        session_ids = drain_pending_sessions()
+        if not session_ids:
+            time.sleep(_WORKER_IDLE_SLEEP_SECONDS)
+            continue
+
+        processed_any = False
+        for session_id in session_ids[:_MAX_SESSIONS_PER_WAKE]:
+            if _is_stop_requested():
+                return
+
+            try:
+                result = process_next_narration_job(session_id)
+            except Exception:
+                logger.exception("Narration worker failed while processing session %s", session_id)
+                # Re-signal so the session is retried on a later wake.
+                signal_narration_work(session_id)
+                continue
+
+            status = str((result or {}).get("status") or "").strip().lower()
+            processed_any = True
+
+            # Re-signal if there may still be queued work for this session.
+            if status in {"completed", "failed", "stale"}:
+                signal_narration_work(session_id)
+            elif status not in {"idle", "claimed_elsewhere"}:
+                signal_narration_work(session_id)
+
+        time.sleep(_WORKER_ACTIVE_SLEEP_SECONDS if processed_any else _WORKER_IDLE_SLEEP_SECONDS)
 
 
 # ── Event publishing (SSE) ────────────────────────────────────────────────

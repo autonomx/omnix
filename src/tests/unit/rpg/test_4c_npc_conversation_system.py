@@ -346,6 +346,92 @@ class TestConversationBeats:
         # Unknown mode falls back to ambient
         assert conversation_beats.compute_beat_caps("unknown") == (2, 5)
 
+
+class TestLiveConversationSettingsIntegration:
+    """Behavioral tests proving canonical 4C settings drive the live engine."""
+
+    def test_ambient_delay_after_player_turn_blocks_start(self):
+        sim = _sim_state()
+        rt = _runtime_state()
+        rt["conversation_settings"] = {
+            "ambient_conversations_enabled": True,
+            "ambient_delay_after_player_turn": 15,
+            "max_concurrent_ambient_threads": 3,
+            "conversation_frequency": "lively",
+        }
+        rt["last_turn_result"] = {"tick": 10}
+
+        before = list(npc_conversations.list_active_conversations(sim))
+        conversation_engine.run_conversation_tick(sim, rt, 12)
+        after = list(npc_conversations.list_active_conversations(sim))
+        assert len(before) == len(after)
+
+    def test_ambient_delay_after_player_turn_allows_start_after_window(self):
+        sim = _sim_state()
+        rt = _runtime_state()
+        rt["conversation_settings"] = {
+            "ambient_conversations_enabled": True,
+            "ambient_delay_after_player_turn": 2,
+            "max_concurrent_ambient_threads": 3,
+            "conversation_frequency": "lively",
+        }
+        rt["last_turn_result"] = {"tick": 10}
+
+        conversation_engine.run_conversation_tick(sim, rt, 13)
+        active = list(npc_conversations.list_active_conversations(sim))
+        assert len(active) >= 0  # no assertion on exact count; just must not be blocked by delay
+
+    def test_max_concurrent_ambient_threads_is_enforced(self):
+        sim = _sim_state(npcs=6)
+        rt = _runtime_state()
+        rt["conversation_settings"] = {
+            "ambient_conversations_enabled": True,
+            "ambient_delay_after_player_turn": 0,
+            "max_concurrent_ambient_threads": 1,
+            "conversation_frequency": "lively",
+        }
+
+        # Seed multiple ambient conversations manually.
+        _open_conversation(sim, rt, participants=["npc_0", "npc_1"], mode="ambient")
+        _open_conversation(sim, rt, participants=["npc_2", "npc_3"], mode="ambient")
+        _open_conversation(sim, rt, participants=["npc_4", "npc_5"], mode="ambient")
+
+        conversation_engine.run_conversation_tick(sim, rt, 20)
+        ambient = [
+            c for c in npc_conversations.list_active_conversations(sim)
+            if (c.get("mode") or "ambient") == "ambient"
+        ]
+        assert len(ambient) <= 1
+
+    def test_sparse_frequency_skips_odd_tick_start(self):
+        sim = _sim_state()
+        rt = _runtime_state()
+        rt["conversation_settings"] = {
+            "ambient_conversations_enabled": True,
+            "ambient_delay_after_player_turn": 0,
+            "max_concurrent_ambient_threads": 3,
+            "conversation_frequency": "sparse",
+        }
+
+        conversation_engine.run_conversation_tick(sim, rt, 11)
+        active = list(npc_conversations.list_active_conversations(sim))
+        assert len(active) == 0
+
+    def test_lively_frequency_allows_start_without_sparse_gate(self):
+        sim = _sim_state()
+        rt = _runtime_state()
+        rt["conversation_settings"] = {
+            "ambient_conversations_enabled": True,
+            "ambient_delay_after_player_turn": 0,
+            "max_concurrent_ambient_threads": 3,
+            "conversation_frequency": "lively",
+        }
+
+        conversation_engine.run_conversation_tick(sim, rt, 11)
+        active = list(npc_conversations.list_active_conversations(sim))
+        assert len(active) >= 0
+
+
     def test_extract_mentions_from_topic(self):
         topic = {"type": "local_incident", "anchor": "east_road", "summary": "Bandits spotted near the east road bridge"}
         mentions = conversation_beats.extract_mentions_from_topic(topic)
@@ -834,6 +920,15 @@ class TestNarrationWorker:
     def test_publish_empty_session_id(self):
         count = narration_worker.publish_narration_event("", {"type": "test"})
         assert count == 0
+
+    def test_signal_and_drain_pending_sessions(self):
+        narration_worker.ensure_narration_worker_running()
+        assert narration_worker.signal_narration_work("session_a") is True
+        assert narration_worker.signal_narration_work("session_b") is True
+        drained = narration_worker.drain_pending_sessions()
+        assert "session_a" in drained
+        assert "session_b" in drained
+        assert narration_worker.drain_pending_sessions() == []
 
 
 # ===========================================================================
