@@ -116,6 +116,8 @@ def _load(dotted: str):
 
 # ---------------------------------------------------------------------------
 # Load all modules under test
+# Order matters: conversation_engine uses direct imports from beats, pivots,
+# signals, scheduler, settings — those must be loaded first.
 # ---------------------------------------------------------------------------
 
 npc_conversations = _load("app.rpg.social.npc_conversations")
@@ -123,11 +125,11 @@ conversation_settings = _load("app.rpg.social.conversation_settings")
 conversation_topics = _load("app.rpg.social.conversation_topics")
 conversation_participants = _load("app.rpg.social.conversation_participants")
 conversation_templates = _load("app.rpg.social.conversation_templates")
-conversation_engine = _load("app.rpg.social.conversation_engine")
 conversation_beats = _load("app.rpg.social.conversation_beats")
-conversation_pivots = _load("app.rpg.social.conversation_pivots")
 conversation_world_signals = _load("app.rpg.social.conversation_world_signals")
+conversation_pivots = _load("app.rpg.social.conversation_pivots")
 conversation_scheduler = _load("app.rpg.social.conversation_scheduler")
+conversation_engine = _load("app.rpg.social.conversation_engine")
 narration_worker = _load("app.rpg.session.narration_worker")
 
 
@@ -771,43 +773,46 @@ class TestExpandedSettings:
 
 
 class TestNarrationWorker:
-    """Tests for narration_worker module."""
+    """Tests for narration_worker module (manager + SSE pub/sub only)."""
 
     def setup_method(self):
-        narration_worker.clear_queue()
+        # Clear pending sessions registry between tests
+        narration_worker._pending_sessions.clear()
 
-    def test_signal_narration_work(self):
-        result = narration_worker.signal_narration_work({"type": "test", "text": "hello"})
+    def test_signal_narration_work_session_id(self):
+        result = narration_worker.signal_narration_work("session_abc")
         assert result is True
+        sessions = narration_worker.drain_pending_sessions()
+        assert "session_abc" in sessions
 
-    def test_signal_narration_work_none(self):
+    def test_signal_narration_work_empty_returns_false(self):
+        result = narration_worker.signal_narration_work("")
+        assert result is False
         result = narration_worker.signal_narration_work(None)
         assert result is False
+
+    def test_drain_pending_sessions_clears(self):
+        narration_worker.signal_narration_work("s1")
+        narration_worker.signal_narration_work("s2")
+        sessions = narration_worker.drain_pending_sessions()
+        assert set(sessions) == {"s1", "s2"}
+        # Second drain should be empty
+        assert narration_worker.drain_pending_sessions() == []
 
     def test_ensure_narration_worker_running(self):
         narration_worker.ensure_narration_worker_running()
         # Should not raise
 
-    def test_get_pending_jobs(self):
-        narration_worker.signal_narration_work({"type": "test1"})
-        narration_worker.signal_narration_work({"type": "test2"})
-        jobs = narration_worker.get_pending_jobs(limit=5)
-        assert len(jobs) == 2
-        assert jobs[0]["type"] == "test1"
-
-    def test_get_pending_jobs_empty(self):
-        jobs = narration_worker.get_pending_jobs()
-        assert len(jobs) == 0
-
-    def test_clear_queue(self):
-        narration_worker.signal_narration_work({"type": "test"})
-        cleared = narration_worker.clear_queue()
-        assert cleared == 1
-        assert narration_worker.get_queue_size() == 0
-
-    def test_get_queue_size(self):
-        narration_worker.signal_narration_work({"type": "test"})
-        assert narration_worker.get_queue_size() == 1
+    def test_no_competing_job_queue(self):
+        """Verify narration_worker has no independent job queue (A1, A2)."""
+        assert not hasattr(narration_worker, "_narration_queue"), \
+            "narration_worker must not own a competing job queue"
+        assert not hasattr(narration_worker, "get_pending_jobs"), \
+            "narration_worker must not provide get_pending_jobs"
+        assert not hasattr(narration_worker, "get_queue_size"), \
+            "narration_worker must not provide get_queue_size"
+        assert not hasattr(narration_worker, "clear_queue"), \
+            "narration_worker must not provide clear_queue"
 
     def test_publish_narration_event_no_subscribers(self):
         count = narration_worker.publish_narration_event("session_1", {"type": "test"})
@@ -931,7 +936,7 @@ class TestEngineIntegration:
 
 
 class TestConversationScheduler:
-    """Tests for conversation_scheduler module."""
+    """Tests for conversation_scheduler module (helper-only, no lifecycle loop)."""
 
     def test_classify_thread_mode_ambient(self):
         conv = {"participants": ["npc_0", "npc_1"], "topic": {"type": "ambient_chat"}, "mode": "ambient"}
@@ -957,13 +962,13 @@ class TestConversationScheduler:
     def test_thread_importance_computation(self):
         conv_ambient = {"mode": "ambient", "topic": {"type": "ambient_chat", "priority": 0.3}}
         conv_directed = {"mode": "directed_to_player", "topic": {"type": "plan_reaction", "priority": 0.8}}
-        assert conversation_scheduler._compute_thread_importance(conv_directed) > conversation_scheduler._compute_thread_importance(conv_ambient)
+        assert conversation_scheduler.compute_thread_importance(conv_directed) > conversation_scheduler.compute_thread_importance(conv_ambient)
 
     def test_world_effect_budget(self):
-        assert conversation_scheduler._compute_world_effect_budget({"mode": "group"}) == 3
-        assert conversation_scheduler._compute_world_effect_budget({"mode": "directed_to_player"}) == 2
-        assert conversation_scheduler._compute_world_effect_budget({"mode": "ambient", "topic": {"type": "ambient_chat"}}) == 1
-        assert conversation_scheduler._compute_world_effect_budget({"mode": "ambient", "topic": {"type": "faction_tension"}}) == 2
+        assert conversation_scheduler.compute_world_effect_budget({"mode": "group"}) == 3
+        assert conversation_scheduler.compute_world_effect_budget({"mode": "directed_to_player"}) == 2
+        assert conversation_scheduler.compute_world_effect_budget({"mode": "ambient", "topic": {"type": "ambient_chat"}}) == 1
+        assert conversation_scheduler.compute_world_effect_budget({"mode": "ambient", "topic": {"type": "faction_tension"}}) == 2
 
     def test_get_active_thread_summary(self):
         sim = _sim_state()
@@ -973,6 +978,19 @@ class TestConversationScheduler:
         assert len(summary) == 1
         assert "conversation_id" in summary[0]
         assert "mode" in summary[0]
+
+    def test_no_lifecycle_loop(self):
+        """Verify scheduler is helper-only — no competing main loop (B1, B2)."""
+        assert not hasattr(conversation_scheduler, "run_conversation_scheduler_tick"), \
+            "conversation_scheduler must not have a competing lifecycle loop"
+
+    def test_expiry_helpers_exist(self):
+        """Verify expiry helpers are available."""
+        assert hasattr(conversation_scheduler, "thread_is_expired")
+        assert hasattr(conversation_scheduler, "thread_is_stale")
+        conv = {"expires_at_tick": 5, "updated_tick": 1}
+        assert conversation_scheduler.thread_is_expired(conv, 10) is True
+        assert conversation_scheduler.thread_is_stale(conv, 10) is True
 
 
 # ===========================================================================
@@ -1036,3 +1054,117 @@ class TestSignalTypes:
             conversation_world_signals.enqueue_signals(rt, [sig])
         pending = rt["conversation_world_signals"]["pending"]
         assert len(pending) <= conversation_world_signals._MAX_PENDING_SIGNALS
+
+
+# ===========================================================================
+# Architectural Consolidation Validation Tests
+# ===========================================================================
+
+
+class TestArchitecturalUnification:
+    """Validate the unified 4C architecture matches the merge checklist."""
+
+    # A. Narration worker architecture
+
+    def test_a1_single_source_of_truth_for_narration_jobs(self):
+        """narration_worker must not own a competing narration job queue."""
+        # narration_worker should not have queue.Queue or any job storage
+        assert not hasattr(narration_worker, "_narration_queue")
+        assert not hasattr(narration_worker, "get_pending_jobs")
+        assert not hasattr(narration_worker, "get_queue_size")
+        assert not hasattr(narration_worker, "clear_queue")
+
+    def test_a2_worker_is_manager_pubsub_only(self):
+        """narration_worker must only provide manager + pub/sub functions."""
+        expected_public = {
+            "ensure_narration_worker_running",
+            "signal_narration_work",
+            "drain_pending_sessions",
+            "publish_narration_event",
+            "subscribe_narration_events",
+            "unsubscribe_narration_events",
+        }
+        actual_public = {
+            name for name in dir(narration_worker)
+            if not name.startswith("_") and callable(getattr(narration_worker, name))
+        }
+        # All expected functions exist
+        assert expected_public.issubset(actual_public), f"Missing: {expected_public - actual_public}"
+
+    # B. Conversation lifecycle ownership
+
+    def test_b1_single_lifecycle_entrypoint(self):
+        """conversation_engine must have run_conversation_tick as sole lifecycle."""
+        assert hasattr(conversation_engine, "run_conversation_tick")
+
+    def test_b2_scheduler_is_helper_only(self):
+        """conversation_scheduler must not have run_conversation_scheduler_tick."""
+        assert not hasattr(conversation_scheduler, "run_conversation_scheduler_tick")
+        # But should have helper functions
+        assert hasattr(conversation_scheduler, "classify_thread_mode")
+        assert hasattr(conversation_scheduler, "compute_thread_importance")
+        assert hasattr(conversation_scheduler, "compute_world_effect_budget")
+        assert hasattr(conversation_scheduler, "get_active_thread_summary")
+
+    # C. Identity model
+
+    def test_c1_thread_id_equals_conversation_id(self):
+        """Beat thread_id must equal conversation_id from the thread."""
+        sim = _sim_state()
+        rt = _runtime_state()
+        conv = _open_conversation(sim, rt, tick=10)
+        line = conversation_engine.build_next_conversation_line(conv, sim, rt, 10)
+        beat = conversation_beats.build_beat_from_conversation_line(conv, line, 10)
+        assert beat["thread_id"] == conv["conversation_id"]
+
+    def test_c2_stable_beat_ids(self):
+        """Beat IDs must be deterministic from thread identity + beat index."""
+        beat1 = conversation_beats.build_conversation_beat(
+            thread_id="conv:test", speaker_id="npc_0",
+            summary="hello", tick=1, beat_index=0,
+        )
+        beat2 = conversation_beats.build_conversation_beat(
+            thread_id="conv:test", speaker_id="npc_0",
+            summary="hello", tick=1, beat_index=0,
+        )
+        assert beat1["beat_id"] == beat2["beat_id"]
+
+    # D. Settings unification
+
+    def test_d1_canonical_settings_contract(self):
+        """Resolved settings must include all canonical 4C fields."""
+        settings = conversation_settings.resolve_conversation_settings({}, {})
+        required = {
+            "ambient_conversations_enabled",
+            "ambient_delay_after_player_turn",
+            "max_concurrent_ambient_threads",
+            "max_beats_per_ambient_thread",
+            "allow_npc_address_player",
+            "allow_conversation_world_signals",
+            "conversation_frequency",
+            "combat_suppression",
+            "stealth_suppression",
+        }
+        assert required.issubset(set(settings.keys()))
+
+    # H. World signal system
+
+    def test_h4_no_import_guards_in_engine(self):
+        """conversation_engine must directly import 4C subsystems, no try/except guards."""
+        import inspect
+        source = inspect.getsource(conversation_engine)
+        # The only allowed except ImportError is for the optional LLM gateway
+        # in build_next_conversation_line, not for 4C conversation modules.
+        assert "except (ImportError, AttributeError):" not in source, \
+            "Broad import guards for 4C modules should be replaced with direct imports"
+
+    # K. Import hygiene
+
+    def test_k1_direct_imports_in_engine(self):
+        """conversation_engine must directly import beats, pivots, signals."""
+        import inspect
+        source = inspect.getsource(conversation_engine)
+        assert "from .conversation_beats import" in source or "from app.rpg.social.conversation_beats import" in source
+        assert "from .conversation_pivots import" in source or "from app.rpg.social.conversation_pivots import" in source
+        assert "from .conversation_world_signals import" in source or "from app.rpg.social.conversation_world_signals import" in source
+        assert "from .conversation_scheduler import" in source or "from app.rpg.social.conversation_scheduler import" in source

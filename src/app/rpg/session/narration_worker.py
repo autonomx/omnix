@@ -1,74 +1,84 @@
-"""Narration Worker — In-process narration job queue and worker.
+"""Narration Worker — Manager and SSE pub/sub layer.
 
-Provides a simple, bounded, in-process queue for narration jobs.
-Jobs are enqueued by the idle tick and turn systems, and processed
-synchronously or asynchronously depending on context.
+This module provides:
+- Background worker lifecycle management
+- Session pending-signal registry
+- SSE subscriber registry for narration events
+- Event publishing to SSE subscribers
 
-This module exists primarily to satisfy the import contract expected
-by runtime.py and rpg_session_routes.py.
+It does NOT own any narration job queue.  The single authoritative
+source of truth for narration jobs is the session runtime state
+(runtime_state["narration_jobs"] / runtime_state["narration_jobs_by_turn"]).
+Jobs are processed by ``process_next_narration_job(session_id)`` in
+runtime.py.
 
 Note: Module-level state is designed for single-process use.
-In a multi-threaded environment, the queue.Queue is thread-safe,
-but the subscriber dict is not. For multi-process deployments,
-replace with an external message broker.
+In a multi-process deployment, replace the subscriber dict with an
+external message broker.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import queue
-import time
-from typing import Any, Callable, Dict, List, Optional
+import threading
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
-_MAX_QUEUE_SIZE = 64
-_MAX_SUBSCRIBERS = 16
+_MAX_SUBSCRIBER_QUEUE_SIZE = 64
+_MAX_SUBSCRIBERS_PER_SESSION = 16
 
 # ── In-process state ──────────────────────────────────────────────────────
 
-_narration_queue: queue.Queue = queue.Queue(maxsize=_MAX_QUEUE_SIZE)
 _worker_running = False
+_worker_lock = threading.Lock()
+_pending_sessions: Set[str] = set()
+_pending_lock = threading.Lock()
 _subscribers: Dict[str, List[asyncio.Queue]] = {}
 
 
-# ── Queue operations ──────────────────────────────────────────────────────
-
-def signal_narration_work(job: Optional[Dict[str, Any]] = None) -> bool:
-    """Enqueue a narration job for processing.
-
-    If the queue is full, the oldest item is discarded.
-    Returns True if the job was enqueued.
-    """
-    if job is None:
-        return False
-    try:
-        _narration_queue.put_nowait(dict(job))
-        return True
-    except queue.Full:
-        # Discard oldest and retry
-        try:
-            _narration_queue.get_nowait()
-        except queue.Empty:
-            pass
-        try:
-            _narration_queue.put_nowait(dict(job))
-            return True
-        except queue.Full:
-            return False
-
+# ── Worker lifecycle ──────────────────────────────────────────────────────
 
 def ensure_narration_worker_running() -> None:
-    """Ensure the narration worker is initialized.
+    """Ensure the narration worker manager is initialized.
 
-    In the current implementation this is a no-op since jobs are
-    processed synchronously during idle ticks.  The function exists
-    to satisfy the import contract.
+    In the current single-process implementation this marks the worker
+    as active.  A future multi-threaded implementation would start
+    the background thread here.
     """
     global _worker_running
-    _worker_running = True
+    with _worker_lock:
+        _worker_running = True
+
+
+def signal_narration_work(session_id: Any) -> bool:
+    """Signal that a session has pending narration work.
+
+    Adds the *session_id* to the pending-signal registry so the
+    background worker knows which sessions to poll via
+    ``process_next_narration_job(session_id)``.
+
+    Returns True if the session was registered for work.
+    """
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return False
+    with _pending_lock:
+        _pending_sessions.add(session_id)
+    return True
+
+
+def drain_pending_sessions() -> List[str]:
+    """Return and clear all session IDs that have pending work.
+
+    Used by the worker loop to decide which sessions to process.
+    """
+    with _pending_lock:
+        sessions = sorted(_pending_sessions)
+        _pending_sessions.clear()
+    return sessions
 
 
 # ── Event publishing (SSE) ────────────────────────────────────────────────
@@ -103,10 +113,10 @@ def subscribe_narration_events(session_id: str) -> asyncio.Queue:
         _subscribers[session_id] = []
 
     # Trim old subscribers to prevent unbounded growth
-    if len(_subscribers[session_id]) >= _MAX_SUBSCRIBERS:
-        _subscribers[session_id] = _subscribers[session_id][-(_MAX_SUBSCRIBERS - 1):]
+    if len(_subscribers[session_id]) >= _MAX_SUBSCRIBERS_PER_SESSION:
+        _subscribers[session_id] = _subscribers[session_id][-(_MAX_SUBSCRIBERS_PER_SESSION - 1):]
 
-    subscriber_q: asyncio.Queue = asyncio.Queue(maxsize=_MAX_QUEUE_SIZE)
+    subscriber_q: asyncio.Queue = asyncio.Queue(maxsize=_MAX_SUBSCRIBER_QUEUE_SIZE)
     _subscribers[session_id].append(subscriber_q)
     return subscriber_q
 
@@ -118,35 +128,3 @@ def unsubscribe_narration_events(session_id: str, subscriber_q: asyncio.Queue) -
     _subscribers[session_id] = [q for q in subs if q is not subscriber_q]
     if not _subscribers[session_id]:
         _subscribers.pop(session_id, None)
-
-
-# ── Job processing ────────────────────────────────────────────────────────
-
-def get_pending_jobs(limit: int = 8) -> List[Dict[str, Any]]:
-    """Drain up to ``limit`` pending jobs from the queue."""
-    jobs: List[Dict[str, Any]] = []
-    for _ in range(min(limit, _MAX_QUEUE_SIZE)):
-        try:
-            job = _narration_queue.get_nowait()
-            if isinstance(job, dict):
-                jobs.append(job)
-        except queue.Empty:
-            break
-    return jobs
-
-
-def get_queue_size() -> int:
-    """Return the approximate number of pending jobs."""
-    return _narration_queue.qsize()
-
-
-def clear_queue() -> int:
-    """Clear all pending jobs. Returns the number cleared."""
-    cleared = 0
-    while True:
-        try:
-            _narration_queue.get_nowait()
-            cleared += 1
-        except queue.Empty:
-            break
-    return cleared

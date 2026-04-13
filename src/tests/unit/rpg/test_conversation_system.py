@@ -55,6 +55,10 @@ _REAL_MODULES = {
     "app.rpg.social.conversation_templates",
     "app.rpg.social.player_interventions",
     "app.rpg.social.conversation_presentation",
+    "app.rpg.social.conversation_beats",
+    "app.rpg.social.conversation_pivots",
+    "app.rpg.social.conversation_scheduler",
+    "app.rpg.social.conversation_world_signals",
     "app.rpg.social.conversation_engine",
     "app.rpg.ai.conversation_prompt_builder",
     "app.rpg.ai.conversation_response_parser",
@@ -132,6 +136,11 @@ _conv_participants = _load("app.rpg.social.conversation_participants", "app/rpg/
 _conv_templates = _load("app.rpg.social.conversation_templates", "app/rpg/social/conversation_templates.py")
 _player_intv = _load("app.rpg.social.player_interventions", "app/rpg/social/player_interventions.py")
 _conv_present = _load("app.rpg.social.conversation_presentation", "app/rpg/social/conversation_presentation.py")
+# 4C modules must load before conversation_engine (direct import dependencies)
+_conv_beats = _load("app.rpg.social.conversation_beats", "app/rpg/social/conversation_beats.py")
+_conv_world_signals = _load("app.rpg.social.conversation_world_signals", "app/rpg/social/conversation_world_signals.py")
+_conv_pivots = _load("app.rpg.social.conversation_pivots", "app/rpg/social/conversation_pivots.py")
+_conv_scheduler = _load("app.rpg.social.conversation_scheduler", "app/rpg/social/conversation_scheduler.py")
 _conv_engine = _load("app.rpg.social.conversation_engine", "app/rpg/social/conversation_engine.py")
 _prompt_builder = _load("app.rpg.ai.conversation_prompt_builder", "app/rpg/ai/conversation_prompt_builder.py")
 _resp_parser = _load("app.rpg.ai.conversation_response_parser", "app/rpg/ai/conversation_response_parser.py")
