@@ -110,6 +110,7 @@
         },
         worldEventsSummary: {},
         worldEventsTab: 'local',
+        narrationEventSource: null,
     };
 
     let typingIdleTimer = null;
@@ -1210,6 +1211,77 @@
         }
     }
 
+    function ensureNarrationSubscription(sessionId) {
+        if (!sessionId) return;
+
+        // Keep one persistent connection per session
+        if (rpgState.narrationEventSource) {
+            return;
+        }
+
+        var url = "/api/rpg/session/narration_events?session_id=" + encodeURIComponent(sessionId);
+        var es = new EventSource(url);
+        rpgState.narrationEventSource = es;
+
+        es.onopen = function () {
+            // On reconnect, resync latest narration state
+            fetch("/api/rpg/session/narration_status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: rpgState.sessionId,
+                    turn_id: rpgState.currentTurnId,
+                }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                var artifact = data && data.artifact;
+                if (artifact && artifact.narration) {
+                    renderTurnNarration(rpgState.currentTurnId, artifact.narration, {
+                        usedLlm: !!artifact.used_llm,
+                        fallback: false,
+                    });
+                }
+            })
+            .catch(() => {});
+        };
+
+        es.onmessage = function (evt) {
+            try {
+                var data = JSON.parse(evt.data || "{}");
+                handleNarrationEvent(data);
+            } catch (err) {
+                console.warn("Failed to parse narration SSE event", err);
+            }
+        };
+
+        es.onerror = function () {
+            // Let EventSource auto-reconnect.
+        };
+    }
+
+    function handleNarrationEvent(evt) {
+        if (!evt || !evt.type) return;
+
+        if (evt.type === "narration_artifact") {
+            var turnId = evt.turn_id;
+            if (!turnId) return;
+            if (turnId !== rpgState.currentTurnId) return;
+
+            renderTurnNarration(turnId, evt.text || "", {
+                usedLlm: !!evt.used_llm,
+                fallback: false,
+            });
+            return;
+        }
+
+        if (evt.type === "narration_job") {
+            // Optional: show status badges/spinner updates if desired.
+            // For now, no UI mutation needed except maybe logging.
+            return;
+        }
+    }
+
     /** Send a turn with a structured action payload (non-streaming). */
     async function apiSendTurnWithAction(sessionId, input, action) {
         var res = await fetch('/api/rpg/session/turn', {
@@ -1554,8 +1626,8 @@
                     }
                 }
 
-                // Background worker is server-driven now; just poll for completion.
-                pollNarrationStatus(rpgState.sessionId, turnId);
+                // Background worker is server-driven now; use SSE for updates.
+                ensureNarrationSubscription(rpgState.sessionId);
             } else {
                 // Legacy handling
                 var update = transformResponse(data);
@@ -3180,6 +3252,9 @@
     function startLivingWorld() {
         if (!rpgState.sessionId) return;
         console.log("🌍 STARTING LIVING WORLD for session:", rpgState.sessionId);
+        
+        // Ensure narration SSE subscription is active
+        ensureNarrationSubscription(rpgState.sessionId);
         // Resume catch-up: compute elapsed seconds since last activity
         var lastActivity = parseInt(localStorage.getItem('omnix_rpg_last_activity') || '0', 10);
         var now = Date.now();

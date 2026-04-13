@@ -31,7 +31,14 @@ from app.rpg.session.runtime import (
     load_runtime_session,
     save_runtime_session,
 )
-from app.rpg.session.narration_worker import ensure_narration_worker_running
+import queue
+import time
+
+from app.rpg.session.narration_worker import (
+    ensure_narration_worker_running,
+    subscribe_narration_events,
+    unsubscribe_narration_events,
+)
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
 
@@ -576,6 +583,49 @@ async def stream_rpg_session(request: Request):
                 last_heartbeat = now
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=sse_headers)
+
+
+@rpg_session_bp.get("/api/rpg/session/narration_events")
+async def stream_rpg_session_narration_events(request: Request):
+    session_id = _safe_str(request.query_params.get("session_id")).strip()
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    ensure_narration_worker_running()
+    subscriber_q = subscribe_narration_events(session_id)
+
+    sse_headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+
+    import asyncio
+
+    async def event_generator():
+        last_heartbeat = time.monotonic()
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    evt = subscriber_q.get(timeout=0.5)
+                    event_type = evt.get("type", "narration_event")
+                    yield f"event: {event_type}\ndata: {json.dumps(evt)}\n\n"
+                except queue.Empty:
+                    now = time.monotonic()
+                    if now - last_heartbeat >= 15.0:
+                        yield "event: heartbeat\ndata: {\"type\": \"heartbeat\"}\n\n"
+                        last_heartbeat = now
+                    await asyncio.sleep(0.05)
+        finally:
+            unsubscribe_narration_events(session_id, subscriber_q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers=sse_headers,
+    )
 
 
 @rpg_session_bp.post("/api/rpg/session/resume")

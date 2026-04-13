@@ -136,7 +136,11 @@ from app.rpg.session.ambient_policy import (
 )
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
-from app.rpg.session.narration_worker import signal_narration_work, ensure_narration_worker_running
+from app.rpg.session.narration_worker import (
+    signal_narration_work,
+    ensure_narration_worker_running,
+    publish_narration_event,
+)
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -471,6 +475,18 @@ def _enqueue_narration_request(
 
     ensure_narration_worker_running()
     signal_narration_work(session_id)
+    
+    publish_narration_event(
+        session_id,
+        {
+            "type": "narration_job",
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "tick": tick,
+            "status": "queued",
+        },
+    )
+    
     return {"ok": True, "status": "queued", "job": job, "session": session}
 
 
@@ -6035,6 +6051,19 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="stale", error="stale_narration_job")
         session["runtime_state"] = runtime_state
         session = save_runtime_session(session)
+        
+        publish_narration_event(
+            session_id,
+            {
+                "type": "narration_job",
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "tick": tick,
+                "status": "stale",
+                "error": "stale_narration_job",
+            },
+        )
+        
         return {"ok": True, "status": "stale", "turn_id": turn_id}
 
     worker_token = f"{_utc_now_iso()}:{os.getpid()}:{turn_id}"
@@ -6046,6 +6075,17 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     )
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
+    
+    publish_narration_event(
+        session_id,
+        {
+            "type": "narration_job",
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "tick": tick,
+            "status": "processing",
+        },
+    )
 
     # Re-read after claim and verify we still own the job before doing work.
     session = load_runtime_session(session_id)
@@ -6087,6 +6127,20 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="completed")
         session["runtime_state"] = runtime_state
         session = save_runtime_session(session)
+        
+        artifact = _safe_dict(result.get("artifact"))
+        publish_narration_event(
+            session_id,
+            {
+                "type": "narration_artifact",
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "tick": artifact.get("tick"),
+                "text": _safe_str(artifact.get("narration")),
+                "used_llm": bool(artifact.get("used_llm")),
+            },
+        )
+        
         return {
             "ok": True,
             "status": "completed",
@@ -6113,6 +6167,19 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         status=final_status,
         error=_safe_str(result.get("error") or "narration_failed") if final_status == "failed" else "",
     )
+    
+    if final_status == "failed":
+        publish_narration_event(
+            session_id,
+            {
+                "type": "narration_job",
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "tick": tick,
+                "status": "failed",
+                "error": _safe_str(result.get("error") or "narration_failed"),
+            },
+        )
 
     # Update attempts count
     job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
