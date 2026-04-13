@@ -5345,6 +5345,7 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     # ── Per-turn execution policy (immutable record for replay safety) ────
     turn_exec_key = f"turn:{current_tick}"
     runtime_state.setdefault("turn_execution_index", {})
+
     turn_execution_policy = {
         "enable_action_advisory": perf["enable_action_advisory"],
         "enable_semantic_action_advisory": perf["enable_semantic_action_advisory"],
@@ -5414,9 +5415,12 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         # Replay mode — consult the immutable per-turn execution policy that
         # was recorded during the original live capture, NOT the current
         # (potentially mutated) session performance settings.
-        recorded_policy = _safe_dict(
-            _safe_dict(runtime_state.get("turn_execution_index")).get(turn_exec_key)
-        )
+        turn_exec_index = _safe_dict(runtime_state.get("turn_execution_index"))
+        if turn_exec_key not in turn_exec_index:
+            raise RuntimeError(
+                f"missing_replay_turn_execution_policy_for_tick:{current_tick}"
+            )
+        recorded_policy = _safe_dict(turn_exec_index.get(turn_exec_key))
         key = f"action_advisory:{current_tick}"
         record = _safe_dict(runtime_state.get("llm_records_index")).get(key)
         if record:
@@ -5649,8 +5653,25 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
     manifest["updated_at"] = _utc_now_iso()
     session["manifest"] = manifest
 
-    # ── Lightweight timing diagnostics (before save so they are durable) ──
+    session["runtime_state"] = runtime_state
+
+    # ── Lightweight timing diagnostics ────────────────────────────────────
+    #
+    # We want the persisted perf_trace entry and the returned API payload to
+    # have the same shape. Because t_save/t_total are only knowable after the
+    # save completes, do a two-phase write:
+    #
+    # 1) save the session without the new perf entry
+    # 2) measure save completion
+    # 3) append the completed perf entry
+    # 4) save once more so the durable session matches the returned payload
+    #
+    # This costs one extra save when perf tracing is enabled, but keeps the
+    # diagnostics internally consistent and replay-inspectable.
     _t_pre_save = _time.monotonic()
+    session = save_runtime_session(session)
+    _t_save = _time.monotonic()
+
     perf_entry = {
         "tick": current_tick,
         "t_load": round(_t_load - _t0, 4),
@@ -5660,20 +5681,17 @@ def apply_turn(session_id: str, player_input: str, action: Dict[str, Any] | None
         "t_step": round(_t_step - _t_authoritative, 4),
         "t_narration": round(_t_narration - _t_step, 4),
         "t_pre_save": round(_t_pre_save - _t_narration, 4),
+        "t_save": round(_t_save - _t_pre_save, 4),
+        "t_total": round(_t_save - _t0, 4),
         "fast_turn_mode": perf["fast_turn_mode"],
     }
+
+    runtime_state = _copy_dict(session.get("runtime_state"))
     runtime_state.setdefault("perf_trace", [])
     runtime_state["perf_trace"].append(perf_entry)
     runtime_state["perf_trace"] = runtime_state["perf_trace"][-_MAX_PERF_TRACE_ENTRIES:]
     session["runtime_state"] = runtime_state
-
     session = save_runtime_session(session)
-    _t_save = _time.monotonic()
-
-    # Back-fill save timing into the entry (already persisted above, but the
-    # returned API payload gets the complete picture).
-    perf_entry["t_save"] = round(_t_save - _t_pre_save, 4)
-    perf_entry["t_total"] = round(_t_save - _t0, 4)
 
     return {
         "ok": True,

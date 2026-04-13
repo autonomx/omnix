@@ -2,7 +2,7 @@ import hashlib
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 # Base paths - project root (parent of src/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -146,10 +146,40 @@ def load_secrets():
             print(f"Error loading secrets: {e}")
     return {"api_keys": {}}
 
+
+def _llm_provider_cache_inputs_from_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract only the settings fields that affect LLM provider construction."""
+    settings = migrate_settings(dict(settings or {}))
+    return {
+        "provider": settings.get("provider", DEFAULT_SETTINGS["provider"]),
+        "lmstudio": dict(settings.get("lmstudio", {})),
+        "openrouter": dict(settings.get("openrouter", {})),
+        "cerebras": dict(settings.get("cerebras", {})),
+        "llamacpp": dict(settings.get("llamacpp", {})),
+    }
+
+
+def _llm_provider_cache_inputs_from_secrets(secrets: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract only the secret fields that affect LLM provider construction."""
+    api_keys = dict((secrets or {}).get("api_keys", {}) or {})
+    return {
+        "api_keys": {
+            "openrouter": api_keys.get("openrouter", ""),
+            "cerebras": api_keys.get("cerebras", ""),
+        }
+    }
+
+
 def save_secrets(secrets):
     """Save API keys and sensitive configuration to secrets file."""
+    previous_inputs = _llm_provider_cache_inputs_from_secrets(load_secrets())
+    next_inputs = _llm_provider_cache_inputs_from_secrets(secrets)
+
     with open(SECRETS_FILE, 'w') as f:
         json.dump(secrets, f, indent=2)
+
+    if previous_inputs != next_inputs:
+        invalidate_provider_cache()
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -168,8 +198,15 @@ def load_settings():
     return DEFAULT_SETTINGS.copy()
 
 def save_settings(settings):
+    settings = migrate_settings(dict(settings or {}))
+    previous_inputs = _llm_provider_cache_inputs_from_settings(load_settings())
+    next_inputs = _llm_provider_cache_inputs_from_settings(settings)
+
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(settings, f, indent=2)
+
+    if previous_inputs != next_inputs:
+        invalidate_provider_cache()
 
 def load_sessions():
     if os.path.exists(SESSIONS_FILE):
