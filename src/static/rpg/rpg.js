@@ -81,6 +81,7 @@
     let rpgState = {
         _v: 0,
         sessionId: null,
+        currentTurnId: null,
         messages: [],      // { type: 'narration'|'event'|'system'|'player', content }
         choices: [],
         npcs: [],
@@ -1135,8 +1136,9 @@
                 if (part.startsWith('data: ')) {
                     try {
                         var evt = JSON.parse(part.slice(6));
-                        if (evt.type === 'token' && onToken) {
-                            onToken(evt.text);
+                        if (evt.type === 'authoritative_result') {
+                            // Handle authoritative result
+                            finalData = evt;
                         } else if (evt.type === 'done') {
                             finalData = evt;
                         } else if (evt.type === 'error') {
@@ -1150,6 +1152,71 @@
         }
 
         return finalData;
+    }
+
+    async function queueNarrationWorker(sessionId, turnId) {
+        try {
+            await fetch("/api/rpg/session/process_narration", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sessionId }),
+            });
+        } catch (err) {
+            // Ignore; polling will still work on next heartbeat/manual retry.
+        }
+        pollNarrationStatus(sessionId, turnId);
+    }
+
+    function renderTurnNarration(turnId, narration, options) {
+        var feed = el('rpgNarrativeFeed');
+        if (!feed) return;
+
+        // Find the last narration message (assuming it's the placeholder)
+        var msgs = feed.querySelectorAll('.rpg-msg--narration');
+        if (msgs.length === 0) return;
+        var lastMsg = msgs[msgs.length - 1];
+
+        // Update with final narration
+        lastMsg.innerHTML = (typeof marked !== 'undefined')
+            ? marked.parse(narration)
+            : escapeHtml(narration).replace(/\n/g, '<br>');
+        feed.scrollTop = feed.scrollHeight;
+
+        // Speak narration
+        speakNarration(narration);
+    }
+
+    async function pollNarrationStatus(sessionId, turnId, attempt = 0) {
+        if (attempt > 30) return;
+
+        try {
+            const resp = await fetch("/api/rpg/session/narration_status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sessionId, turn_id: turnId }),
+            });
+            const data = await resp.json();
+            const job = data.job || {};
+            const artifact = data.artifact || {};
+
+            if (artifact.narration) {
+                if (turnId === rpgState.currentTurnId) {
+                    renderTurnNarration(turnId, artifact.narration, {
+                        usedLlm: !!artifact.used_llm,
+                        fallback: false,
+                    });
+                }
+                return;
+            }
+
+            if (job.status === "failed" || job.status === "stale") {
+                return;
+            }
+
+            setTimeout(() => pollNarrationStatus(sessionId, turnId, attempt + 1), 500);
+        } catch (err) {
+            setTimeout(() => pollNarrationStatus(sessionId, turnId, attempt + 1), 800);
+        }
     }
 
     /** Send a turn with a structured action payload (non-streaming). */
@@ -1190,8 +1257,9 @@
                 if (part.startsWith('data: ')) {
                     try {
                         var evt = JSON.parse(part.slice(6));
-                        if (evt.type === 'token' && onToken) {
-                            onToken(evt.text);
+                        if (evt.type === 'authoritative_result') {
+                            // Handle authoritative result
+                            finalData = evt;
                         } else if (evt.type === 'done') {
                             finalData = evt;
                         } else if (evt.type === 'error') {
@@ -1459,18 +1527,50 @@
                 streamingText = '';
             }
 
-            var update = transformResponse(data);
-            applyUpdate(update);
-            if (update.player) {
-                updateState({ player: update.player });
-                renderPlayerPanel(update.player);
+            if (data.type === 'authoritative_result') {
+                // Handle authoritative result immediately
+                const turnId = data.turn_id;
+                updateState({ currentTurnId: turnId });
+
+                // Render authoritative state immediately
+                const update = transformResponse({
+                    turn_id: data.turn_id,
+                    tick: data.tick,
+                    resolved_result: data.resolved_result,
+                    combat_result: data.combat_result,
+                    xp_result: data.xp_result,
+                    skill_xp_result: data.skill_xp_result,
+                    level_up: data.level_up,
+                    skill_level_ups: data.skill_level_ups,
+                    summary: data.summary,
+                    presentation: data.presentation,
+                });
+                applyUpdate(update);
+                if (update.player) {
+                    updateState({ player: update.player });
+                    renderPlayerPanel(update.player);
+                }
+
+                // Show narration pending
+                appendMessage({ type: 'narration', content: data.fallback_narration || "Generating narration..." });
+
+                // Start background narration processing
+                queueNarrationWorker(rpgState.sessionId, turnId);
+            } else {
+                // Legacy handling
+                var update = transformResponse(data);
+                applyUpdate(update);
+                if (update.player) {
+                    updateState({ player: update.player });
+                    renderPlayerPanel(update.player);
+                }
+                // Render conversation cards from turn response
+                if (data && data.active_conversations) {
+                    renderConversations(data.active_conversations);
+                }
+                // Speak narration after response is complete
+                if (data && data.narration) speakNarration(data.narration);
             }
-            // Render conversation cards from turn response
-            if (data && data.active_conversations) {
-                renderConversations(data.active_conversations);
-            }
-            // Speak narration after response is complete
-            if (data && data.narration) speakNarration(data.narration);
         } catch (err) {
             if (streamingDiv) { streamingDiv.remove(); streamingDiv = null; }
             appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });

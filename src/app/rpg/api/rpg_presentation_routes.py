@@ -1393,6 +1393,8 @@ async def save_rpg_session(request: Request):
         narration_artifacts = _safe_list(runtime_state.get("narration_artifacts"))
         s["narration_artifacts"] = narration_artifacts[-12:]
         s["latest_narration_by_turn"] = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+        s["narration_jobs"] = _safe_list(runtime_state.get("narration_jobs"))[-12:]
+        s["narration_jobs_by_turn"] = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
     return _jsonify({"ok": True, "sessions": sessions})
 
 

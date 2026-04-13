@@ -314,6 +314,142 @@ def _store_narration_artifact(runtime_state: Dict[str, Any], artifact: Dict[str,
     return _prune_narration_artifacts(runtime_state)
 
 
+def _ensure_narration_job_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    runtime_state.setdefault("narration_jobs", [])
+    runtime_state.setdefault("narration_jobs_by_turn", {})
+    return runtime_state
+
+
+def _build_narration_job_id(turn_id: str) -> str:
+    turn_id = _safe_str(turn_id).strip() or "turn:unknown"
+    return f"narration:{turn_id}"
+
+
+def _prune_narration_jobs(runtime_state: Dict[str, Any], max_items: int = 64) -> Dict[str, Any]:
+    runtime_state = _ensure_narration_job_state(runtime_state)
+    jobs = _safe_list(runtime_state.get("narration_jobs"))
+    if len(jobs) > max_items:
+        jobs = jobs[-max_items:]
+    runtime_state["narration_jobs"] = jobs
+
+    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
+    allowed_turn_ids = {
+        _safe_str(_safe_dict(job).get("turn_id")).strip()
+        for job in jobs
+        if isinstance(job, dict)
+    }
+    runtime_state["narration_jobs_by_turn"] = {
+        k: v for k, v in by_turn.items() if k in allowed_turn_ids
+    }
+    return runtime_state
+
+
+def _upsert_narration_job(runtime_state: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _ensure_narration_job_state(runtime_state)
+    job = _safe_dict(job)
+    turn_id = _safe_str(job.get("turn_id")).strip()
+    if not turn_id:
+        return runtime_state
+
+    jobs = _safe_list(runtime_state.get("narration_jobs"))
+    jobs = [j for j in jobs if _safe_str(_safe_dict(j).get("turn_id")).strip() != turn_id]
+    jobs.append(job)
+    runtime_state["narration_jobs"] = jobs
+
+    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
+    by_turn[turn_id] = job
+    runtime_state["narration_jobs_by_turn"] = by_turn
+
+    return _prune_narration_jobs(runtime_state)
+
+
+def _mark_narration_job_status(
+    runtime_state: Dict[str, Any],
+    turn_id: str,
+    *,
+    status: str,
+    error: str = "",
+) -> Dict[str, Any]:
+    runtime_state = _ensure_narration_job_state(runtime_state)
+    turn_id = _safe_str(turn_id).strip()
+    if not turn_id:
+        return runtime_state
+
+    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
+    job = _safe_dict(by_turn.get(turn_id))
+    if not job:
+        job = {
+            "job_id": _build_narration_job_id(turn_id),
+            "turn_id": turn_id,
+            "tick": 0,
+            "status": "queued",
+            "created_at": _utc_now_iso(),
+            "started_at": None,
+            "completed_at": None,
+            "error": "",
+        }
+
+    job["status"] = status
+    if status == "processing" and not job.get("started_at"):
+        job["started_at"] = _utc_now_iso()
+    if status in {"completed", "failed", "stale"}:
+        job["completed_at"] = _utc_now_iso()
+    if error:
+        job["error"] = _safe_str(error)
+
+    return _upsert_narration_job(runtime_state, job)
+
+
+def _enqueue_narration_request(
+    session_id: str,
+    narration_request: Dict[str, Any],
+) -> Dict[str, Any]:
+    narration_request = _safe_dict(narration_request)
+    turn_id = _safe_str(narration_request.get("turn_id")).strip()
+    tick = int(narration_request.get("tick", 0) or 0)
+
+    if not turn_id:
+        return {"ok": False, "error": "missing_turn_id"}
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+
+    runtime_state = _copy_dict(session.get("runtime_state"))
+    runtime_state = _ensure_narration_job_state(runtime_state)
+
+    existing_artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+    if existing_artifact:
+        return {
+            "ok": True,
+            "status": "already_completed",
+            "job": {
+                "job_id": _build_narration_job_id(turn_id),
+                "turn_id": turn_id,
+                "tick": tick,
+                "status": "completed",
+            },
+        }
+
+    job = {
+        "job_id": _build_narration_job_id(turn_id),
+        "turn_id": turn_id,
+        "tick": tick,
+        "status": "queued",
+        "created_at": _utc_now_iso(),
+        "started_at": None,
+        "completed_at": None,
+        "error": "",
+        "narration_request": narration_request,
+    }
+    runtime_state = _upsert_narration_job(runtime_state, job)
+    session["runtime_state"] = runtime_state
+    session = save_runtime_session(session)
+
+    return {"ok": True, "status": "queued", "job": job, "session": session}
+
+
 # ── Fast-turn performance helpers ─────────────────────────────────────────
 
 _FAST_TURN_DEFAULTS = {
@@ -5843,6 +5979,82 @@ def _generate_turn_narration_artifact(
     return {"ok": True, "session": session, "artifact": artifact}
 
 
+def process_next_narration_job(session_id: str) -> Dict[str, Any]:
+    """
+    Process at most one queued narration job for the given session.
+    Safe for polling/heartbeat driven execution.
+    """
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+
+    runtime_state = _copy_dict(session.get("runtime_state"))
+    runtime_state = _ensure_narration_job_state(runtime_state)
+
+    jobs = _safe_list(runtime_state.get("narration_jobs"))
+    queued_job = None
+    for job in jobs:
+        j = _safe_dict(job)
+        if _safe_str(j.get("status")) == "queued":
+            queued_job = j
+            break
+
+    if not queued_job:
+        return {"ok": True, "status": "idle"}
+
+    turn_id = _safe_str(queued_job.get("turn_id")).strip()
+    tick = int(queued_job.get("tick", 0) or 0)
+    current_tick = int(runtime_state.get("tick", 0) or 0)
+
+    # Optional stale protection: if narration is far behind, mark stale.
+    if tick < current_tick - 1:
+        runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="stale", error="stale_narration_job")
+        session["runtime_state"] = runtime_state
+        session = save_runtime_session(session)
+        return {"ok": True, "status": "stale", "turn_id": turn_id}
+
+    runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="processing")
+    session["runtime_state"] = runtime_state
+    session = save_runtime_session(session)
+
+    narration_request = _safe_dict(queued_job.get("narration_request"))
+    result = _generate_turn_narration_artifact(session_id, narration_request)
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found_after_narration"}
+
+    runtime_state = _copy_dict(session.get("runtime_state"))
+    if result.get("ok"):
+        runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="completed")
+        session["runtime_state"] = runtime_state
+        session = save_runtime_session(session)
+        return {
+            "ok": True,
+            "status": "completed",
+            "turn_id": turn_id,
+            "artifact": result.get("artifact"),
+            "session": session,
+        }
+
+    runtime_state = _mark_narration_job_status(
+        runtime_state,
+        turn_id,
+        status="failed",
+        error=_safe_str(result.get("error") or "narration_failed"),
+    )
+    session["runtime_state"] = runtime_state
+    session = save_runtime_session(session)
+    return {
+        "ok": False,
+        "status": "failed",
+        "turn_id": turn_id,
+        "error": _safe_str(result.get("error") or "narration_failed"),
+        "artifact": result.get("artifact"),
+        "session": session,
+    }
+
+
 def apply_turn(
     session_id: str,
     player_input: str,
@@ -5859,26 +6071,29 @@ def apply_turn(
     if not authoritative_result.get("ok"):
         return authoritative_result
 
-    narration_result = _generate_turn_narration_artifact(
-        session_id,
-        authoritative_result.get("narration_request"),
-    )
-    artifact = _safe_dict(narration_result.get("artifact"))
     authoritative = _safe_dict(authoritative_result.get("authoritative"))
+    narration_request = _safe_dict(authoritative_result.get("narration_request"))
+    _enqueue_narration_request(session_id, narration_request)
 
     return {
         "ok": True,
-        "session": narration_result.get("session") or authoritative_result.get("session"),
+        "session": authoritative_result.get("session"),
         "result": {
             "turn_id": authoritative.get("turn_id"),
             "tick": authoritative.get("tick"),
             "resolved_result": authoritative.get("resolved_result"),
+            "combat_result": authoritative.get("combat_result"),
+            "xp_result": authoritative.get("xp_result"),
+            "skill_xp_result": authoritative.get("skill_xp_result"),
+            "level_up": authoritative.get("level_up"),
+            "skill_level_ups": authoritative.get("skill_level_ups"),
             "summary": authoritative.get("summary"),
             "presentation": authoritative.get("presentation"),
             "response_length": authoritative.get("response_length"),
-            "narration": _safe_str(artifact.get("narration")) or _safe_str(authoritative.get("deterministic_fallback_narration")),
-            "raw_llm_narrative": _safe_str(artifact.get("raw_llm_narrative")),
-            "used_llm": bool(artifact.get("used_llm")),
+            "narration": _safe_str(authoritative.get("deterministic_fallback_narration")),
+            "raw_llm_narrative": "",
+            "used_llm": False,
+            "narration_status": "queued",
         },
     }
 

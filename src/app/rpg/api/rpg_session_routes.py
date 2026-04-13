@@ -21,7 +21,8 @@ from app.rpg.session.ambient_builder import (
 )
 from app.rpg.session.runtime import (
     _apply_turn_authoritative,
-    _generate_turn_narration_artifact,
+    _enqueue_narration_request,
+    process_next_narration_job,
     _normalize_runtime_settings,
     apply_idle_ticks,
     apply_resume_catchup,
@@ -335,64 +336,70 @@ async def execute_rpg_session_turn_stream(request: Request):
         authoritative = _safe_dict(authoritative_result.get("authoritative"))
         narration_request = _safe_dict(authoritative_result.get("narration_request"))
 
+        enqueue_result = _enqueue_narration_request(session_id, narration_request)
+        narration_status = _safe_str(enqueue_result.get("status") or "queued")
+
         yield _sse({
             "type": "authoritative_result",
             "turn_id": _safe_str(authoritative.get("turn_id")),
             "tick": authoritative.get("tick"),
             "resolved_result": authoritative.get("resolved_result"),
+            "combat_result": authoritative.get("combat_result"),
+            "xp_result": authoritative.get("xp_result"),
+            "skill_xp_result": authoritative.get("skill_xp_result"),
+            "level_up": authoritative.get("level_up"),
+            "skill_level_ups": authoritative.get("skill_level_ups"),
             "summary": authoritative.get("summary"),
             "presentation": authoritative.get("presentation"),
             "response_length": authoritative.get("response_length"),
             "fallback_narration": authoritative.get("deterministic_fallback_narration"),
+            "narration_status": narration_status,
         })
-
-        yield _sse({"type": "processing", "stage": "narration"})
-
-        narration_result = _generate_turn_narration_artifact(
-            session_id,
-            narration_request,
-        )
-
-        if not narration_result.get("ok"):
-            yield _sse({
-                "type": "narration",
-                "turn_id": _safe_str(authoritative.get("turn_id")),
-                "tick": authoritative.get("tick"),
-                "text": _safe_str(authoritative.get("deterministic_fallback_narration")),
-                "used_llm": False,
-                "fallback": True,
-            })
-            yield _sse({"type": "done", "turn_id": _safe_str(authoritative.get("turn_id")), "tick": authoritative.get("tick")})
-            return
-
-        artifact = _safe_dict(narration_result.get("artifact"))
-        narration = _safe_str(artifact.get("narration"))
-
-        if narration:
-            yield _sse({
-                "type": "narration",
-                "turn_id": _safe_str(artifact.get("turn_id")),
-                "tick": artifact.get("tick"),
-                "text": narration,
-                "used_llm": bool(artifact.get("used_llm")),
-            })
-        else:
-            yield _sse({
-                "type": "narration",
-                "turn_id": _safe_str(authoritative.get("turn_id")),
-                "tick": authoritative.get("tick"),
-                "text": _safe_str(authoritative.get("deterministic_fallback_narration")),
-                "used_llm": False,
-                "fallback": True,
-            })
 
         yield _sse({
             "type": "done",
             "turn_id": _safe_str(authoritative.get("turn_id")),
             "tick": authoritative.get("tick"),
+            "narration_status": narration_status,
         })
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers=sse_headers)
+
+
+@rpg_session_bp.post("/api/rpg/session/process_narration")
+async def process_rpg_session_narration(request: Request):
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+
+    result = process_next_narration_job(session_id)
+    return JSONResponse(result)
+
+
+@rpg_session_bp.post("/api/rpg/session/narration_status")
+async def get_rpg_session_narration_status(request: Request):
+    data = await request.json()
+    session_id = _safe_str(data.get("session_id")).strip()
+    turn_id = _safe_str(data.get("turn_id")).strip()
+
+    if not session_id or not turn_id:
+        return JSONResponse({"ok": False, "error": "session_id_and_turn_id_required"}, status_code=400)
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
+    artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+
+    return JSONResponse({
+        "ok": True,
+        "turn_id": turn_id,
+        "job": job,
+        "artifact": artifact,
+    })
 
 
 # ── Living-world endpoints (Phase 7) ──────────────────────────────────────
@@ -560,6 +567,12 @@ async def stream_rpg_session(request: Request):
                     "tick": int(runtime.get("tick", 0) or 0),
                 })
                 last_heartbeat = now
+
+                # Optional: process one narration job during heartbeat
+                try:
+                    process_next_narration_job(session_id)
+                except Exception:
+                    _logger.debug("Background narration processing failed during heartbeat", exc_info=True)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=sse_headers)
 
