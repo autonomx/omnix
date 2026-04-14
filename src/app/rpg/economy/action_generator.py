@@ -27,6 +27,8 @@ def build_menu_action(payload: Dict[str, Any]) -> Dict[str, Any]:
         "service_id",
         "target_id",
         "repair_item_id",
+        "provider_id",
+        "provider_name",
     ):
         if payload.get(key) is not None:
             action[key] = payload.get(key)

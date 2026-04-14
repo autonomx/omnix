@@ -398,7 +398,10 @@
 
             return (
                 '<div class="rpg-transaction-menu">' +
-                    '<div class="rpg-transaction-menu-title">' + escapeHtml(String(menu.label || 'Services')) + '</div>' +
+                    '<div class="rpg-transaction-menu-title">' +
+                        escapeHtml(String(menu.label || 'Services')) +
+                        (menu.provider_name ? (' — ' + escapeHtml(String(menu.provider_name))) : '') +
+                    '</div>' +
                     '<div class="rpg-transaction-menu-entries">' + entriesHtml + '</div>' +
                 '</div>'
             );
@@ -496,6 +499,11 @@
             var reqCurrency = (((payload.requirements || {}).currency) || {});
             var haveCurrency = (((payload.player_resources || {}).currency) || {});
             return 'Not enough money. Need ' + formatCurrency(reqCurrency) + ', have ' + formatCurrency(haveCurrency) + '.';
+        }
+
+        if (payload.blocked_reason === 'provider_not_available') {
+            var providerName = (((payload.action_metadata || {}).provider_name) || 'That provider');
+            return providerName + ' is not available right now.';
         }
 
         return 'That action cannot be completed.';
@@ -1334,7 +1342,7 @@
     }
 
     async function pollNarrationStatus(sessionId, turnId, attempt = 0) {
-        if (attempt > 30) return;
+        if (attempt > 30 || !turnId) return;
 
         try {
             const resp = await fetch("/api/rpg/session/narration_status", {
@@ -1367,7 +1375,7 @@
     }
 
     function ensureNarrationSubscription(sessionId) {
-        if (!sessionId) return;
+        if (!sessionId || sessionId === "session:unknown") return;
 
         // Keep one persistent connection per session
         if (rpgState.narrationEventSource) {
@@ -1379,26 +1387,28 @@
         rpgState.narrationEventSource = es;
 
         es.onopen = function () {
-            // On reconnect, resync latest narration state
-            fetch("/api/rpg/session/narration_status", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    session_id: rpgState.sessionId,
-                    turn_id: rpgState.currentTurnId,
-                }),
-            })
-            .then(r => r.json())
-            .then(data => {
-                var artifact = data && data.artifact;
-                if (artifact && artifact.narration) {
-                    renderTurnNarration(rpgState.currentTurnId, artifact.narration, {
-                        usedLlm: !!artifact.used_llm,
-                        fallback: false,
-                    });
-                }
-            })
-            .catch(() => {});
+            // On reconnect, resync latest narration state only if we have an active turn
+            if (rpgState.currentTurnId) {
+                fetch("/api/rpg/session/narration_status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: rpgState.sessionId,
+                        turn_id: rpgState.currentTurnId,
+                    }),
+                })
+                .then(r => r.json())
+                .then(data => {
+                    var artifact = data && data.artifact;
+                    if (artifact && artifact.narration) {
+                        renderTurnNarration(rpgState.currentTurnId, artifact.narration, {
+                            usedLlm: !!artifact.used_llm,
+                            fallback: false,
+                        });
+                    }
+                })
+                .catch(() => {});
+            }
         };
 
         es.onmessage = function (evt) {

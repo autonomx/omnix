@@ -35,6 +35,8 @@ def build_transaction_metadata(action: Dict[str, Any]) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {
         "transaction_kind": "",
         "price_source": "",
+        "provider_id": _safe_str(action.get("provider_id")),
+        "provider_name": _safe_str(action.get("provider_name")),
     }
 
     if _safe_dict(action.get("currency_cost")) or _safe_dict(action.get("cost")):

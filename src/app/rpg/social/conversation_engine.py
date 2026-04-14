@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.rpg.session.runtime import _maybe_enqueue_latest_ambient_conversation_narration
-
 from .conversation_beats import (
     append_beat,
     build_beat_from_conversation_line,
@@ -444,6 +442,7 @@ def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[
     session_id = _safe_str(runtime_state.get("session_id")).strip()
     if session_id:
         try:
+            from app.rpg.session.runtime import _maybe_enqueue_latest_ambient_conversation_narration
             ambient_result = _maybe_enqueue_latest_ambient_conversation_narration(
                 session_id,
                 simulation_state,

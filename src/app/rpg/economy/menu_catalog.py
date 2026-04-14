@@ -160,3 +160,66 @@ def build_available_transaction_menus(context_tags: List[Any] | None = None) -> 
         menus.append(build_service_menu("repair"))
 
     return menus
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _attach_provider_to_entry(entry: Dict[str, Any], provider: Dict[str, Any]) -> Dict[str, Any]:
+    entry = dict(_safe_dict(entry))
+    provider = _safe_dict(provider)
+
+    action = dict(_safe_dict(entry.get("action")))
+    action["provider_id"] = _safe_str(provider.get("provider_id"))
+    action["provider_name"] = _safe_str(provider.get("provider_name"))
+
+    entry["provider_id"] = _safe_str(provider.get("provider_id"))
+    entry["provider_name"] = _safe_str(provider.get("provider_name"))
+    entry["provider_kind"] = _safe_str(provider.get("provider_kind"))
+    entry["action"] = action
+    return entry
+
+
+def build_provider_bound_menu(menu_id: str, provider: Dict[str, Any]) -> Dict[str, Any]:
+    provider = _safe_dict(provider)
+    provider_id = _safe_str(provider.get("provider_id"))
+    provider_name = _safe_str(provider.get("provider_name"))
+    provider_kind = _safe_str(provider.get("provider_kind"))
+
+    if menu_id in SHOP_MENU_ITEMS:
+        base_menu = build_shop_menu(menu_id)
+    else:
+        base_menu = build_service_menu(menu_id)
+
+    entries = [_attach_provider_to_entry(entry, provider) for entry in _safe_list(base_menu.get("entries"))]
+
+    return {
+        "menu_id": _safe_str(base_menu.get("menu_id")),
+        "menu_type": _safe_str(base_menu.get("menu_type")),
+        "label": _safe_str(base_menu.get("label")),
+        "provider_id": provider_id,
+        "provider_name": provider_name,
+        "provider_kind": provider_kind,
+        "entries": entries,
+    }
+
+
+def build_provider_transaction_menus(providers: List[Any]) -> List[Dict[str, Any]]:
+    menus: List[Dict[str, Any]] = []
+    seen = set()
+
+    for raw_provider in _safe_list(providers)[:24]:
+        provider = _safe_dict(raw_provider)
+        provider_id = _safe_str(provider.get("provider_id"))
+        for menu_id in list(provider.get("menu_ids") or [])[:8]:
+            menu_id = _safe_str(menu_id)
+            if not menu_id:
+                continue
+            dedupe_key = (provider_id, menu_id)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            menus.append(build_provider_bound_menu(menu_id, provider))
+
+    return menus[:24]

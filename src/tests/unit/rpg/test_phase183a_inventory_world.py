@@ -36,6 +36,8 @@ from app.rpg.economy.transactions import enrich_action_with_registry_price
 from app.rpg.economy.transaction_effects import apply_transaction_effects
 from app.rpg.economy.action_generator import build_menu_action
 from app.rpg.economy.menu_catalog import build_service_menu, build_shop_menu
+from app.rpg.economy.provider_catalog import derive_npc_transaction_providers
+from app.rpg.economy.menu_catalog import build_provider_transaction_menus
 from app.rpg.items.world_items import (
     drop_world_item,
     ensure_world_item_state,
@@ -429,3 +431,37 @@ class TestCanonicalResources:
         assert action["service_type"] == "inn"
         assert action["service_id"] == "private_room"
         assert action["currency_cost"] == {"gold": 0, "silver": 2, "copper": 0}
+
+    def test_provider_bound_menu_action_carries_provider_identity(self):
+        providers = derive_npc_transaction_providers([{
+            "npc_id": "bran",
+            "name": "Bran the Innkeeper",
+            "role": "innkeeper",
+        }])
+
+        menus = build_provider_transaction_menus(providers)
+        inn_menu = menus[0]
+        room_entry = next(entry for entry in inn_menu["entries"] if entry.get("service_id") == "private_room")
+
+        action = build_menu_action(room_entry["action"])
+
+        assert action["provider_id"] == "bran"
+        assert action["provider_name"] == "Bran the Innkeeper"
+        assert action["service_id"] == "private_room"
+
+    def test_provider_bound_shop_action_carries_provider_identity(self):
+        providers = derive_npc_transaction_providers([{
+            "npc_id": "elara",
+            "name": "Elara the Merchant",
+            "profession": "merchant",
+        }])
+
+        menus = build_provider_transaction_menus(providers)
+        shop_menu = menus[0]
+        torch_entry = next(entry for entry in shop_menu["entries"] if entry.get("item_id") == "torch")
+
+        action = build_menu_action(torch_entry["action"])
+
+        assert action["provider_id"] == "elara"
+        assert action["provider_name"] == "Elara the Merchant"
+        assert action["item_id"] == "torch"

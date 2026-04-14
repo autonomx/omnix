@@ -157,7 +157,11 @@ from app.rpg.economy.transactions import (
     enrich_action_with_registry_price,
 )
 from app.rpg.economy.transaction_effects import apply_transaction_effects
-from app.rpg.economy.menu_catalog import build_available_transaction_menus
+from app.rpg.economy.menu_catalog import build_available_transaction_menus, build_provider_transaction_menus
+from app.rpg.economy.provider_catalog import (
+    derive_npc_transaction_providers,
+    derive_world_transaction_providers,
+)
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
@@ -2180,6 +2184,47 @@ def _derive_transaction_context_tags(
     _add(scene_kind)
 
     return tags[:16]
+
+
+def _derive_transaction_providers(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> list[Dict[str, Any]]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    npcs = _safe_list(runtime_state.get("npcs"))
+    world_entities = _safe_list(runtime_state.get("world_entities"))
+
+    npc_providers = derive_npc_transaction_providers(npcs)
+    world_providers = derive_world_transaction_providers(world_entities)
+
+    combined: list[Dict[str, Any]] = []
+    seen = set()
+
+    for provider in npc_providers + world_providers:
+        provider = _safe_dict(provider)
+        provider_id = _safe_str(provider.get("provider_id"))
+        if not provider_id or provider_id in seen:
+            continue
+        seen.add(provider_id)
+        combined.append(provider)
+
+    return combined[:24]
+
+
+def _build_transaction_menus_for_state(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> list[Dict[str, Any]]:
+    providers = _derive_transaction_providers(simulation_state, runtime_state)
+    menus = build_provider_transaction_menus(providers)
+    if menus:
+        return menus
+
+    # Backward-compatible fallback while world/NPC data matures.
+    transaction_context_tags = _derive_transaction_context_tags(simulation_state, runtime_state)
+    return build_available_transaction_menus(transaction_context_tags)
 
 
 def _stable_scene_beat_id(beat: Dict[str, Any]) -> str:
@@ -5558,6 +5603,21 @@ def _apply_action_resource_requirements(
     }
 
 
+def _is_action_provider_available(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> bool:
+    action = _safe_dict(action)
+    provider_id = _safe_str(action.get("provider_id"))
+    if not provider_id:
+        return True  # Backward compatible for old actions
+
+    providers = _derive_transaction_providers(simulation_state, runtime_state)
+    available_ids = {_safe_str(p.get("provider_id")) for p in providers}
+    return provider_id in available_ids
+
+
 def _apply_authoritative_action(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
@@ -5565,6 +5625,35 @@ def _apply_authoritative_action(
 ) -> Dict[str, Any]:
     action_type = _safe_str(action.get("action_type")).strip()
     action = enrich_action_with_registry_price(action)
+
+    if not _is_action_provider_available(simulation_state, runtime_state, action):
+        return {
+            "simulation_state": simulation_state,
+            "result": {
+                "action_type": action_type,
+                "outcome": "blocked",
+                "blocked": True,
+                "blocked_reason": "provider_not_available",
+                "failure_kind": "provider_requirement",
+                "requirements": {},
+                "player_resources": {},
+                "resource_changes": {
+                    "currency": {
+                        "gold": 0,
+                        "silver": 0,
+                        "copper": 0,
+                    },
+                },
+                "effect_result": {
+                    "items_added": [],
+                    "service_effects": {},
+                },
+                "action_metadata": {
+                    "provider_id": _safe_str(action.get("provider_id")),
+                    "provider_name": _safe_str(action.get("provider_name")),
+                },
+            },
+        }
 
     if action_type == "pickup_item":
         return _pickup_item_action(simulation_state, action)
@@ -5850,8 +5939,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     inventory_state = _safe_dict(player_state.get("inventory_state"))
     equipment = _safe_dict(inventory_state.get("equipment"))
 
-    transaction_context_tags = _derive_transaction_context_tags(simulation_state, runtime_state)
-    transaction_menus = build_available_transaction_menus(transaction_context_tags)
+    transaction_menus = _build_transaction_menus_for_state(simulation_state, runtime_state)
 
     return {
         "success": True,
@@ -6053,8 +6141,7 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
     inventory_state = _safe_dict(player_state.get("inventory_state"))
     equipment = _safe_dict(inventory_state.get("equipment"))
 
-    transaction_context_tags = _derive_transaction_context_tags(simulation_state, runtime_state)
-    transaction_menus = build_available_transaction_menus(transaction_context_tags)
+    transaction_menus = _build_transaction_menus_for_state(simulation_state, runtime_state)
     
     return {
         "success": True,

@@ -430,8 +430,16 @@ async def get_rpg_session_narration_status(request: Request):
     session_id = _safe_str(data.get("session_id")).strip()
     turn_id = _safe_str(data.get("turn_id")).strip()
 
-    if not session_id or not turn_id:
-        return JSONResponse({"ok": False, "error": "session_id_and_turn_id_required"}, status_code=400)
+    if not session_id:
+        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
+    
+    if not turn_id:
+        return JSONResponse({
+            "ok": True,
+            "turn_id": None,
+            "job": None,
+            "artifact": None,
+        })
 
     session = load_runtime_session(session_id)
     if session is None:
@@ -642,10 +650,10 @@ async def stream_rpg_session_narration_events(request: Request):
                     break
 
                 try:
-                    evt = subscriber_q.get(timeout=0.5)
+                    evt = await asyncio.wait_for(subscriber_q.get(), timeout=0.5)
                     event_type = evt.get("type", "narration_event")
                     yield f"event: {event_type}\ndata: {json.dumps(evt)}\n\n"
-                except queue.Empty:
+                except asyncio.TimeoutError:
                     now = time.monotonic()
                     if now - last_heartbeat >= 15.0:
                         yield "event: heartbeat\ndata: {\"type\": \"heartbeat\"}\n\n"
