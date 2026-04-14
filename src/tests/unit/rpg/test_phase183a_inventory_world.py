@@ -31,6 +31,7 @@ from app.rpg.items.item_stats import (
     is_weapon,
     normalize_item_stats,
 )
+from app.rpg.economy.currency import normalize_currency
 from app.rpg.items.world_items import (
     drop_world_item,
     ensure_world_item_state,
@@ -178,3 +179,120 @@ class TestItemRegistry:
         assert sword["combat_stats"]["damage"] == 28
         bow = get_item_definition("short_bow")
         assert bow["combat_stats"]["damage"] == 15
+
+
+from app.rpg.session.runtime import (
+    _apply_action_resource_requirements,
+    _apply_starting_resources_to_player_state,
+)
+
+
+class TestCanonicalResources:
+    def test_starting_resources_bridge_into_player_currency(self):
+        simulation_state = {}
+        setup_payload = {
+            "starting_resources": {
+                "gold": 75,
+                "health_potions": 2,
+            }
+        }
+
+        out = _apply_starting_resources_to_player_state(simulation_state, setup_payload)
+        player_state = out["player_state"]
+        inventory_state = player_state["inventory_state"]
+
+        assert inventory_state["currency"]["gold"] == 75
+        assert any(item["item_id"] == "health_potions" for item in inventory_state["items"])
+
+    def test_action_cost_blocks_when_insufficient_gold(self):
+        simulation_state = {
+            "player_state": {
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 0},
+                    "last_loot": [],
+                }
+            }
+        }
+        action = {
+            "action_type": "trade",
+            "gold_cost": 5,
+        }
+
+        out = _apply_action_resource_requirements(simulation_state, action)
+
+        assert out["ok"] is False
+        assert out["result"]["blocked"] is True
+        assert out["result"]["blocked_reason"] == "insufficient_currency"
+
+    def test_action_cost_deducts_gold_when_affordable(self):
+        simulation_state = {
+            "player_state": {
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 9},
+                    "last_loot": [],
+                }
+            }
+        }
+        action = {
+            "action_type": "trade",
+            "gold_cost": 5,
+        }
+
+        out = _apply_action_resource_requirements(simulation_state, action)
+        inventory_state = out["simulation_state"]["player_state"]["inventory_state"]
+
+        assert out["ok"] is True
+        assert inventory_state["currency"]["gold"] == 4
+        assert out["result"]["resource_changes"]["currency"]["gold"] == -5
+
+    def test_action_cost_supports_structured_currency(self):
+        simulation_state = {
+            "player_state": {
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 1, "silver": 0, "copper": 0},
+                    "last_loot": [],
+                }
+            }
+        }
+        action = {
+            "action_type": "buy",
+            "currency_cost": {"silver": 9, "copper": 5},
+        }
+
+        out = _apply_action_resource_requirements(simulation_state, action)
+        inventory_state = out["simulation_state"]["player_state"]["inventory_state"]
+
+        assert out["ok"] is True
+        assert normalize_currency(inventory_state["currency"]) == {"gold": 0, "silver": 0, "copper": 5}
+
+    def test_action_cost_blocks_with_structured_currency(self):
+        simulation_state = {
+            "player_state": {
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 0, "silver": 4, "copper": 0},
+                    "last_loot": [],
+                }
+            }
+        }
+        action = {
+            "action_type": "buy",
+            "currency_cost": {"silver": 4, "copper": 1},
+        }
+
+        out = _apply_action_resource_requirements(simulation_state, action)
+
+        assert out["ok"] is False
+        assert out["result"]["blocked"] is True
+        assert out["result"]["blocked_reason"] == "insufficient_currency"

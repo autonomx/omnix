@@ -352,6 +352,20 @@
             .replace(/'/g, '&#039;');
     }
 
+    function formatCurrency(currency) {
+        currency = (currency && typeof currency === 'object') ? currency : {};
+        var gold = Number(currency.gold || 0);
+        var silver = Number(currency.silver || 0);
+        var copper = Number(currency.copper || 0);
+        var parts = [];
+
+        if (gold) parts.push(gold + 'g');
+        if (silver) parts.push(silver + 's');
+        if (copper || parts.length === 0) parts.push(copper + 'c');
+
+        return parts.join(' ');
+    }
+
     // ─── TTS / Voice ───────────────────────────────────────────────────────────
 
     /** Detect a character's probable gender from their name. */
@@ -2078,7 +2092,20 @@
         if (!panel || !player) return;
 
         var stats = player.stats || {};
-        var inventory = Array.isArray(player.inventory) ? player.inventory : [];
+        var inventoryState = (player.inventory_state && typeof player.inventory_state === 'object') ? player.inventory_state : {};
+        var currency = (player.currency && typeof player.currency === 'object')
+            ? player.currency
+            : ((inventoryState.currency && typeof inventoryState.currency === 'object') ? inventoryState.currency : {});
+        var inventoryItems = Array.isArray(player.inventory_items)
+            ? player.inventory_items
+            : (Array.isArray(inventoryState.items) ? inventoryState.items : []);
+        var inventory = inventoryItems.map(function (item) {
+            if (typeof item === 'string') return item;
+            item = item || {};
+            var qty = Number(item.qty || item.quantity || 1);
+            var label = String(item.name || item.item_id || 'Item');
+            return qty > 1 ? (label + ' x' + qty) : label;
+        });
         var quests = Array.isArray(player.quests_active) ? player.quests_active : [];
         var factionRep = player.reputation_factions || {};
         var skills = player.skills || {};
@@ -2119,7 +2146,7 @@
                 '<div class="rpg-stat"><span class="rpg-stat-label">🧠 INT</span><span class="rpg-stat-value">' + (stats.intelligence || 0) + '</span></div>' +
                 '<div class="rpg-stat"><span class="rpg-stat-label">🔮 WIS</span><span class="rpg-stat-value">' + (stats.wisdom || 0) + '</span></div>' +
                 '<div class="rpg-stat"><span class="rpg-stat-label">💬 CHA</span><span class="rpg-stat-value">' + (stats.charisma || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">💰 Gold</span><span class="rpg-stat-value">' + (stats.wealth || 0) + '</span></div>' +
+                '<div class="rpg-stat"><span class="rpg-stat-label">💰 Money</span><span class="rpg-stat-value">' + formatCurrency(currency) + '</span></div>' +
             '</div>';
 
         // Skills section

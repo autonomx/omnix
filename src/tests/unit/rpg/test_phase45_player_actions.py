@@ -205,3 +205,45 @@ class TestApplyPlayerAction:
             result = apply_player_action(state, action)
             for c in result["consequences"]:
                 assert c.get("origin") == "player_action"
+
+
+from app.rpg.action_resolver import resolve_attack_roll
+
+
+class TestStatGrounding:
+    def test_strength_affects_melee_damage(self):
+        attacker_low = {
+            "stats": {"strength": 8, "dexterity": 10, "constitution": 10},
+            "skills": {"swordsmanship": {"level": 0}},
+            "inventory_state": {"equipment": {}},
+        }
+        attacker_high = {
+            "stats": {"strength": 18, "dexterity": 10, "constitution": 10},
+            "skills": {"swordsmanship": {"level": 0}},
+            "inventory_state": {"equipment": {}},
+        }
+        defender = {
+            "stats": {"dexterity": 10, "constitution": 10},
+            "inventory_state": {"equipment": {}},
+            "hp": 30,
+        }
+        weapon = {
+            "item_id": "iron_sword",
+            "combat_stats": {
+                "weapon_type": "sword",
+                "attack_stat": "strength",
+                "skill_id": "swordsmanship",
+                "damage": 10,
+                "accuracy": 100,  # force same hit band deterministically
+                "crit_chance": 0,
+                "crit_bonus": 0,
+                "armor_penetration": 0,
+            },
+            "quality": {"tier": 0},
+        }
+
+        low = resolve_attack_roll(attacker_low, defender, weapon, seed=123)
+        high = resolve_attack_roll(attacker_high, defender, weapon, seed=123)
+
+        assert high["damage"] > low["damage"]
+        assert high["stat_used"] == "strength"

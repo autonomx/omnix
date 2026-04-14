@@ -233,6 +233,8 @@ def resolve_attack_roll(
         "weapon_id": str(weapon.get("item_id", "unarmed")),
         "skill_id": skill_id,
         "stat_used": attack_stat,
+        "stat_modifier": stat_mod,
+        "skill_modifier": skill_mod,
     }
 
 
@@ -273,6 +275,8 @@ def resolve_noncombat_check(
         "action_type": str(action_type),
         "stat_used": stat_name,
         "skill_id": skill_name,
+        "stat_modifier": stat_mod,
+        "skill_modifier": skill_mod,
         "difficulty": str(difficulty),
     }
 

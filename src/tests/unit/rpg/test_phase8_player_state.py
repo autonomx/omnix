@@ -317,3 +317,25 @@ class TestEncounterView:
         assert "choices" in result
         assert isinstance(result["actors"], list)
         assert isinstance(result["choices"], list)
+
+
+def test_ensure_player_state_preserves_existing_inventory_currency():
+    from app.rpg.player.player_scene_state import ensure_player_state
+
+    simulation_state = {
+        "player_state": {
+            "inventory_state": {
+                "items": [{"item_id": "health_potion", "qty": 2, "name": "Health Potion"}],
+                "equipment": {},
+                "capacity": 50,
+                "currency": {"gold": 50},
+                "last_loot": [],
+            }
+        }
+    }
+
+    out = ensure_player_state(simulation_state)
+    inventory_state = out["player_state"]["inventory_state"]
+
+    assert inventory_state["currency"]["gold"] == 50
+    assert inventory_state["items"][0]["item_id"] == "health_potion"

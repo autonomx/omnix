@@ -193,3 +193,40 @@ class TestCharacterCreation:
     def test_invalid_allocation_not_applied(self):
         ps = apply_character_creation({}, {"stat_allocation": {"strength": 100}})
         assert ps["stats"]["strength"] == 5  # unchanged, over budget
+
+
+from app.rpg.session.runtime import _award_progression
+
+
+class TestRuntimeAwardProgression:
+    def test_runtime_award_progression_persists_player_xp(self):
+        simulation_state = {
+            "player_state": ensure_player_progression_state({}),
+        }
+        resolved_result = {
+            "action_type": "investigate",
+            "xp_result": {"player_xp": 12},
+            "skill_xp_result": {"awards": {}},
+        }
+
+        out = _award_progression(simulation_state, resolved_result)
+        player_state = out["simulation_state"]["player_state"]
+
+        assert player_state["xp"] == 12
+        assert out["xp_result"]["player_xp"] == 12
+
+    def test_runtime_award_progression_triggers_level_up(self):
+        simulation_state = {
+            "player_state": ensure_player_progression_state({"xp": 95, "xp_to_next": 100}),
+        }
+        resolved_result = {
+            "action_type": "investigate",
+            "xp_result": {"player_xp": 10},
+            "skill_xp_result": {"awards": {}},
+        }
+
+        out = _award_progression(simulation_state, resolved_result)
+        player_state = out["simulation_state"]["player_state"]
+
+        assert player_state["level"] == 2
+        assert out["level_up"]

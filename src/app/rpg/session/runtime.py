@@ -73,12 +73,20 @@ from app.rpg.creator.world_simulation import (
     step_simulation_state,
     summarize_simulation_step,
 )
+from app.rpg.economy.currency import (
+    can_afford,
+    currency_delta,
+    currency_to_copper_value,
+    normalize_currency,
+    subtract_currency_cost,
+)
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
     get_inventory_item_for_drop,
     remove_inventory_item,
     unequip_inventory_slot,
+    normalize_inventory_state,
 )
 from app.rpg.items.item_effects import apply_item_use
 from app.rpg.items.world_items import (
@@ -97,6 +105,7 @@ from app.rpg.memory.memory_state import ensure_memory_state
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.player.player_progression_state import (
+    award_player_xp,
     award_skill_xp,
     ensure_player_progression_state,
     resolve_level_ups,
@@ -5156,6 +5165,75 @@ def _normalize_structured_action(action: Any, player_input: str = "") -> Dict[st
     return normalized
 
 
+def _coerce_starting_inventory_items(resources: Dict[str, Any]) -> list[Dict[str, Any]]:
+    resources = _safe_dict(resources)
+    items: list[Dict[str, Any]] = []
+
+    for key, raw_value in sorted(resources.items()):
+        qty = int(raw_value or 0)
+        if qty <= 0:
+            continue
+
+        resource_id = _safe_str(key).strip().lower()
+        if not resource_id or resource_id == "gold":
+            continue
+
+        item_id = resource_id
+        name = resource_id.replace("_", " ").title()
+        items.append({
+            "item_id": item_id,
+            "qty": qty,
+            "name": name,
+        })
+
+    return items
+
+
+def _apply_starting_resources_to_player_state(
+    simulation_state: Dict[str, Any],
+    setup_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = _copy_dict(simulation_state)
+    setup_payload = _safe_dict(setup_payload)
+
+    simulation_state = ensure_player_state(simulation_state)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    player_state = ensure_player_progression_state(player_state)
+
+    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
+    currency = _safe_dict(inventory_state.get("currency"))
+    items = _safe_list(inventory_state.get("items"))
+
+    starting_resources = _safe_dict(setup_payload.get("starting_resources"))
+    if not starting_resources:
+        player_state["inventory_state"] = inventory_state
+        simulation_state["player_state"] = player_state
+        return simulation_state
+
+    currency = normalize_currency(currency)
+
+    current_currency_value = currency_to_copper_value(currency)
+    starting_currency = normalize_currency({
+        "gold": starting_resources.get("gold", 0),
+        "silver": starting_resources.get("silver", 0),
+        "copper": starting_resources.get("copper", 0),
+    })
+
+    if current_currency_value <= 0 and currency_to_copper_value(starting_currency) > 0:
+        currency = starting_currency
+
+    # Apply non-gold resources as inventory items only if inventory is still empty.
+    if not items:
+        bootstrap_items = _coerce_starting_inventory_items(starting_resources)
+        if bootstrap_items:
+            inventory_state = add_inventory_items(inventory_state, bootstrap_items)
+
+    inventory_state["currency"] = currency
+    player_state["inventory_state"] = normalize_inventory_state(inventory_state)
+    simulation_state["player_state"] = player_state
+    return simulation_state
+
+
 def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _copy_dict(simulation_state)
     simulation_state = ensure_player_state(simulation_state)
@@ -5170,7 +5248,7 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
 
     player_state = _safe_dict(simulation_state.get("player_state"))
     player_state = ensure_player_progression_state(player_state)
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
     player_state["inventory_state"] = inventory_state
     simulation_state["player_state"] = player_state
     return simulation_state
@@ -5277,6 +5355,167 @@ def _use_item_action(
     }
 
 
+SPEND_ACTION_TYPES = {
+    "buy",
+    "purchase",
+    "trade",
+    "pay",
+    "bribe",
+    "rent_room",
+    "rent_bed",
+    "hire",
+    "use_service",
+    "shop_purchase",
+}
+
+
+def _should_apply_action_cost(action: Dict[str, Any]) -> bool:
+    action = _safe_dict(action)
+
+    action_type = _safe_str(action.get("action_type") or action.get("type")).strip().lower()
+    
+    if action.get("apply_cost") is True:
+        return action_type in SPEND_ACTION_TYPES
+
+    return action_type in SPEND_ACTION_TYPES
+
+
+def _extract_action_cost(action: Dict[str, Any]) -> Dict[str, int]:
+    action = _safe_dict(action)
+
+    cost = _safe_dict(action.get("cost"))
+    currency_cost = _safe_dict(action.get("currency_cost"))
+    price = _safe_dict(action.get("price"))
+
+    if cost:
+        return normalize_currency(cost)
+
+    if currency_cost:
+        return normalize_currency(currency_cost)
+
+    if price:
+        return normalize_currency(price)
+
+    # Legacy compatibility
+    if action.get("gold_cost") is not None:
+        return normalize_currency({"gold": action.get("gold_cost", 0)})
+    if action.get("requires_gold") is not None:
+        return normalize_currency({"gold": action.get("requires_gold", 0)})
+
+    return normalize_currency({})
+
+
+def _apply_action_resource_requirements(
+    simulation_state: Dict[str, Any],
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    simulation_state = _ensure_simulation_state(simulation_state)
+    action = _safe_dict(action)
+
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
+    currency = normalize_currency(_safe_dict(inventory_state.get("currency")))
+
+    if not _should_apply_action_cost(action):
+        return {
+            "ok": True,
+            "simulation_state": simulation_state,
+            "result": {
+                "blocked": False,
+                "blocked_reason": "",
+                "resource_changes": {
+                    "currency": {
+                        "gold": 0,
+                        "silver": 0,
+                        "copper": 0,
+                    },
+                },
+                "player_resources": {
+                    "currency": currency,
+                    "gold": int(currency.get("gold", 0) or 0),
+                },
+                "requirements": {},
+            },
+        }
+
+    cost = _extract_action_cost(action)
+
+    if currency_to_copper_value(cost) <= 0:
+        return {
+            "ok": True,
+            "simulation_state": simulation_state,
+            "result": {
+                "blocked": False,
+                "blocked_reason": "",
+                "resource_changes": {
+                    "currency": {
+                        "gold": 0,
+                        "silver": 0,
+                        "copper": 0,
+                    },
+                },
+                "player_resources": {
+                    "currency": currency,
+                    "gold": int(currency.get("gold", 0) or 0),
+                },
+                "requirements": {},
+            },
+        }
+
+    if not can_afford(currency, cost):
+        return {
+            "ok": False,
+            "simulation_state": simulation_state,
+            "result": {
+                "action_type": _safe_str(action.get("action_type") or action.get("type")),
+                "outcome": "blocked",
+                "blocked": True,
+                "blocked_reason": "insufficient_currency",
+                "failure_kind": "resource_requirement",
+                "requirements": {
+                    "currency": cost,
+                },
+                "resource_changes": {
+                    "currency": {
+                        "gold": 0,
+                        "silver": 0,
+                        "copper": 0,
+                    },
+                },
+                "player_resources": {
+                    "currency": currency,
+                    "gold": int(currency.get("gold", 0) or 0),
+                },
+            },
+        }
+
+    updated_currency = subtract_currency_cost(currency, cost)
+    delta = currency_delta(currency, updated_currency)
+
+    inventory_state["currency"] = updated_currency
+    player_state["inventory_state"] = inventory_state
+    simulation_state["player_state"] = player_state
+
+    return {
+        "ok": True,
+        "simulation_state": simulation_state,
+        "result": {
+            "blocked": False,
+            "blocked_reason": "",
+            "resource_changes": {
+                "currency": delta,
+            },
+            "player_resources": {
+                "currency": updated_currency,
+                "gold": int(updated_currency.get("gold", 0) or 0),
+            },
+            "requirements": {
+                "currency": cost,
+            },
+        },
+    }
+
+
 def _apply_authoritative_action(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
@@ -5295,11 +5534,42 @@ def _apply_authoritative_action(
     if action_type == "use_item":
         return _use_item_action(simulation_state, action)
 
-    resolved = resolve_player_action(simulation_state, action)
-    next_state = _safe_dict(resolved.get("simulation_state")) or simulation_state
+    gated = _apply_action_resource_requirements(simulation_state, action)
+    gated_state = _safe_dict(gated.get("simulation_state")) or simulation_state
+    gated_result = _safe_dict(gated.get("result"))
+
+    if gated.get("ok") is False:
+        return {
+            "simulation_state": gated_state,
+            "result": gated_result,
+        }
+
+    resolved = resolve_player_action(gated_state, action)
+    next_state = _safe_dict(resolved.get("simulation_state")) or gated_state
+    result = _safe_dict(resolved.get("result"))
+
+    if gated_result:
+        merged_resource_changes = _safe_dict(gated_result.get("resource_changes"))
+        merged_player_resources = _safe_dict(gated_result.get("player_resources"))
+        merged_requirements = _safe_dict(gated_result.get("requirements"))
+
+        if merged_resource_changes:
+            result["resource_changes"] = merged_resource_changes
+        if merged_player_resources:
+            result["player_resources"] = merged_player_resources
+        if merged_requirements:
+            result["requirements"] = merged_requirements
+
+        if "blocked" in gated_result:
+            result["blocked"] = bool(gated_result.get("blocked"))
+        if "blocked_reason" in gated_result:
+            result["blocked_reason"] = _safe_str(gated_result.get("blocked_reason"))
+        if "failure_kind" in gated_result:
+            result["failure_kind"] = _safe_str(gated_result.get("failure_kind"))
+
     return {
         "simulation_state": next_state,
-        "result": _safe_dict(resolved.get("result")),
+        "result": result,
     }
 
 
@@ -5308,11 +5578,14 @@ def _award_progression(
     resolved_result: Dict[str, Any],
 ) -> Dict[str, Any]:
     player_state = _safe_dict(simulation_state.get("player_state"))
+    player_state = ensure_player_progression_state(player_state)
+
     explicit_player_xp = int(_safe_dict(resolved_result.get("xp_result")).get("player_xp", 0) or 0)
     computed_player_xp = int(compute_action_player_xp(resolved_result) or 0)
     action_xp = max(0, explicit_player_xp + computed_player_xp)
     stat_bonus = int(compute_stat_influence_bonus(player_state, resolved_result) or 0) if action_xp > 0 else 0
     total_player_xp = max(0, action_xp + stat_bonus)
+
     explicit_awards = _safe_dict(_safe_dict(resolved_result.get("skill_xp_result")).get("awards"))
     computed_skill_awards = {}
 
@@ -5323,9 +5596,21 @@ def _award_progression(
     for skill_id, amount in computed_skill_awards.items():
         skill_xp_awards[skill_id] = int(skill_xp_awards.get(skill_id, 0) or 0) + int(amount or 0)
 
+    if total_player_xp > 0:
+        player_state = award_player_xp(
+            player_state,
+            total_player_xp,
+            source=_safe_str(resolved_result.get("action_type")),
+        )
+
     for skill_id, amount in skill_xp_awards.items():
         if int(amount or 0) > 0:
-            player_state = award_skill_xp(player_state, skill_id, int(amount), source=_safe_str(resolved_result.get("action_type")))
+            player_state = award_skill_xp(
+                player_state,
+                skill_id,
+                int(amount),
+                source=_safe_str(resolved_result.get("action_type")),
+            )
 
     player_state = resolve_level_ups(player_state)
     level_ups = list(player_state.pop("_level_ups", []) or [])
@@ -5382,8 +5667,12 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
     simulation_state = _safe_dict(metadata.get("simulation_state"))
     if not simulation_state:
         simulation_state = build_initial_simulation_state(setup)
+        simulation_state = _apply_starting_resources_to_player_state(simulation_state, setup)
         metadata["simulation_state"] = simulation_state
         setup["metadata"] = metadata
+    else:
+        simulation_state = _apply_starting_resources_to_player_state(simulation_state, setup)
+        metadata["simulation_state"] = simulation_state
 
     simulation_state = _ensure_simulation_state(simulation_state)
     world = _build_world_payload(setup, generated, canon_summary)
@@ -5459,6 +5748,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             },
         },
     }
+    session["simulation_state"] = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
     session["session_id"] = setup_id
     return session
 
@@ -5504,6 +5794,8 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
             "xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
             "inventory_state": inventory_state,
             "equipment": equipment,
+            "currency": _safe_dict(inventory_state.get("currency")),
+            "inventory_items": _safe_list(inventory_state.get("items")),
             "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
             "available_checks": _safe_list(player_state.get("available_checks")),
         },
@@ -5521,6 +5813,8 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "skill_xp_result": _safe_dict(turn_result.get("skill_xp_result")),
         "level_up": _safe_list(turn_result.get("level_up")),
         "skill_level_ups": _safe_list(turn_result.get("skill_level_ups")),
+        "resource_changes": _safe_dict(turn_result.get("resource_changes")),
+        "player_resources": _safe_dict(turn_result.get("player_resources")),
         "presentation": build_runtime_presentation_payload(simulation_state),
         "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
         "world_events_summary": {
@@ -5681,13 +5975,28 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
     # Phase 18.3A — extract player state for XP/progression fields
     player_state = _safe_dict(simulation_state.get("player_state"))
     last_turn = _safe_dict(runtime_state.get("last_turn_result"))
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    equipment = _safe_dict(inventory_state.get("equipment"))
+    
     return {
         "success": True,
         "session_id": _safe_str(_safe_dict(session.get("manifest")).get("id")),
         "narration": _safe_str(narration_result.get("narrative") or current_scene.get("summary")),
         "choices": _safe_list(narration_result.get("choices")),
         "npcs": _safe_list(runtime_state.get("npcs")),
-        "player": player_state,
+        "player": {
+            "stats": _safe_dict(player_state.get("stats")),
+            "skills": _safe_dict(player_state.get("skills")),
+            "level": int(player_state.get("level", 1) or 1),
+            "xp": int(player_state.get("xp", 0) or 0),
+            "xp_to_next": int(player_state.get("xp_to_next", 0) or 0),
+            "inventory_state": inventory_state,
+            "equipment": equipment,
+            "currency": _safe_dict(inventory_state.get("currency")),
+            "inventory_items": _safe_list(inventory_state.get("items")),
+            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
+            "available_checks": _safe_list(player_state.get("available_checks")),
+        },
         "memory": _safe_list(memory_context.get("items")),
         "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
         "world_events": _safe_list(simulation_state.get("events"))[-8:],
@@ -5708,6 +6017,10 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
         "player_skills": _safe_dict(player_state.get("skills")),
         "level_up": bool(last_turn.get("level_up")),
         "skill_level_ups": _safe_list(last_turn.get("skill_level_ups")),
+        "combat_result": _safe_dict(last_turn.get("combat_result")),
+        "xp_result": _safe_dict(last_turn.get("xp_result")),
+        "resource_changes": _safe_dict(last_turn.get("resource_changes")),
+        "player_resources": _safe_dict(last_turn.get("player_resources")),
     }
 
 

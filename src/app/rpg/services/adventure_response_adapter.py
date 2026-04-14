@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.rpg.items.inventory_state import normalize_inventory_state
+
 # ---------------------------------------------------------------------------
 # Response version constants — bump when the contract changes
 # ---------------------------------------------------------------------------
@@ -56,7 +58,7 @@ def adapt_session_to_frontend(session: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(session.get("simulation_state"))
     player_state = _safe_dict(simulation_state.get("player_state"))
     current_scene = _safe_dict(runtime_state.get("current_scene"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
 
     # Build nearby NPC cards
     from app.rpg.presentation.speaker_cards import build_nearby_npc_cards
@@ -82,6 +84,8 @@ def adapt_session_to_frontend(session: dict[str, Any]) -> dict[str, Any]:
             "xp_to_next": int(player_state.get("xp_to_next", 100) or 100),
             "inventory_state": inventory_state,
             "equipment": _safe_dict(inventory_state.get("equipment")),
+            "currency": _safe_dict(inventory_state.get("currency")),
+            "inventory_items": _safe_list(inventory_state.get("items")),
             "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
             "available_checks": _safe_list(player_state.get("available_checks")),
         },

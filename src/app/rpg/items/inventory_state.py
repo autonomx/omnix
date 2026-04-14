@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.economy.currency import normalize_currency
 from .item_registry import get_item_definition
 
 _MAX_INVENTORY_SLOTS = 50
@@ -78,10 +79,7 @@ def normalize_inventory_state(inventory_state: Dict[str, Any]) -> Dict[str, Any]
         if isinstance(slot_value, dict) and slot_value.get("item_id"):
             equipment_out[str(slot_name)] = _normalize_stack(slot_value)
 
-    currency_in = _safe_dict(inventory_state.get("currency"))
-    currency_out: Dict[str, int] = {}
-    for key in sorted(currency_in.keys())[:_MAX_CURRENCY_KEYS]:
-        currency_out[str(key)] = max(0, _safe_int(currency_in.get(key), 0))
+    currency = normalize_currency(_safe_dict(inventory_state.get("currency")))
 
     last_loot = []
     for item in _safe_list(inventory_state.get("last_loot"))[:_MAX_LAST_LOOT]:
@@ -92,7 +90,7 @@ def normalize_inventory_state(inventory_state: Dict[str, Any]) -> Dict[str, Any]
         "items": items,
         "equipment": equipment_out,
         "capacity": max(0, _safe_int(inventory_state.get("capacity"), _MAX_INVENTORY_SLOTS)),
-        "currency": currency_out,
+        "currency": currency,
         "last_loot": last_loot,
     }
 
