@@ -1171,6 +1171,12 @@
                 voice_assignments: game.voice_assignments || {},
                 messages: [], // Clear messages for fresh start
             });
+            
+            // Render transaction menus on initial load
+            var transactionContainer = document.getElementById('rpg-transaction-menus');
+            if (transactionContainer) {
+                renderTransactionMenus(transactionContainer, game.transaction_menus, gameId);
+            }
             // Clear the feed
             var feed = el('rpgNarrativeFeed');
             if (feed) feed.innerHTML = '<div class="rpg-msg rpg-msg--system">Game loaded. Continue your adventure!</div>';
@@ -1762,6 +1768,12 @@
                     updateState({ player: update.player });
                     renderPlayerPanel(update.player);
                 }
+                
+                // Update transaction menus
+                var transactionContainer = document.getElementById('rpg-transaction-menus');
+                if (transactionContainer) {
+                    renderTransactionMenus(transactionContainer, data.transaction_menus, rpgState.sessionId);
+                }
 
                 // Render transaction price info
                 const result = (data.resolved_result && typeof data.resolved_result === 'object')
@@ -1801,6 +1813,13 @@
                     updateState({ player: update.player });
                     renderPlayerPanel(update.player);
                 }
+                
+                // Update transaction menus
+                var transactionContainer = document.getElementById('rpg-transaction-menus');
+                if (transactionContainer) {
+                    renderTransactionMenus(transactionContainer, data.transaction_menus, rpgState.sessionId);
+                }
+                
                 // Render conversation cards from turn response
                 if (data && data.active_conversations) {
                     renderConversations(data.active_conversations);
