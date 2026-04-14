@@ -155,6 +155,43 @@
         return String(value);
     }
 
+    function _turnKey(turnId) {
+        return (turnId == null) ? '' : String(turnId);
+    }
+
+    function findTurnNarrationNode(turnId) {
+        var feed = el('rpgNarrativeFeed');
+        if (!feed || turnId == null) return null;
+        return feed.querySelector(
+            '.rpg-msg--narration[data-message-role="turn_narration"][data-turn-id="' + _turnKey(turnId) + '"]'
+        );
+    }
+
+    function appendAmbientNarration(narration, turnId) {
+        var feed = el('rpgNarrativeFeed');
+        if (!feed) return;
+
+        var existing = feed.querySelectorAll(
+            '.rpg-msg--narration[data-message-role="ambient_narration"]'
+        );
+
+        if (existing.length > 20) {
+            existing[0].remove(); // bounded list
+        }
+
+        var narrationText = coerceText(narration);
+        if (!narrationText) return;
+        appendMessage({
+            type: 'narration',
+            role: 'ambient_narration',
+            narrationState: 'final',
+            content: narrationText,
+            turnId: turnId
+        });
+    }
+
+
+
     function _nonEmptySection(lines) {
         return _safeArray(lines).filter(Boolean);
     }
@@ -1312,8 +1349,8 @@
                     try {
                         var evt = JSON.parse(part.slice(6));
                         if (evt.type === 'authoritative_result') {
-                            // Handle authoritative result - return immediately for snappier UI
                             finalData = evt;
+                            try { await reader.cancel(); } catch (_) {}
                             return evt;
                         } else if (evt.type === 'done') {
                             // Keep the authoritative payload if we already have it.
@@ -1333,26 +1370,64 @@
 
 
 
-    function renderTurnNarration(turnId, narration, options) {
+    function renderTurnNarration(turnId, narration, version) {
         var feed = el('rpgNarrativeFeed');
         if (!feed) return;
 
-        var selector = '.rpg-msg--narration[data-turn-id="' + String(turnId).replace(/"/g, '&quot;') + '"]';
-        var msg = feed.querySelector(selector);
-        if (!msg) {
-            var msgs = feed.querySelectorAll('.rpg-msg--narration');
-            if (msgs.length === 0) return;
-            msg = msgs[msgs.length - 1];
+        // Turn-scoped finalization: update only the exact placeholder node.
+        if (turnId != null) {
+            var node = findTurnNarrationNode(turnId);
+            if (!node) {
+                // Prevent duplicate recovery append for same turn
+                var existing = feed.querySelector(
+                    '.rpg-msg--narration[data-message-role="turn_narration"][data-turn-id="' + _turnKey(turnId) + '"][data-narration-state="final"]'
+                );
+                if (existing) {
+                    return;
+                }
+
+                var recoveredNarrationText = coerceText(narration);
+                if (!recoveredNarrationText) {
+                    return;
+                }
+                // Recovery path: if the placeholder is gone, append final narration
+                // rather than silently losing the completed worker result.
+                appendMessage({
+                    type: 'narration',
+                    role: 'turn_narration',
+                    narrationState: 'final',
+                    narrationVersion: Number(version || 0),
+                    content: recoveredNarrationText,
+                    turnId: turnId
+                });
+                feed.scrollTop = feed.scrollHeight;
+                speakNarration(recoveredNarrationText);
+                return;
+            }
+
+            if (node.dataset.narrationState === 'final') {
+                return; // duplicate/later repeat
+            }
+
+            var incomingVersion = Number(version || 0);
+            var currentVersion = Number(node.dataset.narrationVersion || 0);
+            if (incomingVersion < currentVersion) {
+                return; // out-of-order older event
+            }
+
+            var narrationText = coerceText(narration);
+            node.innerHTML = (typeof marked !== 'undefined')
+                ? marked.parse(narrationText)
+                : escapeHtml(narrationText).replace(/\n/g, '<br>');
+
+            node.dataset.narrationState = 'final';
+            node.dataset.narrationVersion = String(incomingVersion);
+            feed.scrollTop = feed.scrollHeight;
+
+            // Speak narration
+            speakNarration(narrationText);
+            return;
         }
-
-        var narrationText = coerceText(narration);
-        msg.innerHTML = (typeof marked !== 'undefined')
-            ? marked.parse(narrationText)
-            : escapeHtml(narrationText).replace(/\n/g, '<br>');
-        feed.scrollTop = feed.scrollHeight;
-
-        // Speak narration
-        speakNarration(narration);
     }
 
     async function pollNarrationStatus(sessionId, turnId, attempt = 0) {
@@ -1368,15 +1443,10 @@
             const job = data.job || {};
             const artifact = data.artifact || {};
 
-            if (artifact.narration) {
-                if (turnId === rpgState.currentTurnId) {
-                    renderTurnNarration(turnId, artifact.narration, {
-                        usedLlm: !!artifact.used_llm,
-                        fallback: false,
-                    });
-                }
-                return;
-            }
+             if (artifact.narration) {
+                 renderTurnNarration(turnId, artifact.narration, artifact.version || 1);
+                 return;
+             }
 
             if (job.status === "failed" || job.status === "stale") {
                 return;
@@ -1445,12 +1515,13 @@
         if (evt.type === "narration_artifact") {
             var turnId = evt.turn_id;
             if (!turnId) return;
-            if (turnId !== rpgState.currentTurnId) return;
 
-            renderTurnNarration(turnId, evt.text || "", {
-                usedLlm: !!evt.used_llm,
-                fallback: false,
-            });
+            renderTurnNarration(turnId, evt.text || "", evt.version);
+            return;
+        }
+
+        if (evt.type === "ambient_conversation_artifact" || evt.role === "ambient_narration") {
+            appendAmbientNarration(evt.text, evt.turn_id);
             return;
         }
 
@@ -1500,8 +1571,8 @@
                     try {
                         var evt = JSON.parse(part.slice(6));
                         if (evt.type === 'authoritative_result') {
-                            // Handle authoritative result - return immediately for snappier UI
                             finalData = evt;
+                            try { await reader.cancel(); } catch (_) {}
                             return evt;
                         } else if (evt.type === 'done') {
                             // Keep the authoritative payload if we already have it.
@@ -1820,18 +1891,13 @@
                 // Show narration pending
                 appendMessage({
                     type: 'narration',
-                    content: coerceText(data.fallback_narration) || "Generating narration...",
+                    role: 'turn_narration',
+                    narrationState: 'fallback',
+                    content: coerceText(
+                        data.fallback_narration || data.deterministic_fallback_narration
+                    ) || "Generating narration...",
                     turnId: turnId
                 });
-
-                // Bind placeholder node to this turn id for safe later replacement
-                var feed = el('rpgNarrativeFeed');
-                if (feed) {
-                    var msgs = feed.querySelectorAll('.rpg-msg--narration');
-                    if (msgs.length > 0) {
-                        msgs[msgs.length - 1].setAttribute('data-turn-id', turnId);
-                    }
-                }
 
                 // Background worker is server-driven now; use SSE for updates.
                 ensureNarrationSubscription(rpgState.sessionId);
@@ -1920,7 +1986,17 @@
 
         switch (msg.type) {
             case 'narration':
-                // Use marked.js if available for light markdown rendering
+                if (msg.turnId != null) {
+                    div.dataset.turnId = _turnKey(msg.turnId);
+                }
+                div.dataset.messageRole = msg.role || 'turn_narration';
+                if (msg.narrationState) {
+                    div.dataset.narrationState = msg.narrationState;
+                }
+                div.dataset.narrationVersion = String(
+                    msg.narrationVersion == null ? 0 : Number(msg.narrationVersion || 0)
+                );
+
                 var contentText = coerceText(msg.content);
                 div.innerHTML = (typeof marked !== 'undefined')
                     ? marked.parse(contentText)
