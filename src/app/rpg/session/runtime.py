@@ -706,10 +706,10 @@ def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, 
         perf = dict(runtime_state.get("performance") or {})
     fast = bool(perf.get("fast_turn_mode", False))
     defaults = _FAST_TURN_DEFAULTS if fast else {
-        "enable_action_advisory": True,
-        "enable_semantic_action_advisory": True,
+        "enable_action_advisory": False,
+        "enable_semantic_action_advisory": False,
         "enable_live_narration_llm": True,
-        "enable_narration_retry": True,
+        "enable_narration_retry": False,
         "compact_save": False,
     }
     result: Dict[str, Any] = {"fast_turn_mode": fast}
@@ -6525,6 +6525,7 @@ def _apply_turn_authoritative(
     runtime_state["tick"] = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
 
     summary = summarize_simulation_step(step_result)
+    summary_text = "\n\n".join(_safe_str(line).strip() for line in _safe_list(summary) if _safe_str(line).strip())
     runtime_state["last_turn_result"] = {
         "player_input": player_input,
         "action": action,
@@ -6622,7 +6623,7 @@ def _apply_turn_authoritative(
             "summary": summary,
             "presentation": build_runtime_presentation_payload(after_state),
             "response_length": _safe_str(runtime_state.get("runtime_settings", {}).get("response_length", "short")),
-            "deterministic_fallback_narration": summary,
+            "deterministic_fallback_narration": summary_text,
         },
         "narration_request": narration_request,
     }

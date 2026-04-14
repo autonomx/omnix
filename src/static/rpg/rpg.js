@@ -144,6 +144,17 @@
         return (v == null) ? '' : String(v);
     }
 
+    function coerceText(value) {
+        if (Array.isArray(value)) {
+            return value
+                .map(function (v) { return v == null ? '' : String(v).trim(); })
+                .filter(Boolean)
+                .join('\n\n');
+        }
+        if (value == null) return '';
+        return String(value);
+    }
+
     function _nonEmptySection(lines) {
         return _safeArray(lines).filter(Boolean);
     }
@@ -1301,10 +1312,12 @@
                     try {
                         var evt = JSON.parse(part.slice(6));
                         if (evt.type === 'authoritative_result') {
-                            // Handle authoritative result
+                            // Handle authoritative result - return immediately for snappier UI
                             finalData = evt;
+                            return evt;
                         } else if (evt.type === 'done') {
-                            finalData = evt;
+                            // Keep the authoritative payload if we already have it.
+                            if (!finalData) finalData = evt;
                         } else if (evt.type === 'error') {
                             throw new Error(evt.error || 'Stream error');
                         }
@@ -1332,9 +1345,10 @@
             msg = msgs[msgs.length - 1];
         }
 
+        var narrationText = coerceText(narration);
         msg.innerHTML = (typeof marked !== 'undefined')
-            ? marked.parse(narration)
-            : escapeHtml(narration).replace(/\n/g, '<br>');
+            ? marked.parse(narrationText)
+            : escapeHtml(narrationText).replace(/\n/g, '<br>');
         feed.scrollTop = feed.scrollHeight;
 
         // Speak narration
@@ -1486,10 +1500,12 @@
                     try {
                         var evt = JSON.parse(part.slice(6));
                         if (evt.type === 'authoritative_result') {
-                            // Handle authoritative result
+                            // Handle authoritative result - return immediately for snappier UI
                             finalData = evt;
+                            return evt;
                         } else if (evt.type === 'done') {
-                            finalData = evt;
+                            // Keep the authoritative payload if we already have it.
+                            if (!finalData) finalData = evt;
                         } else if (evt.type === 'error') {
                             throw new Error(evt.error || 'Stream error');
                         }
@@ -1802,7 +1818,11 @@
                 }
 
                 // Show narration pending
-                appendMessage({ type: 'narration', content: data.fallback_narration || "Generating narration...", turnId: turnId });
+                appendMessage({
+                    type: 'narration',
+                    content: coerceText(data.fallback_narration) || "Generating narration...",
+                    turnId: turnId
+                });
 
                 // Bind placeholder node to this turn id for safe later replacement
                 var feed = el('rpgNarrativeFeed');
@@ -1901,9 +1921,10 @@
         switch (msg.type) {
             case 'narration':
                 // Use marked.js if available for light markdown rendering
+                var contentText = coerceText(msg.content);
                 div.innerHTML = (typeof marked !== 'undefined')
-                    ? marked.parse(msg.content)
-                    : escapeHtml(msg.content).replace(/\n/g, '<br>');
+                    ? marked.parse(contentText)
+                    : escapeHtml(contentText).replace(/\n/g, '<br>');
                 break;
 
             case 'player':
