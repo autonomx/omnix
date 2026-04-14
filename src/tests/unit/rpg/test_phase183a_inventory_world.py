@@ -34,6 +34,8 @@ from app.rpg.items.item_stats import (
 from app.rpg.economy.currency import normalize_currency
 from app.rpg.economy.transactions import enrich_action_with_registry_price
 from app.rpg.economy.transaction_effects import apply_transaction_effects
+from app.rpg.economy.action_generator import build_menu_action
+from app.rpg.economy.menu_catalog import build_service_menu, build_shop_menu
 from app.rpg.items.world_items import (
     drop_world_item,
     ensure_world_item_state,
@@ -406,3 +408,24 @@ class TestCanonicalResources:
         player_state = effect_out["simulation_state"]["player_state"]
         assert player_state["lodging"] == "private_room"
         assert "rested" in player_state["statuses"]
+
+    def test_shop_menu_entry_generates_buy_action(self):
+        menu = build_shop_menu("general_store")
+        torch_entry = next(entry for entry in menu["entries"] if entry["item_id"] == "torch")
+
+        action = build_menu_action(torch_entry["action"])
+
+        assert action["action_type"] == "buy"
+        assert action["item_id"] == "torch"
+        assert action["currency_cost"] == {"gold": 0, "silver": 1, "copper": 0}
+
+    def test_service_menu_entry_generates_rent_room_action(self):
+        menu = build_service_menu("inn")
+        room_entry = next(entry for entry in menu["entries"] if entry.get("service_id") == "private_room")
+
+        action = build_menu_action(room_entry["action"])
+
+        assert action["action_type"] == "rent_room"
+        assert action["service_type"] == "inn"
+        assert action["service_id"] == "private_room"
+        assert action["currency_cost"] == {"gold": 0, "silver": 2, "copper": 0}

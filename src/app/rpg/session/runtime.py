@@ -157,6 +157,7 @@ from app.rpg.economy.transactions import (
     enrich_action_with_registry_price,
 )
 from app.rpg.economy.transaction_effects import apply_transaction_effects
+from app.rpg.economy.menu_catalog import build_available_transaction_menus
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
@@ -2143,6 +2144,42 @@ def _safe_str(value: Any) -> str:
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def _derive_transaction_context_tags(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> list[str]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+
+    tags: list[str] = []
+    seen = set()
+
+    def _add(value: Any) -> None:
+        text = _safe_str(value).strip().lower()
+        if text and text not in seen:
+            seen.add(text)
+            tags.append(text)
+
+    current_scene = _safe_dict(runtime_state.get("current_scene"))
+    scene_tags = _safe_list(current_scene.get("tags"))
+    for tag in scene_tags:
+        _add(tag)
+
+    for npc in _safe_list(runtime_state.get("npcs"))[:24]:
+        npc = _safe_dict(npc)
+        role = _safe_str(npc.get("role")).lower()
+        profession = _safe_str(npc.get("profession")).lower()
+        location_type = _safe_str(npc.get("location_type")).lower()
+        _add(role)
+        _add(profession)
+        _add(location_type)
+
+    scene_kind = _safe_str(current_scene.get("scene_type")).lower()
+    _add(scene_kind)
+
+    return tags[:16]
 
 
 def _stable_scene_beat_id(beat: Dict[str, Any]) -> str:
@@ -5813,6 +5850,9 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     inventory_state = _safe_dict(player_state.get("inventory_state"))
     equipment = _safe_dict(inventory_state.get("equipment"))
 
+    transaction_context_tags = _derive_transaction_context_tags(simulation_state, runtime_state)
+    transaction_menus = build_available_transaction_menus(transaction_context_tags)
+
     return {
         "success": True,
         "session_id": _safe_str(manifest.get("id")),
@@ -5855,6 +5895,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
             "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-12:],
         },
         "grounded_scene_context": _safe_dict(runtime_state.get("grounded_scene_context")),
+        "transaction_menus": transaction_menus,
     }
 
 
@@ -6011,6 +6052,9 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
     last_turn = _safe_dict(runtime_state.get("last_turn_result"))
     inventory_state = _safe_dict(player_state.get("inventory_state"))
     equipment = _safe_dict(inventory_state.get("equipment"))
+
+    transaction_context_tags = _derive_transaction_context_tags(simulation_state, runtime_state)
+    transaction_menus = build_available_transaction_menus(transaction_context_tags)
     
     return {
         "success": True,
@@ -6056,6 +6100,7 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
         "resource_changes": _safe_dict(last_turn.get("resource_changes")),
         "player_resources": _safe_dict(last_turn.get("player_resources")),
         "effect_result": _safe_dict(last_turn.get("effect_result")),
+        "transaction_menus": transaction_menus,
     }
 
 

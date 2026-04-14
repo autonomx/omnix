@@ -41,6 +41,7 @@ from app.rpg.session.narration_worker import (
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
+from app.rpg.economy.action_generator import build_menu_action
 
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
@@ -186,6 +187,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "response_length": _safe_str(raw_payload.get("response_length", "short")),
         # Presentation
         "presentation": _safe_dict(raw_payload.get("presentation")),
+        "transaction_menus": _safe_list(raw_payload.get("transaction_menus")),
         # Living-world ambient metadata (Phase 7.4)
         "ambient_updates": _safe_list(
             get_pending_ambient_updates(session, after_seq=0, limit=8)
@@ -206,6 +208,32 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     payload["active_conversations"] = conversation_payload.get("active_conversations", [])
     payload["recent_conversations"] = conversation_payload.get("recent_conversations", [])
     return payload
+
+
+@rpg_session_bp.post("/api/rpg/session/menu_action")
+async def post_rpg_menu_action(request: Request):
+    payload = await request.json() or {}
+    session_id = _safe_str(payload.get("session_id"))
+    action_payload = _safe_dict(payload.get("action"))
+
+    if not session_id:
+        return JSONResponse({"success": False, "error": "missing_session_id"}, status_code=400)
+    if not action_payload:
+        return JSONResponse({"success": False, "error": "missing_action"}, status_code=400)
+
+    action = build_menu_action(action_payload)
+
+    result = apply_turn(
+        session_id=session_id,
+        player_input="",
+        action=action,
+    )
+    if not result.get("ok"):
+        if result.get("error") == "session_not_found":
+            return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+        return JSONResponse({"ok": False, "error": "turn_failed", "details": result}, status_code=500)
+
+    return _build_turn_payload(result)
 
 
 @rpg_session_bp.post("/api/rpg/session/list")

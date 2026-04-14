@@ -366,6 +366,59 @@
         return parts.join(' ');
     }
 
+    function buildTransactionEntryLabel(entry) {
+        entry = (entry && typeof entry === 'object') ? entry : {};
+        var label = String(entry.label || 'Option');
+        var cost = formatCurrency(entry.currency_cost || {});
+        return cost ? (label + ' (' + cost + ')') : label;
+    }
+
+    function renderTransactionMenus(container, menus, sessionId) {
+        if (!container) return;
+        menus = Array.isArray(menus) ? menus : [];
+
+        if (!menus.length) {
+            container.innerHTML = '';
+            return;
+        }
+
+        var html = menus.map(function (menu, menuIndex) {
+            menu = menu || {};
+            var entries = Array.isArray(menu.entries) ? menu.entries : [];
+            var entriesHtml = entries.map(function (entry, entryIndex) {
+                var encoded = encodeURIComponent(JSON.stringify(entry.action || {}));
+                return (
+                    '<button class="rpg-transaction-btn" ' +
+                    'data-session-id="' + escapeHtml(String(sessionId || '')) + '" ' +
+                    'data-action="' + encoded + '">' +
+                    escapeHtml(buildTransactionEntryLabel(entry)) +
+                    '</button>'
+                );
+            }).join('');
+
+            return (
+                '<div class="rpg-transaction-menu">' +
+                    '<div class="rpg-transaction-menu-title">' + escapeHtml(String(menu.label || 'Services')) + '</div>' +
+                    '<div class="rpg-transaction-menu-entries">' + entriesHtml + '</div>' +
+                '</div>'
+            );
+        }).join('');
+
+        container.innerHTML = html;
+    }
+
+    async function submitTransactionMenuAction(sessionId, action) {
+        const response = await fetch('/api/rpg/session/menu_action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: sessionId,
+                action: action
+            })
+        });
+        return response.json();
+    }
+
     function describeTransactionMetadata(actionMetadata, requirements) {
         actionMetadata = (actionMetadata && typeof actionMetadata === 'object') ? actionMetadata : {};
         requirements = (requirements && typeof requirements === 'object') ? requirements : {};

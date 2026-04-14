@@ -46,3 +46,35 @@
     font-size: 0.85rem;
     line-height: 1.5;
 }
+
+.rpg-transaction-menus {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.rpg-transaction-menu {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.rpg-transaction-menu-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.rpg-transaction-menu-entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rpg-transaction-btn {
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+}
