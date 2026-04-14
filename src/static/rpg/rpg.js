@@ -382,6 +382,59 @@
         return 'Price: ' + priceText;
     }
 
+    function describeEffectResult(effectResult) {
+        effectResult = (effectResult && typeof effectResult === 'object') ? effectResult : {};
+        var parts = [];
+
+        var itemsAdded = Array.isArray(effectResult.items_added) ? effectResult.items_added : [];
+        if (itemsAdded.length) {
+            var labels = itemsAdded.map(function (item) {
+                item = item || {};
+                var qty = Number(item.qty || 1);
+                var name = String(item.name || item.item_id || 'Item');
+                return qty > 1 ? (name + ' x' + qty) : name;
+            });
+            parts.push('Received: ' + labels.join(', '));
+        }
+
+        var serviceEffects = (effectResult.service_effects && typeof effectResult.service_effects === 'object')
+            ? effectResult.service_effects
+            : {};
+
+        if (serviceEffects.lodging) {
+            parts.push('Lodging secured: ' + String(serviceEffects.lodging).replace(/_/g, ' '));
+        }
+
+        if (Array.isArray(serviceEffects.statuses_add) && serviceEffects.statuses_add.length) {
+            parts.push('Status: ' + serviceEffects.statuses_add.join(', '));
+        }
+
+        if (serviceEffects.restores && typeof serviceEffects.restores === 'object') {
+            var restoreParts = [];
+            Object.keys(serviceEffects.restores).forEach(function (key) {
+                var value = Number(serviceEffects.restores[key] || 0);
+                if (value !== 0) {
+                    restoreParts.push(key + ' ' + (value > 0 ? '+' : '') + value);
+                }
+            });
+            if (restoreParts.length) {
+                parts.push('Effects: ' + restoreParts.join(', '));
+            }
+        }
+
+        if (serviceEffects.repair && typeof serviceEffects.repair === 'object' && serviceEffects.repair.applied) {
+            var repairTarget = String(serviceEffects.repair.target_item_id || 'item');
+            var repairAmount = Number(serviceEffects.repair.amount || 0);
+            parts.push('Repaired: ' + repairTarget + ' +' + repairAmount);
+        }
+
+        if (serviceEffects.travel_flag) {
+            parts.push('Travel updated');
+        }
+
+        return parts.join(' • ');
+    }
+
     function buildBlockedActionMessage(payload) {
         payload = payload || {};
         if (!payload.blocked) return '';
@@ -1655,6 +1708,22 @@
                 if (update.player) {
                     updateState({ player: update.player });
                     renderPlayerPanel(update.player);
+                }
+
+                // Render transaction price info
+                const result = (data.resolved_result && typeof data.resolved_result === 'object')
+                    ? data.resolved_result
+                    : data;
+                const transactionText = describeTransactionMetadata(result.action_metadata, result.requirements);
+                const blockedMessage = buildBlockedActionMessage(result);
+                const effectText = describeEffectResult(result.effect_result);
+                
+                if (transactionText || blockedMessage || effectText) {
+                    const metaLines = [];
+                    if (transactionText) metaLines.push(transactionText);
+                    if (blockedMessage) metaLines.push(blockedMessage);
+                    if (effectText) metaLines.push(effectText);
+                    appendMessage({ type: 'system', content: metaLines.join('\n'), turnId: turnId });
                 }
 
                 // Show narration pending

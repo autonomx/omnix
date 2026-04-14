@@ -175,6 +175,7 @@ def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
         "resource_changes": _safe_dict(raw_payload.get("resource_changes")),
         "player_resources": _safe_dict(raw_payload.get("player_resources")),
+        "effect_result": _safe_dict(raw_payload.get("effect_result")),
         "action_metadata": _safe_dict(raw_payload.get("action_metadata")),
         "structured_narration": _safe_dict(raw_payload.get("structured_narration")),
         "speaker_turns": _safe_list(raw_payload.get("speaker_turns")),

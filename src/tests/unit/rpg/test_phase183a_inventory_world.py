@@ -33,6 +33,7 @@ from app.rpg.items.item_stats import (
 )
 from app.rpg.economy.currency import normalize_currency
 from app.rpg.economy.transactions import enrich_action_with_registry_price
+from app.rpg.economy.transaction_effects import apply_transaction_effects
 from app.rpg.items.world_items import (
     drop_world_item,
     ensure_world_item_state,
@@ -343,3 +344,65 @@ class TestCanonicalResources:
         assert out["result"]["blocked"] is True
         assert out["result"]["blocked_reason"] == "insufficient_currency"
         assert out["result"]["requirements"]["currency"] == {"gold": 0, "silver": 2, "copper": 0}
+
+    def test_registry_purchase_followed_by_effect_adds_item(self):
+        simulation_state = {
+            "player_state": {
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 0, "silver": 2, "copper": 0},
+                    "last_loot": [],
+                }
+            }
+        }
+        action = enrich_action_with_registry_price({
+            "action_type": "buy",
+            "item_id": "torch",
+        })
+
+        gated = _apply_action_resource_requirements(simulation_state, action)
+        assert gated["ok"] is True
+
+        effect_out = apply_transaction_effects(
+            gated["simulation_state"],
+            action,
+            {"transaction_kind": "item_purchase"},
+        )
+
+        inventory_state = effect_out["simulation_state"]["player_state"]["inventory_state"]
+        assert any(item["item_id"] == "torch" for item in inventory_state["items"])
+
+    def test_registry_service_followed_by_effect_updates_lodging(self):
+        simulation_state = {
+            "player_state": {
+                "resources": {"fatigue": 5, "hunger": 0, "thirst": 0},
+                "statuses": [],
+                "service_flags": {},
+                "lodging": "",
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 0, "silver": 3, "copper": 0},
+                    "last_loot": [],
+                },
+            }
+        }
+        action = enrich_action_with_registry_price({
+            "action_type": "rent_room",
+        })
+
+        gated = _apply_action_resource_requirements(simulation_state, action)
+        assert gated["ok"] is True
+
+        effect_out = apply_transaction_effects(
+            gated["simulation_state"],
+            action,
+            {"transaction_kind": "service_purchase"},
+        )
+
+        player_state = effect_out["simulation_state"]["player_state"]
+        assert player_state["lodging"] == "private_room"
+        assert "rested" in player_state["statuses"]

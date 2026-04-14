@@ -156,6 +156,7 @@ from app.rpg.economy.transactions import (
     build_transaction_metadata,
     enrich_action_with_registry_price,
 )
+from app.rpg.economy.transaction_effects import apply_transaction_effects
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
@@ -5550,6 +5551,10 @@ def _apply_authoritative_action(
             merged_action_metadata = _safe_dict(blocked_result.get("action_metadata"))
             merged_action_metadata.update(transaction_metadata)
             blocked_result["action_metadata"] = merged_action_metadata
+        blocked_result["effect_result"] = {
+            "items_added": [],
+            "service_effects": {},
+        }
         return {
             "simulation_state": gated_state,
             "result": blocked_result,
@@ -5564,6 +5569,17 @@ def _apply_authoritative_action(
         merged_action_metadata = _safe_dict(result.get("action_metadata"))
         merged_action_metadata.update(transaction_metadata)
         result["action_metadata"] = merged_action_metadata
+
+    effect_out = apply_transaction_effects(
+        next_state,
+        action,
+        _safe_dict(result.get("action_metadata")),
+    )
+    next_state = _safe_dict(effect_out.get("simulation_state")) or next_state
+    effect_result = _safe_dict(effect_out.get("effect_result"))
+
+    if effect_result:
+        result["effect_result"] = effect_result
 
     if gated_result:
         merged_resource_changes = _safe_dict(gated_result.get("resource_changes"))
@@ -5832,6 +5848,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "skill_level_ups": _safe_list(turn_result.get("skill_level_ups")),
         "resource_changes": _safe_dict(turn_result.get("resource_changes")),
         "player_resources": _safe_dict(turn_result.get("player_resources")),
+        "effect_result": _safe_dict(turn_result.get("effect_result")),
         "presentation": build_runtime_presentation_payload(simulation_state),
         "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
         "world_events_summary": {
@@ -6038,6 +6055,7 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
         "xp_result": _safe_dict(last_turn.get("xp_result")),
         "resource_changes": _safe_dict(last_turn.get("resource_changes")),
         "player_resources": _safe_dict(last_turn.get("player_resources")),
+        "effect_result": _safe_dict(last_turn.get("effect_result")),
     }
 
 
