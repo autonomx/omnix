@@ -366,6 +366,35 @@
         return parts.join(' ');
     }
 
+    function describeTransactionMetadata(actionMetadata, requirements) {
+        actionMetadata = (actionMetadata && typeof actionMetadata === 'object') ? actionMetadata : {};
+        requirements = (requirements && typeof requirements === 'object') ? requirements : {};
+        var currency = (requirements.currency && typeof requirements.currency === 'object') ? requirements.currency : null;
+        var kind = String(actionMetadata.transaction_kind || '');
+
+        if (!currency) return '';
+
+        var priceText = formatCurrency(currency);
+        if (!priceText) return '';
+
+        if (kind === 'item_purchase') return 'Cost: ' + priceText;
+        if (kind === 'service_purchase') return 'Service cost: ' + priceText;
+        return 'Price: ' + priceText;
+    }
+
+    function buildBlockedActionMessage(payload) {
+        payload = payload || {};
+        if (!payload.blocked) return '';
+
+        if (payload.blocked_reason === 'insufficient_currency') {
+            var reqCurrency = (((payload.requirements || {}).currency) || {});
+            var haveCurrency = (((payload.player_resources || {}).currency) || {});
+            return 'Not enough money. Need ' + formatCurrency(reqCurrency) + ', have ' + formatCurrency(haveCurrency) + '.';
+        }
+
+        return 'That action cannot be completed.';
+    }
+
     // ─── TTS / Voice ───────────────────────────────────────────────────────────
 
     /** Detect a character's probable gender from their name. */

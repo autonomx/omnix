@@ -32,6 +32,7 @@ from app.rpg.items.item_stats import (
     normalize_item_stats,
 )
 from app.rpg.economy.currency import normalize_currency
+from app.rpg.economy.transactions import enrich_action_with_registry_price
 from app.rpg.items.world_items import (
     drop_world_item,
     ensure_world_item_state,
@@ -296,3 +297,49 @@ class TestCanonicalResources:
         assert out["ok"] is False
         assert out["result"]["blocked"] is True
         assert out["result"]["blocked_reason"] == "insufficient_currency"
+
+    def test_buy_action_uses_registry_price_before_spend_gate(self):
+        simulation_state = {
+            "player_state": {
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 0, "silver": 2, "copper": 0},
+                    "last_loot": [],
+                }
+            }
+        }
+        action = enrich_action_with_registry_price({
+            "action_type": "buy",
+            "item_id": "torch",
+        })
+
+        out = _apply_action_resource_requirements(simulation_state, action)
+        inventory_state = out["simulation_state"]["player_state"]["inventory_state"]
+
+        assert out["ok"] is True
+        assert normalize_currency(inventory_state["currency"]) == {"gold": 0, "silver": 1, "copper": 0}
+
+    def test_rent_room_action_blocks_from_registry_price_when_insufficient(self):
+        simulation_state = {
+            "player_state": {
+                "inventory_state": {
+                    "items": [],
+                    "equipment": {},
+                    "capacity": 50,
+                    "currency": {"gold": 0, "silver": 1, "copper": 0},
+                    "last_loot": [],
+                }
+            }
+        }
+        action = enrich_action_with_registry_price({
+            "action_type": "rent_room",
+        })
+
+        out = _apply_action_resource_requirements(simulation_state, action)
+
+        assert out["ok"] is False
+        assert out["result"]["blocked"] is True
+        assert out["result"]["blocked_reason"] == "insufficient_currency"
+        assert out["result"]["requirements"]["currency"] == {"gold": 0, "silver": 2, "copper": 0}

@@ -152,6 +152,10 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
+from app.rpg.economy.transactions import (
+    build_transaction_metadata,
+    enrich_action_with_registry_price,
+)
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
@@ -5522,6 +5526,7 @@ def _apply_authoritative_action(
     action: Dict[str, Any],
 ) -> Dict[str, Any]:
     action_type = _safe_str(action.get("action_type")).strip()
+    action = enrich_action_with_registry_price(action)
 
     if action_type == "pickup_item":
         return _pickup_item_action(simulation_state, action)
@@ -5539,14 +5544,26 @@ def _apply_authoritative_action(
     gated_result = _safe_dict(gated.get("result"))
 
     if gated.get("ok") is False:
+        blocked_result = dict(gated_result)
+        transaction_metadata = build_transaction_metadata(action)
+        if transaction_metadata:
+            merged_action_metadata = _safe_dict(blocked_result.get("action_metadata"))
+            merged_action_metadata.update(transaction_metadata)
+            blocked_result["action_metadata"] = merged_action_metadata
         return {
             "simulation_state": gated_state,
-            "result": gated_result,
+            "result": blocked_result,
         }
 
     resolved = resolve_player_action(gated_state, action)
     next_state = _safe_dict(resolved.get("simulation_state")) or gated_state
     result = _safe_dict(resolved.get("result"))
+
+    transaction_metadata = build_transaction_metadata(action)
+    if transaction_metadata:
+        merged_action_metadata = _safe_dict(result.get("action_metadata"))
+        merged_action_metadata.update(transaction_metadata)
+        result["action_metadata"] = merged_action_metadata
 
     if gated_result:
         merged_resource_changes = _safe_dict(gated_result.get("resource_changes"))
