@@ -5,6 +5,7 @@ Legacy /api/rpg/games* routes are retired from active registration.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import queue
@@ -469,7 +470,6 @@ async def get_rpg_session_narration_status(request: Request):
             started = _safe_str(job.get("started_at"))
             if started:
                 try:
-                    import datetime
                     started_dt = datetime.datetime.fromisoformat(
                         started.replace("Z", "+00:00")
                     )

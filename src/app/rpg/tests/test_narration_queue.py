@@ -1,4 +1,5 @@
 """Tests for narration job queue functionality."""
+import copy
 from unittest.mock import patch, call
 
 from fastapi import FastAPI
@@ -483,7 +484,6 @@ def test_worker_token_claim_prevents_duplicates():
     worker_token), a second worker call returns 'claimed_elsewhere'.
     """
     session_id = "test_session"
-    import copy
 
     base_session = {
         "session_id": session_id,
