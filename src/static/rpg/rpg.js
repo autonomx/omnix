@@ -190,6 +190,69 @@
         });
     }
 
+    function _conversationKey(conversationId, tick, speaker, target) {
+        return [
+            conversationId || '',
+            tick == null ? '' : String(tick),
+            speaker || '',
+            target || ''
+        ].join('|');
+    }
+
+    window.__rpg_seen_conversations = window.__rpg_seen_conversations || new Set();
+
+    function hasConversationMessage(conversationKey) {
+        var feed = el('rpgNarrativeFeed');
+        if (!feed || !conversationKey) return false;
+        return !!feed.querySelector(
+            '.rpg-msg--conversation[data-conversation-key="' + conversationKey.replace(/"/g, '&quot;') + '"]'
+        );
+    }
+
+    function trimConversationMessages(maxCount) {
+        var feed = el('rpgNarrativeFeed');
+        if (!feed) return;
+        var msgs = feed.querySelectorAll('.rpg-msg--conversation');
+        while (msgs.length > maxCount) {
+            msgs[0].remove();
+            msgs = feed.querySelectorAll('.rpg-msg--conversation');
+        }
+    }
+
+    function appendNpcConversation(evt) {
+        var line = coerceText(evt.line || evt.text);
+        if (!line) return;
+
+        var speaker = coerceText(evt.speaker || 'Someone');
+        var target = coerceText(evt.target || '');
+        var conversationKey = _conversationKey(
+            evt.conversation_id,
+            evt.tick,
+            speaker,
+            target
+        );
+
+        if (hasConversationMessage(conversationKey)) {
+            return;
+        }
+        if (window.__rpg_seen_conversations.has(conversationKey)) {
+            return;
+        }
+        window.__rpg_seen_conversations.add(conversationKey);
+
+        appendMessage({
+            type: 'conversation',
+            role: 'npc_conversation',
+            turnId: evt.turn_id,
+            tick: evt.tick,
+            conversationKey: conversationKey,
+            speaker: speaker,
+            target: target,
+            content: line
+        });
+        trimConversationMessages(24);
+    }
+
 
 
     function _nonEmptySection(lines) {
@@ -1520,6 +1583,11 @@
             return;
         }
 
+        if (evt.type === "npc_conversation_artifact" || evt.role === "npc_conversation") {
+            appendNpcConversation(evt);
+            return;
+        }
+
         if (evt.type === "ambient_conversation_artifact" || evt.role === "ambient_narration") {
             appendAmbientNarration(evt.text, evt.turn_id);
             return;
@@ -2006,6 +2074,29 @@
             case 'player':
                 div.innerHTML =
                     '<span class="rpg-msg-player-icon">\u203A</span> <em>' + escapeHtml(msg.content) + '</em>';
+                break;
+
+            case 'conversation':
+                if (msg.turnId != null) {
+                    div.dataset.turnId = _turnKey(msg.turnId);
+                }
+                if (msg.tick != null) {
+                    div.dataset.tick = String(msg.tick);
+                }
+                div.dataset.messageRole = msg.role || 'npc_conversation';
+                if (msg.conversationKey) {
+                    div.dataset.conversationKey = msg.conversationKey;
+                }
+                div.classList.add('rpg-msg--conversation');
+
+                var speakerText = coerceText(msg.speaker || 'Someone');
+                var targetText = coerceText(msg.target || '');
+                var lineText = coerceText(msg.content);
+                var header = targetText
+                    ? '<div class="rpg-conversation-header">' + escapeHtml(speakerText) + ' → ' + escapeHtml(targetText) + '</div>'
+                    : '<div class="rpg-conversation-header">' + escapeHtml(speakerText) + '</div>';
+                var body = '<div class="rpg-conversation-line">' + escapeHtml(lineText).replace(/\n/g, '<br>') + '</div>';
+                div.innerHTML = header + body;
                 break;
 
             case 'event':

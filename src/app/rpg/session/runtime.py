@@ -6807,20 +6807,42 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         artifact = _safe_dict(result.get("artifact"))
         job_kind = _safe_str(_safe_dict(queued_job).get("job_kind")).strip() or "player_turn"
         if job_kind == "ambient_conversation":
-            publish_narration_event(
-                session_id,
-                {
+            speaker = _safe_str(artifact.get("speaker"))
+            target = _safe_str(artifact.get("target"))
+            line = _safe_str(artifact.get("line") or artifact.get("text") or artifact.get("narration"))
+            conversation_id = _safe_str(artifact.get("conversation_id"))
+            if not conversation_id and (speaker or target):
+                def _norm(x):
+                    return _safe_str(x).strip().lower().replace(" ", "_")
+
+                speaker_key = _norm(speaker) or "unknown"
+                target_key = _norm(target) or "unknown"
+                conversation_id = f"conv_{turn_id}_{speaker_key}_{target_key}"
+
+            if speaker or target:
+                event_bus.publish("npc_conversation_artifact", {
+                    "type": "npc_conversation_artifact",
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "role": "npc_conversation",
+                    "conversation_id": conversation_id,
+                    "tick": artifact.get("tick"),
+                    "speaker": speaker,
+                    "target": target,
+                    "line": line,
+                    "text": line,
+                    "used_llm": bool(artifact.get("used_llm")),
+                })
+            else:
+                event_bus.publish("ambient_conversation_artifact", {
                     "type": "ambient_conversation_artifact",
                     "session_id": session_id,
                     "turn_id": turn_id,
                     "role": "ambient_narration",
                     "tick": artifact.get("tick"),
-                    "text": _safe_str(artifact.get("narration")),
+                    "text": _safe_str(artifact.get("narration") or line),
                     "used_llm": bool(artifact.get("used_llm")),
-                    "speaker_id": _safe_str(_safe_dict(_safe_dict(queued_job).get("narration_request")).get("narration_context", {}).get("speaker_id")),
-                    "thread_id": _safe_str(_safe_dict(_safe_dict(queued_job).get("narration_request")).get("narration_context", {}).get("thread_id")),
-                },
-            )
+                })
         else:
             publish_narration_event(
                 session_id,
