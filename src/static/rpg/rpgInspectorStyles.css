@@ -926,3 +926,51 @@
     font-size: 14px;
     line-height: 1.45;
 }
+
+.rpg-msg--conversation-thread {
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-top: 10px;
+    background: rgba(255,255,255,0.03);
+}
+
+.rpg-conversation-thread-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.rpg-conversation-thread-toggle {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    opacity: 0.8;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+}
+
+.rpg-conversation-thread-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.rpg-conversation-thread-meta {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-left: auto;
+}
+
+.rpg-conversation-thread-body {
+    display: block;
+}
+
+.rpg-msg--conversation-thread[data-collapsed="true"] .rpg-conversation-thread-header {
+    margin-bottom: 0;
+}
+
+.rpg-msg--conversation-thread .rpg-msg--conversation {
+    margin-top: 6px;
+}
