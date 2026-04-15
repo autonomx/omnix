@@ -197,15 +197,19 @@ var AdventureBuilder = (function () {
     function _renderFooter() {
         var footer = overlayEl.querySelector('#abFooter');
         var html = '';
+        html += '<div>';
+        html += '<button class="ab-btn ab-btn-secondary" id="abSaveDraft">\uD83D\uDCBE Save Draft</button>';
+        html += '</div>';
+        html += '<div class="ab-footer-right">';
         if (currentStep > 1) {
             html += '<button class="ab-btn ab-btn-secondary" id="abPrev">\u2190 Back</button>';
         }
-        html += '<button class="ab-btn ab-btn-secondary" id="abSaveDraft">\uD83D\uDCBE Save Draft</button>';
         if (currentStep < STEP_COUNT) {
             html += '<button class="ab-btn ab-btn-primary" id="abNext">Next \u2192</button>';
         } else {
             html += '<button class="ab-btn ab-btn-launch" id="abLaunch" disabled>\u2694\uFE0F Launch Adventure</button>';
         }
+        html += '</div>';
         footer.innerHTML = html;
 
         var prevBtn = footer.querySelector('#abPrev');

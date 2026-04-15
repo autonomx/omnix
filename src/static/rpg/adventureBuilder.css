@@ -19,8 +19,9 @@
     background: var(--bg-color, #1e1e2e);
     color: var(--text-color, #e0e0e0);
     border-radius: 14px;
-    width: min(720px, 95vw);
-    max-height: 90vh;
+    width: min(1200px, 98vw);
+    min-width: min(900px, 95vw);
+    max-height: 95vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
@@ -33,7 +34,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 20px 32px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -56,20 +57,23 @@
 
 .ab-progress {
     display: flex;
-    gap: 4px;
-    padding: 10px 20px;
+    gap: 8px;
+    padding: 14px 32px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .ab-step-dot {
     flex: 1;
     text-align: center;
-    padding: 6px 4px;
-    font-size: 0.8rem;
-    border-radius: 6px;
+    padding: 8px 6px;
+    font-size: 0.82rem;
+    border-radius: 8px;
     cursor: pointer;
     background: rgba(255, 255, 255, 0.04);
-    transition: background 0.15s;
+    transition: background 0.15s, transform 0.1s;
+}
+.ab-step-dot:hover {
+    transform: translateY(-1px);
 }
 .ab-step-dot:hover { background: rgba(255, 255, 255, 0.1); }
 .ab-step-done { background: rgba(100, 200, 100, 0.15); color: #8f8; }
@@ -80,16 +84,17 @@
 .ab-body {
     flex: 1;
     overflow-y: auto;
-    padding: 16px 20px;
+    padding: 24px 32px;
 }
 
 .ab-section {
-    margin-bottom: 20px;
+    margin-bottom: 28px;
 }
 .ab-section h4 {
-    margin: 0 0 8px;
-    font-size: 1rem;
-    color: rgba(255, 255, 255, 0.85);
+    margin: 0 0 12px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .ab-hint {
@@ -114,14 +119,18 @@
 .ab-input, .ab-textarea, .ab-select {
     display: block;
     width: 100%;
-    margin-top: 4px;
-    padding: 8px 10px;
+    margin-top: 6px;
+    padding: 10px 14px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
+    border-radius: 8px;
     color: inherit;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ab-input:focus, .ab-textarea:focus, .ab-select:focus {
+    box-shadow: 0 0 0 3px rgba(100, 150, 255, 0.1);
 }
 .ab-input:focus, .ab-textarea:focus, .ab-select:focus {
     outline: none;
@@ -147,14 +156,18 @@
 }
 
 .ab-tpl-card {
-    flex: 0 0 160px;
-    padding: 14px;
+    flex: 1 1 220px;
+    min-width: 200px;
+    padding: 20px 16px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
     text-align: center;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.ab-tpl-card:hover {
+    transform: translateY(-2px);
 }
 .ab-tpl-card:hover {
     background: rgba(255, 255, 255, 0.08);
@@ -239,15 +252,20 @@
 .ab-entity-card {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    margin-bottom: 8px;
+    border-radius: 10px;
+    margin-bottom: 12px;
     overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ab-entity-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .ab-entity-header {
     display: flex;
     align-items: center;
-    padding: 10px 12px;
+    padding: 14px 16px;
     cursor: pointer;
 }
 
@@ -348,19 +366,28 @@
 
 .ab-footer {
     display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    padding: 12px 20px;
+    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 32px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ab-footer-right {
+    display: flex;
+    gap: 10px;
 }
 
 .ab-btn {
-    padding: 8px 18px;
+    padding: 10px 22px;
     border: none;
-    border-radius: 6px;
-    font-size: 0.88rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.15s, transform 0.1s;
+}
+.ab-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
 }
 .ab-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
