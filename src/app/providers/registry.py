@@ -185,6 +185,13 @@ class ProviderRegistry:
         if provider_config:
             final_config = provider_config
         elif config:
+            extra_params = config.get("extra_params", {})
+            
+            # Move known top-level params to extra_params if they exist in config
+            for param in ["thinking_budget", "context_size"]:
+                if param in config:
+                    extra_params[param] = config[param]
+            
             final_config = ProviderConfig(
                 provider_type=provider_name,
                 api_key=config.get("api_key"),
@@ -192,7 +199,7 @@ class ProviderRegistry:
                 model=config.get("model"),
                 timeout=config.get("timeout", 300),
                 max_retries=config.get("max_retries", 3),
-                extra_params=config.get("extra_params", {})
+                extra_params=extra_params
             )
         else:
             # Use empty config, provider should provide defaults

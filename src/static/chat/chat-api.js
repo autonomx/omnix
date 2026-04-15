@@ -94,7 +94,8 @@ async function sendMessage() {
         }
     };
     
-    const useDirectMode = document.getElementById('lmstudioDirect')?.checked;
+    // Never use direct mode for non-LMStudio providers
+    const useDirectMode = document.getElementById('lmstudioDirect')?.checked && providerSelect?.value === 'lmstudio';
     const lmstudioBaseUrl = document.getElementById('lmstudioUrl')?.value || 'http://localhost:1234';
     const endpoint = useDirectMode ? `${lmstudioBaseUrl}/v1/chat/completions` : '/api/chat/stream';
     let isDirectLMStudio = useDirectMode;

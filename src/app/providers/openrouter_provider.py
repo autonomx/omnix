@@ -76,9 +76,17 @@ class OpenRouterProvider(BaseProvider):
             headers["X-Title"] = "Omnix"
         
         try:
-            response = requests.request(method, url, headers=headers, timeout=self.config.timeout, **kwargs)
+            response = requests.request(method, url, headers=headers, **kwargs)
             response.raise_for_status()
             return response
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None:
+                try:
+                    error_data = e.response.json()
+                    print(f"OpenRouter API Error {e.response.status_code}: {error_data}")
+                except:
+                    print(f"OpenRouter API Error {e.response.status_code}: {e.response.text}")
+            raise
         except requests.exceptions.ConnectionError as e:
             raise ConnectionError(f"Failed to connect to OpenRouter at {url}: {e}")
         except requests.exceptions.Timeout as e:
@@ -131,7 +139,7 @@ class OpenRouterProvider(BaseProvider):
         }
         
         # Add optional parameters
-        optional_params = ["temperature", "top_p", "max_tokens", "top_k", "presence_penalty", "frequency_penalty"]
+        optional_params = ["temperature", "top_p", "max_tokens", "top_k", "presence_penalty", "frequency_penalty", "thinking"]
         for key in optional_params:
             if key in kwargs:
                 payload[key] = kwargs[key]
@@ -139,9 +147,12 @@ class OpenRouterProvider(BaseProvider):
                 payload[key] = self.config.extra_params[key]
         
         # Handle thinking budget (OpenRouter's extra_options)
-        thinking_budget = kwargs.get('thinking_budget', self.config.extra_params.get('thinking_budget', 0))
+        thinking_budget = kwargs.get('thinking_budget', getattr(self.config, 'thinking_budget', self.config.extra_params.get('thinking_budget', 0)))
         if thinking_budget and thinking_budget > 0:
-            payload["extra_options"] = {"max_tokens": thinking_budget}
+            payload["max_tokens"] = thinking_budget
+            # For reasoning models like Elephant Alpha
+            if 'thinking' not in payload:
+                payload["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
         
         # Make request
         if stream:
@@ -198,21 +209,24 @@ class OpenRouterProvider(BaseProvider):
                 if data_str == '[DONE]':
                     break
                     
-                try:
-                    import json
-                    data = json.loads(data_str)
-                    if not isinstance(data, dict):
-                        continue
-                        
-                    delta = data.get('choices', [{}])[0].get('delta', {})
-                    
-                    yield ChatResponse(
-                        content=delta.get('content', ''),
-                        model=payload.get('model', ''),
-                        thinking=delta.get('reasoning'),
-                        reasoning=delta.get('reasoning'),
-                        raw_response=data
-                    )
+        try:
+            import json
+            data = json.loads(data_str)
+            if not isinstance(data, dict):
+                continue
+            
+            delta = data.get('choices', [{}])[0].get('delta', {})
+            
+            # OpenRouter uses 'thinking' field for Elephant Alpha models
+            thinking = delta.get('reasoning') or delta.get('thinking')
+            
+            yield ChatResponse(
+                content=delta.get('content', ''),
+                model=payload.get('model', ''),
+                thinking=thinking,
+                reasoning=thinking,
+                raw_response=data
+            )
                 except (ValueError, KeyError, IndexError):
                     continue
                     
@@ -270,9 +284,10 @@ class OpenRouterProvider(BaseProvider):
             # Test with models endpoint
             response = self._make_request('get', '/models', timeout=5)
             return response.status_code == 200
-        except AuthenticationError:
-            raise  # Re-raise auth errors - API key is invalid
-        except Exception:
+        except Exception as e:
+            print(f"OpenRouter connection test failed: {type(e).__name__}: {e}")
+            if isinstance(e, AuthenticationError):
+                raise
             return False
     
     def get_config_schema(self) -> Dict[str, Any]:
