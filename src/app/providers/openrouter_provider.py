@@ -176,8 +176,8 @@ class OpenRouterProvider(BaseProvider):
         message = choices[0].get('message', {})
         content = message.get('content', '')
         
-        # OpenRouter uses 'reasoning' field for thinking
-        thinking = message.get('reasoning')
+        # OpenRouter uses 'reasoning' or 'thinking' field
+        thinking = message.get('reasoning') or message.get('thinking')
         
         return ChatResponse(
             content=content,
@@ -209,24 +209,24 @@ class OpenRouterProvider(BaseProvider):
                 if data_str == '[DONE]':
                     break
                     
-        try:
-            import json
-            data = json.loads(data_str)
-            if not isinstance(data, dict):
-                continue
-            
-            delta = data.get('choices', [{}])[0].get('delta', {})
-            
-            # OpenRouter uses 'thinking' field for Elephant Alpha models
-            thinking = delta.get('reasoning') or delta.get('thinking')
-            
-            yield ChatResponse(
-                content=delta.get('content', ''),
-                model=payload.get('model', ''),
-                thinking=thinking,
-                reasoning=thinking,
-                raw_response=data
-            )
+                try:
+                    import json
+                    data = json.loads(data_str)
+                    if not isinstance(data, dict):
+                        continue
+                    
+                    delta = data.get('choices', [{}])[0].get('delta', {})
+                    
+                    # OpenRouter uses 'thinking' field for Elephant Alpha models
+                    thinking = delta.get('reasoning') or delta.get('thinking')
+                    
+                    yield ChatResponse(
+                        content=delta.get('content', ''),
+                        model=payload.get('model', ''),
+                        thinking=thinking,
+                        reasoning=thinking,
+                        raw_response=data
+                    )
                 except (ValueError, KeyError, IndexError):
                     continue
                     

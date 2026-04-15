@@ -81,7 +81,10 @@ class OpenAICompatibleProvider(BaseProvider):
             headers.update(custom_headers)
         
         try:
-            response = requests.request(method, url, headers=headers, timeout=self.config.timeout, **kwargs)
+            # Don't override timeout if already provided in kwargs
+            if 'timeout' not in kwargs:
+                kwargs['timeout'] = self.config.timeout
+            response = requests.request(method, url, headers=headers, **kwargs)
             response.raise_for_status()
             return response
         except requests.exceptions.ConnectionError as e:
