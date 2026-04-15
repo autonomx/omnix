@@ -71,7 +71,7 @@ def adapt_session_to_frontend(session: dict[str, Any]) -> dict[str, Any]:
     response = {
         "response_version": ADVENTURE_START_RESPONSE_VERSION,
         "success": True,
-        "session_id": manifest.get("id"),
+        "session_id": manifest.get("session_id"),
         "title": manifest.get("title"),
         "opening": runtime_state.get("opening") or "",
         "narration": runtime_state.get("opening") or "",

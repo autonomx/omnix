@@ -1576,7 +1576,7 @@
 
     async function apiEnsureSessionReady(sessionId) {
         var sid = _safeStr(sessionId).trim();
-        if (!sid || sid === 'session:unknown') {
+        if (!sid) {
             return {
                 ok: false,
                 error: 'session_id_required',
@@ -2239,7 +2239,7 @@
         async function doSendTurn(sid) {
             var d;
             // Always use streaming endpoint exclusively
-            if (!sid || sid === 'session:unknown') return buildTurnClientError('session_id_required', { sessionId: sid });
+            if (!sid) return buildTurnClientError('session_id_required', { sessionId: sid });
             try {
                 if (structuredAction) {
                     d = await apiSendTurnStreamWithAction(sid, input, structuredAction, onToken);
@@ -2300,25 +2300,19 @@
                 throw new Error('server returned empty session id');
             }
 
-            // Verify the backend can immediately resolve the canonical session.
-            var ready = await apiEnsureSessionReady(newSessionId);
-            if (!ready.ok) {
-                throw new Error(ready.error || 'session_not_found');
-            }
-
-            applyCreatedGameSession(newSessionId, ready.game || created);
+            applyCreatedGameSession(newSessionId, created);
             renderOpeningIfPresent(created);
             return {
                 sessionId: newSessionId,
                 created: created,
-                hydrated: ready.game || created,
+                hydrated: created,
             };
         }
 
         try {
             var data;
 
-            if (!rpgState.sessionId) {
+            if (!rpgState.sessionId || rpgState.sessionId === 'session:unknown') {
                 let retried = false;
                 while (true) {
                     setLoading(true);
@@ -2327,7 +2321,7 @@
                         setLoading(false);
 
                         data = await doSendTurn(started.sessionId);
-                        if (data && data.type === 'error' && data.error === 'session_not_found' && !retried) {
+                        if (data && data.type === 'error' && (data.error === 'session_not_found' || data.error === 'session_id_required') && !retried) {
                             retried = true;
                             updateState({ sessionId: null });
                             localStorage.removeItem(STORAGE_KEY);
@@ -2351,7 +2345,7 @@
             } else {
                 // Subsequent turns – retry with a fresh session if the stored one expired
                 data = await doSendTurn(rpgState.sessionId);
-                
+
                 if (data.type === 'error' && data.error === 'session_not_found') {
                     updateState({ sessionId: null });
                     localStorage.removeItem(STORAGE_KEY);
@@ -4388,10 +4382,12 @@
 
         // Restore persisted session id (will retry fresh session on first failure)
         var storedId = localStorage.getItem(STORAGE_KEY);
-        if (storedId) updateState({ sessionId: storedId });
-
-        // Hydrate UI from snapshot (prevents blank flash on reload)
-        if (rpgState.sessionId) {
+        if (storedId && storedId !== 'session:unknown') {
+            updateState({ sessionId: storedId });
+            // Hydrate UI from snapshot (prevents blank flash on reload)
+            hydrateFromSnapshot();
+        } else {
+            // Try to hydrate from snapshot even without valid sessionId
             hydrateFromSnapshot();
         }
 
