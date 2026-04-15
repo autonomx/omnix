@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+import time
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -15,34 +17,32 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.rpg.ai.semantic_state_change_capture import (
     capture_semantic_state_change_proposals_for_session,
 )
+from app.rpg.economy.action_generator import build_menu_action
 from app.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
     get_pending_ambient_updates,
 )
 from app.rpg.session.durable_store import CorruptSessionPayloadError
+from app.rpg.session.narration_worker import (
+    ensure_narration_worker_running,
+    signal_narration_work,
+    subscribe_narration_events,
+    unsubscribe_narration_events,
+)
 from app.rpg.session.runtime import (
     _apply_turn_authoritative,
     _enqueue_narration_request,
-    process_next_narration_job,
     _normalize_runtime_settings,
     apply_idle_ticks,
     apply_resume_catchup,
     apply_turn,
     build_frontend_bootstrap_payload,
     load_runtime_session,
+    process_next_narration_job,
     save_runtime_session,
-)
-import queue
-import time
-
-from app.rpg.session.narration_worker import (
-    ensure_narration_worker_running,
-    subscribe_narration_events,
-    unsubscribe_narration_events,
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
-from app.rpg.economy.action_generator import build_menu_action
 
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
@@ -455,6 +455,30 @@ async def get_rpg_session_narration_status(request: Request):
         return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
 
     runtime_state = _safe_dict(session.get("runtime_state"))
+    job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
+    artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+    job_status = _safe_str(job.get("status")).strip().lower()
+
+    # Self-heal queued narration jobs so polling can recover even if the worker
+    # missed a wake-up or the SSE channel never opened on the client.
+    if job and not artifact and job_status == "queued":
+        _logger.info("Re-signaling queued narration job", extra={
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "job_status": job_status,
+        })
+        try:
+            ensure_narration_worker_running()
+            signal_narration_work(session_id)
+        except Exception:
+            _logger.exception("Failed to re-signal queued narration work", extra={
+                "session_id": session_id,
+                "turn_id": turn_id,
+            })
+
+    # Refresh after any re-signal so the client sees the latest status.
+    session = load_runtime_session(session_id)
+    runtime_state = _safe_dict((session or {}).get("runtime_state"))
     job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
     artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
 

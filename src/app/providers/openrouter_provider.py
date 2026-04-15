@@ -18,7 +18,6 @@ from .base import (
     ModelInfo,
     ModelNotFoundError,
     ProviderCapability,
-    ProviderConfig,
 )
 
 
@@ -76,7 +75,14 @@ class OpenRouterProvider(BaseProvider):
             headers["X-Title"] = "Omnix"
         
         try:
+            # Add default timeout if not provided
+            if 'timeout' not in kwargs:
+                kwargs['timeout'] = 60  # 60 seconds timeout
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Making request to {url} with timeout {kwargs.get('timeout', 'default')}")
             response = requests.request(method, url, headers=headers, **kwargs)
+            logger.info(f"Request to {url} completed with status {response.status_code}")
             response.raise_for_status()
             return response
         except requests.exceptions.HTTPError as e:
@@ -84,7 +90,7 @@ class OpenRouterProvider(BaseProvider):
                 try:
                     error_data = e.response.json()
                     print(f"OpenRouter API Error {e.response.status_code}: {error_data}")
-                except:
+                except Exception:
                     print(f"OpenRouter API Error {e.response.status_code}: {e.response.text}")
             raise
         except requests.exceptions.ConnectionError as e:
@@ -155,6 +161,9 @@ class OpenRouterProvider(BaseProvider):
                 payload["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
         
         # Make request
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"OpenRouter chat_completion called with model {payload.get('model')} for {len(messages)} messages")
         if stream:
             return self._stream_completion(payload)
         else:

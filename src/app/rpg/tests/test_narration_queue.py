@@ -1,6 +1,14 @@
 """Tests for narration job queue functionality."""
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, call
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.rpg.session.runtime import (
+    apply_turn,
+    process_next_narration_job,
+)
+from app.rpg.api.rpg_session_routes import rpg_session_bp
+from app.rpg.session.narration_worker import signal_narration_work, ensure_narration_worker_running
 
 from app.rpg.session.runtime import (
     apply_turn,
@@ -460,6 +468,55 @@ def test_enqueue_signals_worker_manager():
         narration_request = {"turn_id": turn_id, "tick": 1}
         _enqueue_narration_request(session_id, narration_request)
 
-        assert mock_ensure.called_once()
-        assert mock_signal.called_once_with(session_id)</content>
+        assert mock_ensure.call_count == 1
+        assert mock_signal.call_args == call(session_id)
+
+
+def test_narration_status_resignals_queued_job_without_artifact(monkeypatch):
+    client = TestClient(app)
+
+    session_id = "session:test_status_resignal"
+
+    from app.rpg.session.runtime import create_runtime_session, load_runtime_session, save_runtime_session
+
+    create_runtime_session({
+        "session_id": session_id,
+        "title": "Queued Narration Test",
+        "player_name": "Tester",
+    })
+
+    session = load_runtime_session(session_id)
+    runtime_state = dict(session.get("runtime_state") or {})
+    runtime_state.setdefault("narration_jobs_by_turn", {})
+    runtime_state.setdefault("narration_artifacts_by_turn", {})
+    runtime_state["narration_jobs_by_turn"]["turn_2"] = {
+        "job_id": "narration:turn_2",
+        "turn_id": "turn_2",
+        "tick": 2,
+        "status": "queued",
+        "attempts": 0,
+        "max_attempts": 3,
+        "narration_request": {
+            "turn_id": "turn_2",
+            "tick": 2,
+            "job_kind": "player_turn",
+        },
+    }
+    session["runtime_state"] = runtime_state
+    save_runtime_session(session)
+
+    with patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_ensure, \
+         patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
+        response = client.post("/api/rpg/session/narration_status", json={
+            "session_id": session_id,
+            "turn_id": "turn_2",
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["turn_id"] == "turn_2"
+        assert (payload.get("job") or {}).get("status") == "queued"
+        assert mock_ensure.call_count == 1
+        assert mock_signal.call_args == call(session_id)</content>
 <parameter name="filePath">src/app/rpg/tests/test_narration_queue.py

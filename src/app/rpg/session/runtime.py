@@ -80,13 +80,26 @@ from app.rpg.economy.currency import (
     normalize_currency,
     subtract_currency_cost,
 )
+from app.rpg.economy.menu_catalog import (
+    build_available_transaction_menus,
+    build_provider_transaction_menus,
+)
+from app.rpg.economy.provider_catalog import (
+    derive_npc_transaction_providers,
+    derive_world_transaction_providers,
+)
+from app.rpg.economy.transaction_effects import apply_transaction_effects
+from app.rpg.economy.transactions import (
+    build_transaction_metadata,
+    enrich_action_with_registry_price,
+)
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     equip_inventory_item,
     get_inventory_item_for_drop,
+    normalize_inventory_state,
     remove_inventory_item,
     unequip_inventory_slot,
-    normalize_inventory_state,
 )
 from app.rpg.items.item_effects import apply_item_use
 from app.rpg.items.world_items import (
@@ -151,16 +164,6 @@ from app.rpg.world.world_event_director import (
     build_world_event_candidates,
     convert_events_to_ambient_updates,
     filter_world_events,
-)
-from app.rpg.economy.transactions import (
-    build_transaction_metadata,
-    enrich_action_with_registry_price,
-)
-from app.rpg.economy.transaction_effects import apply_transaction_effects
-from app.rpg.economy.menu_catalog import build_available_transaction_menus, build_provider_transaction_menus
-from app.rpg.economy.provider_catalog import (
-    derive_npc_transaction_providers,
-    derive_world_transaction_providers,
 )
 
 _SCHEMA_VERSION = 4
@@ -5918,7 +5921,6 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     manifest = _safe_dict(session.get("manifest"))
     runtime_state = _safe_dict(session.get("runtime_state"))
     simulation_state = _safe_dict(session.get("simulation_state"))
-    world = _safe_dict(runtime_state.get("world"))
     npcs = _safe_list(runtime_state.get("npcs"))
     opening = _safe_str(runtime_state.get("opening"))
     turn_result = _safe_dict(runtime_state.get("last_turn_result"))
@@ -6633,6 +6635,7 @@ def _generate_turn_narration_artifact(
     session_id: str,
     narration_request: Dict[str, Any],
 ) -> Dict[str, Any]:
+    logger.debug("_generate_turn_narration_artifact called", extra={"session_id": session_id, "turn_id": narration_request.get("turn_id")})
     narration_request = _safe_dict(narration_request)
     turn_id = _safe_str(narration_request.get("turn_id")).strip()
     tick = int(narration_request.get("tick", 0) or 0)
@@ -6643,7 +6646,9 @@ def _generate_turn_narration_artifact(
     llm_enabled = bool(perf.get("enable_live_narration_llm", True))
     retry_on_invalid = bool(perf.get("enable_narration_retry", False))
     llm_gateway = build_app_llm_gateway() if llm_enabled else None
+    logger.debug("LLM gateway status", extra={"session_id": session_id, "turn_id": turn_id, "llm_enabled": llm_enabled, "llm_gateway": llm_gateway is not None})
 
+    logger.debug("Calling narrate_scene", extra={"session_id": session_id, "turn_id": turn_id})
     narration_result = narrate_scene(
         scene,
         narration_context,
@@ -6652,6 +6657,7 @@ def _generate_turn_narration_artifact(
         retry_on_invalid=retry_on_invalid,
         debug_logging=False,
     )
+    logger.debug("narrate_scene returned", extra={"session_id": session_id, "turn_id": turn_id, "result_keys": list(narration_result.keys()) if isinstance(narration_result, dict) else type(narration_result)})
 
     artifact = {
         "turn_id": turn_id,
@@ -6696,14 +6702,17 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     Process at most one queued narration job for the given session.
     Safe for polling/heartbeat driven execution.
     """
+    logger.debug("process_next_narration_job called", extra={"session_id": session_id})
     session = load_runtime_session(session_id)
     if session is None:
+        logger.warning("Session not found in process_next_narration_job", extra={"session_id": session_id})
         return {"ok": False, "error": "session_not_found"}
 
     runtime_state = _copy_dict(session.get("runtime_state"))
     runtime_state = _ensure_narration_job_state(runtime_state)
 
     jobs = [_safe_dict(j) for j in _safe_list(runtime_state.get("narration_jobs")) if isinstance(j, dict)]
+    logger.debug("Found narration jobs", extra={"session_id": session_id, "total_jobs": len(jobs), "job_statuses": [j.get("status") for j in jobs]})
     queued = [j for j in jobs if _safe_str(j.get("status")) == "queued"]
     queued_job = None
     if queued:
@@ -6715,12 +6724,15 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             )
         )
         queued_job = queued[0]
+        logger.debug("Selected queued job", extra={"session_id": session_id, "turn_id": queued_job.get("turn_id"), "priority": queued_job.get("priority")})
 
     if not queued_job:
+        logger.info("No queued narration jobs for session", extra={"session_id": session_id})
         return {"ok": True, "status": "idle"}
 
     turn_id = _safe_str(queued_job.get("turn_id")).strip()
     tick = int(queued_job.get("tick", 0) or 0)
+    logger.info("Processing queued narration job", extra={"session_id": session_id, "turn_id": turn_id, "tick": tick})
     current_tick = int(runtime_state.get("tick", 0) or 0)
 
     # Optional stale protection: if narration is far behind, mark stale.
@@ -6748,6 +6760,7 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         }
 
     worker_token = f"{_utc_now_iso()}:{os.getpid()}:{turn_id}"
+    logger.debug("Marking narration job as processing", extra={"session_id": session_id, "turn_id": turn_id, "worker_token": worker_token})
     runtime_state = _mark_narration_job_status(
         runtime_state,
         turn_id,
@@ -6789,8 +6802,10 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         return {"ok": False, "status": "claimed_elsewhere", "turn_id": turn_id}
 
     narration_request = _safe_dict(claimed_job.get("narration_request") or queued_job.get("narration_request"))
+    logger.debug("Narration request prepared", extra={"session_id": session_id, "turn_id": turn_id, "request_keys": list(narration_request.keys()) if narration_request else None})
 
     if not narration_request or not narration_request.get("turn_id"):
+        logger.error("Missing narration request", extra={"session_id": session_id, "turn_id": turn_id})
         runtime_state = _mark_narration_job_status(
             runtime_state,
             turn_id,
@@ -6806,6 +6821,7 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             "error": "missing_narration_request",
         }
 
+    logger.debug("Calling _generate_turn_narration_artifact", extra={"session_id": session_id, "turn_id": turn_id})
     result = _generate_turn_narration_artifact(session_id, narration_request)
 
     session = load_runtime_session(session_id)
@@ -6829,7 +6845,6 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         if job_kind == "ambient_conversation":
             speaker = _safe_str(artifact.get("speaker"))
             target = _safe_str(artifact.get("target"))
-            line = _safe_str(artifact.get("line") or artifact.get("text") or artifact.get("narration"))
             conversation_id = _safe_str(artifact.get("conversation_id"))
             if not conversation_id and (speaker or target):
                 def _norm(x):
@@ -6840,29 +6855,31 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
                 conversation_id = f"conv_{turn_id}_{speaker_key}_{target_key}"
 
             if speaker or target:
-                event_bus.publish("npc_conversation_artifact", {
-                    "type": "npc_conversation_artifact",
-                    "session_id": session_id,
-                    "turn_id": turn_id,
-                    "role": "npc_conversation",
-                    "conversation_id": conversation_id,
-                    "tick": artifact.get("tick"),
-                    "speaker": speaker,
-                    "target": target,
-                    "line": line,
-                    "text": line,
-                    "used_llm": bool(artifact.get("used_llm")),
-                })
+                # TODO: event_bus.publish("npc_conversation_artifact", {
+                #     "type": "npc_conversation_artifact",
+                #     "session_id": session_id,
+                #     "turn_id": turn_id,
+                #     "role": "npc_conversation",
+                #     "conversation_id": conversation_id,
+                #     "tick": artifact.get("tick"),
+                #     "speaker": speaker,
+                #     "target": target,
+                #     "line": line,
+                #     "text": line,
+                #     "used_llm": bool(artifact.get("used_llm")),
+                # })
+                pass
             else:
-                event_bus.publish("ambient_conversation_artifact", {
-                    "type": "ambient_conversation_artifact",
-                    "session_id": session_id,
-                    "turn_id": turn_id,
-                    "role": "ambient_narration",
-                    "tick": artifact.get("tick"),
-                    "text": _safe_str(artifact.get("narration") or line),
-                    "used_llm": bool(artifact.get("used_llm")),
-                })
+                # TODO: event_bus.publish("ambient_conversation_artifact", {
+                #     "type": "ambient_conversation_artifact",
+                #     "session_id": session_id,
+                #     "turn_id": turn_id,
+                #     "role": "ambient_narration",
+                #     "tick": artifact.get("tick"),
+                #     "text": _safe_str(artifact.get("narration") or line),
+                #     "used_llm": bool(artifact.get("used_llm")),
+                # })
+                pass
         else:
             publish_narration_event(
                 session_id,

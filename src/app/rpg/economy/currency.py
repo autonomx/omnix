@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-
 DENOMINATION_ORDER = ("gold", "silver", "copper")
 DENOMINATION_VALUES = {
     "gold": 100,

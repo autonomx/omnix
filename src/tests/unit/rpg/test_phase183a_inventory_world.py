@@ -6,6 +6,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 import pytest
 
+from app.rpg.economy.action_generator import build_menu_action
+from app.rpg.economy.currency import normalize_currency
+from app.rpg.economy.menu_catalog import (
+    build_provider_transaction_menus,
+    build_service_menu,
+    build_shop_menu,
+)
+from app.rpg.economy.provider_catalog import derive_npc_transaction_providers
+from app.rpg.economy.transaction_effects import apply_transaction_effects
+from app.rpg.economy.transactions import enrich_action_with_registry_price
 from app.rpg.items.generated_item_builder import (
     build_item_definition_from_llm,
     clamp_generated_item_stats,
@@ -31,13 +41,6 @@ from app.rpg.items.item_stats import (
     is_weapon,
     normalize_item_stats,
 )
-from app.rpg.economy.currency import normalize_currency
-from app.rpg.economy.transactions import enrich_action_with_registry_price
-from app.rpg.economy.transaction_effects import apply_transaction_effects
-from app.rpg.economy.action_generator import build_menu_action
-from app.rpg.economy.menu_catalog import build_service_menu, build_shop_menu
-from app.rpg.economy.provider_catalog import derive_npc_transaction_providers
-from app.rpg.economy.menu_catalog import build_provider_transaction_menus
 from app.rpg.items.world_items import (
     drop_world_item,
     ensure_world_item_state,

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.rpg.economy.currency import normalize_currency
+
 from .item_registry import get_item_definition
 
 _MAX_INVENTORY_SLOTS = 50

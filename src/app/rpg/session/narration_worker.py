@@ -19,9 +19,9 @@ external message broker.
 from __future__ import annotations
 
 import asyncio
-import time
 import logging
 import threading
+import time
 from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,7 @@ def signal_narration_work(session_id: Any) -> bool:
     session_id = str(session_id or "").strip()
     if not session_id:
         return False
+    logger.info("Signaling narration work for session", extra={"session_id": session_id})
     with _pending_lock:
         _pending_sessions.add(session_id)
     return True
@@ -118,7 +119,12 @@ def _worker_loop() -> None:
         if _is_stop_requested():
             return
 
+        logger.debug("Narration worker loop iteration")
         session_ids = drain_pending_sessions()
+        if session_ids:
+            logger.info("Narration worker processing sessions", extra={"session_ids": session_ids, "count": len(session_ids)})
+        else:
+            logger.debug("Narration worker no pending sessions")
         if not session_ids:
             time.sleep(_WORKER_IDLE_SLEEP_SECONDS)
             continue
@@ -128,8 +134,11 @@ def _worker_loop() -> None:
             if _is_stop_requested():
                 return
 
+            logger.info("Processing narration job for session", extra={"session_id": session_id})
             try:
+                logger.debug("Calling process_next_narration_job for session", extra={"session_id": session_id})
                 result = process_next_narration_job(session_id)
+                logger.debug("process_next_narration_job returned", extra={"session_id": session_id, "result_keys": list(result.keys()) if isinstance(result, dict) else type(result)})
             except Exception:
                 logger.exception("Narration worker failed while processing session %s", session_id)
                 # Re-signal so the session is retried on a later wake.
@@ -137,12 +146,15 @@ def _worker_loop() -> None:
                 continue
 
             status = str((result or {}).get("status") or "").strip().lower()
+            logger.info("Narration job processed", extra={"session_id": session_id, "status": status, "result": result})
             processed_any = True
 
             # Re-signal if there may still be queued work for this session.
             if status in {"completed", "failed", "stale"}:
+                logger.debug("Re-signaling work for session due to status", extra={"session_id": session_id, "status": status})
                 signal_narration_work(session_id)
             elif status not in {"idle", "claimed_elsewhere"}:
+                logger.debug("Re-signaling work for session", extra={"session_id": session_id, "status": status})
                 signal_narration_work(session_id)
 
         time.sleep(_WORKER_ACTIVE_SLEEP_SECONDS if processed_any else _WORKER_IDLE_SLEEP_SECONDS)

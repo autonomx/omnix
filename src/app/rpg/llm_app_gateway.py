@@ -77,14 +77,19 @@ class AppLLMGateway:
         # intentionally not wired to the underlying provider yet.  Callers may
         # pass it to express intent; actual timeout enforcement will be added
         # when the provider abstraction gains native support.
-        logger.debug("[RPG GATEWAY] Calling provider.chat_completion")
+        logger.info("[RPG GATEWAY] Calling provider.chat_completion, prompt length: %d", len(prompt))
         messages = self._build_messages(prompt, context=context)
-        response = self.provider.chat_completion(messages=messages, stream=False)
+        logger.debug("[RPG GATEWAY] Built messages for chat_completion", extra={"message_count": len(messages)})
+        try:
+            response = self.provider.chat_completion(messages=messages, stream=False)
+            logger.debug("[RPG GATEWAY] Provider returned type: %s", type(response))
+        except Exception:
+            logger.exception("[RPG GATEWAY] Provider call failed")
+            raise
 
-        logger.debug("[RPG GATEWAY] Provider returned type: %s", type(response))
         if isinstance(response, ChatResponse):
             content = (response.content or "").strip()
-            logger.debug("[RPG GATEWAY] ChatResponse content length: %d", len(content))
+            logger.info("[RPG GATEWAY] ChatResponse content length: %d", len(content))
             return content
         if response is None:
             logger.warning("[RPG GATEWAY] Provider returned None")

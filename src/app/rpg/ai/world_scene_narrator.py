@@ -29,9 +29,13 @@ logger = logging.getLogger(__name__)
 
 def _llm_text(llm_gateway, prompt, *, context=None):
     """Call the LLM gateway and return the response as a clean string."""
-    logger.debug("[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
-    response = llm_gateway.call("generate", prompt, context=context or {})
-    logger.debug("[RPG LLM GATEWAY] Received response type: %s, length: %d", type(response), len(str(response)) if response else 0)
+    logger.info("[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
+    try:
+        response = llm_gateway.call("generate", prompt, context=context or {})
+        logger.info("[RPG LLM GATEWAY] Received response type: %s, length: %d", type(response), len(str(response)) if response else 0)
+    except Exception:
+        logger.exception("[RPG LLM GATEWAY] LLM call failed")
+        raise
     if response is None:
         logger.warning("[RPG LLM GATEWAY] LLM returned None")
         return ""

@@ -1739,6 +1739,13 @@
     async function pollNarrationStatus(sessionId, turnId, attempt = 0) {
         if (attempt > 30 || !turnId) return;
 
+        if (!sessionId || sessionId === "session:unknown") {
+            _emitSseDiagnostic("narration", "poll_skipped", {
+                lastErrorAt: _nowIso(),
+            }, { sessionId: sessionId, turnId: turnId, reason: "invalid_session_id" });
+            return;
+        }
+
         try {
             const resp = await fetch("/api/rpg/session/narration_status", {
                 method: "POST",
@@ -1771,16 +1778,38 @@
             }
 
              if (artifact.narration) {
+                 console.log("[Narration] Artifact found, rendering", { turnId, attempt });
                  renderTurnNarration(turnId, artifact.narration, artifact.version || 1);
                  return;
              }
+            
+            if (job.status === "processing") {
+                console.log("[Narration] Job processing, polling again", { turnId, attempt, status: job.status });
+                setTimeout(() => pollNarrationStatus(sessionId, turnId, attempt + 1), 400);
+                return;
+            }
+
+            if (job.status === "queued") {
+                console.log("[Narration] Job queued, polling again", { turnId, attempt, status: job.status });
+                // Keep polling even when SSE is unavailable. The backend can
+                // re-signal queued work from narration_status.
+                setTimeout(() => pollNarrationStatus(sessionId, turnId, attempt + 1), 500);
+                return;
+            }
 
             if (job.status === "failed" || job.status === "stale") {
+                updateTurnNarrationPlaceholder(
+                    turnId,
+                    _safeStr(job.status || "failed"),
+                    parseInt(job.retry_count, 10) || parseInt(job.attempt, 10) || 0,
+                    parseInt(job.max_retries, 10) || parseInt(job.maxAttempts, 10) || 3
+                );
                 return;
             }
 
             setTimeout(() => pollNarrationStatus(sessionId, turnId, attempt + 1), 500);
         } catch (err) {
+            _emitSseDiagnostic("narration", "poll_error", { lastErrorAt: _nowIso() }, { turnId: turnId, attempt: attempt, error: String((err && err.message) || err || "poll_failed") });
             setTimeout(() => pollNarrationStatus(sessionId, turnId, attempt + 1), 800);
         }
     }
@@ -2479,6 +2508,14 @@
 
                 // Background worker is server-driven now; use SSE for updates.
                 ensureNarrationSubscription(rpgState.sessionId);
+
+                // Fallback for cases where EventSource does not open or misses
+                // narration_job / narration_artifact events. This is especially
+                // important for second+ turns where there may be no fallback
+                // narration text and the placeholder would otherwise stay
+                // queued forever.
+                pollNarrationStatus(rpgState.sessionId, turnId, 0);
+                
             } else {
                 // Legacy handling
                 var update = transformResponse(data);
@@ -2501,14 +2538,6 @@
                 // Speak narration after response is complete
                 if (data && data.narration) speakNarration(data.narration);
             }
-
-            appendMessage({
-                type: 'system',
-                role: 'error',
-                content: '❌ Error: unsupported turn response: ' + escapeHtml(_safeStr(data.type || 'unknown')),
-            });
-            setLoading(false);
-            return;
         } catch (err) {
             if (streamingDiv) { streamingDiv.remove(); streamingDiv = null; }
             appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
