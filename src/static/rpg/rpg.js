@@ -1737,7 +1737,7 @@
     }
 
     async function pollNarrationStatus(sessionId, turnId, attempt = 0) {
-        if (attempt > 30 || !turnId) return;
+        if (attempt > 120 || !turnId) return;
 
         if (!sessionId || sessionId === "session:unknown") {
             _emitSseDiagnostic("narration", "poll_skipped", {

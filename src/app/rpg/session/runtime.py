@@ -6822,7 +6822,15 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         }
 
     logger.debug("Calling _generate_turn_narration_artifact", extra={"session_id": session_id, "turn_id": turn_id})
-    result = _generate_turn_narration_artifact(session_id, narration_request)
+    try:
+        result = _generate_turn_narration_artifact(session_id, narration_request)
+    except Exception:
+        logger.exception(
+            "Exception in _generate_turn_narration_artifact for session %s turn %s",
+            session_id,
+            turn_id,
+        )
+        result = {"ok": False, "error": "narration_generation_exception"}
 
     session = load_runtime_session(session_id)
     if session is None:
@@ -6927,9 +6935,12 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         error=_safe_str(result.get("error") or "narration_failed") if final_status == "failed" else "",
     )
     
-    # Update attempts count BEFORE publishing
+    # Update attempts count and reset claim fields when re-queuing
     job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
     job["attempts"] = attempts
+    if final_status == "queued":
+        job["started_at"] = None
+        job["worker_token"] = ""
     runtime_state["narration_jobs_by_turn"][turn_id] = job
     
     if final_status == "failed":

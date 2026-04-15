@@ -5,6 +5,7 @@ Legacy /api/rpg/games* routes are retired from active registration.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import queue
@@ -461,17 +462,65 @@ async def get_rpg_session_narration_status(request: Request):
 
     # Self-heal queued narration jobs so polling can recover even if the worker
     # missed a wake-up or the SSE channel never opened on the client.
-    if job and not artifact and job_status == "queued":
-        _logger.info("Re-signaling queued narration job", extra={
+    if job and not artifact and job_status in ("queued", "processing"):
+        # Recover jobs stuck in "processing" state (e.g., worker exception left
+        # the job marked processing but never completed it).
+        needs_reset = False
+        if job_status == "processing":
+            started = _safe_str(job.get("started_at"))
+            if started:
+                try:
+                    started_dt = datetime.datetime.fromisoformat(
+                        started.replace("Z", "+00:00")
+                    )
+                    now_dt = datetime.datetime.now(datetime.timezone.utc)
+                    if (now_dt - started_dt).total_seconds() > 90:
+                        needs_reset = True
+                except Exception:
+                    needs_reset = True
+            else:
+                needs_reset = True
+
+        if needs_reset:
+            _logger.warning(
+                "Resetting stuck processing narration job to queued",
+                extra={
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "started_at": _safe_str(job.get("started_at")),
+                },
+            )
+            try:
+                runtime_state = dict(runtime_state)
+                by_turn = dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")))
+                stuck_job = dict(by_turn.get(turn_id, {}))
+                stuck_job["status"] = "queued"
+                stuck_job["started_at"] = None
+                stuck_job["worker_token"] = ""
+                by_turn[turn_id] = stuck_job
+                runtime_state["narration_jobs_by_turn"] = by_turn
+                # Also fix the list
+                jobs_list = list(_safe_list(runtime_state.get("narration_jobs")))
+                for idx, j in enumerate(jobs_list):
+                    if isinstance(j, dict) and _safe_str(j.get("turn_id")).strip() == turn_id:
+                        jobs_list[idx] = stuck_job
+                runtime_state["narration_jobs"] = jobs_list
+                session["runtime_state"] = runtime_state
+                save_runtime_session(session)
+            except Exception:
+                _logger.exception("Failed to reset stuck processing job")
+
+        _logger.info("Re-signaling narration job", extra={
             "session_id": session_id,
             "turn_id": turn_id,
             "job_status": job_status,
+            "was_reset": needs_reset,
         })
         try:
             ensure_narration_worker_running()
             signal_narration_work(session_id)
         except Exception:
-            _logger.exception("Failed to re-signal queued narration work", extra={
+            _logger.exception("Failed to re-signal narration work", extra={
                 "session_id": session_id,
                 "turn_id": turn_id,
             })
