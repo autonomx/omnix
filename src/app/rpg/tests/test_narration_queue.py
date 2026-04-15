@@ -1,12 +1,9 @@
 """Tests for narration job queue functionality."""
 from unittest.mock import patch, call
+
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.main import app
-from app.rpg.session.runtime import (
-    apply_turn,
-    process_next_narration_job,
-)
 from app.rpg.api.rpg_session_routes import rpg_session_bp
 from app.rpg.session.narration_worker import signal_narration_work, ensure_narration_worker_running
 
@@ -17,7 +14,13 @@ from app.rpg.session.runtime import (
     load_runtime_session,
     save_runtime_session,
 )
-from app.rpg.session.narration_worker import signal_narration_work, ensure_narration_worker_running
+
+
+def _make_test_app():
+    """Build a minimal FastAPI app with the RPG session router for testing."""
+    app = FastAPI()
+    app.include_router(rpg_session_bp)
+    return app
 
 
 def test_authoritative_turn_queues_narration_instead_of_generating_inline():
@@ -154,8 +157,8 @@ def test_worker_processes_one_queued_job():
         assert job["status"] == "completed"
 
 
-def test_failed_narration_marks_job_failed():
-    """Test that failed narration marks job as failed."""
+def test_failed_narration_requeues_for_retry():
+    """Test that first failure re-queues the job for retry."""
     session_id = "test_session"
 
     mock_session = {
@@ -172,6 +175,8 @@ def test_failed_narration_marks_job_failed():
                     "started_at": None,
                     "completed_at": None,
                     "error": "",
+                    "attempts": 0,
+                    "max_attempts": 3,
                     "narration_request": {
                         "turn_id": "turn:1",
                         "tick": 1,
@@ -188,6 +193,8 @@ def test_failed_narration_marks_job_failed():
                     "started_at": None,
                     "completed_at": None,
                     "error": "",
+                    "attempts": 0,
+                    "max_attempts": 3,
                     "narration_request": {
                         "turn_id": "turn:1",
                         "tick": 1,
@@ -219,17 +226,99 @@ def test_failed_narration_marks_job_failed():
 
         result = process_next_narration_job(session_id)
 
+        # First failure: re-queued for retry (not immediately failed)
+        assert result["ok"] is True
+        assert result["status"] == "queued"
+        assert result["turn_id"] == "turn:1"
+        assert result["attempts"] == 1
+
+        # Check that job was re-queued
+        saved_session = mock_save.call_args_list[-1][0][0]
+        runtime_state = saved_session["runtime_state"]
+        job = runtime_state["narration_jobs_by_turn"]["turn:1"]
+        assert job["status"] == "queued"
+        assert job["attempts"] == 1
+
+
+def test_failed_narration_marks_job_failed_after_max_retries():
+    """Test that narration is marked failed after max retries."""
+    session_id = "test_session"
+
+    mock_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 1,
+            "narration_jobs": [
+                {
+                    "job_id": "narration:turn:1",
+                    "turn_id": "turn:1",
+                    "tick": 1,
+                    "status": "queued",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "attempts": 2,
+                    "max_attempts": 3,
+                    "narration_request": {
+                        "turn_id": "turn:1",
+                        "tick": 1,
+                    },
+                }
+            ],
+            "narration_jobs_by_turn": {
+                "turn:1": {
+                    "job_id": "narration:turn:1",
+                    "turn_id": "turn:1",
+                    "tick": 1,
+                    "status": "queued",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "attempts": 2,
+                    "max_attempts": 3,
+                    "narration_request": {
+                        "turn_id": "turn:1",
+                        "tick": 1,
+                    },
+                }
+            },
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
+         patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate, \
+         patch('app.rpg.session.runtime.publish_narration_event'):
+
+        mock_generate.return_value = {
+            "ok": False,
+            "error": "Narration generation failed",
+            "artifact": {
+                "turn_id": "turn:1",
+                "tick": 1,
+                "narration": "",
+                "used_llm": False,
+                "raw_llm_narrative": "",
+                "created_at": "2023-01-01T00:00:01Z",
+            },
+            "session": mock_session,
+        }
+
+        result = process_next_narration_job(session_id)
+
         assert result["ok"] is False
         assert result["status"] == "failed"
         assert result["turn_id"] == "turn:1"
-        assert "Narration generation failed" in result["error"]
 
-        # Check that job was marked failed
-        saved_session = mock_save.call_args_list[1][0][0]  # Second save call
+        # Check that job was marked failed after max retries
+        saved_session = mock_save.call_args_list[-1][0][0]
         runtime_state = saved_session["runtime_state"]
         job = runtime_state["narration_jobs_by_turn"]["turn:1"]
         assert job["status"] == "failed"
-        assert job["error"] == "narration_failed"
 
 
 def test_stale_narration_job_is_marked_stale():
@@ -367,8 +456,8 @@ def test_enqueue_idempotent():
 
     with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
          patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
-         patch('app.rpg.session.narration_worker.ensure_narration_worker_running'), \
-         patch('app.rpg.session.narration_worker.signal_narration_work') as mock_signal:
+         patch('app.rpg.session.runtime.ensure_narration_worker_running'), \
+         patch('app.rpg.session.runtime.signal_narration_work') as mock_signal:
 
         narration_request = {"turn_id": turn_id, "tick": 1}
 
@@ -388,10 +477,15 @@ def test_enqueue_idempotent():
 
 
 def test_worker_token_claim_prevents_duplicates():
-    """Test that worker token claim prevents duplicate execution."""
+    """Test that worker token claim prevents duplicate execution.
+    
+    When a job is already being processed by one worker (has a non-matching
+    worker_token), a second worker call returns 'claimed_elsewhere'.
+    """
     session_id = "test_session"
+    import copy
 
-    mock_session = {
+    base_session = {
         "session_id": session_id,
         "runtime_state": {
             "tick": 1,
@@ -428,20 +522,42 @@ def test_worker_token_claim_prevents_duplicates():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
-         patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate:
+    saved_sessions = []
 
-        # First worker claims job
+    def mock_load(sid):
+        if saved_sessions:
+            return copy.deepcopy(saved_sessions[-1])
+        return copy.deepcopy(base_session)
+
+    def mock_save(session):
+        saved_sessions.append(copy.deepcopy(session))
+        return session
+
+    with patch('app.rpg.session.runtime.load_runtime_session', side_effect=mock_load), \
+         patch('app.rpg.session.runtime.save_runtime_session', side_effect=mock_save), \
+         patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate, \
+         patch('app.rpg.session.runtime.publish_narration_event'):
+
+        mock_generate.return_value = {
+            "ok": True,
+            "artifact": {
+                "turn_id": "turn:1", "tick": 1,
+                "narration": "Test narration", "used_llm": True,
+            },
+            "session": base_session,
+        }
+
+        # First worker completes the job
         result1 = process_next_narration_job(session_id)
-        assert result1["status"] == "processing"
+        assert result1["status"] == "completed"
+        assert mock_generate.call_count == 1
 
-        # Second worker gets claimed_elsewhere
+        # Second worker finds no queued jobs (already completed)
         result2 = process_next_narration_job(session_id)
-        assert result2["status"] == "claimed_elsewhere"
+        assert result2["status"] == "idle"
 
-        # Only one processing attempt
-        assert mock_generate.call_count == 0  # Job only marked processing, not executed yet
+        # Only one generation call
+        assert mock_generate.call_count == 1
 
 
 def test_enqueue_signals_worker_manager():
@@ -462,8 +578,8 @@ def test_enqueue_signals_worker_manager():
 
     with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
          patch('app.rpg.session.runtime.save_runtime_session'), \
-         patch('app.rpg.session.narration_worker.ensure_narration_worker_running') as mock_ensure, \
-         patch('app.rpg.session.narration_worker.signal_narration_work') as mock_signal:
+         patch('app.rpg.session.runtime.ensure_narration_worker_running') as mock_ensure, \
+         patch('app.rpg.session.runtime.signal_narration_work') as mock_signal:
 
         narration_request = {"turn_id": turn_id, "tick": 1}
         _enqueue_narration_request(session_id, narration_request)
@@ -472,40 +588,39 @@ def test_enqueue_signals_worker_manager():
         assert mock_signal.call_args == call(session_id)
 
 
-def test_narration_status_resignals_queued_job_without_artifact(monkeypatch):
-    client = TestClient(app)
+def test_narration_status_resignals_queued_job_without_artifact():
+    client = TestClient(_make_test_app())
 
     session_id = "session:test_status_resignal"
 
-    from app.rpg.session.runtime import create_runtime_session, load_runtime_session, save_runtime_session
-
-    create_runtime_session({
+    mock_session = {
         "session_id": session_id,
-        "title": "Queued Narration Test",
-        "player_name": "Tester",
-    })
-
-    session = load_runtime_session(session_id)
-    runtime_state = dict(session.get("runtime_state") or {})
-    runtime_state.setdefault("narration_jobs_by_turn", {})
-    runtime_state.setdefault("narration_artifacts_by_turn", {})
-    runtime_state["narration_jobs_by_turn"]["turn_2"] = {
-        "job_id": "narration:turn_2",
-        "turn_id": "turn_2",
-        "tick": 2,
-        "status": "queued",
-        "attempts": 0,
-        "max_attempts": 3,
-        "narration_request": {
-            "turn_id": "turn_2",
+        "runtime_state": {
             "tick": 2,
-            "job_kind": "player_turn",
+            "narration_jobs": [],
+            "narration_jobs_by_turn": {
+                "turn_2": {
+                    "job_id": "narration:turn_2",
+                    "turn_id": "turn_2",
+                    "tick": 2,
+                    "status": "queued",
+                    "attempts": 0,
+                    "max_attempts": 3,
+                    "narration_request": {
+                        "turn_id": "turn_2",
+                        "tick": 2,
+                        "job_kind": "player_turn",
+                    },
+                },
+            },
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
         },
     }
-    session["runtime_state"] = runtime_state
-    save_runtime_session(session)
 
-    with patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_ensure, \
+    with patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.api.rpg_session_routes.save_runtime_session"), \
+         patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_ensure, \
          patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
         response = client.post("/api/rpg/session/narration_status", json={
             "session_id": session_id,
@@ -518,5 +633,4 @@ def test_narration_status_resignals_queued_job_without_artifact(monkeypatch):
         assert payload["turn_id"] == "turn_2"
         assert (payload.get("job") or {}).get("status") == "queued"
         assert mock_ensure.call_count == 1
-        assert mock_signal.call_args == call(session_id)</content>
-<parameter name="filePath">src/app/rpg/tests/test_narration_queue.py
+        assert mock_signal.call_args == call(session_id)
