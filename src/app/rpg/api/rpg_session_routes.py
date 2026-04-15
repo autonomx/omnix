@@ -19,6 +19,7 @@ from app.rpg.session.ambient_builder import (
     ensure_ambient_runtime_state,
     get_pending_ambient_updates,
 )
+from app.rpg.session.durable_store import CorruptSessionPayloadError
 from app.rpg.session.runtime import (
     _apply_turn_authoritative,
     _enqueue_narration_request,
@@ -688,7 +689,20 @@ async def resume_rpg_session(request: Request):
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
 
     # Upstream recorded LLM semantic proposal capture before catch-up/resume.
-    session = load_runtime_session(session_id)
+    try:
+        session = load_runtime_session(session_id)
+    except CorruptSessionPayloadError as exc:
+        _logger.exception("resume_rpg_session: corrupt persisted session")
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "corrupt_session_payload",
+                "session_id": session_id,
+                "detail": {"path": str(exc.path)},
+            },
+            status_code=409,
+        )
+
     if session:
         session = capture_semantic_state_change_proposals_for_session(session)
         try:
@@ -703,7 +717,20 @@ async def resume_rpg_session(request: Request):
         return JSONResponse({"ok": False, "error": err}, status_code=status)
 
     # Debug: verify the saved session exposes the advanced authoritative tick.
-    session = load_runtime_session(session_id)
+    try:
+        session = load_runtime_session(session_id)
+    except CorruptSessionPayloadError as exc:
+        _logger.exception("resume_rpg_session: session became corrupt after catch-up")
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "corrupt_session_payload",
+                "session_id": session_id,
+                "detail": {"path": str(exc.path)},
+            },
+            status_code=409,
+        )
+
     if session:
         sim = _safe_dict(session.get("simulation_state"))
         rt = _safe_dict(session.get("runtime_state"))
@@ -712,7 +739,20 @@ async def resume_rpg_session(request: Request):
 
     # Post-catchup capture: after resume advances the world, capture again so
     # recorded proposals reflect the newly advanced scene state.
-    session = load_runtime_session(session_id)
+    try:
+        session = load_runtime_session(session_id)
+    except CorruptSessionPayloadError as exc:
+        _logger.exception("resume_rpg_session: corrupt persisted session during post-catchup capture")
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "corrupt_session_payload",
+                "session_id": session_id,
+                "detail": {"path": str(exc.path)},
+            },
+            status_code=409,
+        )
+
     if session:
         runtime_state = _safe_dict(session.get("runtime_state"))
         if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):

@@ -1937,6 +1937,47 @@
         return res.json();
     }
 
+    function buildTurnClientError(message, extra) {
+        var detail = (extra && typeof extra === 'object') ? extra : {};
+        return {
+            ok: false,
+            type: 'error',
+            error: String(message || 'turn_failed'),
+            client_error: true,
+            detail: detail,
+        };
+    }
+
+    function normalizeTurnResponse(payload, meta) {
+        var info = (meta && typeof meta === 'object') ? meta : {};
+
+        if (!payload || typeof payload !== 'object') {
+            return buildTurnClientError('turn_stream_returned_empty_payload', info);
+        }
+
+        if (!payload.type) {
+            // Accept authoritative/done-style payloads that omit a top-level type.
+            if (payload.ok === true || payload.turn_id || payload.summary || payload.presentation || payload.narration_status) {
+                payload.type = 'turn_result';
+                return payload;
+            }
+            return buildTurnClientError('turn_stream_missing_type', {
+                keys: Object.keys(payload || {}),
+                meta: info,
+            });
+        }
+
+        return payload;
+    }
+
+    function ensureTurnResponseObject(payload, meta) {
+        var normalized = normalizeTurnResponse(payload, meta);
+        if (!normalized || typeof normalized !== 'object') {
+            return buildTurnClientError('turn_response_normalization_failed', meta);
+        }
+        return normalized;
+    }
+
     /** Send a turn with a structured action payload (streaming). */
     async function apiSendTurnStreamWithAction(sessionId, input, action, onToken) {
         var res = await fetch('/api/rpg/session/turn/stream', {
@@ -1944,7 +1985,12 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId, input: input, action: action }),
         });
-        if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
+        if (!res.ok) {
+            return buildTurnClientError('turn_stream_http_' + res.status, {
+                status: res.status,
+                sessionId: sessionId,
+            });
+        }
 
         var reader = res.body.getReader();
         var decoder = new TextDecoder();
@@ -1964,15 +2010,17 @@
                 if (part.startsWith('data: ')) {
                     try {
                         var evt = JSON.parse(part.slice(6));
-                        if (evt.type === 'authoritative_result') {
+                        if (evt.type === 'token' && typeof onToken === 'function') {
+                            onToken(evt.token || evt.text || '');
+                            continue;
+                        } else if (evt.type === 'authoritative_result') {
                             finalData = evt;
                             try { await reader.cancel(); } catch (_) {}
-                            return evt;
                         } else if (evt.type === 'done') {
                             // Keep the authoritative payload if we already have it.
                             if (!finalData) finalData = evt;
                         } else if (evt.type === 'error') {
-                            throw new Error(evt.error || 'Stream error');
+                            finalData = evt;
                         }
                     } catch (parseErr) {
                         // ignore malformed SSE line
@@ -1981,7 +2029,11 @@
             }
         }
 
-        return finalData;
+        return ensureTurnResponseObject(finalData, {
+            sessionId: sessionId,
+            phase: 'stream_complete',
+            hasAction: true,
+        });
     }
 
     // ─── Response transform ────────────────────────────────────────────────────
@@ -2157,21 +2209,29 @@
         }
 
         /**
-         * Send a turn via streaming, falling back to the regular endpoint if
-         * the stream returns no data (e.g. on older servers without the endpoint).
+         * Send a turn via the canonical streaming endpoint only.
          * Supports optional structured action payload for structured commands.
          */
         async function doSendTurn(sid) {
             var d;
-            // If we have a structured action, try streaming with it
-            if (structuredAction) {
-                d = await apiSendTurnStreamWithAction(sid, input, structuredAction, onToken);
-                if (!d) d = await apiSendTurnWithAction(sid, input, structuredAction);
-            } else {
-                d = await apiSendTurnStream(sid, input, onToken);
-                if (!d) d = await apiSendTurn(sid, input);
+            // Always use streaming endpoint exclusively
+            try {
+                if (structuredAction) {
+                    d = await apiSendTurnStreamWithAction(sid, input, structuredAction, onToken);
+                } else {
+                    d = await apiSendTurnStream(sid, input, onToken);
+                }
+            } catch (err) {
+                return buildTurnClientError(
+                    (err && err.message) ? err.message : 'turn_stream_request_failed',
+                    { sessionId: sid }
+                );
             }
-            return d;
+
+            return ensureTurnResponseObject(d, {
+                sessionId: sid,
+                hasStructuredAction: !!structuredAction,
+            });
         }
 
         try {
@@ -2185,8 +2245,19 @@
                         setLoading(true);
                         var game = await apiCreateGameStream(getAdventureSetupFromUI());
                         setLoading(false);
-                        updateState({ sessionId: game.session_id });
-                        localStorage.setItem(STORAGE_KEY, rpgState.sessionId);
+                        
+                        // Set session ID FIRST before anything else
+                        const newSessionId = String(game.session_id || '').trim();
+                        if (!newSessionId) {
+                            throw new Error('server returned empty session id');
+                        }
+                        
+                        updateState({ sessionId: newSessionId });
+                        localStorage.setItem(STORAGE_KEY, newSessionId);
+                        
+                        // Start living world and subscriptions ONLY AFTER session id is set
+                        ensureNarrationSubscription(newSessionId);
+                        connectSessionStream();
 
                         // Show world opening before the player's first turn
                         if (game.opening) {
@@ -2194,7 +2265,10 @@
                             speakNarration(game.opening);
                         }
 
-                        data = await doSendTurn(rpgState.sessionId);
+                        data = await doSendTurn(newSessionId);
+                        if (!data || typeof data !== 'object') {
+                            throw new Error('turn returned non-object payload');
+                        }
                         break;
                     } catch (err) {
                         setLoading(false);
@@ -2228,6 +2302,33 @@
                 }
             }
 
+            data = ensureTurnResponseObject(data, {
+                sessionId: rpgState.sessionId,
+                phase: 'post_submit',
+            });
+
+            if (data.type === 'error') {
+                var msg = coerceText(data.error || 'Turn failed.');
+                appendMessage({
+                    type: 'system',
+                    role: 'error',
+                    content: '❌ Error: ' + msg,
+                });
+                setLoading(false);
+                return;
+            }
+
+            if (data.type === 'turn_result') {
+                // Normalize authoritative stream result into the normal path below.
+                data.ok = (data.ok !== false);
+            }
+
+            if (data.type === 'needs_setup') {
+                openAdventureBuilder();
+                setLoading(false);
+                return;
+            }
+
             // Remove the streaming placeholder — applyUpdate will add the final
             // narration with markdown rendering
             if (streamingDiv) {
@@ -2236,9 +2337,18 @@
                 streamingText = '';
             }
 
-            if (data.type === 'authoritative_result') {
+            if (data && (data.type === 'authoritative_result' || data.type === 'turn_result')) {
                 // Handle authoritative result immediately
-                const turnId = data.turn_id;
+                const turnId = data.turn_id || '';
+                if (!turnId) {
+                    appendMessage({
+                        type: 'system',
+                        role: 'error',
+                        content: '❌ Error: turn result missing turn_id',
+                    });
+                    setLoading(false);
+                    return;
+                }
                 updateState({ currentTurnId: turnId });
 
                 // Render authoritative state immediately
@@ -2338,6 +2448,14 @@
                 // Speak narration after response is complete
                 if (data && data.narration) speakNarration(data.narration);
             }
+
+            appendMessage({
+                type: 'system',
+                role: 'error',
+                content: '❌ Error: unsupported turn response: ' + escapeHtml(_safeStr(data.type || 'unknown')),
+            });
+            setLoading(false);
+            return;
         } catch (err) {
             if (streamingDiv) { streamingDiv.remove(); streamingDiv = null; }
             appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
@@ -2346,6 +2464,87 @@
             persistSnapshot();
             if (rpgState.sessionId) startLivingWorld();
         }
+    }
+
+    async function apiSendTurnStream(sessionId, input, onToken) {
+        const response = await fetch('/api/rpg/session/turn/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: sessionId,
+                input: input,
+            }),
+        });
+
+        if (!response.ok) {
+            return buildTurnClientError('turn_stream_http_' + response.status, {
+                status: response.status,
+                sessionId: sessionId,
+            });
+        }
+
+        const reader = response.body && response.body.getReader ? response.body.getReader() : null;
+        if (!reader) {
+            return buildTurnClientError('turn_stream_missing_reader', { sessionId: sessionId });
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalPayload = null;
+
+        while (true) {
+            const next = await reader.read();
+            if (!next || next.done) break;
+
+            buffer += decoder.decode(next.value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() || '';
+
+            for (const raw of parts) {
+                const lines = String(raw || '').split('\n');
+                const dataLines = lines
+                    .filter(line => String(line || '').startsWith('data:'))
+                    .map(line => line.slice(5).trim());
+
+                if (!dataLines.length) continue;
+
+                let evt = null;
+                try {
+                    evt = JSON.parse(dataLines.join('\n'));
+                } catch (_err) {
+                    continue;
+                }
+
+                if (!evt || typeof evt !== 'object') continue;
+
+                if (evt.type === 'token' && typeof onToken === 'function') {
+                    onToken(evt.token || evt.text || '');
+                    continue;
+                }
+
+                if (evt.type === 'error') {
+                    finalPayload = evt;
+                    continue;
+                }
+
+                if (evt.type === 'authoritative_result') {
+                    finalPayload = evt;
+                    continue;
+                }
+
+                if (evt.type === 'done') {
+                    if (!finalPayload) {
+                        finalPayload = evt;
+                    }
+                    continue;
+                }
+            }
+        }
+
+        return ensureTurnResponseObject(finalPayload, {
+            sessionId: sessionId,
+            phase: 'stream_complete',
+        });
     }
 
     // ─── Apply update (versioned) ──────────────────────────────────────────────
@@ -3834,7 +4033,7 @@
     }
 
     function fetchWorldEvents() {
-        if (!rpgState.sessionId) return;
+        if (!rpgState.sessionId || rpgState.sessionId === "session:unknown") return;
         fetch('/api/rpg/session/world_events', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4018,7 +4217,7 @@
     // ── Phase 8: Bootstrap living world on session load ──────────────────────
 
     function startLivingWorld() {
-        if (!rpgState.sessionId) return;
+        if (!rpgState.sessionId || rpgState.sessionId === "session:unknown") return;
         console.log("🌍 STARTING LIVING WORLD for session:", rpgState.sessionId);
         
         // Ensure narration SSE subscription is active
