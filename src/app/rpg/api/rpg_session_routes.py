@@ -363,50 +363,58 @@ async def execute_rpg_session_turn_stream(request: Request):
         return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)
 
     def generate():
-        yield _sse({"type": "accepted"})
-        yield _sse({"type": "processing", "stage": "authoritative_turn"})
+        try:
+            yield _sse({"type": "accepted"})
+            yield _sse({"type": "processing", "stage": "authoritative_turn"})
 
-        authoritative_result = _apply_turn_authoritative(
-            session_id,
-            player_input,
-            action=action,
-            performance_override=request_performance or None,
-        )
+            authoritative_result = _apply_turn_authoritative(
+                session_id,
+                player_input,
+                action=action,
+                performance_override=request_performance or None,
+            )
 
-        if not authoritative_result.get("ok"):
-            err = _safe_str(authoritative_result.get("error") or "turn_failed")
-            yield _sse({"type": "error", "error": err})
+            if not authoritative_result.get("ok"):
+                err = _safe_str(authoritative_result.get("error") or "turn_failed")
+                yield _sse({"type": "error", "error": err})
+                return
+
+            authoritative = _safe_dict(authoritative_result.get("authoritative"))
+            narration_request = _safe_dict(authoritative_result.get("narration_request"))
+
+            enqueue_result = _enqueue_narration_request(session_id, narration_request)
+            narration_status = _safe_str(enqueue_result.get("status") or "queued")
+
+            yield _sse({
+                "type": "authoritative_result",
+                "turn_id": _safe_str(authoritative.get("turn_id")),
+                "tick": authoritative.get("tick"),
+                "resolved_result": authoritative.get("resolved_result"),
+                "combat_result": authoritative.get("combat_result"),
+                "xp_result": authoritative.get("xp_result"),
+                "skill_xp_result": authoritative.get("skill_xp_result"),
+                "level_up": authoritative.get("level_up"),
+                "skill_level_ups": authoritative.get("skill_level_ups"),
+                "summary": authoritative.get("summary"),
+                "presentation": authoritative.get("presentation"),
+                "response_length": authoritative.get("response_length"),
+                "fallback_narration": authoritative.get("deterministic_fallback_narration"),
+                "narration_status": narration_status,
+            })
+
+            yield _sse({
+                "type": "done",
+                "turn_id": _safe_str(authoritative.get("turn_id")),
+                "tick": authoritative.get("tick"),
+                "narration_status": narration_status,
+            })
+        except Exception as exc:
+            _logger.exception("turn/stream failed")
+            yield _sse({
+                "type": "error",
+                "error": str(exc) or "turn_stream_failed",
+            })
             return
-
-        authoritative = _safe_dict(authoritative_result.get("authoritative"))
-        narration_request = _safe_dict(authoritative_result.get("narration_request"))
-
-        enqueue_result = _enqueue_narration_request(session_id, narration_request)
-        narration_status = _safe_str(enqueue_result.get("status") or "queued")
-
-        yield _sse({
-            "type": "authoritative_result",
-            "turn_id": _safe_str(authoritative.get("turn_id")),
-            "tick": authoritative.get("tick"),
-            "resolved_result": authoritative.get("resolved_result"),
-            "combat_result": authoritative.get("combat_result"),
-            "xp_result": authoritative.get("xp_result"),
-            "skill_xp_result": authoritative.get("skill_xp_result"),
-            "level_up": authoritative.get("level_up"),
-            "skill_level_ups": authoritative.get("skill_level_ups"),
-            "summary": authoritative.get("summary"),
-            "presentation": authoritative.get("presentation"),
-            "response_length": authoritative.get("response_length"),
-            "fallback_narration": authoritative.get("deterministic_fallback_narration"),
-            "narration_status": narration_status,
-        })
-
-        yield _sse({
-            "type": "done",
-            "turn_id": _safe_str(authoritative.get("turn_id")),
-            "tick": authoritative.get("tick"),
-            "narration_status": narration_status,
-        })
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers=sse_headers)
 
@@ -572,7 +580,7 @@ async def stream_rpg_session(request: Request):
         "X-Accel-Buffering": "no",
     }
 
-    if not session_id:
+    if not session_id or session_id == "session:unknown":
         def error_gen():
             yield _sse({"type": "error", "error": "session_id_required"})
         return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)

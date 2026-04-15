@@ -5,19 +5,7 @@
  * Integrates with RPGPlayerIntegration to refresh timeline and audit data.
  */
 
-import { RPGInspectorClient } from "./rpgInspectorClient.js";
-import { rpgInspectorState } from "./rpgInspectorState.js";
-import { filterTimelineSnapshots, filterWorldConsequences, buildNpcOptions } from "./rpgInspectorFilters.js";
-import {
-  renderInspectorShell,
-  renderTimelinePanel,
-  renderTickView,
-  renderNpcReasoning,
-  renderGmAudit,
-  setInspectorLoading,
-} from "./rpgInspectorRenderer.js";
-import { renderInspectorDiff } from "./rpgInspectorDiffRenderer.js";
-import { buildCausalTrace, renderCausalTrace } from "./rpgInspectorCausalTrace.js";
+
 
 const inspectorClient = new RPGInspectorClient();
 
@@ -25,10 +13,96 @@ function getEl(id) {
   return document.getElementById(id);
 }
 
-export class RPGInspectorUI {
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function safeObj(v) {
+  return v && typeof v === "object" ? v : {};
+}
+
+function pushBoundedEvent(target, entry, maxItems = 24) {
+  const list = Array.isArray(target) ? target.slice() : [];
+  list.push(entry);
+  return list.slice(-maxItems);
+}
+
+// Auto-initialize inspector when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  console.log("DOM Ready - initializing RPG Inspector");
+  
+  // Wait for RPG module to initialize first
+  setTimeout(() => {
+    console.log("Creating RPGInspectorUI instance");
+    
+    // Create empty stubs for required getters
+    window.rpgInspector = new RPGInspectorUI(
+      () => window.rpgState ? { session_id: window.rpgState.sessionId } : {},
+      () => window.rpgState || {}
+    );
+    
+    // Expose globally
+    window.RPGInspectorUI = RPGInspectorUI;
+    
+    console.log("Calling bind()");
+    window.rpgInspector.bind();
+    
+    // Force initial render to create the panel
+    const shell = document.getElementById("rpg-inspector-shell");
+    if (shell) {
+      console.log("Found inspector shell");
+      shell.style.display = "none";
+    } else {
+      console.error("Inspector shell NOT found!");
+    }
+    
+    // Add direct click handler to button
+    const btn = document.getElementById("rpg-inspector-toggle-btn");
+    if (btn) {
+      console.log("Found inspector toggle button, adding listener");
+      btn.addEventListener("click", () => {
+        console.log("Inspector button clicked!");
+        if (!window.rpgInspector) {
+          console.error("rpgInspector not initialized!");
+          return;
+        }
+        console.log("Toggling inspector open state");
+        window.rpgInspector.toggleOpen();
+      });
+    } else {
+      console.error("Inspector toggle button NOT found!");
+    }
+  }, 1000);
+});
+
+class RPGInspectorUI {
   constructor(getSetupPayload, getSimulationState) {
     this.getSetupPayload = getSetupPayload;
     this.getSimulationState = getSimulationState;
+    this._sseDiagBound = false;
+  }
+
+  handleSseDiagnostic(detail) {
+    const d = safeObj(detail);
+    const channel = String(d.channel || "");
+    if (!channel || !rpgInspectorState.sseDiagnostics[channel]) return;
+
+    const prev = safeObj(rpgInspectorState.sseDiagnostics[channel]);
+    const meta = safeObj(d.meta);
+
+    const next = {
+      ...prev,
+      ...safeObj(d.patch),
+      events: pushBoundedEvent(prev.events, {
+        at: d.at || nowIso(),
+        channel,
+        kind: d.kind || "event",
+        meta,
+      }),
+    };
+
+    rpgInspectorState.sseDiagnostics[channel] = next;
+    renderSseDiagnosticsPanel(rpgInspectorState.sseDiagnostics);
   }
 
   toggleOpen() {
@@ -190,6 +264,7 @@ export class RPGInspectorUI {
   async refreshAudit() {
     const simulationState = this.getSimulationState();
     renderGmAudit((simulationState || {}).debug_meta || {});
+    renderSseDiagnosticsPanel(rpgInspectorState.sseDiagnostics);
   }
 
   bind() {
@@ -242,6 +317,15 @@ export class RPGInspectorUI {
     window.addEventListener("rpg-inspector:inspectNpc", (e) => {
       if (e.detail) this.inspectNpc(e.detail);
     });
+
+    if (!this._sseDiagBound) {
+      window.addEventListener("rpg:sse_diagnostic", (e) => {
+        this.handleSseDiagnostic(e.detail || {});
+      });
+      this._sseDiagBound = true;
+    }
+
+    renderSseDiagnosticsPanel(rpgInspectorState.sseDiagnostics);
   }
 }
 

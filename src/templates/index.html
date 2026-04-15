@@ -461,6 +461,15 @@
                     <div id="rpg-memory-section" style="display:none;">
                         <div id="rpg-memory"></div>
                     </div>
+
+                    <!-- RPG Inspector Shell -->
+                    <button id="rpg-inspector-toggle-btn" class="rpg-toolbar-btn" style="position: absolute; bottom: 8px; right: 8px; z-index: 100;" title="Toggle RPG Inspector">🔍 Inspector</button>
+                    <div id="rpg-inspector-shell" style="display: none; position: fixed; bottom: 0; right: 0; width: 50%; height: 60%; background: #1a1a2e; border: 1px solid #333; z-index: 1000; overflow-y: auto; padding: 12px;">
+                      <div id="rpg-inspector-timeline" class="rpg-inspector-section"></div>
+                      <div id="rpg-inspector-tick-view" class="rpg-inspector-section"></div>
+                      <div id="rpg-inspector-npc-reasoning" class="rpg-inspector-section"></div>
+                      <div id="rpg-inspector-gm-audit" class="rpg-inspector-section"></div>
+                    </div>
                 </div>
 
                 <!-- Player Stats / Inventory overlay modal -->
@@ -1650,6 +1659,13 @@ Morgan: Indeed, it reminds me of home."></textarea>
     <script src="{{ url_for('static', filename='podcast.js') }}"></script>
     <script src="{{ url_for('static', filename='story.js') }}"></script>
     <script src="{{ url_for('static', filename='voice_studio.js') }}"></script>
+    <script src="{{ url_for('static', filename='rpg/rpgInspectorState.js') }}"></script>
+    <script src="{{ url_for('static', filename='rpg/rpgInspectorClient.js') }}"></script>
+    <script src="{{ url_for('static', filename='rpg/rpgInspectorFilters.js') }}"></script>
+    <script src="{{ url_for('static', filename='rpg/rpgInspectorCausalTrace.js') }}"></script>
+    <script src="{{ url_for('static', filename='rpg/rpgInspectorDiffRenderer.js') }}"></script>
+    <script src="{{ url_for('static', filename='rpg/rpgInspectorRenderer.js') }}"></script>
+    <script src="{{ url_for('static', filename='rpg/rpgInspectorUI.js') }}"></script>
     <script src="{{ url_for('static', filename='rpg/adventureBuilderApi.js') }}"></script>
     <script src="{{ url_for('static', filename='rpg/adventureBuilderState.js') }}"></script>
     <script src="{{ url_for('static', filename='rpg/adventureBuilderRenderer.js') }}"></script>

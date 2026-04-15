@@ -26,7 +26,7 @@ function safeObj(v) {
   return v && typeof v === "object" ? v : {};
 }
 
-export function buildCausalTrace(opts) {
+function buildCausalTrace(opts) {
   const optsSafe = safeObj(opts);
   const diff = safeObj(optsSafe.latestDiff);
   const timeline = safeObj(optsSafe.timeline);
@@ -70,7 +70,7 @@ export function buildCausalTrace(opts) {
   return chain.slice(0, 20);
 }
 
-export function renderCausalTrace(trace) {
+function renderCausalTrace(trace) {
   const root = document.getElementById("rpg-inspector-causal-trace");
   if (!root) return;
   const rows = safeArray(trace);

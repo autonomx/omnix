@@ -26,7 +26,7 @@ function safeObj(v) {
   return v && typeof v === "object" ? v : {};
 }
 
-export function renderInspectorDiff(diff) {
+function renderInspectorDiff(diff) {
   const root = document.getElementById("rpg-inspector-diff-panel");
   if (!root) return;
 

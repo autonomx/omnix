@@ -7,7 +7,7 @@
  * - NPC options building for dropdown
  */
 
-export function filterTimelineSnapshots(snapshots, query) {
+function filterTimelineSnapshots(snapshots, query) {
   const q = String(query || "").trim().toLowerCase();
   const rows = Array.isArray(snapshots) ? snapshots : [];
   if (!q) return rows;
@@ -19,14 +19,14 @@ export function filterTimelineSnapshots(snapshots, query) {
   });
 }
 
-export function filterWorldConsequences(items, typeFilter) {
+function filterWorldConsequences(items, typeFilter) {
   const rows = Array.isArray(items) ? items : [];
   const t = String(typeFilter || "").trim().toLowerCase();
   if (!t || t === "all") return rows;
   return rows.filter((item) => String(item?.type || "").toLowerCase() === t);
 }
 
-export function buildNpcOptions(simulationState) {
+function buildNpcOptions(simulationState) {
   const npcIndex = ((simulationState || {}).npc_index || {});
   return Object.keys(npcIndex)
     .sort((a, b) => {

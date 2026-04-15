@@ -332,22 +332,6 @@ def _build_idle_conversation_candidates(
                 npc_count = len([x for x in nearby_ids if x != npc_id])
                 base_salience = 0.52 if npc_count >= 2 else 0.45
                 
-                candidates.append({
-                    "lane": "idle",
-                    "kind": "npc_to_npc",
-                    "speaker_id": npc_id,
-                    "speaker_name": npc_name,
-                    "target_id": other_id,
-                    "target_name": other_name,
-                    "salience": base_salience,
-                    "text_hint": text_content,
-                    "emotion": "neutral",
-                    "location_id": npc_loc,
-                    "tick": tick,
-                })
-                
-                # Only one NPC↔NPC candidate per speaker per idle tick
-                break
                 if npc_loc != player_loc or other_loc != player_loc:
                     continue
                 other_belief = _safe_dict(beliefs.get(other_id))
@@ -367,6 +351,7 @@ def _build_idle_conversation_candidates(
                         "location_id": npc_loc,
                         "tick": tick,
                     })
+                    # Only one NPC↔NPC candidate per speaker per idle tick
                     break
 
         # Gossip from NPCs with goals

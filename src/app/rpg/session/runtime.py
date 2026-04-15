@@ -611,6 +611,7 @@ def _enqueue_narration_request(
     tick = int(narration_request.get("tick", 0) or 0)
     job_kind = _safe_str(narration_request.get("job_kind")).strip() or "player_turn"
     priority = int(narration_request.get("priority", 100 if job_kind == "player_turn" else 20) or 0)
+    max_attempts = int(narration_request.get("max_attempts", 3) or 3)
 
     if not turn_id:
         return {"ok": False, "error": "missing_turn_id"}
@@ -674,10 +675,10 @@ def _enqueue_narration_request(
         session_id,
         {
             "type": "narration_job",
-            "session_id": session_id,
             "turn_id": turn_id,
-            "tick": tick,
             "status": "queued",
+            "retry_count": 0,
+            "max_retries": max_attempts,
         },
     )
     
@@ -6740,7 +6741,11 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             },
         )
         
-        return {"ok": True, "status": "stale", "turn_id": turn_id}
+        return {
+            "ok": True,
+            "status": "stale",
+            "turn_id": turn_id,
+        }
 
     worker_token = f"{_utc_now_iso()}:{os.getpid()}:{turn_id}"
     runtime_state = _mark_narration_job_status(
@@ -6752,16 +6757,25 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
     
-    publish_narration_event(
-        session_id,
-        {
-            "type": "narration_job",
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "tick": tick,
-            "status": "processing",
-        },
+    current_job = _safe_dict(
+        _safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id)
     )
+    attempts = int(current_job.get("attempts", 0))
+    max_attempts = int(current_job.get("max_attempts", 3))
+    
+    try:
+        publish_narration_event(
+            session_id,
+            {
+                "type": "narration_job",
+                "turn_id": turn_id,
+                "status": "processing",
+                "retry_count": attempts,
+                "max_retries": max_attempts,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to publish narration processing event")
 
     # Re-read after claim and verify we still own the job before doing work.
     session = load_runtime_session(session_id)
@@ -6799,6 +6813,12 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         return {"ok": False, "error": "session_not_found_after_narration"}
 
     runtime_state = _copy_dict(session.get("runtime_state"))
+    current_job = _safe_dict(
+        _safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id)
+    )
+    attempts = int(current_job.get("attempts", 0))
+    max_attempts = int(current_job.get("max_attempts", 3))
+    
     if result.get("ok"):
         runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="completed")
         session["runtime_state"] = runtime_state
@@ -6863,6 +6883,8 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             "status": "completed",
             "turn_id": turn_id,
             "artifact": artifact,
+            "attempts": attempts,
+            "max_attempts": max_attempts,
             "session": session,
         }
 
@@ -6870,8 +6892,11 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     current_job = _safe_dict(
         _safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id)
     )
-    attempts = int(current_job.get("attempts", 0)) + 1
+    attempts = int(current_job.get("attempts", 0))
     max_attempts = int(current_job.get("max_attempts", 3))
+    
+    # Increment before checking threshold
+    attempts += 1
 
     if attempts >= max_attempts:
         final_status = "failed"
@@ -6885,23 +6910,26 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         error=_safe_str(result.get("error") or "narration_failed") if final_status == "failed" else "",
     )
     
-    if final_status == "failed":
-        publish_narration_event(
-            session_id,
-            {
-                "type": "narration_job",
-                "session_id": session_id,
-                "turn_id": turn_id,
-                "tick": tick,
-                "status": "failed",
-                "error": _safe_str(result.get("error") or "narration_failed"),
-            },
-        )
-
-    # Update attempts count
+    # Update attempts count BEFORE publishing
     job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
     job["attempts"] = attempts
     runtime_state["narration_jobs_by_turn"][turn_id] = job
+    
+    if final_status == "failed":
+        try:
+            publish_narration_event(
+                session_id,
+                {
+                    "type": "narration_job",
+                    "turn_id": turn_id,
+                    "status": "failed",
+                    "retry_count": attempts,
+                    "max_retries": max_attempts,
+                    "error": _safe_str(result.get("error") or "narration_failed"),
+                },
+            )
+        except Exception:
+            logger.exception("Failed to publish narration job failure event")
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
     return {
@@ -6935,6 +6963,17 @@ def apply_turn(
     authoritative = _safe_dict(authoritative_result.get("authoritative"))
     narration_request = _safe_dict(authoritative_result.get("narration_request"))
     _enqueue_narration_request(session_id, narration_request)
+    
+    try:
+        from app.rpg.session.narration_worker import (
+            ensure_narration_worker_running,
+            signal_narration_work,
+        )
+
+        ensure_narration_worker_running()
+        signal_narration_work(session_id)
+    except Exception:
+        logger.exception("Failed to start or signal narration worker")
 
     return {
         "ok": True,

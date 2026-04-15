@@ -144,6 +144,70 @@
         return (v == null) ? '' : String(v);
     }
 
+    function _nowIso() {
+        try {
+            return new Date().toISOString();
+        } catch (_err) {
+            return '';
+        }
+    }
+
+    function _emitSseDiagnostic(channel, kind, patch, meta) {
+        try {
+            window.dispatchEvent(new CustomEvent("rpg:sse_diagnostic", {
+                detail: {
+                    channel: _safeStr(channel),
+                    kind: _safeStr(kind),
+                    at: _nowIso(),
+                    patch: (patch && typeof patch === "object") ? patch : {},
+                    meta: (meta && typeof meta === "object") ? meta : {},
+                }
+            }));
+        } catch (_err) {}
+    }
+
+    function getNarrationStatusLabel(status, retryCount, maxRetries) {
+        var s = _safeStr(status || "").toLowerCase();
+        var retry = Math.max(0, parseInt(retryCount, 10) || 0);
+        var max = Math.max(0, parseInt(maxRetries, 10) || 0);
+
+        if (s === "failed") return "failed";
+        if (s === "processing" || s === "running") return "processing";
+        if (retry > 0 && max > 0) return "retry " + retry + "/" + max;
+        if (s === "queued" || s === "pending" || s === "enqueued") return "queued";
+        return "queued";
+    }
+
+    function getNarrationStatusBadgeClass(status) {
+        var s = _safeStr(status || "").toLowerCase();
+        if (s === "failed") return "rpg-inline-status-badge is-failed";
+        if (s === "processing" || s === "running") return "rpg-inline-status-badge is-processing";
+        if (s.indexOf("retry ") === 0) return "rpg-inline-status-badge is-retry";
+        return "rpg-inline-status-badge is-queued";
+    }
+
+    function buildNarrationPlaceholderHtml(statusLabel) {
+        var label = _safeStr(statusLabel || "queued");
+        return (
+            '<span class="rpg-generating-inline">' +
+                '<span class="' + getNarrationStatusBadgeClass(label) + '">' + escapeHtml(label) + '</span>' +
+                '<span class="rpg-generating-text">Generating narration...</span>' +
+            '</span>'
+        );
+    }
+
+    function updateTurnNarrationPlaceholder(turnId, status, retryCount, maxRetries) {
+        if (!turnId || typeof CSS === "undefined" || !CSS.escape) return;
+        var root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+        if (!root) return;
+        var placeholder = root.querySelector('.rpg-turn-narration-placeholder');
+        if (!placeholder) return;
+
+        var label = getNarrationStatusLabel(status, retryCount, maxRetries);
+        placeholder.innerHTML = buildNarrationPlaceholderHtml(label);
+        placeholder.setAttribute('data-status', label);
+    }
+
     function coerceText(value) {
         if (Array.isArray(value)) {
             return value
@@ -1661,6 +1725,27 @@
             const job = data.job || {};
             const artifact = data.artifact || {};
 
+            _emitSseDiagnostic("narration", "poll_status", {
+                lastMessageAt: _nowIso(),
+                activeTurnId: _safeStr(turnId || ""),
+                lastJobStatus: _safeStr(job.status || ""),
+                lastArtifactTurnId: _safeStr(artifact.turn_id || ""),
+            }, {
+                turnId: turnId,
+                attempt: attempt,
+                job: job,
+                artifact: artifact,
+            });
+
+            if (turnId && !artifact.narration) {
+                updateTurnNarrationPlaceholder(
+                    turnId,
+                    _safeStr(job.status || "queued"),
+                    parseInt(job.retry_count, 10) || parseInt(job.attempt, 10) || 0,
+                    parseInt(job.max_retries, 10) || parseInt(job.maxAttempts, 10) || 3
+                );
+            }
+
              if (artifact.narration) {
                  renderTurnNarration(turnId, artifact.narration, artifact.version || 1);
                  return;
@@ -1678,18 +1763,27 @@
 
     function ensureNarrationSubscription(sessionId) {
         if (!sessionId || sessionId === "session:unknown") return;
-
-        // Keep one persistent connection per session
         if (rpgState.narrationEventSource) {
-            return;
+            if (rpgState.narrationEventSourceSessionId === sessionId) return;
+            try { rpgState.narrationEventSource.close(); } catch (e) {}
         }
 
         var url = "/api/rpg/session/narration_events?session_id=" + encodeURIComponent(sessionId);
         var es = new EventSource(url);
         rpgState.narrationEventSource = es;
+        rpgState.narrationEventSourceSessionId = sessionId;
 
         es.onopen = function () {
-            // On reconnect, resync latest narration state only if we have an active turn
+            _emitSseDiagnostic("narration", "open", {
+                status: "open",
+                connected: true,
+                lastOpenAt: _nowIso(),
+                activeTurnId: _safeStr(rpgState.currentTurnId || ""),
+            }, {
+                sessionId: sessionId,
+                url: url,
+            });
+
             if (rpgState.currentTurnId) {
                 fetch("/api/rpg/session/narration_status", {
                     method: "POST",
@@ -1702,6 +1796,16 @@
                 .then(r => r.json())
                 .then(data => {
                     var artifact = data && data.artifact;
+                    var job = data && data.job;
+                    _emitSseDiagnostic("narration", "resync", {
+                        lastMessageAt: _nowIso(),
+                        activeTurnId: _safeStr(rpgState.currentTurnId || ""),
+                        lastJobStatus: _safeStr(job && job.status || ""),
+                        lastArtifactTurnId: _safeStr(artifact && artifact.turn_id || ""),
+                    }, {
+                        job: job || null,
+                        artifact: artifact || null,
+                    });
                     if (artifact && artifact.narration) {
                         renderTurnNarration(rpgState.currentTurnId, artifact.narration, {
                             usedLlm: !!artifact.used_llm,
@@ -1713,9 +1817,40 @@
             }
         };
 
+        function bindNarrationNamedEvent(eventName) {
+            es.addEventListener(eventName, function (evt) {
+                try {
+                    var data = JSON.parse(evt.data || "{}");
+                    _emitSseDiagnostic("narration", eventName, {
+                        lastMessageAt: _nowIso(),
+                        activeTurnId: _safeStr(rpgState.currentTurnId || ""),
+                        lastJobStatus: eventName === "narration_job" ? _safeStr(data.status || "") : _safeStr(rpgState.sseLastNarrationJobStatus || ""),
+                        lastArtifactTurnId: eventName === "narration_artifact" ? _safeStr(data.turn_id || "") : _safeStr(rpgState.sseLastNarrationArtifactTurnId || ""),
+                        lastHeartbeatAt: eventName === "heartbeat" ? _nowIso() : _safeStr((rpgState.sseLastNarrationHeartbeatAt || "")),
+                    }, data);
+                    if (eventName === "heartbeat") {
+                        rpgState.sseLastNarrationHeartbeatAt = _nowIso();
+                    }
+                    handleNarrationEvent(data);
+                } catch (err) {
+                    console.warn("Failed to parse narration SSE named event", err);
+                }
+            });
+        }
+
+        bindNarrationNamedEvent("narration_job");
+        bindNarrationNamedEvent("narration_artifact");
+        bindNarrationNamedEvent("npc_conversation_artifact");
+        bindNarrationNamedEvent("ambient_conversation_artifact");
+        bindNarrationNamedEvent("heartbeat");
+
         es.onmessage = function (evt) {
             try {
                 var data = JSON.parse(evt.data || "{}");
+                _emitSseDiagnostic("narration", "message", {
+                    lastMessageAt: _nowIso(),
+                    activeTurnId: _safeStr(rpgState.currentTurnId || ""),
+                }, data);
                 handleNarrationEvent(data);
             } catch (err) {
                 console.warn("Failed to parse narration SSE event", err);
@@ -1723,7 +1858,15 @@
         };
 
         es.onerror = function () {
-            // Let EventSource auto-reconnect.
+            _emitSseDiagnostic("narration", "error", {
+                status: "error",
+                connected: false,
+                lastErrorAt: _nowIso(),
+                activeTurnId: _safeStr(rpgState.currentTurnId || ""),
+            }, {
+                sessionId: sessionId,
+                url: url,
+            });
         };
     }
 
@@ -1733,6 +1876,23 @@
         if (evt.type === "narration_artifact") {
             var turnId = evt.turn_id;
             if (!turnId) return;
+
+            rpgState.sseLastNarrationArtifactTurnId = _safeStr(turnId);
+
+            // Clear status badge before rendering final content
+            if (typeof CSS !== "undefined" && CSS.escape) {
+                var root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                if (root) {
+                    var placeholder = root.querySelector('.rpg-turn-narration-placeholder');
+                    if (placeholder) {
+                        placeholder.removeAttribute('data-status');
+                    }
+                    if (root.classList.contains('rpg-turn-narration-placeholder')) {
+                        root.removeAttribute('data-status');
+                        root.classList.remove('rpg-turn-narration-placeholder');
+                    }
+                }
+            }
 
             renderTurnNarration(turnId, evt.text || "", evt.version);
             return;
@@ -1749,8 +1909,19 @@
         }
 
         if (evt.type === "narration_job") {
-            // Optional: show status badges/spinner updates if desired.
-            // For now, no UI mutation needed except maybe logging.
+            var jobStatus = _safeStr(evt.status || "");
+            var turnId = _safeStr(evt.turn_id || evt.turnId || rpgState.currentTurnId || "");
+            var retryCount = parseInt(evt.retry_count, 10);
+            if (!Number.isFinite(retryCount)) retryCount = parseInt(evt.attempt, 10);
+            if (!Number.isFinite(retryCount)) retryCount = 0;
+            var maxRetries = parseInt(evt.max_retries, 10);
+            if (!Number.isFinite(maxRetries)) maxRetries = parseInt(evt.maxAttempts, 10);
+            if (!Number.isFinite(maxRetries)) maxRetries = 3;
+
+            rpgState.sseLastNarrationJobStatus = jobStatus;
+            if (turnId) {
+                updateTurnNarrationPlaceholder(turnId, jobStatus, retryCount, maxRetries);
+            }
             return;
         }
     }
@@ -2111,16 +2282,37 @@
                     appendMessage({ type: 'system', content: metaLines.join('\n'), turnId: turnId });
                 }
 
-                // Show narration pending
-                appendMessage({
-                    type: 'narration',
-                    role: 'turn_narration',
-                    narrationState: 'fallback',
-                    content: coerceText(
-                        data.fallback_narration || data.deterministic_fallback_narration
-                    ) || "Generating narration...",
-                    turnId: turnId
-                });
+                // Show narration pending with badge
+                const fallbackContent = coerceText(data.fallback_narration || data.deterministic_fallback_narration);
+                if (fallbackContent) {
+                    appendMessage({
+                        type: 'narration',
+                        role: 'turn_narration',
+                        narrationState: 'fallback',
+                        content: fallbackContent,
+                        turnId: turnId
+                    });
+                } else {
+                    // Create pending placeholder with status badge
+                    appendMessage({
+                        type: 'narration',
+                        role: 'turn_narration',
+                        narrationState: 'pending',
+                        content: '',
+                        turnId: turnId
+                    });
+                    
+                    // Add the placeholder badge after DOM is created
+                    requestAnimationFrame(() => {
+                        const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                        if (root) {
+                            const placeholder = root.querySelector('.rpg-turn-narration-placeholder') || root;
+                            placeholder.classList.add("rpg-turn-narration-placeholder");
+                            placeholder.innerHTML = buildNarrationPlaceholderHtml("queued");
+                            placeholder.setAttribute("data-status", "queued");
+                        }
+                    });
+                }
 
                 // Background worker is server-driven now; use SSE for updates.
                 ensureNarrationSubscription(rpgState.sessionId);
@@ -3061,7 +3253,9 @@
     // ── Phase 8: Persistent SSE subscription ─────────────────────────────────
 
     function connectSessionStream() {
-        if (!rpgState.sessionId) return;
+        if (!rpgState.sessionId || rpgState.sessionId === "session:unknown") {
+            return;
+        }
         disconnectSessionStream();
 
         var url = '/api/rpg/session/stream?session_id=' +
@@ -3075,6 +3269,11 @@
             es.onmessage = function (event) {
                 try {
                     var data = JSON.parse(event.data);
+                    _emitSseDiagnostic("ambient", "message", {
+                        status: "open",
+                        connected: true,
+                        lastMessageAt: _nowIso(),
+                    }, data);
                     if (handleStreamEventPayload(data)) {
                         return;
                     }
@@ -3082,8 +3281,16 @@
                     if (data.type === 'ambient' && data.update) {
                         rpgDebug('Ambient:SSE', data.update);
                         handleAmbientUpdate(data.update);
+                        _emitSseDiagnostic("ambient", "ambient_update", {
+                            lastMessageAt: _nowIso(),
+                            lastSeq: Number((data.update || {}).seq || rpgState.ambientSeq || 0),
+                        }, data.update || {});
                     } else if (data.type === 'heartbeat') {
                         var serverSeq = parseInt(data.latest_seq, 10) || 0;
+                        _emitSseDiagnostic("ambient", "heartbeat", {
+                            lastHeartbeatAt: _nowIso(),
+                            lastSeq: serverSeq,
+                        }, data);
                         if (serverSeq > rpgState.ambientSeq) {
                             pollAmbientUpdates();
                         }
@@ -3091,8 +3298,29 @@
                 } catch (e) { rpgDebug('SSE:ParseError', e); }
             };
 
+            es.addEventListener('heartbeat', function (event) {
+                try {
+                    var data = JSON.parse(event.data || "{}");
+                    _emitSseDiagnostic("ambient", "heartbeat", {
+                        lastHeartbeatAt: _nowIso(),
+                        status: "open",
+                        connected: true,
+                        lastSeq: Number(data.latest_seq || rpgState.ambientSeq || 0),
+                    }, data);
+                } catch (_err) {}
+            });
+
             es.onerror = function () {
                 rpgDebug('SSE:Error', { attempts: _ambientReconnectAttempts });
+                _emitSseDiagnostic("ambient", "error", {
+                    status: "error",
+                    connected: false,
+                    lastErrorAt: _nowIso(),
+                    reconnectAttempts: _ambientReconnectAttempts + 1,
+                }, {
+                    sessionId: rpgState.sessionId,
+                    url: url,
+                });
                 disconnectSessionStream();
                 _ambientReconnectAttempts++;
                 if (_ambientReconnectAttempts < _maxReconnectAttempts) {
@@ -3103,6 +3331,16 @@
             es.onopen = function () {
                 rpgDebug('SSE:Open', { sessionId: rpgState.sessionId });
                 _ambientReconnectAttempts = 0;
+                _emitSseDiagnostic("ambient", "open", {
+                    status: "open",
+                    connected: true,
+                    reconnectAttempts: 0,
+                    lastOpenAt: _nowIso(),
+                    lastSeq: Number(rpgState.ambientSeq || 0),
+                }, {
+                    sessionId: rpgState.sessionId,
+                    url: url,
+                });
             };
 
             es.addEventListener('resume_recap', function (event) {
@@ -3824,7 +4062,9 @@
         }
 
         startAmbientHeartbeat();
-        connectSessionStream();
+        if (rpgState.sessionId && rpgState.sessionId !== "session:unknown") {
+            connectSessionStream();
+        }
         _setupTypingDetection();
         console.log('[RPG] Living world started (session=' + rpgState.sessionId + ', seq=' + rpgState.ambientSeq + ')');
     }
@@ -3958,6 +4198,11 @@
 
         setupCollapsible();
         setupInputIntercept();
+        
+        // Initialize RPG Player Integration which also initializes Inspector
+        if (window.RPGPlayerIntegration) {
+            window.rpgPlayer = new RPGPlayerIntegration();
+        }
 
         // Start living-world subscription if session exists
         if (rpgState.sessionId) {

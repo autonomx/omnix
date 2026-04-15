@@ -4,7 +4,7 @@
  * Shared state object for the RPG inspector panels.
  */
 
-export const rpgInspectorState = {
+const rpgInspectorState = {
   timeline: null,
   latestDiff: null,
   selectedTick: null,
@@ -16,9 +16,34 @@ export const rpgInspectorState = {
   causalTrace: [],
   loading: false,
   isOpen: false,
+  sseDiagnostics: {
+    ambient: {
+      status: "idle",
+      connected: false,
+      reconnectAttempts: 0,
+      lastOpenAt: "",
+      lastErrorAt: "",
+      lastHeartbeatAt: "",
+      lastMessageAt: "",
+      lastSeq: 0,
+      events: [],
+    },
+    narration: {
+      status: "idle",
+      connected: false,
+      lastOpenAt: "",
+      lastErrorAt: "",
+      lastHeartbeatAt: "",
+      lastMessageAt: "",
+      activeTurnId: "",
+      lastJobStatus: "",
+      lastArtifactTurnId: "",
+      events: [],
+    },
+  },
 };
 
-export function resetInspectorState() {
+function resetInspectorState() {
   rpgInspectorState.timeline = null;
   rpgInspectorState.latestDiff = null;
   rpgInspectorState.selectedTick = null;
@@ -29,4 +54,29 @@ export function resetInspectorState() {
   rpgInspectorState.worldConsequenceFilter = "all";
   rpgInspectorState.causalTrace = [];
   rpgInspectorState.loading = false;
+  rpgInspectorState.sseDiagnostics = {
+    ambient: {
+      status: "idle",
+      connected: false,
+      reconnectAttempts: 0,
+      lastOpenAt: "",
+      lastErrorAt: "",
+      lastHeartbeatAt: "",
+      lastMessageAt: "",
+      lastSeq: 0,
+      events: [],
+    },
+    narration: {
+      status: "idle",
+      connected: false,
+      lastOpenAt: "",
+      lastErrorAt: "",
+      lastHeartbeatAt: "",
+      lastMessageAt: "",
+      activeTurnId: "",
+      lastJobStatus: "",
+      lastArtifactTurnId: "",
+      events: [],
+    },
+  };
 }

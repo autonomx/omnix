@@ -17,20 +17,108 @@ function safeObj(v) {
   return v && typeof v === "object" ? v : {};
 }
 
-export function renderInspectorShell(isOpen) {
+function safeIso(v) {
+  return v ? String(v) : "\u2014";
+}
+
+function safeEvents(v) {
+  return Array.isArray(v) ? v.slice(-24).reverse() : [];
+}
+
+function ensureSseDiagnosticsMount() {
+  const shell = document.getElementById("rpg-inspector-shell");
+  if (!shell) return null;
+
+  let root = document.getElementById("rpg-inspector-sse-diagnostics");
+  if (root) return root;
+
+  root = document.createElement("div");
+  root.id = "rpg-inspector-sse-diagnostics";
+  root.className = "rpg-inspector-section";
+  shell.appendChild(root);
+  return root;
+}
+
+function renderSseEventList(items) {
+  const rows = safeEvents(items);
+  if (!rows.length) {
+    return '<div class="rpg-inspector-muted">No SSE events captured yet.</div>';
+  }
+  return rows.map(function (item) {
+    const meta = safeObj(item.meta);
+    return (
+      '<div class="rpg-inspector-row rpg-inspector-sse-row">' +
+        '<div><strong>' + esc(item.channel || "channel") + '</strong> · ' + esc(item.kind || "event") + '</div>' +
+        '<div class="rpg-inspector-meta">' + esc(safeIso(item.at)) + '</div>' +
+        '<pre class="rpg-inspector-pre rpg-inspector-sse-pre">' + esc(JSON.stringify(meta, null, 2)) + '</pre>' +
+      '</div>'
+    );
+  }).join("");
+}
+
+function renderSseDiagnosticsPanel(diag) {
+  const root = ensureSseDiagnosticsMount();
+  if (!root) return;
+
+  const data = safeObj(diag);
+  const ambient = safeObj(data.ambient);
+  const narration = safeObj(data.narration);
+
+  root.innerHTML = [
+    '<div class="rpg-inspector-title">SSE Diagnostics</div>',
+    '<div class="rpg-inspector-diff-grid">',
+      '<div class="rpg-inspector-subcard">',
+        '<div class="rpg-inspector-subcard-title">Ambient Stream</div>',
+        '<div class="rpg-inspector-kv-list">',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Status</span><span class="rpg-inspector-kv-value">' + esc(ambient.status || "idle") + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Connected</span><span class="rpg-inspector-kv-value">' + esc(ambient.connected ? "yes" : "no") + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Reconnects</span><span class="rpg-inspector-kv-value">' + esc(ambient.reconnectAttempts ?? 0) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Open</span><span class="rpg-inspector-kv-value">' + esc(safeIso(ambient.lastOpenAt)) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Heartbeat</span><span class="rpg-inspector-kv-value">' + esc(safeIso(ambient.lastHeartbeatAt)) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Message</span><span class="rpg-inspector-kv-value">' + esc(safeIso(ambient.lastMessageAt)) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Seq</span><span class="rpg-inspector-kv-value">' + esc(ambient.lastSeq ?? 0) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Error</span><span class="rpg-inspector-kv-value">' + esc(safeIso(ambient.lastErrorAt)) + '</span></div>',
+        '</div>',
+      '</div>',
+      '<div class="rpg-inspector-subcard">',
+        '<div class="rpg-inspector-subcard-title">Narration Stream</div>',
+        '<div class="rpg-inspector-kv-list">',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Status</span><span class="rpg-inspector-kv-value">' + esc(narration.status || "idle") + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Connected</span><span class="rpg-inspector-kv-value">' + esc(narration.connected ? "yes" : "no") + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Active Turn</span><span class="rpg-inspector-kv-value">' + esc(narration.activeTurnId || "\u2014") + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Job Status</span><span class="rpg-inspector-kv-value">' + esc(narration.lastJobStatus || "\u2014") + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Artifact Turn</span><span class="rpg-inspector-kv-value">' + esc(narration.lastArtifactTurnId || "\u2014") + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Open</span><span class="rpg-inspector-kv-value">' + esc(safeIso(narration.lastOpenAt)) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Heartbeat</span><span class="rpg-inspector-kv-value">' + esc(safeIso(narration.lastHeartbeatAt)) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Message</span><span class="rpg-inspector-kv-value">' + esc(safeIso(narration.lastMessageAt)) + '</span></div>',
+          '<div class="rpg-inspector-kv-row"><span class="rpg-inspector-kv-key">Last Error</span><span class="rpg-inspector-kv-value">' + esc(safeIso(narration.lastErrorAt)) + '</span></div>',
+        '</div>',
+      '</div>',
+    '</div>',
+    '<div class="rpg-inspector-subtitle">Recent SSE Events</div>',
+    renderSseEventList([].concat(
+      safeEvents(ambient.events || []),
+      safeEvents(narration.events || [])
+    ).sort(function (a, b) {
+      return String(b.at || "").localeCompare(String(a.at || ""));
+    }).slice(0, 24)),
+  ].join("\n");
+}
+
+function renderInspectorShell(isOpen) {
   const root = document.getElementById("rpg-inspector-shell");
   if (!root) return;
   root.style.display = isOpen ? "grid" : "none";
   root.dataset.loading = "false";
 }
 
-export function setInspectorLoading(isLoading) {
+function setInspectorLoading(isLoading) {
   const root = document.getElementById("rpg-inspector-shell");
   if (!root) return;
   root.dataset.loading = isLoading ? "true" : "false";
 }
 
-export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
+function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
   setInspectorLoading(true);
   const root = document.getElementById("rpg-inspector-timeline");
   if (!root) { setInspectorLoading(false); return; }
@@ -101,7 +189,7 @@ export function renderTimelinePanel(timeline, latestDiff, onSelectTick) {
   setInspectorLoading(false);
 }
 
-export function renderTickView(tickView) {
+function renderTickView(tickView) {
   const root = document.getElementById("rpg-inspector-tick-view");
   if (!root) return;
 
@@ -116,7 +204,7 @@ export function renderTickView(tickView) {
   ].join("\n");
 }
 
-export function renderNpcReasoning(npcReasoning) {
+function renderNpcReasoning(npcReasoning) {
   const root = document.getElementById("rpg-inspector-npc-reasoning");
   if (!root) return;
   const data = safeObj(npcReasoning);
@@ -141,7 +229,7 @@ export function renderNpcReasoning(npcReasoning) {
   ].join("\n");
 }
 
-export function renderGmAudit(debugMeta) {
+function renderGmAudit(debugMeta) {
   const root = document.getElementById("rpg-inspector-gm-audit");
   if (!root) return;
   const audit = safeArray(safeObj(debugMeta).gm_audit);

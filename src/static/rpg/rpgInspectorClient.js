@@ -5,7 +5,7 @@
  * Provides methods for timeline, tick diff, NPC reasoning, and GM controls.
  */
 
-export class RPGInspectorClient {
+class RPGInspectorClient {
   async _post(path, payload) {
     const res = await fetch(path, {
       method: "POST",
