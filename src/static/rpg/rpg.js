@@ -1574,6 +1574,30 @@
         return apiCreateGame(payload || {});
     }
 
+    async function apiEnsureSessionReady(sessionId) {
+        var sid = _safeStr(sessionId).trim();
+        if (!sid || sid === 'session:unknown') {
+            return {
+                ok: false,
+                error: 'session_id_required',
+            };
+        }
+
+        try {
+            var game = await apiGetGame(sid);
+            return {
+                ok: true,
+                game: game,
+            };
+        } catch (err) {
+            var message = (err && err.message) ? String(err.message) : 'session_not_found';
+            return {
+                ok: false,
+                error: message.indexOf('404') >= 0 ? 'session_not_found' : message,
+            };
+        }
+    }
+
     async function apiGetGame(sessionId) {
         var res = await fetch('/api/rpg/session/get', {
             method: 'POST',
@@ -2215,6 +2239,7 @@
         async function doSendTurn(sid) {
             var d;
             // Always use streaming endpoint exclusively
+            if (!sid || sid === 'session:unknown') return buildTurnClientError('session_id_required', { sessionId: sid });
             try {
                 if (structuredAction) {
                     d = await apiSendTurnStreamWithAction(sid, input, structuredAction, onToken);
@@ -2222,8 +2247,13 @@
                     d = await apiSendTurnStream(sid, input, onToken);
                 }
             } catch (err) {
+                var msg = (err && err.message) ? String(err.message) : 'turn_stream_request_failed';
+                if (msg.indexOf('404') >= 0) {
+                    msg = 'session_not_found';
+                }
+
                 return buildTurnClientError(
-                    (err && err.message) ? err.message : 'turn_stream_request_failed',
+                    msg,
                     { sessionId: sid }
                 );
             }
@@ -2234,38 +2264,75 @@
             });
         }
 
+        function applyCreatedGameSession(newSessionId, gamePayload) {
+            var sid = _safeStr(newSessionId).trim();
+            if (!sid) {
+                throw new Error('server returned empty session id');
+            }
+
+            updateState({ sessionId: sid });
+            localStorage.setItem(STORAGE_KEY, sid);
+
+            // Hydrate stable bootstrap state from canonical session payload when available.
+            if (gamePayload && typeof gamePayload === 'object') {
+                updateState({
+                    player: gamePayload.player || rpgState.player,
+                    npcs: gamePayload.known_npcs || gamePayload.npcs || rpgState.npcs,
+                    voice_assignments: gamePayload.voice_assignments || {},
+                });
+            }
+
+            ensureNarrationSubscription(sid);
+            connectSessionStream();
+        }
+
+        function renderOpeningIfPresent(game) {
+            if (game && game.opening) {
+                applyUpdate(transformResponse({ narration: game.opening }));
+                speakNarration(game.opening);
+            }
+        }
+
+        async function createFreshSessionAndHydrate() {
+            var created = await apiCreateGameStream(getAdventureSetupFromUI());
+            var newSessionId = _safeStr(created && created.session_id).trim();
+            if (!newSessionId) {
+                throw new Error('server returned empty session id');
+            }
+
+            // Verify the backend can immediately resolve the canonical session.
+            var ready = await apiEnsureSessionReady(newSessionId);
+            if (!ready.ok) {
+                throw new Error(ready.error || 'session_not_found');
+            }
+
+            applyCreatedGameSession(newSessionId, ready.game || created);
+            renderOpeningIfPresent(created);
+            return {
+                sessionId: newSessionId,
+                created: created,
+                hydrated: ready.game || created,
+            };
+        }
+
         try {
             var data;
 
             if (!rpgState.sessionId) {
-                // First input – create game (retry once on failure)
-                var retried = false;
+                let retried = false;
                 while (true) {
+                    setLoading(true);
                     try {
-                        setLoading(true);
-                        var game = await apiCreateGameStream(getAdventureSetupFromUI());
+                        var started = await createFreshSessionAndHydrate();
                         setLoading(false);
-                        
-                        // Set session ID FIRST before anything else
-                        const newSessionId = String(game.session_id || '').trim();
-                        if (!newSessionId) {
-                            throw new Error('server returned empty session id');
-                        }
-                        
-                        updateState({ sessionId: newSessionId });
-                        localStorage.setItem(STORAGE_KEY, newSessionId);
-                        
-                        // Start living world and subscriptions ONLY AFTER session id is set
-                        ensureNarrationSubscription(newSessionId);
-                        connectSessionStream();
 
-                        // Show world opening before the player's first turn
-                        if (game.opening) {
-                            applyUpdate(transformResponse({ narration: game.opening }));
-                            speakNarration(game.opening);
+                        data = await doSendTurn(started.sessionId);
+                        if (data && data.type === 'error' && data.error === 'session_not_found' && !retried) {
+                            retried = true;
+                            updateState({ sessionId: null });
+                            localStorage.removeItem(STORAGE_KEY);
+                            continue;
                         }
-
-                        data = await doSendTurn(newSessionId);
                         if (!data || typeof data !== 'object') {
                             throw new Error('turn returned non-object payload');
                         }
@@ -2283,22 +2350,14 @@
                 }
             } else {
                 // Subsequent turns – retry with a fresh session if the stored one expired
-                try {
-                    data = await doSendTurn(rpgState.sessionId);
-                } catch (err) {
+                data = await doSendTurn(rpgState.sessionId);
+                
+                if (data.type === 'error' && data.error === 'session_not_found') {
                     updateState({ sessionId: null });
                     localStorage.removeItem(STORAGE_KEY);
 
-                    var game2 = await apiCreateGameStream(getAdventureSetupFromUI());
-                    updateState({ sessionId: game2.session_id });
-                    localStorage.setItem(STORAGE_KEY, game2.session_id);
-
-                    if (game2.opening) {
-                        applyUpdate(transformResponse({ narration: game2.opening }));
-                        speakNarration(game2.opening);
-                    }
-
-                    data = await doSendTurn(rpgState.sessionId);
+                    var restarted = await createFreshSessionAndHydrate();
+                    data = await doSendTurn(restarted.sessionId);
                 }
             }
 
@@ -4260,9 +4319,9 @@
             }).catch(function () { /* ignore resume errors */ });
         }
 
-        startAmbientHeartbeat();
         if (rpgState.sessionId && rpgState.sessionId !== "session:unknown") {
             connectSessionStream();
+            startAmbientHeartbeat();
         }
         _setupTypingDetection();
         console.log('[RPG] Living world started (session=' + rpgState.sessionId + ', seq=' + rpgState.ambientSeq + ')');
