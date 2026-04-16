@@ -399,6 +399,39 @@ def _has_narration_artifact_for_turn(runtime_state: Dict[str, Any], turn_id: str
     return bool(_safe_dict(by_turn.get(_safe_str(turn_id).strip())))
 
 
+def _has_blocking_player_turn_narration(runtime_state: Dict[str, Any]) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
+    artifacts = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+
+    if not by_turn:
+        jobs = _safe_list(runtime_state.get("narration_jobs"))
+        for job in jobs:
+            turn_id = _safe_str(job.get("turn_id")).strip()
+            raw_job = job
+            job = _safe_dict(raw_job)
+            if (_safe_str(job.get("job_kind")).strip() or "player_turn") != "player_turn":
+                continue
+            status = _safe_str(job.get("status")).strip().lower()
+            if status != "queued":
+                continue
+            artifact = _safe_dict(artifacts.get(turn_id))
+            if not artifact:
+                return True
+    else:
+        for turn_id, raw_job in by_turn.items():
+            job = _safe_dict(raw_job)
+            if (_safe_str(job.get("job_kind")).strip() or "player_turn") != "player_turn":
+                continue
+            status = _safe_str(job.get("status")).strip().lower()
+            if status != "queued":
+                continue
+            artifact = _safe_dict(artifacts.get(turn_id))
+            if not artifact:
+                return True
+    return False
+
+
 def _select_latest_ambient_conversation_beats_per_active_thread(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
@@ -6736,7 +6769,11 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     current_tick = int(runtime_state.get("tick", 0) or 0)
 
     # Optional stale protection: if narration is far behind, mark stale.
-    if tick < current_tick - 1:
+    job_kind = _safe_str(queued_job.get("job_kind")).strip() or "player_turn"
+
+    # Only ambient/background narration may be dropped for staleness.
+    # Player-turn narration is blocking UX and must still complete.
+    if job_kind == "ambient_conversation" and tick < current_tick - 1:
         runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="stale", error="stale_narration_job")
         session["runtime_state"] = runtime_state
         session = save_runtime_session(session)
@@ -7099,6 +7136,22 @@ def _apply_idle_tick_to_session(
     session = _copy_dict(session)
     runtime_state = ensure_ambient_runtime_state(_copy_dict(session.get("runtime_state")))
     simulation_state = _safe_dict(session.get("simulation_state"))
+
+    if _has_blocking_player_turn_narration(runtime_state):
+        return {
+            "ok": True,
+            "session": session,
+            "updates": [],
+            "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+            "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
+            "idle_debug_trace": {
+                "idle_suppressed": True,
+                "reason": "blocking_player_turn_narration",
+            },
+            "idle_seconds": _seconds_since_iso(_safe_str(runtime_state.get("last_real_player_activity_at"))),
+            "idle_gate_open": False,
+            "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
+        }
 
     _log_interaction_trace(
         "idle_tick_start",

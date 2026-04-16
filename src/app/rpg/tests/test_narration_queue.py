@@ -1,19 +1,17 @@
 """Tests for narration job queue functionality."""
 import copy
-from unittest.mock import patch, call
+from unittest.mock import call, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.rpg.api.rpg_session_routes import rpg_session_bp
-from app.rpg.session.narration_worker import signal_narration_work, ensure_narration_worker_running
 
 from app.rpg.session.runtime import (
+    _apply_idle_tick_to_session,
     apply_turn,
-    process_next_narration_job,
     _enqueue_narration_request,
-    load_runtime_session,
-    save_runtime_session,
+    process_next_narration_job,
 )
 
 
@@ -619,9 +617,9 @@ def test_narration_status_resignals_queued_job_without_artifact():
     }
 
     with patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
-         patch("app.rpg.api.rpg_session_routes.save_runtime_session"), \
-         patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_ensure, \
-         patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
+          patch("app.rpg.api.rpg_session_routes.save_runtime_session"), \
+          patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_ensure, \
+          patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
         response = client.post("/api/rpg/session/narration_status", json={
             "session_id": session_id,
             "turn_id": "turn_2",
@@ -634,3 +632,284 @@ def test_narration_status_resignals_queued_job_without_artifact():
         assert (payload.get("job") or {}).get("status") == "queued"
         assert mock_ensure.call_count == 1
         assert mock_signal.call_args == call(session_id)
+
+
+def test_player_turn_job_is_not_marked_stale_when_runtime_tick_advances():
+    """Test that player-turn narration jobs are not marked stale when runtime tick advances."""
+    session_id = "test_session"
+
+    mock_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 10,  # Runtime tick is 10
+            "narration_jobs": [
+                {
+                    "job_id": "narration:turn:6",
+                    "turn_id": "turn:6",
+                    "tick": 6,  # Job tick is 6
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:6",
+                        "tick": 6,
+                        "job_kind": "player_turn",
+                    },
+                }
+            ],
+            "narration_jobs_by_turn": {
+                "turn:6": {
+                    "job_id": "narration:turn:6",
+                    "turn_id": "turn:6",
+                    "tick": 6,
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:6",
+                        "tick": 6,
+                        "job_kind": "player_turn",
+                    },
+                }
+            },
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
+          patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
+          patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate:
+
+        mock_generate.return_value = {
+            "ok": True,
+            "artifact": {
+                "turn_id": "turn:6",
+                "tick": 6,
+                "narration": "Generated narration",
+                "used_llm": True,
+                "raw_llm_narrative": "Raw LLM",
+                "created_at": "2023-01-01T00:00:01Z",
+            },
+            "session": mock_session,
+        }
+
+        result = process_next_narration_job(session_id)
+
+        assert result["ok"] is True
+        assert result["status"] == "completed"
+        assert result["turn_id"] == "turn:6"
+
+        # Verify the job was processed, not marked stale
+        saved_session = mock_save.call_args_list[1][0][0]
+        runtime_state = saved_session["runtime_state"]
+        job = runtime_state["narration_jobs_by_turn"]["turn:6"]
+        assert job["status"] == "completed"
+        assert "stale" not in job.get("error", "")
+
+
+def test_ambient_conversation_job_is_marked_stale_when_far_behind():
+    """Test that ambient conversation jobs are still marked stale when far behind."""
+    session_id = "test_session"
+
+    mock_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 10,  # Runtime tick is 10
+            "narration_jobs": [
+                {
+                    "job_id": "narration:ambient:conv:1:beat:1",
+                    "turn_id": "ambient:conv:1:beat:1",
+                    "tick": 6,  # Job tick is 6
+                    "status": "queued",
+                    "job_kind": "ambient_conversation",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "ambient:conv:1:beat:1",
+                        "tick": 6,
+                        "job_kind": "ambient_conversation",
+                    },
+                }
+            ],
+            "narration_jobs_by_turn": {
+                "ambient:conv:1:beat:1": {
+                    "job_id": "narration:ambient:conv:1:beat:1",
+                    "turn_id": "ambient:conv:1:beat:1",
+                    "tick": 6,
+                    "status": "queued",
+                    "job_kind": "ambient_conversation",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "ambient:conv:1:beat:1",
+                        "tick": 6,
+                        "job_kind": "ambient_conversation",
+                    },
+                }
+            },
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
+          patch('app.rpg.session.runtime.save_runtime_session') as mock_save:
+
+        result = process_next_narration_job(session_id)
+
+        assert result["ok"] is True
+        assert result["status"] == "stale"
+        assert result["turn_id"] == "ambient:conv:1:beat:1"
+
+        # Verify the job was marked stale
+        saved_session = mock_save.call_args[0][0]
+        runtime_state = saved_session["runtime_state"]
+        job = runtime_state["narration_jobs_by_turn"]["ambient:conv:1:beat:1"]
+        assert job["status"] == "stale"
+        assert "stale_narration_job" in job["error"]
+
+
+def test_idle_tick_is_suppressed_while_player_turn_narration_pending():
+    """Test that idle ticks are suppressed when there's a blocking player-turn narration pending."""
+    session_id = "test_session"
+
+    mock_session = {
+        "session_id": session_id,
+        "simulation_state": {
+            "tick": 5,
+        },
+        "runtime_state": {
+            "tick": 5,
+            "idle_streak": 0,
+            "ambient_seq": 10,
+            "last_real_player_activity_at": "2023-01-01T00:00:00Z",
+            "runtime_settings": {},
+            "narration_jobs": [
+                {
+                    "job_id": "narration:turn:5",
+                    "turn_id": "turn:5",
+                    "tick": 5,
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:5",
+                        "tick": 5,
+                        "job_kind": "player_turn",
+                    },
+                }
+            ],
+            "narration_jobs_by_turn": {
+                "turn:5": {
+                    "job_id": "narration:turn:5",
+                    "turn_id": "turn:5",
+                    "tick": 5,
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:5",
+                        "tick": 5,
+                        "job_kind": "player_turn",
+                    },
+                }
+            },
+            "narration_artifacts": [],  # No artifact for turn:5
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    result = _apply_idle_tick_to_session(mock_session, reason="test")
+
+    assert result["ok"] is True
+    assert result["updates"] == []  # No updates generated
+    assert result["idle_debug_trace"]["idle_suppressed"] is True
+    assert result["idle_debug_trace"]["reason"] == "blocking_player_turn_narration"
+    assert result["idle_gate_open"] is False
+    # Tick should not have advanced
+    assert result["session"]["simulation_state"]["tick"] == 5
+    assert result["session"]["runtime_state"]["tick"] == 5
+
+
+def test_processing_player_turn_job_does_not_block_idle_tick():
+    """Test that a processing player-turn narration job does not block idle ticks."""
+    session_id = "test_session"
+
+    mock_session = {
+        "session_id": session_id,
+        "simulation_state": {
+            "tick": 5,
+        },
+        "runtime_state": {
+            "tick": 5,
+            "idle_streak": 0,
+            "ambient_seq": 10,
+            "last_real_player_activity_at": "2023-01-01T00:00:00Z",
+            "runtime_settings": {},
+            "narration_jobs": [
+                {
+                    "job_id": "narration:turn:5",
+                    "turn_id": "turn:5",
+                    "tick": 5,
+                    "status": "processing",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": "2023-01-01T00:00:01Z",
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:5",
+                        "tick": 5,
+                        "job_kind": "player_turn",
+                    },
+                }
+            ],
+            "narration_jobs_by_turn": {
+                "turn:5": {
+                    "job_id": "narration:turn:5",
+                    "turn_id": "turn:5",
+                    "tick": 5,
+                    "status": "processing",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": "2023-01-01T00:00:01Z",
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:5",
+                        "tick": 5,
+                        "job_kind": "player_turn",
+                    },
+                }
+            },
+            "narration_artifacts": [],  # No artifact yet
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    result = _apply_idle_tick_to_session(mock_session, reason="test")
+
+    assert result["ok"] is True
+    assert len(result["updates"]) > 0  # Updates should be generated since not suppressed
+    assert result["idle_debug_trace"].get("idle_suppressed") is not True
+    assert result["idle_gate_open"] is True  # Should proceed with idle
+    # Tick should have advanced
+    assert result["session"]["simulation_state"]["tick"] > 5
+    assert result["session"]["runtime_state"]["tick"] > 5

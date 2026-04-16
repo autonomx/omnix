@@ -82,6 +82,7 @@
         _v: 0,
         sessionId: null,
         currentTurnId: null,
+        isGeneratingNarration: false,
         messages: [],      // { type: 'narration'|'event'|'system'|'player', content }
         choices: [],
         npcs: [],
@@ -1732,6 +1733,7 @@
 
             // Speak narration
             speakNarration(narrationText);
+            updateState({ isGeneratingNarration: false });
             return;
         }
     }
@@ -1804,6 +1806,7 @@
                     parseInt(job.retry_count, 10) || parseInt(job.attempt, 10) || 0,
                     parseInt(job.max_retries, 10) || parseInt(job.maxAttempts, 10) || 3
                 );
+                updateState({ isGeneratingNarration: false });
                 return;
             }
 
@@ -2431,7 +2434,15 @@
                     setLoading(false);
                     return;
                 }
-                updateState({ currentTurnId: turnId });
+                updateState({ currentTurnId: turnId, isGeneratingNarration: true });
+
+                // Watchdog to prevent stuck state
+                setTimeout(() => {
+                    if (rpgState.isGeneratingNarration && rpgState.currentTurnId === turnId) {
+                        console.warn("Narration watchdog releasing stuck state");
+                        updateState({ isGeneratingNarration: false });
+                    }
+                }, 15000); // 15s safety
 
                 // Render authoritative state immediately
                 const update = transformResponse({
@@ -3659,6 +3670,7 @@
         rpgState.heartbeatTimer = setInterval(function () {
             if (!rpgState.sessionId) { stopAmbientHeartbeat(); return; }
             if (document.hidden) return; // Don't tick when tab is hidden
+            if (rpgState.currentTurnId && rpgState.isGeneratingNarration) return; // Don't tick while player-turn narration is pending
             // Do NOT update last_activity here — only real player actions should
 
             rpgDebug('IdleTick:Request', { sessionId: rpgState.sessionId, reason: 'heartbeat' });
