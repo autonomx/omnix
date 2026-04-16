@@ -6,14 +6,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.rpg.api.rpg_session_routes import rpg_session_bp
-
 from app.rpg.session.runtime import (
     _apply_idle_tick_to_session,
-    apply_turn,
     _enqueue_narration_request,
-    _enqueue_narration_request_old as _enqueue_narration_request_compat,
     _get_narration_job_for_turn,
+    apply_turn,
     process_next_narration_job,
+)
+from app.rpg.session.runtime import (
+    _enqueue_narration_request_old as _enqueue_narration_request_compat,
 )
 
 
@@ -1099,3 +1100,86 @@ def test_process_next_narration_job_dedupes_when_artifact_already_exists():
     runtime_state = saved_session["runtime_state"]
     job = runtime_state["narration_jobs_by_turn"]["turn:10"]
     assert job["status"] == "completed"
+
+
+def test_generate_turn_narration_artifact_streams_chunks_and_persists_full_text():
+    chunks = []
+
+    def on_chunk(piece):
+        chunks.append(piece)
+
+    session_id = "test_session"
+    narration_request = {
+        "turn_id": "turn:11",
+        "tick": 11,
+        "scene": {
+            "scene_id": "scene:tick:11",
+            "title": "The Rusty Flagon Tavern",
+            "summary": "You ask Bran the price of a room.",
+        },
+        "narration_context": {
+            "player_input": "well, how much?",
+        },
+        "performance": {
+            "enable_live_narration_llm": True,
+            "enable_narration_retry": False,
+        },
+    }
+
+    narration_result = {
+        "narration": "Bran names the price.",
+        "raw_llm_narrative": "Bran names the price.",
+        "used_llm": True,
+    }
+
+    with patch("app.rpg.session.runtime.narrate_scene", side_effect=lambda *args, **kwargs: (
+        kwargs["on_chunk"]("Bran "),
+        kwargs["on_chunk"]("names "),
+        kwargs["on_chunk"]("the price."),
+        narration_result
+    )[-1]):
+        result = _generate_turn_narration_artifact(
+            session_id,
+            narration_request,
+            on_chunk=on_chunk,
+        )
+
+    assert result["ok"] is True
+    artifact = result["artifact"]
+    assert artifact["narration"] == "Bran names the price."
+    assert "".join(chunks) == "Bran names the price."
+
+
+def test_generate_turn_narration_artifact_uses_streamed_text_when_result_text_missing():
+    chunks = []
+
+    def on_chunk(piece):
+        chunks.append(piece)
+
+    session_id = "test_session"
+    narration_request = {
+        "turn_id": "turn:12",
+        "tick": 12,
+        "scene": {
+            "scene_id": "scene:tick:12",
+            "title": "The Rusty Flagon Tavern",
+            "summary": "You ask again.",
+        },
+        "narration_context": {
+            "player_input": "well, how much?",
+        },
+        "performance": {
+            "enable_live_narration_llm": True,
+            "enable_narration_retry": False,
+        },
+    }
+
+    with patch("app.rpg.session.runtime.narrate_scene", side_effect=lambda *args, **kwargs: (
+        kwargs["on_chunk"]("Five "),
+        kwargs["on_chunk"]("silver."),
+        {"narration": "", "raw_llm_narrative": "", "used_llm": True}
+    )[-1]):
+        result = _generate_turn_narration_artifact(session_id, narration_request, on_chunk=on_chunk)
+
+    assert result["ok"] is True
+    assert result["artifact"]["narration"] == "Five silver."

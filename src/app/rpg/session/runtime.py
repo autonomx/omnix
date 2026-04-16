@@ -16,7 +16,7 @@ import logging
 import os
 import time as _time
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -6702,6 +6702,7 @@ def _apply_turn_authoritative(
 def _generate_turn_narration_artifact(
     session_id: str,
     narration_request: Dict[str, Any],
+    on_chunk: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     logger.debug("_generate_turn_narration_artifact called", extra={"session_id": session_id, "turn_id": narration_request.get("turn_id")})
     narration_request = _safe_dict(narration_request)
@@ -6710,6 +6711,19 @@ def _generate_turn_narration_artifact(
     scene = _safe_dict(narration_request.get("scene"))
     narration_context = _safe_dict(narration_request.get("narration_context"))
     perf = _safe_dict(narration_request.get("performance"))
+
+    streamed_chunks: List[str] = []
+
+    def _emit_chunk(piece: str) -> None:
+        piece = _safe_str(piece)
+        if not piece:
+            return
+        streamed_chunks.append(piece)
+        if on_chunk:
+            try:
+                on_chunk(piece)
+            except Exception:
+                logger.exception("Failed to emit narration chunk")
 
     llm_enabled = bool(perf.get("enable_live_narration_llm", True))
     retry_on_invalid = bool(perf.get("enable_narration_retry", False))
@@ -6724,8 +6738,15 @@ def _generate_turn_narration_artifact(
         tone="dramatic",
         retry_on_invalid=retry_on_invalid,
         debug_logging=False,
+        on_chunk=_emit_chunk,
     )
     logger.debug("narrate_scene returned", extra={"session_id": session_id, "turn_id": turn_id, "result_keys": list(narration_result.keys()) if isinstance(narration_result, dict) else type(narration_result)})
+
+    narration_result = _safe_dict(narration_result)
+    if not _safe_str(narration_result.get("narration")).strip() and streamed_chunks:
+        narration_result["narration"] = "".join(streamed_chunks).strip()
+    if not _safe_str(narration_result.get("raw_llm_narrative")).strip() and streamed_chunks:
+        narration_result["raw_llm_narrative"] = "".join(streamed_chunks).strip()
 
     artifact = {
         "turn_id": turn_id,
@@ -6943,9 +6964,19 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             "error": "missing_narration_request",
         }
 
+    def _on_chunk(piece: str) -> None:
+        publish_narration_event(
+            session_id,
+            {
+                "type": "narration_chunk",
+                "turn_id": turn_id,
+                "chunk": piece,
+            },
+        )
+
     logger.debug("Calling _generate_turn_narration_artifact", extra={"session_id": session_id, "turn_id": turn_id})
     try:
-        result = _generate_turn_narration_artifact(session_id, narration_request)
+        result = _generate_turn_narration_artifact(session_id, narration_request, on_chunk=_on_chunk)
     except Exception:
         logger.exception(
             "Exception in _generate_turn_narration_artifact for session %s turn %s",
@@ -6989,8 +7020,16 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="completed")
         session["runtime_state"] = runtime_state
         session = save_runtime_session(session)
-        
+
         artifact = _safe_dict(result.get("artifact"))
+        publish_narration_event(
+            session_id,
+            {
+                "type": "narration_complete",
+                "turn_id": turn_id,
+                "artifact": artifact,
+            },
+        )
         job_kind = _safe_str(_safe_dict(queued_job).get("job_kind")).strip() or "player_turn"
         if job_kind == "ambient_conversation":
             speaker = _safe_str(artifact.get("speaker"))

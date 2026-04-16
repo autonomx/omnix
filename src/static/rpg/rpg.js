@@ -83,6 +83,10 @@
         sessionId: null,
         currentTurnId: null,
         isGeneratingNarration: false,
+        streamingNarrationByTurn: {},
+        streamingChunkBufferByTurn: {},
+        streamingFlushTimerByTurn: {},
+        streamingRenderedLengthByTurn: {},
         messages: [],      // { type: 'narration'|'event'|'system'|'player', content }
         choices: [],
         npcs: [],
@@ -220,6 +224,109 @@
         return String(value);
     }
 
+    function getFullNarrationText(artifact) {
+        artifact = artifact || {};
+        return (
+            artifact.narration ||
+            artifact.full_text ||
+            artifact.raw_text ||
+            artifact.text ||
+            ""
+        );
+    }
+
+    const NARRATION_STREAM_FLUSH_MS = 90;
+    const NARRATION_STREAM_MIN_CHARS = 24;
+    const NARRATION_STREAM_MAX_CHARS = 140;
+
+    function getStreamingTextForTurn(turnId) {
+        const committed = ((rpgState.streamingNarrationByTurn || {})[turnId]) || '';
+        const buffered = ((rpgState.streamingChunkBufferByTurn || {})[turnId]) || '';
+        return committed + buffered;
+    }
+
+    function clearStreamingFlushTimer(turnId) {
+        const timers = rpgState.streamingFlushTimerByTurn || {};
+        const timer = timers[turnId];
+        if (timer) {
+            clearTimeout(timer);
+        }
+        if (timer || Object.prototype.hasOwnProperty.call(timers, turnId)) {
+            const nextTimers = { ...timers };
+            delete nextTimers[turnId];
+            updateState({ streamingFlushTimerByTurn: nextTimers });
+        }
+    }
+
+    function shouldFlushNarrationBuffer(buffered) {
+        const text = String(buffered || '');
+        if (!text) return false;
+        if (text.length >= NARRATION_STREAM_MAX_CHARS) return true;
+        if (text.length >= NARRATION_STREAM_MIN_CHARS && /[.!?…]\s*$/.test(text)) return true;
+        if (text.length >= NARRATION_STREAM_MIN_CHARS && /[,;:]\s*$/.test(text)) return true;
+        if (/\n\s*$/.test(text)) return true;
+        return false;
+    }
+
+    function commitStreamingNarration(turnId, opts) {
+        opts = opts || {};
+        const isFinal = !!opts.isFinal;
+
+        const committedMap = { ...(rpgState.streamingNarrationByTurn || {}) };
+        const bufferedMap = { ...(rpgState.streamingChunkBufferByTurn || {}) };
+        const renderedLenMap = { ...(rpgState.streamingRenderedLengthByTurn || {}) };
+
+        const committed = committedMap[turnId] || '';
+        const buffered = bufferedMap[turnId] || '';
+        const nextText = committed + buffered;
+
+        clearStreamingFlushTimer(turnId);
+
+        if (!buffered && !isFinal) return;
+
+        committedMap[turnId] = nextText;
+        bufferedMap[turnId] = '';
+        renderedLenMap[turnId] = nextText.length;
+
+        updateState({
+            streamingNarrationByTurn: committedMap,
+            streamingChunkBufferByTurn: bufferedMap,
+            streamingRenderedLengthByTurn: renderedLenMap,
+        });
+
+        renderOrUpdateNarrationMessage(turnId, nextText, {
+            isFinal,
+            version: opts.version || 1,
+        });
+    }
+
+    function scheduleStreamingNarrationFlush(turnId) {
+        clearStreamingFlushTimer(turnId);
+        const nextTimers = { ...(rpgState.streamingFlushTimerByTurn || {}) };
+        nextTimers[turnId] = setTimeout(() => {
+            commitStreamingNarration(turnId, { isFinal: false, version: 1 });
+        }, NARRATION_STREAM_FLUSH_MS);
+        updateState({ streamingFlushTimerByTurn: nextTimers });
+    }
+
+    function resetStreamingNarrationState(turnId) {
+        clearStreamingFlushTimer(turnId);
+
+        const committedMap = { ...(rpgState.streamingNarrationByTurn || {}) };
+        const bufferedMap = { ...(rpgState.streamingChunkBufferByTurn || {}) };
+        const renderedLenMap = { ...(rpgState.streamingRenderedLengthByTurn || {}) };
+
+        delete committedMap[turnId];
+        delete bufferedMap[turnId];
+        delete renderedLenMap[turnId];
+
+        updateState({
+            streamingNarrationByTurn: committedMap,
+            streamingChunkBufferByTurn: bufferedMap,
+            streamingRenderedLengthByTurn: renderedLenMap,
+        });
+    }
+
     function _turnKey(turnId) {
         return (turnId == null) ? '' : String(turnId);
     }
@@ -253,6 +360,64 @@
             content: narrationText,
             turnId: turnId
         });
+    }
+
+    function clearNarrationPlaceholder(turnId) {
+        try {
+            if (typeof CSS !== "undefined" && CSS.escape) {
+                const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                if (!root) return;
+                const placeholder = root.querySelector('.rpg-turn-narration-placeholder');
+                if (placeholder) {
+                    placeholder.removeAttribute('data-status');
+                    placeholder.classList.remove('rpg-turn-narration-placeholder');
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to clear placeholder", e);
+        }
+    }
+
+    function renderOrUpdateNarrationMessage(turnId, text, opts) {
+        opts = opts || {};
+        const isFinal = !!opts.isFinal;
+        const version = parseInt(opts.version, 10) || 1;
+        const nextText = String(text || "");
+
+        const messages = Array.isArray(rpgState.messages) ? [...rpgState.messages] : [];
+
+        const idx = messages.findIndex((m) => m && m.type === "narration" && m.turnId === turnId);
+
+        if (idx === -1) {
+            messages.push({
+                type: "narration",
+                turnId,
+                content: nextText,
+                isFinal,
+            });
+            updateState({ messages });
+            renderTurnNarration(turnId, nextText, version);
+            if (isFinal) {
+                clearNarrationPlaceholder(turnId);
+            }
+            return;
+        }
+
+        const current = messages[idx] || {};
+        const currentText = String(current.content || "");
+        const shouldReplace = isFinal || nextText.length >= currentText.length;
+        if (!shouldReplace) return;
+
+        messages[idx] = {
+            ...current,
+            content: nextText,
+            isFinal,
+        };
+        updateState({ messages });
+        renderTurnNarration(turnId, nextText, version);
+        if (isFinal) {
+            clearNarrationPlaceholder(turnId);
+        }
     }
 
     function _conversationKey(conversationId, tick, speaker, target) {
@@ -1781,7 +1946,8 @@
 
              if (artifact.narration) {
                  console.log("[Narration] Artifact found, rendering", { turnId, attempt });
-                 renderTurnNarration(turnId, artifact.narration, artifact.version || 1);
+                 renderOrUpdateNarrationMessage(turnId, getFullNarrationText(artifact), { isFinal: true, version: artifact.version || 1 });
+                 updateState({ isGeneratingNarration: false });
                  return;
              }
             
@@ -1800,6 +1966,10 @@
             }
 
             if (job.status === "failed" || job.status === "stale") {
+                const failedTurnId = (job && job.turn_id) || rpgState.currentTurnId;
+                if (failedTurnId) {
+                    resetStreamingNarrationState(failedTurnId);
+                }
                 updateTurnNarrationPlaceholder(
                     turnId,
                     _safeStr(job.status || "failed"),
@@ -1929,28 +2099,71 @@
     function handleNarrationEvent(evt) {
         if (!evt || !evt.type) return;
 
+        if (evt.type === 'narration_chunk') {
+            const turnId = evt.turn_id || rpgState.currentTurnId;
+            if (!turnId) return;
+
+            const existing = (rpgState.messages || []).find(m => m && m.turnId === turnId);
+            if (!existing) {
+                clearNarrationPlaceholder(turnId);
+            }
+
+            const committedMap = { ...(rpgState.streamingNarrationByTurn || {}) };
+            const bufferedMap = { ...(rpgState.streamingChunkBufferByTurn || {}) };
+            const currentBuffered = bufferedMap[turnId] || '';
+            const nextBuffered = currentBuffered + String(evt.chunk || '');
+
+            updateState({
+                streamingNarrationByTurn: committedMap,
+                streamingChunkBufferByTurn: {
+                    ...bufferedMap,
+                    [turnId]: nextBuffered,
+                },
+            });
+
+            if (shouldFlushNarrationBuffer(nextBuffered)) {
+                commitStreamingNarration(turnId, { isFinal: false, version: evt.version || 1 });
+            } else {
+                scheduleStreamingNarrationFlush(turnId);
+            }
+            return;
+        }
+
+        if (evt.type === 'narration_complete') {
+            const artifact = evt.artifact || {};
+            const turnId = evt.turn_id || artifact.turn_id || rpgState.currentTurnId;
+            if (!turnId) return;
+
+            // Flush any pending buffered text before final render.
+            commitStreamingNarration(turnId, { isFinal: false, version: artifact.version || 1 });
+
+            const fullText = getFullNarrationText(artifact);
+
+            renderOrUpdateNarrationMessage(turnId, fullText, { isFinal: true, version: artifact.version || 1 });
+            clearNarrationPlaceholder(turnId);
+            resetStreamingNarrationState(turnId);
+
+            updateState({
+                isGeneratingNarration: false,
+            });
+            return;
+        }
+
         if (evt.type === "narration_artifact") {
             var turnId = evt.turn_id;
             if (!turnId) return;
 
-            rpgState.sseLastNarrationArtifactTurnId = _safeStr(turnId);
+            const existing = (rpgState.messages || []).find(m => m && m.turnId === turnId);
+            if (existing && existing.isFinal) return;
 
-            // Clear status badge before rendering final content
-            if (typeof CSS !== "undefined" && CSS.escape) {
-                var root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
-                if (root) {
-                    var placeholder = root.querySelector('.rpg-turn-narration-placeholder');
-                    if (placeholder) {
-                        placeholder.removeAttribute('data-status');
-                    }
-                    if (root.classList.contains('rpg-turn-narration-placeholder')) {
-                        root.removeAttribute('data-status');
-                        root.classList.remove('rpg-turn-narration-placeholder');
-                    }
-                }
-            }
-
-            renderTurnNarration(turnId, evt.text || "", evt.version);
+            renderOrUpdateNarrationMessage(
+                turnId,
+                getFullNarrationText(evt),
+                { isFinal: true, version: evt.version || 1 }
+            );
+            clearNarrationPlaceholder(turnId);
+            resetStreamingNarrationState(turnId);
+            updateState({ isGeneratingNarration: false });
             return;
         }
 

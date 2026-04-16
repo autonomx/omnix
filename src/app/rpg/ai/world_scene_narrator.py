@@ -27,9 +27,25 @@ from app.rpg.player import build_encounter_view
 logger = logging.getLogger(__name__)
 
 
-def _llm_text(llm_gateway, prompt, *, context=None):
+def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
     """Call the LLM gateway and return the response as a clean string."""
     logger.info("[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
+    if on_chunk:
+        # Try streaming if callback provided
+        chunks = []
+        try:
+            for event in llm_gateway.call("generate_stream", prompt, context=context or {}):
+                piece = _safe_str(_safe_dict(event).get("text"))
+                if piece:
+                    chunks.append(piece)
+                    on_chunk(piece)
+            return "".join(chunks).strip()
+        except Exception:
+            logger.exception("[RPG LLM GATEWAY] Streaming failed, falling back to non-streaming")
+            if chunks:
+                return "".join(chunks).strip()
+
+    # Fallback to non-streaming
     try:
         response = llm_gateway.call("generate", prompt, context=context or {})
         logger.info("[RPG LLM GATEWAY] Received response type: %s, length: %d", type(response), len(str(response)) if response else 0)
@@ -1521,6 +1537,7 @@ def _generate_live_narrative(
     tone: str = "dramatic",
     retry_on_invalid: bool = True,
     debug_logging: bool = False,
+    on_chunk: Optional[Callable[[str], None]] = None,
 ) -> str:
     """Generate narrative using LLM."""
     # Inject player_input from narration_context into scene
@@ -1538,7 +1555,7 @@ def _generate_live_narrative(
     max_attempts = 2 if retry_on_invalid else 1
     for attempt in range(max_attempts):
         try:
-            response = _llm_text(llm_gateway, prompt, context={})
+            response = _llm_text(llm_gateway, prompt, context={}, on_chunk=on_chunk if attempt == 0 else None)
             if debug_logging:
                 logger.warning("[RPG LLM RAW OUTPUT attempt %d]\n%s", attempt + 1, response)
             else:
@@ -1640,6 +1657,7 @@ def narrate_scene(
     tone: str = "dramatic",
     retry_on_invalid: bool = True,
     debug_logging: bool = False,
+    on_chunk: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     scene = _safe_dict(scene)
     narration_context = _safe_dict(narration_context)
@@ -1663,6 +1681,7 @@ def narrate_scene(
             tone=tone,
             retry_on_invalid=retry_on_invalid,
             debug_logging=debug_logging,
+            on_chunk=on_chunk,
         )
         used_llm = "[ERROR:" not in llm_narrative
     else:

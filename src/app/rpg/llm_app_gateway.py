@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from app.providers.base import ChatMessage, ChatResponse
 
@@ -98,6 +98,30 @@ class AppLLMGateway:
         logger.debug("[RPG GATEWAY] Provider returned string length: %d", len(content))
         return content
 
+    def generate_stream(
+        self,
+        prompt: str,
+        *,
+        context: Optional[Dict[str, Any]] = None,
+        timeout_s: Optional[float] = None,
+    ) -> Iterator[Dict[str, Any]]:
+        # NOTE: timeout_s is accepted for forward-compatible API shape but is
+        # intentionally not wired to the underlying provider yet.
+        logger.info("[RPG GATEWAY] Calling provider.chat_completion with stream=True, prompt length: %d", len(prompt))
+        messages = self._build_messages(prompt, context=context)
+        logger.debug("[RPG GATEWAY] Built messages for streaming chat_completion", extra={"message_count": len(messages)})
+        try:
+            for chunk in self.provider.chat_completion(messages=messages, stream=True):
+                if isinstance(chunk, ChatResponse):
+                    content = chunk.content or ""
+                    if content:
+                        yield {"text": content}
+                else:
+                    logger.warning("[RPG GATEWAY] Unexpected chunk type during streaming: %s", type(chunk))
+        except Exception:
+            logger.exception("[RPG GATEWAY] Streaming provider call failed")
+            raise
+
     def complete(self, prompt: str) -> Dict[str, Any]:
         response = self.generate(prompt)
         if isinstance(response, dict):
@@ -123,10 +147,13 @@ class AppLLMGateway:
         prompt: str,
         *,
         context: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        if method != "generate":
+    ) -> Any:
+        if method == "generate":
+            return self.generate(prompt, context=context)
+        elif method == "generate_stream":
+            return self.generate_stream(prompt, context=context)
+        else:
             raise ValueError(f"Unsupported AppLLMGateway method: {method}")
-        return self.generate(prompt, context=context)
 
 
 def build_app_llm_gateway() -> Optional[AppLLMGateway]:

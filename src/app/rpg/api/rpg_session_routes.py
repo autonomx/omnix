@@ -430,6 +430,8 @@ async def execute_rpg_session_turn_stream(request: Request):
                 "narration_job": narration_job or {},
             })
 
+            # "done" here means authoritative turn resolution is complete.
+            # Final narration arrives separately via narration stream events.
             yield _sse({
                 "type": "done",
                 "turn_id": authoritative_turn_id,
