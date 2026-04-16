@@ -384,12 +384,37 @@ async def execute_rpg_session_turn_stream(request: Request):
             authoritative = _safe_dict(authoritative_result.get("authoritative"))
             narration_request = _safe_dict(authoritative_result.get("narration_request"))
 
-            enqueue_result = _enqueue_narration_request(session_id, narration_request)
-            narration_status = _safe_str(enqueue_result.get("status") or "queued")
+            session = load_runtime_session(session_id)
+            if session is None:
+                yield _sse({"type": "error", "error": "session_not_found_after_authoritative"})
+                return
+            runtime_state = _copy_dict(session.get("runtime_state"))
+            turn_id = _safe_str(authoritative.get("turn_id")).strip()
+            tick = int(authoritative.get("tick", 0) or 0)
+            runtime_state, narration_job, is_new = _enqueue_narration_request(
+                runtime_state,
+                turn_id,
+                tick,
+                narration_request,
+                "player_turn",
+                100,
+            )
+            session["runtime_state"] = runtime_state
+            save_runtime_session(session)
+
+            if is_new:
+                try:
+                    ensure_narration_worker_running()
+                    signal_narration_work(session_id)
+                except Exception:
+                    _logger.exception("Failed to start or signal narration worker")
+
+            authoritative_turn_id = _safe_str((narration_job or {}).get("turn_id")).strip() or turn_id
+            narration_status = _safe_str((narration_job or {}).get("status") or "queued")
 
             yield _sse({
                 "type": "authoritative_result",
-                "turn_id": _safe_str(authoritative.get("turn_id")),
+                "turn_id": authoritative_turn_id,
                 "tick": authoritative.get("tick"),
                 "resolved_result": authoritative.get("resolved_result"),
                 "combat_result": authoritative.get("combat_result"),
@@ -402,11 +427,12 @@ async def execute_rpg_session_turn_stream(request: Request):
                 "response_length": authoritative.get("response_length"),
                 "fallback_narration": authoritative.get("deterministic_fallback_narration"),
                 "narration_status": narration_status,
+                "narration_job": narration_job or {},
             })
 
             yield _sse({
                 "type": "done",
-                "turn_id": _safe_str(authoritative.get("turn_id")),
+                "turn_id": authoritative_turn_id,
                 "tick": authoritative.get("tick"),
                 "narration_status": narration_status,
             })
