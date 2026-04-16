@@ -279,6 +279,11 @@ class RPGInspectorUI {
       localStorage.setItem("rpg_inspector_open", rpgInspectorState.isOpen ? "1" : "0");
       renderInspectorShell(rpgInspectorState.isOpen);
     });
+    getEl("rpg-inspector-close-btn")?.addEventListener("click", () => {
+      rpgInspectorState.isOpen = false;
+      localStorage.setItem("rpg_inspector_open", "0");
+      renderInspectorShell(false);
+    });
     getEl("rpg-inspector-refresh-btn")?.addEventListener("click", async () => {
       await this.refreshTimeline();
       await this.refreshAudit();
