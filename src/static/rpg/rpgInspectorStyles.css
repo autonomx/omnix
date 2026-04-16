@@ -1254,3 +1254,33 @@
 .rpg-turn--streaming .rpg-speaker-card {
   box-shadow: 0 0 0 1px rgba(140, 180, 255, 0.18), 0 0 18px rgba(140, 180, 255, 0.08);
 }
+
+/* ---- Inline Dialogue Styles ---- */
+
+.rpg-dialogue-inline {
+  display: block;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  border-left: 3px solid var(--speaker-accent, rgba(255,255,255,0.18));
+  line-height: 1.6;
+}
+
+.rpg-dialogue-inline__speaker {
+  font-weight: 700;
+  color: var(--rpg-text-primary, #f2f2f2);
+}
+
+.rpg-dialogue-inline__line {
+  font-style: italic;
+  color: var(--rpg-text-secondary, #d0d0d0);
+}
+
+.rpg-dialogue-inline__meta {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8em;
+  opacity: 0.7;
+  color: var(--rpg-accent, #7eb8da);
+}

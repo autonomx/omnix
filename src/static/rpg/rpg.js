@@ -321,29 +321,21 @@
         }
 
         if (speaker && line) {
-            const avatarHtml = portraitUrl
-                ? '<img class="rpg-speaker-card__portrait" src="' + escapeHtml(portraitUrl) + '" alt="' + escapeHtml(speaker) + ' portrait" />'
-                : '<div class="rpg-speaker-card__avatar">' + escapeHtml(speaker.charAt(0).toUpperCase()) + '</div>';
-
-            const badges = [
-                factionLabel ? '<span class="rpg-speaker-chip rpg-speaker-chip--faction">' + escapeHtml(factionLabel) + '</span>' : '',
-                isCompanion ? '<span class="rpg-speaker-chip rpg-speaker-chip--companion">Companion</span>' : '',
-                isPlayer ? '<span class="rpg-speaker-chip rpg-speaker-chip--player">You</span>' : '',
-            ].filter(Boolean).join('');
-
             parts.push(
-                '<div class="rpg-speaker-card" style="--speaker-accent: ' + escapeHtml(accent) + ';">' +
-                    '<div class="rpg-speaker-card__header">' +
-                        avatarHtml +
-                        '<div class="rpg-speaker-card__meta">' +
-                            '<div class="rpg-speaker-card__name">' + escapeHtml(speaker) + '</div>' +
-                            '<div class="rpg-speaker-card__role">' + escapeHtml(roleLabel) + '</div>' +
-                            (badges ? '<div class="rpg-speaker-card__chips">' + badges + '</div>' : '') +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="rpg-dialogue-bubble">' +
-                        '<span class="rpg-narration-line">"' + escapeHtml(line) + '"</span>' +
-                    '</div>' +
+                '<div class="rpg-dialogue-inline" style="--speaker-accent: ' + escapeHtml(accent) + ';">' +
+                    '<span class="rpg-dialogue-inline__speaker">' + escapeHtml(speaker) + ':</span> ' +
+                    '<span class="rpg-dialogue-inline__line">"' + escapeHtml(line) + '"</span>' +
+                    (
+                        factionLabel || isCompanion || isPlayer
+                            ? '<span class="rpg-dialogue-inline__meta">' +
+                                [
+                                    factionLabel ? escapeHtml(factionLabel) : '',
+                                    isCompanion ? 'Companion' : '',
+                                    isPlayer ? 'You' : '',
+                                ].filter(Boolean).join(' • ') +
+                              '</span>'
+                            : ''
+                    ) +
                 '</div>'
             );
         }
