@@ -617,6 +617,56 @@ def _add_content_pack_data(response_dict: Dict[str, Any], simulation_state: Dict
     return response_dict
 
 
+def _build_speaker_presentation_meta(simulation_state: dict, runtime_state: dict, speaker_name: str) -> dict:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    speaker_name = _safe_str(speaker_name).strip()
+
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    identities = _safe_dict(visual_state.get("character_visual_identities"))
+    party_state = _safe_dict(player_state.get("party_state"))
+    companions = _safe_list(party_state.get("companions"))
+
+    matched_npc = {}
+    matched_npc_id = ""
+    for npc_id, raw in npc_index.items():
+        npc = _safe_dict(raw)
+        if _safe_str(npc.get("name")).strip().lower() == speaker_name.lower():
+            matched_npc = npc
+            matched_npc_id = _safe_str(npc_id).strip()
+            break
+
+    is_player = speaker_name.lower() == _safe_str(player_state.get("name") or "Player").strip().lower()
+    is_companion = any(_safe_str(c.get("name")).strip().lower() == speaker_name.lower() for c in companions if isinstance(c, dict))
+
+    faction_id = _safe_str(matched_npc.get("faction_id")).strip()
+    role = _safe_str(matched_npc.get("role")).strip()
+    portrait = _safe_str(_safe_dict(identities.get(matched_npc_id)).get("portrait_url")).strip()
+
+    faction_palette = {
+        "faction_kings_guard": {"accent": "#6ea8ff", "label": "King's Guard"},
+        "faction_rebels": {"accent": "#ff8a6e", "label": "Rebels"},
+        "faction_mages": {"accent": "#c68cff", "label": "Mages"},
+        "": {"accent": "#a0a0a0", "label": ""},
+    }
+    palette = _safe_dict(faction_palette.get(faction_id) or faction_palette.get(""))
+
+    return {
+        "speaker_name": speaker_name,
+        "speaker_id": matched_npc_id,
+        "role": role,
+        "faction_id": faction_id,
+        "faction_label": _safe_str(palette.get("label")).strip(),
+        "accent_color": _safe_str(palette.get("accent")).strip() or "#a0a0a0",
+        "portrait_url": portrait,
+        "is_player": is_player,
+        "is_companion": is_companion,
+    }
+
+
 # ---- Scene Presentation ----
 
 @rpg_presentation_bp.post("/api/rpg/presentation/scene")

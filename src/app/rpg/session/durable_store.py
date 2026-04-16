@@ -48,6 +48,34 @@ def _session_path(session_id: str) -> Path:
     return ensure_session_dir() / f"{safe_id}.json"
 
 
+def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_delay_s: float = 0.02) -> None:
+    """Best-effort Windows-safe atomic replace with short retry/backoff."""
+    last_exc = None
+    for attempt in range(attempts):
+        try:
+            os.replace(tmp_name, path)
+            return
+        except PermissionError as exc:
+            last_exc = exc
+            if attempt >= attempts - 1:
+                break
+            time.sleep(base_delay_s * (attempt + 1))
+        except OSError as exc:
+            last_exc = exc
+            if attempt >= attempts - 1:
+                break
+            time.sleep(base_delay_s * (attempt + 1))
+
+    # Last-resort fallback for Windows file-lock edge cases.
+    try:
+        text = Path(tmp_name).read_text(encoding="utf-8")
+        path.write_text(text, encoding="utf-8")
+        return
+    except Exception:
+        pass
+    raise last_exc
+
+
 def _write_text_atomic(path: Path, text: str) -> None:
     """Write text atomically to avoid truncated/empty session files."""
     ensure_session_dir()
@@ -65,7 +93,7 @@ def _write_text_atomic(path: Path, text: str) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_name, path)
+        _replace_with_retry(tmp_name, path)
     finally:
         if tmp_name:
             try:

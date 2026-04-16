@@ -1,5 +1,6 @@
 """Tests for narration job queue functionality."""
 import copy
+import json
 from unittest.mock import call, patch
 
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from app.rpg.api.rpg_session_routes import rpg_session_bp
 from app.rpg.session.runtime import (
     _apply_idle_tick_to_session,
     _enqueue_narration_request,
+    _generate_turn_narration_artifact,
     _get_narration_job_for_turn,
     apply_turn,
     process_next_narration_job,
@@ -1183,3 +1185,91 @@ def test_generate_turn_narration_artifact_uses_streamed_text_when_result_text_mi
 
     assert result["ok"] is True
     assert result["artifact"]["narration"] == "Five silver."
+
+
+def test_narration_json_contract_renders_text():
+    from app.rpg.ai.world_scene_narrator import (
+        _extract_json_object_from_text,
+        _normalize_narration_json,
+        _render_narration_text_from_json,
+    )
+
+    raw = json.dumps({
+        "format_version": "rpg_narration_v2",
+        "narration": "The tavern grows quiet.",
+        "action": "Bran studies you for a moment.",
+        "npc": {
+            "speaker": "Bran the Innkeeper",
+            "line": "A room is five silver."
+        },
+        "reward": "",
+        "followup_hooks": [],
+    })
+
+    parsed = _extract_json_object_from_text(raw)
+    normalized = _normalize_narration_json(parsed)
+    rendered = _render_narration_text_from_json(normalized)
+
+    assert "The tavern grows quiet." in rendered
+    assert "Bran studies you for a moment." in rendered
+    assert 'Bran the Innkeeper: "A room is five silver."' in rendered
+
+
+def test_narration_json_contract_recovers_from_label_text():
+    from app.rpg.ai.world_scene_narrator import (
+        _extract_json_object_from_text,
+        _recover_narration_from_raw_text,
+        _render_narration_text_from_json,
+    )
+
+    raw = (
+        "NARRATOR: The tavern grows quiet.\n"
+        "ACTION: Bran studies you for a moment.\n"
+        'NPC: Bran the Innkeeper: "A room is five silver."\n'
+    )
+
+    parsed = _extract_json_object_from_text(raw)
+    assert parsed == {}
+
+    recovered = _recover_narration_from_raw_text(raw)
+    rendered = _render_narration_text_from_json(recovered)
+
+    assert "The tavern grows quiet." in rendered
+    assert "Bran studies you for a moment." in rendered
+    assert 'Bran the Innkeeper: "A room is five silver."' in rendered
+
+
+def test_narrate_scene_does_not_emit_format_invalid_on_non_json_llm_text():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    llm_output = "Bran narrows his eyes. A room is five silver."
+
+    with patch("app.rpg.ai.world_scene_narrator._generate_live_narrative", return_value=llm_output):
+        result = narrate_scene(
+            {"title": "The Rusty Flagon Tavern"},
+            {"player_input": "how much for a room?"},
+            llm_gateway=object(),
+        )
+
+    assert "[ERROR: LLM FORMAT INVALID]" not in result.get("narration", "")
+    assert result.get("used_llm") is True
+
+
+def test_normalize_final_narration_text_removes_dangling_ellipsis():
+    from app.rpg.session.runtime import _normalize_final_narration_text
+
+    value = _normalize_final_narration_text(
+        "Captain Aldric watches you closely..."
+    )
+
+    assert value == "Captain Aldric watches you closely."
+
+
+def test_normalize_final_narration_text_adds_terminal_punctuation():
+    from app.rpg.session.runtime import _normalize_final_narration_text
+
+    value = _normalize_final_narration_text(
+        "Bran the Innkeeper names his price"
+    )
+
+    assert value == "Bran the Innkeeper names his price."

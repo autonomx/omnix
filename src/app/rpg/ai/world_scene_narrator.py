@@ -26,6 +26,20 @@ from app.rpg.player import build_encounter_view
 
 logger = logging.getLogger(__name__)
 
+NARRATION_JSON_FORMAT_VERSION = "rpg_narration_v2"
+
+NARRATION_JSON_SCHEMA_HINT = {
+    "format_version": NARRATION_JSON_FORMAT_VERSION,
+    "narration": "string",
+    "action": "string",
+    "npc": {
+        "speaker": "string",
+        "line": "string",
+    },
+    "reward": "string",
+    "followup_hooks": [],
+}
+
 
 def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
     """Call the LLM gateway and return the response as a clean string."""
@@ -287,6 +301,132 @@ def _build_speaker_turns(parsed: Dict[str, Any]) -> List[Dict[str, Any]]:
     if npc.get("text"):
         turns.append(npc)
     return turns
+
+
+def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
+    text = _safe_str(text).strip()
+    if not text:
+        return {}
+
+    # Fast path: raw JSON
+    try:
+        value = json.loads(text)
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        pass
+
+    # Fenced code block path
+    if "```" in text:
+        blocks = text.split("```")
+        for block in blocks:
+            candidate = block.strip()
+            if candidate.lower().startswith("json"):
+                candidate = candidate[4:].strip()
+            if not candidate:
+                continue
+            try:
+                value = json.loads(candidate)
+                return value if isinstance(value, dict) else {}
+            except Exception:
+                continue
+
+    # Loose substring path: first balanced {...}
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        candidate = text[start:end + 1]
+        try:
+            value = json.loads(candidate)
+            return value if isinstance(value, dict) else {}
+        except Exception:
+            pass
+
+    return {}
+
+
+def _normalize_narration_json(payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _safe_dict(payload)
+    npc = _safe_dict(payload.get("npc"))
+
+    return {
+        "format_version": _safe_str(payload.get("format_version")).strip() or NARRATION_JSON_FORMAT_VERSION,
+        "narration": _safe_str(payload.get("narration")).strip(),
+        "action": _safe_str(payload.get("action")).strip(),
+        "npc": {
+            "speaker": _safe_str(npc.get("speaker")).strip(),
+            "line": _safe_str(npc.get("line")).strip(),
+        },
+        "reward": _safe_str(payload.get("reward")).strip(),
+        "followup_hooks": _safe_list(payload.get("followup_hooks")),
+    }
+
+
+def _render_narration_text_from_json(payload: Dict[str, Any]) -> str:
+    payload = _normalize_narration_json(payload)
+    parts: List[str] = []
+
+    if payload["narration"]:
+        parts.append(payload["narration"])
+
+    if payload["action"]:
+        parts.append(payload["action"])
+
+    npc = _safe_dict(payload.get("npc"))
+    speaker = _safe_str(npc.get("speaker")).strip()
+    line = _safe_str(npc.get("line")).strip()
+    if speaker and line:
+        parts.append(f'{speaker}: "{line}"')
+    elif line:
+        parts.append(line)
+
+    if payload["reward"]:
+        parts.append(f"Rewards: {payload['reward']}")
+
+    return "\n\n".join([p for p in parts if p]).strip()
+
+
+def _recover_narration_from_raw_text(text: str) -> Dict[str, Any]:
+    text = _safe_str(text).strip()
+    if not text:
+        return _normalize_narration_json({})
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    narration_parts: List[str] = []
+    action_parts: List[str] = []
+    npc_speaker = ""
+    npc_line = ""
+    reward = ""
+
+    for line in lines:
+        lower = line.lower()
+        if lower.startswith("narrator:"):
+            narration_parts.append(line.split(":", 1)[1].strip())
+        elif lower.startswith("action:"):
+            action_parts.append(line.split(":", 1)[1].strip())
+        elif lower.startswith("npc:"):
+            rest = line.split(":", 1)[1].strip()
+            if ":" in rest:
+                maybe_speaker, maybe_line = rest.split(":", 1)
+                npc_speaker = maybe_speaker.strip()
+                npc_line = maybe_line.strip().strip('"')
+            else:
+                npc_line = rest.strip().strip('"')
+        elif lower.startswith("reward:"):
+            reward = line.split(":", 1)[1].strip()
+        else:
+            narration_parts.append(line)
+
+    return _normalize_narration_json({
+        "format_version": NARRATION_JSON_FORMAT_VERSION,
+        "narration": " ".join(narration_parts).strip(),
+        "action": " ".join(action_parts).strip(),
+        "npc": {
+            "speaker": npc_speaker,
+            "line": npc_line,
+        },
+        "reward": reward,
+        "followup_hooks": [],
+    })
 
 
 def _structured_fallback_response() -> str:
@@ -688,17 +828,31 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
 
 YOUR ONLY TASK: Generate narration for a player's action in an RPG.
 
-STRICT OUTPUT FORMAT (follow exactly):
+OUTPUT ONLY VALID JSON.
+Do not include markdown fences.
+Do not include commentary outside JSON.
 
-{length_rules}
+Use exactly this object shape:
+{{
+  "format_version": "rpg_narration_v2",
+  "narration": "<1-2 short sentences describing the scene>",
+  "action": "<1 short sentence describing the player's action result>",
+  "npc": {{
+    "speaker": "<npc name or empty string>",
+    "line": "<short reply or empty string>"
+  }},
+  "reward": "<reward summary or empty string>",
+  "followup_hooks": []
+}}
 
 IMPORTANT RULES:
-- Output ONLY the 4 lines shown above
-- NO extra text, explanations, or commentary
-- NO faction goals, loyalty, awareness, or ambient content
-- NO markdown, formatting, or special characters
+- Output ONLY valid JSON with no extra text
+- NO markdown fences or commentary outside the JSON object
 - NO content about ticks, time, or system messages
-- Just the structured response
+- NO faction goals, loyalty, awareness, or ambient content
+- Do not end the response with an ellipsis
+- Finish with complete sentences
+- Do not leave dialogue, action, or scene description trailing mid-thought
 
 SCENE:
 Title: {title}
@@ -1586,9 +1740,9 @@ def _generate_live_narrative(
         except Exception:
             logger.exception("Exception during LLM narration")
 
-    # fallback if LLM fails format
-    logger.error("Structured RPG narration LLM output failed validation after %d attempt(s)", max_attempts)
-    return _structured_fallback_response()
+    # fallback if LLM fails format - return raw text for recovery
+    logger.error("Structured RPG narration LLM output failed validation after %d attempt(s), returning raw text", max_attempts)
+    return response if 'response' in locals() and response else _structured_fallback_response()
 
 
 def _simulate_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], tone: str = "dramatic") -> str:
@@ -1683,22 +1837,44 @@ def narrate_scene(
             debug_logging=debug_logging,
             on_chunk=on_chunk,
         )
-        used_llm = "[ERROR:" not in llm_narrative
+
+        # Parse JSON response with tolerant fallback
+        parsed_json = _extract_json_object_from_text(llm_narrative)
+        normalized_json = _normalize_narration_json(parsed_json)
+
+        if not normalized_json.get("narration") and not normalized_json.get("action") and not _safe_str(_safe_dict(normalized_json.get("npc")).get("line")).strip():
+            logger.warning("Narration JSON parse failed or empty; recovering from raw text")
+            normalized_json = _recover_narration_from_raw_text(llm_narrative)
+
+        rendered_text = _render_narration_text_from_json(normalized_json)
+
+        return {
+            "narration": rendered_text,
+            "used_llm": bool(rendered_text),
+            "raw_llm_narrative": llm_narrative,
+            "narration_json": normalized_json,
+            "speaker_presentation": {},
+            "format_warning": False if parsed_json else True,
+        }
     else:
         llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
-        used_llm = False
+        simulated_json = _normalize_narration_json({
+            "narration": llm_narrative,
+            "action": "",
+            "npc": {"speaker": "", "line": ""},
+            "reward": "",
+            "followup_hooks": [],
+        })
+        rendered_text = _render_narration_text_from_json(simulated_json)
 
-    structured = build_structured_narration(scene, narration_context, llm_narrative)
-
-    return {
-        "narrative": _safe_str(structured.get("markdown")),
-        "narration": _safe_str(structured.get("markdown")),
-        "structured_narration": structured,
-        "speaker_turns": _safe_list(structured.get("speaker_turns")),
-        "used_llm": used_llm,
-        "raw_llm_narrative": _safe_str(llm_narrative),
-        "llm_error": "[ERROR:" in _safe_str(llm_narrative),
-    }
+        return {
+            "narration": rendered_text,
+            "used_llm": False,
+            "raw_llm_narrative": llm_narrative,
+            "narration_json": simulated_json,
+            "speaker_presentation": {},
+            "format_warning": False,
+        }
 
 
 def play_scene(

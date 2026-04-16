@@ -2222,6 +2222,41 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _copy_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
+def _normalize_final_narration_text(text: str) -> str:
+    text = _safe_str(text).strip()
+    if not text:
+        return ""
+
+    # Normalize whitespace inside paragraphs while preserving paragraph breaks.
+    normalized_lines: List[str] = []
+    for raw_line in text.splitlines():
+        line = " ".join(_safe_str(raw_line).split()).strip()
+        if line:
+            normalized_lines.append(line)
+        elif normalized_lines and normalized_lines[-1] != "":
+            normalized_lines.append("")
+
+    text = "\n".join(normalized_lines).strip()
+
+    # Remove trailing ellipsis if it appears to be accidental truncation.
+    if text.endswith("..."):
+        stripped = text[:-3].rstrip()
+        if stripped and stripped[-1].isalnum():
+            text = stripped
+
+    # Ensure final sentence completion for transcript readability.
+    if text and text[-1] not in ".!?\"'":
+        text += "."
+
+    return text
+
+
 def _derive_transaction_context_tags(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
@@ -6748,12 +6783,19 @@ def _generate_turn_narration_artifact(
     if not _safe_str(narration_result.get("raw_llm_narrative")).strip() and streamed_chunks:
         narration_result["raw_llm_narrative"] = "".join(streamed_chunks).strip()
 
+    final_narration = _normalize_final_narration_text(
+        _safe_str(narration_result.get("narration") or narration_result.get("narrative") or "")
+    )
+
     artifact = {
         "turn_id": turn_id,
         "tick": tick,
-        "narration": _safe_str(narration_result.get("narration") or narration_result.get("narrative") or ""),
+        "narration": final_narration,
         "used_llm": bool(narration_result.get("used_llm")),
         "raw_llm_narrative": _safe_str(narration_result.get("raw_llm_narrative")),
+        "narration_json": _safe_dict(narration_result.get("narration_json")),
+        "speaker_presentation": _safe_dict(narration_result.get("speaker_presentation")),
+        "format_warning": bool(narration_result.get("format_warning")),
         "created_at": _utc_now_iso(),
         "artifact_type": "turn_narration",
     }

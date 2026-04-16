@@ -32,6 +32,7 @@ from app.rpg.session.narration_worker import (
 )
 from app.rpg.session.runtime import (
     _apply_turn_authoritative,
+    _copy_dict,
     _enqueue_narration_request,
     _normalize_runtime_settings,
     apply_idle_ticks,

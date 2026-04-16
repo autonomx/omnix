@@ -235,6 +235,144 @@
         );
     }
 
+    function normalizeDisplayedNarrationText(text, opts) {
+        opts = opts || {};
+        const isFinal = !!opts.isFinal;
+        let value = String(text || '').replace(/[ \t]+/g, ' ').trim();
+
+        if (isFinal) {
+            if (value.endsWith('...')) {
+                const stripped = value.slice(0, -3).trim();
+                if (stripped && /[A-Za-z0-9]$/.test(stripped)) {
+                    value = stripped;
+                }
+            }
+            if (value && !/[.!?"'"]$/.test(value)) {
+                value += '.';
+            }
+        }
+
+        return value;
+    }
+
+    function buildSystemNoteHtml(label, text, variant) {
+        const safeLabel = escapeHtml(label || 'Note');
+        const safeText = escapeHtml(normalizeDisplayedNarrationText(text || '', { isFinal: true }));
+        const safeVariant = variant || 'default';
+        return (
+            '<div class="rpg-system-note rpg-system-note--' + safeVariant + '">' +
+                '<div class="rpg-system-note__label">' + safeLabel + '</div>' +
+                '<div class="rpg-system-note__body">' + safeText + '</div>' +
+            '</div>'
+        );
+    }
+
+    function getNarrationJson(artifact) {
+        artifact = artifact || {};
+        return artifact.narration_json || {};
+    }
+
+    function buildNarrationHtmlFromArtifact(artifact) {
+        artifact = artifact || {};
+        const payload = getNarrationJson(artifact);
+        const speakerMeta = artifact.speaker_presentation || {};
+
+        const narration = normalizeDisplayedNarrationText(
+            payload.narration || artifact.narration || '',
+            { isFinal: true }
+        );
+        const action = normalizeDisplayedNarrationText(
+            payload.action || '',
+            { isFinal: true }
+        );
+        const npc = payload.npc || {};
+        const speaker = String(npc.speaker || '').trim();
+        const line = String(npc.line || '').trim();
+        const reward = String(payload.reward || '').trim();
+        const accent = String(speakerMeta.accent_color || '#a0a0a0');
+        const portraitUrl = String(speakerMeta.portrait_url || '').trim();
+        const factionLabel = String(speakerMeta.faction_label || '').trim();
+        const roleLabel = String(speakerMeta.role || '').trim() || (speakerMeta.is_companion ? 'Companion' : 'Speaking');
+        const isCompanion = !!speakerMeta.is_companion;
+        const isPlayer = !!speakerMeta.is_player;
+
+        const parts = [];
+
+        if (narration) {
+            parts.push(
+                '<div class="rpg-narration-card rpg-narration-card--scene">' +
+                    '<div class="rpg-narration-card__label">Scene</div>' +
+                    '<div class="rpg-narration-card__body rpg-narration-scene">' +
+                        escapeHtml(narration) +
+                    '</div>' +
+                '</div>'
+            );
+        }
+
+        if (action) {
+            parts.push(
+                '<div class="rpg-narration-card rpg-narration-card--action">' +
+                    '<div class="rpg-narration-card__label">Action</div>' +
+                    '<div class="rpg-narration-card__body rpg-narration-action">' +
+                        escapeHtml(action) +
+                    '</div>' +
+                '</div>'
+            );
+        }
+
+        if (speaker && line) {
+            const avatarHtml = portraitUrl
+                ? '<img class="rpg-speaker-card__portrait" src="' + escapeHtml(portraitUrl) + '" alt="' + escapeHtml(speaker) + ' portrait" />'
+                : '<div class="rpg-speaker-card__avatar">' + escapeHtml(speaker.charAt(0).toUpperCase()) + '</div>';
+
+            const badges = [
+                factionLabel ? '<span class="rpg-speaker-chip rpg-speaker-chip--faction">' + escapeHtml(factionLabel) + '</span>' : '',
+                isCompanion ? '<span class="rpg-speaker-chip rpg-speaker-chip--companion">Companion</span>' : '',
+                isPlayer ? '<span class="rpg-speaker-chip rpg-speaker-chip--player">You</span>' : '',
+            ].filter(Boolean).join('');
+
+            parts.push(
+                '<div class="rpg-speaker-card" style="--speaker-accent: ' + escapeHtml(accent) + ';">' +
+                    '<div class="rpg-speaker-card__header">' +
+                        avatarHtml +
+                        '<div class="rpg-speaker-card__meta">' +
+                            '<div class="rpg-speaker-card__name">' + escapeHtml(speaker) + '</div>' +
+                            '<div class="rpg-speaker-card__role">' + escapeHtml(roleLabel) + '</div>' +
+                            (badges ? '<div class="rpg-speaker-card__chips">' + badges + '</div>' : '') +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="rpg-dialogue-bubble">' +
+                        '<span class="rpg-narration-line">"' + escapeHtml(line) + '"</span>' +
+                    '</div>' +
+                '</div>'
+            );
+        }
+
+        if (reward) {
+            parts.push(
+                '<div class="rpg-system-note rpg-system-note--reward">' +
+                    '<div class="rpg-system-note__label">Rewards</div>' +
+                    '<div class="rpg-system-note__body">' + escapeHtml(reward) + '</div>' +
+                '</div>'
+            );
+        }
+
+        if (!parts.length) {
+            parts.push(
+                '<div class="rpg-narration-card rpg-narration-card--scene">' +
+                    '<div class="rpg-narration-card__label">Scene</div>' +
+                    '<div class="rpg-narration-card__body rpg-narration-scene">' +
+                        escapeHtml(
+                            normalizeDisplayedNarrationText(getFullNarrationText(artifact), { isFinal: true })
+                        ) +
+                    '</div>' +
+                '</div>'
+            );
+        }
+
+        return '<div class="rpg-response-stack">' + parts.join('') + '</div>';
+    }
+
     const NARRATION_STREAM_FLUSH_MS = 90;
     const NARRATION_STREAM_MIN_CHARS = 24;
     const NARRATION_STREAM_MAX_CHARS = 140;
@@ -382,7 +520,7 @@
         opts = opts || {};
         const isFinal = !!opts.isFinal;
         const version = parseInt(opts.version, 10) || 1;
-        const nextText = String(text || "");
+        const nextText = normalizeDisplayedNarrationText(text, { isFinal });
 
         const messages = Array.isArray(rpgState.messages) ? [...rpgState.messages] : [];
 
@@ -418,6 +556,38 @@
         if (isFinal) {
             clearNarrationPlaceholder(turnId);
         }
+    }
+
+    function renderTurnNarrationStructured(turnId, artifact, version) {
+        artifact = artifact || {};
+        const html = buildNarrationHtmlFromArtifact(artifact);
+
+        if (typeof CSS === 'undefined' || !CSS.escape) {
+            renderTurnNarration(
+                turnId,
+                normalizeDisplayedNarrationText(getFullNarrationText(artifact), { isFinal: true }),
+                version
+            );
+            return;
+        }
+
+        const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+        if (!root) {
+            renderTurnNarration(
+                turnId,
+                normalizeDisplayedNarrationText(getFullNarrationText(artifact), { isFinal: true }),
+                version
+            );
+            return;
+        }
+
+        const body =
+            root.querySelector('.rpg-turn-narration-body') ||
+            root.querySelector('.rpg-turn-body') ||
+            root;
+
+        body.innerHTML = html;
+        body.classList.add('rpg-turn-narration-body');
     }
 
     function _conversationKey(conversationId, tick, speaker, target) {
@@ -1944,10 +2114,11 @@
                 );
             }
 
-             if (artifact.narration) {
-                 console.log("[Narration] Artifact found, rendering", { turnId, attempt });
-                 renderOrUpdateNarrationMessage(turnId, getFullNarrationText(artifact), { isFinal: true, version: artifact.version || 1 });
-                 updateState({ isGeneratingNarration: false });
+              if (artifact.narration) {
+                  console.log("[Narration] Artifact found, rendering", { turnId, attempt });
+                  renderOrUpdateNarrationMessage(turnId, getFullNarrationText(artifact), { isFinal: true, version: artifact.version || 1 });
+                  renderTurnNarrationStructured(turnId, artifact, artifact.version || 1);
+                  updateState({ isGeneratingNarration: false });
                  return;
              }
             
@@ -1965,6 +2136,18 @@
                 return;
             }
 
+            if (job.status === "retrying") {
+                console.log("[Narration] Job retrying", { turnId, attempt, status: job.status });
+                updateTurnNarrationPlaceholder(
+                    turnId,
+                    "retrying",
+                    parseInt(job.retry_count, 10) || parseInt(job.attempt, 10) || 0,
+                    parseInt(job.max_retries, 10) || parseInt(job.maxAttempts, 10) || 3
+                );
+                setTimeout(() => pollNarrationStatus(sessionId, turnId, attempt + 1), 500);
+                return;
+            }
+
             if (job.status === "failed" || job.status === "stale") {
                 const failedTurnId = (job && job.turn_id) || rpgState.currentTurnId;
                 if (failedTurnId) {
@@ -1976,6 +2159,20 @@
                     parseInt(job.retry_count, 10) || parseInt(job.attempt, 10) || 0,
                     parseInt(job.max_retries, 10) || parseInt(job.maxAttempts, 10) || 3
                 );
+                if (typeof CSS !== 'undefined' && CSS.escape) {
+                    const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                    if (root) {
+                        const body =
+                            root.querySelector('.rpg-turn-narration-body') ||
+                            root.querySelector('.rpg-turn-body') ||
+                            root;
+                        body.innerHTML = buildSystemNoteHtml(
+                            job.status === 'stale' ? 'Narration stale' : 'Narration failed',
+                            _safeStr(job.error || 'The narration stream did not complete.'),
+                            job.status === 'stale' ? 'warning' : 'error'
+                        );
+                    }
+                }
                 updateState({ isGeneratingNarration: false });
                 return;
             }
@@ -2126,6 +2323,13 @@
             } else {
                 scheduleStreamingNarrationFlush(turnId);
             }
+
+            if (typeof CSS !== 'undefined' && CSS.escape) {
+                const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                if (root) {
+                    root.classList.add('rpg-turn--streaming');
+                }
+            }
             return;
         }
 
@@ -2140,8 +2344,15 @@
             const fullText = getFullNarrationText(artifact);
 
             renderOrUpdateNarrationMessage(turnId, fullText, { isFinal: true, version: artifact.version || 1 });
+            renderTurnNarrationStructured(turnId, artifact, artifact.version || 1);
             clearNarrationPlaceholder(turnId);
             resetStreamingNarrationState(turnId);
+            if (typeof CSS !== 'undefined' && CSS.escape) {
+                const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                if (root) {
+                    root.classList.remove('rpg-turn--streaming');
+                }
+            }
 
             updateState({
                 isGeneratingNarration: false,
@@ -2161,8 +2372,15 @@
                 getFullNarrationText(evt),
                 { isFinal: true, version: evt.version || 1 }
             );
+            renderTurnNarrationStructured(turnId, evt, evt.version || 1);
             clearNarrationPlaceholder(turnId);
             resetStreamingNarrationState(turnId);
+            if (typeof CSS !== 'undefined' && CSS.escape) {
+                const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                if (root) {
+                    root.classList.remove('rpg-turn--streaming');
+                }
+            }
             updateState({ isGeneratingNarration: false });
             return;
         }

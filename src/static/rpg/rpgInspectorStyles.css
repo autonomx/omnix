@@ -1027,3 +1027,230 @@
 .rpg-inline-status-badge.is-failed {
   background: rgba(255, 90, 90, 0.18);
 }
+
+/* ---- Narration block styling ---- */
+
+.rpg-turn-narration-body,
+.rpg-narration-block {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+
+.rpg-narration-block {
+  margin: 0 0 10px 0;
+  line-height: 1.55;
+}
+
+.rpg-narration-scene {
+  color: var(--rpg-text-primary, #f2f2f2);
+}
+
+.rpg-narration-action {
+  color: var(--rpg-text-secondary, #d0d0d0);
+  padding-left: 10px;
+  border-left: 2px solid rgba(255,255,255,0.14);
+}
+
+.rpg-narration-dialogue {
+  background: rgba(255,255,255,0.04);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.rpg-narration-speaker {
+  font-weight: 600;
+}
+
+.rpg-narration-line {
+  opacity: 0.98;
+}
+
+.rpg-narration-reward {
+  font-size: 0.95em;
+  opacity: 0.9;
+}
+
+.rpg-response-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rpg-narration-card,
+.rpg-speaker-card,
+.rpg-system-note {
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.rpg-narration-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rpg-narration-card--scene {
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
+}
+
+.rpg-narration-card--action {
+  background: rgba(120, 160, 255, 0.08);
+  border-left: 3px solid rgba(120, 160, 255, 0.45);
+}
+
+.rpg-narration-card__label,
+.rpg-system-note__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.72;
+  margin-bottom: 6px;
+}
+
+.rpg-narration-card__body {
+  line-height: 1.6;
+}
+
+.rpg-speaker-card {
+  background: rgba(255, 230, 180, 0.06);
+  border: 1px solid rgba(255, 220, 160, 0.15);
+  border-left: 4px solid var(--speaker-accent, rgba(255,255,255,0.18));
+}
+
+.rpg-speaker-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.rpg-speaker-card__portrait,
+.rpg-speaker-card__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex: 0 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  background: rgba(255,255,255,0.12);
+  color: var(--rpg-text-primary, #f2f2f2);
+}
+
+.rpg-speaker-card__portrait {
+  border: 2px solid var(--speaker-accent, rgba(255,255,255,0.2));
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.18);
+}
+
+.rpg-speaker-card__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rpg-speaker-card__name {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rpg-speaker-card__role {
+  font-size: 0.78rem;
+  opacity: 0.68;
+}
+
+.rpg-speaker-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rpg-speaker-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.rpg-speaker-chip--faction {
+  background: color-mix(in srgb, var(--speaker-accent, #888) 22%, transparent);
+  border-color: color-mix(in srgb, var(--speaker-accent, #888) 42%, transparent);
+}
+
+.rpg-speaker-chip--companion {
+  background: rgba(120, 220, 140, 0.12);
+  border-color: rgba(120, 220, 140, 0.32);
+}
+
+.rpg-speaker-chip--player {
+  background: rgba(120, 160, 255, 0.12);
+  border-color: rgba(120, 160, 255, 0.32);
+}
+
+.rpg-dialogue-bubble {
+  position: relative;
+  background: rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.rpg-dialogue-bubble::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 18px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: rgba(255,255,255,0.08);
+}
+
+.rpg-narration-speaker {
+  font-weight: 700;
+}
+
+.rpg-narration-line {
+  opacity: 0.98;
+}
+
+.rpg-system-note {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.rpg-system-note--reward {
+  background: rgba(120, 220, 140, 0.08);
+  border-left: 3px solid rgba(120, 220, 140, 0.45);
+}
+
+.rpg-system-note--warning {
+  background: rgba(255, 190, 90, 0.10);
+  border-left: 3px solid rgba(255, 190, 90, 0.55);
+}
+
+.rpg-system-note--error {
+  background: rgba(255, 110, 110, 0.10);
+  border-left: 3px solid rgba(255, 110, 110, 0.55);
+}
+
+.rpg-system-note__body {
+  line-height: 1.55;
+}
+
+.rpg-turn--streaming .rpg-dialogue-bubble,
+.rpg-turn--streaming .rpg-narration-card,
+.rpg-turn--streaming .rpg-speaker-card {
+  box-shadow: 0 0 0 1px rgba(140, 180, 255, 0.18), 0 0 18px rgba(140, 180, 255, 0.08);
+}
