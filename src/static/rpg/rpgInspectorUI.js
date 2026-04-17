@@ -284,6 +284,15 @@ class RPGInspectorUI {
       localStorage.setItem("rpg_inspector_open", "0");
       renderInspectorShell(false);
     });
+    getEl("rpg-inspector-copy-all-btn")?.addEventListener("click", () => {
+      const shell = getEl("rpg-inspector-shell");
+      if (shell) {
+        const allText = Array.from(shell.querySelectorAll(".rpg-inspector-section"))
+          .map(section => section.innerText)
+          .join("\n\n---\n\n");
+        navigator.clipboard.writeText(allText);
+      }
+    });
     getEl("rpg-inspector-refresh-btn")?.addEventListener("click", async () => {
       await this.refreshTimeline();
       await this.refreshAudit();

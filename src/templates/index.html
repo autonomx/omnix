@@ -465,10 +465,13 @@
                     <!-- RPG Inspector Shell -->
                     <button id="rpg-inspector-toggle-btn" class="rpg-toolbar-btn" style="position: absolute; bottom: 8px; right: 8px; z-index: 100;" title="Toggle RPG Inspector">🔍 Inspector</button>
                     <div id="rpg-inspector-shell" style="display: none; position: fixed; bottom: 0; right: 0; width: 50%; height: 60%; background: #1a1a2e; border: 1px solid #333; z-index: 1000; overflow-y: auto; padding: 12px;">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <h3 style="margin: 0; color: #fff;">RPG Inspector</h3>
-                        <button id="rpg-inspector-close-btn" style="background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; padding: 0;" title="Close Inspector">&times;</button>
-                      </div>
+                       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                         <h3 style="margin: 0; color: #fff;">RPG Inspector</h3>
+                         <div style="display: flex; gap: 8px; align-items: center;">
+                           <button id="rpg-inspector-copy-all-btn" style="background: #2d2d44; border: 1px solid #444; color: #fff; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 4px;" title="Copy all inspector content">📋 Copy All</button>
+                           <button id="rpg-inspector-close-btn" style="background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; padding: 0;" title="Close Inspector">&times;</button>
+                         </div>
+                       </div>
                       <div id="rpg-inspector-timeline" class="rpg-inspector-section"></div>
                       <div id="rpg-inspector-tick-view" class="rpg-inspector-section"></div>
                       <div id="rpg-inspector-npc-reasoning" class="rpg-inspector-section"></div>

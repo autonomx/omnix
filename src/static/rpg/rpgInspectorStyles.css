@@ -1284,3 +1284,24 @@
   opacity: 0.7;
   color: var(--rpg-accent, #7eb8da);
 }
+
+/* ---- Inspector Copy Buttons ---- */
+.rpg-inspector-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  transition: all 0.15s ease;
+}
+
+.rpg-inspector-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.rpg-inspector-copy-btn:active {
+  background: rgba(255, 255, 255, 0.16);
+}

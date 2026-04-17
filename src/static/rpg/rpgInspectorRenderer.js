@@ -9,6 +9,18 @@ function esc(str) {
   return s.replace(/&/g, "\u0026amp;").replace(/</g, "\u0026lt;").replace(/>/g, "\u0026gt;").replace(/"/g, "\u0026quot;").replace(/'/g, "\u0026#39;");
 }
 
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    // Visual feedback could be added here
+  }).catch(err => {
+    console.warn("Failed to copy:", err);
+  });
+}
+
+function renderCopyButton(content) {
+  return `<button class="rpg-inspector-copy-btn" onclick='copyToClipboard(${JSON.stringify(esc(content))})' title="Copy content">📋</button>`;
+}
+
 function safeArray(v) {
   return Array.isArray(v) ? v : [];
 }
@@ -196,11 +208,15 @@ function renderTickView(tickView) {
   const tv = safeObj(tickView);
   const snapshot = safeObj(tv.snapshot);
 
+  const tickContent = JSON.stringify(snapshot, null, 2);
   root.innerHTML = [
-    '<div class="rpg-inspector-title">Tick View</div>',
+    '<div class="rpg-inspector-title" style="display: flex; justify-content: space-between; align-items: center;">',
+    '  <span>Tick View</span>',
+    renderCopyButton(tickContent),
+    '</div>',
     '<div class="rpg-inspector-meta">Requested tick: ' + esc(tv.requested_tick ?? "0") + '</div>',
     '<div class="rpg-inspector-meta">Found: ' + esc(tv.found ? "yes" : "no") + '</div>',
-    '<pre class="rpg-inspector-pre">' + esc(JSON.stringify(snapshot, null, 2)) + '</pre>',
+    '<pre class="rpg-inspector-pre">' + esc(tickContent) + '</pre>',
   ].join("\n");
 }
 
@@ -212,20 +228,40 @@ function renderNpcReasoning(npcReasoning) {
   const reasoning = safeObj(data.reasoning);
   const why = safeObj(data.why);
 
+  const whyContent = JSON.stringify(why, null, 2);
+  const goalsContent = JSON.stringify(reasoning.top_goals || [], null, 2);
+  const memoriesContent = JSON.stringify(reasoning.recent_memories || [], null, 2);
+  const decisionContent = JSON.stringify(reasoning.last_decision || {}, null, 2);
+  
   root.innerHTML = [
-    '<div class="rpg-inspector-title">NPC Reasoning</div>',
+    '<div class="rpg-inspector-title" style="display: flex; justify-content: space-between; align-items: center;">',
+    '  <span>NPC Reasoning</span>',
+    renderCopyButton(`${npc.name || npc.npc_id || "NPC"}\n\nWhy:\n${whyContent}\n\nTop Goals:\n${goalsContent}\n\nRecent Memories:\n${memoriesContent}\n\nLast Decision:\n${decisionContent}`),
+    '</div>',
     '<div class="rpg-inspector-meta"><strong>' + esc(npc.name || npc.npc_id || "NPC") + '</strong></div>',
     '<div class="rpg-inspector-meta">Role: ' + esc(npc.role || "") + '</div>',
     '<div class="rpg-inspector-meta">Faction: ' + esc(npc.faction_id || "") + '</div>',
     '<div class="rpg-inspector-meta">Location: ' + esc(npc.location_id || "") + '</div>',
-    '<div class="rpg-inspector-subtitle">Why</div>',
-    '<pre class="rpg-inspector-pre">' + esc(JSON.stringify(why, null, 2)) + '</pre>',
-    '<div class="rpg-inspector-subtitle">Top Goals</div>',
-    '<pre class="rpg-inspector-pre">' + esc(JSON.stringify(reasoning.top_goals || [], null, 2)) + '</pre>',
-    '<div class="rpg-inspector-subtitle">Recent Memories</div>',
-    '<pre class="rpg-inspector-pre">' + esc(JSON.stringify(reasoning.recent_memories || [], null, 2)) + '</pre>',
-    '<div class="rpg-inspector-subtitle">Last Decision</div>',
-    '<pre class="rpg-inspector-pre">' + esc(JSON.stringify(reasoning.last_decision || {}, null, 2)) + '</pre>',
+    '<div class="rpg-inspector-subtitle" style="display: flex; justify-content: space-between; align-items: center;">',
+    '  <span>Why</span>',
+    renderCopyButton(whyContent),
+    '</div>',
+    '<pre class="rpg-inspector-pre">' + esc(whyContent) + '</pre>',
+    '<div class="rpg-inspector-subtitle" style="display: flex; justify-content: space-between; align-items: center;">',
+    '  <span>Top Goals</span>',
+    renderCopyButton(goalsContent),
+    '</div>',
+    '<pre class="rpg-inspector-pre">' + esc(goalsContent) + '</pre>',
+    '<div class="rpg-inspector-subtitle" style="display: flex; justify-content: space-between; align-items: center;">',
+    '  <span>Recent Memories</span>',
+    renderCopyButton(memoriesContent),
+    '</div>',
+    '<pre class="rpg-inspector-pre">' + esc(memoriesContent) + '</pre>',
+    '<div class="rpg-inspector-subtitle" style="display: flex; justify-content: space-between; align-items: center;">',
+    '  <span>Last Decision</span>',
+    renderCopyButton(decisionContent),
+    '</div>',
+    '<pre class="rpg-inspector-pre">' + esc(decisionContent) + '</pre>',
   ].join("\n");
 }
 
