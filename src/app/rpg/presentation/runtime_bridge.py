@@ -72,9 +72,10 @@ def _build_turn_payload(turn: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_runtime_presentation_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def build_runtime_presentation_payload(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any] | None = None) -> Dict[str, Any]:
     """Build a pure presentation payload from runtime dialogue state."""
     dialogue_state = get_runtime_dialogue_state(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
 
     turns = [
         _build_turn_payload(v)
@@ -198,5 +199,6 @@ def build_runtime_presentation_payload(simulation_state: Dict[str, Any]) -> Dict
                 "chunks": stream_chunks,
             },
             "emotions": emotions,
-        }
+        },
+        "combat_state": _safe_dict(runtime_state.get("combat_state")),
     }

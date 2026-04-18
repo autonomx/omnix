@@ -736,8 +736,40 @@ def _build_scene_summary(scene: Dict[str, Any], llm_narrative: str) -> str:
     return "The scene settles around you."
 
 
+def _build_combat_facts_block(narration_context: Dict[str, Any]) -> str:
+    combat_result = _safe_dict(narration_context.get("combat_result"))
+    npc_combat_result = _safe_dict(narration_context.get("npc_combat_result"))
+    combat_state = _safe_dict(narration_context.get("combat_state"))
+    if not combat_result and not combat_state and not npc_combat_result:
+        return "- none"
+
+    parts = []
+    if combat_state:
+        parts.append(f'state={_safe_str(combat_state.get("phase") or "idle")}')
+    if combat_result:
+        parts.append(f'hit={bool(combat_result.get("hit"))}')
+        parts.append(f'damage={int(combat_result.get("damage_total", 0) or 0)}')
+        parts.append(f'target_downed={bool(combat_result.get("target_downed"))}')
+    if npc_combat_result:
+        parts.append(f'npc_counterattack_hit={bool(npc_combat_result.get("hit"))}')
+        parts.append(f'npc_counterattack_damage={int(npc_combat_result.get("damage_total", 0) or 0)}')
+    return ", ".join(parts) if parts else "- none"
+
+
 def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
     narration_context = _safe_dict(narration_context)
+    combat_result = _safe_dict(narration_context.get("combat_result"))
+    if combat_result:
+        hit = bool(combat_result.get("hit"))
+        damage_total = int(combat_result.get("damage_total", 0) or 0)
+        target_downed = bool(combat_result.get("target_downed"))
+        target_name = _safe_str(combat_result.get("target_name") or _safe_dict(narration_context.get("resolved_result")).get("target_name")).strip() or "the target"
+        if not hit:
+            return f"You miss {target_name}."
+        if target_downed:
+            return f"You strike {target_name}, dealing {damage_total} damage and knocking them down."
+        return f"You hit {target_name}, dealing {damage_total} damage."
+
     resolved = _safe_dict(narration_context.get("resolved_result"))
     combat = _safe_dict(resolved.get("combat_result"))
     action_type = _safe_str(narration_context.get("action_type")).strip()
@@ -1092,8 +1124,18 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     
     recent_authoritative_facts = _recent_authoritative_facts(narration_context)
     recent_facts_block = "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
+    combat_facts_block = _build_combat_facts_block(narration_context)
 
     prompt = f"""You are a deterministic RPG narration engine.
+
+CONTEXT:
+{safe_context}
+
+Recent authoritative facts:
+{recent_facts_block}
+
+Authoritative combat facts:
+{combat_facts_block}
 
 YOUR ONLY TASK: Generate narration for a player's action in an RPG.
 
@@ -1120,6 +1162,8 @@ IMPORTANT RULES:
 - NO content about ticks, time, or system messages
 - NO faction goals, loyalty, awareness, or ambient content
 - The action result MUST match the already-resolved authoritative outcome
+- Any combat description MUST match the authoritative combat facts block
+- Do NOT invent hits, misses, damage, knockdowns, or combatants
 - The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain
 - Do NOT invent gold, reputation, items, guards, factions, or bystanders not present in the scene/context
 - NPC speaker MUST be one present actor or the explicit target NPC from context

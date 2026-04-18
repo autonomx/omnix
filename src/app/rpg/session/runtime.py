@@ -20,6 +20,13 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+from app.rpg.combat.apply import apply_attack_resolution
+from app.rpg.combat.initiative import begin_combat, advance_turn
+from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
+from app.rpg.combat.models import AttackIntent
+from app.rpg.combat.npc_turns import run_npc_turn
+from app.rpg.combat.resolver import resolve_attack
+from app.rpg.combat.state import build_empty_combat_state, normalize_combat_state, get_current_actor_id
 from app.rpg.action_resolver import resolve_player_action
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.ai.ambient_dialogue import (
@@ -4436,6 +4443,52 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
         return default
 
 
+def _get_combat_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    return normalize_combat_state(_safe_dict(runtime_state).get("combat_state"))
+
+
+def _set_combat_state(runtime_state: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    runtime_state["combat_state"] = normalize_combat_state(combat_state)
+    return runtime_state
+
+
+def _lookup_actor_by_id(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+    for collection_key in ("actor_states", "npc_states"):
+        for actor in _safe_list(simulation_state.get(collection_key)):
+            if _safe_str(actor.get("id")).strip() == _safe_str(actor_id).strip():
+                return actor
+    return {}
+
+
+def _actor_is_player(simulation_state: Dict[str, Any], actor_id: str) -> bool:
+    actor = _lookup_actor_by_id(simulation_state, actor_id)
+    return bool(actor.get("is_player")) or _safe_str(actor.get("type")).strip().lower() == "player"
+
+
+def _build_combat_gate_result(current_actor_id: str, player_actor_id: str) -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "blocked": True,
+        "message": "It is not your turn in combat.",
+        "reason": "combat_turn_gated",
+        "expected_actor_id": current_actor_id,
+        "player_actor_id": player_actor_id,
+    }
+
+
+def _action_requests_hostile_combat(action: Dict[str, Any], player_input: str) -> bool:
+    action = _safe_dict(action)
+    action_type = _safe_str(action.get("action_type")).strip().lower()
+    if action_type in {"melee_attack", "unarmed_attack", "attack_melee", "attack_unarmed"}:
+        return True
+    if action_type in {"attack", "punch"}:
+        text = _safe_str(player_input).strip().lower()
+        hostile_terms = ("attack", "punch", "hit", "kick", "strike", "stab", "slash", "smash", "kill")
+        return any(term in text for term in hostile_terms)
+    return False
+
+
 def _interaction_trace_enabled(runtime_state: Dict[str, Any]) -> bool:
     runtime_state = _safe_dict(runtime_state)
     settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
@@ -6070,6 +6123,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "last_player_action_context": {},
             "idle_debug_trace": {},
             "recent_world_event_rows": [],
+            "combat_state": build_empty_combat_state(),
             # 4C-E: Conversation world signals
             "conversation_world_signals": {
                 "pending": [],
@@ -6598,6 +6652,137 @@ def _apply_turn_authoritative(
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)
+
+    combat_state = _get_combat_state(runtime_state)
+
+    combat_result: Dict[str, Any] = {}
+    npc_combat_result: Dict[str, Any] = {}
+    normalized_action_type = _safe_str(_safe_dict(action).get("action_type")).strip().lower()
+    target_id = _safe_str(_safe_dict(action).get("target_id")).strip()
+    is_combat_action = _action_requests_hostile_combat(action, player_input)
+    if is_combat_action and target_id:
+        target_actor = _lookup_actor_by_id(after_action_state, target_id)
+        if not target_actor:
+            is_combat_action = False
+
+    if combat_state.get("active"):
+        current_actor_id = get_current_actor_id(combat_state)
+        if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
+            resolved_result = _build_combat_gate_result(current_actor_id, player_actor_id)
+            grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
+            narration_context = {
+                "player_input": player_input,
+                "action_type": normalized_action_type,
+                "resolved_result": resolved_result,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+            }
+            return {
+                "ok": True,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "result": resolved_result,
+                "narration_context": narration_context,
+                "turn_id": turn_id,
+                "tick": final_tick,
+            }
+
+    if is_combat_action and target_id:
+        if not combat_state.get("active"):
+            participant_ids = build_combat_participants(
+                after_action_state,
+                [player_actor_id, target_id],
+            )
+            combat_state = begin_combat(
+                after_action_state,
+                combat_state,
+                participant_ids,
+                combat_id=f"combat:{turn_id}",
+                tick=final_tick,
+                initial_target_id=target_id,
+            )
+            runtime_state = _set_combat_state(runtime_state, combat_state)
+
+        current_actor_id = get_current_actor_id(combat_state)
+        if not combat_state.get("active") or not current_actor_id:
+            is_combat_action = False
+
+        if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
+            resolved_result = _build_combat_gate_result(current_actor_id, player_actor_id)
+            grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
+            narration_context = {
+                "player_input": player_input,
+                "action_type": normalized_action_type,
+                "resolved_result": resolved_result,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "combat_result": {},
+                "combat_state": combat_state,
+                "grounded": grounded,
+                "xp_result": {},
+                "skill_xp_result": {},
+                "level_up": [],
+                "skill_level_ups": [],
+                "settings": runtime_state.get("runtime_settings", {}),
+            }
+            return {
+                "ok": True,
+                "simulation_state": after_action_state,
+                "runtime_state": runtime_state,
+                "result": resolved_result,
+                "narration_context": narration_context,
+                "turn_id": turn_id,
+                "tick": final_tick,
+            }
+
+        intent = AttackIntent(
+            actor_id=_safe_str(player_actor_id),
+            target_id=target_id,
+            action_type="unarmed_attack" if normalized_action_type in {"punch", "unarmed_attack", "attack_unarmed"} else "melee_attack",
+        )
+        resolution = resolve_attack(
+            after_action_state,
+            combat_state,
+            intent,
+            turn_id=turn_id,
+            tick=final_tick,
+        )
+        after_action_state, combat_state = apply_attack_resolution(
+            after_action_state,
+            combat_state,
+            resolution.to_dict(),
+        )
+        combat_state = evaluate_combat_exit(after_action_state, combat_state)
+        if combat_state.get("active"):
+            combat_state = advance_turn(combat_state)
+            current_after_player = get_current_actor_id(combat_state)
+            if current_after_player and not _actor_is_player(after_action_state, current_after_player):
+                after_action_state, combat_state, npc_combat_result = run_npc_turn(
+                    after_action_state,
+                    combat_state,
+                    tick=final_tick,
+                )
+                combat_state = evaluate_combat_exit(after_action_state, combat_state)
+        runtime_state = _set_combat_state(runtime_state, combat_state)
+        combat_result = resolution.to_dict()
+        
+        # Inject combat result back into authoritative result
+        authoritative["simulation_state"] = after_action_state
+        resolved_result["combat_result"] = combat_result
+        if npc_combat_result:
+            resolved_result["npc_combat_result"] = npc_combat_result
+        authoritative["result"] = resolved_result
+    after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
+    resolved_result = _safe_dict(authoritative.get("result"))
+    resolved_result.setdefault("action_type", action_type)
     _t_authoritative = _time.monotonic()
 
     progression = _award_progression(after_action_state, resolved_result)
@@ -6686,6 +6871,9 @@ def _apply_turn_authoritative(
         "level_up": _safe_list(progression.get("level_up")),
         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
         "settings": runtime_state.get("runtime_settings", {}),
+        "combat_result": combat_result,
+        "npc_combat_result": npc_combat_result,
+        "combat_state": combat_state,
     }
 
     grounded = _derive_grounded_scene_context(after_state, runtime_state, resolved_result)
