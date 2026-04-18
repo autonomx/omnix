@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Dict, Iterator, List, Optional
 
 from app.providers.base import ChatMessage, ChatResponse
@@ -77,11 +78,21 @@ class AppLLMGateway:
         # intentionally not wired to the underlying provider yet.  Callers may
         # pass it to express intent; actual timeout enforcement will be added
         # when the provider abstraction gains native support.
-        logger.info("[RPG GATEWAY] Calling provider.chat_completion, prompt length: %d", len(prompt))
+        t0 = time.monotonic()
+        logger.info(
+            "[RPG GATEWAY] generate_start prompt_len=%d timeout_s=%s",
+            len(prompt),
+            timeout_s,
+        )
         messages = self._build_messages(prompt, context=context)
         logger.debug("[RPG GATEWAY] Built messages for chat_completion", extra={"message_count": len(messages)})
         try:
             response = self.provider.chat_completion(messages=messages, stream=False)
+            logger.info(
+                "[RPG GATEWAY] generate_end dt=%.3fs response_type=%s",
+                time.monotonic() - t0,
+                type(response).__name__,
+            )
             logger.debug("[RPG GATEWAY] Provider returned type: %s", type(response))
         except Exception:
             logger.exception("[RPG GATEWAY] Provider call failed")
@@ -107,17 +118,36 @@ class AppLLMGateway:
     ) -> Iterator[Dict[str, Any]]:
         # NOTE: timeout_s is accepted for forward-compatible API shape but is
         # intentionally not wired to the underlying provider yet.
-        logger.info("[RPG GATEWAY] Calling provider.chat_completion with stream=True, prompt length: %d", len(prompt))
+        t0 = time.monotonic()
+        chunk_count = 0
+        first_chunk_at = None
+        logger.info(
+            "[RPG GATEWAY] stream_start prompt_len=%d timeout_s=%s",
+            len(prompt),
+            timeout_s,
+        )
         messages = self._build_messages(prompt, context=context)
         logger.debug("[RPG GATEWAY] Built messages for streaming chat_completion", extra={"message_count": len(messages)})
         try:
             for chunk in self.provider.chat_completion(messages=messages, stream=True):
+                if first_chunk_at is None:
+                    first_chunk_at = time.monotonic()
+                    logger.info(
+                        "[RPG GATEWAY] stream_first_chunk dt=%.3fs",
+                        first_chunk_at - t0,
+                    )
+                chunk_count += 1
                 if isinstance(chunk, ChatResponse):
                     content = chunk.content or ""
                     if content:
                         yield {"text": content}
                 else:
                     logger.warning("[RPG GATEWAY] Unexpected chunk type during streaming: %s", type(chunk))
+            logger.info(
+                "[RPG GATEWAY] stream_end total_dt=%.3fs chunk_count=%d",
+                time.monotonic() - t0,
+                chunk_count,
+            )
         except Exception:
             logger.exception("[RPG GATEWAY] Streaming provider call failed")
             raise

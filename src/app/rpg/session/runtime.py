@@ -719,6 +719,16 @@ def _enqueue_narration_request(
     by_turn[turn_id] = job
     runtime_state["narration_jobs_by_turn"] = by_turn
 
+    logger.info(
+        "[RPG NARRATION QUEUE] enqueue session=%s turn_id=%s tick=%s job_kind=%s priority=%s existing_active=%s queue_len=%d",
+        session_id if 'session_id' in locals() else runtime_state.get('session_id', 'unknown'),
+        turn_id,
+        tick,
+        job_kind,
+        priority,
+        bool(existing_job and _is_narration_job_active(existing_job)),
+        len(_safe_list(runtime_state.get("narration_jobs"))),
+    )
     return runtime_state, job, is_new
 
 
@@ -3500,10 +3510,7 @@ def record_semantic_llm_capture(
     proposals: List[Dict[str, Any]],
     tick: int,
 ) -> Dict[str, Any]:
-    print("SEMANTIC RECORD prompt_present =", bool(prompt))
-    print("SEMANTIC RECORD raw_output_present =", bool(_normalize_llm_text_output(raw_output)))
-    print("SEMANTIC RECORD proposal_count =", len(proposals))
-    print("SEMANTIC RECORD proposals =", proposals[:3])
+
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     normalized = [
         _normalize_semantic_state_change_proposal(x)
@@ -3608,9 +3615,7 @@ def validate_semantic_state_change_proposal(
     actor = _find_actor_state(actor_states, proposal["actor_id"])
     if not actor:
         known_ids = [str(_safe_dict(x).get("id") or "").strip() for x in actor_states if _safe_dict(x)]
-        print("SEMANTIC VALIDATOR known_actor_ids =", known_ids[:20])
-        print("SEMANTIC VALIDATOR incoming_actor_id =", proposal.get("actor_id"))
-        print("SEMANTIC VALIDATOR npc_index_keys =", list(_safe_dict(simulation_state.get("npc_index")).keys())[:20])
+
         errors.append("unknown_actor")
 
     delta = _safe_dict(proposal.get("delta"))
@@ -3837,10 +3842,7 @@ def process_semantic_state_change_proposals(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
 ) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    print("SEMANTIC PROCESS queued =", runtime_state.get("semantic_state_change_proposals"))
-    if _safe_bool(_safe_dict(runtime_state.get("runtime_settings")).get("verbose_semantic_trace"), False):
-        print("SEMANTIC PROCESS accepted =", runtime_state.get("accepted_state_change_events"))
-    print("SEMANTIC PROCESS rejected =", runtime_state.get("rejected_state_change_events"))
+
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
 
@@ -4234,7 +4236,7 @@ def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state
         text = match.group(1)
     else:
         # 🔥 HARD FAIL instead of parsing garbage
-        print("SEMANTIC CAPTURE no valid RESPONSE block")
+
         return []
 
     text = text.strip()
@@ -4329,7 +4331,7 @@ def maybe_enqueue_llm_semantic_state_change_proposals(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
 ) -> Dict[str, Any]:
-    print("SEMANTIC ENQUEUE recorded =", runtime_state.get("recorded_semantic_llm_proposals"))
+
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     if not _should_generate_llm_semantic_proposals(simulation_state, runtime_state):
@@ -4343,8 +4345,7 @@ def maybe_enqueue_llm_semantic_state_change_proposals(
     if _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
         runtime_state = clear_recorded_semantic_llm_capture(runtime_state)
         consumed_any = True
-    print("SEMANTIC ENQUEUE consumed_any =", consumed_any)
-    print("SEMANTIC ENQUEUE last_tick =", runtime_state.get("last_semantic_llm_tick"))
+
     if consumed_any:
         runtime_state["last_semantic_llm_tick"] = _safe_int(runtime_state.get("tick", 0), 0)
     return runtime_state
@@ -4402,9 +4403,7 @@ def _compact_active_interactions(items: List[Dict[str, Any]]) -> List[Dict[str, 
 
 
 def _log_interaction_trace(label: str, payload: Dict[str, Any], runtime_state: Dict[str, Any] | None = None) -> None:
-    # Temporarily force these traces to always show for debugging
-    force_show = label in ("apply_turn_before_semantic_apply", "apply_turn_after_semantic_apply", "apply_turn_after_interaction_creation", "apply_turn_before_session_save", "idle_tick_start", "semantic_prompt_context")
-    if runtime_state is not None and not (_interaction_trace_enabled(runtime_state) or force_show):
+    if runtime_state is not None and not _interaction_trace_enabled(runtime_state):
         return
     try:
         print(f"INTERACTION TRACE {label} = {payload}")
@@ -5976,7 +5975,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
                 "idle_npc_to_npc_enabled": True,
                 "follow_reactions_enabled": True,
                 "reaction_style": "normal",
-                "console_debug_enabled": True,
+                "console_debug_enabled": False,
                 "world_events_panel_enabled": True,
                 "interaction_duration_mode": "until_next_command",
                 "interaction_duration_ticks": 5,
@@ -6694,6 +6693,27 @@ def _apply_turn_authoritative(
         "t_total": round(_t_save - _t0, 4),
         "fast_turn_mode": perf["fast_turn_mode"],
     }
+    perf_entry.update({
+        "session_id": session_id,
+        "player_input_len": len(player_input or ""),
+        "save_count": len(runtime_state.get("perf_trace", [])),
+        "simulation_tick_before": current_tick,
+        "tick_after": int(after_state.get("tick", current_tick) or current_tick),
+    })
+    logger.info(
+        "[RPG TURN PERF] session=%s tick=%s load=%.3fs advisory=%.3fs semantic=%.3fs authoritative=%.3fs step=%.3fs pre_save=%.3fs save=%.3fs total=%.3fs fast_turn=%s",
+        session_id,
+        perf_entry["tick_after"],
+        perf_entry["t_load"],
+        perf_entry["t_advisory"],
+        perf_entry["t_semantic"],
+        perf_entry["t_authoritative"],
+        perf_entry["t_step"],
+        perf_entry["t_pre_save"],
+        perf_entry["t_save"],
+        perf_entry["t_total"],
+        perf_entry["fast_turn_mode"],
+    )
     runtime_state = _copy_dict(session.get("runtime_state"))
     runtime_state.setdefault("perf_trace", [])
     runtime_state["perf_trace"].append(perf_entry)
@@ -6740,6 +6760,8 @@ def _generate_turn_narration_artifact(
     on_chunk: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     logger.debug("_generate_turn_narration_artifact called", extra={"session_id": session_id, "turn_id": narration_request.get("turn_id")})
+    t0 = _time.monotonic()
+    logger.info("[RPG NARRATION ARTIFACT] start session=%s turn_id=%s tick=%s", session_id, narration_request.get("turn_id"), narration_request.get("tick"))
     narration_request = _safe_dict(narration_request)
     turn_id = _safe_str(narration_request.get("turn_id")).strip()
     tick = int(narration_request.get("tick", 0) or 0)
@@ -6766,6 +6788,7 @@ def _generate_turn_narration_artifact(
     logger.debug("LLM gateway status", extra={"session_id": session_id, "turn_id": turn_id, "llm_enabled": llm_enabled, "llm_gateway": llm_gateway is not None})
 
     logger.debug("Calling narrate_scene", extra={"session_id": session_id, "turn_id": turn_id})
+    t_narrate0 = _time.monotonic()
     narration_result = narrate_scene(
         scene,
         narration_context,
@@ -6775,6 +6798,8 @@ def _generate_turn_narration_artifact(
         debug_logging=False,
         on_chunk=_emit_chunk,
     )
+    logger.info("[RPG NARRATION ARTIFACT] narrate_scene_done session=%s turn_id=%s dt=%.3fs used_llm=%s",
+        session_id, turn_id, _time.monotonic() - t_narrate0, bool(_safe_dict(narration_result).get("used_llm")))
     logger.debug("narrate_scene returned", extra={"session_id": session_id, "turn_id": turn_id, "result_keys": list(narration_result.keys()) if isinstance(narration_result, dict) else type(narration_result)})
 
     narration_result = _safe_dict(narration_result)
@@ -6823,7 +6848,16 @@ def _generate_turn_narration_artifact(
     session_runtime["narration_artifacts"] = _safe_list(updated_runtime.get("narration_artifacts"))
     session_runtime["narration_artifacts_by_turn"] = _safe_dict(updated_runtime.get("narration_artifacts_by_turn"))
     session["runtime_state"] = session_runtime
+    
+    t_save0 = _time.monotonic()
     session = save_runtime_session(session)
+    logger.info(
+        "[RPG NARRATION ARTIFACT] save_done session=%s turn_id=%s dt=%.3fs total=%.3fs",
+        session_id,
+        turn_id,
+        _time.monotonic() - t_save0,
+        _time.monotonic() - t0,
+    )
 
     return {"ok": True, "session": session, "artifact": artifact}
 
@@ -6833,6 +6867,8 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     Process at most one queued narration job for the given session.
     Safe for polling/heartbeat driven execution.
     """
+    t0 = _time.monotonic()
+    logger.info("[RPG NARRATION JOB] process_start session=%s", session_id)
     logger.debug("process_next_narration_job called", extra={"session_id": session_id})
     session = load_runtime_session(session_id)
     if session is None:
@@ -6855,6 +6891,15 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             )
         )
         queued_job = queued[0]
+        logger.info(
+            "[RPG NARRATION JOB] selected session=%s turn_id=%s job_id=%s status=%s attempts=%s max_attempts=%s",
+            session_id,
+            queued_job.get("turn_id"),
+            queued_job.get("job_id"),
+            _safe_str(queued_job.get("status")),
+            queued_job.get("attempts"),
+            queued_job.get("max_attempts"),
+        )
         logger.debug("Selected queued job", extra={"session_id": session_id, "turn_id": queued_job.get("turn_id"), "priority": queued_job.get("priority")})
 
     if queued_job:
@@ -6889,6 +6934,38 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     logger.info("Processing queued narration job", extra={"session_id": session_id, "turn_id": turn_id, "tick": tick})
     current_tick = int(runtime_state.get("tick", 0) or 0)
 
+    # Single-flight protection:
+    # Re-load the authoritative per-turn job state before claiming. A repeated
+    # wake-up may still be looking at an older queued snapshot while another
+    # worker already owns the same turn's narration.
+    current_job = _get_narration_job_for_turn(runtime_state, turn_id)
+    current_status = _safe_str(current_job.get("status")).strip().lower()
+    current_worker_token = _safe_str(current_job.get("worker_token")).strip()
+    current_job_id = _safe_str(current_job.get("job_id")).strip()
+    if current_job_id and current_job_id != selected_job_id:
+        return {
+            "ok": True,
+            "status": "skipped",
+            "reason": "superseded_before_claim",
+            "turn_id": turn_id,
+        }
+    if current_status == "processing" or current_worker_token:
+        logger.info(
+            "Skipping narration job already claimed by another worker",
+            extra={
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "status": current_status,
+                "worker_token": current_worker_token,
+            },
+        )
+        return {
+            "ok": True,
+            "status": "skipped",
+            "reason": "already_processing",
+            "turn_id": turn_id,
+        }
+
     if _has_narration_artifact_for_turn(runtime_state, turn_id):
         authoritative_job_id = _get_authoritative_narration_job_id(runtime_state, turn_id)
         if authoritative_job_id == selected_job_id:
@@ -6922,6 +6999,7 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     # Only ambient/background narration may be dropped for staleness.
     # Player-turn narration is blocking UX and must still complete.
     if job_kind == "ambient_conversation" and tick < current_tick - 1:
+        logger.info("[RPG NARRATION JOB] stale_detected session=%s turn_id=%s tick=%s current_tick=%s", session_id, turn_id, tick, current_tick)
         runtime_state = _mark_narration_job_status(runtime_state, turn_id, status="stale", error="stale_narration_job")
         session["runtime_state"] = runtime_state
         session = save_runtime_session(session)
@@ -6954,6 +7032,15 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     )
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
+
+    logger.info(
+        "[RPG NARRATION JOB] claimed session=%s turn_id=%s job_id=%s worker_token=%s dt=%.3fs",
+        session_id,
+        turn_id,
+        selected_job_id,
+        worker_token,
+        _time.monotonic() - t0,
+    )
     
     current_job = _safe_dict(
         _safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id)
@@ -6990,6 +7077,7 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
     logger.debug("Narration request prepared", extra={"session_id": session_id, "turn_id": turn_id, "request_keys": list(narration_request.keys()) if narration_request else None})
 
     if not narration_request or not narration_request.get("turn_id"):
+        logger.info("[RPG NARRATION JOB] missing_request session=%s turn_id=%s", session_id, turn_id)
         logger.error("Missing narration request", extra={"session_id": session_id, "turn_id": turn_id})
         runtime_state = _mark_narration_job_status(
             runtime_state,
@@ -7016,9 +7104,25 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
             },
         )
 
+    t_gen = _time.monotonic()
+    logger.info(
+        "[RPG NARRATION JOB] generation_start session=%s turn_id=%s tick=%s",
+        session_id,
+        turn_id,
+        queued_job.get("tick"),
+    )
     logger.debug("Calling _generate_turn_narration_artifact", extra={"session_id": session_id, "turn_id": turn_id})
     try:
         result = _generate_turn_narration_artifact(session_id, narration_request, on_chunk=_on_chunk)
+
+        logger.info(
+            "[RPG NARRATION JOB] generation_end session=%s turn_id=%s ok=%s dt=%.3fs error=%s",
+            session_id,
+            turn_id,
+            result.get("ok"),
+            _time.monotonic() - t_gen,
+            result.get("error"),
+        )
     except Exception:
         logger.exception(
             "Exception in _generate_turn_narration_artifact for session %s turn %s",
@@ -7777,11 +7881,7 @@ def _apply_idle_tick_to_session(
     session["simulation_state"] = simulation_state
     session["runtime_state"] = runtime_state
 
-    # Debug prints
-    print("END-IDLE authoritative_tick =", authoritative_tick)
-    print("END-IDLE simulation_state.tick =", simulation_state.get("tick"))
-    print("END-IDLE simulation_state.current_tick =", simulation_state.get("current_tick"))
-    print("END-IDLE runtime_state.tick =", runtime_state.get("tick"))
+
 
     return {
         "ok": True,
@@ -8290,11 +8390,6 @@ def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[s
         # 🔥 BUILD RECAP (THIS WAS MISSING)
         simulation_state = _safe_dict(session.get("simulation_state"))
 
-        print("DEBUG SIM STATE recent_events =", simulation_state.get("recent_events"))
-        print("DEBUG SIM STATE recent_consequences =", simulation_state.get("recent_consequences"))
-        print("DEBUG SIM STATE active_threads =", simulation_state.get("active_threads"))
-        print("DEBUG SIM STATE npc_states =", simulation_state.get("npc_states"))
-
         recap = _build_world_advance_recap(
             simulation_state,
             runtime_state,
@@ -8310,7 +8405,6 @@ def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[s
             recap = _build_resume_fallback_recap(session, runtime_state, ticks_applied)
 
         result["world_advance_recap"] = recap
-        print("DEBUG BUILT RECAP:", recap)
 
     response = {
         "ok": True,

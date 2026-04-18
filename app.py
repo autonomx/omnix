@@ -10,6 +10,8 @@ Key optimizations:
 - Pre-loaded TTS model
 """
 
+import logging
+from logging.handlers import RotatingFileHandler
 import asyncio
 import base64
 import json
@@ -33,6 +35,43 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
+
+# Configure logging to write to resources/logs/rpg.log
+log_dir = Path(__file__).parent / 'resources' / 'logs'
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / 'rpg.log'
+
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# Format with timestamp, logger name, level, and message
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Rotating file handler: 10MB max, 5 backup files
+file_handler = RotatingFileHandler(
+    log_file,
+    maxBytes=10 * 1024 * 1024,  # 10 MB
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+# Console handler for existing output
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
+# Add handlers to root logger
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
+
+# Ensure RPG loggers propagate to root
+for logger_name in ['app.rpg', 'rpg']:
+    rpg_logger = logging.getLogger(logger_name)
+    rpg_logger.setLevel(logging.INFO)
+    rpg_logger.propagate = True
 
 import app.shared as shared
 from app.providers.base import ChatMessage

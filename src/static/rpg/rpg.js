@@ -931,7 +931,6 @@
 
     /** Atomic state updater — increments version, merges patch. */
     function updateState(patch) {
-        console.log("🔄 STATE UPDATE:", patch, "→ NEW STATE:", Object.assign({}, rpgState, patch));
         stateVersion++;
         rpgState = Object.assign({}, rpgState, patch, { _v: stateVersion });
     }
@@ -2493,11 +2492,15 @@
                             onToken(evt.token || evt.text || '');
                             continue;
                         } else if (evt.type === 'authoritative_result') {
-                            finalData = evt;
-                            try { await reader.cancel(); } catch (_) {}
+                            finalData = Object.assign({}, finalData || {}, evt);
+                        } else if (evt.type === 'narration_artifact') {
+                            finalData = Object.assign({}, finalData || {}, {
+                                narration: evt.narration || '',
+                                narration_artifact: evt,
+                                live_draft_streaming: true,
+                            });
                         } else if (evt.type === 'done') {
-                            // Keep the authoritative payload if we already have it.
-                            if (!finalData) finalData = evt;
+                            finalData = Object.assign({}, finalData || {}, evt);
                         } else if (evt.type === 'error') {
                             finalData = evt;
                         }
@@ -2908,47 +2911,78 @@
                     appendMessage({ type: 'system', content: metaLines.join('\n'), turnId: turnId });
                 }
 
-                // Show narration pending with badge
-                const fallbackContent = coerceText(data.fallback_narration || data.deterministic_fallback_narration);
-                if (fallbackContent) {
-                    appendMessage({
-                        type: 'narration',
-                        role: 'turn_narration',
-                        narrationState: 'fallback',
-                        content: fallbackContent,
-                        turnId: turnId
-                    });
-                } else {
-                    // Create pending placeholder with status badge
-                    appendMessage({
-                        type: 'narration',
-                        role: 'turn_narration',
-                        narrationState: 'pending',
-                        content: '',
-                        turnId: turnId
-                    });
-                    
-                    // Add the placeholder badge after DOM is created
-                    requestAnimationFrame(() => {
-                        const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
-                        if (root) {
-                            const placeholder = root.querySelector('.rpg-turn-narration-placeholder') || root;
-                            placeholder.classList.add("rpg-turn-narration-placeholder");
-                            placeholder.innerHTML = buildNarrationPlaceholderHtml("queued");
-                            placeholder.setAttribute("data-status", "queued");
+                const liveArtifact = _safeObj(data.narration_artifact);
+                const liveNarration = coerceText(
+                    liveArtifact.narration ||
+                    data.narration ||
+                    ''
+                );
+
+                if (data.live_draft_streaming && liveNarration) {
+                    if (streamingDiv) {
+                        streamingDiv.remove();
+                        streamingDiv = null;
+                    }
+
+                    renderOrUpdateNarrationMessage(
+                        turnId,
+                        liveNarration,
+                        {
+                            isFinal: true,
+                            version: liveArtifact.version || 1,
                         }
-                    });
+                    );
+
+                    if (liveArtifact && Object.keys(liveArtifact).length) {
+                        renderTurnNarrationStructured(
+                            turnId,
+                            liveArtifact,
+                            liveArtifact.version || 1
+                        );
+                    }
+
+                    clearNarrationPlaceholder(turnId);
+                    resetStreamingNarrationState(turnId);
+                } else {
+                    // Show narration pending with badge
+                    const fallbackContent = coerceText(data.fallback_narration || data.deterministic_fallback_narration);
+                    if (fallbackContent) {
+                        appendMessage({
+                            type: 'narration',
+                            role: 'turn_narration',
+                            narrationState: 'fallback',
+                            content: fallbackContent,
+                            turnId: turnId
+                        });
+                    } else {
+                        // Create pending placeholder with status badge
+                        appendMessage({
+                            type: 'narration',
+                            role: 'turn_narration',
+                            narrationState: 'pending',
+                            content: '',
+                            turnId: turnId
+                        });
+                        
+                        // Add the placeholder badge after DOM is created
+                        requestAnimationFrame(() => {
+                            const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+                            if (root) {
+                                const placeholder = root.querySelector('.rpg-turn-narration-placeholder') || root;
+                                placeholder.classList.add("rpg-turn-narration-placeholder");
+                                placeholder.innerHTML = buildNarrationPlaceholderHtml("queued");
+                                placeholder.setAttribute("data-status", "queued");
+                            }
+                        });
+                    }
+
+                    // Background worker is server-driven now; use SSE for updates.
+                    ensureNarrationSubscription(rpgState.sessionId);
+
+                    // Fallback for cases where EventSource does not open or misses
+                    // narration_job / narration_artifact events.
+                    pollNarrationStatus(rpgState.sessionId, turnId, 0);
                 }
-
-                // Background worker is server-driven now; use SSE for updates.
-                ensureNarrationSubscription(rpgState.sessionId);
-
-                // Fallback for cases where EventSource does not open or misses
-                // narration_job / narration_artifact events. This is especially
-                // important for second+ turns where there may be no fallback
-                // narration text and the placeholder would otherwise stay
-                // queued forever.
-                pollNarrationStatus(rpgState.sessionId, turnId, 0);
                 
             } else {
                 // Legacy handling
@@ -3044,14 +3078,21 @@
                 }
 
                 if (evt.type === 'authoritative_result') {
-                    finalPayload = evt;
+                    finalPayload = Object.assign({}, finalPayload || {}, evt);
+                    continue;
+                }
+
+                if (evt.type === 'narration_artifact') {
+                    finalPayload = Object.assign({}, finalPayload || {}, {
+                        narration: evt.narration || '',
+                        narration_artifact: evt,
+                        live_draft_streaming: true,
+                    });
                     continue;
                 }
 
                 if (evt.type === 'done') {
-                    if (!finalPayload) {
-                        finalPayload = evt;
-                    }
+                    finalPayload = Object.assign({}, finalPayload || {}, evt);
                     continue;
                 }
             }

@@ -9,7 +9,9 @@ import datetime
 import json
 import logging
 import queue
+import threading
 import time
+import uuid
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -20,7 +22,6 @@ from app.rpg.ai.semantic_state_change_capture import (
 )
 from app.rpg.economy.action_generator import build_menu_action
 from app.rpg.session.ambient_builder import (
-    ensure_ambient_runtime_state,
     get_pending_ambient_updates,
 )
 from app.rpg.session.durable_store import CorruptSessionPayloadError
@@ -34,6 +35,7 @@ from app.rpg.session.runtime import (
     _apply_turn_authoritative,
     _copy_dict,
     _enqueue_narration_request,
+    _generate_turn_narration_artifact,
     _normalize_runtime_settings,
     apply_idle_ticks,
     apply_resume_catchup,
@@ -70,6 +72,88 @@ def _safe_str(value: Any) -> str:
 
 def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
+
+
+def _start_live_first_draft_thread(
+    session_id: str,
+    narration_request: Dict[str, Any],
+) -> "queue.Queue[Dict[str, Any]]":
+    """
+    Generate the first-draft narration inline for the current turn request,
+    while streaming chunks back to the same HTTP response.
+
+    Queue events:
+      {"type": "token", "text": "..."}
+      {"type": "result", "result": {...}}
+      {"type": "error", "error": "..."}
+    """
+    event_q: "queue.Queue[Dict[str, Any]]" = queue.Queue()
+
+    def _emit_chunk(piece: str) -> None:
+        piece = _safe_str(piece)
+        if not piece:
+            return
+        event_q.put({
+            "type": "token",
+            "text": piece,
+        })
+
+    def _worker() -> None:
+        try:
+            result = _generate_turn_narration_artifact(
+                session_id,
+                narration_request,
+                on_chunk=_emit_chunk,
+            )
+            event_q.put({
+                "type": "result",
+                "result": _safe_dict(result),
+            })
+        except Exception as exc:
+            _logger.exception("live first-draft narration failed")
+            event_q.put({
+                "type": "error",
+                "error": _safe_str(exc) or "live_first_draft_failed",
+            })
+
+    threading.Thread(
+        target=_worker,
+        name=f"rpg-live-first-draft:{session_id}",
+        daemon=True,
+    ).start()
+
+    return event_q
+
+
+def _enqueue_and_signal_narration_job(
+    session_id: str,
+    runtime_state: Dict[str, Any],
+    turn_id: str,
+    tick: int,
+    narration_request: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any], bool]:
+    runtime_state, narration_job, is_new = _enqueue_narration_request(
+        runtime_state,
+        turn_id,
+        tick,
+        narration_request,
+        "player_turn",
+        100,
+    )
+
+    session = load_runtime_session(session_id)
+    if session is not None:
+        session["runtime_state"] = runtime_state
+        save_runtime_session(session)
+
+    if is_new:
+        try:
+            ensure_narration_worker_running()
+            signal_narration_work(session_id)
+        except Exception:
+            _logger.exception("Failed to start or signal narration worker")
+
+    return runtime_state, narration_job, is_new
 
 
 # Ensure narration worker is running on module load
@@ -367,6 +451,15 @@ async def execute_rpg_session_turn_stream(request: Request):
 
     def generate():
         try:
+            turn_request_id = uuid.uuid4().hex[:12]
+            t0 = time.monotonic()
+            _logger.info(
+                "[RPG TURN STREAM] request_start session=%s req=%s input_len=%d",
+                session_id,
+                turn_request_id,
+                len(player_input),
+            )
+
             yield _sse({"type": "accepted"})
             yield _sse({"type": "processing", "stage": "authoritative_turn"})
 
@@ -375,6 +468,17 @@ async def execute_rpg_session_turn_stream(request: Request):
                 player_input,
                 action=action,
                 performance_override=request_performance or None,
+            )
+
+            t_authoritative_done = time.monotonic()
+            _logger.info(
+                "[RPG TURN STREAM] authoritative_done session=%s req=%s dt=%.3fs ok=%s turn_id=%s tick=%s",
+                session_id,
+                turn_request_id,
+                t_authoritative_done - t0,
+                authoritative_result.get("ok"),
+                _safe_dict(authoritative_result.get("authoritative")).get("turn_id"),
+                _safe_dict(authoritative_result.get("authoritative")).get("tick"),
             )
 
             if not authoritative_result.get("ok"):
@@ -392,26 +496,14 @@ async def execute_rpg_session_turn_stream(request: Request):
             runtime_state = _copy_dict(session.get("runtime_state"))
             turn_id = _safe_str(authoritative.get("turn_id")).strip()
             tick = int(authoritative.get("tick", 0) or 0)
-            runtime_state, narration_job, is_new = _enqueue_narration_request(
-                runtime_state,
-                turn_id,
-                tick,
-                narration_request,
-                "player_turn",
-                100,
+
+            perf = _safe_dict(narration_request.get("performance"))
+            live_first_draft_stream = bool(
+                perf.get("enable_live_first_draft_stream", True)
             )
-            session["runtime_state"] = runtime_state
-            save_runtime_session(session)
 
-            if is_new:
-                try:
-                    ensure_narration_worker_running()
-                    signal_narration_work(session_id)
-                except Exception:
-                    _logger.exception("Failed to start or signal narration worker")
-
-            authoritative_turn_id = _safe_str((narration_job or {}).get("turn_id")).strip() or turn_id
-            narration_status = _safe_str((narration_job or {}).get("status") or "queued")
+            authoritative_turn_id = turn_id
+            narration_status = "streaming" if live_first_draft_stream else "queued"
 
             yield _sse({
                 "type": "authoritative_result",
@@ -428,16 +520,98 @@ async def execute_rpg_session_turn_stream(request: Request):
                 "response_length": authoritative.get("response_length"),
                 "fallback_narration": authoritative.get("deterministic_fallback_narration"),
                 "narration_status": narration_status,
-                "narration_job": narration_job or {},
+                "narration_job": {},
+                "live_draft_streaming": live_first_draft_stream,
             })
 
-            # "done" here means authoritative turn resolution is complete.
-            # Final narration arrives separately via narration stream events.
+            if live_first_draft_stream:
+                yield _sse({
+                    "type": "processing",
+                    "stage": "live_first_draft",
+                    "turn_id": authoritative_turn_id,
+                })
+
+                event_q = _start_live_first_draft_thread(session_id, narration_request)
+                live_result = {}
+                live_error = ""
+
+                while True:
+                    try:
+                        evt = event_q.get(timeout=0.10)
+                    except queue.Empty:
+                        # Keep the HTTP stream active even if the model has not
+                        # yielded a chunk yet.
+                        yield _sse({
+                            "type": "heartbeat",
+                            "stage": "live_first_draft",
+                            "turn_id": authoritative_turn_id,
+                        })
+                        continue
+
+                    evt_type = _safe_str(evt.get("type")).strip().lower()
+                    if evt_type == "token":
+                        yield _sse({
+                            "type": "token",
+                            "turn_id": authoritative_turn_id,
+                            "text": _safe_str(evt.get("text")),
+                        })
+                        continue
+                    if evt_type == "result":
+                        live_result = _safe_dict(evt.get("result"))
+                        break
+                    if evt_type == "error":
+                        live_error = _safe_str(evt.get("error") or "live_first_draft_failed")
+                        break
+
+                if live_result.get("ok"):
+                    artifact = _safe_dict(live_result.get("artifact"))
+                    if artifact:
+                        yield _sse({
+                            "type": "narration_artifact",
+                            **artifact,
+                            "turn_id": authoritative_turn_id,
+                            "live_draft_streaming": True,
+                        })
+                        yield _sse({
+                            "type": "done",
+                            "turn_id": authoritative_turn_id,
+                            "tick": authoritative.get("tick"),
+                            "narration_status": "completed",
+                            "live_draft_streaming": True,
+                        })
+                        return
+
+                _logger.warning(
+                    "Live first-draft stream failed; falling back to queued narration",
+                    extra={
+                        "session_id": session_id,
+                        "turn_id": authoritative_turn_id,
+                        "error": live_error or _safe_str(live_result.get("error")),
+                    },
+                )
+
+            # Fallback path: queue narration in the background worker.
+            runtime_state, narration_job, is_new = _enqueue_and_signal_narration_job(
+                session_id,
+                runtime_state,
+                turn_id,
+                tick,
+                narration_request,
+            )
+
+            yield _sse({
+                "type": "narration_job",
+                "turn_id": authoritative_turn_id,
+                "status": _safe_str((narration_job or {}).get("status") or "queued"),
+                "job": narration_job or {},
+                "live_draft_streaming": False,
+            })
             yield _sse({
                 "type": "done",
                 "turn_id": authoritative_turn_id,
                 "tick": authoritative.get("tick"),
-                "narration_status": narration_status,
+                "narration_status": _safe_str((narration_job or {}).get("status") or "queued"),
+                "live_draft_streaming": False,
             })
         except Exception as exc:
             _logger.exception("turn/stream failed")
@@ -489,8 +663,37 @@ async def get_rpg_session_narration_status(request: Request):
     artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
     job_status = _safe_str(job.get("status")).strip().lower()
 
+    started = _safe_str(job.get("started_at"))
+    age_seconds = 0.0
+    if started:
+        try:
+            started_dt = datetime.datetime.fromisoformat(
+                started.replace("Z", "+00:00")
+            )
+            now_dt = datetime.datetime.now(datetime.timezone.utc)
+            age_seconds = (now_dt - started_dt).total_seconds()
+        except Exception:
+            age_seconds = -1.0
+
+    _logger.info(
+        "[RPG NARRATION STATUS] poll session=%s turn_id=%s status=%s age=%.1fs has_artifact=%s",
+        session_id,
+        turn_id,
+        job_status,
+        age_seconds,
+        bool(artifact),
+    )
+
     # Self-heal queued narration jobs so polling can recover even if the worker
     # missed a wake-up or the SSE channel never opened on the client.
+    #
+    # IMPORTANT:
+    # - queued      -> may be re-signaled
+    # - processing  -> must NOT be re-signaled unless we first prove it is
+    #                  stuck and reset it back to queued
+    #
+    # Re-signaling live "processing" jobs can trigger duplicate expensive
+    # narration executions while the original worker still owns the job.
     if job and not artifact and job_status in ("queued", "processing"):
         # Recover jobs stuck in "processing" state (e.g., worker exception left
         # the job marked processing but never completed it).
@@ -536,23 +739,38 @@ async def get_rpg_session_narration_status(request: Request):
                 runtime_state["narration_jobs"] = jobs_list
                 session["runtime_state"] = runtime_state
                 save_runtime_session(session)
+                # The authoritative status is now queued again.
+                job_status = "queued"
             except Exception:
                 _logger.exception("Failed to reset stuck processing job")
 
-        _logger.info("Re-signaling narration job", extra={
-            "session_id": session_id,
-            "turn_id": turn_id,
-            "job_status": job_status,
-            "was_reset": needs_reset,
-        })
-        try:
-            ensure_narration_worker_running()
-            signal_narration_work(session_id)
-        except Exception:
-            _logger.exception("Failed to re-signal narration work", extra={
+        # Only re-signal truly queued jobs. Never re-signal active processing
+        # work unless we reset it back to queued above.
+        if job_status == "queued":
+            _logger.info("Re-signaling narration job", extra={
                 "session_id": session_id,
                 "turn_id": turn_id,
+                "job_status": job_status,
+                "was_reset": needs_reset,
             })
+            try:
+                ensure_narration_worker_running()
+                signal_narration_work(session_id)
+            except Exception:
+                _logger.exception("Failed to re-signal narration work", extra={
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                })
+        else:
+            _logger.debug(
+                "Narration job is already processing; skipping re-signal",
+                extra={
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "job_status": job_status,
+                    "was_reset": needs_reset,
+                },
+            )
 
     # Refresh after any re-signal so the client sees the latest status.
     session = load_runtime_session(session_id)
@@ -976,7 +1194,6 @@ async def update_world_behavior(request: Request):
     """Update in-game world behavior overrides."""
     from app.rpg.creator.schema import (
         _WORLD_BEHAVIOR_ENUMS,
-        normalize_world_behavior_config,
     )
     from app.rpg.session.runtime import get_effective_world_behavior
 

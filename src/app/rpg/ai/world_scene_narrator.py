@@ -816,13 +816,7 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     response_length = _normalize_response_length(settings.get("response_length"))
     length_rules = _response_length_prompt_rules(response_length)
     
-    print("[RPG LENGTH DEBUG] response_length =", response_length)
-    print("[RPG LENGTH DEBUG] length_rules =", length_rules)
-
     safe_context = _build_safe_prompt_context(scene, narration_context)
-    logger.debug("[RPG PROMPT] Scene title: %s, location: %s", title, location)
-    logger.debug("[RPG PROMPT] Narration context keys: %s", list(narration_context.keys()))
-    logger.debug("[RPG PROMPT] Safe context: %s", safe_context)
 
     prompt = f"""You are a deterministic RPG narration engine.
 
@@ -1707,9 +1701,28 @@ def _generate_live_narrative(
     else:
         logger.debug("[RPG LLM PROMPT] prompt length: %d", len(prompt))
     max_attempts = 2 if retry_on_invalid else 1
+
+    logger.info(
+        "[RPG NARRATOR] live_narrative_start prompt_len=%d retry_on_invalid=%s max_attempts=%d",
+        len(prompt),
+        retry_on_invalid,
+        max_attempts,
+    )
+
+    import time
+
     for attempt in range(max_attempts):
+        attempt_t0 = time.monotonic()
+        logger.info("[RPG NARRATOR] attempt_start attempt=%d/%d", attempt + 1, max_attempts)
         try:
             response = _llm_text(llm_gateway, prompt, context={}, on_chunk=on_chunk if attempt == 0 else None)
+            logger.info(
+                "[RPG NARRATOR] attempt_end attempt=%d/%d dt=%.3fs response_len=%d",
+                attempt + 1,
+                max_attempts,
+                time.monotonic() - attempt_t0,
+                len(str(response or "")),
+            )
             if debug_logging:
                 logger.warning("[RPG LLM RAW OUTPUT attempt %d]\n%s", attempt + 1, response)
             else:
@@ -1736,6 +1749,11 @@ def _generate_live_narrative(
                 logger.debug("LLM response validation successful")
                 return response
             else:
+                logger.warning(
+                    "[RPG NARRATOR] attempt_rejected attempt=%d/%d reason=invalid_scene_format",
+                    attempt + 1,
+                    max_attempts,
+                )
                 logger.error("LLM response failed validation, parsed: %s", parsed)
         except Exception:
             logger.exception("Exception during LLM narration")
