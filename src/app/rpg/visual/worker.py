@@ -14,7 +14,7 @@ from app.rpg.presentation.visual_state import (
     upsert_character_visual_identity,
 )
 from app.rpg.visual.asset_store import save_asset_bytes
-from app.rpg.visual.providers import get_image_provider
+from app.rpg.visual.providers import get_image_provider, image_generation_enabled
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -92,6 +92,8 @@ def process_pending_image_requests(
 ) -> Dict[str, Any]:
     """Process pending image requests through the configured provider."""
     simulation_state = ensure_visual_state(_safe_dict(simulation_state))
+    if not image_generation_enabled():
+        return simulation_state
     provider = get_image_provider()
     pending = get_pending_image_requests(simulation_state)[: max(1, int(limit))]
 

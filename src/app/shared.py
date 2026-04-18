@@ -80,7 +80,32 @@ DEFAULT_SETTINGS = {
         "non_streaming_mode": True,
         "append_silence": True
     },
-    "parakeet": {"base_url": "http://localhost:8000"}
+    "parakeet": {"base_url": "http://localhost:8000"},
+    "rpg_visual": {
+        "enabled": False,
+        "provider": "mock",
+        "auto_unload_on_disable": True,
+        "flux_klein": {
+            "enabled": False,
+            "repo_id": "black-forest-labs/FLUX.2-klein-4B",
+            "variant": "distilled",  # distilled | base
+            "base_repo_id": "black-forest-labs/FLUX.2-klein-base-4B",
+            "download_dir": "server",
+            "local_dir": "",
+            "device": "cuda",
+            "torch_dtype": "bfloat16",
+            "enable_cpu_offload": True,
+            "prefer_local_files": True,
+            "num_inference_steps": 4,
+            "guidance_scale": 1.0,
+            "portrait_width": 768,
+            "portrait_height": 1024,
+            "scene_width": 1024,
+            "scene_height": 768,
+            "item_width": 1024,
+            "item_height": 1024
+        }
+    },
 }
 
 DEFAULT_SYSTEM_PROMPT = "You are a helpful AI assistant."
@@ -108,6 +133,17 @@ def migrate_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
             settings['audio_provider_stt'] = DEFAULT_SETTINGS['audio_provider_stt']
         if 'parakeet' not in settings:
             settings['parakeet'] = DEFAULT_SETTINGS['parakeet']
+        if 'rpg_visual' not in settings:
+            settings['rpg_visual'] = json.loads(json.dumps(DEFAULT_SETTINGS['rpg_visual']))
+        else:
+            visual = dict(settings.get('rpg_visual') or {})
+            flux = dict(visual.get('flux_klein') or {})
+            merged_visual = json.loads(json.dumps(DEFAULT_SETTINGS['rpg_visual']))
+            merged_visual.update(visual)
+            merged_flux = dict(merged_visual.get('flux_klein') or {})
+            merged_flux.update(flux)
+            merged_visual['flux_klein'] = merged_flux
+            settings['rpg_visual'] = merged_visual
         return settings
     
     # Old format - migrate
@@ -129,6 +165,8 @@ def migrate_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
         migrated['audio_provider_stt'] = DEFAULT_SETTINGS['audio_provider_stt']
     if 'parakeet' not in migrated:
         migrated['parakeet'] = DEFAULT_SETTINGS['parakeet']
+    if 'rpg_visual' not in migrated:
+        migrated['rpg_visual'] = json.loads(json.dumps(DEFAULT_SETTINGS['rpg_visual']))
     
     # Migrate old base_url to lmstudio config
     if 'base_url' in migrated:
@@ -201,12 +239,31 @@ def save_settings(settings):
     settings = migrate_settings(dict(settings or {}))
     previous_inputs = _llm_provider_cache_inputs_from_settings(load_settings())
     next_inputs = _llm_provider_cache_inputs_from_settings(settings)
+    previous_settings = load_settings()
 
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(settings, f, indent=2)
 
     if previous_inputs != next_inputs:
         invalidate_provider_cache()
+
+    try:
+        prev_visual = dict(previous_settings.get("rpg_visual") or {})
+        next_visual = dict(settings.get("rpg_visual") or {})
+        prev_enabled = bool(prev_visual.get("enabled"))
+        next_enabled = bool(next_visual.get("enabled"))
+        prev_provider = str(prev_visual.get("provider") or "mock").strip().lower()
+        next_provider = str(next_visual.get("provider") or "mock").strip().lower()
+        should_unload = (
+            (prev_enabled and not next_enabled and bool(next_visual.get("auto_unload_on_disable", True)))
+            or (prev_provider != next_provider)
+            or (prev_enabled and next_enabled and prev_provider == "flux_klein" and next_provider == "flux_klein" and prev_visual != next_visual)
+        )
+        if should_unload:
+            from app.rpg.visual.providers import unload_image_provider_cache
+            unload_image_provider_cache()
+    except Exception:
+        pass
 
 def load_sessions():
     if os.path.exists(SESSIONS_FILE):

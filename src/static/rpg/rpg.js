@@ -1820,6 +1820,236 @@
             body.appendChild(wbSection);
         }
 
+        // Visual / Image Generation Settings
+        var visualSection = document.createElement('div');
+        visualSection.innerHTML = '<h4>🖼️ Image Generation</h4><p class="ab-hint">Download, load, unload, and configure portrait / scene generation.</p>';
+        var visualContainer = document.createElement('div');
+        visualContainer.id = 'rpgVisualSettings';
+        visualContainer.innerHTML = '<p>Loading image settings...</p>';
+        visualSection.appendChild(visualContainer);
+        body.appendChild(visualSection);
+
+        function visualStatusText(settings, loadedProvider) {
+            settings = settings || {};
+            var enabled = !!settings.enabled;
+            var provider = String(settings.provider || 'mock');
+            var flux = settings.flux_klein || {};
+            var localDir = String(flux.local_dir || '').trim();
+            var downloaded = !!localDir;
+            var parts = [];
+            parts.push(enabled ? 'Enabled' : 'Disabled');
+            parts.push('Provider: ' + provider);
+            if (provider === 'flux_klein') {
+                parts.push(downloaded ? 'Model downloaded' : 'Model not downloaded');
+            }
+            if (loadedProvider) {
+                parts.push('Loaded: ' + loadedProvider);
+            }
+            return parts.join(' • ');
+        }
+
+        function buildVisualSettingsHtml(data) {
+            var settings = (data && data.settings) || {};
+            var enabled = !!settings.enabled;
+            var provider = String(settings.provider || 'mock');
+            var autoUnload = settings.auto_unload_on_disable !== false;
+            var flux = settings.flux_klein || {};
+            var localDir = String(flux.local_dir || '');
+            var device = String(flux.device || 'cuda');
+            var dtype = String(flux.torch_dtype || 'bfloat16');
+            var offload = flux.enable_cpu_offload !== false;
+            var portraitWidth = Number(flux.portrait_width || 768);
+            var portraitHeight = Number(flux.portrait_height || 1024);
+            var sceneWidth = Number(flux.scene_width || 1024);
+            var sceneHeight = Number(flux.scene_height || 768);
+            var steps = Number(flux.num_inference_steps || 4);
+            var guidance = Number(flux.guidance_scale || 1.0);
+            var loadedProvider = String((data && data.loaded_provider) || '');
+            var status = visualStatusText(settings, loadedProvider);
+            var hasModel = !!localDir;
+
+            return '' +
+                '<div style="display:flex;flex-direction:column;gap:12px;">' +
+                    '<div style="opacity:0.9;">' + escapeHtml(status) + '</div>' +
+
+                    '<label style="display:flex;align-items:center;gap:8px;">' +
+                        '<input type="checkbox" id="rpgVisualEnabled"' + (enabled ? ' checked' : '') + '>' +
+                        '<span>Enable image generation</span>' +
+                    '</label>' +
+
+                    '<label style="display:flex;flex-direction:column;gap:6px;">' +
+                        '<span>Provider</span>' +
+                        '<select id="rpgVisualProvider">' +
+                            '<option value="mock"' + (provider === 'mock' ? ' selected' : '') + '>mock</option>' +
+                            '<option value="flux_klein"' + (provider === 'flux_klein' ? ' selected' : '') + '>flux_klein</option>' +
+                            '<option value="comfy"' + (provider === 'comfy' ? ' selected' : '') + '>comfy</option>' +
+                            '<option value="openai"' + (provider === 'openai' ? ' selected' : '') + '>openai</option>' +
+                        '</select>' +
+                    '</label>' +
+
+                    '<label style="display:flex;align-items:center;gap:8px;">' +
+                        '<input type="checkbox" id="rpgVisualAutoUnload"' + (autoUnload ? ' checked' : '') + '>' +
+                        '<span>Auto-unload provider when disabled</span>' +
+                    '</label>' +
+
+                    '<div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;">' +
+                        '<div style="font-weight:600;margin-bottom:8px;">FLUX.2 [klein] 4B</div>' +
+                        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Device</span><input id="rpgFluxDevice" type="text" value="' + escapeHtml(device) + '"></label>' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Torch dtype</span><input id="rpgFluxDtype" type="text" value="' + escapeHtml(dtype) + '"></label>' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Portrait width</span><input id="rpgFluxPortraitWidth" type="number" value="' + portraitWidth + '"></label>' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Portrait height</span><input id="rpgFluxPortraitHeight" type="number" value="' + portraitHeight + '"></label>' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Scene width</span><input id="rpgFluxSceneWidth" type="number" value="' + sceneWidth + '"></label>' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Scene height</span><input id="rpgFluxSceneHeight" type="number" value="' + sceneHeight + '"></label>' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Steps</span><input id="rpgFluxSteps" type="number" value="' + steps + '"></label>' +
+                            '<label style="display:flex;flex-direction:column;gap:4px;"><span>Guidance</span><input id="rpgFluxGuidance" type="number" step="0.1" value="' + guidance + '"></label>' +
+                        '</div>' +
+                        '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;">' +
+                            '<input type="checkbox" id="rpgFluxCpuOffload"' + (offload ? ' checked' : '') + '>' +
+                            '<span>Enable CPU offload</span>' +
+                        '</label>' +
+                        '<div style="margin-top:8px;opacity:0.8;">' +
+                            (hasModel ? 'Model path: ' + escapeHtml(localDir) : 'Model has not been downloaded yet.') +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
+                        '<button type="button" class="btn btn-secondary" id="rpgVisualDownloadBtn">Download model</button>' +
+                        '<button type="button" class="btn btn-secondary" id="rpgVisualLoadBtn">Load model</button>' +
+                        '<button type="button" class="btn btn-secondary" id="rpgVisualUnloadBtn">Unload model</button>' +
+                        '<button type="button" class="btn btn-primary" id="rpgVisualSaveBtn">Save settings</button>' +
+                    '</div>' +
+
+                    '<div id="rpgVisualSettingsStatus" style="opacity:0.85;"></div>' +
+                '</div>';
+        }
+
+        function collectVisualSettingsForm() {
+            return {
+                enabled: !!(document.getElementById('rpgVisualEnabled') || {}).checked,
+                provider: (document.getElementById('rpgVisualProvider') || {}).value || 'mock',
+                auto_unload_on_disable: !!(document.getElementById('rpgVisualAutoUnload') || {}).checked,
+                flux_klein: {
+                    device: (document.getElementById('rpgFluxDevice') || {}).value || 'cuda',
+                    torch_dtype: (document.getElementById('rpgFluxDtype') || {}).value || 'bfloat16',
+                    enable_cpu_offload: !!(document.getElementById('rpgFluxCpuOffload') || {}).checked,
+                    portrait_width: parseInt((document.getElementById('rpgFluxPortraitWidth') || {}).value || '768', 10),
+                    portrait_height: parseInt((document.getElementById('rpgFluxPortraitHeight') || {}).value || '1024', 10),
+                    scene_width: parseInt((document.getElementById('rpgFluxSceneWidth') || {}).value || '1024', 10),
+                    scene_height: parseInt((document.getElementById('rpgFluxSceneHeight') || {}).value || '768', 10),
+                    num_inference_steps: parseInt((document.getElementById('rpgFluxSteps') || {}).value || '4', 10),
+                    guidance_scale: parseFloat((document.getElementById('rpgFluxGuidance') || {}).value || '1.0')
+                }
+            };
+        }
+
+        function setVisualSettingsStatus(text) {
+            var node = document.getElementById('rpgVisualSettingsStatus');
+            if (node) node.textContent = text || '';
+        }
+
+        function bindVisualSettingsEvents() {
+            var saveBtn = document.getElementById('rpgVisualSaveBtn');
+            var downloadBtn = document.getElementById('rpgVisualDownloadBtn');
+            var loadBtn = document.getElementById('rpgVisualLoadBtn');
+            var unloadBtn = document.getElementById('rpgVisualUnloadBtn');
+
+            if (saveBtn) saveBtn.addEventListener('click', function() {
+                setVisualSettingsStatus('Saving settings...');
+                fetch('/api/rpg/visual/provider/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(collectVisualSettingsForm())
+                }).then(function(r) { return r.json(); })
+                  .then(function(result) {
+                      if (result && result.ok) {
+                          setVisualSettingsStatus('Settings saved.');
+                          loadVisualSettings();
+                      } else {
+                          setVisualSettingsStatus('Failed to save settings.');
+                      }
+                  }).catch(function() {
+                      setVisualSettingsStatus('Failed to save settings.');
+                  });
+            });
+
+            if (downloadBtn) downloadBtn.addEventListener('click', function() {
+                setVisualSettingsStatus('Downloading model...');
+                fetch('/api/rpg/visual/provider/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider: 'flux_klein' })
+                }).then(function(r) { return r.json(); })
+                  .then(function(result) {
+                      if (result && result.ok) {
+                          setVisualSettingsStatus('Model downloaded.');
+                          loadVisualSettings();
+                      } else {
+                          setVisualSettingsStatus('Model download failed.');
+                      }
+                  }).catch(function() {
+                      setVisualSettingsStatus('Model download failed.');
+                  });
+            });
+
+            if (loadBtn) loadBtn.addEventListener('click', function() {
+                setVisualSettingsStatus('Loading model...');
+                fetch('/api/rpg/visual/provider/load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider: 'flux_klein' })
+                }).then(function(r) { return r.json(); })
+                  .then(function(result) {
+                      if (result && result.ok) {
+                          setVisualSettingsStatus('Model loaded.');
+                          loadVisualSettings();
+                      } else {
+                          setVisualSettingsStatus('Model load failed.');
+                      }
+                  }).catch(function() {
+                      setVisualSettingsStatus('Model load failed.');
+                  });
+            });
+
+            if (unloadBtn) unloadBtn.addEventListener('click', function() {
+                setVisualSettingsStatus('Unloading model...');
+                fetch('/api/rpg/visual/provider/unload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                }).then(function(r) { return r.json(); })
+                  .then(function(result) {
+                      if (result && result.ok) {
+                          setVisualSettingsStatus('Model unloaded.');
+                          loadVisualSettings();
+                      } else {
+                          setVisualSettingsStatus('Model unload failed.');
+                      }
+                  }).catch(function() {
+                      setVisualSettingsStatus('Model unload failed.');
+                  });
+            });
+        }
+
+        function loadVisualSettings() {
+            fetch('/api/rpg/visual/provider/settings', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                  if (!data || !data.ok) {
+                      visualContainer.innerHTML = '<p>Failed to load image settings</p>';
+                      return;
+                  }
+                  visualContainer.innerHTML = buildVisualSettingsHtml(data);
+                  bindVisualSettingsEvents();
+              }).catch(function() {
+                  visualContainer.innerHTML = '<p>Failed to load image settings</p>';
+              });
+        }
+
+        loadVisualSettings();
+
         panel.classList.add('active');
     }
 
@@ -3298,6 +3528,7 @@
         rpgState.npcs.forEach(function (npc) {
             var card = document.createElement('div');
             card.className = 'rpg-npc-card';
+            card.dataset.npcId = String(npc.id || npc.npc_id || npc.name || '').trim();
 
             var moodClass = getMoodClass(npc.mood);
 
@@ -3347,6 +3578,7 @@
 
             panel.appendChild(card);
         });
+        wireVisualGenerateControls();
     }
 
     function buildTurnSummaryBanner(update) {
@@ -3567,6 +3799,336 @@
                 return '<li class="rpg-memory-item rpg-memory-item--event">' + escapeHtml(_toDisplayString(e)) + '</li>';
             }).join('');
         }
+    }
+
+    // ─── Visual Generation Implementation ─────────────────────────────────────
+
+    function ensureVisualControlState() {
+        if (!rpgState.visualControls || typeof rpgState.visualControls !== 'object') {
+            rpgState.visualControls = {
+                portrait: { style: 'rpg-portrait', lockSeed: false, seed: '' },
+                scene: { style: 'rpg-scene', lockSeed: false, seed: '' }
+            };
+        }
+        if (!rpgState.visualControls.portrait) {
+            rpgState.visualControls.portrait = { style: 'rpg-portrait', lockSeed: false, seed: '' };
+        }
+        if (!rpgState.visualControls.scene) {
+            rpgState.visualControls.scene = { style: 'rpg-scene', lockSeed: false, seed: '' };
+        }
+        return rpgState.visualControls;
+    }
+
+    function getVisualPresetOptions(kind) {
+        if (kind === 'portrait') {
+            return [
+                { value: 'rpg-portrait', label: 'RPG portrait' },
+                { value: 'grimdark-portrait', label: 'Grimdark portrait' },
+                { value: 'painterly-portrait', label: 'Painterly portrait' },
+                { value: 'fantasy-card', label: 'Fantasy card' }
+            ];
+        }
+        return [
+            { value: 'rpg-scene', label: 'RPG scene' },
+            { value: 'grimdark-scene', label: 'Grimdark scene' },
+            { value: 'painterly-scene', label: 'Painterly scene' },
+            { value: 'cinematic-scene', label: 'Cinematic scene' }
+        ];
+    }
+
+    function visualSeedValue(kind) {
+        ensureVisualControlState();
+        var cfg = rpgState.visualControls[kind] || {};
+        if (!cfg.lockSeed) return null;
+        var n = parseInt(cfg.seed, 10);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function postJson(url, payload) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload || {})
+        }).then(function(r) { return r.json(); });
+    }
+
+    function refreshVisualUiFromSession() {
+        if (!rpgState.sessionId) return Promise.resolve(null);
+        return apiGetGame(rpgState.sessionId).then(function(game) {
+            var nextNpcs = game.npcs || game.nearby_npcs || game.known_npcs || [];
+            var nextPlayer = game.player || rpgState.player || null;
+            updateState({
+                player: nextPlayer,
+                npcs: Array.isArray(nextNpcs) ? nextNpcs : []
+            });
+            if (nextPlayer) renderPlayerPanel(nextPlayer);
+            renderNPCs();
+            wireVisualGenerateControls();
+            return game;
+        }).catch(function() {
+            return null;
+        });
+    }
+
+    function ensureVisualActionBar(container, kind) {
+        if (!container) return null;
+        var existing = container.querySelector('.rpg-visual-action-bar[data-kind="' + kind + '"]');
+        if (existing) return existing;
+        var bar = document.createElement('div');
+        bar.className = 'rpg-visual-action-bar';
+        bar.dataset.kind = kind;
+        bar.style.display = 'flex';
+        bar.style.flexDirection = 'column';
+        bar.style.gap = '8px';
+        bar.style.marginTop = '8px';
+        if (container.firstChild) {
+            container.insertBefore(bar, container.firstChild);
+        } else {
+            container.appendChild(bar);
+        }
+        return bar;
+    }
+
+    function ensureVisualStatusNode(container, kind) {
+        if (!container) return null;
+        var existing = container.querySelector('.rpg-visual-status[data-kind="' + kind + '"]');
+        if (existing) return existing;
+        var node = document.createElement('div');
+        node.className = 'rpg-visual-status';
+        node.dataset.kind = kind;
+        node.style.fontSize = '0.9em';
+        node.style.opacity = '0.85';
+        container.appendChild(node);
+        return node;
+    }
+
+    function setVisualStatus(container, kind, text) {
+        var node = ensureVisualStatusNode(container, kind);
+        if (node) node.textContent = text || '';
+    }
+
+    function buildVisualControlRow(kind) {
+        ensureVisualControlState();
+        var cfg = rpgState.visualControls[kind] || {};
+        var options = getVisualPresetOptions(kind);
+        var selectHtml = options.map(function(opt) {
+            var selected = String(cfg.style || '') === String(opt.value) ? ' selected' : '';
+            return '<option value="' + escapeHtml(opt.value) + '"' + selected + '>' + escapeHtml(opt.label) + '</option>';
+        }).join('');
+        return '' +
+            '<div class="rpg-visual-controls" data-kind="' + kind + '" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:0.85em;">' +
+                '<label style="display:flex;align-items:center;gap:4px;">' +
+                    '<span>Style</span>' +
+                    '<select class="rpg-visual-style-select" data-kind="' + kind + '">' + selectHtml + '</select>' +
+                '</label>' +
+                '<label style="display:flex;align-items:center;gap:4px;">' +
+                    '<span>Seed</span>' +
+                    '<input class="rpg-visual-seed-input" data-kind="' + kind + '" type="number" step="1" value="' + escapeHtml(String(cfg.seed || '')) + '" style="width:90px;">' +
+                '</label>' +
+                '<label style="display:flex;align-items:center;gap:4px;">' +
+                    '<input class="rpg-visual-seed-lock" data-kind="' + kind + '" type="checkbox"' + (cfg.lockSeed ? ' checked' : '') + '>' +
+                    '<span>Lock seed</span>' +
+                '</label>' +
+            '</div>';
+    }
+
+    function bindVisualControlRow(container, kind) {
+        ensureVisualControlState();
+        var styleSelect = container.querySelector('.rpg-visual-style-select[data-kind="' + kind + '"]');
+        var seedInput = container.querySelector('.rpg-visual-seed-input[data-kind="' + kind + '"]');
+        var lockInput = container.querySelector('.rpg-visual-seed-lock[data-kind="' + kind + '"]');
+        if (styleSelect) {
+            styleSelect.addEventListener('change', function() {
+                rpgState.visualControls[kind].style = styleSelect.value;
+            });
+        }
+        if (seedInput) {
+            seedInput.addEventListener('input', function() {
+                rpgState.visualControls[kind].seed = seedInput.value;
+            });
+        }
+        if (lockInput) {
+            lockInput.addEventListener('change', function() {
+                rpgState.visualControls[kind].lockSeed = !!lockInput.checked;
+            });
+        }
+    }
+
+    function queueAndRunVisualJob(container, kind, payload, route, successText) {
+        setVisualStatus(container, kind, 'Queueing image request...');
+        return postJson(route, payload)
+            .then(function(result) {
+                if (!result || !result.ok) {
+                    setVisualStatus(container, kind, 'Failed to queue image request.');
+                    return null;
+                }
+                setVisualStatus(container, kind, 'Running image generation...');
+                return postJson('/api/rpg/visual/queue/run_one', {});
+            })
+            .then(function(result) {
+                if (!result) return null;
+                if (!result.ok) {
+                    setVisualStatus(container, kind, 'Image generation failed.');
+                    return null;
+                }
+                setVisualStatus(container, kind, successText || 'Image generated.');
+                return refreshVisualUiFromSession().then(function() {
+                    return result;
+                });
+            })
+            .catch(function() {
+                setVisualStatus(container, kind, 'Image generation failed.');
+                return null;
+            });
+    }
+
+    function generatePortraitNow(actorId, container, opts) {
+        opts = opts || {};
+        ensureVisualControlState();
+        var cfg = rpgState.visualControls.portrait || {};
+        var payload = {
+            session_id: rpgState.sessionId || '',
+            actor_id: actorId,
+            style: opts.style || cfg.style || 'rpg-portrait',
+            reason: opts.reason || 'manual_test',
+            auto_process: false
+        };
+        var seed = visualSeedValue('portrait');
+        if (seed !== null) payload.seed = seed;
+        return queueAndRunVisualJob(
+            container,
+            'portrait',
+            payload,
+            '/api/rpg/character_portrait/request',
+            opts.successText || 'Portrait generated.'
+        );
+    }
+
+    function generateSceneNow(container, opts) {
+        opts = opts || {};
+        ensureVisualControlState();
+        var cfg = rpgState.visualControls.scene || {};
+        var sceneId = opts.sceneId || '';
+        var title = opts.title || '';
+        var payload = {
+            session_id: rpgState.sessionId || '',
+            scene_id: sceneId,
+            title: title,
+            style: opts.style || cfg.style || 'rpg-scene',
+            reason: opts.reason || 'manual_test',
+            auto_process: false
+        };
+        var seed = visualSeedValue('scene');
+        if (seed !== null) payload.seed = seed;
+        return queueAndRunVisualJob(
+            container,
+            'scene',
+            payload,
+            '/api/rpg/scene_illustration/request',
+            opts.successText || 'Scene image generated.'
+        );
+    }
+
+    function attachPortraitControls(container, actorId, isPlayer) {
+        if (!container || !actorId) return;
+        var bar = ensureVisualActionBar(container, 'portrait');
+        if (!bar) return;
+        if (bar.querySelector('.rpg-portrait-generate-btn')) return;
+
+        var controlsWrap = document.createElement('div');
+        controlsWrap.innerHTML = buildVisualControlRow('portrait');
+        bar.appendChild(controlsWrap.firstChild);
+        bindVisualControlRow(bar, 'portrait');
+
+        var buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.gap = '8px';
+        buttons.style.flexWrap = 'wrap';
+
+        var generateBtn = document.createElement('button');
+        generateBtn.className = 'btn btn-secondary rpg-portrait-generate-btn';
+        generateBtn.type = 'button';
+        generateBtn.textContent = isPlayer ? 'Generate portrait now' : 'Generate portrait';
+        generateBtn.addEventListener('click', function() {
+            generatePortraitNow(actorId, container, { reason: 'manual_generate' });
+        });
+
+        var regenerateBtn = document.createElement('button');
+        regenerateBtn.className = 'btn btn-secondary rpg-portrait-regenerate-btn';
+        regenerateBtn.type = 'button';
+        regenerateBtn.textContent = 'Regenerate portrait';
+        regenerateBtn.addEventListener('click', function() {
+            generatePortraitNow(actorId, container, { reason: 'manual_regenerate', successText: 'Portrait regenerated.' });
+        });
+
+        buttons.appendChild(generateBtn);
+        buttons.appendChild(regenerateBtn);
+        bar.appendChild(buttons);
+        ensureVisualStatusNode(container, 'portrait');
+    }
+
+    function attachSceneControls(container, sceneId, sceneTitle) {
+        if (!container) return;
+        var bar = ensureVisualActionBar(container, 'scene');
+        if (!bar) return;
+        if (bar.querySelector('.rpg-scene-generate-btn')) return;
+
+        var controlsWrap = document.createElement('div');
+        controlsWrap.innerHTML = buildVisualControlRow('scene');
+        bar.appendChild(controlsWrap.firstChild);
+        bindVisualControlRow(bar, 'scene');
+
+        var buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.gap = '8px';
+        buttons.style.flexWrap = 'wrap';
+
+        var generateBtn = document.createElement('button');
+        generateBtn.className = 'btn btn-secondary rpg-scene-generate-btn';
+        generateBtn.type = 'button';
+        generateBtn.textContent = 'Generate scene now';
+        generateBtn.addEventListener('click', function() {
+            generateSceneNow(container, { sceneId: sceneId, title: sceneTitle, reason: 'manual_generate' });
+        });
+
+        var regenerateBtn = document.createElement('button');
+        regenerateBtn.className = 'btn btn-secondary rpg-scene-regenerate-btn';
+        regenerateBtn.type = 'button';
+        regenerateBtn.textContent = 'Regenerate scene';
+        regenerateBtn.addEventListener('click', function() {
+            generateSceneNow(container, { sceneId: sceneId, title: sceneTitle, reason: 'manual_regenerate', successText: 'Scene image regenerated.' });
+        });
+
+        buttons.appendChild(generateBtn);
+        buttons.appendChild(regenerateBtn);
+        bar.appendChild(buttons);
+        ensureVisualStatusNode(container, 'scene');
+    }
+
+    function wireVisualGenerateControls() {
+        ensureVisualControlState();
+
+        var playerPanel = el('rpgPlayerPanel');
+        var player = rpgState.player || {};
+        var playerId = String(player.id || player.player_id || 'player').trim();
+        if (playerPanel && playerId) {
+            attachPortraitControls(playerPanel, playerId, true);
+        }
+
+        document.querySelectorAll('.rpg-npc-card').forEach(function(card) {
+            var actorId = String(card.dataset.npcId || '').trim();
+            if (actorId) {
+                attachPortraitControls(card, actorId, false);
+            }
+        });
+
+        document.querySelectorAll('.rpg-scene-beat,[data-scene-id]').forEach(function(node) {
+            var sceneId = String(node.dataset.sceneId || node.dataset.beatId || '').trim();
+            var sceneTitle = String(node.dataset.sceneKind || node.textContent || 'scene').trim();
+            if (sceneId) {
+                attachSceneControls(node, sceneId, sceneTitle);
+            }
+        });
     }
 
     // ─── Rendering: Player Stats / Inventory Panel ─────────────────────────────
@@ -4423,21 +4985,8 @@
         `;
 
         lines.appendChild(row);
-
-        // Lightweight fade marker for old scenes so the feed stays readable.
-        window.clearTimeout(container._fadeTimer);
-        container._fadeTimer = window.setTimeout(function () {
-            container.classList.add('rpg-ambient-scene-faded');
-        }, 8000);
-
-        window.clearTimeout(container._removeTimer);
-        container._removeTimer = window.setTimeout(function () {
-            var lastBeatTs = parseInt(container.dataset.lastBeatTs || '0', 10) || 0;
-            if ((Date.now() - lastBeatTs) < 12000) return;
-            if (container && container.parentNode) {
-                container.parentNode.removeChild(container);
-            }
-        }, 20000);
+        feed.scrollTop = feed.scrollHeight;
+        wireVisualGenerateControls();
     }
 
     function appendAmbientUpdate(update) {

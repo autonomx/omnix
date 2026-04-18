@@ -659,6 +659,12 @@ export function renderPresentation(payload) {
     renderMemory(payload);
   }
 
+  requestAnimationFrame(function() {
+      if (typeof window !== "undefined" && typeof window.wireVisualGenerateControls === 'function') {
+          window.wireVisualGenerateControls();
+      }
+  });
+
   return presentation;
 }
 

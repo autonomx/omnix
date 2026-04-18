@@ -34,3 +34,7 @@ class BaseImageProvider:
     ) -> ImageGenerationResult:
         """Generate an image and return the result."""
         raise NotImplementedError
+
+    def unload(self) -> None:
+        """Optional hook for providers that keep a large model in memory."""
+        return None

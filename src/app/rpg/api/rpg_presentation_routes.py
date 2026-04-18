@@ -176,6 +176,7 @@ from app.rpg.validation.integrity import (
 
 # Phase 12.14 — Asset dedupe and cleanup
 from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
+from app.rpg.visual.downloads import download_flux_klein_model
 
 # Phase 12.13.5 — Visual queue management with hardening
 from app.rpg.visual.job_queue import (
@@ -186,7 +187,13 @@ from app.rpg.visual.job_queue import (
 )
 
 # Phase 12.12 — ComfyUI provider
-from app.rpg.visual.providers import get_image_provider
+from app.rpg.visual.providers import (
+    get_image_provider,
+    get_loaded_image_provider_name,
+    is_image_provider_loaded,
+)
+from app.rpg.visual.providers import image_generation_enabled, unload_image_provider_cache
+from app.shared import load_settings, save_settings
 from app.rpg.visual.queue_runner import run_one_queued_job
 
 # Phase 12.10 — Visual worker executor
@@ -215,6 +222,20 @@ def _safe_dict(v: Any) -> Dict[str, Any]:
 
 def _safe_list(v: Any) -> list:
     return list(v) if isinstance(v, (list, tuple)) else []
+
+
+def _persist_visual_session(session_id, simulation_state):
+    if not session_id:
+        return
+    try:
+        session = load_session_from_disk(session_id)
+        if not isinstance(session, dict):
+            return
+        updated = dict(session)
+        updated["simulation_state"] = simulation_state
+        save_session_to_disk(updated)
+    except Exception:
+        pass
 
 
 def _safe_str(v: Any) -> str:
@@ -970,12 +991,15 @@ async def presentation_world_inspector(request: Request):
 
 @rpg_presentation_bp.post("/api/rpg/character_portrait/request")
 async def request_character_portrait(request: Request):
+    print(f"[PORTRAIT DEBUG] Got request to /api/rpg/character_portrait/request")
     data = await _get_json(request)
+    print(f"[PORTRAIT DEBUG] Request data: {data}")
     session_id = str(data.get("session_id") or "").strip()
     setup_payload = _safe_dict(data.get("setup_payload"))
     actor_id = _safe_str(data.get("actor_id")).strip()
     style = _safe_str(data.get("style")).strip()
     model = _safe_str(data.get("model")).strip()
+    reason = _safe_str(data.get("reason")).strip() or "manual_request"
     prompt_override = _safe_str(data.get("prompt")).strip()
     simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
     simulation_state = ensure_player_party(simulation_state)
@@ -988,16 +1012,43 @@ async def request_character_portrait(request: Request):
     characters = character_ui_state.get("characters") if isinstance(character_ui_state, dict) else []
     if not isinstance(characters, list):
         characters = []
+    
+    # Also check npcs array in simulation state directly
+    npcs = simulation_state.get("npcs") if isinstance(simulation_state, dict) else []
+    npcs = npcs if isinstance(npcs, list) else []
+    if npcs:
+        for npc in npcs:
+            if isinstance(npc, dict) and _safe_str(npc.get("id")).strip() == actor_id:
+                characters.append(npc)
+    
     target = None
     for character in characters:
         if isinstance(character, dict) and _safe_str(character.get("id")).strip() == actor_id:
             target = character
             break
+            
+    # Fallback: if NPC exists in rpgState.npcs just create a minimal target
     if not target:
-        return _jsonify({"ok": False, "error": "character_not_found"}, status_code=404)
+        for npc in npcs:
+            if isinstance(npc, dict) and _safe_str(npc.get("id")).strip() == actor_id:
+                target = npc
+                break
+    
+    if not target:
+        print(f"[PORTRAIT DEBUG] Creating dummy target for {actor_id}")
+        target = {
+            "id": actor_id,
+            "name": actor_id.replace("npc_", "").replace("_", " ").title(),
+            "description": "",
+            "role": "NPC"
+        }
     existing_visual = _safe_dict(target.get("visual_identity"))
     portrait_style = _first_non_empty(style, existing_visual.get("style"), "rpg-portrait")
-    portrait_model = _first_non_empty(model, existing_visual.get("model"), "default")
+    settings = load_settings()
+    visual_settings = _safe_dict(settings.get("rpg_visual"))
+    flux_settings = _safe_dict(visual_settings.get("flux_klein"))
+    default_visual_model = _safe_str(flux_settings.get("repo_id")).strip() or "black-forest-labs/FLUX.2-klein-4B"
+    portrait_model = _first_non_empty(model, existing_visual.get("model"), default_visual_model)
     identity = build_default_character_visual_identity(actor_id=actor_id, name=_safe_str(target.get("name")).strip(), role=_safe_str(target.get("role")).strip(), description=_safe_str(target.get("description")).strip(), personality_summary=_safe_str(_safe_dict(target.get("personality")).get("summary")).strip(), style=portrait_style, model=portrait_model)
     identity.update(existing_visual)
     if prompt_override:
@@ -1015,6 +1066,7 @@ async def request_character_portrait(request: Request):
     request_id = f"portrait:{actor_id}:{identity['version']}"
     now_ts = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     simulation_state = append_image_request(simulation_state, {"request_id": request_id, "kind": "character_portrait", "target_id": actor_id, "prompt": identity.get("base_prompt", ""), "seed": identity.get("seed"), "style": identity.get("style", ""), "model": identity.get("model", ""), "status": "pending" if prompt_check.get("ok") else "blocked", "attempts": 0, "max_attempts": 3, "error": "", "created_at": now_ts, "updated_at": "", "completed_at": ""})
+    _persist_visual_session(session_id, simulation_state)
     if session_id and request_id:
         try:
             enqueue_visual_job(session_id=session_id, request_id=request_id)
@@ -1058,6 +1110,7 @@ async def complete_character_portrait(request: Request):
         version = 1
     simulation_state = append_visual_asset(simulation_state, build_visual_asset_record(kind="character_portrait", target_id=actor_id, version=version, seed=identity.get("seed") if isinstance(identity.get("seed"), int) else None, style=_safe_str(identity.get("style")).strip(), model=_safe_str(identity.get("model")).strip(), prompt=_safe_str(identity.get("base_prompt")).strip(), url=_safe_str(identity.get("portrait_url")).strip(), local_path=local_path, status=status, created_from_request_id=request_id, moderation_status=moderation_status, moderation_reason=moderation_reason))
     simulation_state = append_appearance_event(simulation_state, actor_id=actor_id, event={"event_id": f"appearance-result:{actor_id}:{version}", "reason": "manual_refresh", "summary": f"Portrait result recorded ({status})", "tick": 0})
+    _persist_visual_session(session_id, simulation_state)
     return _jsonify({"ok": True, "visual_state": _extract_visual_state(simulation_state), "character_ui_state": _extract_character_ui_state(simulation_state)})
 
 
@@ -1081,7 +1134,11 @@ async def request_scene_illustration(request: Request):
     visual_state = _extract_visual_state(simulation_state)
     defaults = _safe_dict(visual_state.get("defaults"))
     scene_style = _first_non_empty(style, defaults.get("scene_style"), "rpg-scene")
-    scene_model = _first_non_empty(model, defaults.get("model"), "default")
+    settings = load_settings()
+    visual_settings = _safe_dict(settings.get("rpg_visual"))
+    flux_settings = _safe_dict(visual_settings.get("flux_klein"))
+    default_visual_model = _safe_str(flux_settings.get("repo_id")).strip() or "black-forest-labs/FLUX.2-klein-4B"
+    scene_model = _first_non_empty(model, defaults.get("model"), default_visual_model)
     resolved_target = _first_non_empty(event_id, scene_id, title, "scene")
     seed = data.get("seed")
     if not isinstance(seed, int):
@@ -1090,6 +1147,7 @@ async def request_scene_illustration(request: Request):
     request_id = f"scene:{resolved_target}:{seed}"
     now_ts = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     simulation_state = append_image_request(simulation_state, {"request_id": request_id, "kind": "scene_illustration", "target_id": resolved_target, "prompt": prompt, "seed": seed, "style": scene_style, "model": scene_model, "status": "pending" if prompt_check.get("ok") else "blocked", "attempts": 0, "max_attempts": 3, "error": "", "created_at": now_ts, "updated_at": "", "completed_at": ""})
+    _persist_visual_session(session_id, simulation_state)
     if session_id and request_id:
         try:
             enqueue_visual_job(session_id=session_id, request_id=request_id)
@@ -1126,6 +1184,7 @@ async def complete_scene_illustration(request: Request):
         illustration_payload = apply_visual_fallback(illustration_payload, visual_defaults.get("fallback_scene_url"))
     simulation_state = append_scene_illustration(simulation_state, illustration_payload)
     simulation_state = append_visual_asset(simulation_state, build_visual_asset_record(kind="scene_illustration", target_id=_first_non_empty(event_id, scene_id, title, "scene"), version=1, seed=seed, style=style, model=model, prompt=prompt, url=_safe_str(illustration_payload.get("image_url")).strip(), local_path=local_path, status=status, created_from_request_id=request_id, moderation_status=moderation_status, moderation_reason=moderation_reason))
+    _persist_visual_session(session_id, simulation_state)
     return _jsonify({"ok": True, "visual_state": _extract_visual_state(simulation_state)})
 
 
@@ -1618,6 +1677,88 @@ async def run_one_queued_job_route(request: Request):
     result = run_one_queued_job(lease_seconds=lease_seconds)
     code = 200 if result.get("ok") else 500
     return _jsonify(result, status_code=code)
+
+
+@rpg_presentation_bp.get("/api/rpg/visual/provider/settings")
+async def get_visual_provider_settings_route():
+    settings = load_settings()
+    visual = _safe_dict(settings.get("rpg_visual"))
+    return _jsonify({
+        "ok": True,
+        "settings": visual,
+        "enabled": bool(visual.get("enabled", False)),
+        "provider": _safe_str(visual.get("provider")).strip() or "mock",
+        "loaded_provider": get_loaded_image_provider_name() or "",
+        "provider_loaded": is_image_provider_loaded(),
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/provider/settings")
+async def update_visual_provider_settings_route(request: Request):
+    payload = await _get_json(request)
+    settings = load_settings()
+    visual = _safe_dict(settings.get("rpg_visual"))
+    flux = _safe_dict(visual.get("flux_klein"))
+
+    if "enabled" in payload:
+        visual["enabled"] = bool(payload.get("enabled"))
+    if payload.get("provider") is not None:
+        visual["provider"] = _safe_str(payload.get("provider")).strip() or "mock"
+    if payload.get("auto_unload_on_disable") is not None:
+        visual["auto_unload_on_disable"] = bool(payload.get("auto_unload_on_disable"))
+
+    incoming_flux = _safe_dict(payload.get("flux_klein"))
+    if incoming_flux:
+        flux.update(incoming_flux)
+    visual["flux_klein"] = flux
+    settings["rpg_visual"] = visual
+    save_settings(settings)
+
+    if not bool(visual.get("enabled", False)):
+        unload_image_provider_cache()
+
+    return _jsonify({"ok": True, "settings": visual})
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/provider/download")
+async def download_visual_provider_model_route(request: Request):
+    payload = await _get_json(request)
+    provider = _safe_str(payload.get("provider")).strip().lower() or "flux_klein"
+    if provider != "flux_klein":
+        return _jsonify({"ok": False, "error": "unsupported_provider"}, status_code=400)
+    result = download_flux_klein_model()
+    code = 200 if result.get("ok") else 500
+    return _jsonify(result, status_code=code)
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/provider/load")
+async def load_visual_provider_route(request: Request):
+    payload = await _get_json(request)
+    provider = _safe_str(payload.get("provider")).strip().lower() or "flux_klein"
+    settings = load_settings()
+    visual = _safe_dict(settings.get("rpg_visual"))
+    visual["enabled"] = True
+    visual["provider"] = provider
+    settings["rpg_visual"] = visual
+    save_settings(settings)
+    provider_instance = get_image_provider()
+    return _jsonify({
+        "ok": True,
+        "enabled": image_generation_enabled(),
+        "provider": _safe_str(getattr(provider_instance, "provider_name", provider)).strip(),
+        "settings": visual,
+    })
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/provider/unload")
+async def unload_visual_provider_route(request: Request):
+    settings = load_settings()
+    visual = _safe_dict(settings.get("rpg_visual"))
+    visual["enabled"] = False
+    settings["rpg_visual"] = visual
+    save_settings(settings)
+    unload_image_provider_cache()
+    return _jsonify({"ok": True, "enabled": False, "provider": "mock"})
 
 
 # ---- Asset Cleanup ----
