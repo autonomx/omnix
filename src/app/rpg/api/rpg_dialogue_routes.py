@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, Request
 
 from app.rpg.ai.dialogue import DialogueManager
 from app.rpg.player import ensure_player_state
 
-rpg_dialogue_bp = Blueprint("rpg_dialogue_bp", __name__)
+rpg_dialogue_bp = APIRouter()
 dialogue_manager = DialogueManager()
 
 
-def _load_setup_payload():
-    data = request.get_json(silent=True) or {}
+async def _load_setup_payload(request: Request):
+    data = await request.json() or {}
     return dict(data.get("setup_payload") or {})
 
 
@@ -47,8 +47,8 @@ def _get_npc_and_mind(simulation_state, npc_id: str):
 
 
 @rpg_dialogue_bp.post("/api/rpg/dialogue/start")
-def dialogue_start():
-    data = request.get_json(silent=True) or {}
+async def dialogue_start(request: Request):
+    data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
     npc_id = str(data.get("npc_id") or "")
     scene_id = str(data.get("scene_id") or "")
@@ -57,16 +57,16 @@ def dialogue_start():
     state = dialogue_manager.start_dialogue(state, npc_id=npc_id, scene_id=scene_id)
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return {
         "ok": True,
         "setup_payload": setup_payload,
         "dialogue_state": state.get("player_state", {}).get("dialogue_state", {}),
-    })
+    }
 
 
 @rpg_dialogue_bp.post("/api/rpg/dialogue/message")
-def dialogue_message():
-    data = request.get_json(silent=True) or {}
+async def dialogue_message(request: Request):
+    data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
     npc_id = str(data.get("npc_id") or "")
     scene_id = str(data.get("scene_id") or "")
@@ -87,25 +87,25 @@ def dialogue_message():
     state = result["simulation_state"]
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return {
         "ok": True,
         "setup_payload": setup_payload,
         "reply": result["reply"],
         "dialogue_state": result["dialogue_state"],
-    })
+    }
 
 
 @rpg_dialogue_bp.post("/api/rpg/dialogue/end")
-def dialogue_end():
-    data = request.get_json(silent=True) or {}
+async def dialogue_end(request: Request):
+    data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
 
     state = ensure_player_state(_get_simulation_state(setup_payload))
     state = dialogue_manager.end_dialogue(state)
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return {
         "ok": True,
         "setup_payload": setup_payload,
         "dialogue_state": state.get("player_state", {}).get("dialogue_state", {}),
-    })
+    }

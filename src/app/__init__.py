@@ -1,72 +1,69 @@
 """
 Omnix application package.
 
-Provides ``create_app`` so that other code (tests, WSGI servers) can build a
-fully-configured Flask application without reaching for the root ``app.py``.
+All routes and application logic now use FastAPI exclusively.
+Flask has been completely removed.
+
+See root app.py for the main FastAPI application entry point.
 """
 
 from pathlib import Path
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
-from flask import Flask
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize providers on application startup"""
+    # Pre-load TTS provider on app startup for immediate availability
+    try:
+        import app.shared as shared
+        tts_provider = shared.get_tts_provider()
+        if tts_provider:
+            print(f"[APP-STARTUP] TTS provider '{tts_provider.provider_name}' initialized successfully")
+        else:
+            print("[APP-STARTUP] No TTS provider configured or available")
+    except Exception as e:
+        print(f"[APP-STARTUP] Failed to initialize TTS provider: {e}")
+    
+    yield
 
 
-def create_app() -> Flask:
-    """Create and configure the Flask application with all blueprints."""
-    from app.audio import audio_bp
-    from app.audiobook import audiobook_bp
-    from app.chat import chat_bp
-    from app.core import core_bp
-    from app.llamacpp import llamacpp_bp
-    from app.llm import llm_bp
-    from app.podcast import podcast_bp
-    from app.rpg.api.rpg_debug_routes import rpg_debug_bp
-    from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
-    from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
-    from app.rpg.api.rpg_inspection_routes import rpg_inspection_bp
-    from app.rpg.api.rpg_package_routes import rpg_package_bp
-    from app.rpg.api.rpg_player_routes import rpg_player_bp
-    from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
-    from app.rpg.api.rpg_session_routes import rpg_session_bp
-    from app.rpg.creator_routes import creator_bp
-    from app.services import services_bp
-    from app.voice_studio import voice_studio_bp
+def create_fastapi_app() -> FastAPI:
+    """Create and configure the complete FastAPI application with all routers."""
+    from .rpg.api.rpg_adventure_routes import rpg_adventure_bp
+    from .rpg.api.rpg_debug_routes import rpg_debug_bp
+    from .rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
+    from .rpg.api.rpg_encounter_routes import rpg_encounter_bp
+    from .rpg.api.rpg_game_routes import rpg_game_bp
+    from .rpg.api.rpg_inspection_routes import rpg_inspection_bp
+    from .rpg.api.rpg_package_routes import rpg_package_bp
+    from .rpg.api.rpg_player_routes import rpg_player_bp
+    from .rpg.api.rpg_presentation_routes import rpg_presentation_bp
+    from .rpg.api.rpg_session_routes import rpg_session_bp
+    from .rpg.creator_routes import creator_bp
 
     pkg_dir = Path(__file__).resolve().parent
-    app = Flask(
-        __name__,
-        template_folder=str(pkg_dir.parent / "templates"),
-        static_folder=str(pkg_dir.parent / "static"),
+    
+    app = FastAPI(
+        title="Omnix API",
+        lifespan=lifespan,
     )
 
-    # Pre-load TTS provider on app startup for immediate availability
-    with app.app_context():
-        try:
-            import app.shared as shared
-            tts_provider = shared.get_tts_provider()
-            if tts_provider:
-                print(f"[APP-STARTUP] TTS provider '{tts_provider.provider_name}' initialized successfully")
-            else:
-                print("[APP-STARTUP] No TTS provider configured or available")
-        except Exception as e:
-            print(f"[APP-STARTUP] Failed to initialize TTS provider: {e}")
-
-    app.register_blueprint(core_bp)
-    app.register_blueprint(chat_bp)
-    app.register_blueprint(services_bp)
-    app.register_blueprint(audio_bp)
-    app.register_blueprint(audiobook_bp)
-    app.register_blueprint(podcast_bp)
-    app.register_blueprint(llm_bp)
-    app.register_blueprint(llamacpp_bp)
-    app.register_blueprint(voice_studio_bp)
-    app.register_blueprint(creator_bp)
-    app.register_blueprint(rpg_debug_bp)
-    app.register_blueprint(rpg_player_bp)
-    app.register_blueprint(rpg_dialogue_bp)
-    app.register_blueprint(rpg_encounter_bp)
-    app.register_blueprint(rpg_package_bp)
-    app.register_blueprint(rpg_inspection_bp)
-    app.register_blueprint(rpg_session_bp)
-    app.register_blueprint(rpg_presentation_bp)
+    # Register all FastAPI routers
+    app.include_router(creator_bp)
+    app.include_router(rpg_adventure_bp)
+    app.include_router(rpg_game_bp)
+    app.include_router(rpg_debug_bp)
+    app.include_router(rpg_player_bp)
+    app.include_router(rpg_dialogue_bp)
+    app.include_router(rpg_encounter_bp)
+    app.include_router(rpg_package_bp)
+    app.include_router(rpg_inspection_bp)
+    app.include_router(rpg_session_bp)
+    app.include_router(rpg_presentation_bp)
 
     return app
+
+
+# Legacy alias - kept for backwards compatibility with tests
+create_app = create_fastapi_app

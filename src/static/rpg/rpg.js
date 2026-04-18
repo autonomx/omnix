@@ -3318,17 +3318,18 @@
         var modStr  = (roll.modifier != null && roll.modifier !== 0)
             ? ' + ' + roll.modifier
             : '';
-
-        var cls = success ? 'rpg-dice-roll--success' : 'rpg-dice-roll--fail';
-        var badgeCls = success ? 'rpg-dice-badge--success' : 'rpg-dice-badge--fail';
-        var badge = success ? '\u2713' : '\u2717';
+        
+        var isCritical = roll.result === 20 && label.toLowerCase() === 'd20';
+        var isFumble = roll.result === 1 && label.toLowerCase() === 'd20';
+        var resultClass = isCritical ? 'rpg-dice-critical' : (isFumble ? 'rpg-dice-fumble' : '');
 
         overlay.innerHTML =
-            '<div class="rpg-dice-roll ' + cls + '">' +
-                '\uD83C\uDFB2 ' + escapeHtml(label) + ': ' +
-                '<span class="rpg-dice-value" id="rpgDiceAnimValue">' + roll.result + '</span>' +
-                modStr + ' = <strong>' + total + '</strong>' +
-                '<span class="rpg-dice-badge ' + badgeCls + '">' + badge + '</span>' +
+            '<div class="rpg-dice-result">' +
+                '<div class="rpg-dice-label">' + escapeHtml(label.toUpperCase()) + ' Roll</div>' +
+                '<div class="rpg-dice-value ' + resultClass + '" id="rpgDiceAnimValue">' + roll.result + '</div>' +
+                (modStr ? '<div class="rpg-dice-modifier">Modifier: ' + modStr + '</div>' : '') +
+                '<div class="rpg-dice-label">Total: <strong>' + total + '</strong></div>' +
+                (success ? '<div style="color: var(--rpg-green); margin-top: 8px;">✓ Success</div>' : '<div style="color: var(--rpg-red); margin-top: 8px;">✗ Failure</div>') +
             '</div>';
 
         overlay.style.display = 'flex';
@@ -3519,43 +3520,110 @@
         var factionRep = player.reputation_factions || {};
         var skills = player.skills || {};
 
+        // Character Portrait and Name Header
+        var portraitHtml =
+            '<div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid var(--rpg-gold);">' +
+                '<div class="rpg-character-portrait">' +
+                    (player.portrait_url ? '<img src="' + escapeHtml(player.portrait_url) + '" alt="Portrait" style="width: 100%; height: 100%; object-fit: cover;">' : '<span style="font-size: 2rem;">👤</span>') +
+                '</div>' +
+                '<div style="flex: 1;">' +
+                    '<div class="rpg-character-name">' + escapeHtml(player.name || 'Adventurer') + '</div>' +
+                    (player.character_class ? '<div class="rpg-character-title">' + escapeHtml(player.character_class) + (player.race ? ' • ' + escapeHtml(player.race) : '') + '</div>' : '') +
+                    (player.level !== undefined ? '<div style="margin-top: 4px; font-family: var(--rpg-font-fantasy); color: var(--rpg-gold);">⚔️ Level ' + player.level + '</div>' : '') +
+                '</div>' +
+            '</div>';
+
         // Level / XP bar
         var levelHtml = '';
         if (player.level !== undefined) {
             var xpPercent = player.xp_to_next > 0 ? Math.floor((player.xp / player.xp_to_next) * 100) : 0;
             levelHtml =
-                '<div class="rpg-player-level">' +
-                    '<span class="rpg-level-badge">Lv ' + (player.level || 1) + '</span>' +
-                    (player.character_class ? '<span class="rpg-class-badge">' + escapeHtml(player.character_class) + '</span>' : '') +
-                    '<div class="rpg-xp-bar"><div class="rpg-xp-fill" style="width:' + xpPercent + '%"></div>' +
-                    '<span class="rpg-xp-text">XP ' + (player.xp || 0) + '/' + (player.xp_to_next || 100) + '</span></div>' +
+                '<div style="margin-bottom: 16px;">' +
+                    '<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">' +
+                        '<span class="rpg-stat-label">📜 Experience</span>' +
+                        '<span class="rpg-stat-value">' + (player.xp || 0) + ' / ' + (player.xp_to_next || 100) + '</span>' +
+                    '</div>' +
+                    '<div class="rpg-stat-bar rpg-stat-bar--xp"><div class="rpg-stat-bar-fill" style="width:' + xpPercent + '%"></div></div>' +
                 '</div>';
         }
 
-        // HP / Stamina / Mana bars
+        // HP / Stamina / Mana bars - Authentic RPG style
         var vitalsHtml = '';
         if (player.max_hp !== undefined) {
             var hpPct = player.max_hp > 0 ? Math.floor(((player.hp || 0) / player.max_hp) * 100) : 0;
             var stPct = player.max_stamina > 0 ? Math.floor(((player.stamina || 0) / player.max_stamina) * 100) : 0;
             var mpPct = player.max_mana > 0 ? Math.floor(((player.mana || 0) / player.max_mana) * 100) : 0;
             vitalsHtml =
-                '<div class="rpg-player-vitals">' +
-                    '<div class="rpg-vital-row">❤️ HP <div class="rpg-vital-bar rpg-vital-hp"><div class="rpg-vital-fill" style="width:' + hpPct + '%"></div></div> ' + (player.hp || 0) + '/' + (player.max_hp || 0) + '</div>' +
-                    '<div class="rpg-vital-row">⚡ STA <div class="rpg-vital-bar rpg-vital-sta"><div class="rpg-vital-fill" style="width:' + stPct + '%"></div></div> ' + (player.stamina || 0) + '/' + (player.max_stamina || 0) + '</div>' +
-                    '<div class="rpg-vital-row">🔮 MP <div class="rpg-vital-bar rpg-vital-mp"><div class="rpg-vital-fill" style="width:' + mpPct + '%"></div></div> ' + (player.mana || 0) + '/' + (player.max_mana || 0) + '</div>' +
+                '<div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">' +
+                    '<div>' +
+                        '<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">' +
+                            '<span class="rpg-stat-label">❤️ Health</span>' +
+                            '<span class="rpg-stat-value">' + (player.hp || 0) + ' / ' + (player.max_hp || 0) + '</span>' +
+                        '</div>' +
+                        '<div class="rpg-stat-bar rpg-stat-bar--health"><div class="rpg-stat-bar-fill" style="width:' + hpPct + '%"></div></div>' +
+                    '</div>' +
+                    '<div>' +
+                        '<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">' +
+                            '<span class="rpg-stat-label">⚡ Stamina</span>' +
+                            '<span class="rpg-stat-value">' + (player.stamina || 0) + ' / ' + (player.max_stamina || 0) + '</span>' +
+                        '</div>' +
+                        '<div class="rpg-stat-bar rpg-stat-bar--stamina"><div class="rpg-stat-bar-fill" style="width:' + stPct + '%"></div></div>' +
+                    '</div>' +
+                    (player.max_mana !== undefined ? 
+                        '<div>' +
+                            '<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">' +
+                                '<span class="rpg-stat-label">🔮 Mana</span>' +
+                                '<span class="rpg-stat-value">' + (player.mana || 0) + ' / ' + (player.max_mana || 0) + '</span>' +
+                            '</div>' +
+                            '<div class="rpg-stat-bar rpg-stat-bar--mana"><div class="rpg-stat-bar-fill" style="width:' + mpPct + '%"></div></div>' +
+                        '</div>' : '') +
                 '</div>';
         }
 
-        // Stats rows
+        // Stats rows - Classic RPG 3x2 grid
         var statsHtml =
-            '<div class="rpg-player-stats">' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">⚔️ STR</span><span class="rpg-stat-value">' + (stats.strength || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">🏹 DEX</span><span class="rpg-stat-value">' + (stats.dexterity || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">🛡️ CON</span><span class="rpg-stat-value">' + (stats.constitution || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">🧠 INT</span><span class="rpg-stat-value">' + (stats.intelligence || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">🔮 WIS</span><span class="rpg-stat-value">' + (stats.wisdom || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">💬 CHA</span><span class="rpg-stat-value">' + (stats.charisma || 0) + '</span></div>' +
-                '<div class="rpg-stat"><span class="rpg-stat-label">💰 Money</span><span class="rpg-stat-value">' + formatCurrency(currency) + '</span></div>' +
+            '<div class="rpg-section-title">📊 Attributes</div>' +
+            '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px;">' +
+                '<div class="rpg-panel" style="padding: 10px; margin: 0;">' +
+                    '<div style="display: flex; justify-content: space-between;">' +
+                        '<span style="color: var(--rpg-gold); font-weight: bold;">⚔️ Strength</span>' +
+                        '<span style="color: var(--rpg-parchment); font-weight: bold;">' + (stats.strength || 0) + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="rpg-panel" style="padding: 10px; margin: 0;">' +
+                    '<div style="display: flex; justify-content: space-between;">' +
+                        '<span style="color: var(--rpg-gold); font-weight: bold;">🏹 Dexterity</span>' +
+                        '<span style="color: var(--rpg-parchment); font-weight: bold;">' + (stats.dexterity || 0) + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="rpg-panel" style="padding: 10px; margin: 0;">' +
+                    '<div style="display: flex; justify-content: space-between;">' +
+                        '<span style="color: var(--rpg-gold); font-weight: bold;">🛡️ Constitution</span>' +
+                        '<span style="color: var(--rpg-parchment); font-weight: bold;">' + (stats.constitution || 0) + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="rpg-panel" style="padding: 10px; margin: 0;">' +
+                    '<div style="display: flex; justify-content: space-between;">' +
+                        '<span style="color: var(--rpg-gold); font-weight: bold;">🧠 Intelligence</span>' +
+                        '<span style="color: var(--rpg-parchment); font-weight: bold;">' + (stats.intelligence || 0) + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="rpg-panel" style="padding: 10px; margin: 0;">' +
+                    '<div style="display: flex; justify-content: space-between;">' +
+                        '<span style="color: var(--rpg-gold); font-weight: bold;">🔮 Wisdom</span>' +
+                        '<span style="color: var(--rpg-parchment); font-weight: bold;">' + (stats.wisdom || 0) + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="rpg-panel" style="padding: 10px; margin: 0;">' +
+                    '<div style="display: flex; justify-content: space-between;">' +
+                        '<span style="color: var(--rpg-gold); font-weight: bold;">💬 Charisma</span>' +
+                        '<span style="color: var(--rpg-parchment); font-weight: bold;">' + (stats.charisma || 0) + '</span>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div style="margin-bottom: 12px;">' +
+                '<span style="color: var(--rpg-gold); font-weight: bold; font-family: var(--rpg-font-fantasy);">💰 Currency:</span> ' +
+                '<span style="color: var(--rpg-parchment);">' + formatCurrency(currency) + '</span>' +
             '</div>';
 
         // Skills section

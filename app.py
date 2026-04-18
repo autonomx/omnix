@@ -475,17 +475,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register RPG adventure routes
+# Register all RPG routers directly
 app.include_router(rpg_adventure_bp)
-
-# Register RPG presentation routes
 app.include_router(rpg_presentation_bp)
-
-# Register RPG game routes
 app.include_router(rpg_game_bp)
-
-# Register RPG session routes (canonical turn execution)
 app.include_router(rpg_session_bp)
+
+# Import and register remaining RPG routers
+from app.rpg.api.rpg_debug_routes import rpg_debug_bp
+from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
+from app.rpg.api.rpg_encounter_routes import rpg_encounter_bp
+from app.rpg.api.rpg_inspection_routes import rpg_inspection_bp
+from app.rpg.api.rpg_package_routes import rpg_package_bp
+from app.rpg.api.rpg_player_routes import rpg_player_bp
+from app.rpg.creator_routes import creator_bp
+
+app.include_router(rpg_debug_bp)
+app.include_router(rpg_dialogue_bp)
+app.include_router(rpg_encounter_bp)
+app.include_router(rpg_inspection_bp)
+app.include_router(rpg_package_bp)
+app.include_router(rpg_player_bp)
+app.include_router(creator_bp)
 
 
 @app.get("/health")

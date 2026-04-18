@@ -1,40 +1,38 @@
-"""Flask Blueprint for the Creator UX v1 — Adventure Builder API.
+"""FastAPI Router for the Creator UX v1 — Adventure Builder API.
 
 Provides structured endpoints for template browsing, adventure setup
 validation, rich preview, and launching adventures through the
 ``AdventureSetup`` → ``GameLoop`` pipeline.
-
-These endpoints are separate from the legacy ``POST /api/rpg/games`` path
-and are the recommended creation flow for new adventures.
 """
 
 from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 from app.rpg.ai.world_scene_narrator import play_scene as narrate_scene
 from app.rpg.services import adventure_builder_service as builder
 
 logger = logging.getLogger(__name__)
 
-creator_bp = Blueprint("rpg_creator", __name__)
+creator_bp = APIRouter()
 
 
 # ---------------------------------------------------------------------------
 # 1. GET /api/rpg/adventure/templates
 # ---------------------------------------------------------------------------
 
-@creator_bp.route("/api/rpg/adventure/templates", methods=["GET"])
-def list_adventure_templates():
+@creator_bp.get("/api/rpg/adventure/templates")
+async def list_adventure_templates():
     """Return available adventure setup templates."""
     try:
         templates = builder.get_templates()
-        return jsonify({"success": True, "templates": templates})
+        return {"success": True, "templates": templates}
     except Exception:
         logger.exception("Failed to list templates")
-        return jsonify({"success": False, "error": "Failed to list templates"}), 500
+        return JSONResponse({"success": False, "error": "Failed to list templates"}, status_code=500)
 
 
 # ---------------------------------------------------------------------------

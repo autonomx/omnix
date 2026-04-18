@@ -9,7 +9,7 @@ Flask Blueprint with encounter endpoints:
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, Request
 
 from app.rpg.encounter import (
     EncounterResolver,
@@ -24,7 +24,7 @@ from app.rpg.items import (
 from app.rpg.party import run_companion_turns
 from app.rpg.player import ensure_player_state
 
-rpg_encounter_bp = Blueprint("rpg_encounter_bp", __name__)
+rpg_encounter_bp = APIRouter()
 resolver = EncounterResolver()
 
 
@@ -44,9 +44,9 @@ def _write_simulation_state(setup_payload, simulation_state):
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/start")
-def encounter_start():
+async def encounter_start(request: Request):
     """Start a new encounter from a scene."""
-    data = request.get_json(silent=True) or {}
+    data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
     scene = dict(data.get("scene") or {})
 
@@ -59,17 +59,17 @@ def encounter_start():
     state["player_state"]["current_mode"] = "encounter"
 
     setup_payload = _write_simulation_state(setup_payload, state)
-    return jsonify({
+    return {
         "ok": True,
         "setup_payload": setup_payload,
         "encounter_state": encounter_state,
-    })
+    }
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/action")
-def encounter_action():
+async def encounter_action(request: Request):
     """Apply a player action in the current encounter."""
-    data = request.get_json(silent=True) or {}
+    data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
     action_type = str(data.get("action_type") or "")
     target_id = str(data.get("target_id") or "")
@@ -117,18 +117,18 @@ def encounter_action():
     state["player_state"]["encounter_state"] = encounter_state
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return {
         "ok": True,
         "setup_payload": setup_payload,
         "encounter_state": encounter_state,
         "inventory_state": dict((state.get("player_state") or {}).get("inventory_state") or {}),
-    })
+    }
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/npc_turn")
-def encounter_npc_turn():
+async def encounter_npc_turn(request: Request):
     """Advance NPC turn in the current encounter."""
-    data = request.get_json(silent=True) or {}
+    data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
 
     state = ensure_player_state(_get_simulation_state(setup_payload))
@@ -165,18 +165,18 @@ def encounter_npc_turn():
     state["player_state"]["encounter_state"] = encounter_state
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return {
         "ok": True,
         "setup_payload": setup_payload,
         "encounter_state": encounter_state,
         "inventory_state": dict((state.get("player_state") or {}).get("inventory_state") or {}),
-    })
+    }
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/end")
-def encounter_end():
+async def encounter_end(request: Request):
     """End the current encounter (abort)."""
-    data = request.get_json(silent=True) or {}
+    data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
 
     state = ensure_player_state(_get_simulation_state(setup_payload))
@@ -197,8 +197,8 @@ def encounter_end():
     state["player_state"]["current_mode"] = "scene"
 
     setup_payload = _write_simulation_state(setup_payload, state)
-    return jsonify({
+    return {
         "ok": True,
         "setup_payload": setup_payload,
         "encounter_state": encounter_state,
-    })
+    }
