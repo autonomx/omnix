@@ -222,10 +222,12 @@ def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
 
     for existing in jobs:
         if (
-            _safe_str(existing.get("session_id")).strip() == session_id
-            and _safe_str(existing.get("request_id")).strip() == request_id
+            _safe_str(existing.get("request_id")).strip() == request_id
             and _safe_str(existing.get("status")).strip() in {"queued", "leased"}
         ):
+            # Re-attach existing job to current session if it was orphaned
+            existing["session_id"] = session_id
+            existing["updated_at"] = now_iso
             state["jobs"] = _dedupe_jobs(jobs)
             _write_queue(state)
             return existing

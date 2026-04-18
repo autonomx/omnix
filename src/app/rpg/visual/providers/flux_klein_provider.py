@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import gc
+import importlib
 import io
 import os
 import threading
@@ -115,6 +116,17 @@ class FluxKleinImageProvider(BaseImageProvider):
                 return self._pipe
 
             try:
+                # Fix Windows multiprocessing sys.path inheritance issue
+                import sys
+                import os
+                import site
+                # Reload site packages to ensure all paths are registered
+                importlib.reload(site)
+                # Add parent sys.path entries that might be missing in spawned process
+                for path in os.environ.get('PYTHONPATH', '').split(os.pathsep):
+                    if path and path not in sys.path:
+                        sys.path.insert(0, path)
+                
                 import torch
                 from diffusers import Flux2KleinPipeline
             except Exception as exc:

@@ -3432,10 +3432,20 @@
                 );
 
                 var contentText = coerceText(msg.content);
-                div.innerHTML = (typeof marked !== 'undefined')
-                    ? marked.parse(contentText)
-                    : escapeHtml(contentText).replace(/\n/g, '<br>');
-                break;
+        div.innerHTML = (typeof marked !== 'undefined')
+            ? marked.parse(contentText)
+            : escapeHtml(contentText).replace(/\n/g, '<br>');
+        
+        // Add Generate Scene button
+        var buttonBar = document.createElement('div');
+        buttonBar.className = 'rpg-msg-actions';
+        buttonBar.innerHTML = `
+            <button type="button" class="rpg-msg-action-btn" onclick="window.generateCurrentScene()">
+                🖼️ Generate Scene
+            </button>
+        `;
+        div.appendChild(buttonBar);
+        break;
 
             case 'player':
                 div.innerHTML =
@@ -5748,5 +5758,15 @@
 
     if (typeof window !== 'undefined') {
         window.setWorldEventsTab = setWorldEventsTab;
+        window.generateCurrentScene = function() {
+            const container = document.createElement('div');
+            document.body.appendChild(container);
+            generateSceneNow(container, {
+                reason: 'manual_chat_button',
+                successText: 'Scene image generated.'
+            }).finally(() => {
+                document.body.removeChild(container);
+            });
+        };
     }
 }());
