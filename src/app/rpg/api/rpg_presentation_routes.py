@@ -42,7 +42,6 @@ from app.rpg.memory.dialogue_context import (
 from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
 
 # Phase 14.4 — Memory Decay / Reinforcement
-from app.rpg.memory.memory_decay import apply_memory_decay
 
 # Phase 14.0 — Memory system
 from app.rpg.memory.memory_state import (
@@ -111,31 +110,18 @@ from app.rpg.session.durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
+from app.rpg.session.runtime import (
+    load_runtime_session,
+    save_runtime_session,
+)
 from app.rpg.session.migrations import migrate_session_payload
 
 # Phase 15.2 — Session/package bridge with validation and normalization
-from app.rpg.session.package_bridge import (
-    package_to_session,
-    session_to_package,
-    validate_package_payload,
-)
 
 # Phase 15.3 — Canonical session service
 from app.rpg.session.service import (
-    archive_session as archive_canonical_session,
-)
-from app.rpg.session.service import (
     export_session_as_package,
     import_session_from_package,
-)
-from app.rpg.session.service import (
-    list_sessions as list_canonical_sessions,
-)
-from app.rpg.session.service import (
-    load_session as load_canonical_session,
-)
-from app.rpg.session.service import (
-    save_session as save_canonical_session,
 )
 
 # Phase 13.5 — Session lifecycle + persistence
@@ -224,18 +210,73 @@ def _safe_list(v: Any) -> list:
     return list(v) if isinstance(v, (list, tuple)) else []
 
 
-def _persist_visual_session(session_id, simulation_state):
+def _request_nonce() -> str:
+    return datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
+
+
+def _drop_visual_requests_for_target(simulation_state: Dict[str, Any], *, kind: str, target_id: str) -> Dict[str, Any]:
+    simulation_state = ensure_visual_state(_safe_dict(simulation_state))
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    requests = _safe_list(visual_state.get("image_requests"))
+    visual_state["image_requests"] = [
+        item for item in requests
+        if not (isinstance(item, dict) and _safe_str(item.get("kind")).strip() == kind and _safe_str(item.get("target_id")).strip() == target_id)
+    ]
+    return simulation_state
+
+
+def _load_visual_request_simulation_state(session_id: str, setup_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Prefer the persisted session simulation_state for visual requests.
+    Falling back to setup_payload is only for non-session / preview flows.
+    """
+    session_id = _safe_str(session_id).strip()
+    setup_payload = _safe_dict(setup_payload)
+
+    if session_id:
+        try:
+            session = load_runtime_session(session_id)
+            if isinstance(session, dict):
+                persisted = session.get("simulation_state")
+                if persisted:
+                    return _safe_dict(persisted)
+        except Exception:
+            pass
+
+    return _safe_dict(_get_simulation_state(setup_payload))
+
+
+def _persist_visual_session(session_id, simulation_state, *, expected_request_id: str = "") -> bool:
+    session_id = _safe_str(session_id).strip()
     if not session_id:
-        return
+        return False
     try:
-        session = load_session_from_disk(session_id)
+        session = load_runtime_session(session_id)
         if not isinstance(session, dict):
-            return
+            return False
+
         updated = dict(session)
-        updated["simulation_state"] = simulation_state
-        save_session_to_disk(updated)
+        updated["simulation_state"] = _safe_dict(simulation_state)
+        save_runtime_session(updated)
+
+        reloaded = load_runtime_session(session_id)
+        if not isinstance(reloaded, dict):
+            return False
+
+        reloaded_state = _safe_dict(reloaded.get("simulation_state"))
+        if not expected_request_id:
+            return bool(reloaded_state)
+
+        visual_state = _safe_dict(_safe_dict(reloaded_state.get("presentation_state")).get("visual_state"))
+        requests = _safe_list(visual_state.get("image_requests"))
+        return any(
+            isinstance(item, dict)
+            and _safe_str(item.get("request_id")).strip() == expected_request_id
+            for item in requests
+        )
     except Exception:
-        pass
+        return False
 
 
 def _safe_str(v: Any) -> str:
@@ -835,7 +876,7 @@ async def presentation_speakers(request: Request):
     }
 
     session = _safe_dict(data.get("session"))
-    runtime_state = _safe_dict(session.get("runtime_state"))
+    _safe_dict(session.get("runtime_state"))
     present_ids = _derive_present_npc_ids(simulation_state, data.get("runtime_state") or {}, setup_payload)
     known_ids = _derive_known_npc_ids(simulation_state, data.get("runtime_state") or {})
 
@@ -991,17 +1032,16 @@ async def presentation_world_inspector(request: Request):
 
 @rpg_presentation_bp.post("/api/rpg/character_portrait/request")
 async def request_character_portrait(request: Request):
-    print(f"[PORTRAIT DEBUG] Got request to /api/rpg/character_portrait/request")
     data = await _get_json(request)
-    print(f"[PORTRAIT DEBUG] Request data: {data}")
     session_id = str(data.get("session_id") or "").strip()
     setup_payload = _safe_dict(data.get("setup_payload"))
     actor_id = _safe_str(data.get("actor_id")).strip()
     style = _safe_str(data.get("style")).strip()
     model = _safe_str(data.get("model")).strip()
-    reason = _safe_str(data.get("reason")).strip() or "manual_request"
+    _safe_str(data.get("reason")).strip() or "manual_request"
     prompt_override = _safe_str(data.get("prompt")).strip()
-    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+
+    simulation_state = ensure_player_state(_load_visual_request_simulation_state(session_id, setup_payload))
     simulation_state = ensure_player_party(simulation_state)
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = _ensure_character_ui_state(simulation_state)
@@ -1063,21 +1103,46 @@ async def request_character_portrait(request: Request):
     simulation_state = upsert_appearance_profile(simulation_state, actor_id=actor_id, profile=profile_payload)
     simulation_state = upsert_character_visual_identity(simulation_state, actor_id=actor_id, identity=identity)
     simulation_state = append_appearance_event(simulation_state, actor_id=actor_id, event={"event_id": f"appearance:{actor_id}:{identity['version']}", "reason": "manual_refresh" if prompt_override else "initial", "summary": "Portrait refresh requested", "tick": 0})
-    request_id = f"portrait:{actor_id}:{identity['version']}"
+
+    # Remove stale pending/failed requests for this portrait target before enqueuing a fresh one.
+    simulation_state = _drop_visual_requests_for_target(
+        simulation_state,
+        kind="character_portrait",
+        target_id=actor_id,
+    )
+
     now_ts = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    request_id = f"portrait:{actor_id}:{identity['version']}:{_request_nonce()}"
     simulation_state = append_image_request(simulation_state, {"request_id": request_id, "kind": "character_portrait", "target_id": actor_id, "prompt": identity.get("base_prompt", ""), "seed": identity.get("seed"), "style": identity.get("style", ""), "model": identity.get("model", ""), "status": "pending" if prompt_check.get("ok") else "blocked", "attempts": 0, "max_attempts": 3, "error": "", "created_at": now_ts, "updated_at": "", "completed_at": ""})
-    _persist_visual_session(session_id, simulation_state)
+    persisted = _persist_visual_session(
+        session_id,
+        simulation_state,
+        expected_request_id=request_id,
+    )
+    if session_id and not persisted:
+        return _jsonify({
+            "ok": False,
+            "error": "failed_to_persist_visual_request",
+            "request_id": request_id,
+        }, status_code=500)
+
     if session_id and request_id:
         try:
             enqueue_visual_job(session_id=session_id, request_id=request_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            return _jsonify({
+                "ok": False,
+                "error": "failed_to_enqueue_visual_job",
+                "detail": _safe_str(exc).strip()[:300],
+                "request_id": request_id,
+            }, status_code=500)
     return _jsonify({"ok": True, "request_id": request_id, "moderation": {"status": "approved" if prompt_check.get("ok") else "blocked", "reason": _safe_str(prompt_check.get("reason")).strip()}, "visual_state": _extract_visual_state(simulation_state), "character_ui_state": _extract_character_ui_state(simulation_state)})
 
 
 @rpg_presentation_bp.post("/api/rpg/character_portrait/result")
 async def complete_character_portrait(request: Request):
     data = await _get_json(request)
+    session_id = _safe_str(data.get("session_id")).strip()
     setup_payload = _safe_dict(data.get("setup_payload"))
     actor_id = _safe_str(data.get("actor_id")).strip()
     image_url = _safe_str(data.get("image_url")).strip()
@@ -1127,7 +1192,8 @@ async def request_scene_illustration(request: Request):
     prompt = _safe_str(data.get("prompt")).strip()
     style = _safe_str(data.get("style")).strip()
     model = _safe_str(data.get("model")).strip()
-    simulation_state = ensure_player_state(_get_simulation_state(setup_payload))
+
+    simulation_state = ensure_player_state(_load_visual_request_simulation_state(session_id, setup_payload))
     simulation_state = ensure_player_party(simulation_state)
     simulation_state = ensure_personality_state(simulation_state)
     simulation_state = ensure_visual_state(simulation_state)
@@ -1140,25 +1206,53 @@ async def request_scene_illustration(request: Request):
     default_visual_model = _safe_str(flux_settings.get("repo_id")).strip() or "black-forest-labs/FLUX.2-klein-4B"
     scene_model = _first_non_empty(model, defaults.get("model"), default_visual_model)
     resolved_target = _first_non_empty(event_id, scene_id, title, "scene")
+
+    if not prompt:
+        prompt = f"Scene illustration of {resolved_target or 'the current scene'}"
     seed = data.get("seed")
     if not isinstance(seed, int):
         seed = stable_visual_seed_from_text(f"{scene_id}|{event_id}|{title}|{scene_style}|{scene_model}")
     prompt_check = validate_visual_prompt(prompt)
-    request_id = f"scene:{resolved_target}:{seed}"
+
+    # Remove stale pending/failed requests for this scene target before enqueuing a fresh one.
+    simulation_state = _drop_visual_requests_for_target(
+        simulation_state,
+        kind="scene_illustration",
+        target_id=resolved_target,
+    )
+
     now_ts = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    request_id = f"scene:{resolved_target}:{seed}:{_request_nonce()}"
     simulation_state = append_image_request(simulation_state, {"request_id": request_id, "kind": "scene_illustration", "target_id": resolved_target, "prompt": prompt, "seed": seed, "style": scene_style, "model": scene_model, "status": "pending" if prompt_check.get("ok") else "blocked", "attempts": 0, "max_attempts": 3, "error": "", "created_at": now_ts, "updated_at": "", "completed_at": ""})
-    _persist_visual_session(session_id, simulation_state)
+    persisted = _persist_visual_session(
+        session_id,
+        simulation_state,
+        expected_request_id=request_id,
+    )
+    if session_id and not persisted:
+        return _jsonify({
+            "ok": False,
+            "error": "failed_to_persist_visual_request",
+            "request_id": request_id,
+        }, status_code=500)
+
     if session_id and request_id:
         try:
             enqueue_visual_job(session_id=session_id, request_id=request_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            return _jsonify({
+                "ok": False,
+                "error": "failed_to_enqueue_visual_job",
+                "detail": _safe_str(exc).strip()[:300],
+                "request_id": request_id,
+            }, status_code=500)
     return _jsonify({"ok": True, "request_id": request_id, "moderation": {"status": "approved" if prompt_check.get("ok") else "blocked", "reason": _safe_str(prompt_check.get("reason")).strip()}, "visual_state": _extract_visual_state(simulation_state)})
 
 
 @rpg_presentation_bp.post("/api/rpg/scene_illustration/result")
 async def complete_scene_illustration(request: Request):
     data = await _get_json(request)
+    session_id = _safe_str(data.get("session_id")).strip()
     setup_payload = _safe_dict(data.get("setup_payload"))
     request_id = _safe_str(data.get("request_id")).strip()
     status = normalize_visual_status(data.get("status"), default="complete")
@@ -1675,7 +1769,16 @@ async def run_one_queued_job_route(request: Request):
     payload = await _get_json(request)
     lease_seconds = int(payload.get("lease_seconds") or 300)
     result = run_one_queued_job(lease_seconds=lease_seconds)
-    code = 200 if result.get("ok") else 500
+
+    # Do not surface normal handled visual-generation failures as HTTP 500s.
+    # The frontend should receive the structured JSON and show the real error.
+    error = _safe_str(result.get("error")).strip()
+    code = 200
+    if not result.get("ok") and error in {
+        "invalid_job_state",
+    }:
+        code = 500
+
     return _jsonify(result, status_code=code)
 
 

@@ -90,7 +90,7 @@ DEFAULT_SETTINGS = {
             "repo_id": "black-forest-labs/FLUX.2-klein-4B",
             "variant": "distilled",  # distilled | base
             "base_repo_id": "black-forest-labs/FLUX.2-klein-base-4B",
-            "download_dir": "server",
+            "download_dir": "resources\\models\\image",
             "local_dir": "",
             "device": "cuda",
             "torch_dtype": "bfloat16",

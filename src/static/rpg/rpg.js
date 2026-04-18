@@ -3849,7 +3849,26 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload || {})
-        }).then(function(r) { return r.json(); });
+        }).then(function(r) {
+            return r.text().then(function(text) {
+                var data = {};
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (e) {
+                    data = {
+                        ok: false,
+                        error: 'invalid_json_response',
+                        raw_text: text || ''
+                    };
+                }
+                data.http_status = r.status;
+                data.http_ok = r.ok;
+                if (!r.ok && !data.error) {
+                    data.error = 'http_' + String(r.status);
+                }
+                return data;
+            });
+        });
     }
 
     function refreshVisualUiFromSession() {
@@ -3959,8 +3978,13 @@
         return postJson(route, payload)
             .then(function(result) {
                 if (!result || !result.ok) {
-                    setVisualStatus(container, kind, 'Failed to queue image request.');
+                    setVisualStatus(container, kind, 'Failed to queue image request' + (result && result.error ? ': ' + result.error : '.'));
                     return null;
+                }
+                if (result.request_id) {
+                    console.log('[RPG][VisualRequestQueued]', result.request_id);
+                    window.__lastRpgVisualRequestId = result.request_id;
+                    setVisualStatus(container, kind, 'Queued: ' + result.request_id);
                 }
                 setVisualStatus(container, kind, 'Running image generation...');
                 return postJson('/api/rpg/visual/queue/run_one', {});
@@ -3968,7 +3992,9 @@
             .then(function(result) {
                 if (!result) return null;
                 if (!result.ok) {
-                    setVisualStatus(container, kind, 'Image generation failed.');
+                    var detail = (result && (result.error || result.reason)) ? ': ' + (result.error || result.reason) : '.';
+                    setVisualStatus(container, kind, 'Image generation failed' + detail);
+                    console.warn('[RPG][VisualRunOne]', result);
                     return null;
                 }
                 setVisualStatus(container, kind, successText || 'Image generated.');

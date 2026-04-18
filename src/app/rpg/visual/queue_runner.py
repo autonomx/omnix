@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.rpg.session.durable_store import load_session_from_disk, save_session_to_disk
+from app.rpg.session.runtime import load_runtime_session, save_runtime_session
 from app.rpg.visual.worker import process_pending_image_requests
 
 from .job_queue import (
@@ -55,11 +55,39 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
         return {"ok": False, "error": "invalid_job_state"}
 
     try:
-        session = load_session_from_disk(session_id) or {}
+        session = load_runtime_session(session_id)
+        if not isinstance(session, dict) or not session:
+            release_visual_job(job_id=job_id, lease_token=lease_token, error="session_not_found")
+            return {
+                "ok": False,
+                "error": "session_not_found",
+                "processed": False,
+                "job_id": job_id,
+                "session_id": session_id,
+                "request_id": request_id,
+            }
+
         simulation_state = _safe_dict(session.get("simulation_state"))
+
+        existing_request = _find_request(simulation_state, request_id)
+        if not existing_request:
+            release_visual_job(
+                job_id=job_id,
+                lease_token=lease_token,
+                error="request_missing_before_processing",
+            )
+            return {
+                "ok": False,
+                "error": "request_missing_before_processing",
+                "processed": False,
+                "job_id": job_id,
+                "session_id": session_id,
+                "request_id": request_id,
+            }
+
         simulation_state = process_pending_image_requests(simulation_state, limit=1)
         session["simulation_state"] = simulation_state
-        save_session_to_disk(session)
+        save_runtime_session(session)
     except Exception as exc:
         release_visual_job(job_id=job_id, lease_token=lease_token, error=_safe_str(exc).strip()[:500])
         return {
@@ -74,6 +102,7 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
         return {
             "ok": False,
             "processed": False,
+            "reason": "queue_job_ran_but_request_was_missing_from_session_state",
             "error": "request_not_found_after_run",
             "job_id": job_id,
             "session_id": session_id,

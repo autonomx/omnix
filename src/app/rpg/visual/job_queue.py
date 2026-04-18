@@ -185,6 +185,16 @@ def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
     now = _utc_now()
     now_iso = now.isoformat()
 
+    # Fresh requests should not be shadowed by stale queued/leased jobs that share the
+    # same target prefix. Example:
+    #   portrait:npc_guard_captain:2:20260418...
+    # should replace old queued/leased jobs starting with:
+    #   portrait:npc_guard_captain:2:
+    prefix = ""
+    parts = request_id.split(":")
+    if len(parts) >= 3:
+        prefix = ":".join(parts[:3]) + ":"
+
     # Reclaim stale leased jobs first.
     for idx, existing in enumerate(jobs):
         if (
@@ -198,6 +208,17 @@ def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
             existing["lease_expires_at"] = ""
             existing["updated_at"] = now_iso
             jobs[idx] = existing
+
+    # Drop queued/leased jobs shadowing this same request family.
+    if prefix:
+        jobs = [
+            existing for existing in jobs
+            if not (
+                _safe_str(existing.get("session_id")).strip() == session_id
+                and _safe_str(existing.get("status")).strip() in {"queued", "leased"}
+                and _safe_str(existing.get("request_id")).strip().startswith(prefix)
+            )
+        ]
 
     for existing in jobs:
         if (
