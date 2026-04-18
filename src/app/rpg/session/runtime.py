@@ -773,6 +773,8 @@ _FAST_TURN_DEFAULTS = {
     "enable_semantic_action_advisory": False,
     "enable_live_narration_llm": True,
     "enable_narration_retry": False,
+    "enable_fast_live_narrator_mode": True,
+    "enable_continuity_grounding": True,
     "compact_save": True,
 }
 
@@ -792,12 +794,17 @@ def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, 
         "enable_semantic_action_advisory": False,
         "enable_live_narration_llm": True,
         "enable_narration_retry": False,
+        "enable_fast_live_narrator_mode": False,
+        "enable_continuity_grounding": True,
         "compact_save": False,
     }
     result: Dict[str, Any] = {"fast_turn_mode": fast}
     for key, default_val in defaults.items():
         val = perf.get(key)
         result[key] = bool(val) if val is not None else default_val
+    result["live_narrator_temperature"] = float(perf.get("live_narrator_temperature", 0.2) or 0.2)
+    result["live_narrator_top_p"] = float(perf.get("live_narrator_top_p", 0.9) or 0.9)
+    result["continuity_turn_window"] = int(perf.get("continuity_turn_window", 3) or 3)
     return result
 
 
@@ -819,6 +826,10 @@ def _runtime_narration_enabled(runtime_state: Dict[str, Any]) -> bool:
 
 def _runtime_narration_retry_enabled(runtime_state: Dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["enable_narration_retry"]
+
+
+def _runtime_continuity_grounding_enabled(runtime_state: Dict[str, Any]) -> bool:
+    return _normalize_performance_settings(runtime_state)["enable_continuity_grounding"]
 
 
 def _runtime_compact_save_enabled(runtime_state: Dict[str, Any]) -> bool:
@@ -4360,6 +4371,60 @@ def _safe_int(value, default=0):
         return default
 
 
+def _build_recent_narration_continuity(runtime_state: Dict[str, Any], current_turn_id: str, limit: int = 3) -> List[Dict[str, Any]]:
+    runtime_state = _safe_dict(runtime_state)
+    artifacts = _safe_list(runtime_state.get("narration_artifacts"))
+    rows: List[Dict[str, Any]] = []
+
+    for artifact in reversed(artifacts):
+        artifact = _safe_dict(artifact)
+        turn_id = _safe_str(artifact.get("turn_id")).strip()
+        if not turn_id or turn_id == current_turn_id:
+            continue
+        narration_json = _safe_dict(artifact.get("narration_json"))
+        if not narration_json:
+            narration_json = {
+                "action": _safe_str(artifact.get("authoritative_action")).strip(),
+                "reward": _safe_str(artifact.get("authoritative_reward")).strip(),
+                "npc": _safe_dict(artifact.get("authoritative_npc")),
+            }
+        rows.append({
+            "turn_id": turn_id,
+            "tick": int(artifact.get("tick", 0) or 0),
+            "narration": _safe_str(narration_json.get("narration")).strip(),
+            "action": _safe_str(narration_json.get("action")).strip(),
+            "reward": _safe_str(narration_json.get("reward")).strip(),
+            "npc": _safe_dict(narration_json.get("npc")),
+        })
+        if len(rows) >= max(0, int(limit or 0)):
+            break
+
+    rows.reverse()
+    return rows
+
+
+def _build_recent_authoritative_turn_facts(runtime_state: Dict[str, Any], current_turn_id: str, limit: int = 3) -> List[str]:
+    rows = _build_recent_narration_continuity(runtime_state, current_turn_id, limit=limit)
+    facts: List[str] = []
+    for row in rows:
+        tick = int(row.get("tick", 0) or 0)
+        action = _safe_str(row.get("action")).strip()
+        reward = _safe_str(row.get("reward")).strip()
+        npc = _safe_dict(row.get("npc"))
+        speaker = _safe_str(npc.get("speaker")).strip()
+        line = _safe_str(npc.get("line")).strip()
+        parts: List[str] = []
+        if action:
+            parts.append(action)
+        if speaker and line:
+            parts.append(f'{speaker} said: "{line}"')
+        if reward:
+            parts.append(f"Reward: {reward}")
+        if parts:
+            facts.append(f"Tick {tick}: " + " | ".join(parts))
+    return facts
+
+
 def _safe_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
@@ -6725,6 +6790,23 @@ def _apply_turn_authoritative(
     turn_id = _build_turn_id(runtime_state)
     final_tick = int(runtime_state.get("tick", current_tick) or current_tick)
 
+    continuity_rows: List[Dict[str, Any]] = []
+    continuity_facts: List[str] = []
+    if _runtime_continuity_grounding_enabled(runtime_state):
+        continuity_rows = _build_recent_narration_continuity(
+            runtime_state,
+            _safe_str(turn_id).strip(),
+            limit=int(perf.get("continuity_turn_window", 3) or 3),
+        )
+        continuity_facts = _build_recent_authoritative_turn_facts(
+            runtime_state,
+            _safe_str(turn_id).strip(),
+            limit=int(perf.get("continuity_turn_window", 3) or 3),
+        )
+    
+    narration_context["recent_turns"] = continuity_rows
+    narration_context["recent_authoritative_facts"] = continuity_facts
+
     narration_request = {
         "turn_id": turn_id,
         "tick": final_tick,
@@ -6811,14 +6893,18 @@ def _generate_turn_narration_artifact(
     final_narration = _normalize_final_narration_text(
         _safe_str(narration_result.get("narration") or narration_result.get("narrative") or "")
     )
+    narration_json = _safe_dict(narration_result.get("narration_json"))
 
     artifact = {
         "turn_id": turn_id,
         "tick": tick,
         "narration": final_narration,
+        "narration_json": narration_json,
+        "authoritative_action": _safe_str(narration_json.get("action")).strip(),
+        "authoritative_reward": _safe_str(narration_json.get("reward")).strip(),
+        "authoritative_npc": _safe_dict(narration_json.get("npc")),
         "used_llm": bool(narration_result.get("used_llm")),
         "raw_llm_narrative": _safe_str(narration_result.get("raw_llm_narrative")),
-        "narration_json": _safe_dict(narration_result.get("narration_json")),
         "speaker_presentation": _safe_dict(narration_result.get("speaker_presentation")),
         "format_warning": bool(narration_result.get("format_warning")),
         "created_at": _utc_now_iso(),

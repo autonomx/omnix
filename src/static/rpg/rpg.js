@@ -2674,8 +2674,35 @@
         // Create a streaming narration element that fills as tokens arrive
         var streamingDiv = null;
         var streamingText = '';
+        var streamingLooksStructured = false;
+
+        function shouldHideStructuredTokenChunk(text) {
+            text = String(text || '');
+            if (!text) return false;
+            if (streamingLooksStructured) return true;
+
+            var probe = (streamingText + text).trim();
+            if (!probe) return false;
+
+            if (
+                probe[0] === '{' ||
+                probe[0] === '[' ||
+                probe.indexOf('"format_version"') !== -1 ||
+                probe.indexOf('"narration"') !== -1 ||
+                probe.indexOf('"action"') !== -1 ||
+                probe.indexOf('"npc"') !== -1 ||
+                probe.indexOf('"reward"') !== -1
+            ) {
+                streamingLooksStructured = true;
+                return true;
+            }
+            return false;
+        }
 
         function onToken(text) {
+            if (shouldHideStructuredTokenChunk(text)) {
+                return;
+            }
             var feed = el('rpgNarrativeFeed');
             if (!feed) return;
             var welcome = el('rpgWelcome');
@@ -2846,6 +2873,7 @@
                 streamingDiv.remove();
                 streamingDiv = null;
                 streamingText = '';
+                streamingLooksStructured = false;
             }
 
             if (data && (data.type === 'authoritative_result' || data.type === 'turn_result')) {
@@ -2917,8 +2945,13 @@
                     data.narration ||
                     ''
                 );
+                const liveAuthoritativeAction = coerceText(
+                    liveArtifact.authoritative_action ||
+                    _safeObj(liveArtifact.narration_json).action ||
+                    ''
+                );
 
-                if (data.live_draft_streaming && liveNarration) {
+                if (data.live_draft_streaming && (liveNarration || liveAuthoritativeAction)) {
                     if (streamingDiv) {
                         streamingDiv.remove();
                         streamingDiv = null;
@@ -2926,7 +2959,7 @@
 
                     renderOrUpdateNarrationMessage(
                         turnId,
-                        liveNarration,
+                        liveNarration || liveAuthoritativeAction,
                         {
                             isFinal: true,
                             version: liveArtifact.version || 1,

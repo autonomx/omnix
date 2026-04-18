@@ -1462,6 +1462,132 @@ def test_narrate_scene_does_not_emit_format_invalid_on_non_json_llm_text():
     assert result.get("used_llm") is True
 
 
+def test_narrator_reward_and_action_are_authoritative_only():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {"text": '{"format_version":"rpg_narration_v2","narration":"The tavern goes quiet.","action":"You win a fortune.","npc":{"speaker":"Bran the Innkeeper","line":"Take this chest of gold."},"reward":"25 gold and merchant reputation","followup_hooks":[]}'}
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran the Innkeeper"}, {"name": "Elara the Merchant"}],
+    }
+    narration_context = {
+        "resolved_result": {
+            "ok": True,
+            "message": "Bran quotes a price for the room.",
+            "target_name": "Bran the Innkeeper",
+            "dialogue": "A room costs five silver pieces, up front.",
+        },
+        "xp_result": {"player_xp": 0},
+        "skill_xp_result": {"awards": {}},
+        "level_up": [],
+        "skill_level_ups": [],
+    }
+
+    result = narrate_scene(scene, narration_context, llm_gateway=StubGateway(), retry_on_invalid=False)
+    text = result["narration"]
+    assert "fortune" not in text.lower()
+    assert "25 gold" not in text.lower()
+    assert "merchant reputation" not in text.lower()
+    assert "Bran quotes a price for the room." in text
+
+
+def test_narrator_rejects_invented_npc_speaker():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {"text": '{"format_version":"rpg_narration_v2","narration":"The town guard Captain steps forward. Captain of the Town Guard says: \"Seize him.\"","action":"You insult Bran.","npc":{"speaker":"Captain of the Town Guard","line":"Seize him"},"reward":"","followup_hooks":[]}'}
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran the Innkeeper"}, {"name": "Elara the Merchant"}],
+    }
+    narration_context = {
+        "resolved_result": {
+            "ok": True,
+            "message": "Bran scowls at your insult.",
+            "target_name": "Bran the Innkeeper",
+        },
+        "xp_result": {"player_xp": 0},
+        "skill_xp_result": {"awards": {}},
+        "level_up": [],
+        "skill_level_ups": [],
+    }
+
+    result = narrate_scene(scene, narration_context, llm_gateway=StubGateway(), retry_on_invalid=False)
+    text = result["narration"]
+    assert "Captain of the Town Guard" not in text
+    assert "Seize him" not in text
+
+
+def test_narrator_respects_recent_authoritative_room_price():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {"text": '{"format_version":"rpg_narration_v2","narration":"Bran names a price of ten gold coins for the room.","action":"You ask about the room price.","npc":{"speaker":"Bran the Innkeeper","line":"Ten gold for the night."},"reward":"","followup_hooks":[]}'}
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran the Innkeeper"}, {"name": "Elara the Merchant"}],
+    }
+    narration_context = {
+        "resolved_result": {
+            "ok": True,
+            "message": "You ask Bran how much the room costs.",
+            "target_name": "Bran the Innkeeper",
+            "dialogue": "A room costs five silver pieces, up front.",
+        },
+        "recent_authoritative_facts": [
+            'Tick 2: Bran quotes a price for the room. | Bran the Innkeeper said: "A room costs five silver pieces, up front."'
+        ],
+        "xp_result": {"player_xp": 0},
+        "skill_xp_result": {"awards": {}},
+        "level_up": [],
+        "skill_level_ups": [],
+    }
+
+    result = narrate_scene(scene, narration_context, llm_gateway=StubGateway(), retry_on_invalid=False)
+    text = result["narration"]
+    assert "ten gold" not in text.lower()
+    assert "five silver" in text.lower()
+
+
+def test_narrator_rejects_invented_guards_and_guilds_from_narration_text():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {"text": '{"format_version":"rpg_narration_v2","narration":"Elara signals the guards and word spreads through the merchant guild.","action":"You insult Bran.","npc":{"speaker":"Bran the Innkeeper","line":"Watch your tongue."},"reward":"","followup_hooks":[]}'}
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran the Innkeeper"}, {"name": "Elara the Merchant"}],
+    }
+    narration_context = {
+        "resolved_result": {
+            "ok": True,
+            "message": "Bran scowls at your insult.",
+            "target_name": "Bran the Innkeeper",
+        },
+        "recent_authoritative_facts": [
+            "Tick 4: Bran scowls at your insult."
+        ],
+        "xp_result": {"player_xp": 0},
+        "skill_xp_result": {"awards": {}},
+        "level_up": [],
+        "skill_level_ups": [],
+    }
+
+    result = narrate_scene(scene, narration_context, llm_gateway=StubGateway(), retry_on_invalid=False)
+    text = result["narration"].lower()
+    assert "guards" not in text
+    assert "merchant guild" not in text
+
+
 def test_normalize_final_narration_text_removes_dangling_ellipsis():
     from app.rpg.session.runtime import _normalize_final_narration_text
 

@@ -361,6 +361,278 @@ def _normalize_narration_json(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _strip_basic_markdown(text: Any) -> str:
+    text = _safe_str(text)
+    if not text:
+        return ""
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"\*([^*]+)\*", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return " ".join(text.split()).strip()
+
+
+def _recent_authoritative_facts(narration_context: Dict[str, Any]) -> List[str]:
+    narration_context = _safe_dict(narration_context)
+    facts = []
+    for row in _safe_list(narration_context.get("recent_authoritative_facts")):
+        text = _safe_str(row).strip()
+        if text:
+            facts.append(text)
+    return facts
+
+
+def _extract_continuity_price_facts(narration_context: Dict[str, Any]) -> List[str]:
+    facts = _recent_authoritative_facts(narration_context)
+    hits: List[str] = []
+    for fact in facts:
+        lower = fact.lower()
+        if "room" in lower and ("gold" in lower or "silver" in lower or "copper" in lower):
+            hits.append(fact)
+    return hits
+
+
+def _extract_present_actor_names(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> List[str]:
+    names: List[str] = []
+    seen = set()
+
+    def _add(value: Any) -> None:
+        name = _safe_str(value).strip()
+        if not name:
+            return
+        key = name.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        names.append(name)
+
+    for actor in _safe_list(_safe_dict(scene).get("actors")):
+        if isinstance(actor, dict):
+            _add(actor.get("name") or actor.get("id"))
+        else:
+            _add(actor)
+
+    for actor in _safe_list(_safe_dict(narration_context.get("grounded")).get("present_actor_names")):
+        _add(actor)
+
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    _add(resolved.get("target_name"))
+    _add(resolved.get("npc_name"))
+    _add(resolved.get("speaker_name"))
+    _add(_safe_dict(resolved.get("npc")).get("name"))
+    return names
+
+
+def _extract_price_tokens(text: str) -> set:
+    return set(re.findall(r"\b\d+\s*(gold|silver|copper)\b", text.lower()))
+
+
+def _sanitize_narration_text(
+    text: Any,
+    scene: Dict[str, Any],
+    narration_context: Dict[str, Any],
+) -> str:
+    text = _safe_str(text).strip()
+    if not text:
+        return ""
+
+    allowed_names = {name.lower(): name for name in _extract_present_actor_names(scene, narration_context)}
+    continuity_price_facts = _extract_continuity_price_facts(narration_context)
+
+    banned_generic_terms = (
+        "guard",
+        "guards",
+        "merchant guild",
+        "guild",
+        "town guard",
+        "soldier",
+        "soldiers",
+    )
+
+    IGNORE_NAMES = {
+        "the tavern",
+        "the room",
+        "the inn",
+        "the bar",
+        "the rusty flagon tavern",
+    }
+
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    kept: List[str] = []
+
+    for sentence in sentences:
+        lower = sentence.lower()
+
+        # Reject raw JSON leakage or partial structured output.
+        if sentence.startswith("{") or '"format_version"' in sentence or '"narration"' in sentence:
+            continue
+
+        # Reject invented off-scene enforcement / faction actors unless they are present.
+        if any(term in lower for term in banned_generic_terms):
+            # allow passive mentions, reject active invention
+            if not re.search(r"\b(call|signal|summon|order|arrive|rush|draw|attack)\b", lower):
+                kept.append(sentence)
+                continue
+            else:
+                continue
+
+        # If a recent authoritative room price exists, reject contradictory new price narration.
+        if continuity_price_facts and "room" in lower and ("gold" in lower or "silver" in lower or "copper" in lower):
+            prior_price_tokens = set()
+            for fact in continuity_price_facts:
+                prior_price_tokens.update(_extract_price_tokens(fact))
+            current_price_tokens = _extract_price_tokens(sentence)
+            if current_price_tokens and not current_price_tokens.issubset(prior_price_tokens):
+                continue
+
+        # Reject named actor mentions that are not present/grounded.
+        candidate_names = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\b", sentence)
+        unknown_name = False
+        for raw_name in candidate_names:
+            key = raw_name.strip().lower()
+            if key in IGNORE_NAMES:
+                continue
+            if key not in allowed_names:
+                unknown_name = True
+                break
+        if unknown_name:
+            continue
+
+        kept.append(sentence)
+
+    if not kept:
+        # fallback to authoritative action
+        fallback = _authoritative_action_text(narration_context)
+        return _bound_text(fallback, 220)
+
+    return _bound_text(" ".join(kept), 520)
+
+
+def _authoritative_action_text(narration_context: Dict[str, Any]) -> str:
+    return _strip_basic_markdown(_build_action_result_line(narration_context))
+
+
+def _allowed_npc_speakers(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> List[str]:
+    scene = _safe_dict(scene)
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+
+    allowed: List[str] = []
+    seen = set()
+
+    def _add(value: Any) -> None:
+        name = _safe_str(value).strip()
+        if not name:
+            return
+        key = name.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        allowed.append(name)
+
+    for actor in _safe_list(scene.get("actors")):
+        if isinstance(actor, dict):
+            _add(actor.get("name") or actor.get("id"))
+        else:
+            _add(actor)
+
+    for actor in _safe_list(_safe_dict(narration_context.get("grounded")).get("present_actor_names")):
+        _add(actor)
+
+    _add(resolved.get("target_name"))
+    _add(resolved.get("npc_name"))
+    _add(resolved.get("speaker_name"))
+    _add(_safe_dict(resolved.get("npc")).get("name"))
+
+    return allowed
+
+
+def _authoritative_reward_text(narration_context: Dict[str, Any]) -> str:
+    return _strip_basic_markdown(_build_rewards_block(narration_context))
+
+
+def _allowed_npc_speakers(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> List[str]:
+    return _extract_present_actor_names(scene, narration_context)
+
+
+def _sanitize_npc_block(
+    payload: Dict[str, Any],
+    scene: Dict[str, Any],
+    narration_context: Dict[str, Any],
+) -> Dict[str, str]:
+    payload = _normalize_narration_json(payload)
+    npc = _safe_dict(payload.get("npc"))
+    speaker = _safe_str(npc.get("speaker")).strip()
+    line = _safe_str(npc.get("line")).strip()
+
+    if not line:
+        return {"speaker": "", "line": ""}
+
+    allowed = _allowed_npc_speakers(scene, narration_context)
+    allowed_lut = {name.lower(): name for name in allowed}
+    resolved = _safe_dict(_safe_dict(narration_context).get("resolved_result"))
+
+    # Prefer authoritative target speaker if present.
+    preferred = _first_nonempty(
+        resolved.get("target_name"),
+        resolved.get("npc_name"),
+        resolved.get("speaker_name"),
+        _safe_dict(resolved.get("npc")).get("name"),
+    )
+
+    if speaker:
+        canonical = allowed_lut.get(speaker.lower())
+        if canonical:
+            speaker = canonical
+        elif preferred and preferred.lower() in allowed_lut:
+            speaker = allowed_lut.get(preferred.lower(), preferred)
+        else:
+            # Fall back to preferred authoritative speaker instead of dropping entirely
+            if preferred and preferred.lower() in allowed_lut:
+                speaker = allowed_lut.get(preferred.lower(), preferred)
+            else:
+                return {"speaker": "", "line": ""}
+    elif preferred and preferred.lower() in allowed_lut:
+        speaker = allowed_lut.get(preferred.lower(), preferred)
+
+    # Strip accidental nested quoting / JSON quoting artifacts.
+    line = line.strip().strip('"').strip("'").strip()
+    if line.startswith("{") or line.startswith("["):
+        return {"speaker": "", "line": ""}
+
+    # Clamp dialogue verbosity to prevent hallucinated escalation
+    line = _bound_text(line, 120)
+
+    return {
+        "speaker": speaker,
+        "line": line,
+    }
+
+
+def _sanitize_narration_payload(
+    payload: Dict[str, Any],
+    scene: Dict[str, Any],
+    narration_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = _normalize_narration_json(payload)
+
+    authoritative_action = _authoritative_action_text(narration_context)
+    authoritative_reward = _authoritative_reward_text(narration_context)
+    sanitized_npc = _sanitize_npc_block(payload, scene, narration_context)
+
+    # Presentation-only narration text remains model-authored, but sanitized against hallucinations
+    narration_text = _sanitize_narration_text(_safe_str(payload.get("narration")).strip(), scene, narration_context)
+
+    # Action and reward are authoritative-only.
+    return _normalize_narration_json({
+        "format_version": NARRATION_JSON_FORMAT_VERSION,
+        "narration": narration_text,
+        "action": authoritative_action,
+        "npc": sanitized_npc,
+        "reward": authoritative_reward,
+        "followup_hooks": [],
+    })
+
+
 def _render_narration_text_from_json(payload: Dict[str, Any]) -> str:
     payload = _normalize_narration_json(payload)
     parts: List[str] = []
@@ -817,6 +1089,9 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     length_rules = _response_length_prompt_rules(response_length)
     
     safe_context = _build_safe_prompt_context(scene, narration_context)
+    
+    recent_authoritative_facts = _recent_authoritative_facts(narration_context)
+    recent_facts_block = "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
 
     prompt = f"""You are a deterministic RPG narration engine.
 
@@ -844,6 +1119,12 @@ IMPORTANT RULES:
 - NO markdown fences or commentary outside the JSON object
 - NO content about ticks, time, or system messages
 - NO faction goals, loyalty, awareness, or ambient content
+- The action result MUST match the already-resolved authoritative outcome
+- The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain
+- Do NOT invent gold, reputation, items, guards, factions, or bystanders not present in the scene/context
+- NPC speaker MUST be one present actor or the explicit target NPC from context
++- Keep continuity with the recent authoritative facts block below
++- Do NOT change previously established prices, speakers, outcomes, or conflict state unless the current resolved result changed them
 - Do not end the response with an ellipsis
 - Finish with complete sentences
 - Do not leave dialogue, action, or scene description trailing mid-thought
@@ -1135,9 +1416,16 @@ def _is_valid_scene_response(parsed: Dict[str, Any]) -> bool:
     action = _safe_str(parsed.get("action")).strip()
     npc_text = _safe_str(parsed.get("npc", {}).get("text")).strip()
 
-    # Accept any response that has at least some content
-    has_content = bool(narrator or action or npc_text)
-    is_valid = has_content and len((narrator + action + npc_text).strip()) > 10  # At least 10 chars of content
+    blob = (narrator + "\n" + action + "\n" + npc_text).strip()
+    if not blob:
+        is_valid = False
+    elif len(blob) <= 10:
+        is_valid = False
+    elif blob.startswith("{") or '"format_version"' in blob or '"narration"' in blob:
+        # Do not treat leaked JSON / partial JSON as valid rendered prose.
+        is_valid = False
+    else:
+        is_valid = True
 
     logger.warning("[RPG VALIDATE] narrator=%r, action=%r, npc_text=%r -> valid=%s",
                 narrator[:50], action[:50], npc_text[:50], is_valid)
@@ -1864,13 +2152,14 @@ def narrate_scene(
             logger.warning("Narration JSON parse failed or empty; recovering from raw text")
             normalized_json = _recover_narration_from_raw_text(llm_narrative)
 
-        rendered_text = _render_narration_text_from_json(normalized_json)
+        grounded_json = _sanitize_narration_payload(normalized_json, scene, narration_context)
+        rendered_text = _render_narration_text_from_json(grounded_json)
 
         return {
             "narration": rendered_text,
             "used_llm": bool(rendered_text),
             "raw_llm_narrative": llm_narrative,
-            "narration_json": normalized_json,
+            "narration_json": grounded_json,
             "speaker_presentation": {},
             "format_warning": False if parsed_json else True,
         }
@@ -1878,18 +2167,19 @@ def narrate_scene(
         llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
         simulated_json = _normalize_narration_json({
             "narration": llm_narrative,
-            "action": "",
+            "action": _authoritative_action_text(narration_context),
             "npc": {"speaker": "", "line": ""},
-            "reward": "",
+            "reward": _authoritative_reward_text(narration_context),
             "followup_hooks": [],
         })
-        rendered_text = _render_narration_text_from_json(simulated_json)
+        grounded_json = _sanitize_narration_payload(simulated_json, scene, narration_context)
+        rendered_text = _render_narration_text_from_json(grounded_json)
 
         return {
             "narration": rendered_text,
             "used_llm": False,
             "raw_llm_narrative": llm_narrative,
-            "narration_json": simulated_json,
+            "narration_json": grounded_json,
             "speaker_presentation": {},
             "format_warning": False,
         }
