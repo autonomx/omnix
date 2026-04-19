@@ -155,7 +155,7 @@ def process_pending_image_requests(
             error_text = _safe_str(result.error).strip().lower()
             is_retryable = not is_moderation_terminal and not any(
                 tag in error_text
-                for tag in ("invalid", "rejected", "unauthorized", "not_implemented", "no_api_key")
+                for tag in ("invalid", "rejected", "unauthorized", "not_implemented", "no_api_key", "missing_runtime")
             )
 
             new_attempts = int(request.get("attempts") or 0) + 1

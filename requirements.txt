@@ -53,6 +53,11 @@ transformers>=4.46.3
 faster-qwen3-tts>=0.2.4
 
 # ============================================
+# IMAGE GENERATION (optional - for flux_klein visual provider)
+# ============================================
+diffusers>=0.31.0
+
+# ============================================
 # DOCUMENT PROCESSING
 # ============================================
 PyPDF2>=3.0.0
