@@ -422,8 +422,8 @@ class LlamaCppProvider(BaseProvider):
                     "required": False,
                     "description": "Where to store downloaded models",
                     "options": [
-                        {"value": "server", "label": "models/server (recommended)"},
-                        {"value": "llm", "label": "models/llm"}
+                        {"value": "server", "label": "resources/models/server (recommended)"},
+                        {"value": "llm", "label": "resources/models/llm"}
                     ]
                 },
                 {

@@ -7,8 +7,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
+from app.shared import DATA_DIR
+
 _QUEUE_DIR_ENV = "RPG_VISUAL_QUEUE_DIR"
-_DEFAULT_QUEUE_DIR = "data/rpg/visual_queue"
+_DEFAULT_QUEUE_DIR = os.path.join(DATA_DIR, "rpg", "visual_queue")
 _QUEUE_FILE = "queue.json"
 
 

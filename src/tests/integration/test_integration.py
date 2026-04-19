@@ -49,7 +49,12 @@ if os.environ.get('TEST_LLM') == '1':
 # API Keys for cloud providers - load from settings.json if available
 def load_api_keys():
     """Load API keys from settings.json"""
-    settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'settings.json')
+    settings_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        'resources',
+        'data',
+        'settings.json',
+    )
     cerebras_key = os.environ.get('CEREBRAS_API_KEY', '')
     openrouter_key = os.environ.get('OPENROUTER_API_KEY', '')
     

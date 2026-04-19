@@ -14,10 +14,10 @@ class TestCerebrasRealConnection:
     
     def setup_method(self):
         """Setup for each test method."""
-        # Load settings from data/settings.json
-        settings_path = os.path.join('data', 'settings.json')
+        # Load settings from resources/data/settings.json
+        settings_path = os.path.join('resources', 'data', 'settings.json')
         if not os.path.exists(settings_path):
-            pytest.skip("data/settings.json not found")
+            pytest.skip("resources/data/settings.json not found")
         
         with open(settings_path, 'r') as f:
             self.settings = json.load(f)

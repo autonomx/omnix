@@ -87,7 +87,7 @@ class LlamaCppInstaller:
     
     def __init__(self):
         self.base_dir = Path(BASE_DIR)
-        self.models_dir = self.base_dir / "models"
+        self.models_dir = self.base_dir / "resources" / "models"
         self.server_dir = self.models_dir / "server"
         self.llm_dir = self.models_dir / "llm"
         self.installation_status = {}

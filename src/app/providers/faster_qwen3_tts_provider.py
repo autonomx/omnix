@@ -675,7 +675,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 return True
             
             # Quick test: can we import the library?
-            tts_lib_path = Path(__file__).parent.parent.parent / 'models' / 'tts' / 'faster-qwen3-tts-main'
+            tts_lib_path = Path(__file__).parent.parent.parent.parent / 'resources' / 'models' / 'tts' / 'faster-qwen3-tts-main'
             if not tts_lib_path.exists():
                 logger.warning("faster-qwen3-tts library not found")
                 return False

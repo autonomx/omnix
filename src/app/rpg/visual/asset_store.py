@@ -8,7 +8,9 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-_ASSET_DIR = Path("data/rpg_generated_assets")
+from app.shared import DATA_DIR
+
+_ASSET_DIR = Path(DATA_DIR) / "rpg_generated_assets"
 _MANIFEST = "manifest.json"
 
 

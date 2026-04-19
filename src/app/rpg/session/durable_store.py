@@ -13,12 +13,43 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.shared import DATA_DIR
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.session_store import _normalize_session, _safe_dict
 
 logger = logging.getLogger(__name__)
-_SESSION_DIR = Path("data/rpg_sessions")
+_SESSION_DIR = Path(DATA_DIR) / "rpg_sessions"
+_LEGACY_SESSION_DIR = Path("data/rpg_sessions")
 _SAVE_VERSION = "1.0"
+
+
+def _migrate_legacy_sessions():
+    """
+    One-time migration from data/rpg_sessions → resources/data/rpg_sessions
+    Safe, idempotent, deterministic.
+    """
+    try:
+        if _LEGACY_SESSION_DIR.exists() and not _SESSION_DIR.exists():
+            logger.warning(
+                "[RPG][MIGRATION] Moving legacy sessions → resources/data/rpg_sessions"
+            )
+
+            _SESSION_DIR.parent.mkdir(parents=True, exist_ok=True)
+            _LEGACY_SESSION_DIR.rename(_SESSION_DIR)
+
+        elif _LEGACY_SESSION_DIR.exists() and _SESSION_DIR.exists():
+            logger.warning(
+                "[RPG][MIGRATION] Legacy + new both exist. Skipping auto-move."
+            )
+    except Exception as e:
+        logger.error(f"[RPG][MIGRATION] Failed: {e}")
+
+
+# Run on import (safe, deterministic)
+_migrate_legacy_sessions()
+
+# Ensure directory exists
+_SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def ensure_session_dir() -> Path:
