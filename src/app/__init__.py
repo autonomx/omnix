@@ -10,6 +10,7 @@ See root app.py for the main FastAPI application entry point.
 from pathlib import Path
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from app.rpg.visual.runtime_status import log_flux_klein_runtime_status
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,6 +25,11 @@ async def lifespan(app: FastAPI):
             print("[APP-STARTUP] No TTS provider configured or available")
     except Exception as e:
         print(f"[APP-STARTUP] Failed to initialize TTS provider: {e}")
+
+    try:
+        log_flux_klein_runtime_status()
+    except Exception as e:
+        print(f"[APP-STARTUP] Failed to validate FLUX runtime: {e}")
     
     yield
 

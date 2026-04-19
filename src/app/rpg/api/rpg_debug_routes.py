@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+from app.logging import write_rpg_log
 from app.rpg.creator.world_debug import (
     explain_faction,
     explain_npc,
@@ -171,3 +172,17 @@ async def debug_rollback(request: Request):
     rolled = rollback_to_snapshot(state, snapshot_id)
     setup_payload = _write_simulation_state(setup_payload, rolled)
     return {"ok": True, "setup_payload": setup_payload}
+
+
+@rpg_debug_bp.post("/api/rpg/log")
+async def rpg_log_endpoint(request: Request):
+    data = await request.json() or {}
+    write_rpg_log(
+        message=data.get("tag", "frontend_log"),
+        extra={
+            "payload": data.get("payload"),
+            "timestamp": data.get("timestamp"),
+            "source": "frontend"
+        }
+    )
+    return {"ok": True}

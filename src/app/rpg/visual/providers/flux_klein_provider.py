@@ -10,8 +10,20 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .base import BaseImageProvider, ImageGenerationResult
+from ..runtime_status import validate_flux_klein_runtime
 
 _PIPELINE_LOCK = threading.Lock()
+
+
+def _debug_imports():
+    try:
+        import diffusers
+        import torch
+        print("[FLUX DEBUG] diffusers OK:", diffusers.__version__)
+        print("[FLUX DEBUG] torch OK:", torch.__version__)
+    except Exception as e:
+        print("[FLUX DEBUG] IMPORT FAILURE:", repr(e))
+        raise
 
 
 def _safe_str(value: Any) -> str:
@@ -65,6 +77,11 @@ def _build_prompt(prompt: str, *, kind: str, style: str, target_id: str) -> str:
 class FluxKleinImageProvider(BaseImageProvider):
     provider_name = "flux_klein"
 
+    @staticmethod
+    def is_available() -> bool:
+        status = validate_flux_klein_runtime()
+        return bool(status.get("ready"))
+
     def __init__(self, config: Dict[str, Any] | None = None):
         self.config = _safe_dict(config)
         self._pipe = None
@@ -78,7 +95,7 @@ class FluxKleinImageProvider(BaseImageProvider):
 
     def _local_dir(self) -> str:
         local_dir = _safe_str(self.config.get("local_dir")).strip()
-        return local_dir
+        return local_dir or "./resources/models/image/flux-klein"
 
     def _dtype(self):
         import torch
@@ -114,6 +131,8 @@ class FluxKleinImageProvider(BaseImageProvider):
         with _PIPELINE_LOCK:
             if self._pipe is not None:
                 return self._pipe
+
+            _debug_imports()
 
             try:
                 # Fix Windows multiprocessing sys.path inheritance issue
@@ -184,19 +203,16 @@ class FluxKleinImageProvider(BaseImageProvider):
     ) -> ImageGenerationResult:
         try:
             pipe = self._ensure_pipeline()
-        except RuntimeError as exc:
+        except Exception as exc:
+            raw_error = _safe_str(exc).strip()
+            if raw_error.startswith("flux_klein_missing_runtime:"):
+                error_text = raw_error
+            else:
+                error_text = f"flux_klein_load_failed:{repr(exc)}"
             return ImageGenerationResult(
                 ok=False,
                 status="failed",
-                error=str(exc),
-                moderation_status="approved",
-                moderation_reason="",
-            )
-        except Exception:
-            return ImageGenerationResult(
-                ok=False,
-                status="failed",
-                error="flux_klein_load_failed",
+                error=error_text,
                 moderation_status="approved",
                 moderation_reason="",
             )

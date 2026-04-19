@@ -129,11 +129,22 @@
     function rpgDebug(tag, payload) {
         if (!rpgDebugEnabled()) return;
         try {
-            console.groupCollapsed('[RPG][' + tag + ']');
-            console.log(payload);
-            console.groupEnd();
+            // Send log to backend instead of console
+            fetch('/api/rpg/log', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tag: tag,
+                    payload: payload,
+                    timestamp: new Date().toISOString()
+                })
+            }).catch(() => {
+                // Silent failure if endpoint not available
+            });
         } catch (e) {
-            console.log('[RPG][' + tag + ']', payload);
+            // Fail silently
         }
     }
 
@@ -4534,6 +4545,7 @@
                     '<h3>RPG Mode</h3>' +
                     '<p>Type anything to begin your adventure, or set up a custom world\u2026</p>' +
                     '<button class="rpg-new-session-btn" id="rpgNewSessionBtn" title="Start a fresh adventure">New Adventure</button>' +
+                    '<button class="rpg-new-session-btn" id="rpgQuickAdventureBtn" title="Start with a preset adventure">⚡ Quick Adventure</button>' +
                     '<button class="rpg-setup-btn" id="rpgSetupBtn" title="Customise your world before starting">⚙️ Adventure Setup</button>' +
                 '</div>';
     }
@@ -4640,6 +4652,76 @@
     }
 
     // ─── Reset / new-session ───────────────────────────────────────────────────
+
+    function startQuickAdventure() {
+        // Stop living-world heartbeat/stream
+        stopAmbientHeartbeat();
+        disconnectSessionStream();
+        updateState({
+            sessionId:   null,
+            messages:    [],
+            choices:     [],
+            npcs:        [],
+            rolls:       [],
+            map:         null,
+            memory:      [],
+            worldEvents: [],
+            player:      null,
+            ambientSeq:  0,
+            unreadAmbient: 0,
+            ambientFeedBuffer: [],
+        });
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STATE_STORAGE_KEY);
+
+        // Clear dice queue
+        diceQueue.length = 0;
+        isShowingDice = false;
+
+        var choicePanel = el('rpgChoicePanel');
+        if (choicePanel) { choicePanel.style.display = 'none'; choicePanel.innerHTML = ''; }
+
+        var npcWrapper = el('rpgNPCPanelWrapper');
+        if (npcWrapper) npcWrapper.style.display = 'none';
+
+        var diceOverlay = el('rpgDiceOverlay');
+        if (diceOverlay) diceOverlay.style.display = 'none';
+
+        var minimapPanel = el('rpgMinimapPanel');
+        if (minimapPanel) minimapPanel.style.display = 'none';
+
+        var memoryPanel = el('rpgMemoryPanelWrapper');
+        if (memoryPanel) memoryPanel.style.display = 'none';
+
+        var playerPanel = el('rpgPlayerPanel');
+        if (playerPanel) playerPanel.innerHTML = '';
+
+        closePlayerPanel();
+
+        // Start quick adventure immediately with default preset
+        setLoading(true);
+        apiCreateGame({ preset: true })
+            .then(game => {
+                updateState({ sessionId: game.session_id });
+                localStorage.setItem(STORAGE_KEY, game.session_id);
+                
+                var feed = el('rpgNarrativeFeed');
+                if (feed) feed.innerHTML = '';
+                
+                if (game.opening && game.opening.trim()) {
+                    applyUpdate(transformResponse({ narration: game.opening }));
+                    speakNarration(game.opening);
+                }
+                
+                setLoading(false);
+                persistSnapshot();
+                startLivingWorld();
+            })
+            .catch(err => {
+                appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
+                setLoading(false);
+            });
+    }
 
     function resetSession() {
         // Stop living-world heartbeat/stream
@@ -5286,12 +5368,6 @@
             }),
         }).then(function (r) { return r.json(); })
           .then(function (data) {
-            console.log("DEBUG FRONTEND RECEIVED world_events", data);
-            console.log('DEBUG fetchWorldEvents response', data);
-            console.log(
-                'DEBUG fetchWorldEvents rows',
-                Array.isArray(data && data.recent_world_event_rows) ? data.recent_world_event_rows : []
-            );
             rpgDebug('WorldEvents:Response', data);
             if (data.ok) {
                 var rawRows = _safeArray(data.recent_world_event_rows);
@@ -5598,6 +5674,7 @@
         if (feed) {
             feed.addEventListener('click', function (e) {
                 if (e.target && e.target.id === 'rpgNewSessionBtn') resetSession();
+                if (e.target && e.target.id === 'rpgQuickAdventureBtn') startQuickAdventure();
                 if (e.target && e.target.id === 'rpgSetupBtn') showSetupModal();
             });
         }

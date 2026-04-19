@@ -110,3 +110,60 @@ def list_campaign_templates(templates: List[Dict[str, Any]]) -> List[Dict[str, A
         ),
     )[:_MAX_TEMPLATES]
     return normalized
+
+
+TAVERN_START_TEMPLATE = build_campaign_template(
+    template_id="quick-tavern-adventure",
+    title="Quick Start: The Rusty Tankard Tavern",
+    description="A classic adventure start. You wake up at a table in a crowded, warm tavern with no memory of how you got here. The bartender eyes you suspiciously. A cloaked stranger in the corner is watching. Something is about to happen.",
+    bootstrap={
+        "title": "The Rusty Tankard",
+        "summary": "You have arrived at the Rusty Tankard Tavern, a roadside establishment on the edge of civilization.",
+        "visual_defaults": {
+            "lighting": "warm_candlelight",
+            "atmosphere": "lively_tavern",
+            "time_of_day": "evening",
+        },
+        "world_seed": {
+            "location": {
+                "name": "The Rusty Tankard Tavern",
+                "type": "tavern",
+                "environment": "cozy, crowded, wood interior, smoke curling from hearths",
+            },
+            "starting_npcs": [
+                {
+                    "name": "Mara",
+                    "role": "bartender",
+                    "description": "Middle aged human woman, tough but fair, runs the tavern with an iron fist",
+                    "disposition": "neutral_watchful",
+                },
+                {
+                    "name": "The Cloaked Stranger",
+                    "role": "mysterious_visitor",
+                    "description": "Sits alone in the darkest corner, hood pulled low, hasn't touched their drink",
+                    "disposition": "observing",
+                }
+            ],
+            "starting_situation": "You are sitting at a rough wooden table. A half empty mug of ale sits before you. Your head aches. You don't remember arriving here. The tavern is noisy with travellers, merchants and mercenaries. Outside the wind howls.",
+            "immediate_hooks": [
+                "The bartender is heading your way",
+                "The stranger in the corner just gestured to you",
+                "A loud argument is breaking out near the door",
+                "Someone just dropped a sealed envelope at your feet"
+            ]
+        },
+        "starting_inventory": {
+            "gold": 5,
+            "items": ["worn cloak", "simple dagger", "empty backpack"]
+        },
+        "ambient_settings": {
+            "background_sounds": ["murmuring voices", "clinking mugs", "fire crackling", "wind outside"],
+            "npc_activity_level": "high"
+        }
+    }
+)
+
+
+DEFAULT_CAMPAIGN_TEMPLATES = [
+    TAVERN_START_TEMPLATE,
+]

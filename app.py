@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import requests
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -541,6 +541,22 @@ app.include_router(creator_bp)
 @app.get("/health")
 async def health():
     return {"status": "ok", "server": "fastapi"}
+
+@app.post("/api/rpg/log")
+async def rpg_log(request: Request):
+    """Receive and log RPG frontend logs to file"""
+    try:
+        data = await request.json()
+        timestamp = datetime.now().isoformat()
+        tag = data.get('tag', 'unknown')
+        payload = data.get('payload', {})
+        
+        rpg_logger = logging.getLogger('app.rpg.frontend')
+        rpg_logger.info(f"[{tag}] {json.dumps(payload, ensure_ascii=False)}")
+        
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # ============== WEBSOCKET ENDPOINT ==============

@@ -153,9 +153,21 @@ def process_pending_image_requests(
 
             # Retryable errors: network issues, HTTP 5xx, rate limits
             error_text = _safe_str(result.error).strip().lower()
+            NON_RETRYABLE_ERRORS = [
+                "flux_klein_missing_runtime",
+                "flux_klein_load_failed",
+                "missing_runtime",
+                "invalid_request",
+                "unsupported_model",
+                "invalid",
+                "rejected",
+                "unauthorized",
+                "not_implemented",
+                "no_api_key"
+            ]
             is_retryable = not is_moderation_terminal and not any(
                 tag in error_text
-                for tag in ("invalid", "rejected", "unauthorized", "not_implemented", "no_api_key", "missing_runtime")
+                for tag in NON_RETRYABLE_ERRORS
             )
 
             new_attempts = int(request.get("attempts") or 0) + 1
