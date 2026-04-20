@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import gc
+import contextlib
 import importlib
 import io
 import os
@@ -84,8 +85,9 @@ class FluxKleinImageProvider(BaseImageProvider):
         return bool(status.get("ready"))
 
     def __init__(self, config: Dict[str, Any] | None = None):
-        self.config = _safe_dict(config)
-        self._pipe = None
+        super().__init__(config or {})
+        self._pipeline = None
+        self._loaded_device = ""
         self._torch = None
 
     def _repo_id(self) -> str:
@@ -126,12 +128,12 @@ class FluxKleinImageProvider(BaseImageProvider):
         )
 
     def _ensure_pipeline(self):
-        if self._pipe is not None:
-            return self._pipe
+        if self._pipeline is not None:
+            return self._pipeline
 
         with _PIPELINE_LOCK:
-            if self._pipe is not None:
-                return self._pipe
+            if self._pipeline is not None:
+                return self._pipeline
 
             _debug_imports()
 
@@ -173,30 +175,44 @@ class FluxKleinImageProvider(BaseImageProvider):
             device = _safe_str(self.config.get("device")).strip().lower() or "cuda"
             if bool(self.config.get("enable_cpu_offload", True)):
                 pipe.enable_model_cpu_offload()
+                self._loaded_device = "cpu_offload"
             else:
-                pipe.to(device)
+                pipe = pipe.to(device)
+                self._loaded_device = device
 
-            self._pipe = pipe
+            self._pipeline = pipe
             self._torch = torch
-            return self._pipe
+            return self._pipeline
 
     def unload(self) -> None:
-        with _PIPELINE_LOCK:
-            pipe = self._pipe
-            self._pipe = None
-            self._torch = None
-            if pipe is not None:
-                try:
-                    del pipe
-                except Exception:
-                    pass
+        pipe = self._pipeline
+        self._pipeline = None
+        self._loaded_device = ""
+        if pipe is None:
+            return
+
+        with contextlib.suppress(Exception):
+            del pipe
+        with contextlib.suppress(Exception):
             gc.collect()
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-            except Exception:
-                pass
+        with contextlib.suppress(Exception):
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+
+    def is_available(self) -> bool:
+        return self._pipeline is not None or validate_flux_klein_runtime().get("ready") is True
+
+    def runtime_status(self) -> Dict[str, Any]:
+        payload = validate_flux_klein_runtime()
+        payload["provider"] = self.provider_name
+        payload.setdefault("details", {})
+        payload["details"]["local_dir"] = self._local_dir()
+        payload["details"]["loaded"] = self._pipeline is not None
+        payload["details"]["loaded_device"] = self._loaded_device
+        payload["details"]["vram_unloaded"] = self._pipeline is None
+        return payload
 
     def generate(
         self,

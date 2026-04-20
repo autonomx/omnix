@@ -176,7 +176,10 @@ from app.rpg.visual.job_queue import (
 from app.rpg.visual.providers import (
     get_image_provider,
     get_loaded_image_provider_name,
+    get_visual_provider_status_payload,
     is_image_provider_loaded,
+    preload_image_provider,
+    switch_image_provider_runtime,
 )
 from app.rpg.visual.providers import image_generation_enabled, unload_image_provider_cache
 from app.shared import load_settings, save_settings
@@ -1862,6 +1865,78 @@ async def unload_visual_provider_route(request: Request):
     save_settings(settings)
     unload_image_provider_cache()
     return _jsonify({"ok": True, "enabled": False, "provider": "disabled"})
+
+
+@rpg_presentation_bp.get("/api/rpg/visual/provider/status")
+async def visual_provider_status_route(request: Request):
+    settings = load_settings()
+    visual = dict(settings.get("rpg_visual") or {})
+    selected_provider = (
+        visual.get("visual_provider")
+        or visual.get("provider")
+        or visual.get("image_provider")
+        or ("disabled" if not visual.get("enabled", True) else "flux_klein")
+    )
+    payload = get_visual_provider_status_payload()
+    payload.update(
+        {
+            "ok": True,
+            "enabled": bool(visual.get("enabled", True)),
+            "selected_provider": str(selected_provider),
+            "runtime_validation": validate_visual_runtime(str(selected_provider)),
+        }
+    )
+    return _jsonify(payload)
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/provider/preload")
+async def preload_visual_provider_route(request: Request):
+    data = await request.json() if request.method else {}
+    force_reload = bool((data or {}).get("force_reload", False))
+    provider = preload_image_provider(force_reload=force_reload)
+    payload = get_visual_provider_status_payload()
+    payload.update(
+        {
+            "ok": True,
+            "provider": str(getattr(provider, "provider_name", "") or ""),
+        }
+    )
+    return _jsonify(payload)
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/provider/switch")
+async def switch_visual_provider_route(request: Request):
+    data = await request.json()
+    provider_key = str((data or {}).get("provider") or "").strip().lower()
+    enabled = bool((data or {}).get("enabled", True))
+    force_reload = bool((data or {}).get("force_reload", True))
+
+    settings = load_settings()
+    visual = dict(settings.get("rpg_visual") or {})
+    visual["enabled"] = enabled
+    if provider_key:
+        visual["visual_provider"] = provider_key
+        visual["provider"] = provider_key
+        visual["image_provider"] = provider_key
+    settings["rpg_visual"] = visual
+    save_settings(settings)
+
+    selected_key, provider = switch_image_provider_runtime(
+        provider_key=provider_key,
+        enabled=enabled,
+        provider_config=visual,
+        force_reload=force_reload,
+    )
+    payload = get_visual_provider_status_payload()
+    payload.update(
+        {
+            "ok": True,
+            "enabled": enabled,
+            "selected_provider": selected_key,
+            "provider": str(getattr(provider, "provider_name", "") or ""),
+        }
+    )
+    return _jsonify(payload)
 
 
 # ---- Asset Cleanup ----
