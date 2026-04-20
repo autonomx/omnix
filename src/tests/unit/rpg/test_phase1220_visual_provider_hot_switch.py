@@ -54,3 +54,27 @@ def test_visual_provider_status_payload_contains_runtime_keys(monkeypatch):
     assert payload["loaded_provider"] == "disabled"
     assert "runtime_status" in payload
     assert "options" in payload
+
+
+def test_preload_actually_loads_pipeline(monkeypatch):
+    monkeypatch.setattr(
+        "app.rpg.visual.providers.load_settings",
+        lambda: {"rpg_visual": {"visual_provider": "flux_klein", "enabled": True}},
+    )
+
+    # Mock pipeline initialization completely to avoid model loading
+    mock_pipeline = object()
+    
+    def mock_ensure_pipeline(self):
+        self._pipeline = mock_pipeline
+
+    monkeypatch.setattr(
+        "app.rpg.visual.providers.flux_klein_provider.FluxKleinImageProvider._ensure_pipeline",
+        mock_ensure_pipeline
+    )
+
+    unload_image_provider_cache()
+    provider = preload_image_provider(force_reload=True)
+
+    # Verify pipeline initialization - critical for VRAM preload functionality
+    assert getattr(provider, "_pipeline", None) is mock_pipeline
