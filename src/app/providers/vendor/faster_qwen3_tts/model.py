@@ -35,6 +35,32 @@ def _identity_decorator(*args, **kwargs):
 
 
 def _ensure_transformers_qwen3_compat() -> None:
+    try:
+        import huggingface_hub
+        if not hasattr(huggingface_hub, "is_offline_mode"):
+            def _fallback_is_offline_mode() -> bool:
+                import os
+                return (
+                    os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                    or os.environ.get("TRANSFORMERS_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                )
+            huggingface_hub.is_offline_mode = _fallback_is_offline_mode
+    except Exception:
+        pass
+
+    try:
+        import huggingface_hub.utils as hf_utils
+        if not hasattr(hf_utils, "is_offline_mode"):
+            def _fallback_is_offline_mode_utils() -> bool:
+                import os
+                return (
+                    os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                    or os.environ.get("TRANSFORMERS_OFFLINE", "").strip().lower() in {"1", "true", "yes", "on"}
+                )
+            hf_utils.is_offline_mode = _fallback_is_offline_mode_utils
+    except Exception:
+        pass
+
     import transformers
     import sys
     import types

@@ -2880,13 +2880,29 @@ def _get_tts_provider():
 
 def resolve_speaker_tts(data: dict):
     """Resolve speaker and language from request data."""
-    speaker = data.get('speaker', 'default')
-    language = data.get('language', 'en')
-    
-    if not speaker or speaker.lower() == 'default':
-        speaker = 'default'
-    
-    return speaker, language
+    speaker = str(data.get("speaker", "default") or "default").strip()
+    language = str(data.get("language", "en") or "en").strip()
+
+    if not speaker or speaker.lower() == "default":
+        return "default", language
+
+    clean_speaker = speaker.replace(" (Custom)", "").strip()
+
+    # Map UI/display voice names to actual clone IDs when available.
+    voice_clone_id = shared.custom_voices.get(clean_speaker, {}).get("voice_clone_id")
+    if voice_clone_id:
+        return str(voice_clone_id).strip(), language
+
+    # If the exact speaker exists in custom voices, allow it directly.
+    if clean_speaker in shared.custom_voices:
+        return clean_speaker, language
+
+    # Legacy UI often defaults to Maya even when the active TTS backend
+    # does not provide a built-in Maya speaker. Fall back safely.
+    if clean_speaker.lower() == "maya":
+        return "default", language
+
+    return clean_speaker, language
 
 
 @app.post("/api/stt/float32")

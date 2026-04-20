@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import os
+import traceback
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
@@ -69,9 +70,13 @@ def _load_qwen3_provider() -> Any:
     Load the dedicated TTS provider.
     This function is intentionally isolated so failures stay local to the TTS service.
     """
+    from app.shared import load_settings
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
 
-    provider = FasterQwen3TTSProvider()
+    settings = load_settings() or {}
+    provider_settings = dict(settings.get("faster-qwen3-tts") or {})
+
+    provider = FasterQwen3TTSProvider(config=provider_settings)
     return provider
 
 
@@ -80,16 +85,37 @@ def initialize_tts_provider() -> Dict[str, Any]:
     try:
         _TTS_PROVIDER = _load_qwen3_provider()
         _TTS_PROVIDER_ERROR = ""
-        return _provider_payload_ok()
+        details: Dict[str, Any] = {}
+        try:
+            details["provider_class"] = type(_TTS_PROVIDER).__name__
+            details["provider_name"] = getattr(_TTS_PROVIDER, "provider_name", _TTS_PROVIDER_NAME)
+            details["configured_model"] = getattr(_TTS_PROVIDER, "_model_config", {}).get("model_name", "")
+            details["configured_device"] = getattr(_TTS_PROVIDER, "device", "")
+        except Exception:
+            pass
+        return _provider_payload_ok(details)
     except Exception as exc:
         _TTS_PROVIDER = None
         _TTS_PROVIDER_ERROR = f"{type(exc).__name__}: {exc}"
-        return _provider_payload_fail(_TTS_PROVIDER_ERROR)
+        return _provider_payload_fail(
+            _TTS_PROVIDER_ERROR,
+            {
+                "traceback": traceback.format_exc(limit=8),
+            },
+        )
 
 
 def get_tts_service_status() -> Dict[str, Any]:
     if _TTS_PROVIDER is not None:
-        return _provider_payload_ok()
+        details: Dict[str, Any] = {}
+        try:
+            details["provider_class"] = type(_TTS_PROVIDER).__name__
+            details["provider_name"] = getattr(_TTS_PROVIDER, "provider_name", _TTS_PROVIDER_NAME)
+            details["configured_model"] = getattr(_TTS_PROVIDER, "_model_config", {}).get("model_name", "")
+            details["configured_device"] = getattr(_TTS_PROVIDER, "device", "")
+        except Exception:
+            pass
+        return _provider_payload_ok(details)
     return _provider_payload_fail(_TTS_PROVIDER_ERROR or "provider_not_initialized")
 
 
@@ -193,6 +219,8 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
         chunks: List[str] = []
         sample_rate = 24000
 
+        print(f"[TTS SERVER] generate_stream_audio speaker={request.speaker!r} language={request.language!r} text_len={len(request.text)}")
+
         for audio_chunk, sr, timing in provider.generate_audio_stream(
             text=request.text,
             speaker=request.speaker,
@@ -218,11 +246,15 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
             "chunks": chunks,
         }
     except Exception as exc:
+        import traceback
+        print(f"[TTS SERVER] generate_stream_audio error: {exc}")
+        print(traceback.format_exc())
         return JSONResponse(
             {
                 "success": False,
                 "provider": _TTS_PROVIDER_NAME,
                 "error": str(exc),
+                "traceback": traceback.format_exc(limit=12),
             },
             status_code=500,
         )
