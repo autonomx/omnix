@@ -34,7 +34,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent))
 
 # Configure logging to write to resources/logs/rpg.log
 log_dir = Path(__file__).parent / 'resources' / 'logs'
@@ -75,7 +75,16 @@ for logger_name in ['app.rpg', 'rpg']:
 
 import app.shared as shared
 from app.providers.base import ChatMessage
-from app.providers.faster_qwen3_tts_provider import (
+from app.runtime_services import get_runtime_status_bundle
+from app.tts_http_client import (
+    decode_float32_audio_base64,
+    tts_generate_audio,
+    tts_generate_stream_audio,
+    tts_health,
+    tts_speakers,
+    tts_voice_clone,
+)
+from app.tts_stream_audio import (
     apply_fade,
     find_best_offset,
     soft_clip,
@@ -129,7 +138,6 @@ sessions_lock = threading.Lock()
 
 # TTS worker
 tts_worker_thread: Optional[threading.Thread] = None
-tts_provider = None
 llm_provider = None
 executor = ThreadPoolExecutor(max_workers=2)
 
@@ -138,21 +146,16 @@ executor = ThreadPoolExecutor(max_workers=2)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize providers on startup"""
-    global tts_provider, llm_provider
+    global llm_provider
     
     print("[FASTAPI] Starting up...")
     
-    # Initialize TTS provider
+    # Check TTS service status
     try:
-        tts_provider = shared.get_tts_provider()
-        if tts_provider:
-            print(f"[FASTAPI] TTS provider loaded: {tts_provider.provider_name}")
-            # Warm up the model
-            _warmup_tts()
-        else:
-            print("[FASTAPI] WARNING: No TTS provider available")
+        tts_status = tts_health()
+        print(f"[FASTAPI] TTS service status: {tts_status}")
     except Exception as e:
-        print(f"[FASTAPI] ERROR loading TTS: {e}")
+        print(f"[FASTAPI] ERROR checking TTS service: {e}")
     
     # Initialize LLM provider
     try:
@@ -172,43 +175,6 @@ async def lifespan(app: FastAPI):
     print("[FASTAPI] Shutting down...")
 
 
-def _warmup_tts():
-    """Warm up TTS model with a test generation"""
-    if not tts_provider:
-        return
-    
-    try:
-        print("[FASTAPI] Warming up TTS...")
-        # Try to get a reference audio path
-        ref_audio_path = None
-        voice_clones_dir = Path(shared.VOICE_CLONES_DIR)
-        if voice_clones_dir.exists():
-            wav_files = list(voice_clones_dir.glob('*.wav'))
-            if wav_files:
-                ref_audio_path = str(wav_files[0])
-        
-        # If no voice clone, try to generate without reference (will use default voice)
-        if hasattr(tts_provider, 'generate_audio_stream'):
-            try:
-                # Warmup with streaming - may fail if no ref audio
-                for _ in tts_provider.generate_audio_stream(
-                    text="hello",
-                    speaker="default",
-                    language="English",
-                    chunk_size=TTS_CHUNK_SIZE,
-                    non_streaming_mode=False,
-                    temperature=0.6,
-                    top_k=20,
-                    append_silence=False,
-                    max_new_tokens=30
-                ):
-                    break
-            except Exception as warmup_err:
-                print(f"[FASTAPI] TTS warmup stream error (may be OK): {warmup_err}")
-                
-        print("[FASTAPI] TTS warmup complete!")
-    except Exception as e:
-        print(f"[FASTAPI] TTS warmup error: {e}")
 
 
 def start_tts_worker():
@@ -261,24 +227,16 @@ XFADE_SAMPLES = 512  # crossfade overlap between consecutive model chunks
 def _generate_tts_stream(session: ConversationSession, text: str):
     """Generate TTS and send directly via WebSocket with proper chunking"""
     print(f"[TTS] _generate_tts_stream called with text: '{text[:30]}...' loop={id(session.loop)}")
-    
-    if not tts_provider:
-        print("[TTS] ERROR: No tts_provider available")
-        return
-    
+
     if session.stop_requested:
         print("[TTS] Stop requested, skipping")
         return
     
-    if not hasattr(tts_provider, 'generate_audio_stream'):
-        print(f"[TTS] ERROR: tts_provider doesn't have generate_audio_stream. Has: {[x for x in dir(tts_provider) if not x.startswith('_')]}")
-        return
-    
     session.tts_active = True
     buffer = np.array([], dtype=np.float32)
-    buffer_chunks: list = []          # collect chunks, concat periodically (O(n) vs O(n²))
+    buffer_chunks: list = []
     frames_sent = 0
-    
+
     def _ws_send_json(data):
         """Send JSON on the WebSocket's event loop and wait for completion."""
         if session.loop is None:
@@ -299,152 +257,149 @@ def _generate_tts_stream(session: ConversationSession, text: str):
 
     start_time = time.time()
     try:
-        
-        if hasattr(tts_provider, 'generate_audio_stream'):
-            first_sent = False
-            raw_chunks_received = 0
-            prev_audio = None  # tail held back for crossfade stitching
-            
-            # generate_audio_stream is a regular (synchronous) generator.
-            # Run TTS generation entirely in this worker thread; dispatch
-            # each WebSocket send to the main event loop via
-            # run_coroutine_threadsafe so we use the loop that owns the socket.
-            for audio_chunk, sr, timing in tts_provider.generate_audio_stream(
-                text=text,
-                speaker=session.speaker,
-                language="English",
-                chunk_size=TTS_CHUNK_SIZE,
-                non_streaming_mode=False,
-                temperature=0.6,
-                top_k=20,
-                top_p=0.85,
-                repetition_penalty=1.0,
-                append_silence=False,
-                max_new_tokens=180
-            ):
-                if session.stop_requested or session.tts_abort:
-                    print(f"[TTS] Stop requested mid-stream after {raw_chunks_received} raw chunks")
-                    break
-                    
-                if audio_chunk is not None and len(audio_chunk) > 0:
-                    raw_chunks_received += 1
-                    audio = np.asarray(audio_chunk, dtype=np.float32)
-                    
-                    if audio.ndim > 1:
-                        audio = audio.mean(axis=1)
-                    
-                    # 1. DC offset correction – remove any bias the TTS
-                    # model may have introduced (prevents low-freq hum /
-                    # clicks).  Guard against unstable mean on tiny or
-                    # near-silent chunks.
-                    if len(audio) > 128:
-                        mean = np.mean(audio)
-                        if abs(mean) > 1e-4:
-                            audio = audio - mean
+        first_sent = False
+        raw_chunks_received = 0
+        prev_audio = None
 
-                    # 2. Only apply fade-in/out on the very first chunk
-                    # (edge protection).  For subsequent chunks the
-                    # tail-buffer crossfade handles smooth transitions —
-                    # stacking both causes over-attenuation ("pulsing").
-                    if prev_audio is None:
-                        audio = apply_fade(audio, fade_samples=128)
+        response = tts_generate_stream_audio(
+            text=text,
+            speaker=session.speaker,
+            language="English",
+            chunk_size=TTS_CHUNK_SIZE,
+            temperature=0.6,
+            top_k=20,
+            top_p=0.85,
+            repetition_penalty=1.0,
+            append_silence=False,
+            max_new_tokens=180,
+        )
 
-                    # 3. Tail-buffer crossfade (single strategy) -------
-                    # Blend the held-back tail of the previous chunk with
-                    # the head of this chunk using a raised-cosine ramp.
-                    # Energy-based alignment reduces phase-mismatch
-                    # artifacts between arbitrary TTS chunk boundaries.
-                    if prev_audio is not None:
-                        # Phase-align: shift curr to best-match prev tail
-                        offset = find_best_offset(prev_audio, audio)
-                        if offset > 0:
-                            audio = audio[offset:]
+        if not response.get("success"):
+            raise RuntimeError(response.get("error", "tts_generate_stream_audio_failed"))
 
-                        overlap = min(len(prev_audio), len(audio), XFADE_SAMPLES)
-                        if overlap > 0:
-                            t = np.linspace(0.0, 1.0, overlap, dtype=np.float32)
-                            fade_in = 0.5 * (1.0 - np.cos(np.pi * t))
-                            fade_out = 1.0 - fade_in
-                            audio[:overlap] = (
-                                prev_audio[-overlap:] * fade_out
-                                + audio[:overlap] * fade_in
-                            )
+        sample_rate = int(response.get("sample_rate", 24000) or 24000)
+        if sample_rate != 24000:
+            print(f"[TTS] WARNING: expected 24000Hz from TTS service, got {sample_rate}Hz")
 
-                    # 4. Soft limiter AFTER crossfade — crossfade can
-                    # push amplitude >1.0 even if both inputs were
-                    # limited, so we limit the final stitched waveform.
-                    audio = soft_clip(audio * TTS_GAIN)
+        audio_b64 = response.get("audio", "")
+        audio_bytes = decode_float32_audio_base64(audio_b64) if audio_b64 else b""
 
-                    # Split tail for next iteration's crossfade
-                    if len(audio) > XFADE_SAMPLES:
-                        prev_audio = audio[-XFADE_SAMPLES:].copy()
-                        audio = audio[:-XFADE_SAMPLES]
-                    else:
-                        prev_audio = audio.copy()
-                        audio = np.array([], dtype=np.float32)
+        if session.stop_requested or session.tts_abort:
+            print("[TTS] Stop requested before audio dispatch")
+            return
 
-                    # Accumulate into list buffer (O(n) total)
-                    if len(audio) > 0:
-                        buffer_chunks.append(audio)
-                    
-                    # Flatten accumulated chunks into working buffer
-                    if buffer_chunks:
-                        if len(buffer) > 0:
-                            buffer_chunks.insert(0, buffer)
-                        buffer = np.concatenate(buffer_chunks)
-                        buffer_chunks.clear()
+        if audio_bytes:
+            raw_chunks_received = 1
+            audio = np.frombuffer(audio_bytes, dtype=np.float32)
+        else:
+            audio = np.array([], dtype=np.float32)
 
-                    while len(buffer) >= FRAME_SIZE:
-                        frame = buffer[:FRAME_SIZE]
-                        buffer = buffer[FRAME_SIZE:]
-                        
-                        try:
-                            if not first_sent:
-                                elapsed = (time.time() - start_time) * 1000
-                                print(f"[TTS] First chunk for '{text[:20]}...' in {elapsed:.0f}ms, sent {len(frame)} samples")
-                                _ws_send_json({
-                                    "type": "tts_start",
-                                    "time": elapsed
-                                })
-                                first_sent = True
-                            
-                            _ws_send_bytes(frame.tobytes())
-                            frames_sent += 1
-                        except Exception as e:
-                            print(f"[TTS] Send error (frame {frames_sent}): {e}")
-                            break
-            
-            print(f"[TTS] Generator done for '{text[:20]}...': raw_chunks={raw_chunks_received}, frames_sent={frames_sent}, remainder={len(buffer)}")
-            
-            # Flush the crossfade tail that was held back for stitching
-            if prev_audio is not None and len(prev_audio) > 0:
-                buffer_chunks.append(prev_audio)
-                prev_audio = None
-            if buffer_chunks:
-                if len(buffer) > 0:
-                    buffer_chunks.insert(0, buffer)
-                buffer = np.concatenate(buffer_chunks)
-                buffer_chunks.clear()
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
 
+        if len(audio) > 128:
+            mean = np.mean(audio)
+            if abs(mean) > 1e-4:
+                audio = audio - mean
+
+        if prev_audio is None and len(audio) > 0:
+            audio = apply_fade(audio, fade_samples=128)
+
+        if prev_audio is not None and len(audio) > 0:
+            offset = find_best_offset(prev_audio, audio)
+            if offset > 0:
+                audio = audio[offset:]
+
+            overlap = min(len(prev_audio), len(audio), XFADE_SAMPLES)
+            if overlap > 0:
+                t = np.linspace(0.0, 1.0, overlap, dtype=np.float32)
+                fade_in = 0.5 * (1.0 - np.cos(np.pi * t))
+                fade_out = 1.0 - fade_in
+                audio[:overlap] = (
+                    prev_audio[-overlap:] * fade_out
+                    + audio[:overlap] * fade_in
+                )
+
+        if len(audio) > 0:
+            audio = soft_clip(audio * TTS_GAIN)
+
+        if len(audio) > XFADE_SAMPLES:
+            prev_audio = audio[-XFADE_SAMPLES:].copy()
+            audio = audio[:-XFADE_SAMPLES]
+        elif len(audio) > 0:
+            prev_audio = audio.copy()
+            audio = np.array([], dtype=np.float32)
+
+        if len(audio) > 0:
+            buffer_chunks.append(audio)
+
+        if buffer_chunks:
             if len(buffer) > 0:
-                try:
-                    fade_len = min(len(buffer), 256)
-                    fade = np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
-                    buffer[-fade_len:] *= fade
-                    if len(buffer) < FRAME_SIZE:
-                        buffer = np.pad(buffer, (0, FRAME_SIZE - len(buffer)))
-                    _ws_send_bytes(buffer.tobytes())
-                    frames_sent += 1
-                    print(f"[TTS] Flushed remainder frame, total frames_sent={frames_sent}")
-                except Exception as e:
-                    print(f"[TTS] Final send error: {e}")
-                        
+                buffer_chunks.insert(0, buffer)
+            buffer = np.concatenate(buffer_chunks)
+            buffer_chunks.clear()
+
+        while len(buffer) >= FRAME_SIZE:
+            if session.stop_requested or session.tts_abort:
+                print(f"[TTS] Stop requested mid-dispatch after {frames_sent} frames")
+                break
+
+            frame = buffer[:FRAME_SIZE]
+            buffer = buffer[FRAME_SIZE:]
+
+            try:
+                if not first_sent:
+                    elapsed = (time.time() - start_time) * 1000
+                    print(f"[TTS] First chunk for '{text[:20]}...' in {elapsed:.0f}ms, sent {len(frame)} samples")
+                    _ws_send_json({
+                        "type": "tts_start",
+                        "time": elapsed
+                    })
+                    first_sent = True
+
+                _ws_send_bytes(frame.tobytes())
+                frames_sent += 1
+            except Exception as e:
+                print(f"[TTS] Send error (frame {frames_sent}): {e}")
+                break
+
+        print(f"[TTS] HTTP TTS done for '{text[:20]}...': raw_chunks={raw_chunks_received}, frames_sent={frames_sent}, remainder={len(buffer)}")
+
+        # Flush the crossfade tail that was held back for stitching
+        if prev_audio is not None and len(prev_audio) > 0:
+            buffer_chunks.append(prev_audio)
+            prev_audio = None
+        if buffer_chunks:
+            if len(buffer) > 0:
+                buffer_chunks.insert(0, buffer)
+            buffer = np.concatenate(buffer_chunks)
+            buffer_chunks.clear()
+
+        if len(buffer) > 0:
+            try:
+                fade_len = min(len(buffer), 256)
+                fade = np.linspace(1.0, 0.0, fade_len, dtype=np.float32)
+                buffer[-fade_len:] *= fade
+                if len(buffer) < FRAME_SIZE:
+                    buffer = np.pad(buffer, (0, FRAME_SIZE - len(buffer)))
+                _ws_send_bytes(buffer.tobytes())
+                frames_sent += 1
+                print(f"[TTS] Flushed remainder frame, total frames_sent={frames_sent}")
+            except Exception as e:
+                print(f"[TTS] Final send error: {e}")
+
     except Exception as e:
         print(f"[TTS] Generation error: {e}")
+        try:
+            _ws_send_json({
+                "type": "tts_error",
+                "error": str(e)
+            })
+        except Exception:
+            pass
     finally:
-        elapsed_total = (time.time() - start_time) * 1000
-        print(f"[TTS] Finished '{text[:20]}...': frames_sent={frames_sent}, total_time={elapsed_total:.0f}ms, tts_chunks_pending={session.tts_chunks_pending}")
         session.tts_active = False
+        session.tts_abort = False
         if session.tts_chunks_pending > 0:
             session.tts_chunks_pending -= 1
 
@@ -458,8 +413,8 @@ from pathlib import Path
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 BASE_DIR = Path(__file__).parent
-static_dir = BASE_DIR / 'src' / 'static'
-templates_dir = BASE_DIR / 'src' / 'templates'
+static_dir = BASE_DIR / 'static'
+templates_dir = BASE_DIR / 'templates'
 index_file = templates_dir / 'index.html'
 
 # Cache for processed index.html
@@ -536,6 +491,34 @@ app.include_router(rpg_inspection_bp)
 app.include_router(rpg_package_bp)
 app.include_router(rpg_player_bp)
 app.include_router(creator_bp)
+
+
+def _assert_required_rpg_visual_routes_registered() -> None:
+    """
+    Fail fast if the portrait/scene generation endpoints are not mounted.
+    This catches accidental route regressions early at startup.
+    """
+    required = {
+        ("POST", "/api/rpg/character_portrait/request"),
+        ("POST", "/api/rpg/character_portrait/result"),
+        ("POST", "/api/rpg/scene_illustration/request"),
+        ("POST", "/api/rpg/scene_illustration/result"),
+    }
+
+    seen = set()
+    for route in app.routes:
+        path = getattr(route, "path", "")
+        methods = getattr(route, "methods", set()) or set()
+        for method in methods:
+            seen.add((str(method).upper(), path))
+
+    missing = sorted(required - seen)
+    if missing:
+        missing_text = ", ".join(f"{method} {path}" for method, path in missing)
+        raise RuntimeError(f"missing_required_rpg_visual_routes:{missing_text}")
+
+
+_assert_required_rpg_visual_routes_registered()
 
 
 @app.get("/health")
@@ -1053,27 +1036,8 @@ Just return the title, nothing else."""
 @app.get("/api/tts/speakers")
 async def get_tts_speakers():
     """Get available TTS speakers/voices"""
-    tts = shared.get_tts_provider()
-    if not tts:
-        return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
-    
     try:
-        if hasattr(tts, 'get_speakers'):
-            speakers = tts.get_speakers()
-        elif hasattr(tts, 'get_voices'):
-            speakers = tts.get_voices()
-        else:
-            speakers = [
-                {"id": "Maya", "name": "Maya"},
-                {"id": "en", "name": "English (Default)"},
-                {"id": "default", "name": "Default"}
-            ]
-        
-        return {
-            "success": True,
-            "speakers": speakers,
-            "provider": tts.provider_name
-        }
+        return tts_speakers()
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -1126,12 +1090,12 @@ async def providers_status():
                     "provider": llm_provider.provider_name,
                     "message": str(e)
                 }
-        
-        tts_p = shared.get_tts_provider()
+
+        remote_tts = tts_health()
         tts_status = {
-            "available": tts_p is not None,
-            "provider": tts_p.provider_name if tts_p else "none",
-            "message": "Ready" if tts_p else "Not loaded"
+            "available": bool(remote_tts.get("ok")),
+            "provider": remote_tts.get("provider", "tts-http"),
+            "message": "Ready" if remote_tts.get("ok") else remote_tts.get("error", "Not loaded"),
         }
         
         return {
@@ -1139,6 +1103,15 @@ async def providers_status():
             "llm": llm_status,
             "tts": tts_status
         }
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/runtime/status")
+async def runtime_status():
+    """Aggregated runtime status for FLUX / TTS / STT."""
+    try:
+        return {"success": True, **get_runtime_status_bundle()}
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -1241,10 +1214,15 @@ async def create_voice_clone(request: Request):
                 wav_path = clones_dir / f"{voice_id_clean}.wav"
                 wav_path.write_bytes(audio_bytes)
 
-                # Try voice cloning via provider
-                tts_provider = shared.get_tts_provider()
-                if tts_provider and hasattr(tts_provider, "voice_clone"):
-                    tts_provider.voice_clone(voice_id_clean, audio_bytes, ref_text)
+                # Try voice cloning via HTTP service
+                tts_voice_clone(
+                    voice_id=voice_id_clean,
+                    gender=gender,
+                    language=language,
+                    ref_text=ref_text,
+                    audio_bytes=audio_bytes,
+                    filename=f"{voice_id_clean}.wav",
+                )
 
         # Register in custom_voices
         shared.custom_voices[voice_id_clean] = {
@@ -1322,19 +1300,14 @@ async def voice_studio_generate(request: Request):
         voice_clone_id = shared.custom_voices.get(clean_speaker, {}).get("voice_clone_id")
         final_speaker = voice_clone_id if voice_clone_id else clean_speaker
 
-        tts_provider = shared.get_tts_provider()
-        if not tts_provider:
-            return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
-
-        gen_kwargs = {"text": text, "speaker": final_speaker, "language": "en",
-                      "speed": speed, "pitch": pitch, "emotion": emotion}
-
-        if hasattr(tts_provider, "generate_tts"):
-            result = tts_provider.generate_tts(**gen_kwargs)
-        elif hasattr(tts_provider, "generate_audio"):
-            result = tts_provider.generate_audio(**gen_kwargs)
-        else:
-            return JSONResponse({"success": False, "error": "TTS provider missing generation method"}, status_code=500)
+        result = tts_generate_audio(
+            text=text,
+            speaker=final_speaker,
+            language="en",
+            speed=speed,
+            pitch=pitch,
+            emotion=emotion,
+        )
 
         if not result or not result.get("success"):
             err = result.get("error", "TTS generation failed") if result else "TTS generation failed"
@@ -1357,21 +1330,18 @@ async def voice_studio_voices():
             "gender": vdata.get("gender", "neutral"),
         })
 
-    tts_provider = shared.get_tts_provider()
-    if tts_provider:
-        try:
-            if hasattr(tts_provider, "get_speakers"):
-                for s in tts_provider.get_speakers():
-                    sid = s.get("id", s.get("name", ""))
-                    if sid and not any(v["id"] == sid for v in voices):
-                        voices.append({"id": sid, "name": s.get("name", sid), "gender": "neutral"})
-            elif hasattr(tts_provider, "get_voices"):
-                for s in tts_provider.get_voices():
-                    sid = s.get("id", s.get("name", ""))
-                    if sid and not any(v["id"] == sid for v in voices):
-                        voices.append({"id": sid, "name": s.get("name", sid), "gender": "neutral"})
-        except Exception:
-            pass
+    try:
+        remote = tts_speakers()
+        for s in remote.get("speakers", []):
+            sid = s.get("id", s.get("name", ""))
+            if sid and not any(v["id"] == sid for v in voices):
+                voices.append({
+                    "id": sid,
+                    "name": s.get("name", sid),
+                    "gender": s.get("gender", "neutral"),
+                })
+    except Exception:
+        pass
 
     if not voices:
         voices.append({"id": "default", "name": "Default", "gender": "neutral"})
@@ -1568,20 +1538,18 @@ async def generate_podcast_episode(request: Request):
                 ).get('voice_clone_id', vid)
 
                 try:
-                    tts_provider = shared.get_tts_provider()
-                    if tts_provider:
-                        result = await asyncio.to_thread(
-                            tts_provider.generate_audio,
-                            text=shared.remove_emojis(seg['text']),
-                            speaker=v_clone,
-                            language="en"
-                        )
-                        if result.get('success'):
-                            adata, sr = result.get('audio'), result.get('sample_rate')
-                            pct = round(10 + (i + 1) / total_segments * 85) if total_segments else 95
-                            yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i, 'total_segments': total_segments, 'percent': pct, 'speaker': seg['speaker'], 'text': seg['text']})}\n\n"
-                            transcript.append({"speaker": seg['speaker'], "text": seg['text']})
-                            audios.append(base64.b64decode(adata))
+                    result = await asyncio.to_thread(
+                        tts_generate_audio,
+                        text=shared.remove_emojis(seg['text']),
+                        speaker=v_clone,
+                        language="en"
+                    )
+                    if result.get('success'):
+                        adata, sr = result.get('audio'), result.get('sample_rate')
+                        pct = round(10 + (i + 1) / total_segments * 85) if total_segments else 95
+                        yield f"data: {json.dumps({'type': 'audio', 'audio': adata, 'sample_rate': sr, 'segment_index': i, 'total_segments': total_segments, 'percent': pct, 'speaker': seg['speaker'], 'text': seg['text']})}\n\n"
+                        transcript.append({"speaker": seg['speaker'], "text": seg['text']})
+                        audios.append(base64.b64decode(adata))
                 except Exception:
                     pass
 
@@ -1938,18 +1906,18 @@ async def audiobook_generate(request: Request):
     avail = set(shared.custom_voices.keys())
 
     async def gen():
-        # Use the configured TTS provider (same as /api/tts endpoint)
-        tts_provider = shared.get_tts_provider()
-        if not tts_provider:
-            yield f"data: {json.dumps({'type': 'error', 'error': 'No TTS provider available. Please check your TTS settings.', 'code': 'TTS_UNAVAILABLE'})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            return
+        try:
+            tts_status = tts_health()
+            if not tts_status.get("ok"):
+                yield f"data: {json.dumps({'type': 'error', 'error': 'TTS service not available. Please check your TTS settings.', 'code': 'TTS_UNAVAILABLE'})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                return
 
-        for i, seg in enumerate(segments):
-            speaker = seg.get("speaker")
-            text = seg.get("text", "")
-            if not text.strip():
-                continue
+            for i, seg in enumerate(segments):
+                speaker = seg.get("speaker")
+                text = seg.get("text", "")
+                if not text.strip():
+                    continue
 
             v_name = v_map.get(speaker)
             if not v_name:
@@ -1970,13 +1938,11 @@ async def audiobook_generate(request: Request):
             final_speaker = vid if vid else v_name
 
             try:
-                if hasattr(tts_provider, 'generate_tts'):
-                    result = tts_provider.generate_tts(text=shared.remove_emojis(text), speaker=final_speaker, language="en")
-                elif hasattr(tts_provider, 'generate_audio'):
-                    result = tts_provider.generate_audio(text=shared.remove_emojis(text), speaker=final_speaker, language="en")
-                else:
-                    yield f"data: {json.dumps({'type': 'error', 'error': 'TTS provider missing generate method.'})}\n\n"
-                    break
+                result = tts_generate_audio(
+                    text=shared.remove_emojis(text),
+                    speaker=final_speaker,
+                    language="en"
+                )
 
                 if result and result.get("success"):
                     yield (
@@ -1986,13 +1952,16 @@ async def audiobook_generate(request: Request):
                     yield f"data: {json.dumps({'type': 'error', 'error': result.get('error', 'TTS generation failed')})}\n\n"
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
                 yield f"data: {json.dumps({'type': 'error', 'error': 'TTS server is not running. Please start the TTS server and try again.', 'code': 'TTS_UNAVAILABLE'})}\n\n"
-                break
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
             await asyncio.sleep(0.1)
 
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 

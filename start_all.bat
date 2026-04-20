@@ -1,52 +1,106 @@
 @echo off
+setlocal
+
+set "RPG_FLUX_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe"
+set "RPG_TTS_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe"
+set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
+
+set "OMNIX_TTS_URL=http://127.0.0.1:5101"
+set "OMNIX_STT_URL=http://127.0.0.1:5201"
+
+echo ========================================
+echo Starting Omnix with split runtime envs
+echo ========================================
+
+if not exist "%RPG_FLUX_PYTHON%" (
+    echo ERROR: rpg-flux python not found:
+    echo   %RPG_FLUX_PYTHON%
+    pause
+    exit /b 1
+)
+
+if not exist "%RPG_TTS_PYTHON%" (
+    echo ERROR: rpg-tts python not found:
+    echo   %RPG_TTS_PYTHON%
+    pause
+    exit /b 1
+)
+
+if not exist "%RPG_STT_PYTHON%" (
+    echo ERROR: rpg-stt python not found:
+    echo   %RPG_STT_PYTHON%
+    pause
+    exit /b 1
+)
+
+echo.
+echo [ENV CHECK][FLUX]
+"%RPG_FLUX_PYTHON%" -c "import sys; print('[FLUX][PYTHON]', sys.executable)"
+"%RPG_FLUX_PYTHON%" -c "import diffusers; print('[FLUX] diffusers OK')"
+set "PYTHONPATH=%~dp0src"
+"%RPG_FLUX_PYTHON%" -c "from app.providers.vendor.qwen3_tts.bootstrap import ensure_vendored_qwen3_tts_available; print('[FLUX][TTS][VENDORED]', ensure_vendored_qwen3_tts_available())"
+if errorlevel 1 (
+    echo ERROR: rpg-flux verification failed
+    pause
+    exit /b 1
+)
+
+echo.
+echo [ENV CHECK][TTS]
+"%RPG_TTS_PYTHON%" -c "import sys; print('[TTS][PYTHON]', sys.executable)"
+if errorlevel 1 (
+    echo ERROR: rpg-tts verification failed
+    pause
+    exit /b 1
+)
+
+echo.
+echo [ENV CHECK][STT]
+"%RPG_STT_PYTHON%" -c "import sys; print('[STT][PYTHON]', sys.executable)"
+"%RPG_STT_PYTHON%" -c "import nemo.collections.asr as nemo_asr; print('[STT] NeMo ASR OK')"
+if errorlevel 1 (
+    echo ERROR: rpg-stt verification failed
+    pause
+    exit /b 1
+)
+
+echo.
 echo ================================================
 echo LM Studio Chatbot - Full Launcher
 echo ================================================
 echo.
-echo This will start:
-echo   1. Parakeet STT Server (port 8000) - Voice recognition
-echo   2. FasterQwen3TTS Model - Real-time multilingual TTS
-echo   3. Chatbot Web Server (port 5000) - Main application
-echo.
 
-set SERVER_MODE=fastapi
-echo Starting in %SERVER_MODE% mode (WebSocket TTS enabled)...
-echo.
-
-cd /d "%~dp0"
-
-echo [Cleanup] Killing existing server processes...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5000 ^| findstr LISTENING') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
-timeout /t 2 /nobreak >nul
-echo [Cleanup] Done.
-
-if exist "venv\Scripts\activate.bat" (
-    call venv\Scripts\activate.bat
-) else (
-    echo Creating virtual environment...
-    python -m venv venv
-    call venv\Scripts\activate.bat
-)
-
-echo [Setup] Installing dependencies...
-pip install -q fastapi uvicorn websockets aiohttp pydub numpy soundfile 2>nul
-
-set PARKEET_FORCE_CPU=false
-
-echo [1/3] Starting Parakeet STT Server...
-start "Parakeet STT" cmd /k "cd /d "%~dp0" && set PARKEET_FORCE_CPU=false && python parakeet_stt_server.py 2>&1"
+echo [1/4] Starting Parakeet STT...
+start "Parakeet STT" cmd /k "cd /d ""%~dp0"" && ""%RPG_STT_PYTHON%"" -c "import sys; print('[STT][PYTHON]', sys.executable)" && ""%RPG_STT_PYTHON%"" src\parakeet_stt_server.py"
 
 echo Waiting for STT...
 ping -n 6 127.0.0.1 >nul
 
-echo [2/3] Starting Chatbot...
-start "Omnix FastAPI" cmd /k "cd /d "%~dp0" && python app.py 2>&1"
+echo.
+echo [2/4] Starting TTS...
+start "Omnix TTS" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && ""%RPG_TTS_PYTHON%"" src\tts_server.py 2>&1"
 
+echo Waiting for TTS...
+ping -n 4 127.0.0.1 >nul
+
+echo.
+echo [3/4] Starting Chatbot...
+start "Omnix FastAPI" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_URL=%OMNIX_TTS_URL%"" && set ""OMNIX_STT_URL=%OMNIX_STT_URL%"" && ""%RPG_FLUX_PYTHON%"" -c "import sys; print('[APP][PYTHON]', sys.executable)" && ""%RPG_FLUX_PYTHON%"" -c "import diffusers; print('[APP][FLUX] diffusers OK')" && ""%RPG_FLUX_PYTHON%"" src\launch.py 2>&1"
+
+echo Waiting for FastAPI...
+ping -n 4 127.0.0.1 >nul
+
+echo.
+echo [4/4] Services launched.
+echo.
+echo STT window should show:
+echo   [STT][PYTHON] C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe
+echo.
+echo App window should show:
+echo   [APP][PYTHON] C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe
+echo   [APP][FLUX] diffusers OK
+echo   [APP][TTS][VENDORED] vendored path loaded OK
 echo.
 echo All servers started!
 pause
+endlocal

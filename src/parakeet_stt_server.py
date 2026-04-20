@@ -393,14 +393,37 @@ async def startup_event():
     """Load model on startup"""
     load_model()
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint"""
-    return HealthResponse(
-        status="healthy" if model else "unhealthy",
-        model_loaded=model is not None,
-        device=device
-    )
+@app.get("/health")
+async def health():
+    try:
+        import torch
+        import nemo.collections.asr as nemo_asr
+        return {
+            "ok": True,
+            "status": "ready",
+            "provider": "parakeet_stt",
+            "details": {
+                "versions": {
+                    "torch": getattr(torch, "__version__", ""),
+                    "nemo": getattr(nemo_asr, "__version__", ""),
+                },
+                "cuda_available": bool(torch.cuda.is_available()) if hasattr(torch, "cuda") else False,
+                "model_loaded": model is not None,
+                "device": device
+            },
+            "error": "",
+        }
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "ok": False,
+                "status": "not_ready",
+                "provider": "parakeet_stt",
+                "details": {},
+                "error": str(exc),
+            },
+            status_code=500,
+        )
 
 @app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(
@@ -615,9 +638,10 @@ async def websocket_transcribe(websocket: WebSocket):
             pass
 
 if __name__ == "__main__":
-    print("Starting Parakeet STT Server on http://0.0.0.0:8000")
+    PORT = int(os.environ.get("OMNIX_STT_PORT", "5201"))
+    print(f"Starting Parakeet STT Server on http://0.0.0.0:{PORT}")
     print(f"Endpoints:")
-    print(f"  - Health:    http://0.0.0.0:8000/health")
-    print(f"  - Transcribe: http://0.0.0.0:8000/transcribe (POST)")
-    print(f"  - WebSocket:  ws://0.0.0.0:8000/ws/transcribe")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print(f"  - Health:    http://0.0.0.0:{PORT}/health")
+    print(f"  - Transcribe: http://0.0.0.0:{PORT}/transcribe (POST)")
+    print(f"  - WebSocket:  ws://0.0.0.0:{PORT}/ws/transcribe")
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

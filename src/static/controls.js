@@ -246,7 +246,7 @@ function setupSTTControl() {
 async function checkSTTStatus() {
     // First try direct health check for faster response
     try {
-        const healthResponse = await fetch('http://localhost:8000/health', { timeout: 3000 });
+        const healthResponse = await fetch('http://localhost:5201/health', { timeout: 3000 });
         if (healthResponse.status === 200) {
             updateSTTStatus(true, 'STT: Running');
             return;
@@ -287,23 +287,16 @@ function updateSTTStatus(running, text) {
 }
 
 async function startSTT() {
+    // STT is now started externally by start_all.bat on port 5201.
+    // Keep this button as a manual refresh instead of calling a removed backend route.
     sttStartBtn.disabled = true;
-    sttStartBtn.textContent = 'Starting...';
-    
+    sttStartBtn.textContent = 'Checking...';
     try {
-        const response = await fetch('/api/services/stt/start', { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.success) {
-            setTimeout(() => {
-                checkSTTStatus();
-                refreshSTTLogs();
-            }, 3000);
-        }
+        await checkSTTStatus();
+        await refreshSTTLogs();
     } catch (e) {
-        console.error('Error starting STT:', e);
+        console.error('Error checking STT:', e);
     }
-    
     sttStartBtn.textContent = 'Start';
     sttStartBtn.disabled = false;
 }

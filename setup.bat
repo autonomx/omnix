@@ -1,149 +1,402 @@
 @echo off
+setlocal
+
 REM ============================================
-REM Omnix - Setup Script (Windows) with Virtual Environment
+REM Omnix - Split Runtime Setup Script (Windows)
 REM ============================================
 
+set "CONDA_ROOT=C:\Users\unx47\miniconda3"
+set "CONDA_EXE=%CONDA_ROOT%\Scripts\conda.exe"
+
+set "RPG_FLUX_ENV=rpg-flux"
+set "RPG_FLUX_PYTHON=%CONDA_ROOT%\envs\rpg-flux\python.exe"
+
+set "RPG_TTS_ENV=rpg-tts"
+set "RPG_TTS_PYTHON=%CONDA_ROOT%\envs\rpg-tts\python.exe"
+
+set "RPG_STT_ENV=rpg-stt"
+set "RPG_STT_PYTHON=%CONDA_ROOT%\envs\rpg-stt\python.exe"
+
 echo =============================================
-echo Omnix - Setup with Virtual Environment
+echo Omnix - Setup with Split Conda Environments
 echo =============================================
 echo.
 echo This will install all dependencies for:
-echo   - Chatbot Web Server
-echo   - Parakeet STT (Speech-to-Text)
-echo   - FasterQwen3TTS (Text-to-Speech)
+echo   - Main app + FLUX image generation in %RPG_FLUX_ENV%
+echo   - Vendored Qwen3-TTS in %RPG_TTS_ENV%
+echo   - Parakeet STT in %RPG_STT_ENV%
 echo.
-echo Using Python virtual environment for isolation
-pause
+echo Setup will start automatically in 3 seconds...
+ping 127.0.0.1 -n 3 -w 1000 >nul
 
-REM Check if Python is installed
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Python is not installed or not in PATH
-    echo Please install Python 3.10 or higher from https://www.python.org/
+if not exist "%CONDA_EXE%" (
+    echo ERROR: conda.exe not found:
+    echo   %CONDA_EXE%
     pause
     exit /b 1
 )
 
-REM Check Python version
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYVER=%%i
-echo Python version: %PYVER%
-
-echo.
-echo [1/7] Creating Python virtual environment...
-if exist "venv" (
-    echo Virtual environment already exists, removing...
-    rmdir /s /q venv
+if not exist "%RPG_FLUX_PYTHON%" (
+    echo Creating conda environment: %RPG_FLUX_ENV%
+    "%CONDA_EXE%" create -n %RPG_FLUX_ENV% python=3.10 -y
+    if errorlevel 1 (
+        echo ERROR: Failed to create %RPG_FLUX_ENV%
+        pause
+        exit /b 1
+    )
 )
 
-python -m venv venv
-if errorlevel 1 (
-    echo ERROR: Failed to create virtual environment
+if not exist "%RPG_TTS_PYTHON%" (
+    echo Creating conda environment: %RPG_TTS_ENV%
+    "%CONDA_EXE%" create -n %RPG_TTS_ENV% python=3.10 -y
+    if errorlevel 1 (
+        echo ERROR: Failed to create %RPG_TTS_ENV%
+        pause
+        exit /b 1
+    )
+)
+
+if not exist "%RPG_STT_PYTHON%" (
+    echo Creating conda environment: %RPG_STT_ENV%
+    "%CONDA_EXE%" create -n %RPG_STT_ENV% python=3.10 -y
+    if errorlevel 1 (
+        echo ERROR: Failed to create %RPG_STT_ENV%
+        pause
+        exit /b 1
+    )
+)
+
+if not exist "src\requirements-rpg-flux.txt" (
+    echo ERROR: Runtime requirements file not found
+    echo Expected:
+    echo   src\requirements-rpg-flux.txt
     pause
     exit /b 1
 )
 
-REM Activate virtual environment
-call venv\Scripts\activate.bat
-echo Virtual environment activated
-
-echo.
-echo [2/7] Upgrading pip...
-pip install --upgrade pip
-
-echo.
-echo [3/7] Installing PyTorch with CUDA 12.4 support...
-echo This is CRITICAL - mismatched versions cause errors
-echo.
-pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
-if errorlevel 1 (
-    echo WARNING: Failed to install PyTorch with CUDA
-    echo Trying CPU-only version...
-    pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1
-)
-
-echo.
-echo [4/7] Installing torchmetrics...
-pip install torchmetrics==1.4.2
-
-echo.
-echo [5/7] Installing core dependencies...
-pip install -r requirements.txt
-if errorlevel 1 (
-    echo ERROR: Failed to install core dependencies
+if not exist "src\requirements-rpg-tts.txt" (
+    echo ERROR: TTS runtime requirements file not found
+    echo Expected:
+    echo   src\requirements-rpg-tts.txt
     pause
     exit /b 1
 )
 
 echo.
-echo [6/8] Installing FasterQwen3TTS...
-pip install faster-qwen3-tts>=0.2.4
+echo [ENV CHECK] FLUX
+"%RPG_FLUX_PYTHON%" -c "import sys; print('FLUX Python:', sys.executable)"
 if errorlevel 1 (
-    echo WARNING: Failed to install FasterQwen3TTS
-    echo You can try: pip install faster-qwen3-tts
+    echo ERROR: Failed to verify %RPG_FLUX_ENV%
+    pause
+    exit /b 1
 )
 
 echo.
-echo [7/7] Installing NeMo ASR for Parakeet STT...
-pip install "nemo_toolkit[asr]"
+echo [ENV CHECK] STT
+"%RPG_STT_PYTHON%" -c "import sys; print('STT Python:', sys.executable)"
 if errorlevel 1 (
-    echo WARNING: Failed to install NeMo ASR
-    echo STT will not be available
-    echo Try: pip install nemo_toolkit[asr]
+    echo ERROR: Failed to verify %RPG_STT_ENV%
+    pause
+    exit /b 1
 )
 
 echo.
-echo [8/8] Installing compatible transformers version...
-echo Note: nemo_toolkit installs transformers 4.53+ which may break compatibility
-echo Installing transformers==4.46.3 for better compatibility...
-pip install transformers==4.46.3 tokenizers==0.20.3 --force-reinstall
+echo =============================================
+echo Installing main app + FLUX into %RPG_FLUX_ENV%
+echo =============================================
+
+if not exist "src\app\providers\vendor\faster_qwen3_tts\__init__.py" (
+    echo ERROR: Vendored faster_qwen3_tts package not found
+    echo Expected:
+    echo   src\app\providers\vendor\faster_qwen3_tts\__init__.py
+    pause
+    exit /b 1
+)
+
+if not exist "src\app\providers\vendor\qwen_tts\__init__.py" (
+    echo ERROR: Vendored qwen_tts package not found
+    echo Expected:
+    echo   src\app\providers\vendor\qwen_tts\__init__.py
+    pause
+    exit /b 1
+)
+
+echo [1/9][FLUX] Upgrading pip/setuptools/wheel...
+"%RPG_FLUX_PYTHON%" -m pip install --upgrade pip
+
+REM Pin wheel to avoid packaging>=24 requirement (deepfilternet requires <24)
+"%RPG_FLUX_PYTHON%" -m pip install wheel==0.43.0
+if errorlevel 1 (
+    echo ERROR: Failed to pin wheel
+    pause
+    exit /b 1
+)
+
+REM DO NOT upgrade setuptools/packaging here — breaks deepfilternet + torch constraints
 
 echo.
-echo [9/9] Pre-downloading Parakeet TDT 0.6B model...
-echo This may take a few minutes...
-echo Note: Model downloads to HuggingFace cache: %USERPROFILE%\.cache\huggingface\
-python -c "from nemo.collections.asr.models import ASRModel; ASRModel.from_pretrained('nvidia/parakeet-tdt-0.6b-v2'); print('Parakeet model downloaded successfully!')" 2>nul
+echo [2/9][FLUX] Removing conflicting torch packages...
+"%RPG_FLUX_PYTHON%" -m pip uninstall -y torch torchvision torchaudio
+"%RPG_FLUX_PYTHON%" -m pip uninstall -y torchtext torchdata
+
+echo.
+echo [3/9][FLUX] Installing torch/vision/audio CUDA 12.4 trio...
+"%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
+if errorlevel 1 (
+    echo WARNING: CUDA trio failed for %RPG_FLUX_ENV%, falling back to CPU
+    "%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1
+    if errorlevel 1 (
+        echo ERROR: Failed to install torch trio into %RPG_FLUX_ENV%
+        pause
+        exit /b 1
+    )
+)
+
+echo.
+echo [FLUX] Pinning core compatibility (numpy/packaging/setuptools)...
+"%RPG_FLUX_PYTHON%" -m pip install numpy==1.26.4 packaging==23.2 setuptools==81.0.0
+if errorlevel 1 (
+    echo ERROR: Failed to pin numpy/packaging/setuptools
+    pause
+    exit /b 1
+)
+
+echo.
+echo [FLUX] Re-locking numpy after torch install...
+"%RPG_FLUX_PYTHON%" -m pip install numpy==1.26.4
+if errorlevel 1 (
+    echo ERROR: Failed to re-lock numpy
+    pause
+    exit /b 1
+)
+
+echo.
+echo [FLUX] Cleaning conflicting pip-installed TTS packages...
+
+REM These packages conflict with the vendored Qwen3-TTS runtime and can
+REM force incompatible transformers/accelerate versions into the env.
+REM We explicitly remove them to guarantee a clean deterministic runtime.
+
+"%RPG_FLUX_PYTHON%" -m pip uninstall -y faster-qwen3-tts >nul 2>nul
+if errorlevel 0 (
+    echo   removed faster-qwen3-tts
+) else (
+    echo   faster-qwen3-tts not present
+)
+
+"%RPG_FLUX_PYTHON%" -m pip uninstall -y qwen-tts >nul 2>nul
+if errorlevel 0 (
+    echo   removed qwen-tts
+) else (
+    echo   qwen-tts not present
+)
+
+REM Optional: clear HF cache metadata for these packages (safe no-op if not present)
+REM Uncomment if you see persistent version bleed-through issues
+REM rmdir /s /q "%USERPROFILE%\.cache\huggingface\modules\transformers_modules" 2>nul
+
+echo [FLUX] Cleanup complete.
+
+echo.
+echo [4/9][FLUX] Installing core requirements...
+"%RPG_FLUX_PYTHON%" -m pip install -r requirements.txt
+if errorlevel 1 (
+    echo ERROR: Failed to install requirements into %RPG_FLUX_ENV%
+    pause
+    exit /b 1
+)
+
+echo.
+echo [5/9][FLUX] Installing centralized RPG-FLUX runtime requirements...
+"%RPG_FLUX_PYTHON%" -m pip install --no-deps -r src\requirements-rpg-flux.txt
+if errorlevel 1 (
+    echo ERROR: Failed to install src\requirements-rpg-flux.txt
+    pause
+    exit /b 1
+)
+
+echo.
+echo [6/9][FLUX] TTS moved to dedicated %RPG_TTS_ENV% environment
+
+echo.
+echo [7/9][FLUX] Runtime dependency pins are managed by src\requirements-rpg-flux.txt
+
+echo.
+echo [8/9][FLUX] Downloading default LLM (Qwen3-4B Q8_0)...
+if not exist "models\llm" mkdir "models\llm"
+"%RPG_FLUX_PYTHON%" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='qwen/Qwen3-4B-Instruct-2507-GGUF', filename='qwen3-4b-instruct-2507-q8_0.gguf', local_dir='models/llm', local_dir_use_symlinks=False)" 2>nul
+if errorlevel 1 (
+    echo WARNING: Could not auto-download Qwen3-4B GGUF model
+) else (
+    echo Qwen3-4B model downloaded to models/llm/
+)
+
+echo.
+echo [9/9][FLUX] Verifying main app runtime...
+set PYTHONPATH=%CD%\src
+"%RPG_FLUX_PYTHON%" -c "import torch, torchvision, torchaudio; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('torchaudio:', torchaudio.__version__)"
+"%RPG_FLUX_PYTHON%" -m app.rpg.visual.runtime_status
+if errorlevel 1 (
+    echo =============================================
+    echo FLUX: NOT READY
+    echo =============================================
+    echo ERROR: Verification failed for %RPG_FLUX_ENV%
+    pause
+    exit /b 1
+)
+
+"%RPG_FLUX_PYTHON%" -m app.providers.vendor.qwen3_tts.runtime_status
+if errorlevel 1 (
+    echo =============================================
+    echo QWEN3-TTS: NOT READY
+    echo =============================================
+    echo WARNING: Qwen3 TTS runtime not available (will use external TTS service)
+)
+
+echo =============================================
+echo FLUX: READY
+echo =============================================
+
+echo.
+echo =============================================
+echo Installing Vendored Qwen3-TTS into %RPG_TTS_ENV%
+echo =============================================
+
+echo [1/5][TTS] Upgrading pip...
+"%RPG_TTS_PYTHON%" -m pip install --upgrade pip
+if errorlevel 1 (
+    echo ERROR: Failed to upgrade pip in %RPG_TTS_ENV%
+    pause
+    exit /b 1
+)
+
+echo.
+echo [2/5][TTS] Installing torch CUDA runtime...
+"%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
+if errorlevel 1 (
+    echo WARNING: CUDA torch failed for %RPG_TTS_ENV%, falling back to CPU
+    "%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1
+    if errorlevel 1 (
+        echo ERROR: Failed to install torch in %RPG_TTS_ENV%
+        pause
+        exit /b 1
+    )
+)
+
+echo.
+echo [3/5][TTS] Installing TTS runtime requirements...
+"%RPG_TTS_PYTHON%" -m pip install -r src\requirements-rpg-tts.txt
+if errorlevel 1 (
+    echo ERROR: Failed to install src\requirements-rpg-tts.txt
+    pause
+    exit /b 1
+)
+
+echo.
+echo [4/5][TTS] Verifying vendored Qwen3-TTS runtime...
+set PYTHONPATH=%CD%\src
+"%RPG_TTS_PYTHON%" -m app.providers.vendor.qwen3_tts.runtime_status
+if errorlevel 1 (
+    echo =============================================
+    echo QWEN3-TTS: NOT READY
+    echo =============================================
+    pause
+    exit /b 1
+)
+
+echo.
+echo [5/5][TTS] TTS environment ready.
+
+echo =============================================
+echo QWEN3-TTS: READY
+echo =============================================
+
+echo.
+echo =============================================
+echo Installing Parakeet STT into %RPG_STT_ENV%
+echo =============================================
+
+echo [1/7][STT] Upgrading pip/setuptools/wheel...
+"%RPG_STT_PYTHON%" -m pip install --upgrade pip setuptools wheel
+if errorlevel 1 (
+    echo ERROR: Failed to upgrade pip tools in %RPG_STT_ENV%
+    pause
+    exit /b 1
+)
+
+echo.
+echo [2/7][STT] Removing conflicting torch packages...
+"%RPG_STT_PYTHON%" -m pip uninstall -y torch torchvision torchaudio
+
+echo.
+echo [3/7][STT] Installing torch 2.6+ for NeMo compatibility...
+"%RPG_STT_PYTHON%" -m pip install --no-cache-dir torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+if errorlevel 1 (
+    echo WARNING: CUDA trio failed for %RPG_STT_ENV%, falling back to CPU
+    "%RPG_STT_PYTHON%" -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0
+    if errorlevel 1 (
+        echo ERROR: Failed to install torch trio into %RPG_STT_ENV%
+        pause
+        exit /b 1
+    )
+)
+
+echo.
+echo [4/7][STT] Installing NeMo ASR...
+"%RPG_STT_PYTHON%" -m pip install "nemo_toolkit[asr]"
+if errorlevel 1 (
+    echo ERROR: Failed to install nemo_toolkit[asr]
+    pause
+    exit /b 1
+)
+
+echo.
+echo [STT] Installing web server dependencies for parakeet_stt_server...
+"%RPG_STT_PYTHON%" -m pip install fastapi uvicorn python-multipart
+if errorlevel 1 (
+    echo ERROR: Failed to install FastAPI/Uvicorn/python-multipart in %RPG_STT_ENV%
+    pause
+    exit /b 1
+)
+
+echo.
+echo [5/7][STT] Reinstalling exact torch/vision/audio trio after NeMo...
+"%RPG_STT_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+if errorlevel 1 (
+    echo WARNING: CUDA trio reinstall failed for %RPG_STT_ENV%, falling back to CPU
+    "%RPG_STT_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0
+    if errorlevel 1 (
+        echo ERROR: Failed to reassert torch trio in %RPG_STT_ENV%
+        pause
+        exit /b 1
+    )
+)
+
+echo.
+echo [6/7][STT] Installing STT transformers/tokenizers compatibility pins...
+"%RPG_STT_PYTHON%" -m pip install transformers==4.46.3 tokenizers==0.20.3 --force-reinstall
+if errorlevel 1 (
+    echo ERROR: Failed to install STT transformers/tokenizers compatibility pins
+    pause
+    exit /b 1
+)
+
+echo.
+echo [6/7][STT] Pre-downloading Parakeet model...
+"%RPG_STT_PYTHON%" -c "from nemo.collections.asr.models import ASRModel; ASRModel.from_pretrained('nvidia/parakeet-tdt-0.6b-v2'); print('Parakeet model downloaded successfully!')" 2>nul
 if errorlevel 1 (
     echo WARNING: Failed to pre-download Parakeet model
     echo It will be downloaded on first use instead
 )
 
 echo.
-echo [10/10] Downloading default LLM (Qwen3-4B Q8_0)...
-echo This provides an immediate working LLM for new installations
-echo Model: qwen/Qwen3-4B-Instruct-2507-GGUF
-echo Quantization: Q8_0 (~4GB)
-echo.
-
-REM Create models directory
-if not exist "models\llm" mkdir "models\llm"
-
-REM Download using huggingface-cli or curl
-echo Downloading Qwen3-4B GGUF model...
-python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='qwen/Qwen3-4B-Instruct-2507-GGUF', filename='qwen3-4b-instruct-2507-q8_0.gguf', local_dir='models/llm', local_dir_use_symlinks=False)" 2>nul
+echo [7/7][STT] Verifying STT runtime...
+"%RPG_STT_PYTHON%" -c "import torch, torchvision, torchaudio; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('torchaudio:', torchaudio.__version__)"
+"%RPG_STT_PYTHON%" -c "import nemo.collections.asr as nemo_asr; print('NeMo ASR: OK')"
 if errorlevel 1 (
-    echo Could not auto-download - will provide manual instructions below
-) else (
-    echo Qwen3-4B model downloaded to models/llm/
-)
-
-echo.
-echo [11/11] Verifying installations...
-echo.
-
-REM Check PyTorch
-python -c "import torch; print(f'PyTorch: {torch.__version__}')" 2>nul
-python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')" 2>nul
-
-REM Check TTS
-python -c "import faster_qwen3_tts; print('FasterQwen3TTS: OK')" 2>nul
-if errorlevel 1 (
-    echo FasterQwen3TTS: FAILED - check faster-qwen3-tts installation
-)
-
-REM Check STT
-python -c "import nemo.collections.asr as nemo_asr; print('NeMo ASR: OK')" 2>nul
-if errorlevel 1 (
-    echo NeMo ASR: FAILED - check nemo_toolkit installation
+    echo ERROR: Verification failed for %RPG_STT_ENV%
+    pause
+    exit /b 1
 )
 
 echo.
@@ -151,19 +404,19 @@ echo =============================================
 echo Setup Complete!
 echo =============================================
 echo.
-echo IMPORTANT NOTES:
-echo   - Virtual environment created in 'venv' directory
-echo   - To activate: venv\Scripts\activate.bat
-echo   - To deactivate: deactivate
-echo   - PyTorch must match torchvision version
-echo   - Use parakeet_stt_server.py from root (not models folder)
-echo   - transformers will be updated to 4.53.x by nemo_toolkit
+echo Environments:
+echo   - %RPG_FLUX_ENV% : main app + FLUX
+echo   - %RPG_TTS_ENV%  : vendored Qwen3-TTS
+echo   - %RPG_STT_ENV%  : Parakeet STT only
 echo.
-echo To start services:
-echo   start_all.bat             - Start all services
-echo   start_parakeet_stt.bat    - Start STT only
+echo Python interpreters:
+echo   - %RPG_FLUX_PYTHON%
+echo   - %RPG_STT_PYTHON%
 echo.
-echo To run with virtual environment:
-echo   venv\Scripts\activate.bat && start_all.bat
+echo IMPORTANT:
+echo   - Do not rely on bare python or pip
+echo   - Do not rely on project venv for FLUX/TTS/STT services
+echo   - start_all.bat must use exact interpreter paths
 echo.
 pause
+endlocal

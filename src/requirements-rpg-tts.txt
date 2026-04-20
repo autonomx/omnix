@@ -1,0 +1,18 @@
+numpy==1.26.4
+packaging==23.2
+wheel==0.43.0
+setuptools==81.0.0
+requests==2.31.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+soundfile>=0.12,<1
+PyYAML<7,>=6
+sentencepiece<0.3,>=0.2
+safetensors<0.7,>=0.5
+huggingface_hub<0.35,>=0.30
+
+# TTS-only HF stack
+transformers==4.57.3
+tokenizers==0.22.2
+accelerate==1.12.0

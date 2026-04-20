@@ -29,7 +29,9 @@ huggingface_hub>=0.19.0
 # ============================================
 # AUDIO PROCESSING
 # ============================================
-numpy>=1.26,<2.1
+numpy==1.26.4
+packaging==23.2
+wheel==0.43.0
 scipy>=1.9.0
 soundfile>=0.12.0
 pydub==0.25.1
@@ -44,22 +46,16 @@ deepfilternet>=0.5.0
 # Note: This will update transformers to 4.53.x
 # ============================================
 # nemo_toolkit[asr]>=2.5.0
-transformers>=4.46.3
+# TTS moved to rpg-tts environment
 
-# ============================================
-# FASTER QWEN3 TTS
-# ============================================
-faster-qwen3-tts>=0.2.4
 
 # ============================================
 # IMAGE GENERATION (optional - for flux_klein visual provider)
 # ============================================
 diffusers>=0.31.0
 transformers>=4.40.0
-accelerate>=0.30.0
 safetensors>=0.4.0
-sentencepiece>=0.2.0
-torch>=2.2.0
+# torch installed explicitly in setup.bat (DO NOT install via pip)
 
 # ============================================
 # DOCUMENT PROCESSING

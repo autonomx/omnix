@@ -35,26 +35,15 @@ def run_command(cmd, description=""):
         return False
 
 def install_faster_qwen3_tts():
-    """Install the faster-qwen3-tts library."""
-    print("Installing faster-qwen3-tts library...")
-    
-    # Try to install from the local directory first
-    local_path = Path(__file__).parent / "resources" / "models" / "tts" / "faster-qwen3-tts-main"
-    if local_path.exists():
-        print(f"Found local faster-qwen3-tts at {local_path}")
-        if run_command(f"pip install -e {local_path}", "Installing local faster-qwen3-tts"):
-            return True
-    
-    # Fall back to PyPI
-    print("Installing from PyPI...")
-    return run_command("pip install faster-qwen3-tts", "Installing faster-qwen3-tts from PyPI")
+    """No-op: Omnix now uses vendored Qwen3-TTS in the dedicated rpg-tts environment."""
+    print("Skipping pip install of faster-qwen3-tts (vendored runtime is used instead).")
+    return True
 
 def install_dependencies():
     """Install additional dependencies."""
     print("Installing additional dependencies...")
     
     deps = [
-        "qwen-tts",
         "soundfile",
         "numpy",
         "scipy",  # For high-quality resampling

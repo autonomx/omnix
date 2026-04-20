@@ -24,6 +24,13 @@ from .audio_base import (
     BaseTTSProvider,
     TTSAudioResponse,
 )
+from .vendor.qwen3_tts import (
+    ensure_vendored_qwen3_tts_available,
+    get_or_create_tts_model,
+    reset_tts_model_cache,
+    list_available_speakers,
+    synthesize_speech,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -249,17 +256,11 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             try:
                 logger.info("Loading FasterQwen3TTS model...")
                 
-                # Add the faster-qwen3-tts directory to Python path if not already
-                tts_lib_path = Path(__file__).parent.parent.parent.parent / 'resources' / 'models' / 'tts' / 'faster-qwen3-tts-main'
-                if tts_lib_path.exists() and str(tts_lib_path) not in sys.path:
-                    sys.path.insert(0, str(tts_lib_path))
+                ensure_vendored_qwen3_tts_available()
                 
-                # Import the FasterQwen3TTS class
-                from faster_qwen3_tts.model import FasterQwen3TTS
-                
-                # Load the model
+                # Load vendored TTS model
                 model_name = self._model_config['model_name']
-                model = FasterQwen3TTS.from_pretrained(
+                model = get_or_create_tts_model(
                     model_name=model_name,
                     device=self.device,
                     dtype=self.dtype,

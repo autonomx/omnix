@@ -15,22 +15,11 @@ from app.rpg.visual.runtime_status import log_flux_klein_runtime_status
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize providers on application startup"""
-    # Pre-load TTS provider on app startup for immediate availability
-    try:
-        import app.shared as shared
-        tts_provider = shared.get_tts_provider()
-        if tts_provider:
-            print(f"[APP-STARTUP] TTS provider '{tts_provider.provider_name}' initialized successfully")
-        else:
-            print("[APP-STARTUP] No TTS provider configured or available")
-    except Exception as e:
-        print(f"[APP-STARTUP] Failed to initialize TTS provider: {e}")
-
     try:
         log_flux_klein_runtime_status()
     except Exception as e:
         print(f"[APP-STARTUP] Failed to validate FLUX runtime: {e}")
-    
+
     yield
 
 

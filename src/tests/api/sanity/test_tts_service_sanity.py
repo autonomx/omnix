@@ -1,0 +1,161 @@
+"""
+TTS Service sanity tests.
+
+These tests run against running services to verify that the TTS HTTP
+architecture is working correctly after the migration from local provider
+to separate TTS service.
+
+Tests both the TTS backend service (port 5101) and the frontend API proxy (port 5000).
+"""
+
+from __future__ import annotations
+
+import pytest
+import requests
+from typing import Dict, Any
+
+
+# Test configuration
+TTS_SERVICE_BASE = "http://127.0.0.1:5101"
+MAIN_API_BASE = "http://127.0.0.1:5000"
+
+
+def is_service_running(url: str, timeout: float = 2.0) -> bool:
+    """Helper to check if a service is reachable."""
+    try:
+        requests.get(url, timeout=timeout)
+        return True
+    except requests.exceptions.ConnectionError:
+        return False
+
+
+@pytest.fixture(scope="module")
+def tts_service_available() -> bool:
+    """Fixture to skip tests if TTS service is not running."""
+    available = is_service_running(f"{TTS_SERVICE_BASE}/health")
+    if not available:
+        pytest.skip("TTS service (port 5101) is not running")
+    return available
+
+
+@pytest.fixture(scope="module")
+def main_api_available() -> bool:
+    """Fixture to skip tests if main API is not running."""
+    available = is_service_running(f"{MAIN_API_BASE}/api/health")
+    if not available:
+        pytest.skip("Main API (port 5000) is not running")
+    return available
+
+
+class TestTtsServiceBackend:
+    """Tests for the standalone TTS service at port 5101."""
+
+    def test_health_endpoint_responds(self, tts_service_available: bool) -> None:
+        """Test /health endpoint returns valid structure."""
+        response = requests.get(f"{TTS_SERVICE_BASE}/health", timeout=3)
+        
+        # Should always return 200 even if not ready
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert isinstance(data, dict)
+        
+        # Required fields
+        assert "ok" in data
+        assert isinstance(data["ok"], bool)
+        assert "provider" in data
+        assert "status" in data
+        
+        # Optional fields
+        if data["ok"]:
+            assert data["status"] == "ready"
+            assert "details" in data
+
+    def test_speakers_endpoint(self, tts_service_available: bool) -> None:
+        """Test /api/tts/speakers returns speaker list."""
+        response = requests.get(f"{TTS_SERVICE_BASE}/api/tts/speakers", timeout=3)
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert data["success"] is True
+        assert "speakers" in data
+        assert isinstance(data["speakers"], list)
+        assert "provider" in data
+        
+        # Each speaker should have id and name
+        for speaker in data["speakers"]:
+            assert isinstance(speaker, dict)
+            assert "id" in speaker
+            assert "name" in speaker
+            assert speaker["id"] and speaker["name"]
+
+
+class TestMainApiProxy:
+    """Tests for the main API at port 5000 which proxies TTS requests."""
+
+    def test_tts_speakers_proxy(self, main_api_available: bool) -> None:
+        """Test /api/tts/speakers returns speakers via proxy."""
+        response = requests.get(f"{MAIN_API_BASE}/api/tts/speakers", timeout=5)
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert data["success"] is True
+        assert "speakers" in data
+        assert isinstance(data["speakers"], list)
+        
+        # Verify structure matches TTS service format
+        for speaker in data["speakers"]:
+            assert "id" in speaker
+            assert "name" in speaker
+
+    def test_providers_status_includes_tts(self, main_api_available: bool) -> None:
+        """Test /api/providers/status includes TTS service status."""
+        response = requests.get(f"{MAIN_API_BASE}/api/providers/status", timeout=5)
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert data["success"] is True
+        assert "tts" in data
+        assert isinstance(data["tts"], dict)
+        
+        tts_status = data["tts"]
+        assert "available" in tts_status
+        assert isinstance(tts_status["available"], bool)
+        assert "provider" in tts_status
+        assert "message" in tts_status
+        
+        # Should use the HTTP provider now, not local
+        assert tts_status["provider"] in ("tts-http", "qwen3_tts")
+
+
+class TestTtsIntegration:
+    """Integration tests verifying full flow between services."""
+
+    def test_both_services_return_same_speakers(self,
+                                                tts_service_available: bool,
+                                                main_api_available: bool) -> None:
+        """Verify both endpoints return consistent speaker lists."""
+        tts_resp = requests.get(f"{TTS_SERVICE_BASE}/api/tts/speakers", timeout=3)
+        main_resp = requests.get(f"{MAIN_API_BASE}/api/tts/speakers", timeout=5)
+        
+        tts_data = tts_resp.json()
+        main_data = main_resp.json()
+        
+        # Both should succeed
+        assert tts_data["success"] is True
+        assert main_data["success"] is True
+        
+        # Get speaker IDs from both
+        tts_ids = {s["id"] for s in tts_data["speakers"]}
+        main_ids = {s["id"] for s in main_data["speakers"]}
+        
+        # Should have at least the built-in speakers in common
+        common = tts_ids.intersection(main_ids)
+        assert len(common) >= 1, "No common speakers found between services"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
