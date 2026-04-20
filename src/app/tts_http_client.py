@@ -28,9 +28,18 @@ def tts_health(timeout: float = 5.0) -> Dict[str, Any]:
 
 
 def tts_speakers(timeout: float = 10.0) -> Dict[str, Any]:
-    response = requests.get(f"{_tts_base_url()}/api/tts/speakers", timeout=timeout)
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = requests.get(f"{_tts_base_url()}/api/tts/speakers", timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        return {
+            "success": False,
+            "speakers": [],
+            "provider": "tts-http",
+            "error": str(exc),
+            "reachable": False,
+        }
 
 
 def tts_generate_stream_audio(
