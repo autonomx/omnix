@@ -116,7 +116,11 @@ def preload_image_provider(force_reload: bool = False) -> BaseImageProvider:
     """
     if force_reload:
         unload_image_provider_cache()
-    return get_image_provider()
+    provider = get_image_provider()
+    load = getattr(provider, "load", None)
+    if callable(load):
+        load()
+    return provider
 
 
 def switch_image_provider_runtime(

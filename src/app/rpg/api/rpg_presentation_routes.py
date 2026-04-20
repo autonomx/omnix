@@ -1841,19 +1841,33 @@ async def download_visual_provider_model_route(request: Request):
 async def load_visual_provider_route(request: Request):
     payload = await _get_json(request)
     provider = _safe_str(payload.get("provider")).strip().lower() or "flux_klein"
+    force_reload = bool(payload.get("force_reload", True))
     settings = load_settings()
     visual = _safe_dict(settings.get("rpg_visual"))
     visual["enabled"] = True
+    visual["visual_provider"] = provider
     visual["provider"] = provider
+    visual["image_provider"] = provider
     settings["rpg_visual"] = visual
     save_settings(settings)
-    provider_instance = get_image_provider()
-    return _jsonify({
+    selected_key, provider_instance = switch_image_provider_runtime(
+        provider_key=provider,
+        enabled=True,
+        provider_config=visual,
+        force_reload=force_reload,
+    )
+    load = getattr(provider_instance, "load", None)
+    if callable(load):
+        load()
+    response = get_visual_provider_status_payload()
+    response.update({
         "ok": True,
         "enabled": image_generation_enabled(),
+        "selected_provider": selected_key,
         "provider": _safe_str(getattr(provider_instance, "provider_name", provider)).strip(),
         "settings": visual,
     })
+    return _jsonify(response)
 
 
 @rpg_presentation_bp.post("/api/rpg/visual/provider/unload")

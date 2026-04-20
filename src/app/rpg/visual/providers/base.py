@@ -22,6 +22,10 @@ class BaseImageProvider:
     """Abstract base for image generation providers."""
     provider_name = "base"
 
+    def load(self) -> None:
+        """Optional hook for providers that support explicit warm/preload."""
+        return None
+
     def generate(
         self,
         *,

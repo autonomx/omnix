@@ -214,6 +214,10 @@ class FluxKleinImageProvider(BaseImageProvider):
         payload["details"]["vram_unloaded"] = self._pipeline is None
         return payload
 
+    def load(self) -> None:
+        self._ensure_pipeline()
+        return None
+
     def generate(
         self,
         *,
