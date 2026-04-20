@@ -2805,6 +2805,79 @@ async def greeting(request: Request):
 
 
 # ============== TTS ENDPOINTS ==============
+class _HttpTtsProvider:
+    """Thin adapter that makes the main app use the dedicated HTTP TTS service."""
+
+    def generate_audio(self, *, text: str, speaker: str, language: str):
+        from app.tts_http_client import tts_generate_audio
+
+        return tts_generate_audio(
+            text=text,
+            speaker=speaker,
+            language=language,
+        )
+
+    def generate_tts(self, *, text: str, speaker: str, language: str):
+        return self.generate_audio(
+            text=text,
+            speaker=speaker,
+            language=language,
+        )
+
+    def generate_audio_stream(self, *, text: str, speaker: str, language: str, **kwargs):
+        from app.tts_http_client import tts_generate_stream_audio, decode_float32_audio_base64
+
+        result = tts_generate_stream_audio(
+            text=text,
+            speaker=speaker,
+            language=language,
+            chunk_size=kwargs.get("chunk_size", 6),
+            temperature=kwargs.get("temperature", 0.6),
+            top_k=kwargs.get("top_k", 20),
+            top_p=kwargs.get("top_p", 0.85),
+            repetition_penalty=kwargs.get("repetition_penalty", 1.0),
+            append_silence=kwargs.get("append_silence", False),
+            max_new_tokens=kwargs.get("max_new_tokens", 180),
+        )
+
+        if not result.get("success"):
+            raise RuntimeError(result.get("error", "tts_stream_failed"))
+
+        sample_rate = result.get("sample_rate", 24000)
+        for chunk_b64 in result.get("chunks", []):
+            raw = decode_float32_audio_base64(chunk_b64)
+            if not raw:
+                continue
+            import numpy as np
+            pcm = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32767.0
+            yield pcm, sample_rate, {}
+
+    def get_speakers(self):
+        from app.tts_http_client import tts_speakers
+
+        response = tts_speakers()
+        return response.get("speakers", [])
+
+
+def _get_tts_provider():
+    """Resolve the current TTS provider safely at call time."""
+    try:
+        health = None
+        try:
+            from app.tts_http_client import tts_health
+            health = tts_health()
+        except Exception:
+            health = None
+
+        if health and health.get("ok"):
+            return _HttpTtsProvider()
+        print(f"[TTS] HTTP provider unavailable. health={health}")
+        return None
+    except Exception as e:
+        print(f"[TTS] Failed to resolve provider: {e}")
+        return None
+
+
 def resolve_speaker_tts(data: dict):
     """Resolve speaker and language from request data."""
     speaker = data.get('speaker', 'default')
@@ -2914,33 +2987,36 @@ async def stt_endpoint(request: Request):
 @app.post("/api/tts")
 async def tts_endpoint(request: Request):
     """Standard TTS endpoint - returns complete audio."""
-    if not tts_provider:
-        return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
-    
     try:
+        provider = _get_tts_provider()
+        if not provider:
+            return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
+
         data = await request.json()
-        text = shared.remove_emojis(data.get('text', ''))
+        text = shared.remove_emojis(data.get("text", ""))
         if not text:
             return JSONResponse({"success": False, "error": "Text required"}, status_code=400)
-        
+
         final_speaker, language = resolve_speaker_tts(data)
-        
-        if hasattr(tts_provider, 'generate_tts'):
-            result = tts_provider.generate_tts(text=text, speaker=final_speaker, language=language)
-        elif hasattr(tts_provider, 'generate_audio'):
-            result = tts_provider.generate_audio(text=text, speaker=final_speaker, language=language)
+
+        if hasattr(provider, "generate_tts"):
+            result = provider.generate_tts(text=text, speaker=final_speaker, language=language)
+        elif hasattr(provider, "generate_audio"):
+            result = provider.generate_audio(text=text, speaker=final_speaker, language=language)
         else:
             return JSONResponse({"success": False, "error": "Provider missing TTS method"}, status_code=500)
-        
-        if result and result.get('success'):
+
+        if result and result.get("success"):
             return {
                 "success": True,
-                "audio": result.get('audio', ''),
-                "sample_rate": result.get('sample_rate', 24000)
+                "audio": result.get("audio", ""),
+                "sample_rate": result.get("sample_rate", 24000),
             }
-        else:
-            return JSONResponse({"success": False, "error": result.get('error', 'TTS failed')}, status_code=500)
-            
+
+        return JSONResponse(
+            {"success": False, "error": (result or {}).get("error", "TTS failed")},
+            status_code=500,
+        )
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -2948,27 +3024,26 @@ async def tts_endpoint(request: Request):
 @app.post("/api/tts/stream")
 async def tts_stream_endpoint(request: Request):
     """Streaming TTS endpoint."""
-    if not tts_provider:
-        return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
-    
     try:
+        provider = _get_tts_provider()
+        if not provider:
+            return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
+
         data = await request.json()
-        text = shared.remove_emojis(data.get('text', ''))
+        text = shared.remove_emojis(data.get("text", ""))
         if not text:
             return JSONResponse({"success": False, "error": "Text required"}, status_code=400)
-        
+
         final_speaker, language = resolve_speaker_tts(data)
-        
-        if not hasattr(tts_provider, 'generate_audio_stream'):
+
+        if not hasattr(provider, "generate_audio_stream"):
             return JSONResponse({"success": False, "error": "Provider doesn't support streaming"}, status_code=500)
-        
-        import io
 
         from fastapi.responses import StreamingResponse
-        
+
         async def generate():
             try:
-                for audio_chunk, sr, timing in tts_provider.generate_audio_stream(
+                for audio_chunk, sr, timing in provider.generate_audio_stream(
                     text=text,
                     speaker=final_speaker,
                     language=language,
@@ -2978,16 +3053,15 @@ async def tts_stream_endpoint(request: Request):
                     repetition_penalty=1.05,
                     top_p=0.95,
                     append_silence=False,
-                    max_new_tokens=1024
+                    max_new_tokens=1024,
                 ):
                     if audio_chunk is not None and len(audio_chunk) > 0:
                         pcm_int16 = (audio_chunk * 32767).astype(np.int16).tobytes()
                         yield pcm_int16
             except Exception as e:
                 print(f"[TTS STREAM] Error: {e}")
-        
+
         return StreamingResponse(generate(), media_type="audio/wav")
-    
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
@@ -2995,62 +3069,51 @@ async def tts_stream_endpoint(request: Request):
 @app.post("/api/tts/stream/server-sent-events")
 async def tts_stream_sse_endpoint(request: Request):
     """SSE streaming TTS endpoint."""
-    import asyncio
-
     from fastapi.responses import StreamingResponse
-    
-    print(f"[TTS SSE] Request received")
-    
-    if not tts_provider:
-        print(f"[TTS SSE] No TTS provider")
-        return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
-    
+
+    print("[TTS SSE] Request received")
+
     try:
-        content_type = request.headers.get('content-type', '')
-        
-        if 'application/json' in content_type:
+        provider = _get_tts_provider()
+        if not provider:
+            print("[TTS SSE] No TTS provider")
+            return JSONResponse({"success": False, "error": "No TTS provider available"}, status_code=500)
+
+        content_type = request.headers.get("content-type", "")
+
+        if "application/json" in content_type:
             data = await request.json()
-        elif 'multipart/form-data' in content_type or 'application/x-www-form-urlencoded' in content_type:
+        elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
             form = await request.form()
-            data = {}
-            for key, value in form.items():
-                if hasattr(value, 'file'):
-                    data[key] = value
-                else:
-                    data[key] = value
+            data = {key: value for key, value in form.items()}
         else:
             try:
                 body = await request.body()
-                import json as json_module
-                data = json_module.loads(body)
-            except:
+                data = json.loads(body)
+            except Exception:
                 data = {}
-        
-        text = data.get('text', '')
+
+        text = data.get("text", "")
         if isinstance(text, list):
-            text = ' '.join(text)
+            text = " ".join(text)
         text = shared.remove_emojis(str(text))
+
         print(f"[TTS SSE] Text: {text[:50]}...")
-        
+
         if not text:
             return JSONResponse({"success": False, "error": "Text required"}, status_code=400)
-        
-        final_speaker = data.get('speaker', 'default')
-        language = data.get('language', 'en')
-        
-        if not final_speaker or final_speaker.lower() == 'default':
-            final_speaker = 'default'
-        
+
+        final_speaker, language = resolve_speaker_tts(data)
         print(f"[TTS SSE] Speaker: {final_speaker}, Language: {language}")
-        
-        if not hasattr(tts_provider, 'generate_audio_stream'):
-            print(f"[TTS SSE] No generate_audio_stream method")
+
+        if not hasattr(provider, "generate_audio_stream"):
+            print("[TTS SSE] No generate_audio_stream method")
             return JSONResponse({"success": False, "error": "Provider doesn't support streaming"}, status_code=500)
-        
-        def generate_tts():
+
+        async def generate():
             try:
-                print(f"[TTS SSE] Starting generation")
-                for audio_chunk, sr, timing in tts_provider.generate_audio_stream(
+                print("[TTS SSE] Starting generation")
+                for audio_chunk, sr, timing in provider.generate_audio_stream(
                     text=text,
                     speaker=final_speaker,
                     language=language,
@@ -3060,29 +3123,29 @@ async def tts_stream_sse_endpoint(request: Request):
                     repetition_penalty=1.05,
                     top_p=0.95,
                     append_silence=False,
-                    max_new_tokens=1024
+                    max_new_tokens=1024,
                 ):
                     if audio_chunk is not None and len(audio_chunk) > 0:
                         pcm_int16 = (audio_chunk * 32767).astype(np.int16)
-                        audio_b64 = base64.b64encode(pcm_int16.tobytes()).decode('utf-8')
+                        audio_b64 = base64.b64encode(pcm_int16.tobytes()).decode("utf-8")
                         yield f"data: {json.dumps({'type': 'chunk', 'audio_b64': audio_b64, 'sample_rate': sr})}\n\n"
-                print(f"[TTS SSE] Generation complete")
+
+                print("[TTS SSE] Generation complete")
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
             except Exception as e:
                 print(f"[TTS SSE] Generation error: {e}")
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-        
-        async def generate():
-            try:
-                loop = asyncio.get_event_loop()
-                for chunk in await loop.run_in_executor(None, generate_tts):
-                    yield chunk
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            except Exception as e:
-                print(f"[TTS SSE] Async error: {e}")
-                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-        
-        return StreamingResponse(generate(), media_type="text/event-stream")
-    
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     except Exception as e:
         print(f"[TTS SSE] Outer error: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)

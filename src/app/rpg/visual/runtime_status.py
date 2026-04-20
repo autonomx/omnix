@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from packaging.version import InvalidVersion, Version
+
 
 def _safe_str(value: Any) -> str:
     if value is None:
@@ -34,6 +36,13 @@ def _fail_payload(provider: str, error: str, details: Dict[str, Any] | None = No
         "error": err,
         "details": dict(details or {}),
     }
+
+
+def _version_gte(value: str, minimum: str) -> bool:
+    try:
+        return Version(value) >= Version(minimum)
+    except (InvalidVersion, TypeError):
+        return False
 
 
 def validate_flux_klein_runtime() -> Dict[str, Any]:
@@ -71,6 +80,18 @@ def validate_flux_klein_runtime() -> Dict[str, Any]:
     except ImportError:
         pass
 
+    hh_ver = versions.get("huggingface_hub", "")
+    if hh_ver and _version_gte(hh_ver, "1.0.0"):
+        return _fail_payload(
+            "flux_klein",
+            (
+                "huggingface_hub_version_incompatible:"
+                f"{hh_ver} — FLUX runtime expects the pinned stack from "
+                "src/requirements-rpg-flux.txt. Reinstall that file in rpg-flux."
+            ),
+            {"versions": versions},
+        )
+
     try:
         import transformers  # noqa: F401
         versions["transformers"] = getattr(transformers, "__version__", "")
@@ -78,12 +99,10 @@ def validate_flux_klein_runtime() -> Dict[str, Any]:
         hint = ""
         exc_str = str(exc)
         if "is_offline_mode" in exc_str and "huggingface_hub" in exc_str:
-            hh_ver = versions.get("huggingface_hub", "unknown")
             hint = (
-                f" — huggingface_hub {hh_ver} is incompatible with "
-                f"installed transformers. Run: pip install -U "
-                f"'huggingface_hub>=0.25' or reinstall with: "
-                f"pip install -r requirements-rpg-visual-flux.txt"
+                " — installed huggingface_hub is incompatible with installed "
+                "transformers. Reinstall the pinned FLUX stack with: "
+                "pip install -r src/requirements-rpg-flux.txt"
             )
         return _fail_payload(
             "flux_klein",
@@ -106,9 +125,22 @@ def validate_flux_klein_runtime() -> Dict[str, Any]:
         return _fail_payload("flux_klein", f"safetensors_import_failed:{exc!r}", {"versions": versions})
 
     try:
-        from diffusers import Flux2KleinPipeline  # noqa: F401
+        # Verify that the installed diffusers build exposes a FLUX pipeline API.
+        # Do not hard-require a nonstandard symbol like Flux2KleinPipeline here.
+        from diffusers import FluxPipeline  # noqa: F401
     except Exception as exc:
-        return _fail_payload("flux_klein", f"flux_pipeline_import_failed:{exc!r}", {"versions": versions})
+        error = f"flux_pipeline_import_failed:{exc!r}"
+        return _fail_payload(
+            "flux_klein",
+            error,
+            {
+                "versions": versions,
+                "hint": (
+                    "diffusers is installed, but the expected FLUX pipeline API is not importable. "
+                    "Check the pinned diffusers version and the provider integration."
+                ),
+            },
+        )
 
     return _ok_payload("flux_klein", {"versions": versions})
 

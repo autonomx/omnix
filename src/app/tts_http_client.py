@@ -7,8 +7,17 @@ from typing import Any, Dict, Optional
 import requests
 
 
+def _normalize_base_url(value: str | None, default: str) -> str:
+    raw = (value or default).strip().strip('"').strip("'")
+    raw = raw.replace(" ", "")
+    return raw.rstrip("/")
+
+
 def _tts_base_url() -> str:
-    return os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101").strip().rstrip("/")
+    return _normalize_base_url(
+        os.environ.get("OMNIX_TTS_URL"),
+        "http://127.0.0.1:5101",
+    )
 
 
 def tts_health(timeout: float = 5.0) -> Dict[str, Any]:
@@ -42,6 +51,29 @@ def tts_speakers(timeout: float = 10.0) -> Dict[str, Any]:
         }
 
 
+def tts_generate_audio(
+    *,
+    text: str,
+    speaker: str,
+    language: str = "en",
+    speed: float = 1.0,
+    pitch: float = 0.0,
+    emotion: str = "neutral",
+    timeout: float = 120.0,
+) -> Dict[str, Any]:
+    payload = {
+        "text": text,
+        "speaker": speaker,
+        "language": language,
+        "speed": speed,
+        "pitch": pitch,
+        "emotion": emotion,
+    }
+    response = requests.post(f"{_tts_base_url()}/api/tts/generate_audio", json=payload, timeout=timeout)
+    response.raise_for_status()
+    return response.json()
+
+
 def tts_generate_stream_audio(
     *,
     text: str,
@@ -70,33 +102,6 @@ def tts_generate_stream_audio(
     }
     response = requests.post(
         f"{_tts_base_url()}/api/tts/generate_stream_audio",
-        json=payload,
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def tts_generate_audio(
-    *,
-    text: str,
-    speaker: str,
-    language: str = "en",
-    speed: float = 1.0,
-    pitch: float = 0.0,
-    emotion: str = "neutral",
-    timeout: float = 120.0,
-) -> Dict[str, Any]:
-    payload = {
-        "text": text,
-        "speaker": speaker,
-        "language": language,
-        "speed": speed,
-        "pitch": pitch,
-        "emotion": emotion,
-    }
-    response = requests.post(
-        f"{_tts_base_url()}/api/tts/generate_audio",
         json=payload,
         timeout=timeout,
     )

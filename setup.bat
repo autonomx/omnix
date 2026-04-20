@@ -1,5 +1,7 @@
 @echo off
 setlocal
+set "OMNIX_REPO_ROOT=%~dp0"
+set "OMNIX_REPO_ROOT=%OMNIX_REPO_ROOT:~0,-1%"
 
 REM ============================================
 REM Omnix - Split Runtime Setup Script (Windows)
@@ -198,22 +200,15 @@ REM rmdir /s /q "%USERPROFILE%\.cache\huggingface\modules\transformers_modules" 
 echo [FLUX] Cleanup complete.
 
 echo.
-echo [4/9][FLUX] Installing core requirements...
-"%RPG_FLUX_PYTHON%" -m pip install -r requirements.txt
-if errorlevel 1 (
-    echo ERROR: Failed to install requirements into %RPG_FLUX_ENV%
-    pause
-    exit /b 1
-)
+echo [4/9][FLUX] Installing main app requirements (excluding HF/FLUX stack)...
+"%RPG_FLUX_PYTHON%" -m pip install -r requirements-rpg-main-nohf.txt
+if errorlevel 1 goto :error
+
 
 echo.
 echo [5/9][FLUX] Installing centralized RPG-FLUX runtime requirements...
-"%RPG_FLUX_PYTHON%" -m pip install --no-deps -r src\requirements-rpg-flux.txt
-if errorlevel 1 (
-    echo ERROR: Failed to install src\requirements-rpg-flux.txt
-    pause
-    exit /b 1
-)
+"%RPG_FLUX_PYTHON%" -m pip install -r src\requirements-rpg-flux.txt
+if errorlevel 1 goto :error
 
 echo.
 echo [6/9][FLUX] TTS moved to dedicated %RPG_TTS_ENV% environment
@@ -235,23 +230,15 @@ echo.
 echo [9/9][FLUX] Verifying main app runtime...
 set PYTHONPATH=%CD%\src
 "%RPG_FLUX_PYTHON%" -c "import torch, torchvision, torchaudio; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('torchaudio:', torchaudio.__version__)"
-"%RPG_FLUX_PYTHON%" -m app.rpg.visual.runtime_status
-if errorlevel 1 (
-    echo =============================================
-    echo FLUX: NOT READY
-    echo =============================================
-    echo ERROR: Verification failed for %RPG_FLUX_ENV%
-    pause
-    exit /b 1
-)
-
-"%RPG_FLUX_PYTHON%" -m app.providers.vendor.qwen3_tts.runtime_status
-if errorlevel 1 (
-    echo =============================================
-    echo QWEN3-TTS: NOT READY
-    echo =============================================
-    echo WARNING: Qwen3 TTS runtime not available (will use external TTS service)
-)
+"%RPG_FLUX_PYTHON%" -c "import torch; print('torch:', torch.__version__)"
+if errorlevel 1 goto :error
+"%RPG_FLUX_PYTHON%" -c "import torchvision; print('torchvision:', torchvision.__version__)"
+if errorlevel 1 goto :error
+"%RPG_FLUX_PYTHON%" -c "import diffusers; print('diffusers OK')"
+if errorlevel 1 goto :error
+"%RPG_FLUX_PYTHON%" -c "from app.rpg.visual.runtime_status import validate_flux_klein_runtime; s=validate_flux_klein_runtime(); print('FLUX:', 'READY' if s.get('ready') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ready') else 1)"
+if errorlevel 1 goto :error
+echo [FLUX] Runtime verification complete.
 
 echo =============================================
 echo FLUX: READY
@@ -259,57 +246,41 @@ echo =============================================
 
 echo.
 echo =============================================
-echo Installing Vendored Qwen3-TTS into %RPG_TTS_ENV%
+echo Installing dedicated TTS service into %RPG_TTS_ENV%
 echo =============================================
 
-echo [1/5][TTS] Upgrading pip...
-"%RPG_TTS_PYTHON%" -m pip install --upgrade pip
-if errorlevel 1 (
-    echo ERROR: Failed to upgrade pip in %RPG_TTS_ENV%
-    pause
-    exit /b 1
+if not exist "%RPG_TTS_PYTHON%" (
+    echo Creating conda environment: %RPG_TTS_ENV%
+    call conda create -n %RPG_TTS_ENV% python=3.10 -y
+    if errorlevel 1 goto :error
 )
 
 echo.
-echo [2/5][TTS] Installing torch CUDA runtime...
-"%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
-if errorlevel 1 (
-    echo WARNING: CUDA torch failed for %RPG_TTS_ENV%, falling back to CPU
-    "%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1
-    if errorlevel 1 (
-        echo ERROR: Failed to install torch in %RPG_TTS_ENV%
-        pause
-        exit /b 1
-    )
-)
+echo [1/5][TTS] Upgrading pip/setuptools/wheel...
+"%RPG_TTS_PYTHON%" -m pip install --upgrade pip wheel==0.43.0 setuptools==81.0.0
+if errorlevel 1 goto :error
 
 echo.
-echo [3/5][TTS] Installing TTS runtime requirements...
+echo [2/5][TTS] Installing dedicated TTS requirements...
 "%RPG_TTS_PYTHON%" -m pip install -r src\requirements-rpg-tts.txt
-if errorlevel 1 (
-    echo ERROR: Failed to install src\requirements-rpg-tts.txt
-    pause
-    exit /b 1
-)
+if errorlevel 1 goto :error
 
 echo.
-echo [4/5][TTS] Verifying vendored Qwen3-TTS runtime...
-set PYTHONPATH=%CD%\src
-"%RPG_TTS_PYTHON%" -m app.providers.vendor.qwen3_tts.runtime_status
-if errorlevel 1 (
-    echo =============================================
-    echo QWEN3-TTS: NOT READY
-    echo =============================================
-    pause
-    exit /b 1
-)
+echo [3/5][TTS] Verifying tts_server import...
+"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; print('tts_server import OK')"
+if errorlevel 1 goto :error
 
 echo.
-echo [5/5][TTS] TTS environment ready.
+echo [4/5][TTS] Verifying HTTP TTS contract boot path...
+"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; app = tts_server.app; print('tts_server app OK')"
+if errorlevel 1 goto :error
 
-echo =============================================
-echo QWEN3-TTS: READY
-echo =============================================
+echo.
+echo [5/5][TTS] Verifying provider status helper...
+"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; s = tts_server.get_tts_service_status(); print('TTS:', 'READY' if s.get('ok') else 'NOT READY', s.get('error',''))"
+if errorlevel 1 goto :error
+
+echo [TTS] Runtime verification complete.
 
 echo.
 echo =============================================
@@ -420,3 +391,11 @@ echo   - start_all.bat must use exact interpreter paths
 echo.
 pause
 endlocal
+
+:error
+echo.
+echo =============================================
+echo SETUP FAILED
+echo =============================================
+pause
+exit /b 1

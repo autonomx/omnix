@@ -1,8 +1,8 @@
-# Omnix optional RPG FLUX/TTS runtime requirements
+# Omnix optional RPG FLUX runtime requirements
 # Installed by setup.bat into the rpg-flux conda environment.
 #
-# Keep this file focused on the fragile optional runtime stack.
-# Do not move broad app requirements here.
+# This file must fully pin the fragile HF stack used by FLUX runtime validation.
+# Do not rely on broad requirements.txt ranges for these packages.
 
 numpy==1.26.4
 soundfile>=0.12,<1
@@ -12,7 +12,11 @@ Pillow>=10,<12
 diffusers>=0.33,<0.36
 accelerate==1.12.0
 safetensors>=0.5,<0.7
-huggingface_hub>=0.30,<0.35
+huggingface_hub==0.34.6
+transformers==4.57.3
+tokenizers==0.22.2
+psutil>=5.9,<7
+regex>=2024.0.0
 
 # Common utility/runtime deps used by vendored/model code
 packaging==23.2

@@ -8,13 +8,26 @@ import requests
 from app.rpg.visual.runtime_status import validate_flux_klein_runtime
 
 
-def _service_status_payload(name: str, ok: bool, status: str, details: Dict[str, Any] | None = None, error: str = "") -> Dict[str, Any]:
+def _normalize_base_url(value: str | None, default: str) -> str:
+    raw = (value or default).strip().strip('"').strip("'")
+    raw = raw.replace(" ", "")
+    return raw.rstrip("/")
+
+
+def _service_status_payload(
+    *,
+    name: str,
+    ok: bool,
+    status: str,
+    details: Dict[str, Any] | None = None,
+    error: str = "",
+) -> Dict[str, Any]:
     return {
         "name": name,
-        "ok": bool(ok),
+        "ok": ok,
         "status": status,
-        "error": error or "",
         "details": dict(details or {}),
+        "error": error,
     }
 
 
@@ -52,12 +65,18 @@ def _probe_http_service(name: str, url: str, timeout: float = 4.0) -> Dict[str, 
 
 
 def get_tts_runtime_status() -> Dict[str, Any]:
-    url = os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101").strip()
+    url = _normalize_base_url(
+        os.environ.get("OMNIX_TTS_URL"),
+        "http://127.0.0.1:5101",
+    )
     return _probe_http_service("tts", url)
 
 
 def get_stt_runtime_status() -> Dict[str, Any]:
-    url = os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201").strip()
+    url = _normalize_base_url(
+        os.environ.get("OMNIX_STT_URL"),
+        "http://127.0.0.1:5201",
+    )
     return _probe_http_service("stt", url)
 
 
