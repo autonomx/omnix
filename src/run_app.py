@@ -1037,9 +1037,12 @@ Just return the title, nothing else."""
 async def get_tts_speakers():
     """Get available TTS speakers/voices"""
     try:
-        return tts_speakers()
-    except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+        result = tts_speakers()
+        # tts_speakers() now always returns a dict (never raises)
+        # but if it somehow indicates failure, still return 200 with the data
+        return result
+    except Exception:
+        return {"success": False, "speakers": [], "error": "TTS speaker lookup failed"}
 
 
 @app.get("/api/health")

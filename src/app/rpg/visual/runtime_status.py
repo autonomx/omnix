@@ -66,8 +66,30 @@ def validate_flux_klein_runtime() -> Dict[str, Any]:
         return _fail_payload("flux_klein", f"diffusers_import_failed:{exc!r}", {"versions": versions})
 
     try:
+        import huggingface_hub  # noqa: F401
+        versions["huggingface_hub"] = getattr(huggingface_hub, "__version__", "")
+    except ImportError:
+        pass
+
+    try:
         import transformers  # noqa: F401
         versions["transformers"] = getattr(transformers, "__version__", "")
+    except ImportError as exc:
+        hint = ""
+        exc_str = str(exc)
+        if "is_offline_mode" in exc_str and "huggingface_hub" in exc_str:
+            hh_ver = versions.get("huggingface_hub", "unknown")
+            hint = (
+                f" — huggingface_hub {hh_ver} is incompatible with "
+                f"installed transformers. Run: pip install -U "
+                f"'huggingface_hub>=0.25' or reinstall with: "
+                f"pip install -r requirements-rpg-visual-flux.txt"
+            )
+        return _fail_payload(
+            "flux_klein",
+            f"transformers_import_failed:{exc!r}{hint}",
+            {"versions": versions},
+        )
     except Exception as exc:
         return _fail_payload("flux_klein", f"transformers_import_failed:{exc!r}", {"versions": versions})
 
