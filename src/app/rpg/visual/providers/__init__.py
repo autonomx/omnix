@@ -1,43 +1,25 @@
-"""Phase 12.10 / 12.12 — Visual provider registry."""
 from __future__ import annotations
 
 from typing import Any, Dict
 
 from app.shared import load_settings
+
 from .base import BaseImageProvider, ImageGenerationResult
-from .comfy_provider import ComfyImageProvider
+from .disabled_provider import DisabledImageProvider
 from .flux_klein_provider import FluxKleinImageProvider
-from .mock_provider import MockImageProvider
-from .openai_provider import OpenAIImageProvider
-from ..runtime_status import validate_flux_klein_runtime
-
-
-class UnavailableImageProvider(BaseImageProvider):
-    def __init__(self, error: str, provider_name: str = "unavailable"):
-        self._error = str(error or "").strip() or "provider_unavailable"
-        self.provider_name = provider_name
-
-    def generate(
-        self,
-        *,
-        prompt: str,
-        seed: int | None,
-        style: str,
-        model: str,
-        kind: str,
-        target_id: str,
-    ) -> ImageGenerationResult:
-        return ImageGenerationResult(
-            ok=False,
-            status="failed",
-            error=self._error,
-            moderation_status="approved",
-            moderation_reason="",
-        )
+from .registry import (
+    build_visual_provider,
+    get_visual_provider_runtime_validator,
+    has_visual_provider,
+    list_visual_provider_keys,
+    list_visual_provider_options,
+    resolve_visual_provider_key,
+)
 
 _IMAGE_PROVIDER_CACHE: Dict[str, Any] = {
     "key": None,
     "instance": None,
+    "provider_key": None,
 }
 
 
@@ -48,7 +30,8 @@ def _visual_settings() -> Dict[str, Any]:
 
 def image_generation_enabled() -> bool:
     visual = _visual_settings()
-    return bool(visual.get("enabled", False))
+    provider_key = resolve_visual_provider_key(visual)
+    return provider_key != "disabled"
 
 
 def is_image_provider_loaded() -> bool:
@@ -56,6 +39,9 @@ def is_image_provider_loaded() -> bool:
 
 
 def get_loaded_image_provider_name() -> str:
+    provider_key = _IMAGE_PROVIDER_CACHE.get("provider_key")
+    if provider_key:
+        return str(provider_key)
     instance = _IMAGE_PROVIDER_CACHE.get("instance")
     if instance is None:
         return ""
@@ -66,44 +52,57 @@ def unload_image_provider_cache() -> None:
     instance = _IMAGE_PROVIDER_CACHE.get("instance")
     if instance is not None:
         try:
-            instance.unload()
+            unload = getattr(instance, "unload", None)
+            if callable(unload):
+                unload()
         except Exception:
             pass
     _IMAGE_PROVIDER_CACHE["key"] = None
     _IMAGE_PROVIDER_CACHE["instance"] = None
+    _IMAGE_PROVIDER_CACHE["provider_key"] = None
 
 
 def get_image_provider() -> BaseImageProvider:
-    """Return the configured image provider."""
-    visual = _visual_settings()
-    provider = str(visual.get("provider") or "mock").strip().lower()
-    enabled = bool(visual.get("enabled", False))
-    cache_key = f"{enabled}:{provider}:{visual}"
+    """
+    Backwards-compatible provider accessor.
 
-    if _IMAGE_PROVIDER_CACHE.get("key") == cache_key and _IMAGE_PROVIDER_CACHE.get("instance") is not None:
+    Existing routes still import and call this function. Keep it stable while
+    the app migrates toward explicit registry-based construction.
+    """
+    visual = _visual_settings()
+    provider_key = resolve_visual_provider_key(visual)
+    cache_key = f"{provider_key}:{visual!r}"
+
+    if (
+        _IMAGE_PROVIDER_CACHE.get("key") == cache_key
+        and _IMAGE_PROVIDER_CACHE.get("instance") is not None
+    ):
         return _IMAGE_PROVIDER_CACHE["instance"]
 
     unload_image_provider_cache()
 
-    if not enabled:
-        instance = MockImageProvider()
-    elif provider == "comfy":
-        instance = ComfyImageProvider()
-    elif provider == "openai":
-        instance = OpenAIImageProvider()
-    elif provider == "flux_klein":
-        flux_config = dict(visual.get("flux_klein") or {})
-        flux_status = validate_flux_klein_runtime()
-        if not flux_status.get("ready"):
-            instance = UnavailableImageProvider(
-                f"flux_klein_missing_runtime:{flux_status.get('error')}",
-                provider_name="flux_klein",
-            )
-        else:
-            instance = FluxKleinImageProvider(flux_config)
-    else:
-        instance = MockImageProvider()
+    selected_key, instance = build_visual_provider(visual)
 
     _IMAGE_PROVIDER_CACHE["key"] = cache_key
     _IMAGE_PROVIDER_CACHE["instance"] = instance
+    _IMAGE_PROVIDER_CACHE["provider_key"] = selected_key
     return instance
+
+
+__all__ = [
+    "BaseImageProvider",
+    "ImageGenerationResult",
+    "DisabledImageProvider",
+    "FluxKleinImageProvider",
+    "image_generation_enabled",
+    "is_image_provider_loaded",
+    "get_loaded_image_provider_name",
+    "unload_image_provider_cache",
+    "get_image_provider",
+    "build_visual_provider",
+    "get_visual_provider_runtime_validator",
+    "has_visual_provider",
+    "list_visual_provider_keys",
+    "list_visual_provider_options",
+    "resolve_visual_provider_key",
+]

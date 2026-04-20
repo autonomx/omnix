@@ -1,5 +1,6 @@
 import app.rpg.visual.providers as providers
 from app.rpg.visual.runtime_status import validate_flux_klein_runtime
+from app.rpg.visual.flux_pipeline_compat import validate_flux_pipeline_import
 
 
 def test_flux_klein_runtime_preflight_is_ready_for_real_environment():
@@ -13,9 +14,13 @@ def test_flux_klein_runtime_preflight_is_ready_for_real_environment():
     payload = validate_flux_klein_runtime()
     assert payload.get("ready") is True, payload
 
-    from diffusers import Flux2KleinPipeline
-
-    assert Flux2KleinPipeline is not None
+    compat = validate_flux_pipeline_import()
+    assert compat["ok"] is True, compat
+    assert compat["details"].get("pipeline_class") in {
+        "FluxPipeline",
+        "Flux2KleinPipeline",
+    }
+    assert compat["details"].get("pipeline_resolved_from")
 
 
 def test_flux_klein_provider_selection_returns_real_provider_when_runtime_is_ready(monkeypatch):

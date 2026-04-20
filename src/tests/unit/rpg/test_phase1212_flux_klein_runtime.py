@@ -1,4 +1,5 @@
 import importlib
+from app.rpg.visual.flux_pipeline_compat import validate_flux_pipeline_import
 
 
 def test_flux_klein_runtime_dependencies_are_importable():
@@ -20,9 +21,13 @@ def test_flux_klein_runtime_dependencies_are_importable():
     assert accelerate is not None
     assert safetensors is not None
 
-    from diffusers import Flux2KleinPipeline
-
-    assert Flux2KleinPipeline is not None
+    compat = validate_flux_pipeline_import()
+    assert compat["ok"] is True, compat
+    assert compat["details"].get("pipeline_class") in {
+        "FluxPipeline",
+        "Flux2KleinPipeline",
+    }
+    assert compat["details"].get("pipeline_resolved_from")
 
 
 from app.rpg.visual.providers.flux_klein_provider import FluxKleinImageProvider

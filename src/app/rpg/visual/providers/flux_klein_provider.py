@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .base import BaseImageProvider, ImageGenerationResult
+from ..flux_pipeline_compat import build_flux_pipeline, validate_flux_pipeline_import
 from ..runtime_status import validate_flux_klein_runtime
 
 _PIPELINE_LOCK = threading.Lock()
@@ -147,9 +148,15 @@ class FluxKleinImageProvider(BaseImageProvider):
                         sys.path.insert(0, path)
                 
                 import torch
-                from diffusers import Flux2KleinPipeline
             except Exception as exc:
                 raise RuntimeError(f"flux_klein_missing_runtime:{exc}") from exc
+
+            compat = validate_flux_pipeline_import()
+            if not compat.get("ok"):
+                raise RuntimeError(f"flux_klein_missing_runtime:{compat.get('error')}")
+
+            pipeline_name = (compat.get("details") or {}).get("pipeline_class", "unknown")
+            print(f"[FLUX] Using pipeline: {pipeline_name}")
 
             repo_or_path = self._repo_id()
             local_dir = self._local_dir()
@@ -157,7 +164,7 @@ class FluxKleinImageProvider(BaseImageProvider):
             if local_dir and os.path.isdir(local_dir) and any(Path(local_dir).iterdir()):
                 repo_or_path = local_dir
 
-            pipe = Flux2KleinPipeline.from_pretrained(
+            pipe = build_flux_pipeline(
                 repo_or_path,
                 torch_dtype=self._dtype(),
                 local_files_only=bool(prefer_local and local_dir and os.path.isdir(local_dir)),

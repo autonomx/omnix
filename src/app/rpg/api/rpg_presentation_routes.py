@@ -1861,7 +1861,7 @@ async def unload_visual_provider_route(request: Request):
     settings["rpg_visual"] = visual
     save_settings(settings)
     unload_image_provider_cache()
-    return _jsonify({"ok": True, "enabled": False, "provider": "mock"})
+    return _jsonify({"ok": True, "enabled": False, "provider": "disabled"})
 
 
 # ---- Asset Cleanup ----

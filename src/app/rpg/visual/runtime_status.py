@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from .flux_pipeline_compat import validate_flux_pipeline_import
+
 from packaging.version import InvalidVersion, Version
 
 
@@ -124,25 +126,52 @@ def validate_flux_klein_runtime() -> Dict[str, Any]:
     except Exception as exc:
         return _fail_payload("flux_klein", f"safetensors_import_failed:{exc!r}", {"versions": versions})
 
-    try:
-        # Verify that the installed diffusers build exposes a FLUX pipeline API.
-        # Do not hard-require a nonstandard symbol like Flux2KleinPipeline here.
-        from diffusers import FluxPipeline  # noqa: F401
-    except Exception as exc:
-        error = f"flux_pipeline_import_failed:{exc!r}"
+    compat = validate_flux_pipeline_import()
+    if not compat.get("ok"):
+        details = {"versions": versions}
+        details.update(dict(compat.get("details") or {}))
         return _fail_payload(
             "flux_klein",
-            error,
-            {
-                "versions": versions,
-                "hint": (
-                    "diffusers is installed, but the expected FLUX pipeline API is not importable. "
-                    "Check the pinned diffusers version and the provider integration."
-                ),
-            },
+            compat.get("error", "flux_pipeline_import_failed"),
+            details,
         )
 
-    return _ok_payload("flux_klein", {"versions": versions})
+    payload = {"versions": versions}
+    payload.update(dict(compat.get("details") or {}))
+    return _ok_payload("flux_klein", payload)
+
+
+def validate_visual_runtime(provider_key: str | None = None) -> Dict[str, Any]:
+    from .providers.registry import get_visual_provider_runtime_validator
+
+    key = (provider_key or "").strip().lower() or "flux_klein"
+
+    if key == "disabled":
+        return {
+            "provider": "disabled",
+            "ready": True,
+            "status": "disabled",
+            "summary": "VISUALS DISABLED",
+            "error": "",
+            "details": {
+                "enabled": False,
+            },
+        }
+
+    runtime_validator = get_visual_provider_runtime_validator(key)
+    if runtime_validator == "flux_klein":
+        return validate_flux_klein_runtime()
+
+    return {
+        "provider": key,
+        "ready": False,
+        "status": "not_ready",
+        "summary": f"{key.upper()} NOT READY",
+        "error": "unknown_visual_provider",
+        "details": {
+            "provider_key": key,
+        },
+    }
 
 
 def log_flux_klein_runtime_status() -> Dict[str, Any]:
@@ -154,4 +183,15 @@ def log_flux_klein_runtime_status() -> Dict[str, Any]:
             f"[RPG][VISUAL][FLUX] FLUX NOT READY "
             f"error={status.get('error')} details={status.get('details', {})}"
         )
+    return status
+
+
+def log_visual_runtime_status(provider_key: str | None = None) -> Dict[str, Any]:
+    status = validate_visual_runtime(provider_key)
+    print(
+        "[RPG][VISUAL]",
+        status.get("summary"),
+        status.get("error", ""),
+        status.get("details", {}),
+    )
     return status
