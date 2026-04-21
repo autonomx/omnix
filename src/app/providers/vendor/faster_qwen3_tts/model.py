@@ -82,12 +82,16 @@ def _ensure_transformers_qwen3_compat() -> None:
     if hasattr(transformers, "utils"):
         transformers.utils.auto_docstring = _noop
         transformers.utils.auto_class_docstring = _noop
+        if not hasattr(transformers.utils, "can_return_tuple"):
+            transformers.utils.can_return_tuple = _noop
 
     # Patch sys.modules binding (critical)
     utils_module = sys.modules.get("transformers.utils")
     if utils_module:
         utils_module.auto_docstring = _noop
         utils_module.auto_class_docstring = _noop
+        if not hasattr(utils_module, "can_return_tuple"):
+            utils_module.can_return_tuple = _noop
 
     # ---- 3. Pre-import hook to ensure patch BEFORE vendor import ----
     # This ensures any "from transformers.utils import ..." sees patched version
@@ -97,8 +101,12 @@ def _ensure_transformers_qwen3_compat() -> None:
     # Re-apply after reload (important)
     transformers.utils.auto_docstring = _noop
     transformers.utils.auto_class_docstring = _noop
+    if not hasattr(transformers.utils, "can_return_tuple"):
+        transformers.utils.can_return_tuple = _noop
     sys.modules["transformers.utils"].auto_docstring = _noop
     sys.modules["transformers.utils"].auto_class_docstring = _noop
+    if not hasattr(sys.modules["transformers.utils"], "can_return_tuple"):
+        sys.modules["transformers.utils"].can_return_tuple = _noop
 
     # ---- 4. Provide missing masking_utils module ----
     if "transformers.masking_utils" not in sys.modules:
@@ -150,22 +158,44 @@ def _ensure_transformers_qwen3_compat() -> None:
     except Exception:
         pass
 
-    # ---- 7. Patch missing check_model_inputs from utils.generic ----
+    # ---- 7. Patch missing layer_type_validation from configuration_utils ----
+    try:
+        import transformers.configuration_utils
+        if not hasattr(transformers.configuration_utils, "layer_type_validation"):
+            logger.info("Adding missing layer_type_validation compatibility shim")
+
+            def layer_type_validation(*args, **kwargs):
+                return None
+
+            transformers.configuration_utils.layer_type_validation = layer_type_validation
+            sys.modules["transformers.configuration_utils"].layer_type_validation = layer_type_validation
+    except Exception:
+        pass
+
+    # ---- 8. Patch missing check_model_inputs from utils.generic ----
     try:
         import transformers.utils.generic
         if not hasattr(transformers.utils.generic, "check_model_inputs"):
             logger.info("Adding missing check_model_inputs compatibility shim")
 
-            def check_model_inputs(*args, **kwargs):
-                # This function was renamed/removed in newer transformers versions
-                return True
+            def check_model_inputs(*decorator_args, **decorator_kwargs):
+                # This function was renamed/removed in newer transformers versions.
+                # Mirror the decorator contract used by vendored Qwen modules:
+                # support both ``@check_model_inputs`` and ``@check_model_inputs()``.
+                if decorator_args and len(decorator_args) == 1 and callable(decorator_args[0]) and not decorator_kwargs:
+                    return decorator_args[0]
+
+                def decorator(fn):
+                    return fn
+
+                return decorator
 
             transformers.utils.generic.check_model_inputs = check_model_inputs
             sys.modules["transformers.utils.generic"].check_model_inputs = check_model_inputs
     except Exception:
         pass
 
-    # ---- 8. Ensure we patch BEFORE the vendor module imports anything ----
+    # ---- 9. Ensure we patch BEFORE the vendor module imports anything ----
     # Force clear any cached qwen_tts modules that might have already imported broken references
     for key in list(sys.modules.keys()):
         if key.startswith("app.providers.vendor.qwen"):
@@ -211,7 +241,7 @@ def _ensure_transformers_qwen3_compat() -> None:
         if not hasattr(transformers.modeling_flash_attention_utils, "FlashAttentionKwargs"):
             logger.info("Adding missing FlashAttentionKwargs compatibility shim")
             # This was renamed/moved/removed in newer transformers
-            from typing import TypedDict, Optional, Any
+            from typing import TypedDict, Optional
 
             class FlashAttentionKwargs(TypedDict, total=False):
                 attention_dropout: Optional[float]
