@@ -90,6 +90,36 @@ class TestTtsServiceBackend:
             assert "name" in speaker
             assert speaker["id"] and speaker["name"]
 
+    @pytest.mark.e2e
+    def test_tts_server_real_generation(self, tts_service_available: bool) -> None:
+        """
+        FULL real path:
+        HTTP → TTS server → provider → model → audio
+
+        Requires:
+        - server running on :5101
+        - model actually loadable
+        """
+
+        url = f"{TTS_SERVICE_BASE}/api/tts/generate_audio"
+
+        payload = {
+            "text": "hello world",
+            "speaker": "Maya",
+            "language": "en"
+        }
+
+        try:
+            r = requests.post(url, json=payload, timeout=30)
+        except Exception as e:
+            pytest.fail(f"TTS server unreachable: {e}")
+
+        assert r.status_code == 200, r.text
+
+        data = r.json()
+        assert data.get("ok") is True
+        assert "audio_base64" in data
+
 
 class TestMainApiProxy:
     """Tests for the main API at port 5000 which proxies TTS requests."""

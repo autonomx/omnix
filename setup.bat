@@ -262,7 +262,12 @@ if errorlevel 1 goto :error
 
 echo.
 echo [2/5][TTS] Installing dedicated TTS requirements...
-"%RPG_TTS_PYTHON%" -m pip install -r src\requirements-rpg-tts.txt
+"%RPG_TTS_PYTHON%" -m pip install --force-reinstall -r src\requirements-rpg-tts.txt
+if errorlevel 1 goto :error
+
+echo.
+echo [VERIFY][TTS] transformers/tokenizers/sox/onnxruntime versions...
+"%RPG_TTS_PYTHON%" -c "import transformers, tokenizers, sox, onnxruntime; print('transformers:', transformers.__version__); print('tokenizers:', tokenizers.__version__); print('sox: OK'); print('onnxruntime:', onnxruntime.__version__)"
 if errorlevel 1 goto :error
 
 echo.
@@ -353,7 +358,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [6/7][STT] Pre-downloading Parakeet model...
+echo [7/7][STT] Pre-downloading Parakeet model...
 "%RPG_STT_PYTHON%" -c "from nemo.collections.asr.models import ASRModel; ASRModel.from_pretrained('nvidia/parakeet-tdt-0.6b-v2'); print('Parakeet model downloaded successfully!')" 2>nul
 if errorlevel 1 (
     echo WARNING: Failed to pre-download Parakeet model
@@ -361,7 +366,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [7/7][STT] Verifying STT runtime...
+echo [VERIFY][STT] Verifying STT runtime...
 "%RPG_STT_PYTHON%" -c "import torch, torchvision, torchaudio; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('torchaudio:', torchaudio.__version__)"
 "%RPG_STT_PYTHON%" -c "import nemo.collections.asr as nemo_asr; print('NeMo ASR: OK')"
 if errorlevel 1 (

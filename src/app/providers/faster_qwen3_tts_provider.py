@@ -233,7 +233,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self.device = self._model_config.get('device', 'cuda')
         self.dtype = self._model_config.get('dtype', 'bfloat16')
         self.max_seq_len = self._model_config.get('max_seq_len', 2048)
-        
+
         logger.info(f"FasterQwen3TTS configured: model={self._model_config['model_name']}, device={self.device}")
     
     def _get_model(self):
@@ -260,6 +260,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 
                 # Load vendored TTS model
                 model_name = self._model_config['model_name']
+
                 model = get_or_create_tts_model(
                     model_name=model_name,
                     device=self.device,

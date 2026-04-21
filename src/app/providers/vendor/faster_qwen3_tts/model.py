@@ -1,6 +1,6 @@
 """
 FasterQwen3TTS: Real-time TTS using CUDA graph capture.
-
+ 
 Wrapper class that provides a Qwen3-TTS API while using
 CUDA graphs for 6-10x speedup.
 """
@@ -148,6 +148,9 @@ class FasterQwen3TTS:
         self.sample_rate = 12000  # Qwen3-TTS uses 12kHz
         self._warmed_up = False
         self._voice_prompt_cache = {}  # Cache (ref_audio, ref_text) -> (vcp, ref_ids)
+        self._cuda_graphs_enabled = (
+            predictor_graph is not None and talker_graph is not None and str(device).startswith("cuda")
+        )
         
     @classmethod
     def from_pretrained(
@@ -173,62 +176,71 @@ class FasterQwen3TTS:
         """
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
-            
-        if device != "cuda" or not torch.cuda.is_available():
-            raise ValueError("CUDA graphs require CUDA device")
-        
+
+        normalized_device = str(device or "cpu").strip().lower()
+        cuda_enabled = normalized_device.startswith("cuda") and torch.cuda.is_available()
+
         logger.info(f"Loading Qwen3-TTS model: {model_name}")
-        
+
         # Import here to avoid dependency issues (and suppress flash-attn warning)
         with suppress_flash_attn_warning():
             _ensure_transformers_qwen3_compat()
             from app.providers.vendor.qwen_tts import Qwen3TTSModel
-        from .predictor_graph import PredictorGraph
-        from .talker_graph import TalkerGraph
+
         # Load base model using qwen-tts library
+        device_map = "cuda:0" if cuda_enabled else normalized_device
         base_model = Qwen3TTSModel.from_pretrained(
             model_name,
-            device_map="cuda:0",
+            device_map=device_map,
             torch_dtype=dtype,
             attn_implementation=attn_implementation,
         )
-        
-        talker = base_model.model.talker
-        talker_config = base_model.model.config.talker_config
 
-        # Extract predictor config from loaded model
-        predictor = talker.code_predictor
-        pred_config = predictor.model.config
-        talker_hidden = talker_config.hidden_size
+        predictor_graph = None
+        talker_graph = None
 
-        # Build CUDA graphs
-        logger.info("Building CUDA graphs...")
-        predictor_graph = PredictorGraph(
-            predictor,
-            pred_config,
-            talker_hidden,
-            device=device,
-            dtype=dtype,
-            do_sample=True,
-            top_k=50,
-            temperature=0.9,
-        )
-        
-        talker_graph = TalkerGraph(
-            talker.model,
-            talker_config,
-            device=device,
-            dtype=dtype,
-            max_seq_len=max_seq_len,
-        )
-        
-        logger.info("CUDA graphs initialized (will capture on first run)")
-        
+        if cuda_enabled:
+            from .predictor_graph import PredictorGraph
+            from .talker_graph import TalkerGraph
+
+            talker = base_model.model.talker
+            talker_config = base_model.model.config.talker_config
+
+            # Extract predictor config from loaded model
+            predictor = talker.code_predictor
+            pred_config = predictor.model.config
+            talker_hidden = talker_config.hidden_size
+
+            # Build CUDA graphs
+            logger.info("Building CUDA graphs...")
+            predictor_graph = PredictorGraph(
+                predictor,
+                pred_config,
+                talker_hidden,
+                device=normalized_device,
+                dtype=dtype,
+                do_sample=True,
+                top_k=50,
+                temperature=0.9,
+            )
+            
+            talker_graph = TalkerGraph(
+                talker.model,
+                talker_config,
+                device=normalized_device,
+                dtype=dtype,
+                max_seq_len=max_seq_len,
+            )
+            
+            logger.info("CUDA graphs initialized (will capture on first run)")
+        else:
+            logger.info("CUDA unavailable or non-CUDA device requested; using non-CUDA Qwen3-TTS path without CUDA graphs")
+
         return cls(
             base_model=base_model,
             predictor_graph=predictor_graph,
             talker_graph=talker_graph,
-            device=device,
+            device=normalized_device,
             dtype=dtype,
             max_seq_len=max_seq_len,
         )
@@ -237,7 +249,11 @@ class FasterQwen3TTS:
         """Warm up and capture CUDA graphs with given prefill length."""
         if self._warmed_up:
             return
-            
+
+        if not self._cuda_graphs_enabled:
+            self._warmed_up = True
+            return
+
         logger.info("Warming up CUDA graphs...")
         self.predictor_graph.capture(num_warmup=3)
         self.talker_graph.capture(prefill_len=prefill_len, num_warmup=3)
