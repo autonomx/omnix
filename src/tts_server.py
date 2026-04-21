@@ -136,7 +136,7 @@ def _pcm16_chunks_to_wav_response(chunks: List[bytes], sample_rate: int) -> Resp
     with wave.open(buffer, "wb") as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate or 24000)
+        wav_file.setframerate(sample_rate)
         wav_file.writeframes(b"".join(chunks))
     return Response(content=buffer.getvalue(), media_type="audio/wav")
 
@@ -156,12 +156,18 @@ def _stream_fallback_response(provider: Any, request: TtsGenerateStreamRequest) 
         append_silence=request.append_silence,
         max_new_tokens=request.max_new_tokens,
     )
-    audio_base64 = str(fallback_result.get("audio_base64") or fallback_result.get("audio") or "")
+    audio_base64 = fallback_result.get("audio_base64")
+    if not isinstance(audio_base64, str) or not audio_base64:
+        audio_value = fallback_result.get("audio")
+        audio_base64 = audio_value if isinstance(audio_value, str) else ""
     if not fallback_result.get("success") or not audio_base64:
         return None
+    media_type = fallback_result.get("format")
+    if not isinstance(media_type, str) or not media_type:
+        media_type = "audio/wav"
     return _wav_response_from_base64(
         audio_base64,
-        media_type=str(fallback_result.get("format") or "audio/wav"),
+        media_type=media_type,
     )
 
 
