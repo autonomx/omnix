@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import logging
 import base64
 import io
 import urllib.request
@@ -27,6 +28,8 @@ import torch
 from transformers import AutoConfig, AutoModel, AutoProcessor
 
 from ..core.models import Qwen3TTSConfig, Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
+
+logger = logging.getLogger(__name__)
 
 AudioLike = Union[
     str,                     # wav path, URL, base64
@@ -109,7 +112,24 @@ class Qwen3TTSModel:
         AutoModel.register(Qwen3TTSConfig, Qwen3TTSForConditionalGeneration)
         AutoProcessor.register(Qwen3TTSConfig, Qwen3TTSProcessor)
 
-        model = AutoModel.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        try:
+            model = AutoModel.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        except AttributeError as exc:
+            message = str(exc or "")
+            if "'NoneType' object has no attribute 'get'" not in message:
+                raise
+
+            logger.warning(
+                "Qwen3-TTS AutoModel.from_pretrained failed with safetensors metadata "
+                "compatibility issue; reapplying shim and retrying once: %s",
+                exc,
+            )
+
+            # Local import avoids circular import at module import time.
+            from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+
+            _ensure_transformers_qwen3_compat()
+            model = AutoModel.from_pretrained(pretrained_model_name_or_path, **kwargs)
         if not isinstance(model, Qwen3TTSForConditionalGeneration):
             raise TypeError(
                 f"AutoModel returned {type(model)}, expected Qwen3TTSForConditionalGeneration. "

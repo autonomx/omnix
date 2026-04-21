@@ -29,6 +29,51 @@ def is_service_running(url: str, timeout: float = 2.0) -> bool:
         return False
 
 
+def _pick_test_speaker() -> str:
+    """
+    Resolve a speaker dynamically from the live TTS service so this test does not
+    become brittle if the built-in default set changes.
+    """
+    response = requests.get(f"{TTS_SERVICE_BASE}/api/tts/speakers", timeout=5)
+    response.raise_for_status()
+    data = response.json()
+    speakers = data.get("speakers") or []
+    assert speakers, f"No speakers returned from TTS service: {data}"
+
+    preferred_ids = ("Maya", "maya")
+    for speaker in speakers:
+        speaker_id = str(speaker.get("id") or "")
+        if speaker_id in preferred_ids:
+            return speaker_id
+
+    return str(speakers[0]["id"])
+
+
+def _assert_no_known_tts_loader_failure(text: str) -> None:
+    """
+    Guardrail for the exact failure modes seen in production logs.
+    We intentionally check response text for these signatures because
+    one route can falsely appear 'successful' while another is actually
+    failing underneath.
+    """
+    lowered = (text or "").lower()
+    forbidden_fragments = [
+        "model loading failed",
+        "failed to load vendored qwen3-tts model",
+        "failed to load fasterqwen3tts model",
+        "nonetype' object has no attribute 'get'",
+        "incompatible safetensors file",
+        "file metadata is not ['pt', 'tf', 'flax', 'mlx'] but none",
+        "falling back to reference preview audio",
+        "reference preview audio",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment not in lowered, (
+            f"TTS response leaked known loader/fallback failure fragment: {fragment!r}\n"
+            f"Response text:\n{text}"
+        )
+
+
 @pytest.fixture(scope="module")
 def tts_service_available() -> bool:
     """Fixture to skip tests if TTS service is not running."""
@@ -119,6 +164,74 @@ class TestTtsServiceBackend:
         data = r.json()
         assert data.get("success") is True, f"Expected success=True, got: {data}"
         assert "audio_base64" in data
+
+    @pytest.mark.e2e
+    def test_tts_server_stream_and_nonstream_are_both_real_and_consistent(
+        self,
+        tts_service_available: bool,
+    ) -> None:
+        """
+        Regression guard for the split failure mode where:
+        - /generate_audio returns 200 because it falls back to preview audio
+        - /generate_stream_audio returns 500 due to real model load failure
+
+        This test must fail if:
+        - non-stream path only "succeeds" via fallback
+        - stream path fails while non-stream path passes
+        - known vendored Qwen/safetensors loader errors surface in either path
+        """
+        speaker = _pick_test_speaker()
+        payload = {
+            "text": "Sanity check. The quick brown fox jumps over the lazy dog.",
+            "speaker": speaker,
+            "language": "en",
+        }
+
+        nonstream_url = f"{TTS_SERVICE_BASE}/api/tts/generate_audio"
+        stream_url = f"{TTS_SERVICE_BASE}/api/tts/generate_stream_audio"
+
+        try:
+            nonstream_response = requests.post(nonstream_url, json=payload, timeout=60)
+        except Exception as e:
+            pytest.fail(f"Non-stream TTS request failed to reach service: {e}")
+
+        assert nonstream_response.status_code == 200, (
+            f"/generate_audio returned unexpected status {nonstream_response.status_code}: "
+            f"{nonstream_response.text}"
+        )
+        _assert_no_known_tts_loader_failure(nonstream_response.text)
+
+        nonstream_data = nonstream_response.json()
+        assert nonstream_data.get("success") is True, (
+            f"/generate_audio expected success=True, got: {nonstream_data}"
+        )
+        assert nonstream_data.get("audio_base64"), (
+            f"/generate_audio missing audio_base64: {nonstream_data}"
+        )
+
+        try:
+            stream_response = requests.post(stream_url, json=payload, timeout=60)
+        except Exception as e:
+            pytest.fail(f"Stream TTS request failed to reach service: {e}")
+
+        assert stream_response.status_code == 200, (
+            "/generate_stream_audio failed while /generate_audio succeeded. "
+            "This usually means the non-stream path masked a real provider/model "
+            "failure via fallback while the stream path exercised the real load path.\n"
+            f"Stream status={stream_response.status_code}\n"
+            f"Stream body:\n{stream_response.text}\n"
+            f"Non-stream body:\n{nonstream_response.text}"
+        )
+        _assert_no_known_tts_loader_failure(stream_response.text)
+
+        content_type = (stream_response.headers.get("content-type") or "").lower()
+        assert content_type, "Missing Content-Type header on /generate_stream_audio response"
+        assert not content_type.startswith("application/json"), (
+            "/generate_stream_audio returned JSON instead of streaming/binary audio.\n"
+            f"Headers: {dict(stream_response.headers)}\n"
+            f"Body:\n{stream_response.text}"
+        )
+        assert len(stream_response.content) > 0, "Empty body returned from /generate_stream_audio"
 
 
 class TestMainApiProxy:

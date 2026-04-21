@@ -95,3 +95,32 @@ def test_layer_type_validation_fallback_is_available(monkeypatch):
     layer_type_validation = fake_transformers.configuration_utils.layer_type_validation
     assert callable(layer_type_validation)
     assert layer_type_validation(["full_attention", "sliding_attention"]) is None
+
+
+def test_ensure_transformers_qwen3_compat_normalizes_none_safetensors_metadata(monkeypatch):
+    fake_transformers = _install_fake_transformers(monkeypatch)
+
+    class _InnerSafeOpen:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def metadata(self):
+            return None
+
+    fake_safetensors = types.ModuleType("safetensors")
+
+    def _fake_safe_open(*args, **kwargs):
+        return _InnerSafeOpen()
+
+    fake_safetensors.safe_open = _fake_safe_open
+    monkeypatch.setitem(sys.modules, "safetensors", fake_safetensors)
+
+    _ensure_transformers_qwen3_compat()
+
+    with fake_safetensors.safe_open("ignored", framework="pt") as handle:
+        assert handle.metadata() == {}
+
+    assert getattr(fake_safetensors.safe_open, "_omnix_qwen3_metadata_compat", False) is True

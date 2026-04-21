@@ -65,6 +65,63 @@ def _ensure_transformers_qwen3_compat() -> None:
     import sys
     import types
 
+    # ---- 0. Patch safetensors metadata contract ----
+    # Some model shards return ``None`` for ``safe_open(...).metadata()``.
+    # Newer transformers codepaths assume a dict-like object and do:
+    #     metadata.get("format")
+    # which crashes with:
+    #     AttributeError: 'NoneType' object has no attribute 'get'
+    #
+    # Normalize that contract here at the vendored boundary so all downstream
+    # Qwen3-TTS model loads see a dict instead of None.
+    try:
+        import safetensors
+
+        original_safe_open = getattr(safetensors, "safe_open", None)
+        if original_safe_open is not None and not getattr(original_safe_open, "_omnix_qwen3_metadata_compat", False):
+            class _SafeOpenMetadataCompatProxy:
+                def __init__(self, *args, **kwargs):
+                    self._inner = original_safe_open(*args, **kwargs)
+
+                def __enter__(self):
+                    entered = self._inner.__enter__()
+                    # Some implementations return self, some return another handle.
+                    # Keep proxy semantics stable either way.
+                    if entered is not self._inner:
+                        self._inner = entered
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return self._inner.__exit__(exc_type, exc, tb)
+
+                def __getattr__(self, name):
+                    return getattr(self._inner, name)
+
+                def metadata(self):
+                    try:
+                        metadata = self._inner.metadata()
+                    except Exception:
+                        raise
+                    return metadata or {}
+
+            def _patched_safe_open(*args, **kwargs):
+                return _SafeOpenMetadataCompatProxy(*args, **kwargs)
+
+            _patched_safe_open._omnix_qwen3_metadata_compat = True
+            safetensors.safe_open = _patched_safe_open
+            sys.modules["safetensors"].safe_open = _patched_safe_open
+
+            # If transformers.modeling_utils already imported safe_open into its
+            # module namespace, patch that live binding too.
+            try:
+                import transformers.modeling_utils as modeling_utils_module
+                if hasattr(modeling_utils_module, "safe_open"):
+                    modeling_utils_module.safe_open = _patched_safe_open
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     # ---- 1. Ensure modeling_utils surface ----
     modeling_utils = getattr(transformers, "modeling_utils", None)
     if modeling_utils is not None and not hasattr(modeling_utils, "ALL_ATTENTION_FUNCTIONS"):

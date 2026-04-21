@@ -134,6 +134,19 @@ def validate_qwen3_tts_runtime() -> Dict[str, Any]:
         )
 
     try:
+        import safetensors
+        safe_open = getattr(safetensors, "safe_open", None)
+        compat["shim_patched_safetensors_metadata"] = bool(
+            safe_open is not None and getattr(safe_open, "_omnix_qwen3_metadata_compat", False)
+        )
+    except Exception as exc:
+        return _fail_payload(
+            "qwen3_tts",
+            f"safetensors_postcheck_failed:{exc!r}",
+            {"versions": versions, "compat": compat, "vendor_paths": vendor_paths},
+        )
+
+    try:
         from app.providers.vendor.qwen_tts import Qwen3TTSModel  # noqa: F401
     except Exception as exc:
         return _fail_payload(

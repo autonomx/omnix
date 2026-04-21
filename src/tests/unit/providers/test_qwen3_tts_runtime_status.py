@@ -111,6 +111,7 @@ def test_validate_qwen3_tts_runtime_returns_structured_payload(monkeypatch):
     fake_tokenizers = types.SimpleNamespace(__version__="0.21.0")
     fake_accelerate = types.SimpleNamespace(__version__="1.6.0")
     fake_safetensors = types.SimpleNamespace(__version__="0.6.0")
+    fake_safetensors.safe_open = lambda *args, **kwargs: object()
     fake_soundfile = types.SimpleNamespace(__version__="0.13.0")
     fake_qwen_tts = types.ModuleType("app.providers.vendor.qwen_tts")
     fake_qwen_tts.Qwen3TTSModel = object
@@ -136,3 +137,4 @@ def test_validate_qwen3_tts_runtime_returns_structured_payload(monkeypatch):
     assert "compat" in payload["details"]
     assert payload["details"]["compat"]["shim_has_auto_docstring"] is True
     assert payload["details"]["compat"]["shim_has_all_attention_functions"] is True
+    assert payload["details"]["compat"]["shim_patched_safetensors_metadata"] is True

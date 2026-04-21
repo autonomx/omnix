@@ -18,6 +18,16 @@ _model_cache: Dict[str, Any] = {}
 _cache_lock = threading.Lock()
 
 
+def _classify_qwen3_model_load_error(exc: Exception) -> str:
+    message = str(exc or "").strip()
+    if "'NoneType' object has no attribute 'get'" in message:
+        return (
+            "safetensors_metadata_missing_or_incompatible:"
+            "transformers attempted metadata.get('format') but shard metadata was None"
+        )
+    return message or exc.__class__.__name__
+
+
 def load_tts_model(model_name: str, device: str, **kwargs) -> Any:
     """
     Load and return vendored Qwen3-TTS model runtime instance.
@@ -54,8 +64,14 @@ def load_tts_model(model_name: str, device: str, **kwargs) -> Any:
         return model
         
     except Exception as e:
-        logger.error(f"Failed to load vendored Qwen3-TTS model: {e}", exc_info=True)
-        raise RuntimeError(f"Model loading failed: {str(e)}") from e
+        classified = _classify_qwen3_model_load_error(e)
+        logger.error(
+            "Failed to load vendored Qwen3-TTS model: %s (raw=%r)",
+            classified,
+            e,
+            exc_info=True,
+        )
+        raise RuntimeError(f"Model loading failed: {classified}") from e
 
 
 def get_or_create_tts_model(model_name: str, device: str, **kwargs) -> Any:
