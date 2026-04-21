@@ -27,6 +27,10 @@ from .vendor.qwen3_tts import (
 
 logger = logging.getLogger(__name__)
 
+# Fallback preview audio aims to stay short, deterministic, and obviously synthetic.
+# We size it using a rough conversational reading rate so longer prompts yield slightly
+# longer previews, and use a simple A3/E4 interval to produce a stable tone when no
+# reference clip can be read.
 FALLBACK_CHARACTERS_PER_SECOND = 14.0
 FALLBACK_CARRIER_FREQ_HZ = 220.0
 FALLBACK_HARMONIC_FREQ_HZ = 330.0
@@ -361,7 +365,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self,
         *,
         text: str,
-        ref_audio_path: Optional[str],
+        reference_audio_path: Optional[str],
         error: Exception,
     ) -> Dict[str, Any]:
         sample_rate = self._sample_rate or 12000
@@ -371,11 +375,11 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         )
 
         audio: Optional[np.ndarray] = None
-        if ref_audio_path:
+        if reference_audio_path:
             try:
                 import soundfile as io
 
-                audio, ref_sample_rate = io.read(ref_audio_path, dtype='float32', always_2d=False)
+                audio, ref_sample_rate = io.read(reference_audio_path, dtype='float32', always_2d=False)
                 if getattr(audio, "ndim", 1) > 1:
                     audio = audio.mean(axis=1)
                 sample_rate = int(ref_sample_rate or sample_rate)
@@ -575,7 +579,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 logger.warning("Falling back to reference preview audio: %s", e)
                 return self._build_reference_fallback_response(
                     text=text,
-                    ref_audio_path=ref_audio_path,
+                    reference_audio_path=ref_audio_path,
                     error=e,
                 )
             except Exception:

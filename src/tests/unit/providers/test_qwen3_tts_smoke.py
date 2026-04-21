@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import traceback
 import pytest
 import numpy as np
@@ -136,4 +137,6 @@ def test_generate_audio_returns_reference_fallback_when_model_unavailable(monkey
     assert out["success"] is True
     assert out["fallback"] == "reference-preview"
     assert out["audio"] == out["audio_base64"]
+    decoded = base64.b64decode(out["audio_base64"])
+    assert decoded[:4] == b"RIFF"
     assert out["sample_rate"] == sample_rate
