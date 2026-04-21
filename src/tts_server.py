@@ -254,6 +254,7 @@ async def generate_audio(request: TtsGenerateRequest):
 
 @app.post("/api/tts/generate_stream_audio")
 async def generate_stream_audio(request: TtsGenerateStreamRequest):
+    # Keep this outside the try so exception fallback can reuse the resolved provider.
     provider = None
     try:
         provider = _require_provider()
@@ -263,7 +264,7 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
                 status_code=500,
             )
 
-        chunks: List[bytes] = []
+        pcm_chunks: List[bytes] = []
         sample_rate = 24000
 
         print(f"[TTS SERVER] generate_stream_audio speaker={request.speaker!r} language={request.language!r} text_len={len(request.text)}")
@@ -284,9 +285,9 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
                 continue
             sample_rate = sr or sample_rate
             pcm = (audio_chunk * 32767).astype("int16").tobytes()
-            chunks.append(pcm)
+            pcm_chunks.append(pcm)
 
-        return _pcm16_chunks_to_wav_response(chunks, sample_rate)
+        return _pcm16_chunks_to_wav_response(pcm_chunks, sample_rate)
     except Exception as exc:
         import traceback
         print(f"[TTS SERVER] generate_stream_audio error: {exc}")

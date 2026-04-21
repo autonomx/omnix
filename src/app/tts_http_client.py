@@ -117,10 +117,10 @@ def tts_generate_stream_audio(
             with wave.open(io.BytesIO(audio_bytes), "rb") as wav_file:
                 parsed_sample_rate = int(wav_file.getframerate())
                 if parsed_sample_rate <= 0:
-                    raise wave.Error("invalid_stream_sample_rate")
+                    raise wave.Error("Invalid stream sample rate")
                 sample_rate = parsed_sample_rate
         except (wave.Error, EOFError) as exc:
-            raise RuntimeError(f"invalid_audio_stream_response: {exc}") from exc
+            raise RuntimeError(f"Invalid audio stream response: {exc}") from exc
         return {
             "success": True,
             "sample_rate": sample_rate,
