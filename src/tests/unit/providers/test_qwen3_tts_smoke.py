@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import base64
 import traceback
 import pytest
+import numpy as np
+import soundfile as sf
 
 
 @pytest.mark.smoke
@@ -86,7 +89,7 @@ def test_qwen3_generate_minimal_call(monkeypatch):
     provider = FasterQwen3TTSProvider(config={"device": "cpu"})
 
     # Replace heavy model with stub AFTER load succeeds
-    model = provider._get_model()
+    provider._get_model()
 
     class DummyModel:
         def generate(self, *args, **kwargs):
@@ -108,3 +111,32 @@ def test_qwen3_generate_minimal_call(monkeypatch):
         )
 
     assert out is not None
+
+
+@pytest.mark.smoke
+def test_generate_audio_returns_reference_fallback_when_model_unavailable(monkeypatch, tmp_path):
+    from app.providers import faster_qwen3_tts_provider as provider_module
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    sample_rate = 12000
+    preview_audio = np.linspace(-0.2, 0.2, sample_rate // 2, dtype=np.float32)
+    preview_path = tmp_path / "default_ref.wav"
+    sf.write(preview_path, preview_audio, sample_rate)
+
+    monkeypatch.setattr(provider_module, "VOICE_CLONES_DIR", str(tmp_path))
+
+    provider = FasterQwen3TTSProvider(config={"device": "cpu"})
+
+    def _raise_model_error():
+        raise RuntimeError("model unavailable in offline test")
+
+    monkeypatch.setattr(provider, "_get_model", _raise_model_error)
+
+    out = provider.generate_audio(text="hello world", speaker="Maya", language="en")
+
+    assert out["success"] is True
+    assert out["fallback"] == "reference-preview"
+    assert out["audio"] == out["audio_base64"]
+    decoded = base64.b64decode(out["audio_base64"])
+    assert decoded[:4] == b"RIFF"
+    assert out["sample_rate"] == sample_rate

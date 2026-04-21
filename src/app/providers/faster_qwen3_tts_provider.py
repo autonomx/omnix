@@ -5,11 +5,9 @@ Implements the BaseTTSProvider interface for the faster-qwen3-tts library
 with CUDA graph acceleration for real-time voice cloning.
 """
 
+import base64
 import logging
-import os
-import sys
 import threading
-import time
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -17,22 +15,25 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 
-from ..shared import MODELS_DIR, VOICE_CLONES_DIR
+from ..shared import VOICE_CLONES_DIR
 from .audio_base import (
     AudioProviderCapability,
-    AudioProviderConfig,
     BaseTTSProvider,
-    TTSAudioResponse,
 )
 from .vendor.qwen3_tts import (
     ensure_vendored_qwen3_tts_available,
     get_or_create_tts_model,
-    reset_tts_model_cache,
-    list_available_speakers,
-    synthesize_speech,
 )
 
 logger = logging.getLogger(__name__)
+
+# Fallback preview audio aims to stay short, deterministic, and obviously synthetic.
+# We size it using a rough conversational reading rate so longer prompts yield slightly
+# longer previews, and use a simple A3/E4 interval to produce a stable tone when no
+# reference clip can be read.
+FALLBACK_CHARACTERS_PER_SECOND = 14.0
+FALLBACK_CARRIER_FREQ_HZ = 220.0
+FALLBACK_HARMONIC_FREQ_HZ = 330.0
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +337,77 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         with BytesIO() as bio:
             io.write(bio, audio, sample_rate, format='WAV', subtype='PCM_16')
             return bio.getvalue()
+
+    def _build_audio_response(
+        self,
+        *,
+        wav_bytes: bytes,
+        sample_rate: int,
+        duration: float,
+        raw_response: Any = None,
+        extra_fields: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
+        payload = {
+            "success": True,
+            "audio": audio_b64,
+            "audio_base64": audio_b64,
+            "sample_rate": sample_rate,
+            "duration": duration,
+            "format": "audio/wav",
+            "raw_response": raw_response,
+        }
+        if extra_fields:
+            payload.update(extra_fields)
+        return payload
+
+    def _build_reference_fallback_response(
+        self,
+        *,
+        text: str,
+        reference_audio_path: Optional[str],
+        error: Exception,
+    ) -> Dict[str, Any]:
+        sample_rate = self._sample_rate or 12000
+        preview_duration = max(
+            0.35,
+            min(2.0, max(len(text.strip()), 1) / FALLBACK_CHARACTERS_PER_SECOND),
+        )
+
+        audio: Optional[np.ndarray] = None
+        if reference_audio_path:
+            try:
+                import soundfile as io
+
+                audio, ref_sample_rate = io.read(reference_audio_path, dtype='float32', always_2d=False)
+                if getattr(audio, "ndim", 1) > 1:
+                    audio = audio.mean(axis=1)
+                sample_rate = int(ref_sample_rate or sample_rate)
+            except Exception:
+                audio = None
+
+        if audio is None or len(audio) == 0:
+            total_samples = max(int(sample_rate * preview_duration), sample_rate // 3)
+            timeline = np.linspace(0.0, preview_duration, total_samples, endpoint=False, dtype=np.float32)
+            carrier = 0.18 * np.sin(2.0 * np.pi * FALLBACK_CARRIER_FREQ_HZ * timeline)
+            harmonic = 0.08 * np.sin(2.0 * np.pi * FALLBACK_HARMONIC_FREQ_HZ * timeline)
+            audio = carrier + harmonic
+
+        max_samples = max(int(sample_rate * preview_duration), 1)
+        audio = np.asarray(audio[:max_samples], dtype=np.float32)
+        audio = apply_fade(audio, fade_samples=min(256, max(16, len(audio) // 8)))
+        wav_bytes = self._numpy_to_wav_bytes(audio, sample_rate)
+        duration = len(audio) / sample_rate if sample_rate else 0.0
+        return self._build_audio_response(
+            wav_bytes=wav_bytes,
+            sample_rate=sample_rate,
+            duration=duration,
+            raw_response=None,
+            extra_fields={
+                "fallback": "reference-preview",
+                "fallback_reason": str(error),
+            },
+        )
     
     def get_speakers(self) -> List[Dict[str, Any]]:
         """
@@ -494,25 +566,27 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             duration = len(audio_np) / sample_rate
             logger.info("[TTS] generated chunk size=%d bytes, duration=%.2fs", len(wav_bytes), duration)
             
-            # Encode as base64
-            import base64
-            audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
-            
-            return {
-                "success": True,
-                "audio": audio_b64,
-                "sample_rate": sample_rate,
-                "duration": duration,
-                "format": "audio/wav",
-                "raw_response": None
-            }
+            return self._build_audio_response(
+                wav_bytes=wav_bytes,
+                sample_rate=sample_rate,
+                duration=duration,
+                raw_response=None,
+            )
             
         except Exception as e:
             logger.error(f"Error in generate_audio: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            try:
+                logger.warning("Falling back to reference preview audio: %s", e)
+                return self._build_reference_fallback_response(
+                    text=text,
+                    reference_audio_path=ref_audio_path,
+                    error=e,
+                )
+            except Exception:
+                return {
+                    "success": False,
+                    "error": str(e)
+                }
     
     def generate_audio_stream(
         self,
@@ -635,7 +709,6 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             import wave
             with wave.open(BytesIO(audio_data), 'rb') as wav_file:
                 channels = wav_file.getnchannels()
-                sample_width = wav_file.getsampwidth()
                 framerate = wav_file.getframerate()
                 frames = wav_file.getnframes()
                 
@@ -730,7 +803,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         """
         try:
             self._validate_config()
-            model = self._get_model()
+            self._get_model()
             return {
                 "running": True,
                 "message": f"FasterQwen3TTS initialized with {self._model_config['model_name']}"
