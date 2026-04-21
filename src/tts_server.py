@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import io
 import os
 import traceback
+import wave
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 
@@ -125,6 +127,44 @@ def _require_provider() -> Any:
     return _TTS_PROVIDER
 
 
+def _wav_response_from_base64(audio_base64: str, media_type: str = "audio/wav") -> Response:
+    return Response(content=base64.b64decode(audio_base64), media_type=media_type)
+
+
+def _pcm16_chunks_to_wav_response(chunks: List[bytes], sample_rate: int) -> Response:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate or 24000)
+        wav_file.writeframes(b"".join(chunks))
+    return Response(content=buffer.getvalue(), media_type="audio/wav")
+
+
+def _stream_fallback_response(provider: Any, request: TtsGenerateStreamRequest) -> Optional[Response]:
+    if not hasattr(provider, "generate_audio"):
+        return None
+
+    fallback_result = provider.generate_audio(
+        text=request.text,
+        speaker=request.speaker,
+        language=request.language,
+        temperature=request.temperature,
+        top_k=request.top_k,
+        top_p=request.top_p,
+        repetition_penalty=request.repetition_penalty,
+        append_silence=request.append_silence,
+        max_new_tokens=request.max_new_tokens,
+    )
+    audio_base64 = str(fallback_result.get("audio_base64") or fallback_result.get("audio") or "")
+    if not fallback_result.get("success") or not audio_base64:
+        return None
+    return _wav_response_from_base64(
+        audio_base64,
+        media_type=str(fallback_result.get("format") or "audio/wav"),
+    )
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     status = initialize_tts_provider()
@@ -208,6 +248,7 @@ async def generate_audio(request: TtsGenerateRequest):
 
 @app.post("/api/tts/generate_stream_audio")
 async def generate_stream_audio(request: TtsGenerateStreamRequest):
+    provider = None
     try:
         provider = _require_provider()
         if not hasattr(provider, "generate_audio_stream"):
@@ -216,7 +257,7 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
                 status_code=500,
             )
 
-        chunks: List[str] = []
+        chunks: List[bytes] = []
         sample_rate = 24000
 
         print(f"[TTS SERVER] generate_stream_audio speaker={request.speaker!r} language={request.language!r} text_len={len(request.text)}")
@@ -237,18 +278,16 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
                 continue
             sample_rate = sr or sample_rate
             pcm = (audio_chunk * 32767).astype("int16").tobytes()
-            chunks.append(base64.b64encode(pcm).decode("utf-8"))
+            chunks.append(pcm)
 
-        return {
-            "success": True,
-            "provider": _TTS_PROVIDER_NAME,
-            "sample_rate": sample_rate,
-            "chunks": chunks,
-        }
+        return _pcm16_chunks_to_wav_response(chunks, sample_rate)
     except Exception as exc:
         import traceback
         print(f"[TTS SERVER] generate_stream_audio error: {exc}")
         print(traceback.format_exc())
+        fallback_response = _stream_fallback_response(provider, request) if provider is not None else None
+        if fallback_response is not None:
+            return fallback_response
         return JSONResponse(
             {
                 "success": False,

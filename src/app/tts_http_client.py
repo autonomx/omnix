@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import io
 import os
+import wave
 from typing import Any, Dict, Optional
 
 import requests
@@ -106,6 +108,23 @@ def tts_generate_stream_audio(
         timeout=timeout,
     )
     response.raise_for_status()
+    content_type = (response.headers.get("content-type") or "").lower()
+    if content_type and not content_type.startswith("application/json"):
+        audio_bytes = response.content
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        sample_rate = 24000
+        try:
+            with wave.open(io.BytesIO(audio_bytes), "rb") as wav_file:
+                sample_rate = int(wav_file.getframerate() or sample_rate)
+        except (wave.Error, EOFError):
+            pass
+        return {
+            "success": True,
+            "sample_rate": sample_rate,
+            "audio": audio_b64,
+            "chunks": [audio_b64] if audio_b64 else [],
+            "format": content_type,
+        }
     return response.json()
 
 

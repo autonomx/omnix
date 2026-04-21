@@ -405,7 +405,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             raw_response=None,
             extra_fields={
                 "fallback": "reference-preview",
-                "fallback_reason": str(error),
+                "fallback_reason": "temporary_synthesis_unavailable",
             },
         )
     

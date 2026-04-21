@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import wave
 from typing import Any, Dict, Iterable, Tuple
 
 from fastapi.testclient import TestClient
@@ -104,14 +106,48 @@ def test_generate_stream_audio_returns_chunks_on_success():
         tts_server._TTS_PROVIDER_ERROR = old_error
 
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["success"] is True
-    assert payload["provider"] == "qwen3_tts"
-    assert payload["sample_rate"] == 24000
-    assert isinstance(payload["chunks"], list)
-    assert len(payload["chunks"]) == 1
-    assert isinstance(payload["chunks"][0], str)
-    assert payload["chunks"][0] != ""
+    assert response.headers["content-type"].startswith("audio/wav")
+    with wave.open(io.BytesIO(response.content), "rb") as wav_file:
+        assert wav_file.getframerate() == 24000
+        assert wav_file.getnframes() == 3
+
+
+def test_generate_stream_audio_falls_back_to_wav_response():
+    import tts_server
+
+    class FakeProvider:
+        def generate_audio_stream(self, **_: Any):
+            raise RuntimeError("offline")
+
+        def generate_audio(self, **_: Any):
+            return {
+                "success": True,
+                "audio_base64": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=",
+                "format": "audio/wav",
+            }
+
+    old_provider = tts_server._TTS_PROVIDER
+    old_error = tts_server._TTS_PROVIDER_ERROR
+    try:
+        tts_server._TTS_PROVIDER = FakeProvider()
+        tts_server._TTS_PROVIDER_ERROR = ""
+        client = TestClient(tts_server.app)
+
+        response = client.post(
+            "/api/tts/generate_stream_audio",
+            json={
+                "text": "hello world",
+                "speaker": "default",
+                "language": "en",
+            },
+        )
+    finally:
+        tts_server._TTS_PROVIDER = old_provider
+        tts_server._TTS_PROVIDER_ERROR = old_error
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("audio/wav")
+    assert response.content[:4] == b"RIFF"
 
 
 def test_generate_stream_audio_surfaces_missing_sox_error():
