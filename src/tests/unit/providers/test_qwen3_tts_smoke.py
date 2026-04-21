@@ -118,8 +118,7 @@ def test_generate_audio_returns_reference_fallback_when_model_unavailable(monkey
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
 
     sample_rate = 12000
-    timeline = np.linspace(0.0, 0.5, sample_rate // 2, endpoint=False, dtype=np.float32)
-    preview_audio = 0.2 * np.sin(2.0 * np.pi * 220.0 * timeline)
+    preview_audio = np.linspace(-0.2, 0.2, sample_rate // 2, dtype=np.float32)
     preview_path = tmp_path / "default_ref.wav"
     sf.write(preview_path, preview_audio, sample_rate)
 

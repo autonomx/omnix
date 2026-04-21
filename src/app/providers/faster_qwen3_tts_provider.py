@@ -27,6 +27,10 @@ from .vendor.qwen3_tts import (
 
 logger = logging.getLogger(__name__)
 
+FALLBACK_CHARACTERS_PER_SECOND = 14.0
+FALLBACK_CARRIER_FREQ_HZ = 220.0
+FALLBACK_HARMONIC_FREQ_HZ = 330.0
+
 
 # ---------------------------------------------------------------------------
 # Audio hardening helpers  (Issue 3 – prevent stream corruption)
@@ -361,7 +365,10 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         error: Exception,
     ) -> Dict[str, Any]:
         sample_rate = self._sample_rate or 12000
-        preview_duration = max(0.35, min(2.0, max(len(text.strip()), 1) / 14.0))
+        preview_duration = max(
+            0.35,
+            min(2.0, max(len(text.strip()), 1) / FALLBACK_CHARACTERS_PER_SECOND),
+        )
 
         audio: Optional[np.ndarray] = None
         if ref_audio_path:
@@ -378,8 +385,8 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         if audio is None or len(audio) == 0:
             total_samples = max(int(sample_rate * preview_duration), sample_rate // 3)
             timeline = np.linspace(0.0, preview_duration, total_samples, endpoint=False, dtype=np.float32)
-            carrier = 0.18 * np.sin(2.0 * np.pi * 220.0 * timeline)
-            harmonic = 0.08 * np.sin(2.0 * np.pi * 330.0 * timeline)
+            carrier = 0.18 * np.sin(2.0 * np.pi * FALLBACK_CARRIER_FREQ_HZ * timeline)
+            harmonic = 0.08 * np.sin(2.0 * np.pi * FALLBACK_HARMONIC_FREQ_HZ * timeline)
             audio = carrier + harmonic
 
         max_samples = max(int(sample_rate * preview_duration), 1)
