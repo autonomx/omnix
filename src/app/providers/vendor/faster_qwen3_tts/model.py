@@ -110,8 +110,69 @@ def _ensure_transformers_qwen3_compat() -> None:
 
         masking_utils.create_causal_mask = _dummy
         masking_utils.expand_mask = _dummy
+        masking_utils.create_sliding_window_causal_mask = _dummy
 
         sys.modules["transformers.masking_utils"] = masking_utils
+
+    # ---- 5. Provide missing modeling_layers module for transformers >=4.51 ----
+    if "transformers.modeling_layers" not in sys.modules:
+        modeling_layers = types.ModuleType("transformers.modeling_layers")
+        
+        # This module was split/moved/removed in newer transformers versions
+        # Add all required stubs used by Qwen3-TTS codebase
+        
+        try:
+            from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+            modeling_layers.AttentionMaskConverter = AttentionMaskConverter
+        except ImportError:
+            pass
+        
+        # Dummy stubs for classes that no longer exist or were renamed
+        class GradientCheckpointingLayer:
+            pass
+        
+        modeling_layers.GradientCheckpointingLayer = GradientCheckpointingLayer
+        
+        sys.modules["transformers.modeling_layers"] = modeling_layers
+
+    # ---- 6. Patch missing dynamic_rope_update from modeling_rope_utils ----
+    try:
+        import transformers.modeling_rope_utils
+        if not hasattr(transformers.modeling_rope_utils, "dynamic_rope_update"):
+            logger.info("Adding missing dynamic_rope_update compatibility shim")
+
+            def dynamic_rope_update(*args, **kwargs):
+                # This function was renamed/removed in newer transformers versions
+                return None, None
+
+            transformers.modeling_rope_utils.dynamic_rope_update = dynamic_rope_update
+            sys.modules["transformers.modeling_rope_utils"].dynamic_rope_update = dynamic_rope_update
+    except Exception:
+        pass
+
+    # ---- 7. Patch missing check_model_inputs from utils.generic ----
+    try:
+        import transformers.utils.generic
+        if not hasattr(transformers.utils.generic, "check_model_inputs"):
+            logger.info("Adding missing check_model_inputs compatibility shim")
+
+            def check_model_inputs(*args, **kwargs):
+                # This function was renamed/removed in newer transformers versions
+                return True
+
+            transformers.utils.generic.check_model_inputs = check_model_inputs
+            sys.modules["transformers.utils.generic"].check_model_inputs = check_model_inputs
+    except Exception:
+        pass
+
+    # ---- 8. Ensure we patch BEFORE the vendor module imports anything ----
+    # Force clear any cached qwen_tts modules that might have already imported broken references
+    for key in list(sys.modules.keys()):
+        if key.startswith("app.providers.vendor.qwen"):
+            del sys.modules[key]
+    for key in list(sys.modules.keys()):
+        if "qwen_tts" in key:
+            del sys.modules[key]
 
     logger.info(
         "Applied Qwen3-TTS transformers compatibility shim: "
@@ -120,6 +181,50 @@ def _ensure_transformers_qwen3_compat() -> None:
         hasattr(getattr(transformers, "utils", object()), "auto_docstring"),
         hasattr(getattr(transformers, "utils", object()), "auto_class_docstring"),
     )
+
+    # ---- 5. Patch missing use_kernel_forward_from_hub for new transformers versions
+    try:
+        # Force import the module BEFORE patching so we patch the actual live module
+        # that will be used when imports happen later
+        import transformers.integrations
+        
+        # Also ensure sys.modules has the real module reference
+        if "transformers.integrations" not in sys.modules:
+            import importlib
+            sys.modules["transformers.integrations"] = importlib.import_module("transformers.integrations")
+            
+        if not hasattr(transformers.integrations, "use_kernel_forward_from_hub"):
+            # This function was removed in transformers >=4.48
+            logger.info("Adding missing use_kernel_forward_from_hub compatibility shim")
+
+            def use_kernel_forward_from_hub(*args, **kwargs):
+                return lambda fn: fn
+
+            transformers.integrations.use_kernel_forward_from_hub = use_kernel_forward_from_hub
+            sys.modules["transformers.integrations"].use_kernel_forward_from_hub = use_kernel_forward_from_hub
+    except Exception:
+        pass
+
+    # ---- 6. Patch missing FlashAttentionKwargs for transformers versions >=4.50
+    try:
+        import transformers.modeling_flash_attention_utils
+        if not hasattr(transformers.modeling_flash_attention_utils, "FlashAttentionKwargs"):
+            logger.info("Adding missing FlashAttentionKwargs compatibility shim")
+            # This was renamed/moved/removed in newer transformers
+            from typing import TypedDict, Optional, Any
+
+            class FlashAttentionKwargs(TypedDict, total=False):
+                attention_dropout: Optional[float]
+                dropout: Optional[float]
+                is_causal: Optional[bool]
+                use_sliding_windows: Optional[bool]
+                sliding_window: Optional[int]
+                softcap: Optional[float]
+
+            transformers.modeling_flash_attention_utils.FlashAttentionKwargs = FlashAttentionKwargs
+            sys.modules["transformers.modeling_flash_attention_utils"].FlashAttentionKwargs = FlashAttentionKwargs
+    except Exception:
+        pass
 
 
 class FasterQwen3TTS:

@@ -117,7 +117,7 @@ class TestTtsServiceBackend:
         assert r.status_code == 200, r.text
 
         data = r.json()
-        assert data.get("ok") is True
+        assert data.get("success") is True, f"Expected success=True, got: {data}"
         assert "audio_base64" in data
 
 
