@@ -1078,6 +1078,12 @@ body::before {
     color: var(--error);
 }
 
+.welcome-speaker-btn.unavailable {
+    background: rgba(148, 163, 184, 0.12);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
 .app-title {
     font-size: 1.25rem;
     font-weight: 600;

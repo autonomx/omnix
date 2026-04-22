@@ -76,7 +76,23 @@ function setupChatControls() {
     if (welcomeSpeakerBtn) {
         welcomeSpeakerBtn.addEventListener('click', async () => {
             // Reset state
-            welcomeSpeakerBtn.classList.remove('success', 'error');
+            welcomeSpeakerBtn.classList.remove('success', 'error', 'unavailable');
+
+            const isTtsAvailable =
+                document.getElementById('xttsStatusDot')?.classList.contains('connected') === true;
+            const speakFn =
+                window.ChatAPI?.speakText ||
+                window.speakText ||
+                window.ChatAPI?.speakTextStreaming ||
+                window.speakTextStreaming;
+
+            if (!isTtsAvailable || typeof speakFn !== 'function') {
+                welcomeSpeakerBtn.classList.add('unavailable');
+                setTimeout(() => {
+                    welcomeSpeakerBtn.classList.remove('unavailable');
+                }, 3000);
+                return;
+            }
             
             // Track success flag
             let ttsSucceeded = false;
@@ -104,11 +120,7 @@ function setupChatControls() {
             };
             
             try {
-                if (typeof window.speakText === 'function') {
-                    await window.speakText("Hello, welcome to Omnix chat");
-                } else if (typeof window.speakTextStreaming === 'function') {
-                    await window.speakTextStreaming("Hello, welcome to Omnix chat");
-                }
+                await speakFn("Hello, welcome to Omnix chat");
                 
                 // Check if any TTS errors were logged
                 ttsSucceeded = ttsErrors.length === 0;
@@ -128,7 +140,7 @@ function setupChatControls() {
                 
                 // Clear state after 3 seconds
                 setTimeout(() => {
-                    welcomeSpeakerBtn.classList.remove('success', 'error');
+                    welcomeSpeakerBtn.classList.remove('success', 'error', 'unavailable');
                 }, 3000);
             }
         });

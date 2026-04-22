@@ -58,7 +58,9 @@ def test_welcome_speaker_button_e2e(page):
     print("Waiting for button status to update...")
     page.wait_for_function("""() => {
         const btn = document.getElementById('welcomeSpeakerBtn');
-        return btn.classList.contains('success') || btn.classList.contains('error');
+        return btn.classList.contains('success') ||
+               btn.classList.contains('error') ||
+               btn.classList.contains('unavailable');
     }""", timeout=10000)
     
     # Print all console logs
@@ -100,8 +102,13 @@ def test_welcome_speaker_button_e2e(page):
         const btn = document.getElementById('welcomeSpeakerBtn');
         return btn.classList.contains('success');
     }""")
+
+    button_is_unavailable = page.evaluate("""() => {
+        const btn = document.getElementById('welcomeSpeakerBtn');
+        return btn.classList.contains('unavailable');
+    }""")
     
-    print(f"Button state: success={button_has_success}, error={button_has_error}")
+    print(f"Button state: success={button_has_success}, error={button_has_error}, unavailable={button_is_unavailable}")
     
     # Fail test if button shows error status
     if button_has_error:
@@ -111,6 +118,12 @@ def test_welcome_speaker_button_e2e(page):
     
     print("\nTest completed successfully:")
     print(f"  - TTS status: {tts_status}")
-    print(f"  - Button clicked successfully")
+    print("  - Button clicked successfully")
     print(f"  - No critical client errors found ({len(console_errors)} total errors)")
-    print(f"  - Button status: {'SUCCESS (green)' if button_has_success else 'NEUTRAL'}")
+    if button_has_success:
+        button_status = 'SUCCESS (green)'
+    elif button_is_unavailable:
+        button_status = 'UNAVAILABLE (grey)'
+    else:
+        button_status = 'NEUTRAL'
+    print(f"  - Button status: {button_status}")
