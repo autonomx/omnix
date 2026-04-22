@@ -84,6 +84,30 @@ DEFAULT_SETTINGS = {
         "append_silence": True
     },
     "parakeet": {"base_url": "http://localhost:8000"},
+    "image": {
+        "enabled": False,
+        "provider": "flux_klein",
+        "auto_unload_on_disable": True,
+        "flux_klein": {
+            "enabled": False,
+            "repo_id": "black-forest-labs/FLUX.2-klein-4B",
+            "variant": "distilled",
+            "base_repo_id": "black-forest-labs/FLUX.2-klein-base-4B",
+            "download_dir": "image",
+            "local_dir": "",
+            "device": "cuda",
+            "torch_dtype": "bfloat16",
+            "enable_cpu_offload": True,
+            "prefer_local_files": True,
+            "allow_repo_fallback": False,
+            "num_inference_steps": 4,
+            "guidance_scale": 1.0,
+            "portrait_width": 768,
+            "portrait_height": 1024,
+            "scene_width": 1344,
+            "scene_height": 768,
+        },
+    },
     "rpg_visual": {
         "enabled": False,
         "provider": "mock",
@@ -93,17 +117,18 @@ DEFAULT_SETTINGS = {
             "repo_id": "black-forest-labs/FLUX.2-klein-4B",
             "variant": "distilled",  # distilled | base
             "base_repo_id": "black-forest-labs/FLUX.2-klein-base-4B",
-            "download_dir": "resources\\models\\image",
+            "download_dir": "image",
             "local_dir": "",
             "device": "cuda",
             "torch_dtype": "bfloat16",
             "enable_cpu_offload": True,
             "prefer_local_files": True,
+            "allow_repo_fallback": False,
             "num_inference_steps": 4,
             "guidance_scale": 1.0,
             "portrait_width": 768,
             "portrait_height": 1024,
-            "scene_width": 1024,
+            "scene_width": 1344,
             "scene_height": 768,
             "item_width": 1024,
             "item_height": 1024
@@ -136,6 +161,17 @@ def migrate_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
             settings['audio_provider_stt'] = DEFAULT_SETTINGS['audio_provider_stt']
         if 'parakeet' not in settings:
             settings['parakeet'] = DEFAULT_SETTINGS['parakeet']
+        if 'image' not in settings:
+            settings['image'] = json.loads(json.dumps(DEFAULT_SETTINGS['image']))
+        else:
+            image = dict(settings.get('image') or {})
+            flux = dict(image.get('flux_klein') or {})
+            merged_image = json.loads(json.dumps(DEFAULT_SETTINGS['image']))
+            merged_image.update(image)
+            merged_flux = dict(merged_image.get('flux_klein') or {})
+            merged_flux.update(flux)
+            merged_image['flux_klein'] = merged_flux
+            settings['image'] = merged_image
         if 'rpg_visual' not in settings:
             settings['rpg_visual'] = json.loads(json.dumps(DEFAULT_SETTINGS['rpg_visual']))
         else:

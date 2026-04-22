@@ -1,12 +1,14 @@
 """Phase 12.13.5 — Queue runner for visual jobs with request-state awareness."""
 from __future__ import annotations
 
+import os
 from typing import Any, Dict
 
 from app.rpg.session.runtime import load_runtime_session, save_runtime_session
 from app.rpg.visual.worker import process_pending_image_requests
-from app.rpg.visual.providers import get_image_provider, image_generation_enabled
+from app.rpg.visual.providers import image_generation_enabled
 from app.rpg.visual.asset_store import save_asset_bytes
+from app.rpg.visual.global_image_adapter import generate_rpg_image
 
 from .job_queue import (
     claim_next_visual_job,
@@ -25,6 +27,20 @@ def _safe_str(value: Any) -> str:
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _result_bytes_and_mime(result: Any) -> tuple[bytes, str]:
+    image_bytes = getattr(result, "image_bytes", None)
+    mime_type = _safe_str(getattr(result, "mime_type", "")).strip() or "image/png"
+    if isinstance(image_bytes, (bytes, bytearray)) and image_bytes:
+        return bytes(image_bytes), mime_type
+
+    local_path = _safe_str(getattr(result, "local_path", "")).strip() or _safe_str(getattr(result, "file_path", "")).strip()
+    if local_path and os.path.isfile(local_path):
+        with open(local_path, "rb") as f:
+            return f.read(), mime_type
+
+    return b"", mime_type
 
 
 def _find_request(simulation_state: Dict[str, Any], request_id: str) -> Dict[str, Any]:
@@ -72,8 +88,6 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
                     "request_id": request_id,
                 }
             
-            provider = get_image_provider()
-            
             # Extract request metadata directly from request_id format
             parts = request_id.split(":")
             kind = parts[0] if len(parts) > 0 else "character_portrait"
@@ -93,6 +107,7 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
             
             # Minimal request object for generation
             request = {
+                "provider": "flux_klein",
                 "request_id": request_id,
                 "kind": kind,
                 "target_id": target_id,
@@ -102,16 +117,13 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
                 "model": "default",
                 "attempts": 0,
                 "max_attempts": 3,
+                "session_id": session_id,
+                "metadata": {
+                    "source": "rpg_preview"
+                },
             }
             
-            result = provider.generate(
-                prompt=_safe_str(request.get("prompt")).strip(),
-                seed=request.get("seed"),
-                style=_safe_str(request.get("style")).strip(),
-                model=_safe_str(request.get("model")).strip(),
-                kind=_safe_str(request.get("kind")).strip(),
-                target_id=_safe_str(request.get("target_id")).strip(),
-            )
+            result = generate_rpg_image(request)
             
             if not result.ok:
                 complete_visual_job(job_id=job_id, lease_token=lease_token, error=_safe_str(result.error).strip()[:500])
@@ -127,9 +139,10 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
             # Save generated asset
             version = 1
             asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
+            image_bytes, mime_type = _result_bytes_and_mime(result)
             image_path = save_asset_bytes(
-                result.image_bytes or b"",
-                mime_type=result.mime_type,
+                image_bytes,
+                mime_type=mime_type,
                 asset_id=asset_id,
                 kind=_safe_str(request.get("kind")).strip(),
                 target_id=_safe_str(request.get("target_id")).strip(),

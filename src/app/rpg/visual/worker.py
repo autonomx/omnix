@@ -1,8 +1,9 @@
 """Phase 12.10 — Worker executor for pending image requests."""
 from __future__ import annotations
 
+import os
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.rpg.presentation.visual_state import (
     append_scene_illustration,
@@ -14,7 +15,8 @@ from app.rpg.presentation.visual_state import (
     upsert_character_visual_identity,
 )
 from app.rpg.visual.asset_store import save_asset_bytes
-from app.rpg.visual.providers import get_image_provider, image_generation_enabled
+from app.rpg.visual.global_image_adapter import generate_rpg_image
+from app.rpg.visual.providers import image_generation_enabled
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -31,6 +33,20 @@ def _safe_str(value: Any) -> str:
 
 def _now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _result_bytes_and_mime(result: Any) -> tuple[bytes, str]:
+    image_bytes = getattr(result, "image_bytes", None)
+    mime_type = _safe_str(getattr(result, "mime_type", "")).strip() or "image/png"
+    if isinstance(image_bytes, (bytes, bytearray)) and image_bytes:
+        return bytes(image_bytes), mime_type
+
+    local_path = _safe_str(getattr(result, "local_path", "")).strip() or _safe_str(getattr(result, "file_path", "")).strip()
+    if local_path and os.path.isfile(local_path):
+        with open(local_path, "rb") as f:
+            return f.read(), mime_type
+
+    return b"", mime_type
 
 
 def _complete_character_portrait(
@@ -94,7 +110,6 @@ def process_pending_image_requests(
     simulation_state = ensure_visual_state(_safe_dict(simulation_state))
     if not image_generation_enabled():
         return simulation_state
-    provider = get_image_provider()
     pending = get_pending_image_requests(simulation_state)[: max(1, int(limit))]
 
     for request in pending:
@@ -137,14 +152,21 @@ def process_pending_image_requests(
             },
         )
 
-        result = provider.generate(
-            prompt=_safe_str(request.get("prompt")).strip(),
-            seed=request.get("seed") if isinstance(request.get("seed"), int) else None,
-            style=_safe_str(request.get("style")).strip(),
-            model=_safe_str(request.get("model")).strip(),
-            kind=_safe_str(request.get("kind")).strip(),
-            target_id=_safe_str(request.get("target_id")).strip(),
-        )
+        payload = {
+            "provider": "flux_klein",
+            "prompt": _safe_str(request.get("prompt")).strip(),
+            "seed": request.get("seed") if isinstance(request.get("seed"), int) else None,
+            "style": _safe_str(request.get("style")).strip(),
+            "model": _safe_str(request.get("model")).strip(),
+            "kind": _safe_str(request.get("kind")).strip(),
+            "target_id": _safe_str(request.get("target_id")).strip(),
+            "request_id": _safe_str(request.get("request_id")).strip(),
+            "session_id": _safe_str(request.get("session_id")).strip(),
+            "metadata": {
+                "source": "rpg_worker"
+            },
+        }
+        result = generate_rpg_image(payload)
 
         if not result.ok:
             moderation_status = _safe_str(result.moderation_status).strip()
@@ -242,12 +264,13 @@ def process_pending_image_requests(
             if isinstance(identity.get("version"), int) and identity.get("version") > 0:
                 version = identity.get("version")
 
-        final_prompt = _safe_str(result.revised_prompt).strip() or _safe_str(request.get("prompt")).strip()
+        final_prompt = _safe_str(getattr(result, "revised_prompt", "")).strip() or _safe_str(request.get("prompt")).strip()
+        image_bytes, mime_type = _result_bytes_and_mime(result)
 
         asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
         image_path = save_asset_bytes(
-            result.image_bytes or b"",
-            mime_type=result.mime_type,
+            image_bytes,
+            mime_type=mime_type,
             asset_id=asset_id,
             kind=_safe_str(request.get("kind")).strip(),
             target_id=_safe_str(request.get("target_id")).strip(),

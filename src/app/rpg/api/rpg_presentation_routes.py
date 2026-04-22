@@ -162,7 +162,7 @@ from app.rpg.validation.integrity import (
 
 # Phase 12.14 — Asset dedupe and cleanup
 from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
-from app.rpg.visual.downloads import download_flux_klein_model
+from app.image.downloads import download_flux_klein_model, get_flux_local_model_status
 
 # Phase 12.13.5 — Visual queue management with hardening
 from app.rpg.visual.job_queue import (
@@ -1824,6 +1824,31 @@ async def update_visual_provider_settings_route(request: Request):
         unload_image_provider_cache()
 
     return _jsonify({"ok": True, "settings": visual})
+
+
+@rpg_presentation_bp.post("/api/rpg/visual/download_flux_klein")
+async def download_flux_klein_route(_request: Request):
+    result = download_flux_klein_model()
+    code = 200 if result.get("ok") else 500
+    return _jsonify(result, status_code=code)
+
+
+@rpg_presentation_bp.get("/api/rpg/visual/download_flux_klein")
+async def download_flux_klein_status_route():
+    settings = load_settings()
+    image_cfg = _safe_dict(settings.get("image"))
+    flux = _safe_dict(image_cfg.get("flux_klein"))
+    local_dir = _safe_str(flux.get("local_dir")).strip()
+    if not local_dir:
+        from app.image.downloads import resolve_flux_local_dir_from_settings
+        local_dir = resolve_flux_local_dir_from_settings(settings)
+    status = get_flux_local_model_status(local_dir)
+    return _jsonify({
+        "ok": True,
+        "provider": "flux_klein",
+        "local_dir": local_dir,
+        "local_status": status,
+    })
 
 
 @rpg_presentation_bp.post("/api/rpg/visual/provider/download")

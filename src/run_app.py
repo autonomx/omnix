@@ -95,6 +95,7 @@ from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
 from app.rpg.api.rpg_game_routes import rpg_game_bp
 from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
 from app.rpg.api.rpg_session_routes import rpg_session_bp
+from app.image.api import router as image_router
 
 # RPG imports
 
@@ -490,6 +491,7 @@ app.include_router(rpg_adventure_bp)
 app.include_router(rpg_presentation_bp)
 app.include_router(rpg_game_bp)
 app.include_router(rpg_session_bp)
+app.include_router(image_router)
 
 # Import and register remaining RPG routers
 from app.rpg.api.rpg_debug_routes import rpg_debug_bp
