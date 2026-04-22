@@ -10,6 +10,7 @@
     // State
     // ---------------------------------------------------------------------------
     let storyState = {
+        sessionId: 'story_' + Math.random().toString(36).slice(2, 10),
         storyText: '',
         segments: [],
         speakers: {},        // { name: { name, gender, segment_count, suggested_voice } }
@@ -209,7 +210,14 @@
             const res = await fetch('/api/story/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ genre, tone, length, custom_prompt: customPrompt, characters }),
+                body: JSON.stringify({
+                    session_id: storyState.sessionId,
+                    genre,
+                    tone,
+                    length,
+                    custom_prompt: customPrompt,
+                    characters
+                }),
             });
             const data = await res.json();
 
@@ -220,6 +228,9 @@
 
             storyState.storyText = data.story;
             storyState.segments = data.segments;
+            if (data.session_id) {
+                storyState.sessionId = data.session_id;
+            }
 
             const textArea = _el('story-text');
             if (textArea) textArea.value = data.story;

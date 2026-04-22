@@ -16,6 +16,7 @@ import asyncio
 import base64
 import json
 import queue
+import uuid
 import re
 import os
 
@@ -76,6 +77,8 @@ for logger_name in ['app.rpg', 'rpg']:
     rpg_logger.propagate = True
 
 import app.shared as shared
+from app.image.chat_hooks import maybe_enqueue_chat_image
+from app.image.story_hooks import maybe_enqueue_story_scene_image
 from app.providers.base import ChatMessage
 from app.runtime_services import get_runtime_status_bundle
 from app.tts_http_client import (
@@ -2304,6 +2307,7 @@ def _parse_story_format(text: str) -> list:
 async def story_generate(request: Request):
     """Generate a structured story using the configured LLM."""
     data = await request.json()
+    story_session_id = str(data.get("session_id") or "").strip() or f"story_{uuid.uuid4().hex[:12]}"
     genre = data.get("genre", "fantasy")
     tone = data.get("tone", "epic")
     length = data.get("length", "short")
@@ -2347,7 +2351,25 @@ async def story_generate(request: Request):
     if not segments:
         return JSONResponse({"success": False, "error": "LLM output could not be parsed. Ensure the LLM is connected and responding correctly."}, status_code=500)
 
-    return {"success": True, "story": story_text, "segments": segments}
+    try:
+        settings = shared.load_settings()
+        image_settings = dict((settings or {}).get("image") or {})
+        story_image_settings = dict(image_settings.get("story") or {})
+        maybe_enqueue_story_scene_image(
+            session_id=story_session_id,
+            story_text=story_text,
+            settings=story_image_settings,
+        )
+    except Exception:
+        # Auto-image generation is best-effort and must not break story generation.
+        pass
+
+    return {
+        "success": True,
+        "story": story_text,
+        "segments": segments,
+        "session_id": story_session_id,
+    }
 
 
 @app.post("/api/story/parse")
@@ -2783,6 +2805,20 @@ async def chat_stream(request: Request):
                         "thinking": thinking
                     })
                     shared.save_sessions(shared.sessions_data)
+
+                    try:
+                        settings = shared.load_settings()
+                        image_settings = dict((settings or {}).get("image") or {})
+                        chat_image_settings = dict(image_settings.get("chat") or {})
+                        maybe_enqueue_chat_image(
+                            session_id=session_id,
+                            user_text=user_message,
+                            assistant_text=ai_message,
+                            settings=chat_image_settings,
+                        )
+                    except Exception:
+                        # Auto-image generation is best-effort and must not break chat streaming.
+                        pass
                 
                 yield f"data: {json.dumps({'type': 'done', 'thinking': thinking, 'session_id': session_id})}\n\n"
                 
