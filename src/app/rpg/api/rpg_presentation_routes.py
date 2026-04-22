@@ -163,6 +163,8 @@ from app.rpg.validation.integrity import (
 # Phase 12.14 — Asset dedupe and cleanup
 from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
 from app.image.downloads import download_flux_klein_model, get_flux_local_model_status
+from app.image.lifecycle import load_image_provider, unload_image_provider
+from app.image.settings_api import get_image_settings_payload, update_image_settings_payload
 
 # Phase 12.13.5 — Visual queue management with hardening
 from app.rpg.visual.job_queue import (
@@ -1866,44 +1868,26 @@ async def download_visual_provider_model_route(request: Request):
 async def load_visual_provider_route(request: Request):
     payload = await _get_json(request)
     provider = _safe_str(payload.get("provider")).strip().lower() or "flux_klein"
-    force_reload = bool(payload.get("force_reload", True))
-    settings = load_settings()
-    visual = _safe_dict(settings.get("rpg_visual"))
-    visual["enabled"] = True
-    visual["visual_provider"] = provider
-    visual["provider"] = provider
-    visual["image_provider"] = provider
-    settings["rpg_visual"] = visual
-    save_settings(settings)
-    selected_key, provider_instance = switch_image_provider_runtime(
-        provider_key=provider,
-        enabled=True,
-        provider_config=visual,
-        force_reload=force_reload,
-    )
-    load = getattr(provider_instance, "load", None)
-    if callable(load):
-        load()
-    response = get_visual_provider_status_payload()
-    response.update({
-        "ok": True,
-        "enabled": image_generation_enabled(),
-        "selected_provider": selected_key,
-        "provider": _safe_str(getattr(provider_instance, "provider_name", provider)).strip(),
-        "settings": visual,
+    image_result = load_image_provider(provider)
+    return _jsonify({
+        "ok": bool(image_result.get("ok")),
+        "enabled": True,
+        "provider": provider,
+        "settings": get_image_settings_payload().get("settings", {}),
     })
-    return _jsonify(response)
 
 
 @rpg_presentation_bp.post("/api/rpg/visual/provider/unload")
 async def unload_visual_provider_route(request: Request):
-    settings = load_settings()
-    visual = _safe_dict(settings.get("rpg_visual"))
-    visual["enabled"] = False
-    settings["rpg_visual"] = visual
-    save_settings(settings)
-    unload_image_provider_cache()
-    return _jsonify({"ok": True, "enabled": False, "provider": "disabled"})
+    payload = await _get_json(request)
+    provider = _safe_str(payload.get("provider")).strip().lower()
+    if not provider:
+        settings_payload = get_image_settings_payload()
+        settings = _safe_dict(settings_payload.get("settings"))
+        provider = _safe_str(settings.get("provider")).strip().lower() or "flux_klein"
+    unload_image_provider(provider)
+    image_settings = get_image_settings_payload().get("settings", {})
+    return _jsonify({"ok": True, "enabled": False, "provider": provider, "settings": image_settings})
 
 
 @rpg_presentation_bp.get("/api/rpg/visual/provider/status")

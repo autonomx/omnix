@@ -88,6 +88,18 @@ DEFAULT_SETTINGS = {
         "enabled": False,
         "provider": "flux_klein",
         "auto_unload_on_disable": True,
+        "chat": {
+            "auto_generate_images": False,
+            "style": "",
+        },
+        "story": {
+            "auto_generate_scene_images": False,
+            "auto_generate_cover_images": False,
+            "style": "story",
+        },
+        "mock": {
+            "enabled": True,
+        },
         "flux_klein": {
             "enabled": False,
             "repo_id": "black-forest-labs/FLUX.2-klein-4B",
@@ -168,6 +180,9 @@ def migrate_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
             flux = dict(image.get('flux_klein') or {})
             merged_image = json.loads(json.dumps(DEFAULT_SETTINGS['image']))
             merged_image.update(image)
+            merged_mock = dict(merged_image.get('mock') or {})
+            merged_mock.update(dict(image.get('mock') or {}))
+            merged_image['mock'] = merged_mock
             merged_flux = dict(merged_image.get('flux_klein') or {})
             merged_flux.update(flux)
             merged_image['flux_klein'] = merged_flux

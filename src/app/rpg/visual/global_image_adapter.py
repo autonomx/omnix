@@ -45,7 +45,7 @@ def generate_rpg_image(payload: Dict[str, Any]):
     kind = _normalize_rpg_kind(_safe_str(payload.get("kind")))
     default_width, default_height = _default_dimensions_for_kind(kind)
     adapted = {
-        "provider": payload.get("provider", "flux_klein"),
+        "provider": _safe_str(payload.get("provider")).strip(),
         "prompt": _safe_str(payload.get("prompt")),
         "negative_prompt": _safe_str(payload.get("negative_prompt")),
         "width": payload.get("width", default_width),

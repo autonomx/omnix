@@ -4,7 +4,10 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.image.config import get_active_image_provider_name, get_provider_config
+from app.image.job_queue import enqueue_image_job
 from app.image.models import ImageGenerationRequest, ImageGenerationResponse
+from app.image.consumer_adapters import build_chat_image_request, build_story_image_request
+from app.image.providers.registry import is_supported_image_provider
 
 
 def _safe_str(value: Any) -> str:
@@ -32,6 +35,8 @@ def _safe_float(value: Any, default: float) -> float:
 def _normalize_request(payload: Dict[str, Any]) -> ImageGenerationRequest:
     payload = payload if isinstance(payload, dict) else {}
     provider = _safe_str(payload.get("provider")).strip() or get_active_image_provider_name()
+    if not is_supported_image_provider(provider):
+        provider = get_active_image_provider_name()
     return ImageGenerationRequest(
         provider=provider,
         prompt=_safe_str(payload.get("prompt")).strip(),
@@ -56,6 +61,9 @@ def _load_provider(provider_name: str, provider_config: Dict[str, Any]):
     if provider_name == "flux_klein":
         from app.image.providers.flux_klein_provider import FluxKleinImageProvider
         return FluxKleinImageProvider(provider_config)
+    if provider_name == "mock":
+        from app.image.providers.mock_provider import MockImageProvider
+        return MockImageProvider(provider_config)
 
     raise RuntimeError(f"unsupported_image_provider:{provider_name}")
 
@@ -123,3 +131,11 @@ def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
             **result_metadata,
         },
     )
+
+
+def enqueue_chat_image(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return enqueue_image_job(build_chat_image_request(payload))
+
+
+def enqueue_story_image(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return enqueue_image_job(build_story_image_request(payload))

@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.shared import load_settings
+from app.image.providers.registry import is_supported_image_provider
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -35,7 +36,11 @@ def get_image_settings() -> Dict[str, Any]:
 def get_active_image_provider_name() -> str:
     image_cfg = get_image_settings()
     provider = _safe_str(image_cfg.get("provider")).strip()
-    return provider or "flux_klein"
+    if not provider:
+        return "flux_klein"
+    if is_supported_image_provider(provider):
+        return provider
+    return "flux_klein"
 
 
 def get_provider_config(provider_name: str) -> Dict[str, Any]:
@@ -44,5 +49,7 @@ def get_provider_config(provider_name: str) -> Dict[str, Any]:
 
     if provider_name == "flux_klein":
         return _safe_dict(image_cfg.get("flux_klein"))
+    if provider_name == "mock":
+        return _safe_dict(image_cfg.get("mock"))
 
     return {}

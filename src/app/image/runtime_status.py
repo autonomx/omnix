@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
+from app.image.config import get_active_image_provider_name
 from app.image.downloads import get_flux_local_model_status, resolve_flux_local_dir_from_settings
 from app.image.flux_pipeline_compat import validate_flux_pipeline_import, validate_flux_repo_runtime
 
@@ -29,4 +30,24 @@ def validate_global_flux_klein_runtime() -> Dict[str, Any]:
         "local_status": local_status,
         "runtime": compat,
         "repo_runtime": repo_runtime,
+    }
+
+
+def validate_global_image_runtime() -> Dict[str, Any]:
+    provider = get_active_image_provider_name()
+    if provider == "flux_klein":
+        return validate_global_flux_klein_runtime()
+    if provider == "mock":
+        return {
+            "ok": True,
+            "provider": "mock",
+            "local_dir": "",
+            "local_status": {"ok": True, "exists": False, "complete": True, "missing": []},
+            "runtime": {"ok": True, "details": {"provider": "mock"}},
+            "repo_runtime": {},
+        }
+    return {
+        "ok": False,
+        "provider": provider,
+        "error": "unsupported_image_provider",
     }

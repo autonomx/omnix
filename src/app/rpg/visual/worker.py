@@ -153,7 +153,7 @@ def process_pending_image_requests(
         )
 
         payload = {
-            "provider": "flux_klein",
+            "provider": _safe_str(request.get("provider")).strip(),
             "prompt": _safe_str(request.get("prompt")).strip(),
             "seed": request.get("seed") if isinstance(request.get("seed"), int) else None,
             "style": _safe_str(request.get("style")).strip(),
