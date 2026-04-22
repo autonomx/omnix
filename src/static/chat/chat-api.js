@@ -453,7 +453,6 @@ function onAudioPlaybackComplete() {
   }
   console.log('[TTS DEBUG] ========== AUDIO PLAYBACK COMPLETE ==========');
 }
-}
 
 function base64ToFloat32(b64) {
   const binary = atob(b64);
@@ -478,8 +477,9 @@ function scheduleChunk(float32Array, sampleRate) {
   audioQueue.push(buffer);
   console.log('[TTS DEBUG] Buffer created and pushed to queue, new queue length:', audioQueue.length);
   
-  // Auto-start playback if not playing and we have enough buffered (3+ chunks for smoothness)
-  if (!isPlaying && audioQueue.length >= 3) {
+  // Auto-start playback as soon as the first chunk is available.
+  // Some providers return a single large chunk, so waiting for 3 chunks deadlocks playback.
+  if (!isPlaying && audioQueue.length > 0) {
     console.log('[TTS DEBUG] Auto-starting playback from scheduleChunk');
     playQueuedAudio();
   } else {
@@ -512,6 +512,7 @@ function playQueuedAudio() {
       isPlaying = true; 
       return; 
   }
+  console.log('[TTS DEBUG] No current audio source, proceeding with queued playback');
   
   isPlaying = true;
   isPaused = false;
@@ -581,6 +582,9 @@ function pauseTTSAudio() {
 window.stopTTSAudio = stopTTSAudio;
 window.pauseTTSAudio = pauseTTSAudio;
 window.setTTSButtonState = setTTSButtonState;
+window.isPlaying = isPlaying;
+window.isPaused = isPaused;
+window.audioQueue = audioQueue;
 
 function ensureAudioContext() {
   console.log('[TTS DEBUG] ensureAudioContext called');
@@ -688,15 +692,22 @@ async function speakTextStreaming(text, speaker = 'en') {
                 scheduleChunk(float32Data, data.sample_rate);
                 console.log('[TTS DEBUG] Chunk scheduled, audioQueue length now:', audioQueue.length);
                 
-                // Start playback only after buffering 3 chunks for smoother audio
-                if (!isPlaying && audioQueue.length >= 3) {
-                  console.log('[TTS DEBUG] Buffer threshold reached (3 chunks), calling playQueuedAudio()');
+                // Start playback immediately once any audio has been queued.
+                // This avoids hanging forever when the server emits only one chunk.
+                if (!isPlaying && audioQueue.length > 0) {
+                  console.log('[TTS DEBUG] Audio available, calling playQueuedAudio()');
                   playQueuedAudio();
                 } else {
                   console.log('[TTS DEBUG] Not starting playback yet:', { isPlaying, audioQueueLength: audioQueue.length });
                 }
               } else if (data.type === 'done') {
                 console.log('[TTS DEBUG] DONE message received from server, total chunks:', chunkCount);
+                // If audio was queued but playback never started yet, start it now.
+                if (!isPlaying && audioQueue.length > 0) {
+                  console.log('[TTS DEBUG] DONE received with queued audio and idle playback, forcing playQueuedAudio()');
+                  playQueuedAudio();
+                }
+
                 // Wait for queue to finish before resolving
                 const waitForQueue = () => {
                   if (audioQueue.length > 0 || isPlaying) {

@@ -123,8 +123,8 @@ function addMessage(role, content, thinking = null, tokens = null, tokensPerSec 
             currentMessageDiv = messageDiv;
             
             // If paused, resume playback instead of restarting TTS
-            if (isPaused) {
-                isPaused = false;
+            if (window.isPaused) {
+                window.isPaused = false;
 
                 ensureAudioContext();
                 playQueuedAudio();
