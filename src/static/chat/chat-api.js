@@ -472,6 +472,41 @@ function scheduleChunk(float32Array, sampleRate) {
   const audioCtx = getAudioContext();
   console.log('[TTS DEBUG] AudioContext state:', audioCtx?.state);
   
+  // Start-click suppression:
+  // 1) estimate and remove tiny DC offset from the opening window
+  // 2) apply a short sample-domain fade-in over the first few milliseconds
+  //
+  // This is more reliable than only zeroing sample[0], because the PCM itself
+  // may begin with a hard edge even if playback starts through a gain node.
+  if (float32Array && float32Array.length > 0) {
+    const dcWindow = Math.min(float32Array.length, Math.max(32, Math.floor(sampleRate * 0.005))); // ~5ms
+    let dcSum = 0.0;
+    for (let i = 0; i < dcWindow; i++) {
+      dcSum += float32Array[i];
+    }
+    const dcOffset = dcWindow > 0 ? (dcSum / dcWindow) : 0.0;
+
+    if (Math.abs(dcOffset) > 1e-6) {
+      for (let i = 0; i < float32Array.length; i++) {
+        float32Array[i] -= dcOffset;
+      }
+    }
+
+    const fadeSamples = Math.min(float32Array.length, Math.max(64, Math.floor(sampleRate * 0.010))); // ~10ms
+    for (let i = 0; i < fadeSamples; i++) {
+      const t = i / fadeSamples;
+      float32Array[i] *= t;
+    }
+
+    // Force exact silence at the first sample.
+    float32Array[0] = 0.0;
+
+    console.log('[TTS DEBUG] Applied input fade-in and DC offset correction', {
+      dcOffset,
+      fadeSamples
+    });
+  }
+
   const buffer = audioCtx.createBuffer(1, float32Array.length, sampleRate);
   buffer.copyToChannel(float32Array, 0);
   audioQueue.push(buffer);
@@ -526,9 +561,24 @@ function playQueuedAudio() {
   
   const source = audioCtx.createBufferSource();
   source.buffer = buffer;
-  source.connect(audioCtx.destination);
+  
+  // Keep a small output ramp in addition to the input fade-in.
+  const gainNode = audioCtx.createGain();
+  const now = audioCtx.currentTime;
+  const startAt = now + 0.002;
+  const fadeInSec = 0.005;
+
+  gainNode.gain.cancelScheduledValues(now);
+  gainNode.gain.setValueAtTime(0.0, now);
+  gainNode.gain.linearRampToValueAtTime(1.0, startAt + fadeInSec);
+
+  source.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
   currentAudioSource = source;
-  console.log('[TTS DEBUG] Source created, connected to destination, set as currentAudioSource');
+  console.log('[TTS DEBUG] Source created, connected through output ramp, set as currentAudioSource', {
+    startAt,
+    fadeInSec
+  });
   
   source.onended = () => {
     console.log('[TTS DEBUG] Source onended event fired');
@@ -542,8 +592,8 @@ function playQueuedAudio() {
     }
   };
   
-  console.log('[TTS DEBUG] Calling source.start() NOW');
-  source.start();
+  console.log('[TTS DEBUG] Calling source.start() with ramped start time');
+  source.start(startAt);
   console.log('[TTS DEBUG] source.start() completed');
 }
 
