@@ -1066,6 +1066,18 @@ body::before {
     color: var(--text-primary);
 }
 
+.welcome-speaker-btn.success {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.welcome-speaker-btn.error {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: var(--error);
+    color: var(--error);
+}
+
 .app-title {
     font-size: 1.25rem;
     font-weight: 600;

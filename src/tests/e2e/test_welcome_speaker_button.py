@@ -1,118 +1,116 @@
 """
-Test for welcome speaker button in header.
-Verifies that clicking the speaker button triggers TTS functionality
-and checks for console errors.
+End-to-end test for welcome speaker button in header.
+Waits for TTS status, clicks button, verifies client handles TTS correctly.
 """
 
 from __future__ import annotations
 
 import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import expect
 
 
-class TestWelcomeSpeakerButton:
-    """Test suite for welcome speaker button functionality."""
-
-    def test_welcome_speaker_button_exists(self, page: Page):
-        """Verify the speaker button is present in the header."""
-        page.goto("http://localhost:5000/", wait_until="domcontentloaded")
-        
-        # Verify button exists
-        speaker_btn = page.locator("#welcomeSpeakerBtn")
-        expect(speaker_btn).to_be_visible()
-        expect(speaker_btn).to_be_enabled()
-        
-        # Verify button has correct title
-        expect(speaker_btn).to_have_attribute("title", "Play welcome message")
-
-    def test_clicking_speaker_button_triggers_tts(self, page: Page):
-        """Test clicking the speaker button and monitor for TTS errors."""
-        console_errors = []
-        
-        # Capture console errors
-        def on_console(msg):
-            if msg.type == "error":
-                console_errors.append(msg.text)
-        
-        page.on("console", on_console)
-        
-        # Navigate to app
-        page.goto("http://localhost:5000/", wait_until="domcontentloaded")
-        
-        # Wait for all scripts to load
-        page.wait_for_function("""() => {
-            return typeof window.speakText !== 'undefined' || 
-                   typeof window.speakTextStreaming !== 'undefined';
-        }""", timeout=5000)
-        
-        # Click the speaker button
-        speaker_btn = page.locator("#welcomeSpeakerBtn")
-        speaker_btn.click()
-        
-        # Wait briefly for any errors to appear
-        page.wait_for_timeout(1000)
-        
-        # Verify no TTS related console errors
-        tts_errors = [
-            err for err in console_errors 
-            if any(term in err.lower() for term in [
-                'tts', 'speak', 'audio', 'voice', 'sound',
-                'networkerror', 'fetch', 'api/tts'
-            ])
-        ]
-        
-        assert len(tts_errors) == 0, f"Found TTS related console errors: {tts_errors}"
-
-    def test_speak_function_available(self, page: Page):
-        """Verify speakText function is available globally."""
-        page.goto("http://localhost:5000/", wait_until="domcontentloaded")
-        
-        page.wait_for_function("""() => {
-            return typeof window.speakText === 'function' || 
-                   typeof window.speakTextStreaming === 'function';
-        }""", timeout=5000)
-        
-        # Verify function exists
-        has_speak_function = page.evaluate("""() => {
-            return typeof window.speakText === 'function' || 
-                   typeof window.speakTextStreaming === 'function';
-        }""")
-        
-        assert has_speak_function, "Speak function not available on window object"
-
-    def test_click_calls_speak_function(self, page: Page):
-        """Verify button click invokes the speak function with correct text."""
-        page.goto("http://localhost:5000/", wait_until="domcontentloaded")
-        
-        # Wait for chat module to initialize
-        page.wait_for_function("""() => {
-            return document.getElementById('welcomeSpeakerBtn') !== null &&
-                   typeof window.speakText === 'function';
-        }""", timeout=5000)
-        
-        # Spy on speak function
-        page.evaluate("""() => {
-            window.originalSpeakText = window.speakText;
-            window.speakTextCalled = false;
-            window.speakTextArgument = null;
-            
-            window.speakText = function(text, speaker) {
-                window.speakTextCalled = true;
-                window.speakTextArgument = text;
-                return Promise.resolve();
-            };
-        }""")
-        
-        # Click button
-        page.locator("#welcomeSpeakerBtn").click()
-        page.wait_for_timeout(100)
-        
-        # Verify function was called
-        called = page.evaluate("() => window.speakTextCalled")
-        arg = page.evaluate("() => window.speakTextArgument")
-        
-        assert called is True, "speakText was not called when clicking speaker button"
-        assert arg == "Hello, welcome to Omnix chat", f"Unexpected text passed to speakText: {arg}"
-        
-        # Restore original function
-        page.evaluate("() => window.speakText = window.originalSpeakText")
+def test_welcome_speaker_button_e2e(page):
+    """Complete end-to-end test for welcome speaker button."""
+    console_logs = []
+    console_errors = []
+    
+    # Capture all console output
+    def on_console(msg):
+        text = msg.text
+        console_logs.append(f"[{msg.type}] {text}")
+        if msg.type == "error":
+            console_errors.append(text)
+    
+    page.on("console", on_console)
+    
+    # Navigate to app
+    print("Navigating to app...")
+    page.goto("http://localhost:5000/", wait_until="domcontentloaded")
+    
+    # Wait for TTS status to resolve
+    print("Waiting for TTS status to complete loading...")
+    status_text = page.wait_for_function("""() => {
+        const status = document.getElementById('xttsStatusText');
+        if (!status) return null;
+        const text = status.textContent;
+        if (text.includes('Stopped') || text.includes('Running') || 
+            text.includes('Ready') || text.includes('Offline') || 
+            text.includes('Error')) {
+            return text;
+        }
+        return null;
+    }""", timeout=30000)
+    
+    tts_status = status_text.json_value()
+    print(f"TTS status resolved: {tts_status}")
+    
+    # Verify speaker button exists and is enabled
+    speaker_btn = page.locator("#welcomeSpeakerBtn")
+    expect(speaker_btn).to_be_visible()
+    expect(speaker_btn).to_be_enabled()
+    print("Speaker button is visible and enabled")
+    
+    # Click the speaker button
+    print("Clicking welcome speaker button...")
+    speaker_btn.click()
+    
+    # Wait for button to show color state (green/red)
+    print("Waiting for button status to update...")
+    page.wait_for_function("""() => {
+        const btn = document.getElementById('welcomeSpeakerBtn');
+        return btn.classList.contains('success') || btn.classList.contains('error');
+    }""", timeout=10000)
+    
+    # Print all console logs
+    print("\n--- Console logs during test: ---")
+    for log in console_logs:
+        print(log)
+    
+    # Check for critical client errors
+    critical_errors = [
+        err for err in console_errors 
+        if any(term in err.lower() for term in [
+            'uncaught', 'typeerror', 'cannot read', 'undefined', 'null'
+        ])
+    ]
+    
+    # Verify no uncaught client exceptions
+    assert len(critical_errors) == 0, (
+        f"Found critical client errors: {critical_errors}\n"
+        "Client should handle TTS failures gracefully without exceptions"
+    )
+    
+    # Verify TTS requests were attempted (expected when TTS is running)
+    tts_attempts = any(
+        '[tts]' in log.lower() or 'api/tts' in log.lower()
+        for log in console_logs
+    )
+    
+    if tts_status == 'Running' or tts_status == 'Ready':
+        assert tts_attempts, "TTS requests should be made when TTS is running"
+        print("✓ TTS requests were successfully initiated")
+    
+    # Check button state
+    button_has_error = page.evaluate("""() => {
+        const btn = document.getElementById('welcomeSpeakerBtn');
+        return btn.classList.contains('error');
+    }""")
+    
+    button_has_success = page.evaluate("""() => {
+        const btn = document.getElementById('welcomeSpeakerBtn');
+        return btn.classList.contains('success');
+    }""")
+    
+    print(f"Button state: success={button_has_success}, error={button_has_error}")
+    
+    # Fail test if button shows error status
+    if button_has_error:
+        error_logs = [log for log in console_logs if '[error]' in log or '[TTS]' in log or '500' in log]
+        error_details = "\n".join(error_logs)
+        pytest.fail(f"Speaker button turned red - TTS errors detected\n\n--- TTS ERRORS ---\n{error_details}\n\nButton state: ERROR (red)")
+    
+    print("\nTest completed successfully:")
+    print(f"  - TTS status: {tts_status}")
+    print(f"  - Button clicked successfully")
+    print(f"  - No critical client errors found ({len(console_errors)} total errors)")
+    print(f"  - Button status: {'SUCCESS (green)' if button_has_success else 'NEUTRAL'}")

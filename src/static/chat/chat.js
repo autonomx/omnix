@@ -74,11 +74,62 @@ function setupChatControls() {
     // Welcome speaker button
     const welcomeSpeakerBtn = document.getElementById('welcomeSpeakerBtn');
     if (welcomeSpeakerBtn) {
-        welcomeSpeakerBtn.addEventListener('click', () => {
-            if (typeof window.speakText === 'function') {
-                window.speakText("Hello, welcome to Omnix chat");
-            } else if (typeof window.speakTextStreaming === 'function') {
-                window.speakTextStreaming("Hello, welcome to Omnix chat");
+        welcomeSpeakerBtn.addEventListener('click', async () => {
+            // Reset state
+            welcomeSpeakerBtn.classList.remove('success', 'error');
+            
+            // Track success flag
+            let ttsSucceeded = false;
+            
+            // Override console.error temporarily to catch TTS errors
+            const originalConsoleError = console.error;
+            const ttsErrors = [];
+            
+            console.error = function(...args) {
+                originalConsoleError.apply(console, args);
+                // Detect all TTS, FastAPI, and server errors
+                if (args.some(arg => {
+                    const strArg = String(arg);
+                    return strArg.includes('[TTS]') ||
+                           strArg.includes('api/tts') ||
+                           strArg.includes('HTTP 500') ||
+                           strArg.includes('Internal Server Error') ||
+                           strArg.includes('Failed to load resource') ||
+                           strArg.includes('NetworkError') ||
+                           strArg.includes('tts_server') ||
+                           strArg.includes('FastAPI');
+                })) {
+                    ttsErrors.push(args);
+                }
+            };
+            
+            try {
+                if (typeof window.speakText === 'function') {
+                    await window.speakText("Hello, welcome to Omnix chat");
+                } else if (typeof window.speakTextStreaming === 'function') {
+                    await window.speakTextStreaming("Hello, welcome to Omnix chat");
+                }
+                
+                // Check if any TTS errors were logged
+                ttsSucceeded = ttsErrors.length === 0;
+                
+            } catch (e) {
+                ttsSucceeded = false;
+            } finally {
+                // Restore original console.error
+                console.error = originalConsoleError;
+                
+                // Set status
+                if (ttsSucceeded) {
+                    welcomeSpeakerBtn.classList.add('success');
+                } else {
+                    welcomeSpeakerBtn.classList.add('error');
+                }
+                
+                // Clear state after 3 seconds
+                setTimeout(() => {
+                    welcomeSpeakerBtn.classList.remove('success', 'error');
+                }, 3000);
             }
         });
     }
