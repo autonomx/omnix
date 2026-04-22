@@ -166,9 +166,14 @@ def _ensure_transformers_qwen3_compat() -> None:
         sys.modules["transformers.utils"].can_return_tuple = _noop
 
     # ---- 4. Provide missing masking_utils module ----
-    if "transformers.masking_utils" not in sys.modules:
+    import importlib
+    try:
+        real_masking_utils = importlib.import_module("transformers.masking_utils")
+        masking_utils = real_masking_utils
+    except Exception:
+        # Always replace broken or missing module
         masking_utils = types.ModuleType("transformers.masking_utils")
-
+        
         # minimal stubs used by older Qwen codepaths
         def _dummy(*args, **kwargs):
             return None
@@ -178,6 +183,26 @@ def _ensure_transformers_qwen3_compat() -> None:
         masking_utils.create_sliding_window_causal_mask = _dummy
 
         sys.modules["transformers.masking_utils"] = masking_utils
+
+    # transformers>=4.57 generation.utils imports these symbols.
+    if not hasattr(masking_utils, "create_masks_for_generate"):
+        def create_masks_for_generate(*args, **kwargs):
+            # Minimal compatibility shim:
+            # return None so downstream generation code can fall back to
+            # model-internal/default masking behavior rather than crashing
+            return None
+
+        masking_utils.create_masks_for_generate = create_masks_for_generate
+        
+    if not hasattr(masking_utils, "prepare_decoder_attention_mask"):
+        def prepare_decoder_attention_mask(*args, **kwargs):
+            return None
+        masking_utils.prepare_decoder_attention_mask = prepare_decoder_attention_mask
+
+    if not hasattr(masking_utils, "prepare_attention_mask_for_generation"):
+        def prepare_attention_mask_for_generation(*args, **kwargs):
+            return None
+        masking_utils.prepare_attention_mask_for_generation = prepare_attention_mask_for_generation
 
     # ---- 5. Provide missing modeling_layers module for transformers >=4.51 ----
     if "transformers.modeling_layers" not in sys.modules:

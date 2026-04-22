@@ -317,5 +317,25 @@ class TestTtsIntegration:
         assert len(common) >= 1, "No common speakers found between services"
 
 
+def test_initialize_tts_provider_fails_when_startup_not_running(monkeypatch):
+    import sys
+    sys.path.insert(0, "src")
+    import tts_server
+
+    class _BadProvider:
+        provider_name = "qwen3_tts"
+        device = "cpu"
+        _model_config = {"model_name": "Qwen/Qwen3-TTS-12Hz-0.6B-Base"}
+
+        def start(self):
+            return {"running": False, "error": "provider_start_failed"}
+
+    monkeypatch.setattr(tts_server, "_load_qwen3_provider", lambda: _BadProvider())
+
+    result = tts_server.initialize_tts_provider()
+    assert result["ok"] is False
+    assert "provider_start_failed" in result["error"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

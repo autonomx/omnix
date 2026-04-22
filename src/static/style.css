@@ -1047,6 +1047,25 @@ body::before {
     border-radius: 8px;
 }
 
+.welcome-speaker-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 6px;
+    transition: all 0.2s;
+}
+
+.welcome-speaker-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
 .app-title {
     font-size: 1.25rem;
     font-weight: 600;

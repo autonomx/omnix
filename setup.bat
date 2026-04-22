@@ -1,8 +1,4 @@
 @echo off
-echo ########################################
-echo ### USING SETUP.BAT (CURRENT VERSION) ###
-echo ########################################
-pause
 setlocal
 set "OMNIX_REPO_ROOT=%~dp0"
 set "OMNIX_REPO_ROOT=%OMNIX_REPO_ROOT:~0,-1%"

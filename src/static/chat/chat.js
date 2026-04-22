@@ -71,6 +71,18 @@ function setupChatControls() {
         });
     }
     
+    // Welcome speaker button
+    const welcomeSpeakerBtn = document.getElementById('welcomeSpeakerBtn');
+    if (welcomeSpeakerBtn) {
+        welcomeSpeakerBtn.addEventListener('click', () => {
+            if (typeof window.speakText === 'function') {
+                window.speakText("Hello, welcome to Omnix chat");
+            } else if (typeof window.speakTextStreaming === 'function') {
+                window.speakTextStreaming("Hello, welcome to Omnix chat");
+            }
+        });
+    }
+    
     // New chat button - use SessionManager
     const newChatBtns = [
         document.getElementById('newChatBtn'),

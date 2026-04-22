@@ -249,6 +249,9 @@ def load_tts_model(model_name: str, device: str, **kwargs) -> Any:
         )
 
     # Import only after bootstrap validation is complete
+    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+    _ensure_transformers_qwen3_compat()
+    
     from app.providers.vendor.faster_qwen3_tts.model import FasterQwen3TTS
 
     resolved_model_source = _resolve_model_source(model_name)

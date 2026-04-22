@@ -138,3 +138,36 @@ def test_validate_qwen3_tts_runtime_returns_structured_payload(monkeypatch):
     assert payload["details"]["compat"]["shim_has_auto_docstring"] is True
     assert payload["details"]["compat"]["shim_has_all_attention_functions"] is True
     assert payload["details"]["compat"]["shim_patched_safetensors_metadata"] is True
+
+
+def test_transformers_masking_utils_shim_exposes_create_masks_for_generate():
+    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+    import importlib
+    import sys
+
+    # Clear any existing module first and save original
+    original = sys.modules.pop("transformers.masking_utils", None)
+
+    try:
+        # Apply compat shims
+        _ensure_transformers_qwen3_compat()
+
+        # Import the module
+        masking_utils = importlib.import_module("transformers.masking_utils")
+
+        # Verify the symbol exists and is callable
+        assert hasattr(masking_utils, "create_masks_for_generate")
+        assert callable(masking_utils.create_masks_for_generate)
+        assert hasattr(masking_utils, "prepare_decoder_attention_mask")
+        assert callable(masking_utils.prepare_decoder_attention_mask)
+        assert hasattr(masking_utils, "prepare_attention_mask_for_generation")
+        assert callable(masking_utils.prepare_attention_mask_for_generation)
+        
+        # Verify they return None as expected
+        assert masking_utils.create_masks_for_generate() is None
+        assert masking_utils.prepare_decoder_attention_mask() is None
+        assert masking_utils.prepare_attention_mask_for_generation() is None
+    finally:
+        # Restore original module if it existed
+        if original is not None:
+            sys.modules["transformers.masking_utils"] = original

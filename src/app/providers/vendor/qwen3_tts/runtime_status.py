@@ -126,6 +126,12 @@ def validate_qwen3_tts_runtime() -> Dict[str, Any]:
         compat["shim_has_all_attention_functions"] = hasattr(modeling_utils, "ALL_ATTENTION_FUNCTIONS")
         compat["shim_has_auto_docstring"] = hasattr(transformers_utils, "auto_docstring")
         compat["shim_has_auto_class_docstring"] = hasattr(transformers_utils, "auto_class_docstring")
+        try:
+            import importlib
+            masking_utils = importlib.import_module("transformers.masking_utils")
+            compat["shim_has_create_masks_for_generate"] = hasattr(masking_utils, "create_masks_for_generate")
+        except Exception:
+            compat["shim_has_create_masks_for_generate"] = False
     except Exception as exc:
         return _fail_payload(
             "qwen3_tts",
