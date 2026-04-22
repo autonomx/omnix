@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import requests
@@ -97,16 +97,6 @@ from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
 from app.rpg.api.rpg_session_routes import rpg_session_bp
 
 # RPG imports
-from app.rpg.models import GameSession
-from app.rpg.persistence import CURRENT_RPG_SCHEMA_VERSION, migrate_package_to_current
-from app.rpg.pipeline import (
-    create_new_game,
-    delete_game,
-    execute_turn,
-    list_games,
-    load_game,
-    replay_turn,
-)
 
 # ============== CONFIG ==============
 HOST = "0.0.0.0"
@@ -412,7 +402,7 @@ app = FastAPI(title="Omnix FastAPI", lifespan=lifespan)
 # Serve static files directly
 from pathlib import Path
 
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse
 
 BASE_DIR = Path(__file__).parent
 static_dir = BASE_DIR / 'static'
@@ -2490,7 +2480,6 @@ async def llamacpp_start(request: Request):
         )
         
         # Start thread to read and log server output to file
-        import logging
         import threading
         
         log_file = Path(shared.BASE_DIR) / "logs" / "llama-server.log"
@@ -2520,7 +2509,6 @@ async def llamacpp_start(request: Request):
 async def llamacpp_stop():
     """Stop llama.cpp server"""
     try:
-        import subprocess as sp
         port = 8080
         try: 
             port = int(shared.load_settings().get('llamacpp', {}).get('base_url', '').split(':')[-1])
@@ -2619,7 +2607,7 @@ async def get_xtts_logs():
     logs = []
     try:
         # Try Flask first
-        response = requests.get(f"http://127.0.0.1:5001/api/services/xtts/logs", timeout=5)
+        response = requests.get("http://127.0.0.1:5001/api/services/xtts/logs", timeout=5)
         if response.ok:
             data = response.json()
             if data.get("logs"):
@@ -2644,7 +2632,7 @@ async def get_stt_logs():
     logs = []
     try:
         # Try Flask first
-        response = requests.get(f"http://127.0.0.1:5001/api/services/stt/logs", timeout=5)
+        response = requests.get("http://127.0.0.1:5001/api/services/stt/logs", timeout=5)
         if response.ok:
             data = response.json()
             if data.get("logs"):
@@ -2806,18 +2794,19 @@ async def chat_stream(request: Request):
 @app.post("/api/conversation/greeting")
 async def greeting(request: Request):
     """HTTP fallback for greeting"""
-    if not tts_provider:
-        return JSONResponse({"success": False, "error": "No TTS"})
-    
     try:
+        provider = _get_tts_provider()
+        if not provider:
+            return JSONResponse({"success": False, "error": "No TTS"}, status_code=503)
+
         data = await request.json()
         speaker = data.get('speaker', 'default')
         greeting_text = "Hello! I'm listening. How can I help you today?"
         
-        if hasattr(tts_provider, 'generate_tts'):
-            result = tts_provider.generate_tts(text=greeting_text, speaker=speaker, language="en")
+        if hasattr(provider, 'generate_tts'):
+            result = provider.generate_tts(text=greeting_text, speaker=speaker, language="en")
         else:
-            result = tts_provider.generate_audio(text=greeting_text, speaker=speaker, language="en")
+            result = provider.generate_audio(text=greeting_text, speaker=speaker, language="en")
         
         if result and result.get('success'):
             return {
@@ -2826,8 +2815,15 @@ async def greeting(request: Request):
                 "audio": result.get('audio', ''),
                 "sample_rate": result.get('sample_rate', 24000)
             }
+        return JSONResponse(
+            {
+                "success": False,
+                "error": (result or {}).get("error", "greeting_tts_failed"),
+            },
+            status_code=502,
+        )
     except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)})
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
 # ============== TTS ENDPOINTS ==============
@@ -3224,14 +3220,14 @@ async def tts_stream_cancel():
 _ws_tts_semaphore = threading.Semaphore(2)
 
 
-def _generate_ws_tts(text: str, speaker: str, ws: WebSocket,
+def _generate_ws_tts(provider: Any, text: str, speaker: str, ws: WebSocket,
                      loop: asyncio.AbstractEventLoop, abort_flag: list):
     """Synchronous TTS generator — runs in a worker thread.
 
     Streams int16 PCM frames to the WebSocket via ``run_coroutine_threadsafe``.
     """
-    if not tts_provider or not hasattr(tts_provider, 'generate_audio_stream'):
-        err = "TTS streaming not supported by current provider" if tts_provider else "No TTS provider loaded"
+    if not provider or not hasattr(provider, 'generate_audio_stream'):
+        err = "TTS streaming not supported by current provider" if provider else "No TTS provider loaded"
         asyncio.run_coroutine_threadsafe(
             ws.send_json({"type": "error", "error": err}),
             loop,
@@ -3246,7 +3242,7 @@ def _generate_ws_tts(text: str, speaker: str, ws: WebSocket,
     start_time = time.time()
 
     try:
-        for audio_chunk, sr, timing in tts_provider.generate_audio_stream(
+        for audio_chunk, sr, timing in provider.generate_audio_stream(
             text=text,
             speaker=speaker,
             language="English",
@@ -3410,6 +3406,12 @@ async def websocket_tts(websocket: WebSocket):
             # Reset abort flag for the new request
             abort_flag[0] = False
 
+            provider = _get_tts_provider()
+            if not provider:
+                await websocket.send_json({"type": "error", "error": "No TTS provider loaded"})
+                await websocket.send_json({"type": "done"})
+                continue
+
             # Run TTS generation in a thread so we don't block the event loop
             acquired = _ws_tts_semaphore.acquire(timeout=5)
             if not acquired:
@@ -3420,6 +3422,7 @@ async def websocket_tts(websocket: WebSocket):
                 await asyncio.get_event_loop().run_in_executor(
                     executor,
                     _generate_ws_tts,
+                    provider,
                     text, voice, websocket, loop, abort_flag,
                 )
             finally:

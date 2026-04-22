@@ -1029,9 +1029,15 @@ export class VoiceEngine {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ speaker: this.speaker })
       });
-      const data = await response.json();
+      const rawText = await response.text();
+      let data = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (_err) {
+        throw new Error(`Greeting failed: HTTP ${response.status} ${rawText}`);
+      }
 
-      if (data.success) {
+      if (response.ok && data.success) {
         if (data.text) {
           this.onAIResponse(data.text);
         }
