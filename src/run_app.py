@@ -16,6 +16,8 @@ import asyncio
 import base64
 import json
 import queue
+import re
+import os
 
 # Import existing infrastructure
 import sys
@@ -431,8 +433,32 @@ def get_index_html():
         # Replace Flask url_for with static paths
         content = content.replace("{{ url_for('static', filename='", '/static/')
         content = content.replace("') }}", '')
-        # Also handle variable replacements
-        content = content.replace("{{ ", "").replace(" }}", "")
+
+        # Explicit legacy template variable replacements used by the frontend.
+        stt_http_url = os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201")
+        stt_ws_url = os.environ.get("OMNIX_STT_WS_URL", "ws://127.0.0.1:5201/ws/transcribe")
+
+        content = content.replace(
+            "{{ omnix_stt_url|default('http://127.0.0.1:5201') }}",
+            stt_http_url,
+        )
+        content = content.replace(
+            "{{ omnix_stt_ws_url|default('ws://127.0.0.1:5201/ws/transcribe') }}",
+            stt_ws_url,
+        )
+
+        # Generic fallback for any remaining {{ var|default('value') }} patterns.
+        def replace_template_var(match):
+            var_name = match.group(1)
+            default_val = match.group(2)
+            env_name = var_name.upper()
+            env_value = os.environ.get(env_name)
+            if env_value:
+                return env_value
+            return default_val.strip("'\"")
+
+        content = re.sub(r'{{\s*(\w+)\|default\(([^)]+)\)\s*}}', replace_template_var, content)
+
         _index_html_cache = content
         return content
     return None

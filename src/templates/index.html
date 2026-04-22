@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+      window.OMNIX_STT_URL = "{{ omnix_stt_url|default('http://127.0.0.1:5201') }}";
+      window.OMNIX_STT_WS_URL = "{{ omnix_stt_ws_url|default('ws://127.0.0.1:5201/ws/transcribe') }}";
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Omnix</title>

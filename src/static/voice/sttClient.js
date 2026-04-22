@@ -1,3 +1,45 @@
+function isUnresolvedTemplateValue(value) {
+  return (
+    typeof value === 'string' &&
+    (
+      value.includes('{{') ||
+      value.includes('}}') ||
+      value.includes('{%') ||
+      value.includes('%}')
+    )
+  );
+}
+
+function resolveSttWebSocketUrl() {
+  const explicitWs = window.OMNIX_STT_WS_URL;
+  if (
+    explicitWs &&
+    typeof explicitWs === 'string' &&
+    explicitWs.trim() &&
+    !isUnresolvedTemplateValue(explicitWs)
+  ) {
+    return explicitWs.trim();
+  }
+
+  const explicitHttp = window.OMNIX_STT_URL;
+  if (
+    explicitHttp &&
+    typeof explicitHttp === 'string' &&
+    explicitHttp.trim() &&
+    !isUnresolvedTemplateValue(explicitHttp)
+  ) {
+    const base = explicitHttp.trim().replace(/\/+$/, '');
+    if (base.startsWith('https://')) {
+      return `wss://${base.slice('https://'.length)}/ws/transcribe`;
+    }
+    if (base.startsWith('http://')) {
+      return `ws://${base.slice('http://'.length)}/ws/transcribe`;
+    }
+  }
+
+  return 'ws://127.0.0.1:5201/ws/transcribe';
+}
+
 export class STTClient {
   constructor(onTranscript, onFinal) {
     this.onTranscript = onTranscript;
@@ -5,8 +47,8 @@ export class STTClient {
     this.ws = null;
     this.connected = false;
     this.connecting = false;
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.url = `${wsProtocol}//${window.location.hostname}:8000/ws/transcribe`;
+    this.url = resolveSttWebSocketUrl();
+    console.log('[STTClient] Connecting to:', this.url);
 
     // Audio chunks that arrive while reconnecting are queued and flushed
     // once the connection is re-established.

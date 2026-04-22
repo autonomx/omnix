@@ -14,6 +14,20 @@ import shutil
 import tempfile
 import traceback
 import uuid
+
+# --- WebSocket dependency validation ---
+def _validate_websocket_support():
+    try:
+        import websockets  # noqa
+        return "websockets"
+    except Exception:
+        try:
+            import wsproto  # noqa
+            return "wsproto"
+        except Exception:
+            raise RuntimeError(
+                "STT WebSocket support missing. Install with: pip install 'uvicorn[standard]' or 'websockets'"
+            )
 from pathlib import Path
 from typing import List, Optional
 
@@ -638,6 +652,8 @@ async def websocket_transcribe(websocket: WebSocket):
             pass
 
 if __name__ == "__main__":
+    ws_backend = _validate_websocket_support()
+    print(f"[STT] WebSocket backend: {ws_backend}")
     PORT = int(os.environ.get("OMNIX_STT_PORT", "5201"))
     print(f"Starting Parakeet STT Server on http://0.0.0.0:{PORT}")
     print(f"Endpoints:")

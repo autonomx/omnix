@@ -96,6 +96,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [STT] Verifying websocket support...
+"%RPG_STT_PYTHON%" -c "import websockets; print('[STT] websockets OK')"
+if errorlevel 1 (
+    echo [STT] websockets missing, installing...
+    "%RPG_STT_PYTHON%" -m pip install websockets
+    if errorlevel 1 (
+        echo ERROR: failed to install websockets into rpg-stt
+        pause
+        exit /b 1
+    )
+)
+
 echo.
 echo ================================================
 echo LM Studio Chatbot - Full Launcher
