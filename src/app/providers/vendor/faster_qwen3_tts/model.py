@@ -64,6 +64,7 @@ def _ensure_transformers_qwen3_compat() -> None:
     import transformers
     import sys
     import types
+    import functools
 
     # ---- 0. Patch safetensors metadata contract ----
     # Some model shards return ``None`` for ``safe_open(...).metadata()``.
@@ -153,17 +154,26 @@ def _ensure_transformers_qwen3_compat() -> None:
     # ---- 3. Pre-import hook to ensure patch BEFORE vendor import ----
     # This ensures any "from transformers.utils import ..." sees patched version
     import importlib
-    importlib.reload(transformers.utils)
 
-    # Re-apply after reload (important)
-    transformers.utils.auto_docstring = _noop
-    transformers.utils.auto_class_docstring = _noop
-    if not hasattr(transformers.utils, "can_return_tuple"):
-        transformers.utils.can_return_tuple = _noop
-    sys.modules["transformers.utils"].auto_docstring = _noop
-    sys.modules["transformers.utils"].auto_class_docstring = _noop
-    if not hasattr(sys.modules["transformers.utils"], "can_return_tuple"):
-        sys.modules["transformers.utils"].can_return_tuple = _noop
+    # Ensure module is imported before reload
+    try:
+        transformers_utils = importlib.import_module("transformers.utils")
+    except Exception:
+        transformers_utils = None
+
+    if transformers_utils is not None and hasattr(transformers_utils, '__file__'):
+        # Only reload real modules (not fake test modules)
+        importlib.reload(transformers_utils)
+
+        # Re-apply after reload (important)
+        transformers.utils.auto_docstring = _noop
+        transformers.utils.auto_class_docstring = _noop
+        if not hasattr(transformers.utils, "can_return_tuple"):
+            transformers.utils.can_return_tuple = _noop
+        sys.modules["transformers.utils"].auto_docstring = _noop
+        sys.modules["transformers.utils"].auto_class_docstring = _noop
+        if not hasattr(sys.modules["transformers.utils"], "can_return_tuple"):
+            sys.modules["transformers.utils"].can_return_tuple = _noop
 
     # ---- 4. Provide missing masking_utils module ----
     import importlib
@@ -193,6 +203,70 @@ def _ensure_transformers_qwen3_compat() -> None:
             return None
 
         masking_utils.create_masks_for_generate = create_masks_for_generate
+
+    # ---- 4b. Patch safetensors metadata=None -> {"format": "pt"} ----
+    try:
+        import safetensors
+        import transformers.modeling_utils as modeling_utils
+
+        if not getattr(safetensors, "_omnix_metadata_patch_applied", False):
+            _orig_safe_open = safetensors.safe_open
+
+            @functools.wraps(_orig_safe_open)
+            def _patched_safe_open(*args, **kwargs):
+                handle = _orig_safe_open(*args, **kwargs)
+
+                original_metadata = getattr(handle, "metadata", None)
+                if callable(original_metadata):
+                    def _patched_metadata():
+                        value = original_metadata()
+                        if value is None:
+                            return {"format": "pt"}
+                        if isinstance(value, dict) and "format" not in value:
+                            value = dict(value)
+                            value["format"] = "pt"
+                        return value
+
+                    try:
+                        handle.metadata = _patched_metadata
+                    except Exception:
+                        class _SafeOpenHandleProxy:
+                            def __init__(self, inner):
+                                self._inner = inner
+
+                            def __getattr__(self, name):
+                                return getattr(self._inner, name)
+
+                            def metadata(self):
+                                value = self._inner.metadata()
+                                if value is None:
+                                    return {"format": "pt"}
+                                if isinstance(value, dict) and "format" not in value:
+                                    value = dict(value)
+                                    value["format"] = "pt"
+                                return value
+
+                            def __enter__(self):
+                                self._inner.__enter__()
+                                return self
+
+                            def __exit__(self, exc_type, exc, tb):
+                                return self._inner.__exit__(exc_type, exc, tb)
+
+                        handle = _SafeOpenHandleProxy(handle)
+
+                return handle
+
+            safetensors.safe_open = _patched_safe_open
+
+            # Critical: Transformers may have already imported/bound safe_open.
+            # Rebind its local reference too.
+            if hasattr(modeling_utils, "safe_open"):
+                modeling_utils.safe_open = _patched_safe_open
+
+            safetensors._omnix_metadata_patch_applied = True
+    except Exception:
+        pass
         
     if not hasattr(masking_utils, "prepare_decoder_attention_mask"):
         def prepare_decoder_attention_mask(*args, **kwargs):
@@ -218,8 +292,13 @@ def _ensure_transformers_qwen3_compat() -> None:
             pass
         
         # Dummy stubs for classes that no longer exist or were renamed
-        class GradientCheckpointingLayer:
-            pass
+        import torch.nn as nn
+
+        class GradientCheckpointingLayer(nn.Module):
+            supports_gradient_checkpointing = True
+
+            def __init__(self, *args, **kwargs):
+                super().__init__()
         
         modeling_layers.GradientCheckpointingLayer = GradientCheckpointingLayer
         
@@ -377,6 +456,7 @@ class FasterQwen3TTS:
         dtype: Union[str, torch.dtype] = torch.bfloat16,
         attn_implementation: str = "eager",
         max_seq_len: int = 2048,
+        **kwargs,
     ):
         """
         Load Qwen3-TTS model and prepare CUDA graphs.
@@ -405,12 +485,21 @@ class FasterQwen3TTS:
             from app.providers.vendor.qwen_tts import Qwen3TTSModel
 
         # Load base model using qwen-tts library
-        device_map = "cuda:0" if cuda_enabled else normalized_device
+        normalized_device = (device or "cpu").strip().lower()
+        use_cuda = normalized_device.startswith("cuda")
+
+        model_kwargs = dict(kwargs or {})
+        model_kwargs["dtype"] = dtype or (torch.float16 if use_cuda else torch.float32)
+        model_kwargs["attn_implementation"] = attn_implementation
+
+        if use_cuda:
+            model_kwargs["device_map"] = normalized_device
+        else:
+            model_kwargs.pop("device_map", None)
+
         base_model = Qwen3TTSModel.from_pretrained(
             model_name,
-            device_map=device_map,
-            torch_dtype=dtype,
-            attn_implementation=attn_implementation,
+            **model_kwargs,
         )
 
         predictor_graph = None

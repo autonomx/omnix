@@ -22,8 +22,7 @@ regex>=2024.0.0
 
 # Torch stack for Windows / CUDA env
 # Keep aligned with setup.bat torch install strategy if you install torch separately.
-torch==2.5.1
-torchaudio==2.5.1
+# Torch + torchaudio are installed by setup.bat directly to get correct CUDA builds
 
 # HF / tokenizer stack for vendored Qwen3-TTS
 transformers==4.57.3

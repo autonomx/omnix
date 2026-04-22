@@ -171,3 +171,49 @@ def test_transformers_masking_utils_shim_exposes_create_masks_for_generate():
         # Restore original module if it existed
         if original is not None:
             sys.modules["transformers.masking_utils"] = original
+
+
+def test_transformers_modeling_utils_safe_open_is_rebound(monkeypatch):
+    import types
+    import transformers.modeling_utils as modeling_utils
+    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+
+    class _Handle:
+        def metadata(self):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    fake_safetensors = types.SimpleNamespace()
+    fake_safetensors.safe_open = lambda *args, **kwargs: _Handle()
+    fake_safetensors._omnix_metadata_patch_applied = False
+
+    monkeypatch.setitem(__import__("sys").modules, "safetensors", fake_safetensors)
+
+    _ensure_transformers_qwen3_compat()
+
+    with modeling_utils.safe_open("dummy", framework="pt") as handle:
+        assert handle.metadata() == {"format": "pt"}
+
+
+def test_gradient_checkpointing_layer_shim_is_module_subclass():
+    import importlib
+    import sys
+    import torch.nn as nn
+    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+
+    if "transformers.modeling_layers" in sys.modules:
+        del sys.modules["transformers.modeling_layers"]
+
+    _ensure_transformers_qwen3_compat()
+
+    modeling_layers = importlib.import_module("transformers.modeling_layers")
+    layer_cls = modeling_layers.GradientCheckpointingLayer
+
+    assert issubclass(layer_cls, nn.Module)
+    instance = layer_cls()
+    assert isinstance(instance, nn.Module)

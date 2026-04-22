@@ -167,7 +167,7 @@ def _validate_local_model_dir(model_dir: Path) -> Dict[str, Any]:
             raise RuntimeError(f"safetensors_open_failed:{shard}:{exc}") from exc
 
         if metadata is None:
-            raise RuntimeError(f"safetensors_metadata_missing:{shard}")
+            metadata = {"format": "pt", "_omnix_inferred": True}
 
         shard_details.append(
             {
@@ -183,6 +183,26 @@ def _validate_local_model_dir(model_dir: Path) -> Dict[str, Any]:
         "num_safetensors_shards": len(shard_files),
         "shards": shard_details,
     }
+
+
+def _normalize_requested_device(requested_device: str | None) -> str:
+    import torch
+
+    raw = (requested_device or "").strip().lower()
+    if not raw:
+        raw = "cuda"
+
+    if raw.startswith("cuda"):
+        cuda_available = bool(getattr(torch, "cuda", None)) and torch.cuda.is_available()
+        torch_cuda_compiled = getattr(torch.version, "cuda", None) is not None
+        if not cuda_available or not torch_cuda_compiled:
+            return "cpu"
+        return raw
+
+    if raw in {"cpu", "mps"}:
+        return raw
+
+    return "cpu"
 
 
 def _classify_qwen3_model_load_error(exc: Exception) -> str:
@@ -272,18 +292,21 @@ def load_tts_model(model_name: str, device: str, **kwargs) -> Any:
             device,
         )
 
+    normalized_device = _normalize_requested_device(device)
+    
     logger.info(
-        "Loading vendored Qwen3-TTS model: requested=%s resolved=%s device=%s "
+        "Loading vendored Qwen3-TTS model: requested=%s resolved=%s device=%s normalized_device=%s "
         "(vendored runtime package remains under resources/models/tts/faster-qwen3-tts-main)",
         model_name,
         resolved_model_source,
         device,
+        normalized_device,
     )
     
     try:
         model = FasterQwen3TTS.from_pretrained(
             model_name=resolved_model_source,
-            device=device,
+            device=normalized_device,
             **kwargs
         )
         

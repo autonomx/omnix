@@ -31,7 +31,9 @@ async function generateSmartTitle(userMessage, aiResponse) {
 // No sampleRate param passed to prevent locking the global context to an arbitrary rate.
 function getAudioContext() {
     if (!window._globalAudioContext) {
+        console.log('[TTS DEBUG] Creating new AudioContext');
         window._globalAudioContext = window.AudioPlayer?.getWebAudioContext?.() || new (window.AudioContext || window.webkitAudioContext)();
+        console.log('[TTS DEBUG] AudioContext created:', { state: window._globalAudioContext.state, sampleRate: window._globalAudioContext.sampleRate });
     }
     return window._globalAudioContext;
 }
@@ -439,12 +441,18 @@ function setTTSButtonState(messageDiv, state) {
 }
 
 function onAudioPlaybackComplete() {
-  isPlaying = false;
-  isPaused = false;
+  console.log('[TTS DEBUG] onAudioPlaybackComplete CALLED');
   if (currentMessageDiv) {
+    console.log('[TTS DEBUG] Resetting TTS button state to idle');
     setTTSButtonState(currentMessageDiv, 'idle');
     currentMessageDiv = null;
   }
+  if (typeof triggerTTSCooldown === 'function') {
+    console.log('[TTS DEBUG] Triggering TTS cooldown');
+    triggerTTSCooldown();
+  }
+  console.log('[TTS DEBUG] ========== AUDIO PLAYBACK COMPLETE ==========');
+}
 }
 
 function base64ToFloat32(b64) {
@@ -461,21 +469,35 @@ function base64ToFloat32(b64) {
 }
 
 function scheduleChunk(float32Array, sampleRate) {
+  console.log('[TTS DEBUG] scheduleChunk called with', float32Array.length, 'samples, sampleRate:', sampleRate);
   const audioCtx = getAudioContext();
+  console.log('[TTS DEBUG] AudioContext state:', audioCtx?.state);
+  
   const buffer = audioCtx.createBuffer(1, float32Array.length, sampleRate);
   buffer.copyToChannel(float32Array, 0);
   audioQueue.push(buffer);
+  console.log('[TTS DEBUG] Buffer created and pushed to queue, new queue length:', audioQueue.length);
   
   // Auto-start playback if not playing and we have enough buffered (3+ chunks for smoothness)
   if (!isPlaying && audioQueue.length >= 3) {
+    console.log('[TTS DEBUG] Auto-starting playback from scheduleChunk');
     playQueuedAudio();
+  } else {
+    console.log('[TTS DEBUG] Not auto-starting playback:', { isPlaying, queueLength: audioQueue.length });
   }
 }
 
 function playQueuedAudio() {
-  if (isPlaying && !isPaused) return; // Prevent dual-playing queue shifts
+  console.log('[TTS DEBUG] playQueuedAudio CALLED');
+  console.log('[TTS DEBUG] State check:', { isPlaying, isPaused, queueLength: audioQueue.length, hasCurrentSource: !!currentAudioSource });
+  
+  if (isPlaying && !isPaused) {
+    console.log('[TTS DEBUG] Already playing and not paused, returning early');
+    return; // Prevent dual-playing queue shifts
+  }
   
   if (audioQueue.length === 0) {
+    console.log('[TTS DEBUG] Audio queue empty, marking playback complete');
     isPlaying = false;
     currentAudioSource = null;
     onAudioPlaybackComplete();
@@ -486,28 +508,42 @@ function playQueuedAudio() {
   
   // Guard to ensure we don't accidentally shift a new buffer if one is currently paused/playing
   if (currentAudioSource) {
+      console.log('[TTS DEBUG] Current audio source exists, returning early');
       isPlaying = true; 
       return; 
   }
   
   isPlaying = true;
   isPaused = false;
+  console.log('[TTS DEBUG] Starting playback, queue length before shift:', audioQueue.length);
   
   const buffer = audioQueue.shift();
+  console.log('[TTS DEBUG] Shifted buffer from queue:', { length: buffer.length, duration: buffer.duration.toFixed(3) + 's', sampleRate: buffer.sampleRate });
+  
   const audioCtx = getAudioContext();
+  console.log('[TTS DEBUG] AudioContext state before playback:', audioCtx?.state, 'currentTime:', audioCtx?.currentTime);
   
   const source = audioCtx.createBufferSource();
   source.buffer = buffer;
   source.connect(audioCtx.destination);
   currentAudioSource = source;
+  console.log('[TTS DEBUG] Source created, connected to destination, set as currentAudioSource');
   
   source.onended = () => {
+    console.log('[TTS DEBUG] Source onended event fired');
     isPlaying = false;
     currentAudioSource = null;
-    if (!isPaused) playQueuedAudio();
+    if (!isPaused) {
+      console.log('[TTS DEBUG] Not paused, calling playQueuedAudio again for next buffer');
+      playQueuedAudio();
+    } else {
+      console.log('[TTS DEBUG] Paused, not playing next buffer');
+    }
   };
   
+  console.log('[TTS DEBUG] Calling source.start() NOW');
   source.start();
+  console.log('[TTS DEBUG] source.start() completed');
 }
 
 function stopTTSAudio() {
@@ -547,9 +583,18 @@ window.pauseTTSAudio = pauseTTSAudio;
 window.setTTSButtonState = setTTSButtonState;
 
 function ensureAudioContext() {
+  console.log('[TTS DEBUG] ensureAudioContext called');
   try {
     const audioCtx = getAudioContext();
-    if (audioCtx?.state === 'suspended') audioCtx.resume();
+    console.log('[TTS DEBUG] AudioContext state check:', audioCtx?.state);
+    if (audioCtx?.state === 'suspended') {
+      console.log('[TTS DEBUG] AudioContext is suspended, calling resume()');
+      audioCtx.resume().then(() => {
+        console.log('[TTS DEBUG] AudioContext resumed successfully, new state:', audioCtx.state);
+      }).catch(e => {
+        console.error('[TTS DEBUG] Failed to resume AudioContext:', e);
+      });
+    }
   } catch (e) { console.warn('[TTS] Failed to resume AudioContext', e); }
 }
 
@@ -562,33 +607,49 @@ window.testTTSControls = function() {
 };
 
 async function speakTextStreaming(text, speaker = 'en') {
+  console.log('[TTS DEBUG] speakTextStreaming CALLED with text:', text.substring(0, 50) + '..., speaker:', speaker);
   stopTTSAudio();
-  if (isFetching) return;
+  if (isFetching) {
+    console.log('[TTS DEBUG] Already fetching, returning early');
+    return;
+  }
   
   isFetching = true;
+  console.log('[TTS DEBUG] Starting new stream request');
+  
   return new Promise((resolve, reject) => {
-    if (currentStreamController) currentStreamController.abort();
+    if (currentStreamController) {
+      console.log('[TTS DEBUG] Aborting existing stream controller');
+      currentStreamController.abort();
+    }
     currentStreamController = new AbortController();
     
     const formData = new FormData();
     formData.append('text', text);
     formData.append('speaker', speaker || 'default');
     formData.append('language', 'en');
+    console.log('[TTS DEBUG] Form data prepared:', { textLength: text.length, speaker: speaker || 'default', language: 'en' });
     
     window.currentStreamAbort = () => { if (currentStreamController) currentStreamController.abort(); };
     
+    console.log('[TTS DEBUG] Sending POST request to /api/tts/stream/server-sent-events');
     fetch('/api/tts/stream/server-sent-events', {
       method: 'POST',
       body: formData,
       signal: currentStreamController.signal
     }).then(async response => {
+      console.log('[TTS DEBUG] Response received:', { status: response.status, statusText: response.statusText, ok: response.ok });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let chunkCount = 0;
+      console.log('[TTS DEBUG] Response body reader created, starting read loop');
       
       while (true) {
         if (typeof stopAudioRequested !== 'undefined' && stopAudioRequested) {
+          console.log('[TTS DEBUG] Stop audio requested, cancelling reader');
           reader.cancel();
           currentStreamController.abort();
           resolve();
@@ -596,43 +657,71 @@ async function speakTextStreaming(text, speaker = 'en') {
         }
         
         const { done, value } = await reader.read();
-        if (done) break;
+        console.log('[TTS DEBUG] Reader read result:', { done, valueLength: value ? value.length : 0 });
+        
+        if (done) {
+          console.log('[TTS DEBUG] Read loop completed (done=true)');
+          break;
+        }
         
         buffer += decoder.decode(value, { stream: true });
+        console.log('[TTS DEBUG] Buffer updated, new length:', buffer.length);
+        
         const lines = buffer.split(/\r?\n/);
         buffer = lines.pop();
+        console.log('[TTS DEBUG] Parsed lines:', lines.length, 'lines, remaining buffer:', buffer.length);
         
         for (const line of lines) {
+          console.log('[TTS DEBUG] Processing line:', line.substring(0, 100));
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
+              console.log('[TTS DEBUG] Parsed data:', { type: data.type, hasAudio: !!data.audio_b64, sampleRate: data.sample_rate });
+              
               if (data.type === 'chunk') {
-                scheduleChunk(base64ToFloat32(data.audio_b64), data.sample_rate);
+                chunkCount++;
+                console.log('[TTS DEBUG] CHUNK RECEIVED #' + chunkCount + ', audio_b64 length:', data.audio_b64.length);
+                
+                const float32Data = base64ToFloat32(data.audio_b64);
+                console.log('[TTS DEBUG] Decoded float32 data length:', float32Data.length, 'samples, duration:', (float32Data.length / data.sample_rate).toFixed(3) + 's');
+                
+                scheduleChunk(float32Data, data.sample_rate);
+                console.log('[TTS DEBUG] Chunk scheduled, audioQueue length now:', audioQueue.length);
+                
                 // Start playback only after buffering 3 chunks for smoother audio
                 if (!isPlaying && audioQueue.length >= 3) {
+                  console.log('[TTS DEBUG] Buffer threshold reached (3 chunks), calling playQueuedAudio()');
                   playQueuedAudio();
+                } else {
+                  console.log('[TTS DEBUG] Not starting playback yet:', { isPlaying, audioQueueLength: audioQueue.length });
                 }
               } else if (data.type === 'done') {
+                console.log('[TTS DEBUG] DONE message received from server, total chunks:', chunkCount);
                 // Wait for queue to finish before resolving
                 const waitForQueue = () => {
                   if (audioQueue.length > 0 || isPlaying) {
+                    console.log('[TTS DEBUG] Waiting for queue to finish:', { audioQueueLength: audioQueue.length, isPlaying });
                     setTimeout(waitForQueue, 100);
                   } else {
+                    console.log('[TTS DEBUG] Playback complete, resolving promise');
                     resolve();
                   }
                 };
                 waitForQueue();
                 return;
               } else if (data.type === 'error') {
+                console.error('[TTS DEBUG] Error from server:', data.message);
                 reject(new Error(data.message));
               }
-            } catch (e) { console.error('[TTS] Parse error:', e); }
+            } catch (e) { console.error('[TTS] Parse error:', e, 'Line:', line); }
           }
         }
       }
     }).catch(err => {
+      console.error('[TTS DEBUG] Fetch error:', err.name, err.message);
       if (err.name !== 'AbortError') reject(err);
     }).finally(() => {
+      console.log('[TTS DEBUG] Request completed, cleaning up');
       currentStreamController = null;
       isFetching = false;
     });

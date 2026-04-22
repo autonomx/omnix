@@ -240,14 +240,40 @@ echo Installing dedicated TTS service into %RPG_TTS_ENV%
 echo =============================================
 
 echo.
-echo [1/5][TTS] Upgrading pip/setuptools/wheel...
+echo [1/7][TTS] Upgrading pip/setuptools/wheel...
 "%RPG_TTS_PYTHON%" -m pip install --upgrade pip wheel==0.43.0 setuptools==81.0.0
 if errorlevel 1 goto :error
 
 echo.
-echo [2/5][TTS] Installing dedicated TTS requirements...
+echo [2/7][TTS] Removing conflicting torch packages...
+"%RPG_TTS_PYTHON%" -m pip uninstall -y torch torchvision torchaudio
+"%RPG_TTS_PYTHON%" -m pip uninstall -y torchtext torchdata
+
+echo.
+echo [3/7][TTS] Installing torch/torchaudio CUDA 12.4...
+"%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
+if errorlevel 1 (
+    echo WARNING: CUDA torch install failed for %RPG_TTS_ENV%, falling back to CPU
+    "%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1 torchaudio==2.5.1
+    if errorlevel 1 (
+        echo ERROR: Failed to install torch/torchaudio into %RPG_TTS_ENV%
+        goto :error
+    )
+)
+
+echo.
+echo [4/7][TTS] Verifying torch CUDA build...
+"%RPG_TTS_PYTHON%" -c "import torch, torchaudio; print('torch:', torch.__version__); print('torchaudio:', torchaudio.__version__); print('torch_cuda:', torch.version.cuda); print('cuda_available:', torch.cuda.is_available())"
+if errorlevel 1 goto :error
+
+echo.
+echo [5/7][TTS] Installing dedicated TTS requirements...
 "%RPG_TTS_PYTHON%" -m pip install --force-reinstall -r src\requirements-rpg-tts.txt
 if errorlevel 1 goto :error
+
+echo.
+echo [5b/7][TTS] Re-locking torch/torchaudio CUDA 12.4 after dependency install...
+"%RPG_TTS_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
 
 echo.
 echo =============================================
@@ -258,12 +284,12 @@ call "%OMNIX_REPO_ROOT%\download_tts_only.bat"
 if errorlevel 1 goto :error
 
 echo.
-echo [VERIFY][TTS MODEL] Checking local Qwen3-TTS files...
+echo [6/7][TTS] Checking local Qwen3-TTS files...
 "%RPG_TTS_PYTHON%" -c "from pathlib import Path; p=Path(r'%OMNIX_QWEN3_TTS_MODEL_DIR%'); shards=list(p.glob('*.safetensors')); print('model_dir:', p); print('safetensors_shards:', [s.name for s in shards]); assert (p/'config.json').exists(), 'Missing config.json'; assert (p/'preprocessor_config.json').exists(), 'Missing preprocessor_config.json'; assert shards, 'No safetensors shards found'"
 if errorlevel 1 goto :error
 
 echo.
-echo [SMOKE][TTS MODEL] Attempting real local from_pretrained load...
+echo [7/7][TTS] Attempting real local from_pretrained load...
 "%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); from app.providers.vendor.qwen_tts.inference.qwen3_tts_model import Qwen3TTSModel; model_dir=r'%OMNIX_QWEN3_TTS_MODEL_DIR%'; print('Loading from:', model_dir); model = Qwen3TTSModel.from_pretrained(model_dir); print('Qwen3TTSModel local load OK:', type(model).__name__)"
 if errorlevel 1 goto :error
 
@@ -273,17 +299,17 @@ echo [VERIFY][TTS] transformers/tokenizers/onnxruntime versions.
 if errorlevel 1 goto :error
 
 echo.
-echo [3/5][TTS] Verifying tts_server import...
+echo [POST-CHECK][TTS] Verifying tts_server import...
 "%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; print('tts_server import OK')"
 if errorlevel 1 goto :error
 
 echo.
-echo [4/5][TTS] Verifying HTTP TTS contract boot path...
+echo [POST-CHECK][TTS] Verifying HTTP TTS contract boot path...
 "%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; app = tts_server.app; print('tts_server app OK')"
 if errorlevel 1 goto :error
 
 echo.
-echo [5/5][TTS] Verifying provider status helper...
+echo [POST-CHECK][TTS] Verifying provider status helper...
 "%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); import tts_server; s = tts_server.get_tts_service_status(); print('TTS:', 'READY' if s.get('ok') else 'NOT READY', s.get('error',''))"
 if errorlevel 1 goto :error
 

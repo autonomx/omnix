@@ -103,27 +103,36 @@ function setupChatControls() {
             
             console.error = function(...args) {
                 originalConsoleError.apply(console, args);
-                // Detect all TTS, FastAPI, and server errors
+                // Detect all TTS, server, network, and HTTP errors
                 if (args.some(arg => {
                     const strArg = String(arg);
                     return strArg.includes('[TTS]') ||
                            strArg.includes('api/tts') ||
-                           strArg.includes('HTTP 500') ||
+                           strArg.includes('HTTP 5') || // All 5xx server errors
                            strArg.includes('Internal Server Error') ||
                            strArg.includes('Failed to load resource') ||
                            strArg.includes('NetworkError') ||
                            strArg.includes('tts_server') ||
-                           strArg.includes('FastAPI');
+                           strArg.includes('FastAPI') ||
+                           strArg.includes('500') ||
+                           strArg.includes('502') ||
+                           strArg.includes('503') ||
+                           strArg.includes('504') ||
+                           strArg.includes('Error:') ||
+                           strArg.includes('Exception:');
                 })) {
                     ttsErrors.push(args);
                 }
             };
             
             try {
-                await speakFn("Hello, welcome to Omnix chat");
+                const result = await speakFn("Hello, welcome to Omnix chat");
                 
-                // Check if any TTS errors were logged
-                ttsSucceeded = ttsErrors.length === 0;
+                // Check if any TTS errors were logged OR server returned error
+                ttsSucceeded = ttsErrors.length === 0 && 
+                              result !== false && 
+                              !(result && result.success === false) &&
+                              !(result && result.error);
                 
             } catch (e) {
                 ttsSucceeded = false;
@@ -131,17 +140,17 @@ function setupChatControls() {
                 // Restore original console.error
                 console.error = originalConsoleError;
                 
-                // Set status
+                // Set status - red for any failure (server errors, network errors, TTS errors)
                 if (ttsSucceeded) {
                     welcomeSpeakerBtn.classList.add('success');
                 } else {
                     welcomeSpeakerBtn.classList.add('error');
                 }
                 
-                // Clear state after 3 seconds
+                // Clear state after 4 seconds
                 setTimeout(() => {
                     welcomeSpeakerBtn.classList.remove('success', 'error', 'unavailable');
-                }, 3000);
+                }, 4000);
             }
         });
     }
