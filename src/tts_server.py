@@ -85,7 +85,14 @@ def _load_qwen3_provider() -> Any:
 def initialize_tts_provider() -> Dict[str, Any]:
     global _TTS_PROVIDER, _TTS_PROVIDER_ERROR
     try:
-        _TTS_PROVIDER = _load_qwen3_provider()
+        provider = _load_qwen3_provider()
+        startup_result: Dict[str, Any] = {}
+        if hasattr(provider, "start"):
+            startup_result = provider.start() or {}
+            if not startup_result.get("running", False):
+                raise RuntimeError(startup_result.get("error") or startup_result.get("message") or "provider_start_failed")
+
+        _TTS_PROVIDER = provider
         _TTS_PROVIDER_ERROR = ""
         details: Dict[str, Any] = {}
         try:
@@ -93,6 +100,10 @@ def initialize_tts_provider() -> Dict[str, Any]:
             details["provider_name"] = getattr(_TTS_PROVIDER, "provider_name", _TTS_PROVIDER_NAME)
             details["configured_model"] = getattr(_TTS_PROVIDER, "_model_config", {}).get("model_name", "")
             details["configured_device"] = getattr(_TTS_PROVIDER, "device", "")
+            if hasattr(_TTS_PROVIDER, "get_runtime_status"):
+                details["runtime_status"] = _TTS_PROVIDER.get_runtime_status()
+            if startup_result:
+                details["startup"] = startup_result
         except Exception:
             pass
         return _provider_payload_ok(details)
@@ -115,6 +126,8 @@ def get_tts_service_status() -> Dict[str, Any]:
             details["provider_name"] = getattr(_TTS_PROVIDER, "provider_name", _TTS_PROVIDER_NAME)
             details["configured_model"] = getattr(_TTS_PROVIDER, "_model_config", {}).get("model_name", "")
             details["configured_device"] = getattr(_TTS_PROVIDER, "device", "")
+            if hasattr(_TTS_PROVIDER, "get_runtime_status"):
+                details["runtime_status"] = _TTS_PROVIDER.get_runtime_status()
         except Exception:
             pass
         return _provider_payload_ok(details)
@@ -141,34 +154,6 @@ def _pcm16_chunks_to_wav_response(chunks: List[bytes], sample_rate: int) -> Resp
     return Response(content=buffer.getvalue(), media_type="audio/wav")
 
 
-def _stream_fallback_response(provider: Any, request: TtsGenerateStreamRequest) -> Optional[Response]:
-    if not hasattr(provider, "generate_audio"):
-        return None
-
-    fallback_result = provider.generate_audio(
-        text=request.text,
-        speaker=request.speaker,
-        language=request.language,
-        temperature=request.temperature,
-        top_k=request.top_k,
-        top_p=request.top_p,
-        repetition_penalty=request.repetition_penalty,
-        append_silence=request.append_silence,
-        max_new_tokens=request.max_new_tokens,
-    )
-    audio_base64 = fallback_result.get("audio_base64")
-    if not isinstance(audio_base64, str) or not audio_base64:
-        audio_value = fallback_result.get("audio")
-        audio_base64 = audio_value if isinstance(audio_value, str) else ""
-    if not fallback_result.get("success") or not audio_base64:
-        return None
-    media_type = fallback_result.get("format")
-    if not isinstance(media_type, str) or not media_type:
-        media_type = "audio/wav"
-    return _wav_response_from_base64(
-        audio_base64,
-        media_type=media_type,
-    )
 
 
 @app.on_event("startup")
@@ -240,6 +225,20 @@ async def generate_audio(request: TtsGenerateRequest):
                 status_code=500,
             )
 
+        if isinstance(result, dict) and result.get("is_fallback"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "provider": _TTS_PROVIDER_NAME,
+                    "error": "tts_model_unavailable",
+                    "details": result,
+                },
+                status_code=503,
+            )
+
+        if isinstance(result, dict) and not result.get("success", False):
+            return JSONResponse(result, status_code=503)
+
         return result
     except Exception as exc:
         return JSONResponse(
@@ -292,9 +291,6 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
         import traceback
         print(f"[TTS SERVER] generate_stream_audio error: {exc}")
         print(traceback.format_exc())
-        fallback_response = _stream_fallback_response(provider, request) if provider is not None else None
-        if fallback_response is not None:
-            return fallback_response
         return JSONResponse(
             {
                 "success": False,

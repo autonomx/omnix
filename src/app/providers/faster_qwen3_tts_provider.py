@@ -6,9 +6,11 @@ with CUDA graph acceleration for real-time voice cloning.
 """
 
 import base64
+import os
 import logging
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
@@ -34,6 +36,49 @@ logger = logging.getLogger(__name__)
 FALLBACK_CHARACTERS_PER_SECOND = 14.0
 FALLBACK_CARRIER_FREQ_HZ = 220.0
 FALLBACK_HARMONIC_FREQ_HZ = 330.0
+
+
+DEFAULT_QWEN3_TTS_MODEL_REPO = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+
+
+def _resolve_qwen3_model_name(config: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Resolve the model source for Qwen3-TTS.
+
+    Important distinction:
+      - resources/models/tts/faster-qwen3-tts-main = vendored runtime code package
+      - model_name / model_dir = actual model weights source
+
+    Resolution order:
+      1. explicit env override (OMNIX_TTS_MODEL_DIR / OMNIX_QWEN3_TTS_MODEL_DIR)
+      2. explicit config model_dir
+      3. explicit config model_name, unless it is the legacy broken local-path default
+      4. canonical HF repo id default
+    """
+    config = config or {}
+
+    env_model_dir = (os.environ.get("OMNIX_TTS_MODEL_DIR", "") or "").strip()
+    if env_model_dir:
+        return env_model_dir
+
+    env_qwen3_model_dir = (os.environ.get("OMNIX_QWEN3_TTS_MODEL_DIR", "") or "").strip()
+    if env_qwen3_model_dir:
+        return env_qwen3_model_dir
+
+    config_model_dir = str(config.get("model_dir") or "").strip()
+    if config_model_dir:
+        return config_model_dir
+
+    config_model_name = str(config.get("model_name") or "").strip()
+    legacy_broken_defaults = {
+        r"F:\LLM\omnix\Qwen\Qwen3-TTS-12Hz-0.6B-Base",
+        r".\Qwen\Qwen3-TTS-12Hz-0.6B-Base",
+        r"Qwen\Qwen3-TTS-12Hz-0.6B-Base",
+    }
+    if config_model_name and config_model_name not in legacy_broken_defaults:
+        return config_model_name
+
+    return DEFAULT_QWEN3_TTS_MODEL_REPO
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +227,9 @@ class ModelLoader:
     model: Any = None
     device: str = "cuda"
     initialized: bool = False
+    last_error: str = ""
+    last_error_type: str = ""
+    last_error_at: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -207,33 +255,36 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         AudioProviderCapability.REAL_TIME,
     ]
     
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initialize the FasterQwen3TTS provider.
-        
-        Args:
-            config: Provider configuration dict. For faster-qwen3-tts, this contains
-                   the full settings from settings.json['faster-qwen3-tts'] with keys:
-                   model_name, device, dtype, max_seq_len, chunk_size, temperature, top_k, etc.
-        """
-        super().__init__(config)
-        # The config directly contains the model settings (not wrapped in extra_params)
-        self._model_config = self.config.copy()
-        self._sample_rate = 12000  # Qwen3-TTS uses 12kHz
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        super().__init__(config or {})
+        self.config = config or {}
+        self._runtime_code_dir = (
+            Path(__file__).parent.parent.parent / "resources" / "models" / "tts" / "faster-qwen3-tts-main"
+        )
+        resolved_model_name = _resolve_qwen3_model_name(self.config)
+        self._sample_rate = int(self.config.get("sample_rate", 12000))
         self._model_instance = None
-        # Validate configuration and set defaults immediately
+        self._model_config = dict(self.config)
+        self._model_config["model_name"] = resolved_model_name
         self._validate_config()
+
+        logger.info("FasterQwen3TTS runtime code dir: %s", self._runtime_code_dir)
+        logger.info("FasterQwen3TTS configured model source: %s", self._model_config["model_name"])
         
     def _validate_config(self):
         """Validate and set defaults for provider configuration."""
-        # Set default model name if not provided
-        if not self._model_config.get('model_name'):
-            self._model_config['model_name'] = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-        
-        # Set device
-        self.device = self._model_config.get('device', 'cuda')
-        self.dtype = self._model_config.get('dtype', 'bfloat16')
-        self.max_seq_len = self._model_config.get('max_seq_len', 2048)
+        resolved_model_name = _resolve_qwen3_model_name(self._model_config)
+        self._model_config["model_name"] = resolved_model_name
+
+        self.device = self._model_config.get("device", "cuda")
+        self.dtype = self._model_config.get("dtype", "bfloat16")
+        self.max_seq_len = self._model_config.get("max_seq_len", 2048)
+
+        # Keep normalized values mirrored back into model config so downstream code
+        # never sees the stale legacy path.
+        self._model_config["device"] = self.device
+        self._model_config["dtype"] = self.dtype
+        self._model_config["max_seq_len"] = self.max_seq_len
 
         logger.info(f"FasterQwen3TTS configured: model={self._model_config['model_name']}, device={self.device}")
     
@@ -255,7 +306,13 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 return _model_loader.model
             
             try:
-                logger.info("Loading FasterQwen3TTS model...")
+                logger.info(
+                    "Loading FasterQwen3TTS model '%s' on device '%s' "
+                    "(runtime_code_dir=%s)",
+                    self._model_config["model_name"],
+                    self.device,
+                    self._runtime_code_dir,
+                )
                 
                 ensure_vendored_qwen3_tts_available()
                 
@@ -270,6 +327,9 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 )
                 
                 _model_loader.model = model
+                _model_loader.last_error = ""
+                _model_loader.last_error_type = ""
+                _model_loader.last_error_at = ""
                 _model_loader.initialized = True
                 logger.info("FasterQwen3TTS model loaded successfully")
                 
@@ -279,9 +339,24 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 logger.error(f"Failed to import faster_qwen3_tts: {e}")
                 raise
             except Exception as e:
+                _model_loader.model = None
+                _model_loader.initialized = False
+                _model_loader.last_error = str(e)
+                _model_loader.last_error_type = type(e).__name__
+                _model_loader.last_error_at = datetime.now(timezone.utc).isoformat()
                 logger.error(f"Failed to load FasterQwen3TTS model: {e}")
                 raise
     
+    def get_runtime_status(self) -> Dict[str, Any]:
+        return {
+            "model_loaded": bool(_model_loader.model is not None and _model_loader.initialized),
+            "runtime_code_dir": str(self._runtime_code_dir),
+            "configured_model_source": str(self._model_config.get("model_name", "")),
+            "last_error": _model_loader.last_error,
+            "last_error_type": _model_loader.last_error_type,
+            "last_error_at": _model_loader.last_error_at,
+        }
+
     def _convert_audio_to_float32(self, audio_data: Union[bytes, np.ndarray], sample_rate: int = 24000) -> np.ndarray:
         """
         Convert audio data to float32 numpy array.
@@ -365,7 +440,6 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self,
         *,
         text: str,
-        reference_audio_path: Optional[str],
         error: Exception,
     ) -> Dict[str, Any]:
         sample_rate = self._sample_rate or 12000
@@ -374,40 +448,32 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             min(2.0, max(len(text.strip()), 1) / FALLBACK_CHARACTERS_PER_SECOND),
         )
 
-        audio: Optional[np.ndarray] = None
-        if reference_audio_path:
-            try:
-                import soundfile as io
-
-                audio, ref_sample_rate = io.read(reference_audio_path, dtype='float32', always_2d=False)
-                if getattr(audio, "ndim", 1) > 1:
-                    audio = audio.mean(axis=1)
-                sample_rate = int(ref_sample_rate or sample_rate)
-            except Exception:
-                audio = None
-
-        if audio is None or len(audio) == 0:
-            total_samples = max(int(sample_rate * preview_duration), sample_rate // 3)
-            timeline = np.linspace(0.0, preview_duration, total_samples, endpoint=False, dtype=np.float32)
-            carrier = 0.18 * np.sin(2.0 * np.pi * FALLBACK_CARRIER_FREQ_HZ * timeline)
-            harmonic = 0.08 * np.sin(2.0 * np.pi * FALLBACK_HARMONIC_FREQ_HZ * timeline)
-            audio = carrier + harmonic
+        total_samples = max(int(sample_rate * preview_duration), sample_rate // 3)
+        timeline = np.linspace(0.0, preview_duration, total_samples, endpoint=False, dtype=np.float32)
+        carrier = 0.18 * np.sin(2.0 * np.pi * FALLBACK_CARRIER_FREQ_HZ * timeline)
+        harmonic = 0.08 * np.sin(2.0 * np.pi * FALLBACK_HARMONIC_FREQ_HZ * timeline)
+        audio = carrier + harmonic
 
         max_samples = max(int(sample_rate * preview_duration), 1)
         audio = np.asarray(audio[:max_samples], dtype=np.float32)
         audio = apply_fade(audio, fade_samples=min(256, max(16, len(audio) // 8)))
         wav_bytes = self._numpy_to_wav_bytes(audio, sample_rate)
         duration = len(audio) / sample_rate if sample_rate else 0.0
-        return self._build_audio_response(
-            wav_bytes=wav_bytes,
-            sample_rate=sample_rate,
-            duration=duration,
-            raw_response=None,
-            extra_fields={
-                "fallback": "reference-preview",
-                "fallback_reason": "temporary_synthesis_unavailable",
-            },
-        )
+        audio_b64 = base64.b64encode(wav_bytes).decode("utf-8")
+        return {
+            "success": False,
+            "audio": audio_b64,
+            "audio_base64": audio_b64,
+            "sample_rate": sample_rate,
+            "duration": duration,
+            "format": "audio/wav",
+            "error": str(error),
+            "raw_response": None,
+            "provider_state": self.get_runtime_status(),
+            "is_fallback": True,
+            "fallback": "reference-preview",
+            "fallback_reason": "temporary_synthesis_unavailable",
+        }
     
     def get_speakers(self) -> List[Dict[str, Any]]:
         """
@@ -572,21 +638,20 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 duration=duration,
                 raw_response=None,
             )
-            
+
         except Exception as e:
-            logger.error(f"Error in generate_audio: {e}", exc_info=True)
-            try:
-                logger.warning("Falling back to reference preview audio: %s", e)
-                return self._build_reference_fallback_response(
-                    text=text,
-                    reference_audio_path=ref_audio_path,
-                    error=e,
-                )
-            except Exception:
-                return {
-                    "success": False,
-                    "error": str(e)
-                }
+                logger.error(f"Error in generate_audio: {e}", exc_info=True)
+                try:
+                    logger.warning("Returning explicit fallback failure response: %s", e)
+                    return self._build_reference_fallback_response(
+                        text=text,
+                        error=e,
+                    )
+                except Exception as fallback_exc:
+                    return {
+                        "success": False,
+                        "error": str(fallback_exc or e)
+                    }
     
     def generate_audio_stream(
         self,
@@ -748,11 +813,18 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             # Try to get the model (does not initialize if not ready)
             if _model_loader.model is not None and _model_loader.initialized:
                 return True
+
+            if _model_loader.last_error:
+                logger.warning("Provider unhealthy due to previous model load failure: %s", _model_loader.last_error)
+                return False
             
             # Quick test: can we import the library?
-            tts_lib_path = Path(__file__).parent.parent.parent.parent / 'resources' / 'models' / 'tts' / 'faster-qwen3-tts-main'
+            tts_lib_path = self._runtime_code_dir
             if not tts_lib_path.exists():
-                logger.warning("faster-qwen3-tts library not found")
+                logger.warning(
+                    "Vendored TTS runtime code path not found: %s",
+                    tts_lib_path,
+                )
                 return False
             
             # Check if CUDA is available if using CUDA
@@ -812,7 +884,9 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             logger.error(f"Failed to start provider: {e}")
             return {
                 "running": False,
-                "message": f"Failed to start: {str(e)}"
+                "message": f"Failed to start: {str(e)}",
+                "error": str(e),
+                "provider_state": self.get_runtime_status(),
             }
     
     def stop(self) -> bool:

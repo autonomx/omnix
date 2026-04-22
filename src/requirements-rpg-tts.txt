@@ -14,7 +14,6 @@ numpy==1.26.4
 scipy>=1.9,<2
 soundfile>=0.12,<1
 librosa==0.11.0
-sox>=1.4,<2
 soxr>=0.3,<2
 onnxruntime>=1.18,<2
 
@@ -27,8 +26,8 @@ torch==2.5.1
 torchaudio==2.5.1
 
 # HF / tokenizer stack for vendored Qwen3-TTS
-transformers==4.46.3
-tokenizers==0.20.3
+transformers==4.57.3
+tokenizers==0.22.2
 huggingface_hub==0.34.6
 safetensors>=0.5,<0.8
 sentencepiece>=0.2,<0.3

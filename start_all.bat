@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
 set "RPG_FLUX_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe"
 set "RPG_TTS_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe"
@@ -8,9 +8,33 @@ set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
 set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
 
+set "OMNIX_TTS_MODELS_DIR=%~dp0resources\models\tts"
+set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_TTS_MODELS_DIR%\Qwen3-TTS-12Hz-0.6B-Base"
+
+set "OMNIX_TTS_MODEL_DIR="
+set "OMNIX_QWEN3_TTS_MODEL_DIR_ENV="
+
+if exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\config.json" if exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\preprocessor_config.json" (
+    set "OMNIX_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR%"
+    set "OMNIX_QWEN3_TTS_MODEL_DIR_ENV=%OMNIX_QWEN3_TTS_MODEL_DIR%"
+    echo [TTS] Using local downloaded model:
+    echo        %OMNIX_QWEN3_TTS_MODEL_DIR%
+) else (
+    echo [TTS][WARN] Local Qwen3-TTS model not found:
+    echo        %OMNIX_QWEN3_TTS_MODEL_DIR%
+    echo [TTS] Run setup first.
+)
+
 echo ========================================
 echo Starting Omnix with split runtime envs
 echo ========================================
+
+if defined OMNIX_TTS_MODEL_DIR (
+    echo [TTS] Using cached HF snapshot:
+    echo        !OMNIX_TTS_MODEL_DIR!
+) else (
+    echo [TTS] No cached HF snapshot found. Provider will use repo id/download path.
+)
 
 if not exist "%RPG_FLUX_PYTHON%" (
     echo ERROR: rpg-flux python not found:
@@ -54,6 +78,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if not exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\config.json" (
+    echo ERROR: Qwen3-TTS model missing:
+    echo   %OMNIX_QWEN3_TTS_MODEL_DIR%
+    echo Run setup first.
+    pause
+    exit /b 1
+)
+
 echo.
 echo [ENV CHECK][STT]
 "%RPG_STT_PYTHON%" -c "import sys; print('[STT][PYTHON]', sys.executable)"
@@ -76,16 +108,18 @@ start "Parakeet STT" cmd /k "cd /d ""%~dp0"" && ""%RPG_STT_PYTHON%"" -c "import 
 echo Waiting for STT...
 ping -n 6 127.0.0.1 >nul
 
+
+
 echo.
 echo [2/4] Starting TTS...
-start "Omnix TTS" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && ""%RPG_TTS_PYTHON%"" src\tts_server.py 2>&1"
+start "Omnix TTS" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"" && set ""OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"" && ""%RPG_TTS_PYTHON%"" src\tts_server.py 2>&1"
 
 echo Waiting for TTS...
 ping -n 4 127.0.0.1 >nul
 
 echo.
 echo [3/4] Starting Chatbot...
-start "Omnix FastAPI" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_URL=%OMNIX_TTS_URL%"" && set ""OMNIX_STT_URL=%OMNIX_STT_URL%"" && ""%RPG_FLUX_PYTHON%"" -c "import sys; print('[APP][PYTHON]', sys.executable)" && ""%RPG_FLUX_PYTHON%"" -c "import diffusers; print('[APP][FLUX] diffusers OK')" && ""%RPG_FLUX_PYTHON%"" src\launch.py 2>&1"
+start "Omnix FastAPI" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_URL=%OMNIX_TTS_URL%"" && set ""OMNIX_STT_URL=%OMNIX_STT_URL%"" && set ""OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"" && set ""OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"" && ""%RPG_FLUX_PYTHON%"" -c "import sys; print('[APP][PYTHON]', sys.executable)" && ""%RPG_FLUX_PYTHON%"" -c "import diffusers; print('[APP][FLUX] diffusers OK')" && ""%RPG_FLUX_PYTHON%"" src\launch.py 2>&1"
 
 echo Waiting for FastAPI...
 ping -n 4 127.0.0.1 >nul

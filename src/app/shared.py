@@ -69,6 +69,7 @@ DEFAULT_SETTINGS = {
     "llamacpp": {"base_url": "http://localhost:8080", "model": "", "download_location": "server", "auto_start": False},
     "faster-qwen3-tts": {
         "model_name": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "model_dir": "",
         "device": "cuda",
         "dtype": "bfloat16",
         "max_seq_len": 2048,

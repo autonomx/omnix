@@ -1,4 +1,8 @@
 @echo off
+echo ########################################
+echo ### USING SETUP.BAT (CURRENT VERSION) ###
+echo ########################################
+pause
 setlocal
 set "OMNIX_REPO_ROOT=%~dp0"
 set "OMNIX_REPO_ROOT=%OMNIX_REPO_ROOT:~0,-1%"
@@ -18,6 +22,15 @@ set "RPG_TTS_PYTHON=%CONDA_ROOT%\envs\rpg-tts\python.exe"
 
 set "RPG_STT_ENV=rpg-stt"
 set "RPG_STT_PYTHON=%CONDA_ROOT%\envs\rpg-stt\python.exe"
+
+set "OMNIX_MODELS_ROOT=%OMNIX_REPO_ROOT%\resources\models"
+set "OMNIX_LLM_MODELS_DIR=%OMNIX_MODELS_ROOT%\llm"
+set "OMNIX_TTS_MODELS_DIR=%OMNIX_MODELS_ROOT%\tts"
+set "OMNIX_STT_MODELS_DIR=%OMNIX_MODELS_ROOT%\stt"
+set "OMNIX_IMAGE_MODELS_DIR=%OMNIX_MODELS_ROOT%\image"
+
+set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_TTS_MODELS_DIR%\Qwen3-TTS-12Hz-0.6B-Base"
+set "OMNIX_QWEN3_TTS_REPO_ID=Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 
 echo =============================================
 echo Omnix - Setup with Split Conda Environments
@@ -143,33 +156,15 @@ echo [2/9][FLUX] Removing conflicting torch packages...
 
 echo.
 echo [3/9][FLUX] Installing torch/vision/audio CUDA 12.4 trio...
-"%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
+"%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 numpy==1.26.4 --index-url https://download.pytorch.org/whl/cu124
 if errorlevel 1 (
     echo WARNING: CUDA trio failed for %RPG_FLUX_ENV%, falling back to CPU
-    "%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1
+    "%RPG_FLUX_PYTHON%" -m pip install --no-cache-dir --force-reinstall torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 numpy==1.26.4
     if errorlevel 1 (
         echo ERROR: Failed to install torch trio into %RPG_FLUX_ENV%
         pause
         exit /b 1
     )
-)
-
-echo.
-echo [FLUX] Pinning core compatibility (numpy/packaging/setuptools)...
-"%RPG_FLUX_PYTHON%" -m pip install numpy==1.26.4 packaging==23.2 setuptools==81.0.0
-if errorlevel 1 (
-    echo ERROR: Failed to pin numpy/packaging/setuptools
-    pause
-    exit /b 1
-)
-
-echo.
-echo [FLUX] Re-locking numpy after torch install...
-"%RPG_FLUX_PYTHON%" -m pip install numpy==1.26.4
-if errorlevel 1 (
-    echo ERROR: Failed to re-lock numpy
-    pause
-    exit /b 1
 )
 
 echo.
@@ -218,12 +213,12 @@ echo [7/9][FLUX] Runtime dependency pins are managed by src\requirements-rpg-flu
 
 echo.
 echo [8/9][FLUX] Downloading default LLM (Qwen3-4B Q8_0)...
-if not exist "models\llm" mkdir "models\llm"
-"%RPG_FLUX_PYTHON%" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='qwen/Qwen3-4B-Instruct-2507-GGUF', filename='qwen3-4b-instruct-2507-q8_0.gguf', local_dir='models/llm', local_dir_use_symlinks=False)" 2>nul
+if not exist "%OMNIX_LLM_MODELS_DIR%" mkdir "%OMNIX_LLM_MODELS_DIR%"
+"%RPG_FLUX_PYTHON%" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='qwen/Qwen3-4B-Instruct-2507-GGUF', filename='qwen3-4b-instruct-2507-q8_0.gguf', local_dir=r'%OMNIX_LLM_MODELS_DIR%', local_dir_use_symlinks=False)" 2>nul
 if errorlevel 1 (
     echo WARNING: Could not auto-download Qwen3-4B GGUF model
 ) else (
-    echo Qwen3-4B model downloaded to models/llm/
+    echo Qwen3-4B model downloaded to %OMNIX_LLM_MODELS_DIR%/
 )
 
 echo.
@@ -239,7 +234,6 @@ if errorlevel 1 goto :error
 "%RPG_FLUX_PYTHON%" -c "from app.rpg.visual.runtime_status import validate_flux_klein_runtime; s=validate_flux_klein_runtime(); print('FLUX:', 'READY' if s.get('ready') else 'NOT READY', s.get('error','')); raise SystemExit(0 if s.get('ready') else 1)"
 if errorlevel 1 goto :error
 echo [FLUX] Runtime verification complete.
-
 echo =============================================
 echo FLUX: READY
 echo =============================================
@@ -248,12 +242,6 @@ echo.
 echo =============================================
 echo Installing dedicated TTS service into %RPG_TTS_ENV%
 echo =============================================
-
-if not exist "%RPG_TTS_PYTHON%" (
-    echo Creating conda environment: %RPG_TTS_ENV%
-    call conda create -n %RPG_TTS_ENV% python=3.10 -y
-    if errorlevel 1 goto :error
-)
 
 echo.
 echo [1/5][TTS] Upgrading pip/setuptools/wheel...
@@ -266,8 +254,26 @@ echo [2/5][TTS] Installing dedicated TTS requirements...
 if errorlevel 1 goto :error
 
 echo.
-echo [VERIFY][TTS] transformers/tokenizers/sox/onnxruntime versions...
-"%RPG_TTS_PYTHON%" -c "import transformers, tokenizers, sox, onnxruntime; print('transformers:', transformers.__version__); print('tokenizers:', tokenizers.__version__); print('sox: OK'); print('onnxruntime:', onnxruntime.__version__)"
+echo =============================================
+echo Downloading Qwen3-TTS model
+echo =============================================
+
+call "%OMNIX_REPO_ROOT%\download_tts_only.bat"
+if errorlevel 1 goto :error
+
+echo.
+echo [VERIFY][TTS MODEL] Checking local Qwen3-TTS files...
+"%RPG_TTS_PYTHON%" -c "from pathlib import Path; p=Path(r'%OMNIX_QWEN3_TTS_MODEL_DIR%'); shards=list(p.glob('*.safetensors')); print('model_dir:', p); print('safetensors_shards:', [s.name for s in shards]); assert (p/'config.json').exists(), 'Missing config.json'; assert (p/'preprocessor_config.json').exists(), 'Missing preprocessor_config.json'; assert shards, 'No safetensors shards found'"
+if errorlevel 1 goto :error
+
+echo.
+echo [SMOKE][TTS MODEL] Attempting real local from_pretrained load...
+"%RPG_TTS_PYTHON%" -c "import sys; sys.path.insert(0, r'%OMNIX_REPO_ROOT%\src'); from app.providers.vendor.qwen_tts.inference.qwen3_tts_model import Qwen3TTSModel; model_dir=r'%OMNIX_QWEN3_TTS_MODEL_DIR%'; print('Loading from:', model_dir); model = Qwen3TTSModel.from_pretrained(model_dir); print('Qwen3TTSModel local load OK:', type(model).__name__)"
+if errorlevel 1 goto :error
+
+echo.
+echo [VERIFY][TTS] transformers/tokenizers/onnxruntime versions.
+"%RPG_TTS_PYTHON%" -c "import transformers, tokenizers, onnxruntime; print('transformers:', transformers.__version__); print('tokenizers:', tokenizers.__version__); print('onnxruntime:', onnxruntime.__version__)"
 if errorlevel 1 goto :error
 
 echo.
@@ -359,7 +365,8 @@ if errorlevel 1 (
 
 echo.
 echo [7/7][STT] Pre-downloading Parakeet model...
-"%RPG_STT_PYTHON%" -c "from nemo.collections.asr.models import ASRModel; ASRModel.from_pretrained('nvidia/parakeet-tdt-0.6b-v2'); print('Parakeet model downloaded successfully!')" 2>nul
+if not exist "%OMNIX_STT_MODELS_DIR%" mkdir "%OMNIX_STT_MODELS_DIR%"
+"%RPG_STT_PYTHON%" -c "import os; os.environ['NEMO_CACHE_DIR'] = r'%OMNIX_STT_MODELS_DIR%'; from nemo.collections.asr.models import ASRModel; ASRModel.from_pretrained('nvidia/parakeet-tdt-0.6b-v2'); print('Parakeet model downloaded successfully!')" 2>nul
 if errorlevel 1 (
     echo WARNING: Failed to pre-download Parakeet model
     echo It will be downloaded on first use instead
@@ -387,6 +394,7 @@ echo   - %RPG_STT_ENV%  : Parakeet STT only
 echo.
 echo Python interpreters:
 echo   - %RPG_FLUX_PYTHON%
+echo   - %RPG_TTS_PYTHON%
 echo   - %RPG_STT_PYTHON%
 echo.
 echo IMPORTANT:

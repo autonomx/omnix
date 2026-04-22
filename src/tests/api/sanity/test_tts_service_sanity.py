@@ -110,11 +110,17 @@ class TestTtsServiceBackend:
         assert isinstance(data["ok"], bool)
         assert "provider" in data
         assert "status" in data
+        assert data["status"] in {"ready", "not_ready"}
         
         # Optional fields
         if data["ok"]:
             assert data["status"] == "ready"
             assert "details" in data
+            runtime_status = ((data.get("details") or {}).get("runtime_status") or {})
+            if runtime_status:
+                assert runtime_status.get("model_loaded") is True, (
+                    f"Health claimed ready but runtime_status disagrees: {data}"
+                )
 
     def test_speakers_endpoint(self, tts_service_available: bool) -> None:
         """Test /api/tts/speakers returns speaker list."""
@@ -159,11 +165,18 @@ class TestTtsServiceBackend:
         except Exception as e:
             pytest.fail(f"TTS server unreachable: {e}")
 
-        assert r.status_code == 200, r.text
+        assert r.status_code == 200, (
+            "Expected real synthesis success from /generate_audio.\n"
+            f"Status={r.status_code}\nBody:\n{r.text}"
+        )
+        _assert_no_known_tts_loader_failure(r.text)
 
         data = r.json()
         assert data.get("success") is True, f"Expected success=True, got: {data}"
         assert "audio_base64" in data
+        assert not data.get("is_fallback"), f"Non-stream synthesis used fallback: {data}"
+        assert "fallback" not in data, f"Unexpected fallback field in success response: {data}"
+        assert "fallback_reason" not in data, f"Unexpected fallback_reason in success response: {data}"
 
     @pytest.mark.e2e
     def test_tts_server_stream_and_nonstream_are_both_real_and_consistent(
@@ -208,6 +221,10 @@ class TestTtsServiceBackend:
         assert nonstream_data.get("audio_base64"), (
             f"/generate_audio missing audio_base64: {nonstream_data}"
         )
+        assert not nonstream_data.get("is_fallback"), (
+            f"/generate_audio masked failure via fallback: {nonstream_data}"
+        )
+        assert "fallback" not in nonstream_data and "fallback_reason" not in nonstream_data
 
         try:
             stream_response = requests.post(stream_url, json=payload, timeout=60)
