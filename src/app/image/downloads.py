@@ -30,7 +30,14 @@ def normalize_flux_local_dir(local_dir: str, download_dir: str) -> str:
     else:
         root = os.path.join(MODELS_DIR, download_dir)
 
-    return os.path.normpath(os.path.join(root, "flux2-klein-4b"))
+    preferred = os.path.normpath(os.path.join(root, "flux2-klein-4b"))
+    legacy = os.path.normpath(os.path.join(root, "flux-klein"))
+
+    if os.path.isdir(preferred):
+        return preferred
+    if os.path.isdir(legacy):
+        return legacy
+    return preferred
 
 
 def resolve_flux_local_dir_from_settings(settings: Dict[str, Any]) -> str:
@@ -46,8 +53,6 @@ def resolve_flux_local_dir_from_settings(settings: Dict[str, Any]) -> str:
 def required_flux_files() -> List[str]:
     return [
         "model_index.json",
-        "tokenizer.json",
-        "tokenizer_config.json",
         os.path.join("scheduler", "scheduler_config.json"),
     ]
 

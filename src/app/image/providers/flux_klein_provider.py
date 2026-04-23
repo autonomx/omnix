@@ -65,7 +65,14 @@ class FluxKleinImageProvider(BaseImageProvider):
             from app.shared import MODELS_DIR
             root = os.path.join(MODELS_DIR, download_dir)
 
-        return os.path.normpath(os.path.join(root, "flux2-klein-4b"))
+        preferred = os.path.normpath(os.path.join(root, "flux2-klein-4b"))
+        legacy = os.path.normpath(os.path.join(root, "flux-klein"))
+
+        if os.path.isdir(preferred):
+            return preferred
+        if os.path.isdir(legacy):
+            return legacy
+        return preferred
 
     def _dtype(self):
         import torch

@@ -21,7 +21,7 @@ def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
 
 
 def claim_next_visual_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
-    # Current global queue runner uses its own default lease handling.
+    # Global queue currently manages lease handling internally.
     return claim_next_image_job() or {}
 
 
