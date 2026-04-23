@@ -1049,3 +1049,31 @@ if (document.readyState === 'loading') {
 } else {
     setupStoryTeller();
 }
+
+// Fix mode toggle buttons
+function setupModeToggles() {
+    const chatModeBtn = document.getElementById('chatModeBtn');
+    const rpgModeBtn = document.getElementById('rpgModeBtn');
+
+    if (chatModeBtn) {
+        chatModeBtn.addEventListener('click', () => {
+            if (typeof window.RPGMode !== 'undefined' && window.RPGMode.switchMode) {
+                window.RPGMode.switchMode('chat');
+            }
+        });
+    }
+
+    if (rpgModeBtn) {
+        rpgModeBtn.addEventListener('click', () => {
+            if (typeof window.RPGMode !== 'undefined' && window.RPGMode.switchMode) {
+                window.RPGMode.switchMode('rpg');
+            }
+        });
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupModeToggles);
+} else {
+    setupModeToggles();
+}
