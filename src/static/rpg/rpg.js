@@ -3904,17 +3904,27 @@
     function refreshVisualUiFromSession() {
         if (!rpgState.sessionId) return Promise.resolve(null);
         return apiGetGame(rpgState.sessionId).then(function(game) {
+            if (!game || !game.session_id || game.session_id === 'session:unknown') {
+                console.warn('[RPG][VisualRefresh] invalid game payload', game);
+            }
+            if (!game || !game.visual_state) {
+                console.warn('[RPG][VisualRefresh] visual_state missing from /api/rpg/session/get payload', game);
+            }
+
             var nextNpcs = game.npcs || game.nearby_npcs || game.known_npcs || [];
             var nextPlayer = game.player || rpgState.player || null;
+            var visualState = game && game.visual_state ? game.visual_state : null;
             updateState({
                 player: nextPlayer,
                 npcs: Array.isArray(nextNpcs) ? nextNpcs : []
             });
             if (nextPlayer) renderPlayerPanel(nextPlayer);
             renderNPCs();
+            if (visualState) renderSceneIllustrations(visualState);
             wireVisualGenerateControls();
             return game;
-        }).catch(function() {
+        }).catch(function(err) {
+            console.error('[RPG][VisualRefresh] refreshVisualUiFromSession failed', err);
             return null;
         });
     }

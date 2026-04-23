@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from typing import Dict, Any
 
 ASSET_DIR = os.path.join("resources", "data", "generated_images")
@@ -33,12 +34,35 @@ def _hash_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:16]
 
 
+def _safe_asset_filename_component(value: str) -> str:
+    """
+    Convert an arbitrary asset id into a Windows-safe filename component.
+
+    Important:
+    - keep the original asset_id unchanged in the manifest key
+    - only sanitize the on-disk filename
+    """
+    text = str(value or "").strip()
+    if not text:
+        return "asset"
+
+    # Windows-invalid filename chars: <>:"/\\|?*
+    text = re.sub(r'[<>:"/\\\\|?*]+', "_", text)
+
+    # Collapse whitespace / repeated separators a bit
+    text = re.sub(r"\s+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("._ ")
+
+    return text or "asset"
+
+
 def save_image_asset_bytes(image_bytes: bytes, mime_type: str, asset_id: str, metadata: Dict[str, Any]):
     _ensure_dirs()
     manifest = _load_manifest()
 
     content_hash = _hash_bytes(image_bytes)
-    filename = f"{asset_id}_{content_hash}.png"
+    safe_asset_id = _safe_asset_filename_component(asset_id)
+    filename = f"{safe_asset_id}_{content_hash}.png"
     path = os.path.join(ASSET_DIR, filename)
 
     if not os.path.isfile(path):

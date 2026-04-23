@@ -63,10 +63,11 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
     if not job:
         return {"ok": True, "processed": False, "reason": "no_job_available"}
 
+    payload = _safe_dict(job.get("payload"))
     job_id = _safe_str(job.get("job_id")).strip()
     lease_token = _safe_str(job.get("lease_token")).strip()
-    session_id = _safe_str(job.get("session_id")).strip()
-    request_id = _safe_str(job.get("request_id")).strip()
+    session_id = _safe_str(job.get("session_id")).strip() or _safe_str(payload.get("session_id")).strip()
+    request_id = _safe_str(job.get("request_id")).strip() or _safe_str(payload.get("request_id")).strip()
 
     if not job_id or not lease_token:
         return {"ok": False, "error": "invalid_job_state"}
@@ -140,6 +141,8 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
 
             complete_visual_job(job_id=job_id, lease_token=lease_token, error="")
 
+            public_image_url = f"/generated-images/{os.path.basename(image_path)}"
+
             return {
                 "ok": True,
                 "processed": True,
@@ -148,7 +151,8 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
                 "request_id": request_id,
                 "request_status": "complete",
                 "asset_id": asset_id,
-                "image_url": image_path,
+                "image_url": public_image_url,
+                "local_path": image_path,
                 "note": "preview generation completed successfully",
             }
 

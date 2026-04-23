@@ -6142,9 +6142,10 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     manifest = _safe_dict(session.get("manifest"))
     runtime_state = _safe_dict(session.get("runtime_state"))
     simulation_state = _safe_dict(session.get("simulation_state"))
+    simulation_state = ensure_visual_state(simulation_state)
     npcs = _safe_list(runtime_state.get("npcs"))
     opening = _safe_str(runtime_state.get("opening"))
-    turn_result = _safe_dict(runtime_state.get("last_turn_result"))
+    turn_result = _safe_dict(session.get("turn_result"))
     player_state = _safe_dict(simulation_state.get("player_state"))
 
     # Ensure grounded scene context is always available
@@ -6157,13 +6158,15 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
 
     current_scene = _safe_dict(runtime_state.get("current_scene"))
     narration = _safe_str(turn_result.get("narration")) or opening
-
     nearby_npcs = build_nearby_npc_cards(simulation_state, current_scene)
 
     inventory_state = _safe_dict(player_state.get("inventory_state"))
     equipment = _safe_dict(inventory_state.get("equipment"))
 
     transaction_menus = _build_transaction_menus_for_state(simulation_state, runtime_state)
+
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
 
     return {
         "success": True,
@@ -6202,6 +6205,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
         "player_resources": _safe_dict(turn_result.get("player_resources")),
         "effect_result": _safe_dict(turn_result.get("effect_result")),
         "presentation": build_runtime_presentation_payload(simulation_state),
+        "visual_state": visual_state,
         "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
         "world_events_summary": {
             "recent_world_event_rows": _safe_list(runtime_state.get("recent_world_event_rows"))[-12:],

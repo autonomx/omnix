@@ -13,11 +13,15 @@ from app.image.job_queue import (
 
 
 def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
-    return enqueue_image_job({
+    job = enqueue_image_job({
         "session_id": session_id,
         "request_id": request_id,
         "source": "rpg",
     })
+    # Preserve legacy top-level shape expected by RPG queue runner/routes/tests.
+    job["session_id"] = session_id
+    job["request_id"] = request_id
+    return job
 
 
 def claim_next_visual_job(*, lease_seconds: int = 300) -> Dict[str, Any]:

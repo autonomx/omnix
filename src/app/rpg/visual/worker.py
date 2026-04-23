@@ -54,7 +54,8 @@ def _complete_character_portrait(
     *,
     request: Dict[str, Any],
     asset_id: str,
-    image_path: str,
+    image_url: str,
+    local_path: str,
     status: str,
 ) -> Dict[str, Any]:
     """Write completed portrait result back to character visual identity."""
@@ -64,7 +65,8 @@ def _complete_character_portrait(
     identities = _safe_dict(visual_state.get("character_visual_identities"))
     identity = _safe_dict(identities.get(target_id))
 
-    identity["portrait_url"] = image_path
+    identity["portrait_url"] = image_url
+    identity["portrait_local_path"] = local_path
     identity["portrait_asset_id"] = asset_id
     identity["status"] = status
 
@@ -80,7 +82,8 @@ def _complete_scene_illustration(
     *,
     request: Dict[str, Any],
     asset_id: str,
-    image_path: str,
+    image_url: str,
+    local_path: str,
     status: str,
 ) -> Dict[str, Any]:
     """Write completed scene illustration result back to visual state."""
@@ -90,7 +93,8 @@ def _complete_scene_illustration(
             "scene_id": _safe_str(request.get("target_id")).strip(),
             "event_id": _safe_str(request.get("request_id")).strip(),
             "title": _safe_str(request.get("target_id")).strip(),
-            "image_url": image_path,
+            "image_url": image_url,
+            "local_path": local_path,
             "asset_id": asset_id,
             "seed": request.get("seed"),
             "style": _safe_str(request.get("style")).strip(),
@@ -276,6 +280,8 @@ def process_pending_image_requests(
             target_id=_safe_str(request.get("target_id")).strip(),
         )
 
+        public_image_url = f"/generated-images/{os.path.basename(image_path)}"
+
         # Register the asset
         simulation_state = append_visual_asset(
             simulation_state,
@@ -287,7 +293,7 @@ def process_pending_image_requests(
                 style=_safe_str(request.get("style")).strip(),
                 model=_safe_str(request.get("model")).strip(),
                 prompt=final_prompt,
-                url=image_path,
+                url=public_image_url,
                 local_path=image_path,
                 status="complete",
                 created_from_request_id=request_id,
@@ -302,7 +308,8 @@ def process_pending_image_requests(
                 simulation_state,
                 request=request,
                 asset_id=asset_id,
-                image_path=image_path,
+                image_url=public_image_url,
+                local_path=image_path,
                 status="complete",
             )
         else:
@@ -312,7 +319,8 @@ def process_pending_image_requests(
                 simulation_state,
                 request=scene_request,
                 asset_id=asset_id,
-                image_path=image_path,
+                image_url=public_image_url,
+                local_path=image_path,
                 status="complete",
             )
 

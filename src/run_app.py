@@ -482,6 +482,25 @@ async def serve_logo(path: str):
         return FileResponse(file_path)
     return HTMLResponse("Not Found", status_code=404)
 
+@app.get("/generated-images/{filename:path}")
+async def serve_generated_image(filename: str):
+    """Serve generated RPG/image assets from resources/data/generated_images."""
+    basename = _os.path.basename(filename)
+    if basename != filename:
+        return JSONResponse({"ok": False, "error": "invalid_filename"}, status_code=400)
+
+    image_dir = Path(shared.BASE_DIR) / "resources" / "data" / "generated_images"
+    file_path = image_dir / basename
+
+    if not file_path.exists() or not file_path.is_file():
+        return JSONResponse({"ok": False, "error": "file_not_found"}, status_code=404)
+
+    ext = file_path.suffix.lower()
+    media_type = {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"
+    }.get(ext, "application/octet-stream")
+    return FileResponse(file_path, media_type=media_type)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

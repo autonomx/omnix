@@ -92,6 +92,7 @@ def _normalize_visual_identity_entry(value: Any) -> Dict[str, Any]:
 
     return {
         "portrait_url": _safe_str(data.get("portrait_url")).strip(),
+        "portrait_local_path": _safe_str(data.get("portrait_local_path")).strip(),
         "portrait_asset_id": _safe_str(data.get("portrait_asset_id")).strip(),
         "seed": seed,
         "style": _safe_str(data.get("style")).strip(),
@@ -110,6 +111,7 @@ def _normalize_scene_illustration(value: Any) -> Dict[str, Any]:
         "event_id": _safe_str(data.get("event_id")).strip(),
         "title": _safe_str(data.get("title")).strip(),
         "image_url": _safe_str(data.get("image_url")).strip(),
+        "local_path": _safe_str(data.get("local_path")).strip(),
         "asset_id": _safe_str(data.get("asset_id")).strip(),
         "seed": _safe_int(data.get("seed"), None),
         "style": _safe_str(data.get("style")).strip(),
@@ -409,11 +411,39 @@ def append_scene_illustration(
     simulation_state = ensure_visual_state(simulation_state)
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
     visual_state = _safe_dict(presentation_state.get("visual_state"))
-    illustrations = _safe_list(visual_state.get("scene_illustrations"))
+    illustrations = [
+        _normalize_scene_illustration(item)
+        for item in _safe_list(visual_state.get("scene_illustrations"))
+        if isinstance(item, dict)
+    ]
 
-    illustrations.append(_normalize_scene_illustration(illustration))
+    normalized = _normalize_scene_illustration(illustration)
+    normalized_scene_id = _safe_str(normalized.get("scene_id")).strip()
+    normalized_event_id = _safe_str(normalized.get("event_id")).strip()
+    normalized_asset_id = _safe_str(normalized.get("asset_id")).strip()
+
+    deduped = []
+    for item in illustrations:
+        same_event = (
+            normalized_event_id
+            and _safe_str(item.get("event_id")).strip() == normalized_event_id
+        )
+        same_asset = (
+            normalized_asset_id
+            and _safe_str(item.get("asset_id")).strip() == normalized_asset_id
+        )
+        same_scene_latest = (
+            normalized_scene_id
+            and not normalized_event_id
+            and _safe_str(item.get("scene_id")).strip() == normalized_scene_id
+        )
+        if same_event or same_asset or same_scene_latest:
+            continue
+        deduped.append(item)
+
+    deduped.append(normalized)
     illustrations = sorted(
-        [item for item in illustrations if isinstance(item, dict)],
+        deduped,
         key=lambda item: (
             _safe_str(item.get("scene_id")),
             _safe_str(item.get("event_id")),
@@ -503,11 +533,36 @@ def append_visual_asset(
     simulation_state = ensure_visual_state(simulation_state)
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
     visual_state = _safe_dict(presentation_state.get("visual_state"))
-    assets = _safe_list(visual_state.get("visual_assets"))
+    assets = [
+        _normalize_visual_asset(item)
+        for item in _safe_list(visual_state.get("visual_assets"))
+        if isinstance(item, dict)
+    ]
 
-    assets.append(_normalize_visual_asset(asset))
+    normalized = _normalize_visual_asset(asset)
+    normalized_asset_id = _safe_str(normalized.get("asset_id")).strip()
+    normalized_kind = _safe_str(normalized.get("kind")).strip()
+    normalized_target_id = _safe_str(normalized.get("target_id")).strip()
+    normalized_version = _safe_int(normalized.get("version"), 1)
+
+    deduped = []
+    for item in assets:
+        same_asset = (
+            normalized_asset_id
+            and _safe_str(item.get("asset_id")).strip() == normalized_asset_id
+        )
+        same_slot = (
+            _safe_str(item.get("kind")).strip() == normalized_kind
+            and _safe_str(item.get("target_id")).strip() == normalized_target_id
+            and _safe_int(item.get("version"), 1) == normalized_version
+        )
+        if same_asset or same_slot:
+            continue
+        deduped.append(item)
+
+    deduped.append(normalized)
     assets = sorted(
-        [item for item in assets if isinstance(item, dict)],
+        deduped,
         key=lambda item: (
             _safe_str(item.get("kind")),
             _safe_str(item.get("target_id")),
