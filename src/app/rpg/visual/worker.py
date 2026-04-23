@@ -11,6 +11,7 @@ from app.rpg.presentation.visual_state import (
     build_visual_asset_record,
     ensure_visual_state,
     get_pending_image_requests,
+    mark_image_request_complete,
     update_image_request,
     upsert_character_visual_identity,
 )
@@ -323,6 +324,14 @@ def process_pending_image_requests(
                 local_path=image_path,
                 status="complete",
             )
+
+        simulation_state = mark_image_request_complete(
+            simulation_state,
+            request_id=request_id,
+            asset_id=asset_id,
+            image_url=public_image_url,
+            local_path=image_path,
+        )
 
         # Mark request complete
         simulation_state = update_image_request(

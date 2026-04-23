@@ -3874,6 +3874,40 @@
         return Number.isFinite(n) ? n : null;
     }
 
+    function renderSceneIllustrations(visualState) {
+        var state = visualState || {};
+        var illustrations = Array.isArray(state.scene_illustrations) ? state.scene_illustrations : [];
+        var container = document.getElementById('rpgSceneIllustration');
+        if (!container) return;
+
+        if (!illustrations.length) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+            return;
+        }
+
+        var latest = illustrations[illustrations.length - 1] || {};
+        var imageUrl = typeof latest.image_url === 'string' ? latest.image_url : '';
+        var title = typeof latest.title === 'string' && latest.title ? latest.title : 'Scene Illustration';
+        var status = typeof latest.status === 'string' ? latest.status : '';
+
+        if (!imageUrl) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = '';
+        container.innerHTML =
+            '<div class="rpg-scene-illustration-card">' +
+                '<div class="rpg-scene-illustration-header">' +
+                    '<div class="rpg-scene-illustration-title">' + escapeHtml(title) + '</div>' +
+                    (status ? '<div class="rpg-scene-illustration-status">' + escapeHtml(status) + '</div>' : '') +
+                '</div>' +
+                '<img class="rpg-scene-illustration-image" src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '">' +
+            '</div>';
+    }
+
     function postJson(url, payload) {
         return fetch(url, {
             method: 'POST',
@@ -3906,6 +3940,14 @@
         return apiGetGame(rpgState.sessionId).then(function(game) {
             if (!game || !game.session_id || game.session_id === 'session:unknown') {
                 console.warn('[RPG][VisualRefresh] invalid game payload', game);
+                return null;
+            }
+            if (game.session_id !== rpgState.sessionId) {
+                console.warn('[RPG][VisualRefresh] session id mismatch', {
+                    requested: rpgState.sessionId,
+                    returned: game.session_id
+                });
+                return null;
             }
             if (!game || !game.visual_state) {
                 console.warn('[RPG][VisualRefresh] visual_state missing from /api/rpg/session/get payload', game);

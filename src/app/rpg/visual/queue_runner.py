@@ -57,6 +57,20 @@ def _find_request(simulation_state: Dict[str, Any], request_id: str) -> Dict[str
     return {}
 
 
+def _load_pending_request(session_id: str, request_id: str) -> Dict[str, Any]:
+    session_id = _safe_str(session_id).strip()
+    request_id = _safe_str(request_id).strip()
+    if not session_id or not request_id:
+        return {}
+
+    session = load_runtime_session(session_id)
+    if not isinstance(session, dict):
+        return {}
+
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    return _find_request(simulation_state, request_id)
+
+
 def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
     """Claim the next queued visual job, run canonical processing, then settle queue state."""
     job = claim_next_visual_job(lease_seconds=lease_seconds)
@@ -73,6 +87,23 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
         return {"ok": False, "error": "invalid_job_state"}
 
     try:
+        request = _load_pending_request(session_id=session_id, request_id=request_id)
+        if not request:
+            release_visual_job(job_id=job_id, lease_token=lease_token, error="request_not_found")
+            return {"ok": False, "processed": False, "error": "request_not_found"}
+
+        existing_status = _safe_str(request.get("status")).strip().lower()
+        existing_asset_id = _safe_str(request.get("asset_id")).strip()
+        if existing_status == "complete" or existing_asset_id:
+            complete_visual_job(job_id=job_id, lease_token=lease_token, error="")
+            return {
+                "ok": True,
+                "processed": False,
+                "reason": "request_already_completed",
+                "session_id": session_id,
+                "request_id": request_id,
+            }
+
         # Preview sessions are ephemeral and do not exist in the persisted session store.
         if session_id.startswith("preview_"):
             if not image_generation_enabled():

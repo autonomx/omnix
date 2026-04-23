@@ -400,6 +400,8 @@ def upsert_character_visual_identity(
     identities[_safe_str(actor_id)] = _normalize_visual_identity_entry(identity)
     visual_state["character_visual_identities"] = dict(sorted(identities.items(), key=lambda item: _safe_str(item[0])))
 
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
     return simulation_state
 
 
@@ -452,6 +454,8 @@ def append_scene_illustration(
     )[-_MAX_SCENE_ILLUSTRATIONS:]
 
     visual_state["scene_illustrations"] = illustrations
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
     return simulation_state
 
 
@@ -476,6 +480,8 @@ def append_image_request(
     )[-_MAX_IMAGE_REQUESTS:]
 
     visual_state["image_requests"] = requests
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
     return simulation_state
 
 
@@ -505,6 +511,8 @@ def update_image_request(
             updated.append(_normalize_image_request(item_dict))
 
     visual_state["image_requests"] = updated[-_MAX_IMAGE_REQUESTS:]
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
     return simulation_state
 
 
@@ -570,6 +578,37 @@ def append_visual_asset(
         ),
     )[-_MAX_VISUAL_ASSETS:]
     visual_state["visual_assets"] = assets
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
+    return simulation_state
+
+
+def mark_image_request_complete(
+    simulation_state: Dict[str, Any],
+    *,
+    request_id: str,
+    asset_id: str,
+    image_url: str,
+    local_path: str,
+) -> Dict[str, Any]:
+    simulation_state = ensure_visual_state(simulation_state)
+    presentation_state = _safe_dict(simulation_state.get("presentation_state"))
+    visual_state = _safe_dict(presentation_state.get("visual_state"))
+    requests = _safe_list(visual_state.get("image_requests"))
+
+    updated = []
+    for item in requests:
+        data = _safe_dict(item)
+        if _safe_str(data.get("request_id")).strip() == _safe_str(request_id).strip():
+            data["status"] = "complete"
+            data["asset_id"] = asset_id
+            data["image_url"] = image_url
+            data["local_path"] = local_path
+        updated.append(data)
+
+    visual_state["image_requests"] = updated
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
     return simulation_state
 
 
@@ -587,6 +626,8 @@ def upsert_appearance_profile(
 
     profiles[_safe_str(actor_id)] = _normalize_appearance_profile(profile)
     visual_state["appearance_profiles"] = dict(sorted(profiles.items(), key=lambda item: _safe_str(item[0])))
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
     return simulation_state
 
 
@@ -615,6 +656,8 @@ def append_appearance_event(
 
     events[_safe_str(actor_id)] = actor_events
     visual_state["appearance_events"] = dict(sorted(events.items(), key=lambda item: _safe_str(item[0])))
+    presentation_state["visual_state"] = visual_state
+    simulation_state["presentation_state"] = presentation_state
     return simulation_state
 
 

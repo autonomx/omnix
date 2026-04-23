@@ -2208,6 +2208,31 @@ body::before {
     animation-delay: 0.5s;
 }
 
+.rpg-scene-illustration {
+    display: none;
+    margin-top: 12px;
+}
+
+.rpg-scene-illustration-card {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.03);
+}
+
+.rpg-scene-illustration-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+}
+
+.rpg-scene-illustration-image {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
 @keyframes idlePulse {
     0%, 100% {
         transform: scale(1);

@@ -6170,7 +6170,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "success": True,
-        "session_id": _safe_str(manifest.get("id")),
+        "session_id": _safe_str(manifest.get("id")) or _safe_str(session.get("id")),
         "title": _safe_str(manifest.get("title")),
         "opening": opening,
         "narration": narration,

@@ -5,11 +5,25 @@ FastAPI server for speech-to-text using NVIDIA NeMo Parakeet model
 This file is placed in the root to avoid import conflicts with the 
 local nemo folder in models/stt/parakeet-tdt-0.6b-v2/
 """
+# Fix PyTorch DLL loading hang on Windows (PyTorch 2.9+)
+import os
+import platform
+if platform.system() == "Windows":
+    import ctypes
+    from importlib.util import find_spec
+    try:
+        if (spec := find_spec("torch")) and spec.origin:
+            torch_lib_dir = os.path.join(os.path.dirname(spec.origin), "lib")
+            c10_dll = os.path.join(torch_lib_dir, "c10.dll")
+            if os.path.exists(c10_dll):
+                ctypes.CDLL(os.path.normpath(c10_dll))
+    except Exception:
+        pass
+
 import asyncio
 import base64
 import datetime
 import gc
-import os
 import shutil
 import tempfile
 import traceback

@@ -4,9 +4,22 @@ Vendored Qwen3-TTS model loader with caching.
 This is the only module that imports directly from the vendored TTS package.
 All other code should use this loader interface.
 """
+# Fix PyTorch DLL loading hang on Windows (PyTorch 2.9+)
+import os
+import platform
+if platform.system() == "Windows":
+    import ctypes
+    from importlib.util import find_spec
+    try:
+        if (spec := find_spec("torch")) and spec.origin:
+            torch_lib_dir = os.path.join(os.path.dirname(spec.origin), "lib")
+            c10_dll = os.path.join(torch_lib_dir, "c10.dll")
+            if os.path.exists(c10_dll):
+                ctypes.CDLL(os.path.normpath(c10_dll))
+    except Exception:
+        pass
 
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional

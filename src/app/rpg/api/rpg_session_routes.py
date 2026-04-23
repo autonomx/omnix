@@ -336,11 +336,24 @@ def list_rpg_sessions():
 async def get_rpg_session(request: Request):
     data = await request.json()
     session_id = _safe_str(data.get("session_id")).strip()
+    if not session_id:
+        return {"ok": False, "error": "missing_session_id"}
+
     session = load_runtime_session(session_id)
-    if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-    payload = build_frontend_bootstrap_payload(session)
-    return {"ok": True, "game": payload}
+    print("[RPG][session/get]", {
+        "requested_session_id": session_id,
+        "session_type": type(session).__name__,
+        "session_found": bool(session),
+        "session_manifest_id": ((session or {}).get("manifest") or {}).get("id") if isinstance(session, dict) else None,
+    })
+    if not session:
+        return {"ok": False, "error": "session_not_found", "session_id": session_id}
+
+    game = build_frontend_bootstrap_payload(session)
+    if game.get("session_id") == "session:unknown":
+        game["session_id"] = session_id
+
+    return {"ok": True, "game": game}
 
 
 @rpg_session_bp.post("/api/rpg/session/update")
