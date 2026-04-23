@@ -8083,23 +8083,7 @@ def _apply_idle_tick_to_session(
         from app.rpg.analytics.world_events import build_incremental_world_event_rows
         new_rows = build_incremental_world_event_rows(after_state, runtime_state, debug_trace)
 
-        print(
-            "DEBUG WORLD EVENTS MERGE new_rows =",
-            {
-                "count": len(_safe_list(new_rows)),
-                "event_ids": [_safe_str(r.get("event_id")) for r in _safe_list(new_rows)],
-            },
-        )
-
         existing_rows = _safe_list(runtime_state.get("recent_world_event_rows"))
-
-        print(
-            "DEBUG WORLD EVENTS MERGE existing_rows_before =",
-            {
-                "count": len(_safe_list(existing_rows)),
-                "event_ids": [_safe_str(r.get("event_id")) for r in _safe_list(existing_rows)],
-            },
-        )
 
         merged_rows = existing_rows + new_rows
         deduped_rows: List[Dict[str, Any]] = []
@@ -8116,17 +8100,6 @@ def _apply_idle_tick_to_session(
             deduped_rows.append(row)
         deduped_rows.reverse()
         runtime_state["recent_world_event_rows"] = deduped_rows[-_MAX_RECENT_WORLD_EVENT_ROWS:]
-
-        print(
-            "DEBUG WORLD EVENTS MERGE final_rows =",
-            {
-                "count": len(_safe_list(runtime_state.get("recent_world_event_rows"))),
-                "event_ids": [
-                    _safe_str(r.get("event_id"))
-                    for r in _safe_list(runtime_state.get("recent_world_event_rows"))
-                ],
-            },
-        )
 
     except (ImportError, AttributeError):
         pass  # world_events module may not be available yet

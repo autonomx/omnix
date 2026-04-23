@@ -21,12 +21,22 @@ def enqueue_visual_job(*, session_id: str, request_id: str) -> Dict[str, Any]:
     # Preserve legacy top-level shape expected by RPG queue runner/routes/tests.
     job["session_id"] = session_id
     job["request_id"] = request_id
+    print("[RPG][visual/enqueue]", {"job_id": job.get("job_id"), "session_id": session_id, "request_id": request_id, "payload": job.get("payload")})
     return job
 
 
 def claim_next_visual_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
-    # Global queue currently manages lease handling internally.
-    return claim_next_image_job() or {}
+    # app.image.job_queue.claim_next_image_job does not accept lease_seconds.
+    # Claim first, then let the image queue own its default lease behavior.
+    job = claim_next_image_job()
+    if isinstance(job, dict):
+        payload = job.get("payload") or {}
+        if not job.get("session_id"):
+            job["session_id"] = payload.get("session_id")
+        if not job.get("request_id"):
+            job["request_id"] = payload.get("request_id")
+    print("[RPG][visual/claim]", {"job": job})
+    return job or {}
 
 
 def complete_visual_job(*, job_id: str, lease_token: str, error: str = "") -> Dict[str, Any]:

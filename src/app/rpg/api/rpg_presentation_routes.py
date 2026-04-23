@@ -94,11 +94,10 @@ from app.rpg.presentation.visual_state import (
     append_visual_asset,
     build_visual_asset_record,
     ensure_visual_state,
-    get_pending_image_requests,
     mark_image_request_complete,
     normalize_visual_status,
-    stable_visual_seed_from_text,
     update_image_request,
+    stable_visual_seed_from_text,
     upsert_appearance_profile,
     upsert_character_visual_identity,
     validate_visual_prompt,
@@ -168,7 +167,7 @@ from app.rpg.validation.integrity import (
 from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
 from app.image.downloads import download_flux_klein_model, get_flux_local_model_status
 from app.image.lifecycle import load_image_provider, unload_image_provider
-from app.image.settings_api import get_image_settings_payload, update_image_settings_payload
+from app.image.settings_api import get_image_settings_payload
 
 # Phase 12.13.5 — Visual queue management with hardening
 from app.rpg.visual.job_queue import (
@@ -180,14 +179,13 @@ from app.rpg.visual.job_queue import (
 
 # Phase 12.12 — ComfyUI provider
 from app.rpg.visual.providers import (
-    get_image_provider,
     get_loaded_image_provider_name,
     get_visual_provider_status_payload,
     is_image_provider_loaded,
     preload_image_provider,
     switch_image_provider_runtime,
 )
-from app.rpg.visual.providers import image_generation_enabled, unload_image_provider_cache
+from app.rpg.visual.providers import unload_image_provider_cache
 from app.shared import load_settings, save_settings
 from app.rpg.visual.queue_runner import run_one_queued_job
 
@@ -1130,6 +1128,11 @@ async def request_character_portrait(request: Request):
         simulation_state,
         expected_request_id=request_id,
     )
+    print("[RPG][portrait/request]", {
+        "request_id": request_id,
+        "persisted": persisted,
+        "actor_id": actor_id,
+    })
     if session_id and not persisted:
         return _jsonify({
             "ok": False,
@@ -1218,6 +1221,8 @@ async def request_scene_illustration(request: Request):
         default_visual_model = _safe_str(flux_settings.get("repo_id")).strip() or "black-forest-labs/FLUX.2-klein-4B"
         scene_model = _first_non_empty(model, defaults.get("model"), default_visual_model)
         resolved_target = _first_non_empty(event_id, scene_id, title, "scene")
+        if ":" not in resolved_target:
+            resolved_target = f"scene:manual:{_request_nonce()}"
 
         if not prompt:
             prompt = f"Scene illustration of {resolved_target or 'the current scene'}"
@@ -1232,6 +1237,32 @@ async def request_scene_illustration(request: Request):
             kind="scene_illustration",
             target_id=resolved_target,
         )
+
+        # If a completed asset already exists for this exact logical target/prompt/style/model/seed,
+        # return it instead of enqueueing/generating again.
+        current_visual_state = _extract_visual_state(simulation_state)
+        existing_illustrations = _safe_list(current_visual_state.get("scene_illustrations"))
+        for item in reversed(existing_illustrations):
+            row = _safe_dict(item)
+            if (
+                _safe_str(row.get("scene_id")).strip() == resolved_target
+                and _safe_str(row.get("prompt")).strip() == prompt
+                and _safe_str(row.get("style")).strip() == scene_style
+                and _safe_str(row.get("model")).strip() == scene_model
+                and row.get("seed") == seed
+                and _safe_str(row.get("status")).strip() == "complete"
+                and _safe_str(row.get("image_url")).strip()
+            ):
+                return _jsonify({
+                    "ok": True,
+                    "request_id": _safe_str(row.get("event_id")).strip() or "",
+                    "moderation": {
+                        "status": "approved" if prompt_check.get("ok") else "blocked",
+                        "reason": _safe_str(prompt_check.get("reason")).strip(),
+                    },
+                    "visual_state": current_visual_state,
+                    "reused_existing": True,
+                })
 
         now_ts = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
         request_id = f"scene:{resolved_target}:{seed}:{_request_nonce()}"
@@ -1793,7 +1824,26 @@ async def normalize_visual_queue_route(request: Request):
 async def run_one_queued_job_route(request: Request):
     payload = await _get_json(request)
     lease_seconds = int(payload.get("lease_seconds") or 300)
-    result = run_one_queued_job(lease_seconds=lease_seconds)
+    try:
+        result = run_one_queued_job(lease_seconds=lease_seconds)
+    except Exception as exc:
+        print("[RPG][visual/run_one][ERROR]", {
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        })
+        return _jsonify({
+            "ok": False,
+            "processed": False,
+            "error": str(exc) or "run_one_failed",
+        }, status_code=200)
+
+    if not result.get("ok"):
+        if isinstance(result.get("provider_result"), object) and not isinstance(result.get("provider_result"), dict):
+            result["provider_result"] = {
+                "error": str(result.get("provider_result")),
+            }
+        print("[RPG][visual/run_one][RESULT]", result)
+        return _jsonify(result, status_code=200)
 
     # Persist preview/run_one completions back into the live session so the UI
     # can see them through /api/rpg/session/get.
@@ -1804,73 +1854,93 @@ async def run_one_queued_job_route(request: Request):
             asset_id = str(result.get("asset_id") or "").strip()
             image_url = str(result.get("image_url") or "").strip()
             local_path = str(result.get("local_path") or "").strip()
+            kind = str(result.get("kind") or "").strip()
+            target_id = str(result.get("target_id") or "").strip()
+            prompt = str(result.get("prompt") or "").strip()
+            style = str(result.get("style") or "").strip()
+            model = str(result.get("model") or "").strip()
+            seed = result.get("seed")
+            version = result.get("version")
 
             session = load_runtime_session(session_id)
             if session:
                 simulation_state = dict(session.get("simulation_state") or {})
-                runtime_state = dict(session.get("runtime_state") or {})
 
-                pending = (
-                    ((simulation_state.get("presentation_state") or {}).get("visual_state") or {}).get("image_requests")
-                    or []
+                if not kind:
+                    kind = "scene_illustration"
+                if not target_id:
+                    target_id = "scene"
+                if not prompt:
+                    prompt = request_id
+                if not style:
+                    style = "rpg-scene"
+                if not model:
+                    model = "default"
+
+                simulation_state = append_visual_asset(
+                    simulation_state,
+                    {
+                        "kind": kind,
+                        "target_id": target_id,
+                        "version": version,
+                        "seed": seed,
+                        "style": style,
+                        "model": model,
+                        "prompt": prompt,
+                        "url": image_url,
+                        "local_path": local_path,
+                        "status": "complete",
+                        "asset_id": asset_id,
+                        "created_from_request_id": request_id,
+                    },
                 )
-                matched_request = None
-                for item in pending:
-                    if isinstance(item, dict) and str(item.get("request_id") or "").strip() == request_id:
-                        matched_request = dict(item)
-                        break
 
-                if matched_request:
-                    simulation_state = append_visual_asset(
-                        simulation_state,
-                        {
-                            "kind": str(matched_request.get("kind") or "").strip(),
-                            "target_id": str(matched_request.get("target_id") or "").strip(),
-                            "version": matched_request.get("version"),
-                            "seed": matched_request.get("seed"),
-                            "style": str(matched_request.get("style") or "").strip(),
-                            "model": str(matched_request.get("model") or "").strip(),
-                            "prompt": str(matched_request.get("prompt") or "").strip(),
-                            "url": image_url,
-                            "local_path": local_path,
-                            "status": "complete",
-                            "asset_id": asset_id,
-                            "created_from_request_id": request_id,
-                        },
+                simulation_state = mark_image_request_complete(
+                    simulation_state,
+                    request_id=request_id,
+                    asset_id=asset_id,
+                    image_url=image_url,
+                    local_path=local_path,
+                )
+
+                completed_request = {
+                    "request_id": request_id,
+                    "kind": kind,
+                    "target_id": target_id,
+                    "prompt": prompt,
+                    "style": style,
+                    "model": model,
+                    "seed": seed,
+                    "version": version,
+                }
+
+                if kind == "character_portrait":
+                    simulation_state = _complete_character_portrait(
+                        simulation_state, request=completed_request, asset_id=asset_id, image_url=image_url, local_path=local_path, status="complete"
+                    )
+                else:
+                    simulation_state = _complete_scene_illustration(
+                        simulation_state, request=completed_request, asset_id=asset_id, image_url=image_url, local_path=local_path, status="complete"
                     )
 
-                    simulation_state = mark_image_request_complete(
-                        simulation_state,
-                        request_id=request_id,
-                        asset_id=asset_id,
-                        image_url=image_url,
-                        local_path=local_path,
-                    )
+                # Remove the completed request from the pending queue so repeat clicks
+                # do not cause duplicate generations for the same work item.
+                simulation_state = update_image_request(
+                    simulation_state,
+                    request_id=request_id,
+                    patch={"status": "complete", "updated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z", "completed_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z"},
+                )
 
-                    if str(matched_request.get("kind") or "").strip() == "character_portrait":
-                        simulation_state = _complete_character_portrait(
-                            simulation_state, request=matched_request, asset_id=asset_id, image_url=image_url, local_path=local_path, status="complete"
-                        )
-                    else:
-                        simulation_state = _complete_scene_illustration(
-                            simulation_state, request=matched_request, asset_id=asset_id, image_url=image_url, local_path=local_path, status="complete"
-                        )
-
-                    session["simulation_state"] = simulation_state
-                    save_runtime_session(session)
+                session["simulation_state"] = simulation_state
+                save_runtime_session(session)
     except Exception as exc:
+        print("[RPG][visual/run_one][PERSIST_ERROR]", {
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        })
         result["session_persist_error"] = str(exc)
 
-    # Do not surface normal handled visual-generation failures as HTTP 500s.
-    # The frontend should receive the structured JSON and show the real error.
-    error = _safe_str(result.get("error")).strip()
-    code = 200
-    if not result.get("ok") and error in {
-        "invalid_job_state",
-    }:
-        code = 500
-
-    return _jsonify(result, status_code=code)
+    return _jsonify(result, status_code=200)
 
 
 @rpg_presentation_bp.get("/api/rpg/visual/provider/settings")

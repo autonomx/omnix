@@ -1126,13 +1126,6 @@ async def get_rpg_session_world_events(request: Request):
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
 
-    print(
-        "DEBUG WORLD EVENTS ROUTE REQUEST =",
-        {
-            "session_id": session_id,
-        },
-    )
-
     session = load_runtime_session(session_id)
     if session is None:
         return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
@@ -1149,16 +1142,6 @@ async def get_rpg_session_world_events(request: Request):
     player_world_view_rows = build_player_world_view_rows(simulation_state, runtime_state)
     player_local_world_view_rows = build_player_local_world_view_rows(simulation_state, runtime_state)
     player_global_world_view_rows = build_player_global_world_view_rows(simulation_state, runtime_state)
-
-    print(
-        "DEBUG WORLD EVENTS ROUTE RESPONSE =",
-        {
-            "count": len(recent_rows),
-            "player_count": len(player_world_view_rows),
-            "event_ids": [_safe_str(r.get("event_id")) for r in recent_rows],
-            "player_event_ids": [_safe_str(r.get("event_id")) for r in player_world_view_rows],
-        },
-    )
 
     return {
         "ok": True,

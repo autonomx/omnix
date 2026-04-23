@@ -34,11 +34,21 @@ def claim_next_image_job() -> Dict[str, Any] | None:
     return None
 
 
-def complete_image_job(job_id: str, token: str, result: Dict[str, Any]):
+def complete_image_job(job_id: str, lease_token: str, result: Dict[str, Any]):
     for job in _QUEUE:
-        if job["job_id"] == job_id and job["lease_token"] == token:
+        if job["job_id"] == job_id and job["lease_token"] == lease_token:
             job["status"] = "complete"
             job["result"] = result
+            job["updated_at"] = time.time()
+            return job
+    return None
+
+
+def fail_image_job(job_id: str, lease_token: str, error: str):
+    for job in _QUEUE:
+        if job["job_id"] == job_id and job["lease_token"] == lease_token:
+            job["status"] = "failed"
+            job["result"] = {"error": error, "status": "failed"}
             job["updated_at"] = time.time()
             return job
     return None

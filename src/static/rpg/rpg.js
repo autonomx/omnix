@@ -3877,19 +3877,43 @@
     function renderSceneIllustrations(visualState) {
         var state = visualState || {};
         var illustrations = Array.isArray(state.scene_illustrations) ? state.scene_illustrations : [];
+        var requests = Array.isArray(state.image_requests) ? state.image_requests : [];
         var container = document.getElementById('rpgSceneIllustration');
         if (!container) return;
 
-        if (!illustrations.length) {
+        if (!illustrations.length && !requests.length) {
             container.innerHTML = '';
             container.style.display = 'none';
             return;
         }
 
-        var latest = illustrations[illustrations.length - 1] || {};
+        var completed = illustrations.filter(function(item) {
+            return item && item.status === 'complete' && item.image_url;
+        });
+        var latest = (completed.length ? completed[completed.length - 1] : illustrations[illustrations.length - 1]) || {};
+
+        console.log("Scene render check:", { illustrations, latest });
+
         var imageUrl = typeof latest.image_url === 'string' ? latest.image_url : '';
         var title = typeof latest.title === 'string' && latest.title ? latest.title : 'Scene Illustration';
         var status = typeof latest.status === 'string' ? latest.status : '';
+
+        if (!imageUrl && requests.length) {
+            var pending = requests[requests.length - 1] || {};
+            container.style.display = '';
+            container.innerHTML =
+                '<div class="rpg-scene-illustration-card rpg-scene-illustration-card--pending">' +
+                    '<div class="rpg-scene-illustration-header">' +
+                        '<div class="rpg-scene-illustration-title">Generating scene illustration…</div>' +
+                        '<div class="rpg-scene-illustration-status">' + escapeHtml(pending.status || 'pending') + '</div>' +
+                    '</div>' +
+                    '<div class="rpg-scene-illustration-placeholder">' +
+                        '<div class="rpg-scene-illustration-spinner"></div>' +
+                        '<div class="rpg-scene-illustration-prompt">' + escapeHtml(pending.prompt || 'Preparing image…') + '</div>' +
+                    '</div>' +
+                '</div>';
+            return;
+        }
 
         if (!imageUrl) {
             container.innerHTML = '';
@@ -3913,62 +3937,76 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload || {})
-        }).then(function(r) {
-            return r.text().then(function(text) {
-                var data = {};
+        }).then(function(response) {
+            return response.text().then(function(text) {
+                var data = null;
                 try {
                     data = text ? JSON.parse(text) : {};
-                } catch (e) {
-                    data = {
+                } catch (err) {
+                    console.error('[RPG][postJson][InvalidJSON]', {
+                        url: url,
+                        status: response.status,
+                        raw_text: text
+                    });
+                    return {
                         ok: false,
                         error: 'invalid_json_response',
-                        raw_text: text || ''
+                        raw_text: text,
+                        http_status: response.status,
+                        http_ok: response.ok
                     };
                 }
-                data.http_status = r.status;
-                data.http_ok = r.ok;
-                if (!r.ok && !data.error) {
-                    data.error = 'http_' + String(r.status);
+                if (!response.ok) {
+                    data.http_status = response.status;
+                    data.http_ok = response.ok;
                 }
                 return data;
             });
         });
     }
 
-    function refreshVisualUiFromSession() {
+    function refreshVisualUiFromSession(force) {
         if (!rpgState.sessionId) return Promise.resolve(null);
-        return apiGetGame(rpgState.sessionId).then(function(game) {
-            if (!game || !game.session_id || game.session_id === 'session:unknown') {
-                console.warn('[RPG][VisualRefresh] invalid game payload', game);
-                return null;
-            }
-            if (game.session_id !== rpgState.sessionId) {
-                console.warn('[RPG][VisualRefresh] session id mismatch', {
-                    requested: rpgState.sessionId,
-                    returned: game.session_id
-                });
-                return null;
-            }
-            if (!game || !game.visual_state) {
-                console.warn('[RPG][VisualRefresh] visual_state missing from /api/rpg/session/get payload', game);
-            }
+        return postJson('/api/rpg/session/get', { session_id: rpgState.sessionId, force: !!force })
+            .then(function(result) {
+                // Handle both {ok, game} wrapper and direct game object response
+                var game = result && result.game ? result.game : result;
+                if (!game || !game.session_id || game.session_id === 'session:unknown') {
+                    console.warn('[RPG][VisualRefresh] invalid game payload', game);
+                    return null;
+                }
 
-            var nextNpcs = game.npcs || game.nearby_npcs || game.known_npcs || [];
-            var nextPlayer = game.player || rpgState.player || null;
-            var visualState = game && game.visual_state ? game.visual_state : null;
-            updateState({
-                player: nextPlayer,
-                npcs: Array.isArray(nextNpcs) ? nextNpcs : []
+                if (game.session_id !== rpgState.sessionId) {
+                    console.warn('[RPG][VisualRefresh] session id mismatch', {
+                        requested: rpgState.sessionId,
+                        returned: game.session_id
+                    });
+                    return null;
+                }
+
+                var nextNpcs = game.npcs || game.nearby_npcs || game.known_npcs || [];
+                var nextPlayer = game.player || rpgState.player || null;
+                var visualState = game.visual_state;
+
+                updateState({
+                    player: nextPlayer,
+                    npcs: Array.isArray(nextNpcs) ? nextNpcs : []
+                });
+
+                if (nextPlayer) renderPlayerPanel(nextPlayer);
+                renderNPCs();
+
+                if (visualState) {
+                    console.log("[RPG][visual refresh]", visualState);
+                    renderSceneIllustrations(visualState);
+                }
+
+                wireVisualGenerateControls();
+                return game;
+            }).catch(function(err) {
+                console.error('[RPG][VisualRefresh] refreshVisualUiFromSession failed', err);
+                return null;
             });
-            if (nextPlayer) renderPlayerPanel(nextPlayer);
-            renderNPCs();
-            if (visualState) renderSceneIllustrations(visualState);
-            wireVisualGenerateControls();
-            return game;
-        }).catch(function(err) {
-            console.error('[RPG][VisualRefresh] refreshVisualUiFromSession failed', err);
-            return null;
-        });
     }
 
     function ensureVisualActionBar(container, kind) {
@@ -4055,39 +4093,42 @@
         }
     }
 
-    function queueAndRunVisualJob(container, kind, payload, route, successText) {
-        setVisualStatus(container, kind, 'Queueing image request...');
-        return postJson(route, payload)
-            .then(function(result) {
-                if (!result || !result.ok) {
-                    setVisualStatus(container, kind, 'Failed to queue image request' + (result && result.error ? ': ' + result.error : '.'));
-                    return null;
-                }
-                if (result.request_id) {
-                    console.log('[RPG][VisualRequestQueued]', result.request_id);
-                    window.__lastRpgVisualRequestId = result.request_id;
-                    setVisualStatus(container, kind, 'Queued: ' + result.request_id);
+    function queueAndRunVisualJob(container, kind, payload, url, successText) {
+        return postJson(url, payload).then(function(requestResult) {
+            if (!requestResult || !requestResult.ok) return requestResult;
+
+            // 🔥 IMMEDIATE pending render (zero latency preview)
+            if (requestResult.visual_state) {
+                renderSceneIllustrations(requestResult.visual_state);
+            }
+
+            if (requestResult.reused_existing) {
+                return refreshVisualUiFromSession().then(function() {
+                    return requestResult;
+                });
+            }
+
+            return postJson('/api/rpg/visual/queue/run_one', { lease_seconds: 300 }).then(function(runResult) {
+
+                console.log("[RPG][run_one result]", runResult);
+
+                if (runResult.request_id) {
+                    console.log('[RPG][VisualRequestQueued]', runResult.request_id);
+                    window.__lastRpgVisualRequestId = runResult.request_id;
+                    setVisualStatus(container, kind, 'Queued: ' + runResult.request_id);
                 }
                 setVisualStatus(container, kind, 'Running image generation...');
-                return postJson('/api/rpg/visual/queue/run_one', {});
-            })
-            .then(function(result) {
-                if (!result) return null;
-                if (!result.ok) {
-                    var detail = (result && (result.error || result.reason)) ? ': ' + (result.error || result.reason) : '.';
-                    setVisualStatus(container, kind, 'Image generation failed' + detail);
-                    console.warn('[RPG][VisualRunOne]', result);
-                    return null;
-                }
-                setVisualStatus(container, kind, successText || 'Image generated.');
-                return refreshVisualUiFromSession().then(function() {
-                    return result;
+
+                // 🔥 CRITICAL: force fresh session fetch AFTER generation
+                return refreshVisualUiFromSession(true).then(function() {
+                    setVisualStatus(container, kind, successText || 'Image generated.');
+                    return runResult;
                 });
-            })
-            .catch(function() {
-                setVisualStatus(container, kind, 'Image generation failed.');
-                return null;
             });
+        }).catch(function() {
+            setVisualStatus(container, kind, 'Image generation failed.');
+            return null;
+        });
     }
 
     function generatePortraitNow(actorId, container, opts) {
@@ -4116,12 +4157,14 @@
         opts = opts || {};
         ensureVisualControlState();
         var cfg = rpgState.visualControls.scene || {};
-        var sceneId = opts.sceneId || '';
-        var title = opts.title || '';
+        var sceneId = opts.sceneId || getCurrentSceneId();
+        var title = opts.title || getCurrentSceneTitle();
         var payload = {
             session_id: rpgState.sessionId || '',
             scene_id: sceneId,
+            event_id: opts.eventId || sceneId,
             title: title,
+            prompt: opts.prompt || ('Scene illustration of ' + (title || sceneId || 'the current scene')),
             style: opts.style || cfg.style || 'rpg-scene',
             reason: opts.reason || 'manual_test',
             auto_process: false
@@ -4135,6 +4178,18 @@
             '/api/rpg/scene_illustration/request',
             opts.successText || 'Scene image generated.'
         );
+    }
+
+    function getCurrentSceneId() {
+        var scene = rpgState.scene || rpgState.currentScene || {};
+        var id = String(scene.id || scene.scene_id || rpgState.sceneId || '').trim();
+        if (id && id.indexOf(':') !== -1) return id;
+        return 'scene:manual:' + Date.now();
+    }
+
+    function getCurrentSceneTitle() {
+        var scene = rpgState.scene || rpgState.currentScene || {};
+        return String(scene.title || scene.name || rpgState.sceneTitle || 'Current Scene').trim();
     }
 
     function attachPortraitControls(container, actorId, isPlayer) {
@@ -5897,13 +5952,16 @@
     if (typeof window !== 'undefined') {
         window.setWorldEventsTab = setWorldEventsTab;
         window.generateCurrentScene = function() {
-            const container = document.createElement('div');
-            document.body.appendChild(container);
+            const container = document.getElementById('rpgSceneIllustration') || document.body;
+            const sceneId = getCurrentSceneId();
+            const title = getCurrentSceneTitle();
             generateSceneNow(container, {
+                sceneId: sceneId,
+                eventId: sceneId,
+                title: title,
+                prompt: 'Scene illustration of ' + title,
                 reason: 'manual_chat_button',
                 successText: 'Scene image generated.'
-            }).finally(() => {
-                document.body.removeChild(container);
             });
         };
     }

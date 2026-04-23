@@ -265,7 +265,7 @@ def ensure_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     illustrations_out = [
         _normalize_scene_illustration(item)
         for item in illustrations_in
-        if isinstance(item, dict)
+        if isinstance(item, dict) and ":" in _safe_str(item.get("scene_id")).strip()
     ]
     illustrations_out = sorted(
         illustrations_out,
@@ -281,7 +281,7 @@ def ensure_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     requests_out = [
         _normalize_image_request(item)
         for item in requests_in
-        if isinstance(item, dict)
+        if isinstance(item, dict) and ":" in _safe_str(item.get("target_id")).strip()
     ]
     requests_out = sorted(
         requests_out,
@@ -298,7 +298,7 @@ def ensure_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     assets_out = [
         _normalize_visual_asset(item)
         for item in assets_in
-        if isinstance(item, dict)
+        if isinstance(item, dict) and ":" in _safe_str(item.get("target_id")).strip()
     ]
     assets_out = sorted(
         assets_out,
@@ -419,6 +419,11 @@ def append_scene_illustration(
         if isinstance(item, dict)
     ]
 
+    scene_id = _safe_str(illustration.get("scene_id")).strip()
+    if ":" not in scene_id:
+        print("[RPG][WARN] Rejecting invalid scene_id:", scene_id)
+        return simulation_state
+
     normalized = _normalize_scene_illustration(illustration)
     normalized_scene_id = _safe_str(normalized.get("scene_id")).strip()
     normalized_event_id = _safe_str(normalized.get("event_id")).strip()
@@ -469,6 +474,11 @@ def append_image_request(
     visual_state = _safe_dict(presentation_state.get("visual_state"))
     requests = _safe_list(visual_state.get("image_requests"))
 
+    target_id = _safe_str(request.get("target_id")).strip()
+    if ":" not in target_id:
+        print("[RPG][WARN] Rejecting invalid target_id:", target_id)
+        return simulation_state
+
     requests.append(_normalize_image_request(request))
     requests = sorted(
         [item for item in requests if isinstance(item, dict)],
@@ -504,9 +514,12 @@ def update_image_request(
     for item in requests:
         item_dict = _safe_dict(item)
         if _safe_str(item_dict.get("request_id")).strip() == _safe_str(request_id).strip():
-            merged = dict(item_dict)
-            merged.update(_safe_dict(patch))
-            updated.append(_normalize_image_request(merged))
+            item_dict.update(_safe_dict(patch))
+            normalized = _normalize_image_request(item_dict)
+            # Drop completed requests from the pending queue; completed work is
+            # represented by scene_illustrations / visual_assets.
+            if _safe_str(normalized.get("status")).strip() != "complete":
+                updated.append(normalized)
         else:
             updated.append(_normalize_image_request(item_dict))
 
@@ -546,6 +559,11 @@ def append_visual_asset(
         for item in _safe_list(visual_state.get("visual_assets"))
         if isinstance(item, dict)
     ]
+
+    target_id = _safe_str(asset.get("target_id")).strip()
+    if ":" not in target_id:
+        print("[RPG][WARN] Rejecting invalid target_id:", target_id)
+        return simulation_state
 
     normalized = _normalize_visual_asset(asset)
     normalized_asset_id = _safe_str(normalized.get("asset_id")).strip()

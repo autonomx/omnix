@@ -1,20 +1,15 @@
-"""RPG queue runner with request-state awareness."""
 from __future__ import annotations
 
 import os
 from typing import Any, Dict
 
-from app.rpg.session.runtime import load_runtime_session, save_runtime_session
-from app.rpg.visual.worker import process_pending_image_requests
-from app.rpg.visual.providers import image_generation_enabled
-from app.rpg.visual.asset_store import save_asset_bytes
+from app.image.asset_store import save_image_asset_bytes as save_asset_bytes
+from app.image.job_queue import complete_image_job, fail_image_job
 from app.rpg.visual.global_image_adapter import generate_rpg_image
-
-from .job_queue import (
-    claim_next_visual_job,
-    complete_visual_job,
-    release_visual_job,
-)
+from app.rpg.visual.job_queue import claim_next_visual_job, complete_visual_job, release_visual_job
+from app.rpg.visual.providers import image_generation_enabled
+from app.rpg.visual.worker import process_pending_image_requests
+from app.rpg.session.durable_store import load_session_from_disk as load_runtime_session, save_session_to_disk as save_runtime_session
 
 
 def _safe_str(value: Any) -> str:
@@ -27,6 +22,54 @@ def _safe_str(value: Any) -> str:
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _result_ok(value: Any) -> bool:
+    if isinstance(value, dict):
+        return bool(value.get("ok"))
+    return bool(getattr(value, "ok", False))
+
+
+def _result_error(value: Any) -> str:
+    if isinstance(value, dict):
+        return _safe_str(value.get("error")).strip()
+    return _safe_str(getattr(value, "error", "")).strip()
+
+
+def _result_local_path(value: Any) -> str:
+    if isinstance(value, dict):
+        return _safe_str(value.get("local_path")).strip()
+    return _safe_str(getattr(value, "local_path", "")).strip()
+
+
+def _result_mime_type(value: Any) -> str:
+    if isinstance(value, dict):
+        return _safe_str(value.get("mime_type")).strip()
+    return _safe_str(getattr(value, "mime_type", "")).strip()
+
+
+def _result_seed(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value.get("seed")
+    return getattr(value, "seed", None)
+
+
+def _result_to_jsonable(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {
+        "ok": bool(getattr(value, "ok", False)),
+        "provider": _safe_str(getattr(value, "provider", "")).strip(),
+        "status": _safe_str(getattr(value, "status", "")).strip(),
+        "error": _safe_str(getattr(value, "error", "")).strip(),
+        "asset_url": _safe_str(getattr(value, "asset_url", "")).strip(),
+        "local_path": _safe_str(getattr(value, "local_path", "")).strip(),
+        "seed": getattr(value, "seed", None),
+        "width": getattr(value, "width", None),
+        "height": getattr(value, "height", None),
+        "mime_type": _safe_str(getattr(value, "mime_type", "")).strip(),
+        "metadata": getattr(value, "metadata", {}) if isinstance(getattr(value, "metadata", {}), dict) else {},
+    }
 
 
 def _result_bytes_and_mime(result: Any) -> tuple[bytes, str]:
@@ -71,31 +114,65 @@ def _load_pending_request(session_id: str, request_id: str) -> Dict[str, Any]:
     return _find_request(simulation_state, request_id)
 
 
+def _claim_next_live_visual_job(*, lease_seconds: int = 300, max_skip: int = 8) -> Dict[str, Any]:
+    """
+    Claim the next queue job whose request still exists in session state.
+    Skip stale jobs left behind after request replacement/dedup.
+    """
+    for _ in range(max_skip):
+        job = claim_next_visual_job(lease_seconds=lease_seconds)
+        if not job:
+            return {}
+
+        payload = _safe_dict(job.get("payload"))
+        job_id = _safe_str(job.get("job_id")).strip()
+        lease_token = _safe_str(job.get("lease_token")).strip()
+        session_id = _safe_str(job.get("session_id")).strip() or _safe_str(payload.get("session_id")).strip()
+        request_id = _safe_str(job.get("request_id")).strip() or _safe_str(payload.get("request_id")).strip()
+
+        request = _load_pending_request(session_id=session_id, request_id=request_id)
+        if request:
+            job["_resolved_request"] = request
+            job["_resolved_session_id"] = session_id
+            job["_resolved_request_id"] = request_id
+            return job
+
+        if job_id and lease_token:
+            fail_image_job(job_id=job_id, lease_token=lease_token, error="stale_request_not_found")
+
+    return {}
+
+
 def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
     """Claim the next queued visual job, run canonical processing, then settle queue state."""
-    job = claim_next_visual_job(lease_seconds=lease_seconds)
+    job = _claim_next_live_visual_job(lease_seconds=lease_seconds)
     if not job:
-        return {"ok": True, "processed": False, "reason": "no_job_available"}
+        return {"ok": True, "processed": False, "reason": "no_live_job_available"}
 
-    payload = _safe_dict(job.get("payload"))
     job_id = _safe_str(job.get("job_id")).strip()
     lease_token = _safe_str(job.get("lease_token")).strip()
-    session_id = _safe_str(job.get("session_id")).strip() or _safe_str(payload.get("session_id")).strip()
-    request_id = _safe_str(job.get("request_id")).strip() or _safe_str(payload.get("request_id")).strip()
+    session_id = _safe_str(job.get("_resolved_session_id")).strip()
+    request_id = _safe_str(job.get("_resolved_request_id")).strip()
+    print("[RPG][visual/run_one]", {"job_id": job_id, "session_id": session_id, "request_id": request_id})
 
     if not job_id or not lease_token:
         return {"ok": False, "error": "invalid_job_state"}
 
     try:
-        request = _load_pending_request(session_id=session_id, request_id=request_id)
-        if not request:
-            release_visual_job(job_id=job_id, lease_token=lease_token, error="request_not_found")
-            return {"ok": False, "processed": False, "error": "request_not_found"}
+        request = _safe_dict(job.get("_resolved_request"))
+
+        request_kind = _safe_str(request.get("kind")).strip() or "scene_illustration"
+        request_target_id = _safe_str(request.get("target_id")).strip()
+        request_prompt = _safe_str(request.get("prompt")).strip()
+        request_style = _safe_str(request.get("style")).strip()
+        request_model = _safe_str(request.get("model")).strip() or "default"
+        request_seed = request.get("seed")
+        request_version = request.get("version")
 
         existing_status = _safe_str(request.get("status")).strip().lower()
         existing_asset_id = _safe_str(request.get("asset_id")).strip()
         if existing_status == "complete" or existing_asset_id:
-            complete_visual_job(job_id=job_id, lease_token=lease_token, error="")
+            complete_image_job(job_id=job_id, lease_token=lease_token, result={"error": "", "status": "complete"})
             return {
                 "ok": True,
                 "processed": False,
@@ -107,72 +184,58 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
         # Preview sessions are ephemeral and do not exist in the persisted session store.
         if session_id.startswith("preview_"):
             if not image_generation_enabled():
-                complete_visual_job(job_id=job_id, lease_token=lease_token, error="image_generation_disabled")
-                return {
-                    "ok": False,
-                    "error": "image_generation_disabled",
-                    "processed": False,
-                    "job_id": job_id,
-                    "session_id": session_id,
-                    "request_id": request_id,
-                }
+                complete_image_job(job_id=job_id, lease_token=lease_token, result={"error": "", "status": "complete"})
+                return {"ok": False, "processed": False, "error": "image_generation_disabled"}
 
-            parts = request_id.split(":")
-            kind = parts[0] if len(parts) > 0 else "character_portrait"
-            if kind not in {"portrait", "scene", "illustration", "character_portrait", "scene_illustration", "environment"}:
-                kind = "character_portrait"
-            if kind == "portrait":
-                kind = "character_portrait"
-            if kind in {"scene", "illustration"}:
-                kind = "scene_illustration"
-
-            target_id = parts[1] if len(parts) > 1 else ""
-            seed = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
-
-            request = {
-                "provider": "",
-                "request_id": request_id,
-                "kind": kind,
-                "target_id": target_id,
-                "seed": seed,
-                "prompt": request_id,
-                "style": "rpg_scene" if kind == "scene_illustration" else "default",
-                "model": "default",
-                "attempts": 0,
-                "max_attempts": 3,
-                "session_id": session_id,
-                "metadata": {
-                    "source": "rpg_preview"
-                },
-            }
-
-            result = generate_rpg_image(request)
-
-            if not getattr(result, "ok", False):
-                complete_visual_job(job_id=job_id, lease_token=lease_token, error=_safe_str(getattr(result, "error", "")).strip()[:500])
-                return {
-                    "ok": False,
-                    "error": _safe_str(getattr(result, "error", "")).strip()[:500],
-                    "processed": False,
-                    "job_id": job_id,
-                    "session_id": session_id,
-                    "request_id": request_id,
-                }
-
-            version = 1
-            asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
-            image_bytes, mime_type = _result_bytes_and_mime(result)
-            image_path = save_asset_bytes(
-                image_bytes,
-                mime_type=mime_type,
-                asset_id=asset_id,
-                kind=_safe_str(request.get("kind")).strip(),
-                target_id=_safe_str(request.get("target_id")).strip(),
+            result = _generate_preview_image_for_request(
+                request=request,
+                request_id=request_id,
+                session_id=session_id,
             )
+            if not _result_ok(result):
+                error_text = _result_error(result) or "preview_generation_failed"
+                print("[RPG][preview_generation_failed]", {
+                    "session_id": session_id,
+                    "request_id": request_id,
+                    "request": request,
+                    "result": _result_to_jsonable(result),
+                })
+                fail_image_job(job_id=job_id, lease_token=lease_token, error=error_text[:300])
+                return {
+                    "ok": False,
+                    "processed": False,
+                    "error": error_text,
+                    "provider_result": _result_to_jsonable(result),
+                }
 
-            complete_visual_job(job_id=job_id, lease_token=lease_token, error="")
+            asset_id = _safe_str(_safe_dict(result).get("asset_id")).strip()
+            image_path = _result_local_path(result)
+            mime_type = _result_mime_type(result) or "image/png"
+
+            # Eliminate duplicate files:
+            # - if provider already wrote a file, reuse it
+            # - otherwise fall back to saving returned bytes into asset store
+            if not image_path or not os.path.isfile(image_path):
+                image_bytes, inferred_mime_type = _result_bytes_and_mime(result)
+                mime_type = inferred_mime_type or mime_type
+                image_path = save_asset_bytes(
+                    image_bytes,
+                    mime_type=mime_type,
+                    asset_id=asset_id,
+                    metadata={},
+                )
+
+            complete_image_job(job_id=job_id, lease_token=lease_token, result={"error": "", "status": "complete"})
 
             public_image_url = f"/generated-images/{os.path.basename(image_path)}"
+
+            if not asset_id:
+
+                hash_part = os.path.splitext(os.path.basename(image_path))[0].split("_")[-1]
+
+                seed_part = request_seed if isinstance(request_seed, int) else "noseed"
+
+                asset_id = f"{request_kind}:{request_target_id}:{seed_part}:{hash_part}"
 
             return {
                 "ok": True,
@@ -184,6 +247,14 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
                 "asset_id": asset_id,
                 "image_url": public_image_url,
                 "local_path": image_path,
+                "kind": request_kind,
+                "target_id": request_target_id,
+                "prompt": request_prompt,
+                "style": request_style,
+                "model": request_model,
+                "seed": request_seed if isinstance(request_seed, int) else _result_seed(result),
+                "version": request_version,
+                "provider_result": _result_to_jsonable(result),
                 "note": "preview generation completed successfully",
             }
 
@@ -209,8 +280,9 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
         release_visual_job(job_id=job_id, lease_token=lease_token, error=_safe_str(exc).strip()[:500])
         return {
             "ok": False,
-            "error": _safe_str(exc).strip()[:500],
             "processed": False,
+            "error": _safe_str(exc).strip()[:500] or "run_one_failed",
+            "error_type": type(exc).__name__,
         }
 
     request_record = _find_request(simulation_state, request_id)
@@ -260,6 +332,26 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
         "request_id": request_id,
         "request_status": request_status,
     }
+
+
+def _generate_preview_image_for_request(*, request: Dict[str, Any], request_id: str, session_id: str) -> Dict[str, Any]:
+    prompt = _safe_str(request.get("prompt")).strip()
+    style = _safe_str(request.get("style")).strip()
+    seed = request.get("seed")
+    target_id = _safe_str(request.get("target_id")).strip()
+
+    payload = {
+        "kind": "scene_illustration",
+        "prompt": prompt,
+        "style": style,
+        "seed": seed,
+        "session_id": session_id,
+        "target_id": target_id,
+    }
+    print("[RPG][preview_generate][request]", payload)
+    result = generate_rpg_image(payload)
+    print("[RPG][preview_generate][result]", _result_to_jsonable(result))
+    return result
 
 
 def run_one_image_job():
