@@ -7051,6 +7051,7 @@ def _apply_turn_authoritative(
         "turn_contract": turn_contract,
         "interpreted_action": _safe_dict(turn_contract.get("interpreted_action")),
         "state_delta": _safe_dict(turn_contract.get("state_delta")),
+        "npc_behavior_context": _safe_dict(turn_contract.get("npc_behavior_context")),
         "narration_brief": _safe_dict(turn_contract.get("narration_brief")),
         "xp_result": _safe_dict(progression.get("xp_result")),
         "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),

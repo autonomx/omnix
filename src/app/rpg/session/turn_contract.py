@@ -35,7 +35,12 @@ def _find_actor(simulation_state: Dict[str, Any], target_id: str) -> Dict[str, A
 
 def _guess_target_id(simulation_state: Dict[str, Any], text: str, action: Dict[str, Any]) -> str:
     explicit = safe_str(action.get("target_id") or action.get("target"))
-    if explicit and explicit not in {"room", "inn", "service"}:
+    if (
+        explicit
+        and explicit not in {"room", "inn", "service", "player"}
+        and not explicit.startswith("npc:")
+        and not explicit.startswith("npc_")
+    ):
         return explicit
 
     text_l = text.lower()
@@ -61,6 +66,8 @@ def interpret_turn_action(
 
     action_type = safe_str(action.get("action_type") or "unknown")
     target_id = _guess_target_id(simulation_state, text, action)
+    if target_id == "player" or target_id.startswith("npc:") or target_id.startswith("npc_"):
+        target_id = ""
     target = _find_actor(simulation_state, target_id)
     target_name = safe_str(target.get("name") or target.get("display_name") or target_id)
 
@@ -325,6 +332,55 @@ def supplement_generic_resolved_action(
     return resolved
 
 
+def build_npc_behavior_context(
+    simulation_state: Dict[str, Any],
+    interpreted_action: Dict[str, Any],
+    state_delta: Dict[str, Any],
+) -> Dict[str, Any]:
+    target_id = safe_str(interpreted_action.get("target_id"))
+    if not target_id:
+        return {}
+
+    actor = _find_actor(simulation_state, target_id)
+    if not actor:
+        return {}
+
+    mood = safe_str(actor.get("mood") or "neutral")
+    activity = safe_str(actor.get("activity") or "")
+    relationship = safe_int(actor.get("relationship_to_player"), 0)
+    trust = safe_int(actor.get("trust"), 0)
+    fear = safe_int(actor.get("fear"), 0)
+    health = safe_int(actor.get("health"), 100)
+    memories = safe_list(actor.get("recent_memories"))[-5:]
+
+    reaction_tone = "neutral"
+    if mood in {"furious", "hostile", "angry"}:
+        reaction_tone = "hostile"
+    elif relationship <= -50:
+        reaction_tone = "hostile"
+    elif relationship <= -20 or trust < -10:
+        reaction_tone = "wary"
+    elif fear >= 30:
+        reaction_tone = "afraid"
+    elif relationship >= 30 or trust >= 25:
+        reaction_tone = "friendly"
+
+    return {
+        "target_id": target_id,
+        "target_name": safe_str(actor.get("name") or actor.get("display_name") or target_id),
+        "mood": mood,
+        "activity": activity,
+        "relationship_to_player": relationship,
+        "trust": trust,
+        "fear": fear,
+        "health": health,
+        "recent_memories": memories,
+        "reaction_tone": reaction_tone,
+        "state_delta": state_delta,
+        "required_reaction": bool(target_id),
+    }
+
+
 def build_turn_contract(
     *,
     player_input: str,
@@ -356,11 +412,18 @@ def build_turn_contract(
         narration_brief,
     )
 
+    npc_behavior_context = build_npc_behavior_context(
+        simulation_state_after,
+        interpreted,
+        state_delta,
+    )
+
     return {
         "version": "turn_contract_v1",
         "player_input": player_input,
         "interpreted_action": interpreted,
         "resolved_action": resolved,
         "state_delta": state_delta,
+        "npc_behavior_context": npc_behavior_context,
         "narration_brief": narration_brief,
     }

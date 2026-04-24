@@ -621,6 +621,118 @@ def _sanitize_npc_block(
     }
 
 
+def _desystemify_text(text: str) -> str:
+    text = _safe_str(text).strip()
+    if not text:
+        return ""
+
+    banned_prefixes = (
+        "The player ",
+        "The NPC ",
+        "The target ",
+    )
+
+    for prefix in banned_prefixes:
+        if text.startswith(prefix):
+            text = text.replace("The player ", "You ", 1)
+            text = text.replace("The NPC ", "", 1)
+            text = text.replace("The target ", "", 1)
+
+    # normalize various internal id patterns
+    text = text.replace("npc_bran", "Bran")
+    text = text.replace("npc:0", "Bran")
+    text = text.replace("np:bran", "Bran")
+    text = text.replace("np:", "")
+    text = text.replace("npc_", "")
+
+    # grammar cleanup
+    text = text.replace("You takes", "You take")
+    text = text.replace("You attempts", "You attempt")
+
+    text = text.replace(" asks player", " asks")
+
+    return text
+
+
+def _strip_meta_narration(text: str) -> str:
+    text = _safe_str(text)
+
+    forbidden_phrases = (
+        "The player ",
+        "The NPC ",
+        "The target ",
+        "Narrate ",
+        "Interpret the action",
+        "should react",
+        "according to the state delta",
+    )
+
+    for phrase in forbidden_phrases:
+        if phrase in text:
+            return ""
+
+    return text
+
+
+def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, Any]) -> Dict[str, Any]:
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    interpreted = _safe_dict(turn_contract.get("interpreted_action"))
+    npc_behavior = _safe_dict(
+        narration_context.get("npc_behavior_context")
+        or turn_contract.get("npc_behavior_context")
+    )
+
+    target_id = _safe_str(interpreted.get("target_id"))
+    target_name = _safe_str(
+        npc_behavior.get("target_name")
+        or interpreted.get("target_name")
+        or target_id
+    )
+
+    if not (target_id and target_name):
+        return payload
+
+    npc = _safe_dict(payload.get("npc"))
+
+    npc["speaker"] = target_name
+
+    if not _safe_str(npc.get("line")):
+        tone = _safe_str(npc_behavior.get("reaction_tone") or "wary")
+
+        if tone == "hostile":
+            npc["line"] = "You have made your point. Now get out before this gets worse."
+        elif tone == "afraid":
+            npc["line"] = "Stay back. I do not want any more trouble."
+        elif tone == "friendly":
+            npc["line"] = "All right, I am listening. What do you need?"
+        else:
+            npc["line"] = "Careful now. I am not sure what to make of you."
+
+    # anti-repeat logic
+    recent_lines = []
+    for thread in _safe_list(narration_context.get("conversation_threads")):
+        for recent in _safe_list(_safe_dict(thread).get("recent_lines")):
+            recent_lines.append(_safe_str(_safe_dict(recent).get("text")).strip().lower())
+
+    if any(_safe_str(npc.get("line")).strip().lower()[:40] in line for line in recent_lines):
+        tone = _safe_str(npc_behavior.get("reaction_tone") or "wary")
+
+        if tone == "hostile":
+            npc["line"] = "I remember what you did. Choose your next words carefully."
+        elif tone == "afraid":
+            npc["line"] = "I am not forgetting that. Keep your distance."
+        elif tone == "friendly":
+            npc["line"] = "Go on, then. I am listening."
+        else:
+            npc["line"] = "Let us not pretend nothing happened."
+
+    if npc.get("speaker") == "Player":
+        npc["speaker"] = target_name
+
+    payload["npc"] = npc
+    return payload
+
+
 def _sanitize_narration_payload(
     payload: Dict[str, Any],
     scene: Dict[str, Any],
@@ -636,14 +748,71 @@ def _sanitize_narration_payload(
     narration_text = _sanitize_narration_text(_safe_str(payload.get("narration")).strip(), scene, narration_context)
 
     # Action and reward are authoritative-only.
-    return _normalize_narration_json({
+    normalized = _normalize_narration_json({
         "format_version": NARRATION_JSON_FORMAT_VERSION,
         "narration": narration_text,
-        "action": authoritative_action,
+        "action": _desystemify_text(authoritative_action),
         "npc": sanitized_npc,
         "reward": authoritative_reward,
         "followup_hooks": [],
     })
+
+    normalized = _enforce_npc_behavior(normalized, narration_context)
+
+    # Fallback: ensure physical reaction in narration if missing
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    interpreted = _safe_dict(turn_contract.get("interpreted_action"))
+    npc_behavior = _safe_dict(
+        narration_context.get("npc_behavior_context")
+        or turn_contract.get("npc_behavior_context")
+    )
+    target_id = _safe_str(interpreted.get("target_id"))
+    target_name = _safe_str(
+        npc_behavior.get("target_name")
+        or interpreted.get("target_name")
+        or target_id
+    )
+    if target_id and target_name:
+        narration = _safe_str(normalized.get("narration"))
+        if target_name.lower() not in narration.lower():
+            intent = _safe_str(interpreted.get("intent") or "").lower()
+            if "attack" in intent:
+                prefix = f"{target_name} recoils from the blow, the room going tense. "
+            elif "apologize" in intent or "apology" in intent:
+                prefix = f"{target_name} pauses, considering your words. "
+            elif "ask" in intent:
+                prefix = f"{target_name} turns toward you, attentive. "
+            else:
+                tone = _safe_str(npc_behavior.get("reaction_tone") or "wary")
+                if tone == "hostile":
+                    prefix = f"{target_name} snaps upright, anger flashing across their face. "
+                elif tone == "afraid":
+                    prefix = f"{target_name} recoils, instinctively putting space between you. "
+                elif tone == "friendly":
+                    prefix = f"{target_name} shifts, reacting to you with a hint of warmth. "
+                else:
+                    prefix = f"{target_name} stiffens, clearly affected by what just happened. "
+            normalized["narration"] = prefix + narration
+
+    narration_clean = _desystemify_text(normalized.get("narration"))
+    narration_clean = _strip_meta_narration(narration_clean)
+
+    if not narration_clean:
+        # fallback to narrative brief but rewritten
+        brief = _safe_str(_safe_dict(narration_context.get("turn_contract")).get("narration_brief", {}).get("summary"))
+        narration_clean = _desystemify_text(brief)
+
+    normalized["narration"] = narration_clean
+    normalized["action"] = _desystemify_text(normalized.get("action"))
+
+    if normalized["action"].startswith("The player"):
+        normalized["action"] = ""
+    npc = _safe_dict(normalized.get("npc"))
+    npc["speaker"] = _desystemify_text(npc.get("speaker"))
+    npc["line"] = _desystemify_text(npc.get("line"))
+    normalized["npc"] = npc
+
+    return normalized
 
 
 def _render_narration_text_from_json(payload: Dict[str, Any]) -> str:
@@ -1164,10 +1333,10 @@ Use exactly this object shape:
 {
   "format_version": "rpg_narration_v2",
   "narration": "<descriptive scene narration grounded in turn_contract>",
-  "action": "<descriptive result of the player's interpreted action>",
+  "action": "<short, in-world description of what happened (1–2 sentences, no meta language)>",
   "npc": {
-    "speaker": "<npc name or empty string>",
-    "line": "<natural in-character dialogue or empty string>"
+    "speaker": "<target NPC name if the interpreted action targets an NPC, otherwise empty string>",
+    "line": "<natural in-character dialogue matching npc_behavior_context.reaction_tone, or empty string only if no NPC reaction is needed>"
   },
   "reward": "<reward summary or empty string>",
   "followup_hooks": []
@@ -1185,8 +1354,20 @@ Recent authoritative facts:
 Authoritative combat facts:
 {combat_facts_block}
 
-Turn contract:
-{json.dumps(_safe_dict(narration_context.get("turn_contract")), ensure_ascii=False, indent=2)[:5000]}
+Turn contract PRIMARY TRUTH:
+{json.dumps(_safe_dict(narration_context.get("turn_contract")), ensure_ascii=False, indent=2)[:6000]}
+
+NPC STATE SUMMARY (must influence tone and dialogue):
+{json.dumps({
+    "mood": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("mood"),
+    "relationship": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("relationship_to_player"),
+    "trust": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("trust"),
+    "fear": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("fear"),
+    "recent_memories": _safe_list(_safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("recent_memories"))
+}, ensure_ascii=False)}
+
+NPC behavior context:
+{json.dumps(_safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")), ensure_ascii=False, indent=2)[:3000]}
 
 Ongoing conversation threads:
 {conversation_threads_block}
@@ -1203,12 +1384,35 @@ Do not include commentary outside JSON.
  - NO markdown fences or commentary outside the JSON object
  - NO content about ticks, time, or system messages
  - NO faction goals, loyalty, awareness, or ambient content
- - The action result MUST match the already-resolved authoritative outcome
- - Use turn_contract.narration_brief as your main creative brief when present.
- - You may be vivid and creative with sensory detail, emotion, pacing, and dialogue.
- - You must not invent state changes outside turn_contract.state_delta or resolved_result.
- - If turn_contract.interpreted_action identifies an NPC target, that NPC should react believably.
- - Never output generic filler like "Action: You act."
+TURN CONTRACT RULES:
+- turn_contract is the primary truth for this turn.
+- resolved_result is legacy compatibility; prefer turn_contract when both are present.
+- You MUST base the narration primarily on turn_contract.narration_brief.
+- You MUST reflect turn_contract.state_delta when it exists.
+- You MUST NOT invent state changes outside turn_contract.state_delta, resolved_result, or combat facts.
+- You may freely add sensory detail, body language, pacing, and natural dialogue as presentation only.
+- NEVER copy or restate narration_brief directly. Convert it into in-world description.
+- NEVER refer to "the player" in narration. Always describe actions in-world (e.g., "You step forward..." or omit subject).
+- NEVER output internal IDs like npc:0, npc_bran, player, target_id, action_type, state_delta, narration_brief, or turn_contract.
+- The final prose must sound like an RPG narrator, not a debug summary.
+- If your output resembles an instruction, rewrite it into a natural in-world description.
+- If narration sounds like a system description, rewrite it before finalizing.
+- Never output generic filler like "Action: You act."
+
+NPC REACTION RULES:
+- If turn_contract.interpreted_action.target_id exists, that NPC MUST visibly react.
+- If npc_behavior_context.required_reaction is true, include either:
+  1. physical/body-language reaction, or
+  2. direct dialogue, preferably both.
+- NPC dialogue must match npc_behavior_context.reaction_tone.
+- hostile/angry NPCs should not respond as friendly.
+- wary NPCs should remain cautious even after an apology.
+- recent_memories MUST influence tone and dialogue.
+- If a memory includes violence or betrayal, NPC should reference or emotionally reflect it.
+- If the player recently harmed an NPC, that NPC should remember it and respond accordingly.
+- NPC dialogue should sound natural, not like a summary of emotions.
+- Avoid phrases like "I am wary" or "I feel cautious".
+- Express emotion through tone, word choice, and implication.
 - Any combat description MUST match the authoritative combat facts block
 - Do NOT invent hits, misses, damage, knockdowns, or combatants
 - The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain
