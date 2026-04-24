@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -14,7 +15,7 @@ from app.rpg.session.service import create_or_normalize_session, save_session
 from app.rpg.creator.defaults import apply_adventure_defaults
 
 
-OUTPUT_PATH = Path("manual_rpg_llm_transcript.txt")
+OUTPUT_PATH = Path(__file__).parent.parent / "results" / "manual_rpg_llm_transcript.txt"
 
 
 PROMPTS = [
@@ -99,7 +100,23 @@ def main() -> None:
     lines.append("")
 
     for index, prompt in enumerate(PROMPTS, start=1):
-        result = apply_turn(session_id, prompt)
+        try:
+            result = apply_turn(session_id, prompt)
+        except RuntimeError as exc:
+            result = {
+                "error": repr(exc),
+                "traceback": traceback.format_exc(),
+                "session_id": session_id,
+                "prompt": prompt,
+            }
+            # Try to get latest session state
+            try:
+                from app.rpg.session.service import load_session
+                session = load_session(session_id)
+                if session:
+                    result["session"] = session
+            except Exception:
+                pass
 
         result_sub = _safe_dict(result.get("result"))
         session = _safe_dict(result.get("session") or session)
@@ -117,6 +134,15 @@ def main() -> None:
         lines.append(f"TURN {index}")
         lines.append(f"PLAYER: {prompt}")
         lines.append("")
+
+        if result.get("error"):
+            lines.append("ERROR:")
+            lines.append(result["error"])
+            lines.append("")
+            lines.append("TRACEBACK:")
+            lines.append(result.get("traceback", "")[:2000])
+            lines.append("")
+
         lines.append("NARRATION:")
         lines.append(narration or "[no narration found]")
         lines.append("")

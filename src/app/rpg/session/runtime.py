@@ -21,13 +21,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from app.rpg.combat.apply import apply_attack_resolution
-from app.rpg.combat.initiative import begin_combat, advance_turn
-from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
-from app.rpg.combat.models import AttackIntent
-from app.rpg.combat.npc_turns import run_npc_turn
-from app.rpg.combat.resolver import resolve_attack
-from app.rpg.combat.state import build_empty_combat_state, normalize_combat_state, get_current_actor_id
 from app.rpg.action_resolver import resolve_player_action
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.ai.ambient_dialogue import (
@@ -42,10 +35,6 @@ from app.rpg.ai.conversation_threads import (
     expire_conversation_threads,
     normalize_conversation_threads,
     seed_or_update_thread,
-)
-from app.rpg.session.turn_contract import (
-    apply_state_delta,
-    build_turn_contract,
 )
 from app.rpg.ai.npc_initiative import (
     apply_initiative_cooldowns,
@@ -79,6 +68,17 @@ from app.rpg.ai.scene_weaver import (
 )
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.ai.world_scene_narrator import narrate_ambient_update, narrate_scene
+from app.rpg.combat.apply import apply_attack_resolution
+from app.rpg.combat.initiative import advance_turn, begin_combat
+from app.rpg.combat.lifecycle import build_combat_participants, evaluate_combat_exit
+from app.rpg.combat.models import AttackIntent
+from app.rpg.combat.npc_turns import run_npc_turn
+from app.rpg.combat.resolver import resolve_attack
+from app.rpg.combat.state import (
+    build_empty_combat_state,
+    get_current_actor_id,
+    normalize_combat_state,
+)
 from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.creator.schema import normalize_world_behavior_config
 from app.rpg.creator.world_player_actions import (
@@ -178,6 +178,10 @@ from app.rpg.session.narration_worker import (
 )
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
+from app.rpg.session.turn_contract import (
+    apply_state_delta,
+    build_turn_contract,
+)
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -6981,6 +6985,26 @@ def _apply_turn_authoritative(
         )
         runtime_state["last_turn_contract"] = turn_contract
 
+    if not turn_contract:
+        turn_contract = {
+            "version": "fallback_turn_contract_v1",
+            "player_input": player_input,
+            "action": action,
+            "resolved_action": resolved_result,
+            "resolved_result": resolved_result,
+            "semantic_action": semantic_action_record,
+            "state_delta": {},
+            "narration_brief": {
+                "summary": _safe_str(
+                    resolved_result.get("narrative_brief")
+                    or resolved_result.get("message")
+                    or resolved_result.get("summary")
+                    or player_input
+                )
+            },
+        }
+        runtime_state["last_turn_contract"] = turn_contract
+
     progression = _award_progression(after_action_state, resolved_result)
     after_progression_state = _ensure_simulation_state(_safe_dict(progression.get("simulation_state")))
 
@@ -7068,10 +7092,9 @@ def _apply_turn_authoritative(
         "player_input": player_input,
         "resolved_result": resolved_result,
         "turn_contract": turn_contract,
-        "interpreted_action": _safe_dict(turn_contract.get("interpreted_action")),
+        "narration_brief": _safe_dict(turn_contract.get("narration_brief")),
         "state_delta": _safe_dict(turn_contract.get("state_delta")),
         "npc_behavior_context": _safe_dict(turn_contract.get("npc_behavior_context")),
-        "narration_brief": _safe_dict(turn_contract.get("narration_brief")),
         "xp_result": _safe_dict(progression.get("xp_result")),
         "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
         "level_up": _safe_list(progression.get("level_up")),
@@ -7218,16 +7241,50 @@ def _apply_turn_authoritative(
     force_sync = bool(runtime_state.get("force_sync_narration", False))
 
     if force_sync:
-        narration_payload = narrate_scene(narration_request["scene"], narration_request["narration_context"])
-        rendered_narration = _safe_str(
+        print("[RPG][narration][sync] calling narrate_scene")
+
+        sync_scene = _safe_dict(narration_request.get("scene") or runtime_state.get("current_scene"))
+        sync_context = _safe_dict(narration_request.get("narration_context"))
+
+        sync_context["turn_contract"] = turn_contract
+        sync_context["resolved_result"] = resolved_result
+        sync_context["narration_brief"] = _safe_dict(turn_contract.get("narration_brief"))
+        sync_context["state_delta"] = _safe_dict(turn_contract.get("state_delta"))
+        sync_context["npc_behavior_context"] = _safe_dict(turn_contract.get("npc_behavior_context"))
+        sync_context["force_sync_narration"] = True
+        sync_context["require_live_llm_narration"] = True
+        sync_context["performance"] = _safe_dict(runtime_state.get("performance"))
+        sync_context["runtime_settings"] = _safe_dict(runtime_state.get("runtime_settings") or runtime_state.get("settings"))
+
+        llm_enabled = bool(perf.get("enable_live_narration_llm", True))
+        llm_gateway = build_app_llm_gateway() if llm_enabled else None
+
+        try:
+            narration_payload = narrate_scene(sync_scene, sync_context, llm_gateway=llm_gateway)
+        except Exception as exc:
+            print("[RPG][narration][sync] failed", {"error": repr(exc)})
+            raise
+
+        rendered = _safe_str(
             narration_payload.get("text")
             or narration_payload.get("narration")
             or narration_payload.get("rendered_text")
         )
-        narration = rendered_narration
+
+        narration = rendered
         raw_llm_narrative = narration_payload
-        used_llm = _safe_bool(narration_payload.get("used_llm"), False)
+        used_llm = llm_gateway is not None
         narration_status = "completed"
+        authoritative["turn_contract"] = turn_contract
+
+        print(
+            "[RPG][narration][sync] completed",
+            {
+                "used_llm": used_llm,
+                "has_text": bool(rendered.strip()),
+                "has_turn_contract": bool(turn_contract),
+            },
+        )
     else:
         narration = _safe_str(authoritative.get("deterministic_fallback_narration"))
         raw_llm_narrative = ""
@@ -7237,7 +7294,7 @@ def _apply_turn_authoritative(
     return {
         "ok": True,
         "session": session,
-        "turn_contract": turn_contract,
+        "turn_contract": _safe_dict(authoritative.get("turn_contract") or turn_contract),
         "result": {
             "turn_id": authoritative.get("turn_id"),
             "tick": authoritative.get("tick"),

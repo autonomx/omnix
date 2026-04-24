@@ -18,8 +18,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import traceback
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 # Phase 8: player-facing encounter view
 from app.rpg.player import build_encounter_view
@@ -43,6 +44,38 @@ NARRATION_JSON_SCHEMA_HINT = {
 }
 
 
+def _extract_llm_text(response):
+    """Extract text from provider response in various formats."""
+    if isinstance(response, str):
+        return response.strip()
+
+    if not isinstance(response, dict):
+        return ""
+
+    # OpenAI / Cerebras format
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+
+        # Chat format
+        msg = first.get("message")
+        if isinstance(msg, dict):
+            content = msg.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+
+        # Text format fallback
+        text = first.get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+
+    # Direct text fallback
+    if isinstance(response.get("text"), str):
+        return response["text"].strip()
+
+    return ""
+
+
 def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
     """Call the LLM gateway and return the response as a clean string."""
     logger.info("[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
@@ -50,31 +83,38 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
         # Try streaming if callback provided
         chunks = []
         try:
+            print("[RPG][LLM] calling provider.stream")
             for event in llm_gateway.call("generate_stream", prompt, context=context or {}):
                 piece = _safe_str(_safe_dict(event).get("text"))
                 if piece:
                     chunks.append(piece)
                     on_chunk(piece)
-            return "".join(chunks).strip()
-        except Exception:
+            print("[RPG][LLM] stream completed, chunks:", len(chunks))
+            return _extract_llm_text("".join(chunks).strip())
+        except Exception as exc:
+            print("[RPG][LLM] stream failed:", repr(exc))
             logger.exception("[RPG LLM GATEWAY] Streaming failed, falling back to non-streaming")
             if chunks:
-                return "".join(chunks).strip()
+                return _extract_llm_text("".join(chunks).strip())
 
     # Fallback to non-streaming
     try:
+        print("[RPG][LLM] calling provider.generate")
+        print("[ACTIVE PROVIDER]", llm_gateway)
         response = llm_gateway.call("generate", prompt, context=context or {})
+        print("[RPG][LLM] raw response:", repr(response)[:500])
         logger.info("[RPG LLM GATEWAY] Received response type: %s, length: %d", type(response), len(str(response)) if response else 0)
-    except Exception:
+    except Exception as exc:
+        print("[RPG][LLM] generate failed:", repr(exc))
         logger.exception("[RPG LLM GATEWAY] LLM call failed")
-        raise
+        raise RuntimeError(
+            f"live_llm_required_but_llm_failed: provider_exception: {repr(exc)}"
+        )
     if response is None:
         logger.warning("[RPG LLM GATEWAY] LLM returned None")
         return ""
-    if isinstance(response, str):
-        return response
-    logger.warning("[RPG LLM GATEWAY] LLM returned non-string type: %s", type(response))
-    return str(response)
+    # Extract text from response dict or return string directly
+    return _extract_llm_text(response)
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +189,19 @@ def _title_case_token(value: Any) -> str:
     if not text:
         return ""
     return text.replace("_", " ").strip().title()
+
+
+def _force_live_llm_required(narration_context: Dict[str, Any]) -> bool:
+    narration_context = _safe_dict(narration_context)
+    runtime_settings = _safe_dict(narration_context.get("runtime_settings"))
+    performance = _safe_dict(narration_context.get("performance"))
+    return bool(
+        narration_context.get("force_sync_narration")
+        or runtime_settings.get("force_sync_narration")
+        or performance.get("force_sync_narration")
+        or runtime_settings.get("require_live_llm_narration")
+        or performance.get("require_live_llm_narration")
+    )
 
 
 def _build_ambient_conversation_line(narration_context: Dict[str, Any]) -> str:
@@ -1665,13 +1718,10 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
 
     Returns raw parsed fields only.
     Parses structured output format directly from LLM response.
-    More flexible parsing that looks for keywords anywhere in the text.
 
-    Args:
-        text: Raw LLM response text.
-
-    Returns:
-        Dict with parsed fields.
+    Handles both:
+    - JSON format: {"format_version": "...", "narration": "...", "action": "...", ...}
+    - Text format: NARRATOR: ...\nACTION: ...\nNPC: ...
     """
     logger.debug("[RPG PARSE] Starting to parse response, length: %d", len(text))
 
@@ -1692,9 +1742,37 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
     text = _safe_str(text).strip()
     logger.debug("[RPG PARSE] Cleaned text: %r", text[:200] + "..." if len(text) > 200 else text)
 
-    # Look for patterns anywhere in the text
+    # Try JSON format first
+    if text.startswith("{"):
+        try:
+            import json
+            parsed_json = json.loads(text)
+            if isinstance(parsed_json, dict):
+                # Map JSON fields to result fields
+                result["narrator"] = _safe_str(parsed_json.get("narration")).strip()
+                result["action"] = _safe_str(parsed_json.get("action")).strip()
+
+                npc = parsed_json.get("npc")
+                if isinstance(npc, dict):
+                    result["npc"] = {
+                        "speaker_id": _safe_str(npc.get("speaker")).strip().replace(" ", "_").lower(),
+                        "name": _safe_str(npc.get("speaker")).strip(),
+                        "text": _bound_text(npc.get("line"), 180),
+                        "emotion": "",
+                        "portrait": "",
+                    }
+
+                result["reward"] = _safe_str(parsed_json.get("reward")).strip()
+
+                logger.debug("[RPG PARSE] Parsed JSON format: narrator=%r, action=%r, npc_text=%r",
+                             result["narrator"][:50], result["action"][:50], result["npc"]["text"][:50])
+                return result
+        except Exception:
+            logger.debug("[RPG PARSE] JSON parsing failed, falling back to text parsing")
+
     import re
 
+    # Look for patterns anywhere in the text
     # NARRATOR pattern
     narrator_match = re.search(r'NARRATOR:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
     if narrator_match:
@@ -2320,6 +2398,7 @@ def _generate_live_narrative(
     retry_on_invalid: bool = True,
     debug_logging: bool = False,
     on_chunk: Optional[Callable[[str], None]] = None,
+    require_live_llm: bool = False,
 ) -> str:
     """Generate narrative using LLM."""
     # Inject player_input from narration_context into scene
@@ -2335,6 +2414,7 @@ def _generate_live_narrative(
     else:
         logger.debug("[RPG LLM PROMPT] prompt length: %d", len(prompt))
     max_attempts = 2 if retry_on_invalid else 1
+    llm_narrative = ""
 
     logger.info(
         "[RPG NARRATOR] live_narrative_start prompt_len=%d retry_on_invalid=%s max_attempts=%d",
@@ -2350,30 +2430,33 @@ def _generate_live_narrative(
         logger.info("[RPG NARRATOR] attempt_start attempt=%d/%d", attempt + 1, max_attempts)
         try:
             response = _llm_text(llm_gateway, prompt, context={}, on_chunk=on_chunk if attempt == 0 else None)
+            print("[LLM RAW]", repr(response)[:500])
+            llm_narrative = _extract_llm_text(response)
+            print("[LLM TEXT]", repr(llm_narrative)[:500])
             logger.info(
                 "[RPG NARRATOR] attempt_end attempt=%d/%d dt=%.3fs response_len=%d",
                 attempt + 1,
                 max_attempts,
                 time.monotonic() - attempt_t0,
-                len(str(response or "")),
+                len(str(llm_narrative or "")),
             )
             if debug_logging:
-                logger.warning("[RPG LLM RAW OUTPUT attempt %d]\n%s", attempt + 1, response)
+                logger.warning("[RPG LLM RAW OUTPUT attempt %d]\n%s", attempt + 1, llm_narrative)
             else:
-                logger.debug("[RPG LLM RAW OUTPUT attempt %d] length: %d", attempt + 1, len(str(response or "")))
+                logger.debug("[RPG LLM RAW OUTPUT attempt %d] length: %d", attempt + 1, len(str(llm_narrative or "")))
 
             # Check if response contains invalid content (like ambient updates)
-            response_lower = _safe_str(response).lower()
+            response_lower = _safe_str(llm_narrative).lower()
             if any(phrase in response_lower for phrase in [
                 "faction loyalty baseline",
                 "maintain awareness",
                 "playertick",
                 "📜 📜"
             ]):
-                logger.error("LLM response contains invalid ambient-like content, rejecting: %s", response[:200])
+                logger.error("LLM response contains invalid ambient-like content, rejecting: %s", llm_narrative[:200])
                 continue
 
-            parsed = parse_scene_response(response)
+            parsed = parse_scene_response(llm_narrative)
             if debug_logging:
                 logger.warning("[RPG PARSED RESPONSE]\n%s", parsed)
             else:
@@ -2381,7 +2464,7 @@ def _generate_live_narrative(
 
             if _is_valid_scene_response(parsed):
                 logger.debug("LLM response validation successful")
-                return response
+                return llm_narrative
             else:
                 logger.warning(
                     "[RPG NARRATOR] attempt_rejected attempt=%d/%d reason=invalid_scene_format",
@@ -2389,12 +2472,22 @@ def _generate_live_narrative(
                     max_attempts,
                 )
                 logger.error("LLM response failed validation, parsed: %s", parsed)
-        except Exception:
+        except Exception as exc:
+            print("[RPG][narrator] provider call failed", {
+                "error": repr(exc),
+                "traceback": traceback.format_exc()[-4000:],
+            })
+            if require_live_llm:
+                raise
             logger.exception("Exception during LLM narration")
 
     # fallback if LLM fails format - return raw text for recovery
     logger.error("Structured RPG narration LLM output failed validation after %d attempt(s), returning raw text", max_attempts)
-    return response if 'response' in locals() and response else _structured_fallback_response()
+    if require_live_llm:
+        raise RuntimeError(
+            "live_llm_required_but_llm_failed: empty_response_from_provider"
+        )
+    return llm_narrative if 'llm_narrative' in locals() and llm_narrative else _structured_fallback_response()
 
 
 def _simulate_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], tone: str = "dramatic") -> str:
@@ -2467,8 +2560,16 @@ def narrate_scene(
 ) -> Dict[str, Any]:
     scene = _safe_dict(scene)
     narration_context = _safe_dict(narration_context)
+    require_live_llm = _force_live_llm_required(narration_context)
+    print("[RPG][narrator] entering narrate_scene", {
+        "require_live_llm": require_live_llm,
+        "has_turn_contract": bool(_safe_dict(narration_context.get("turn_contract"))),
+        "has_resolved_result": bool(_safe_dict(narration_context.get("resolved_result"))),
+    })
     turn_id = narration_context.get("turn_id")
     if turn_id and turn_id in _ACTIVE_NARRATIONS:
+        if require_live_llm:
+            raise RuntimeError("live_llm_required_but_narrator_fallback_selected")
         return {
             "narration": "",
             "used_llm": False,
@@ -2482,6 +2583,8 @@ def narrate_scene(
     try:
         try_ambient = _safe_str(narration_context.get("mode")) == "ambient_conversation"
         if try_ambient:
+            if require_live_llm:
+                raise RuntimeError("live_llm_required_but_ambient_fallback_selected")
             text = _build_ambient_conversation_line(narration_context)
             return {
                 "narration": text,
@@ -2493,6 +2596,14 @@ def narrate_scene(
             }
 
         if llm_gateway:
+            print("[RPG][narrator] provider resolved", {
+                "provider_type": type(llm_gateway).__name__ if llm_gateway else "",
+                "provider_truthy": bool(llm_gateway),
+            })
+
+            if require_live_llm and not llm_gateway:
+                raise RuntimeError("live_llm_required_but_no_provider_available")
+
             llm_narrative = _generate_live_narrative(
                 scene,
                 narration_context,
@@ -2501,6 +2612,7 @@ def narrate_scene(
                 retry_on_invalid=retry_on_invalid,
                 debug_logging=debug_logging,
                 on_chunk=on_chunk,
+                require_live_llm=require_live_llm,
             )
 
             # Parse JSON response with tolerant fallback
@@ -2523,6 +2635,8 @@ def narrate_scene(
                 "format_warning": False if parsed_json else True,
             }
         else:
+            if require_live_llm:
+                raise RuntimeError("live_llm_required_but_simulation_fallback_selected")
             llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
             simulated_json = _normalize_narration_json({
                 "narration": llm_narrative,
