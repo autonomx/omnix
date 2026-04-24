@@ -3956,7 +3956,7 @@
                     '<div class="rpg-scene-illustration-title">' + escapeHtml(title) + '</div>' +
                     (status ? '<div class="rpg-scene-illustration-status">' + escapeHtml(status) + '</div>' : '') +
                 '</div>' +
-                '<img class="rpg-scene-illustration-image" src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '">' +
+                '<img class="rpg-scene-illustration-image" src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '" style="width:100%;max-width:520px;height:auto;border-radius:12px;display:block;">' +
             '</div>';
     }
 
@@ -4018,7 +4018,9 @@
 
                 updateState({
                     player: nextPlayer,
-                    npcs: Array.isArray(nextNpcs) ? nextNpcs : []
+                    npcs: Array.isArray(nextNpcs) ? nextNpcs : [],
+                    scene: game.scene || rpgState.scene || null,
+                    grounded_scene_context: game.grounded_scene_context || rpgState.grounded_scene_context || null
                 });
 
                 if (nextPlayer) renderPlayerPanel(nextPlayer);
@@ -4219,7 +4221,7 @@
             scene_id: sceneId,
             event_id: opts.eventId || sceneId,
             title: title,
-            prompt: opts.prompt || ('Scene illustration of ' + (title || sceneId || 'the current scene')),
+            prompt: opts.prompt || buildScenePrompt(),
             style: opts.style || cfg.style || 'rpg-scene',
             reason: opts.reason || 'manual_test',
             auto_process: false
@@ -4244,7 +4246,50 @@
 
     function getCurrentSceneTitle() {
         var scene = rpgState.scene || rpgState.currentScene || {};
-        return String(scene.title || scene.name || rpgState.sceneTitle || 'Current Scene').trim();
+        var grounded = rpgState.grounded_scene_context || rpgState.groundedSceneContext || {};
+        return String(
+            grounded.scene_title ||
+            grounded.location_name ||
+            scene.title ||
+            scene.name ||
+            scene.scene_title ||
+            scene.location_name ||
+            rpgState.sceneTitle ||
+            'The Rusty Flagon Tavern'
+        ).trim();
+    }
+
+    function buildScenePrompt() {
+        var grounded = rpgState.grounded_scene_context || {};
+        var npcs = rpgState.npcs || [];
+
+        var title =
+            grounded.scene_title ||
+            grounded.location_name ||
+            'fantasy location';
+
+        var lines = [];
+
+        // Base scene
+        lines.push(
+            'Fantasy scene, ' + title + ', medieval setting, detailed environment, cinematic composition'
+        );
+
+        // NPC presence
+        npcs.forEach(function(npc) {
+            if (!npc || !npc.name) return;
+
+            var behavior = npc.status_summary || npc.role || 'present in the scene';
+            lines.push(npc.name + ' ' + behavior + '.');
+        });
+
+        // Mood (you can expand later)
+        lines.push('Mood: immersive, atmospheric, natural lighting, high detail.');
+
+        // Style
+        lines.push('Style: high-quality fantasy illustration, sharp, detailed, cinematic lighting.');
+
+        return lines.join(' ');
     }
 
     function attachPortraitControls(container, actorId, isPlayer) {
@@ -6014,7 +6059,7 @@
                 sceneId: sceneId,
                 eventId: sceneId,
                 title: title,
-                prompt: 'Scene illustration of ' + title,
+                prompt: buildScenePrompt(),
                 reason: 'manual_chat_button',
                 successText: 'Scene image generated.'
             });
