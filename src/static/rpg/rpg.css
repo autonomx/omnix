@@ -92,4 +92,23 @@
     font-size: 13px;
 }
 
+.rpg-turn-contract-card {
+    margin: 10px 0;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.rpg-turn-contract-section {
+    margin-top: 8px;
+}
+
+.rpg-turn-contract-section pre {
+    white-space: pre-wrap;
+    font-size: 12px;
+    max-height: 220px;
+    overflow: auto;
+}
+
 

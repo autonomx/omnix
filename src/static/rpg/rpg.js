@@ -3417,6 +3417,7 @@
         if (update.memory && update.memory.length) renderMemory();
         if (update.worldEvents && update.worldEvents.length) renderMemory();
         if (update.session) renderRpgConversationThreads(update.session);
+        if (update.turn_contract) renderRpgTurnContract(update.turn_contract);
 
         // Dice rolls go through the queue (animated, no overlap)
         if (update.rolls && update.rolls.length) {
@@ -4303,6 +4304,49 @@
                 `;
             })
             .join('');
+    }
+
+    function renderRpgTurnContract(turnContract) {
+        var host =
+            document.getElementById('rpgTurnContractDebug') ||
+            document.querySelector('[data-rpg-turn-contract-debug]');
+
+        if (!host) return;
+
+        if (!turnContract) {
+            host.innerHTML = '';
+            return;
+        }
+
+        function pretty(value) {
+            try {
+                return escapeHtml(JSON.stringify(value || {}, null, 2));
+            } catch (_) {
+                return escapeHtml(String(value || ''));
+            }
+        }
+
+        host.innerHTML = `
+            <details class="rpg-turn-contract-card" open>
+                <summary>Turn Contract</summary>
+                <div class="rpg-turn-contract-section">
+                    <strong>Interpreted Action</strong>
+                    <pre>${pretty(turnContract.interpreted_action)}</pre>
+                </div>
+                <div class="rpg-turn-contract-section">
+                    <strong>Resolved Action</strong>
+                    <pre>${pretty(turnContract.resolved_action)}</pre>
+                </div>
+                <div class="rpg-turn-contract-section">
+                    <strong>State Delta</strong>
+                    <pre>${pretty(turnContract.state_delta)}</pre>
+                </div>
+                <div class="rpg-turn-contract-section">
+                    <strong>Narration Brief</strong>
+                    <pre>${pretty(turnContract.narration_brief)}</pre>
+                </div>
+            </details>
+        `;
     }
 
     function queueAndRunVisualJob(container, kind, payload, url, successText) {

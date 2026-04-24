@@ -10,6 +10,7 @@ This replaces the legacy in-memory GameSession / pipeline.py / routes.py flow.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -41,6 +42,10 @@ from app.rpg.ai.conversation_threads import (
     expire_conversation_threads,
     normalize_conversation_threads,
     seed_or_update_thread,
+)
+from app.rpg.session.turn_contract import (
+    apply_state_delta,
+    build_turn_contract,
 )
 from app.rpg.ai.npc_initiative import (
     apply_initiative_cooldowns,
@@ -6151,6 +6156,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
             "turn_history": [],
             "voice_assignments": {},
             "settings": {
+                "enable_turn_contract": True,
                 "response_length": "short",
                 "idle_conversation_seconds": 15,
                 "idle_conversations_enabled": True,
@@ -6598,7 +6604,11 @@ def _apply_turn_authoritative(
     action = _coerce_action_target(simulation_state, action, player_input)
 
     if not action:
-        candidates = derive_action_candidates(simulation_state, player_input)
+        candidates = derive_action_candidates(
+            simulation_state,
+            player_input,
+            runtime_state=runtime_state,
+        )
         action = select_primary_action(simulation_state, candidates)
 
     action = _safe_dict(action)
@@ -6781,6 +6791,7 @@ def _apply_turn_authoritative(
         semantic_action_record=semantic_action_record,
     )
 
+    before_state = copy.deepcopy(simulation_state)
     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
     resolved_result = _safe_dict(authoritative.get("result"))
@@ -6930,6 +6941,27 @@ def _apply_turn_authoritative(
     resolved_result.setdefault("action_type", action_type)
     _t_authoritative = _time.monotonic()
 
+    runtime_settings_for_contract = _safe_dict(
+        runtime_state.get("runtime_settings") or runtime_state.get("settings")
+    )
+    turn_contract = {}
+    if _safe_bool(runtime_settings_for_contract.get("enable_turn_contract"), True):
+        before_state_for_contract = _safe_dict(before_state if "before_state" in locals() else simulation_state)
+        turn_contract = build_turn_contract(
+            player_input=player_input,
+            action=action,
+            resolved_action=resolved_result,
+            simulation_state_before=before_state_for_contract,
+            simulation_state_after=after_action_state,
+            runtime_state=runtime_state,
+        )
+        resolved_result = _safe_dict(turn_contract.get("resolved_action") or resolved_result)
+        after_action_state = apply_state_delta(
+            after_action_state,
+            _safe_dict(turn_contract.get("state_delta")),
+        )
+        runtime_state["last_turn_contract"] = turn_contract
+
     progression = _award_progression(after_action_state, resolved_result)
     after_progression_state = _ensure_simulation_state(_safe_dict(progression.get("simulation_state")))
 
@@ -7016,6 +7048,10 @@ def _apply_turn_authoritative(
         "simulation_state": after_state,
         "player_input": player_input,
         "resolved_result": resolved_result,
+        "turn_contract": turn_contract,
+        "interpreted_action": _safe_dict(turn_contract.get("interpreted_action")),
+        "state_delta": _safe_dict(turn_contract.get("state_delta")),
+        "narration_brief": _safe_dict(turn_contract.get("narration_brief")),
         "xp_result": _safe_dict(progression.get("xp_result")),
         "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
         "level_up": _safe_list(progression.get("level_up")),
@@ -7173,8 +7209,9 @@ def _apply_turn_authoritative(
             "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
             "summary": summary,
             "presentation": build_runtime_presentation_payload(after_state),
-            "response_length": _safe_str(runtime_state.get("runtime_settings", {}).get("response_length", "short")),
+            "response_length": _safe_str(runtime_state.get("runtime_settings", {}).get("response_length", "long")),
             "deterministic_fallback_narration": summary_text,
+            "turn_contract": turn_contract,
         },
         "narration_request": narration_request,
     }
@@ -7745,11 +7782,13 @@ def apply_turn(
         return authoritative_result
 
     authoritative = _safe_dict(authoritative_result.get("authoritative"))
+    turn_contract = _safe_dict(authoritative.get("turn_contract"))
     narration_request = _safe_dict(authoritative_result.get("narration_request"))
 
     return {
         "ok": True,
         "session": authoritative_result.get("session"),
+        "turn_contract": turn_contract,
         "result": {
             "turn_id": authoritative.get("turn_id"),
             "tick": authoritative.get("tick"),

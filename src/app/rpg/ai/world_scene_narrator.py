@@ -503,10 +503,21 @@ def _sanitize_narration_text(
 
     if not kept:
         # fallback to authoritative action
-        fallback = _authoritative_action_text(narration_context)
+        turn_contract = _safe_dict(narration_context.get("turn_contract"))
+        narration_brief = _safe_dict(turn_contract.get("narration_brief"))
+        resolved = _safe_dict(narration_context.get("resolved_result"))
+        fallback = _safe_str(
+            narration_brief.get("summary")
+            or resolved.get("narrative_brief")
+            or resolved.get("message")
+            or resolved.get("summary")
+            or _authoritative_action_text(narration_context)
+        )
+        if fallback.strip().lower() in {"action: you act.", "you act.", "action: you act"}:
+            fallback = "The action changes the scene, and the people nearby react according to what just happened."
         return _bound_text(fallback, 220)
 
-    return _bound_text(" ".join(kept), 520)
+    return _bound_text(" ".join(kept), 1400)
 
 
 def _authoritative_action_text(narration_context: Dict[str, Any]) -> str:
@@ -1148,6 +1159,21 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     recent_facts_block = "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
     combat_facts_block = _build_combat_facts_block(narration_context)
 
+    schema = """
+Use exactly this object shape:
+{
+  "format_version": "rpg_narration_v2",
+  "narration": "<descriptive scene narration grounded in turn_contract>",
+  "action": "<descriptive result of the player's interpreted action>",
+  "npc": {
+    "speaker": "<npc name or empty string>",
+    "line": "<natural in-character dialogue or empty string>"
+  },
+  "reward": "<reward summary or empty string>",
+  "followup_hooks": []
+}
+"""
+
     prompt = f"""You are a deterministic RPG narration engine.
 
 CONTEXT:
@@ -1159,6 +1185,9 @@ Recent authoritative facts:
 Authoritative combat facts:
 {combat_facts_block}
 
+Turn contract:
+{json.dumps(_safe_dict(narration_context.get("turn_contract")), ensure_ascii=False, indent=2)[:5000]}
+
 Ongoing conversation threads:
 {conversation_threads_block}
 
@@ -1167,26 +1196,19 @@ YOUR ONLY TASK: Generate narration for a player's action in an RPG.
 OUTPUT ONLY VALID JSON.
 Do not include markdown fences.
 Do not include commentary outside JSON.
+{schema}
 
-Use exactly this object shape:
-{{
-  "format_version": "rpg_narration_v2",
-  "narration": "<1-2 short sentences describing the scene>",
-  "action": "<1 short sentence describing the player's action result>",
-  "npc": {{
-    "speaker": "<npc name or empty string>",
-    "line": "<short reply or empty string>"
-  }},
-  "reward": "<reward summary or empty string>",
-  "followup_hooks": []
-}}
-
-IMPORTANT RULES:
-- Output ONLY valid JSON with no extra text
-- NO markdown fences or commentary outside the JSON object
-- NO content about ticks, time, or system messages
-- NO faction goals, loyalty, awareness, or ambient content
-- The action result MUST match the already-resolved authoritative outcome
+ IMPORTANT RULES:
+ - Output ONLY valid JSON with no extra text
+ - NO markdown fences or commentary outside the JSON object
+ - NO content about ticks, time, or system messages
+ - NO faction goals, loyalty, awareness, or ambient content
+ - The action result MUST match the already-resolved authoritative outcome
+ - Use turn_contract.narration_brief as your main creative brief when present.
+ - You may be vivid and creative with sensory detail, emotion, pacing, and dialogue.
+ - You must not invent state changes outside turn_contract.state_delta or resolved_result.
+ - If turn_contract.interpreted_action identifies an NPC target, that NPC should react believably.
+ - Never output generic filler like "Action: You act."
 - Any combat description MUST match the authoritative combat facts block
 - Do NOT invent hits, misses, damage, knockdowns, or combatants
 - The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain
