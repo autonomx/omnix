@@ -6339,6 +6339,25 @@ def derive_player_action(simulation_state: Dict[str, Any], player_input: str) ->
                 "action_id": f"action:{int(simulation_state.get('tick', 0) or 0)}:{target_id}:escalate",
             }
 
+    force_sync = bool(runtime_state.get("force_sync_narration", False))
+
+    if force_sync:
+        narration_payload = narrate_scene(narration_request["scene"], narration_request["narration_context"])
+        rendered_narration = _safe_str(
+            narration_payload.get("text")
+            or narration_payload.get("narration")
+            or narration_payload.get("rendered_text")
+        )
+        narration = rendered_narration
+        raw_llm_narrative = narration_payload
+        used_llm = _safe_bool(narration_payload.get("used_llm"), False)
+        narration_status = "completed"
+    else:
+        narration = _safe_str(authoritative.get("deterministic_fallback_narration"))
+        raw_llm_narrative = ""
+        used_llm = False
+        narration_status = "queued"
+
     return {}
 
 
@@ -7196,25 +7215,46 @@ def _apply_turn_authoritative(
         "performance": _safe_dict(perf),
     }
 
+    force_sync = bool(runtime_state.get("force_sync_narration", False))
+
+    if force_sync:
+        narration_payload = narrate_scene(narration_request["scene"], narration_request["narration_context"])
+        rendered_narration = _safe_str(
+            narration_payload.get("text")
+            or narration_payload.get("narration")
+            or narration_payload.get("rendered_text")
+        )
+        narration = rendered_narration
+        raw_llm_narrative = narration_payload
+        used_llm = _safe_bool(narration_payload.get("used_llm"), False)
+        narration_status = "completed"
+    else:
+        narration = _safe_str(authoritative.get("deterministic_fallback_narration"))
+        raw_llm_narrative = ""
+        used_llm = False
+        narration_status = "queued"
+
     return {
         "ok": True,
         "session": session,
-        "authoritative": {
-            "turn_id": turn_id,
-            "tick": final_tick,
-            "resolved_result": resolved_result,
-            "combat_result": _safe_dict(resolved_result.get("combat_result")),
-            "xp_result": _safe_dict(progression.get("xp_result")),
-            "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
-            "level_up": _safe_list(progression.get("level_up")),
-            "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
-            "summary": summary,
-            "presentation": build_runtime_presentation_payload(after_state),
-            "response_length": _safe_str(runtime_state.get("runtime_settings", {}).get("response_length", "long")),
-            "deterministic_fallback_narration": summary_text,
-            "turn_contract": turn_contract,
+        "turn_contract": turn_contract,
+        "result": {
+            "turn_id": authoritative.get("turn_id"),
+            "tick": authoritative.get("tick"),
+            "resolved_result": authoritative.get("resolved_result"),
+            "combat_result": authoritative.get("combat_result"),
+            "xp_result": authoritative.get("xp_result"),
+            "skill_xp_result": authoritative.get("skill_xp_result"),
+            "level_up": authoritative.get("level_up"),
+            "skill_level_ups": authoritative.get("skill_level_ups"),
+            "summary": authoritative.get("summary"),
+            "presentation": authoritative.get("presentation"),
+            "response_length": authoritative.get("response_length"),
+            "narration": narration,
+            "raw_llm_narrative": raw_llm_narrative,
+            "used_llm": used_llm,
+            "narration_status": narration_status,
         },
-        "narration_request": narration_request,
     }
 
 def _generate_turn_narration_artifact(
@@ -7785,8 +7825,14 @@ def apply_turn(
     authoritative = _safe_dict(authoritative_result.get("authoritative"))
     turn_contract = _safe_dict(authoritative.get("turn_contract"))
     narration_request = _safe_dict(authoritative_result.get("narration_request"))
+    result_sub = _safe_dict(authoritative_result.get("result"))
 
-    return {
+    narration = result_sub.get("narration")
+    raw_llm_narrative = result_sub.get("raw_llm_narrative")
+    used_llm = result_sub.get("used_llm")
+    narration_status = result_sub.get("narration_status")
+
+    result_dict = {
         "ok": True,
         "session": authoritative_result.get("session"),
         "turn_contract": turn_contract,
@@ -7802,12 +7848,13 @@ def apply_turn(
             "summary": authoritative.get("summary"),
             "presentation": authoritative.get("presentation"),
             "response_length": authoritative.get("response_length"),
-            "narration": _safe_str(authoritative.get("deterministic_fallback_narration")),
-            "raw_llm_narrative": "",
-            "used_llm": False,
-            "narration_status": "queued",
+            "narration": narration,
+            "raw_llm_narrative": raw_llm_narrative,
+            "used_llm": used_llm,
+            "narration_status": narration_status,
         },
     }
+    return result_dict
 
 
 def _advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "heartbeat") -> Dict[str, Any]:

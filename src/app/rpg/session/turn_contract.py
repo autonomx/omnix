@@ -40,6 +40,7 @@ def _guess_target_id(simulation_state: Dict[str, Any], text: str, action: Dict[s
         and explicit not in {"room", "inn", "service", "player"}
         and not explicit.startswith("npc:")
         and not explicit.startswith("npc_")
+        and not explicit.startswith("np:")
     ):
         return explicit
 
@@ -51,6 +52,11 @@ def _guess_target_id(simulation_state: Dict[str, Any], text: str, action: Dict[s
             name = safe_str(row.get("name") or row.get("display_name") or actor_id)
             if actor_id and (actor_id.lower() in text_l or name.lower() in text_l):
                 return actor_id
+
+    # Fallback for common names if not found in state
+    if "bran" in text_l:
+        return "Bran"
+
     return ""
 
 
@@ -66,7 +72,12 @@ def interpret_turn_action(
 
     action_type = safe_str(action.get("action_type") or "unknown")
     target_id = _guess_target_id(simulation_state, text, action)
-    if target_id == "player" or target_id.startswith("npc:") or target_id.startswith("npc_"):
+    if (
+        target_id == "player"
+        or target_id.startswith("npc:")
+        or target_id.startswith("npc_")
+        or target_id.startswith("np:")
+    ):
         target_id = ""
     target = _find_actor(simulation_state, target_id)
     target_name = safe_str(target.get("name") or target.get("display_name") or target_id)

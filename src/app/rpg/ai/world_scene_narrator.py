@@ -648,6 +648,10 @@ def _desystemify_text(text: str) -> str:
     # grammar cleanup
     text = text.replace("You takes", "You take")
     text = text.replace("You attempts", "You attempt")
+    text = text.replace("You tries", "You try")
+    text = text.replace("You goes", "You go")
+    text = text.replace("You is ", "You are ")
+    text = text.replace("You was ", "You were ")
 
     text = text.replace(" asks player", " asks")
 
@@ -672,6 +676,34 @@ def _strip_meta_narration(text: str) -> str:
             return ""
 
     return text
+
+
+def _fallback_in_world_narration(narration_context: Dict[str, Any]) -> str:
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    interpreted = _safe_dict(turn_contract.get("interpreted_action"))
+    npc_behavior = _safe_dict(
+        narration_context.get("npc_behavior_context")
+        or turn_contract.get("npc_behavior_context")
+    )
+
+    intent = _safe_str(interpreted.get("intent")).lower()
+    raw = _safe_str(interpreted.get("raw_input"))
+    target_name = _safe_str(
+        npc_behavior.get("target_name")
+        or interpreted.get("target_name")
+        or "Bran"
+    )
+
+    if intent == "service":
+        return f"{target_name} looks you over from behind the bar, weighing your request before answering."
+    if intent == "attack":
+        return f"You move suddenly, turning the exchange violent. {target_name} recoils as the tavern around you goes tense."
+    if intent == "apologize":
+        return f"{target_name} watches you carefully, the apology landing against the memory of what just happened."
+    if intent == "ask":
+        return f"{target_name} studies you for a moment before answering, still shaped by the recent tension."
+
+    return "The room shifts around your action, attention turning toward you as the moment changes."
 
 
 def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -744,6 +776,9 @@ def _sanitize_narration_payload(
     authoritative_reward = _authoritative_reward_text(narration_context)
     sanitized_npc = _sanitize_npc_block(payload, scene, narration_context)
 
+    if _safe_str(sanitized_npc.get("speaker")).lower() == "player":
+        sanitized_npc["speaker"] = ""
+
     # Presentation-only narration text remains model-authored, but sanitized against hallucinations
     narration_text = _sanitize_narration_text(_safe_str(payload.get("narration")).strip(), scene, narration_context)
 
@@ -798,14 +833,22 @@ def _sanitize_narration_payload(
     narration_clean = _strip_meta_narration(narration_clean)
 
     if not narration_clean:
-        # fallback to narrative brief but rewritten
-        brief = _safe_str(_safe_dict(narration_context.get("turn_contract")).get("narration_brief", {}).get("summary"))
-        narration_clean = _desystemify_text(brief)
+        # fallback to deterministic in-world narration based on intent
+        narration_clean = _fallback_in_world_narration(narration_context)
 
     normalized["narration"] = narration_clean
     normalized["action"] = _desystemify_text(normalized.get("action"))
 
-    if normalized["action"].startswith("The player"):
+    action_text = _safe_str(normalized["action"])
+    if (
+        action_text.startswith("The player")
+        or action_text.startswith("You is ")
+        or "service or room-rental interaction" in action_text
+        or "hostile physical action" in action_text
+        or "Narrate" in action_text
+        or "Interpret" in action_text
+        or "according to the state delta" in action_text
+    ):
         normalized["action"] = ""
     npc = _safe_dict(normalized.get("npc"))
     npc["speaker"] = _desystemify_text(npc.get("speaker"))
