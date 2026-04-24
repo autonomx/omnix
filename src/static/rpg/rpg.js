@@ -3874,11 +3874,39 @@
         return Number.isFinite(n) ? n : null;
     }
 
+    function ensureSceneIllustrationContainer() {
+        var existing = document.getElementById('rpgSceneIllustration');
+        if (existing) return existing;
+
+        var messages =
+            document.getElementById('rpgVisualPanel') ||
+            document.getElementById('rpgScenePanel') ||
+            document.querySelector('.rpg-panel') ||
+            document.querySelector('.rpg-view') ||
+            document.getElementById('rpgMessages') ||
+            document.querySelector('.rpg-messages') ||
+            document.getElementById('rpgChatMessages') ||
+            document.querySelector('.chat-messages') ||
+            document.querySelector('[data-rpg-messages]') ||
+            document.body;
+
+        var container = document.createElement('div');
+        container.id = 'rpgSceneIllustration';
+        container.className = 'rpg-scene-illustration-host';
+        container.style.display = 'block';
+        container.style.margin = '12px 0';
+        container.style.maxWidth = '100%';
+
+        messages.appendChild(container);
+        console.log('[RPG][SceneImage] created container', container, 'inside', messages);
+        return container;
+    }
+
     function renderSceneIllustrations(visualState) {
         var state = visualState || {};
         var illustrations = Array.isArray(state.scene_illustrations) ? state.scene_illustrations : [];
         var requests = Array.isArray(state.image_requests) ? state.image_requests : [];
-        var container = document.getElementById('rpgSceneIllustration');
+        var container = ensureSceneIllustrationContainer();
         if (!container) return;
 
         if (!illustrations.length && !requests.length) {
@@ -4108,16 +4136,43 @@
                 });
             }
 
+            setVisualStatus(container, kind, 'Running image generation...');
+
             return postJson('/api/rpg/visual/queue/run_one', { lease_seconds: 300 }).then(function(runResult) {
 
                 console.log("[RPG][run_one result]", runResult);
+
+                if (runResult && runResult.ok && runResult.image_url) {
+                    renderSceneIllustrations({
+                        scene_illustrations: [{
+                            scene_id: runResult.target_id || payload.scene_id || payload.event_id || 'scene:manual',
+                            event_id: runResult.request_id || '',
+                            title: payload.title || 'Scene Illustration',
+                            image_url: runResult.image_url,
+                            local_path: runResult.local_path || '',
+                            asset_id: runResult.asset_id || '',
+                            seed: runResult.seed || null,
+                            style: runResult.style || 'rpg-scene',
+                            prompt: runResult.prompt || payload.prompt || '',
+                            model: runResult.model || 'default',
+                            status: 'complete'
+                        }],
+                        image_requests: [],
+                        visual_assets: []
+                    });
+                }
 
                 if (runResult.request_id) {
                     console.log('[RPG][VisualRequestQueued]', runResult.request_id);
                     window.__lastRpgVisualRequestId = runResult.request_id;
                     setVisualStatus(container, kind, 'Queued: ' + runResult.request_id);
                 }
-                setVisualStatus(container, kind, 'Running image generation...');
+
+                // If we have image_url, skip session refresh (it would wipe the image)
+                if (runResult && runResult.ok && runResult.image_url) {
+                    setVisualStatus(container, kind, successText || 'Image generated.');
+                    return runResult;
+                }
 
                 // 🔥 CRITICAL: force fresh session fetch AFTER generation
                 return refreshVisualUiFromSession(true).then(function() {
@@ -5952,7 +6007,7 @@
     if (typeof window !== 'undefined') {
         window.setWorldEventsTab = setWorldEventsTab;
         window.generateCurrentScene = function() {
-            const container = document.getElementById('rpgSceneIllustration') || document.body;
+            const container = ensureSceneIllustrationContainer() || document.body;
             const sceneId = getCurrentSceneId();
             const title = getCurrentSceneTitle();
             generateSceneNow(container, {
