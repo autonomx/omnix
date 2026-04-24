@@ -7,6 +7,7 @@ set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
 
 set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
+set "OMNIX_IMAGE_URL=http://127.0.0.1:5301"
 
 set "OMNIX_TTS_MODELS_DIR=%~dp0resources\models\tts"
 set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_TTS_MODELS_DIR%\Qwen3-TTS-12Hz-0.6B-Base"
@@ -70,6 +71,13 @@ if errorlevel 1 (
 )
 
 echo.
+echo [IMAGE SERVICE] Starting image service on %OMNIX_IMAGE_URL%...
+start "Omnix Image Service" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_IMAGE_SERVICE_MODE=1"" && set ""OMNIX_IMAGE_URL="" && ""%RPG_FLUX_PYTHON%"" -m uvicorn app.image_service_app:app --host 127.0.0.1 --port 5301 2>&1"
+
+echo Waiting for image service...
+ping -n 4 127.0.0.1 >nul
+
+echo.
 echo [ENV CHECK][TTS]
 "%RPG_TTS_PYTHON%" -c "import sys; print('[TTS][PYTHON]', sys.executable)"
 if errorlevel 1 (
@@ -131,7 +139,7 @@ ping -n 4 127.0.0.1 >nul
 
 echo.
 echo [3/4] Starting Chatbot...
-start "Omnix FastAPI" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_URL=%OMNIX_TTS_URL%"" && set ""OMNIX_STT_URL=%OMNIX_STT_URL%"" && set ""OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"" && set ""OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"" && ""%RPG_FLUX_PYTHON%"" -c "import sys; print('[APP][PYTHON]', sys.executable)" && ""%RPG_FLUX_PYTHON%"" -c "import diffusers; print('[APP][FLUX] diffusers OK')" && ""%RPG_FLUX_PYTHON%"" src\launch.py 2>&1"
+start "Omnix FastAPI" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_URL=%OMNIX_TTS_URL%"" && set ""OMNIX_STT_URL=%OMNIX_STT_URL%"" && set ""OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"" && set ""OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"" && set ""OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"" && ""%RPG_FLUX_PYTHON%"" -c "import sys; print('[APP][PYTHON]', sys.executable)" && ""%RPG_FLUX_PYTHON%"" -c "import diffusers; print('[APP][FLUX] diffusers OK')" && ""%RPG_FLUX_PYTHON%"" src\launch.py 2>&1"
 
 echo Waiting for FastAPI...
 ping -n 4 127.0.0.1 >nul

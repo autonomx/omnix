@@ -1,9 +1,12 @@
 """Global image generation service."""
 from __future__ import annotations
+import os
 
 from typing import Any, Dict
 
 from app.image.config import get_active_image_provider_name, get_provider_config
+from app.image.lifecycle import get_or_create_image_provider
+from app.image_http_client import generate_image_via_service, is_image_service_enabled
 from app.image.job_queue import enqueue_image_job
 from app.image.models import ImageGenerationRequest, ImageGenerationResponse
 from app.image.consumer_adapters import build_chat_image_request, build_story_image_request
@@ -55,18 +58,6 @@ def _normalize_request(payload: Dict[str, Any]) -> ImageGenerationRequest:
     )
 
 
-def _load_provider(provider_name: str, provider_config: Dict[str, Any]):
-    provider_name = _safe_str(provider_name).strip().lower()
-
-    if provider_name == "flux_klein":
-        from app.image.providers.flux_klein_provider import FluxKleinImageProvider
-        return FluxKleinImageProvider(provider_config)
-    if provider_name == "mock":
-        from app.image.providers.mock_provider import MockImageProvider
-        return MockImageProvider(provider_config)
-
-    raise RuntimeError(f"unsupported_image_provider:{provider_name}")
-
 
 def _map_to_provider_payload(req: ImageGenerationRequest, provider_config: Dict[str, Any]) -> Dict[str, Any]:
     steps = req.steps
@@ -91,11 +82,11 @@ def _map_to_provider_payload(req: ImageGenerationRequest, provider_config: Dict[
     }
 
 
-def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
+def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
     req = _normalize_request(payload)
     provider_name = req.provider or get_active_image_provider_name()
     provider_config = get_provider_config(provider_name)
-    provider = _load_provider(provider_name, provider_config)
+    provider = get_or_create_image_provider(provider_name)
 
     provider_payload = _map_to_provider_payload(req, provider_config)
     result = provider.generate(provider_payload)
@@ -131,6 +122,26 @@ def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
             **result_metadata,
         },
     )
+
+
+def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
+    if is_image_service_enabled() and os.environ.get("OMNIX_IMAGE_SERVICE_MODE") != "1":
+        data = generate_image_via_service(payload if isinstance(payload, dict) else {})
+        return ImageGenerationResponse(
+            ok=bool(data.get("ok")),
+            provider=_safe_str(data.get("provider")),
+            status=_safe_str(data.get("status")) or ("completed" if data.get("ok") else "failed"),
+            error=_safe_str(data.get("error")),
+            asset_url=_safe_str(data.get("asset_url")),
+            local_path=_safe_str(data.get("local_path")),
+            seed=data.get("seed"),
+            width=_safe_int(data.get("width"), 0),
+            height=_safe_int(data.get("height"), 0),
+            mime_type=_safe_str(data.get("mime_type")) or "image/png",
+            metadata=data.get("metadata") if isinstance(data.get("metadata"), dict) else {},
+        )
+
+    return generate_image_local(payload)
 
 
 def enqueue_chat_image(payload: Dict[str, Any]) -> Dict[str, Any]:

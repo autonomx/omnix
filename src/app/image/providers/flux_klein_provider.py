@@ -8,6 +8,8 @@ import os
 import threading
 from typing import Any, Dict
 
+import torch
+
 
 from app.image.downloads import get_flux_local_model_status
 from app.image.flux_pipeline_compat import (
@@ -16,8 +18,10 @@ from app.image.flux_pipeline_compat import (
     validate_flux_repo_runtime,
 )
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
+from app.shared import DATA_DIR
 
 _PIPELINE_LOCK = threading.Lock()
+_GENERATE_LOCK = threading.Lock()
 
 
 def _safe_str(value: Any) -> str:
@@ -46,6 +50,10 @@ class FluxKleinImageProvider(BaseImageProvider):
     def __init__(self, config: Dict[str, Any] | None = None):
         super().__init__(config)
         self._pipeline = None
+
+    def load(self):
+        self._ensure_pipeline()
+        return None
 
     def _repo_id(self) -> str:
         variant = _safe_str(self.config.get("variant")).strip().lower()
@@ -145,16 +153,22 @@ class FluxKleinImageProvider(BaseImageProvider):
             return self._pipeline
 
     def unload(self):
-        pipe = self._pipeline
-        self._pipeline = None
-        if pipe is not None:
-            with contextlib.suppress(Exception):
-                del pipe
+        with _PIPELINE_LOCK:
+            pipe = self._pipeline
+            self._pipeline = None
+
         with contextlib.suppress(Exception):
-            import torch
+            del pipe
+
+        with contextlib.suppress(Exception):
+            gc.collect()
+
+        with contextlib.suppress(Exception):
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        gc.collect()
+                torch.cuda.ipc_collect()
+
+        return None
 
     def generate(self, payload: Dict[str, Any]) -> ImageGenerationResult:
         try:
@@ -170,8 +184,8 @@ class FluxKleinImageProvider(BaseImageProvider):
 
         prompt = _safe_str(payload.get("prompt")).strip()
         negative_prompt = _safe_str(payload.get("negative_prompt")).strip()
-        width = _safe_int(payload.get("width"), 1024)
-        height = _safe_int(payload.get("height"), 1024)
+        width = _safe_int(payload.get("width"), _safe_int(self.config.get("width"), 768))
+        height = _safe_int(payload.get("height"), _safe_int(self.config.get("height"), 768))
         seed = payload.get("seed")
         steps = _safe_int(payload.get("num_inference_steps"), _safe_int(self.config.get("num_inference_steps"), 4))
         guidance_scale = _safe_float(payload.get("guidance_scale"), _safe_float(self.config.get("guidance_scale"), 1.0))
@@ -192,7 +206,10 @@ class FluxKleinImageProvider(BaseImageProvider):
                 kwargs["generator"] = torch.Generator(device="cpu").manual_seed(int(seed))
 
         try:
-            image = pipe(**kwargs).images[0]
+            with _GENERATE_LOCK:
+                with torch.inference_mode():
+                    output = pipe(**kwargs)
+                    image = output.images[0]
         except Exception as exc:
             return ImageGenerationResult(
                 ok=False,
@@ -206,8 +223,9 @@ class FluxKleinImageProvider(BaseImageProvider):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         image_bytes = buffer.getvalue()
+        buffer.close()
 
-        out_dir = os.path.join("resources", "data", "generated_images")
+        out_dir = os.path.join(DATA_DIR, "generated_images")
         os.makedirs(out_dir, exist_ok=True)
         filename = f"{_safe_str(payload.get('kind')).strip() or 'image'}_{os.getpid()}_{id(image)}.png"
         file_path = os.path.normpath(os.path.join(out_dir, filename))
@@ -224,7 +242,7 @@ class FluxKleinImageProvider(BaseImageProvider):
                 moderation_reason="",
             )
 
-        return ImageGenerationResult(
+        result = ImageGenerationResult(
             ok=True,
             status="completed",
             error="",
@@ -237,3 +255,17 @@ class FluxKleinImageProvider(BaseImageProvider):
             asset_url="",
             metadata={"width": width, "height": height},
         )
+
+        with contextlib.suppress(Exception):
+            del output
+            del image
+
+        if bool(self.config.get("cuda_empty_cache_after_generate", False)):
+            with contextlib.suppress(Exception):
+                gc.collect()
+            with contextlib.suppress(Exception):
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    torch.cuda.empty_cache()
+
+        return result
