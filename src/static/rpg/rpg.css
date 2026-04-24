@@ -1,0 +1,70 @@
+.rpg-scene-illustration-host {
+    width: 100%;
+    max-width: 560px;
+    flex: none !important;
+    align-self: stretch;
+    display: block;
+    margin: 10px 0 14px 0;
+    clear: both;
+}
+
+.rpg-scene-illustration-card {
+    width: 100%;
+    max-width: 560px;
+    box-sizing: border-box;
+    display: block;
+    position: relative;
+    z-index: 1;
+}
+
+.rpg-scene-illustration-image-wrapper {
+    width: 100%;
+    max-width: 520px;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: block;
+    position: relative;
+}
+
+.rpg-scene-illustration-image {
+    width: 100%;
+    max-width: 520px;
+    max-height: 360px;
+    object-fit: contain;
+    display: block;
+}
+
+.rpg-image-placeholder {
+    width: 100%;
+    max-width: 520px;
+    min-height: 280px;
+    max-height: 360px;
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+    background: linear-gradient(110deg, rgba(255,255,255,0.06), rgba(255,255,255,0.16), rgba(255,255,255,0.06));
+    background-size: 220% 100%;
+    animation: rpgImageShimmer 1.35s ease-in-out infinite;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: inset 0 0 40px rgba(255,255,255,0.04);
+}
+
+.rpg-image-placeholder::after {
+    content: "Creating image…";
+    position: absolute;
+    left: 16px;
+    bottom: 14px;
+    font-size: 0.9rem;
+    opacity: 0.78;
+}
+
+@keyframes rpgImageShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.rpg-scene-illustration-card.is-generating img {
+    display: none;
+}
+
+

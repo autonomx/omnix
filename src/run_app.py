@@ -484,13 +484,19 @@ async def serve_logo(path: str):
 
 @app.get("/generated-images/{filename:path}")
 async def serve_generated_image(filename: str):
-    """Serve generated RPG/image assets from resources/data/generated_images."""
-    basename = _os.path.basename(filename)
-    if basename != filename:
+    """Serve generated RPG/image assets from resources/data/generated_images/ and subdirectories."""
+    # Normalize path and prevent traversal
+    normalized = _os.path.normpath(filename)
+    if normalized.startswith("..") or normalized.startswith("/"):
         return JSONResponse({"ok": False, "error": "invalid_filename"}, status_code=400)
 
     image_dir = Path(shared.BASE_DIR) / "resources" / "data" / "generated_images"
-    file_path = image_dir / basename
+    file_path = image_dir / normalized
+
+    # Ensure the resolved path is still inside image_dir
+    resolved = file_path.resolve()
+    if not str(resolved).startswith(str(image_dir.resolve())):
+        return JSONResponse({"ok": False, "error": "invalid_filename"}, status_code=400)
 
     if not file_path.exists() or not file_path.is_file():
         return JSONResponse({"ok": False, "error": "file_not_found"}, status_code=404)

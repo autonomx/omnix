@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict
 
@@ -16,12 +17,26 @@ from app.rpg.presentation.visual_state import (
     upsert_character_visual_identity,
 )
 from app.rpg.visual.asset_store import save_asset_bytes
+from app.shared import DATA_DIR
 from app.rpg.visual.global_image_adapter import generate_rpg_image
 from app.rpg.visual.providers import image_generation_enabled
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _public_generated_image_url(image_path: str) -> str:
+    image_path = _safe_str(image_path).strip()
+    if not image_path:
+        return ""
+    try:
+        root = (Path(DATA_DIR) / "generated_images").resolve()
+        path = Path(image_path).resolve()
+        rel = path.relative_to(root).as_posix()
+        return f"/generated-images/{rel}"
+    except Exception:
+        return f"/generated-images/{os.path.basename(image_path)}"
 
 
 def _safe_str(value: Any) -> str:
@@ -271,17 +286,29 @@ def process_pending_image_requests(
 
         final_prompt = _safe_str(getattr(result, "revised_prompt", "")).strip() or _safe_str(request.get("prompt")).strip()
         image_bytes, mime_type = _result_bytes_and_mime(result)
-
         asset_id = f"{_safe_str(request.get('kind')).strip()}:{_safe_str(request.get('target_id')).strip()}:{version}:{request.get('seed')}"
-        image_path = save_asset_bytes(
-            image_bytes,
-            mime_type=mime_type,
-            asset_id=asset_id,
-            kind=_safe_str(request.get("kind")).strip(),
-            target_id=_safe_str(request.get("target_id")).strip(),
-        )
 
-        public_image_url = f"/generated-images/{os.path.basename(image_path)}"
+        # Use asset_url from cache if available, otherwise save bytes and construct URL
+        asset_url = _safe_str(getattr(result, "asset_url", "")).strip()
+        if asset_url:
+            public_image_url = asset_url
+            # Save bytes for local_path reference, but URL already points to cached file
+            image_path = save_asset_bytes(
+                image_bytes,
+                mime_type=mime_type,
+                asset_id=asset_id,
+                kind=_safe_str(request.get("kind")).strip(),
+                target_id=_safe_str(request.get("target_id")).strip(),
+            )
+        else:
+            image_path = save_asset_bytes(
+                image_bytes,
+                mime_type=mime_type,
+                asset_id=asset_id,
+                kind=_safe_str(request.get("kind")).strip(),
+                target_id=_safe_str(request.get("target_id")).strip(),
+            )
+            public_image_url = _public_generated_image_url(image_path)
 
         # Register the asset
         simulation_state = append_visual_asset(

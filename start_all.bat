@@ -72,7 +72,7 @@ if errorlevel 1 (
 
 echo.
 echo [IMAGE SERVICE] Starting image service on %OMNIX_IMAGE_URL%...
-start "Omnix Image Service" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_IMAGE_SERVICE_MODE=1"" && set ""OMNIX_IMAGE_URL="" && ""%RPG_FLUX_PYTHON%"" -m uvicorn app.image_service_app:app --host 127.0.0.1 --port 5301 2>&1"
+start "Omnix Image Service" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_IMAGE_SERVICE_MODE=1"" && set ""OMNIX_IMAGE_PRELOAD=1"" && set ""OMNIX_IMAGE_WARMUP=1"" && set ""OMNIX_IMAGE_URL="" && ""%RPG_FLUX_PYTHON%"" -m uvicorn app.image_service_app:app --host 127.0.0.1 --port 5301 2>&1"
 
 echo Waiting for image service...
 ping -n 4 127.0.0.1 >nul

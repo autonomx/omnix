@@ -5,6 +5,7 @@ import os
 from typing import Any, Dict
 
 from app.image.config import get_active_image_provider_name, get_provider_config
+from app.image.cache import image_cache_key, lookup_image_cache, store_image_cache
 from app.image.lifecycle import get_or_create_image_provider
 from app.image_http_client import generate_image_via_service, is_image_service_enabled
 from app.image.job_queue import enqueue_image_job
@@ -89,7 +90,33 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
     provider = get_or_create_image_provider(provider_name)
 
     provider_payload = _map_to_provider_payload(req, provider_config)
+    provider_payload["provider"] = provider_name
+
+    use_cache = not bool(payload.get("no_cache")) and not bool(payload.get("warmup"))
+    cache_key = image_cache_key(provider_payload)
+    if use_cache:
+        cached = lookup_image_cache(cache_key)
+        if cached:
+            return ImageGenerationResponse(
+                ok=True,
+                provider=_safe_str(cached.get("provider")) or provider_name,
+                status="completed",
+                error="",
+                asset_url=_safe_str(cached.get("asset_url")),
+                local_path=_safe_str(cached.get("file_path")),
+                seed=cached.get("seed"),
+                width=_safe_int(cached.get("width"), req.width),
+                height=_safe_int(cached.get("height"), req.height),
+                mime_type=_safe_str(cached.get("mime_type")) or "image/png",
+                metadata={"cache_hit": True, "cache_key": cache_key},
+            )
+
     result = provider.generate(provider_payload)
+    if use_cache and result.ok:
+        cached = store_image_cache(cache_key, result)
+        if cached:
+            result.file_path = cached.get("file_path") or getattr(result, "file_path", "")
+            result.asset_url = cached.get("asset_url") or getattr(result, "asset_url", "")
 
     local_path = _safe_str(getattr(result, "file_path", "")).strip()
     asset_url = _safe_str(getattr(result, "asset_url", "")).strip()
@@ -113,13 +140,15 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
         height=req.height,
         mime_type=mime_type,
         metadata={
+            **(result_metadata or {}),
+            "cache_hit": False,
+            "cache_key": cache_key,
             "source": req.source,
             "kind": req.kind,
             "style": req.style,
             "request_id": req.request_id,
             "session_id": req.session_id,
             "revised_prompt": revised_prompt,
-            **result_metadata,
         },
     )
 

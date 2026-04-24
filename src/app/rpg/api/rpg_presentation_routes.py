@@ -307,6 +307,195 @@ def _safe_int(v: Any, default: int = 0) -> int:
         return default
 
 
+def _clip_visual_prompt_text(value: Any, limit: int = 320) -> str:
+    text = " ".join(_safe_str(value).replace("\n", " ").split()).strip()
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _is_generic_scene_visual_prompt(prompt: str) -> bool:
+    text = _safe_str(prompt).strip().lower()
+    if not text:
+        return True
+    generic_markers = [
+        "fantasy scene, fantasy location",
+        "fantasy location, medieval setting",
+        "scene illustration of scene:",
+        "scene illustration of the current scene",
+        "detailed environment, cinematic composition",
+    ]
+    return any(marker in text for marker in generic_markers)
+
+
+def _lookup_location_record(simulation_state: Dict[str, Any], location_id: str) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    location_id = _safe_str(location_id).strip()
+    if not location_id:
+        return {}
+
+    candidates = [
+        _safe_dict(simulation_state.get("locations")),
+        _safe_dict(_safe_dict(simulation_state.get("world_state")).get("locations")),
+        _safe_dict(_safe_dict(simulation_state.get("world")).get("locations")),
+    ]
+
+    for locations in candidates:
+        direct = _safe_dict(locations.get(location_id))
+        if direct:
+            return direct
+        for item in locations.values():
+            row = _safe_dict(item)
+            if _safe_str(row.get("id")).strip() == location_id or _safe_str(row.get("location_id")).strip() == location_id:
+                return row
+
+    return {}
+
+
+def _humanize_visual_id(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    if text.startswith("scene:") or text.startswith("portrait:") or text.startswith("job:"):
+        return ""
+    return text.replace("loc_", "").replace("scene_", "").replace("_", " ").replace("-", " ").strip().title()
+
+
+def _derive_scene_visual_context(simulation_state: Dict[str, Any], *, scene_id: str, event_id: str, title: str) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(simulation_state.get("runtime_state"))
+    current_scene = _safe_dict(runtime_state.get("current_scene") or simulation_state.get("current_scene"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+
+    location_id = _first_non_empty(
+        current_scene.get("location_id"),
+        player_state.get("location_id"),
+        scene_id,
+    )
+    location = _lookup_location_record(simulation_state, location_id)
+
+    scene_title = _first_non_empty(
+        title,
+        current_scene.get("title"),
+        current_scene.get("name"),
+        location.get("title"),
+        location.get("name"),
+        _humanize_visual_id(location_id),
+        _humanize_visual_id(scene_id),
+        "Current fantasy scene",
+    )
+
+    scene_description = _first_non_empty(
+        current_scene.get("description"),
+        current_scene.get("summary"),
+        current_scene.get("scene"),
+        location.get("description"),
+        location.get("summary"),
+        location.get("flavor"),
+    )
+
+    npc_index = _safe_dict(simulation_state.get("npc_index"))
+    present_ids = []
+    seen = set()
+    for raw_id in (
+        _safe_list(current_scene.get("present_npc_ids"))
+        + _safe_list(player_state.get("nearby_npc_ids"))
+    ):
+        npc_id = _safe_str(raw_id).strip()
+        if npc_id and npc_id not in seen:
+            seen.add(npc_id)
+            present_ids.append(npc_id)
+
+    if not present_ids and location_id:
+        for npc_id, raw_npc in npc_index.items():
+            npc = _safe_dict(raw_npc)
+            if _safe_str(npc.get("location_id")).strip() == location_id:
+                npc_id = _safe_str(npc_id).strip()
+                if npc_id and npc_id not in seen:
+                    seen.add(npc_id)
+                    present_ids.append(npc_id)
+
+    npc_names = []
+    for npc_id in present_ids[:6]:
+        npc = _safe_dict(npc_index.get(npc_id))
+        npc_name = _first_non_empty(npc.get("name"), npc.get("title"), _humanize_visual_id(npc_id))
+        if npc_name:
+            npc_names.append(npc_name)
+
+    return {
+        "title": scene_title,
+        "description": scene_description,
+        "location_id": location_id,
+        "location_type": _first_non_empty(location.get("type"), current_scene.get("type"), "fantasy location"),
+        "present_npc_names": npc_names,
+    }
+
+
+def _scene_type_visual_details(title: str, location_type: str) -> str:
+    text = f"{title} {location_type}".lower()
+    if "tavern" in text or "inn" in text or "flagon" in text:
+        return (
+            "medieval tavern interior, worn wooden tables, rough timber beams, "
+            "warm lantern light, smoky hearth, mugs and bottles behind the bar, "
+            "shadowed corners with patrons watching"
+        )
+    if "market" in text or "shop" in text or "merchant" in text:
+        return "busy medieval market details, stacked goods, hanging signs, cloth awnings, trade stalls"
+    if "forest" in text or "woods" in text:
+        return "ancient forest details, mossy roots, dense trees, filtered light, mysterious undergrowth"
+    if "road" in text or "street" in text:
+        return "weathered medieval road, stone and mud textures, distant buildings, travel-worn atmosphere"
+    return "detailed fantasy environment, grounded physical layout, believable props, clear sense of place"
+
+
+def build_grounded_scene_illustration_prompt(
+    simulation_state: Dict[str, Any],
+    *,
+    scene_id: str,
+    event_id: str,
+    title: str,
+    prompt: str,
+) -> str:
+    context = _derive_scene_visual_context(
+        simulation_state,
+        scene_id=scene_id,
+        event_id=event_id,
+        title=title,
+    )
+    scene_title = _clip_visual_prompt_text(context.get("title"), 120)
+    description = _clip_visual_prompt_text(context.get("description"), 360)
+    location_type = _clip_visual_prompt_text(context.get("location_type"), 80)
+    npc_names = [
+        _clip_visual_prompt_text(name, 80)
+        for name in _safe_list(context.get("present_npc_names"))
+        if _clip_visual_prompt_text(name, 80)
+    ]
+
+    parts = []
+    if scene_title:
+        parts.append(scene_title)
+    if location_type and location_type.lower() not in {"fantasy location", scene_title.lower()}:
+        parts.append(f"Location type: {location_type}")
+    if description:
+        parts.append(description)
+    if npc_names:
+        parts.append(f"Present characters: {', '.join(npc_names)}")
+
+    prompt_hint = _clip_visual_prompt_text(prompt, 260)
+    if prompt_hint and not _is_generic_scene_visual_prompt(prompt_hint):
+        parts.append(f"Visual request hint: {prompt_hint}")
+
+    parts.append(f"Environment details: {_scene_type_visual_details(scene_title, location_type)}")
+    parts.append(
+        "High-quality fantasy illustration, cinematic composition, immersive atmosphere, "
+        "natural lighting, sharp detail, coherent architecture, no text, no UI, no labels."
+    )
+
+    return ". ".join(part.strip(" .") for part in parts if part).strip() + "."
+
+
 def _derive_present_npc_ids(simulation_state: dict, runtime_state: dict, setup_payload: dict) -> list[str]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
@@ -1226,9 +1415,18 @@ async def request_scene_illustration(request: Request):
 
         if not prompt:
             prompt = f"Scene illustration of {resolved_target or 'the current scene'}"
+
+        prompt = build_grounded_scene_illustration_prompt(
+            simulation_state,
+            scene_id=scene_id,
+            event_id=event_id,
+            title=title,
+            prompt=prompt,
+        )
+        print("[IMG PROMPT]", prompt)
         seed = data.get("seed")
         if not isinstance(seed, int):
-            seed = stable_visual_seed_from_text(f"{scene_id}|{event_id}|{title}|{scene_style}|{scene_model}")
+            seed = stable_visual_seed_from_text(f"{scene_id}|{event_id}|{title}|{prompt}|{scene_style}|{scene_model}")
         prompt_check = validate_visual_prompt(prompt)
 
         # Remove stale pending/failed requests for this scene target before enqueuing a fresh one.
@@ -1277,6 +1475,7 @@ async def request_scene_illustration(request: Request):
             "request_id": request_id,
             "persisted": persisted,
             "resolved_target": resolved_target,
+            "prompt_preview": prompt[:240],
         })
         if session_id and not persisted:
             return _jsonify({

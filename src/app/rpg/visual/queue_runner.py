@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 from app.image.asset_store import save_image_asset_bytes as save_asset_bytes
+from app.shared import DATA_DIR
 from app.image.job_queue import complete_image_job, fail_image_job
 from app.rpg.visual.global_image_adapter import generate_rpg_image
 from app.rpg.visual.job_queue import claim_next_visual_job, complete_visual_job, release_visual_job
@@ -52,6 +54,19 @@ def _result_seed(value: Any) -> Any:
     if isinstance(value, dict):
         return value.get("seed")
     return getattr(value, "seed", None)
+
+
+def _public_generated_image_url(image_path: str) -> str:
+    image_path = _safe_str(image_path).strip()
+    if not image_path:
+        return ""
+    try:
+        root = (Path(DATA_DIR) / "generated_images").resolve()
+        path = Path(image_path).resolve()
+        rel = path.relative_to(root).as_posix()
+        return f"/generated-images/{rel}"
+    except Exception:
+        return f"/generated-images/{os.path.basename(image_path)}"
 
 
 def _result_to_jsonable(value: Any) -> Dict[str, Any]:
@@ -227,7 +242,12 @@ def run_one_queued_job(*, lease_seconds: int = 300) -> Dict[str, Any]:
 
             complete_image_job(job_id=job_id, lease_token=lease_token, result={"error": "", "status": "complete"})
 
-            public_image_url = f"/generated-images/{os.path.basename(image_path)}"
+            # Use asset_url from cache if available, otherwise construct from image_path
+            asset_url = _safe_str(_safe_dict(result).get("asset_url")).strip()
+            if asset_url:
+                public_image_url = asset_url
+            else:
+                public_image_url = _public_generated_image_url(image_path)
 
             if not asset_id:
 
@@ -347,6 +367,10 @@ def _generate_preview_image_for_request(*, request: Dict[str, Any], request_id: 
         "seed": seed,
         "session_id": session_id,
         "target_id": target_id,
+        "quality": _safe_str(request.get("quality")).strip() or "fast",
+        "width": request.get("width"),
+        "height": request.get("height"),
+        "num_inference_steps": request.get("num_inference_steps"),
     }
     print("[RPG][preview_generate][request]", payload)
     result = generate_rpg_image(payload)

@@ -3874,39 +3874,38 @@
         return Number.isFinite(n) ? n : null;
     }
 
-    function ensureSceneIllustrationContainer() {
-        var existing = document.getElementById('rpgSceneIllustration');
-        if (existing) return existing;
+    function ensureSceneIllustrationContainer(anchorEl) {
+        var anchor = anchorEl && anchorEl.nodeType === 1
+            ? anchorEl.closest('[data-message-role="turn_narration"]')
+            : null;
 
-        var messages =
-            document.getElementById('rpgVisualPanel') ||
-            document.getElementById('rpgScenePanel') ||
-            document.querySelector('.rpg-panel') ||
-            document.querySelector('.rpg-view') ||
-            document.getElementById('rpgMessages') ||
-            document.querySelector('.rpg-messages') ||
-            document.getElementById('rpgChatMessages') ||
-            document.querySelector('.chat-messages') ||
-            document.querySelector('[data-rpg-messages]') ||
-            document.body;
+        if (!anchor) {
+            anchor = document.querySelector('[data-message-role="turn_narration"]:last-of-type');
+        }
 
-        var container = document.createElement('div');
-        container.id = 'rpgSceneIllustration';
-        container.className = 'rpg-scene-illustration-host';
-        container.style.display = 'block';
-        container.style.margin = '12px 0';
-        container.style.maxWidth = '100%';
+        if (!anchor) {
+            return null;
+        }
 
-        messages.appendChild(container);
-        console.log('[RPG][SceneImage] created container', container, 'inside', messages);
-        return container;
+        var existing = anchor.querySelector('.rpg-scene-illustration-host');
+        if (existing) return existing; 
+        var host = document.createElement('div');
+        host.className = 'rpg-scene-illustration-host';
+        host.style.margin = '12px 0';
+        host.style.maxWidth = '100%';
+        host.style.width = '100%';
+        host.style.flex = 'none';
+        host.style.display = 'block'; 
+        anchor.appendChild(host);
+        return host;
     }
 
     function renderSceneIllustrations(visualState) {
         var state = visualState || {};
         var illustrations = Array.isArray(state.scene_illustrations) ? state.scene_illustrations : [];
         var requests = Array.isArray(state.image_requests) ? state.image_requests : [];
-        var container = ensureSceneIllustrationContainer();
+        var hosts = Array.from(document.querySelectorAll('[data-message-role="turn_narration"] .rpg-scene-illustration-host'));
+        var container = hosts.length ? hosts[hosts.length - 1] : null;
         if (!container) return;
 
         if (!illustrations.length && !requests.length) {
@@ -3925,19 +3924,29 @@
         var imageUrl = typeof latest.image_url === 'string' ? latest.image_url : '';
         var title = typeof latest.title === 'string' && latest.title ? latest.title : 'Scene Illustration';
         var status = typeof latest.status === 'string' ? latest.status : '';
+        var statusText = 'Scene image generated.';
+        if (status === 'completed') {
+            statusText = 'Scene image generated.';
+        } else if (status === 'queued' || status === 'pending') {
+            statusText = 'Creating image…';
+        } else if (status === 'processing') {
+            statusText = 'Rendering image…';
+        }
 
         if (!imageUrl && requests.length) {
             var pending = requests[requests.length - 1] || {};
             container.style.display = '';
+            if (pending.status === 'processing') statusText = 'Rendering image…';
             container.innerHTML =
-                '<div class="rpg-scene-illustration-card rpg-scene-illustration-card--pending">' +
+                '<div class="rpg-scene-illustration-card rpg-scene-illustration-card--pending is-generating">' +
                     '<div class="rpg-scene-illustration-header">' +
                         '<div class="rpg-scene-illustration-title">Generating scene illustration…</div>' +
-                        '<div class="rpg-scene-illustration-status">' + escapeHtml(pending.status || 'pending') + '</div>' +
+                        '<div class="rpg-scene-illustration-status">' + statusText + '</div>' +
                     '</div>' +
-                    '<div class="rpg-scene-illustration-placeholder">' +
-                        '<div class="rpg-scene-illustration-spinner"></div>' +
-                        '<div class="rpg-scene-illustration-prompt">' + escapeHtml(pending.prompt || 'Preparing image…') + '</div>' +
+                    '<div class="rpg-scene-illustration-image-wrapper" style="position:relative;">' +
+                        '<div class="rpg-image-placeholder">' +
+                            '<div class="rpg-scene-illustration-prompt">' + escapeHtml(pending.prompt || 'Preparing image…') + '</div>' +
+                        '</div>' +
                     '</div>' +
                 '</div>';
             return;
@@ -3950,14 +3959,142 @@
         }
 
         container.style.display = '';
-        container.innerHTML =
-            '<div class="rpg-scene-illustration-card">' +
-                '<div class="rpg-scene-illustration-header">' +
-                    '<div class="rpg-scene-illustration-title">' + escapeHtml(title) + '</div>' +
-                    (status ? '<div class="rpg-scene-illustration-status">' + escapeHtml(status) + '</div>' : '') +
-                '</div>' +
-                '<img class="rpg-scene-illustration-image" src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '" style="width:100%;max-width:520px;height:auto;border-radius:12px;display:block;">' +
-            '</div>';
+        container.innerHTML = '';
+
+        var card = document.createElement('div');
+        card.className = 'rpg-scene-illustration-card';
+
+        var header = document.createElement('div');
+        header.className = 'rpg-scene-illustration-header';
+
+        var titleDiv = document.createElement('div');
+        titleDiv.className = 'rpg-scene-illustration-title';
+        titleDiv.textContent = title;
+        header.appendChild(titleDiv);
+
+        var statusDiv = document.createElement('div');
+        statusDiv.className = 'rpg-scene-illustration-status';
+        statusDiv.textContent = statusText;
+        header.appendChild(statusDiv);
+
+        card.appendChild(header);
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'rpg-scene-illustration-image-wrapper';
+        wrapper.style.position = 'relative';
+
+        var spinner = document.createElement('div');
+        spinner.className = 'rpg-scene-illustration-spinner';
+        spinner.style.textAlign = 'center';
+        spinner.style.padding = '20px';
+        spinner.textContent = 'Loading image…';
+        wrapper.appendChild(spinner);
+
+        var img = document.createElement('img');
+        img.className = 'rpg-scene-illustration-image';
+        img.src = imageUrl;
+        img.alt = title;
+        img.style.width = '100%';
+        img.style.maxWidth = '520px';
+        img.style.height = 'auto';
+        img.style.borderRadius = '12px';
+        img.style.display = 'block';
+        img.style.visibility = 'hidden';
+
+        img.addEventListener('load', function() {
+            img.style.visibility = 'visible';
+            spinner.style.display = 'none';
+        });
+
+        img.addEventListener('error', function() {
+            spinner.textContent = 'Image failed to load.';
+            spinner.style.display = 'block';
+        });
+
+        wrapper.appendChild(img);
+        card.appendChild(wrapper);
+
+        container.appendChild(card);
+    }
+
+    function renderSceneIllustration(container, visual) {
+        if (!container) return;
+
+        var imageUrl = visual.asset_url || visual.url || '';
+        var title = visual.title || 'Scene Illustration';
+
+        container.innerHTML = '';
+
+        var card = document.createElement('div');
+        card.className = 'rpg-scene-illustration-card';
+
+        var header = document.createElement('div');
+        header.className = 'rpg-scene-illustration-header';
+
+        var titleDiv = document.createElement('div');
+        titleDiv.className = 'rpg-scene-illustration-title';
+        titleDiv.textContent = title;
+        header.appendChild(titleDiv);
+
+        var statusDiv = document.createElement('div');
+        statusDiv.className = 'rpg-scene-illustration-status';
+        if (visual.status === 'queued' || visual.status === 'pending') {
+            statusDiv.textContent = 'Creating image…';
+        } else if (visual.status === 'processing') {
+            statusDiv.textContent = 'Rendering image…';
+        } else if (visual.status === 'completed') {
+            statusDiv.textContent = visual.quality === 'enhanced'
+                ? 'Enhanced scene image generated.'
+                : 'Scene image generated.';
+        } else {
+            statusDiv.textContent = visual.status || '';
+        }
+        header.appendChild(statusDiv);
+        card.appendChild(header);
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'rpg-scene-illustration-image-wrapper';
+        wrapper.style.position = 'relative';
+
+        var spinner = document.createElement('div');
+        spinner.className = 'rpg-scene-illustration-spinner';
+        spinner.style.textAlign = 'center';
+        spinner.style.padding = '20px';
+        spinner.textContent = 'Loading image…';
+        wrapper.appendChild(spinner);
+
+        if (imageUrl && visual.status !== 'pending' && visual.status !== 'processing' && visual.status !== 'queued') {
+            var img = document.createElement('img');
+            img.className = 'rpg-scene-illustration-image';
+            img.src = imageUrl;
+            img.alt = title;
+            img.style.width = '100%';
+            img.style.maxWidth = '520px';
+            img.style.height = 'auto';
+            img.style.borderRadius = '12px';
+            img.style.display = 'block';
+            img.style.visibility = 'hidden';
+
+            img.addEventListener('load', function() {
+                img.style.visibility = 'visible';
+                spinner.style.display = 'none';
+            });
+
+            img.addEventListener('error', function() {
+                spinner.textContent = 'Image failed to load.';
+                spinner.style.display = 'block';
+            });
+
+            wrapper.appendChild(img);
+        } else {
+            spinner.style.display = 'none';
+            var placeholder = document.createElement('div');
+            placeholder.className = 'rpg-image-placeholder';
+            wrapper.appendChild(placeholder);
+        }
+
+        card.appendChild(wrapper);
+        container.appendChild(card);
     }
 
     function postJson(url, payload) {
@@ -4212,10 +4349,21 @@
 
     function generateSceneNow(container, opts) {
         opts = opts || {};
+        container = ensureSceneIllustrationContainer(container) || container;
+        if (!container) return;
         ensureVisualControlState();
         var cfg = rpgState.visualControls.scene || {};
         var sceneId = opts.sceneId || getCurrentSceneId();
         var title = opts.title || getCurrentSceneTitle();
+
+        // Render placeholder immediately
+        renderSceneIllustration(container, {
+            status: 'queued',
+            title: title,
+            asset_url: '',
+            quality: opts.quality || 'fast'
+        });
+
         var payload = {
             session_id: rpgState.sessionId || '',
             scene_id: sceneId,
@@ -4224,8 +4372,12 @@
             prompt: opts.prompt || buildScenePrompt(),
             style: opts.style || cfg.style || 'rpg-scene',
             reason: opts.reason || 'manual_test',
+            quality: opts.quality || 'fast',
             auto_process: false
         };
+        if (opts.width) payload.width = opts.width;
+        if (opts.height) payload.height = opts.height;
+        if (opts.num_inference_steps) payload.num_inference_steps = opts.num_inference_steps;
         var seed = visualSeedValue('scene');
         if (seed !== null) payload.seed = seed;
         return queueAndRunVisualJob(
@@ -4351,7 +4503,7 @@
         generateBtn.type = 'button';
         generateBtn.textContent = 'Generate scene now';
         generateBtn.addEventListener('click', function() {
-            generateSceneNow(container, { sceneId: sceneId, title: sceneTitle, reason: 'manual_generate' });
+            generateSceneNow(this, { sceneId: sceneId, title: sceneTitle, reason: 'manual_generate' });
         });
 
         var regenerateBtn = document.createElement('button');
@@ -4359,11 +4511,30 @@
         regenerateBtn.type = 'button';
         regenerateBtn.textContent = 'Regenerate scene';
         regenerateBtn.addEventListener('click', function() {
-            generateSceneNow(container, { sceneId: sceneId, title: sceneTitle, reason: 'manual_regenerate', successText: 'Scene image regenerated.' });
+            generateSceneNow(this, { sceneId: sceneId, title: sceneTitle, reason: 'manual_regenerate', successText: 'Scene image regenerated.' });
+        });
+
+        var enhanceBtn = document.createElement('button');
+        enhanceBtn.className = 'btn btn-secondary rpg-scene-enhance-btn';
+        enhanceBtn.type = 'button';
+        enhanceBtn.textContent = 'Enhance image';
+        enhanceBtn.title = 'Generate a slower high-resolution version of this scene image.';
+        enhanceBtn.addEventListener('click', function() {
+            generateSceneNow(this, {
+                sceneId: sceneId,
+                title: sceneTitle,
+                reason: 'manual_enhance',
+                quality: 'enhanced',
+                width: 1344,
+                height: 768,
+                num_inference_steps: 4,
+                successText: 'Enhanced scene image generated.'
+            });
         });
 
         buttons.appendChild(generateBtn);
         buttons.appendChild(regenerateBtn);
+        buttons.appendChild(enhanceBtn);
         bar.appendChild(buttons);
         ensureVisualStatusNode(container, 'scene');
     }
@@ -6052,7 +6223,9 @@
     if (typeof window !== 'undefined') {
         window.setWorldEventsTab = setWorldEventsTab;
         window.generateCurrentScene = function() {
-            const container = ensureSceneIllustrationContainer() || document.body;
+            const container = ensureSceneIllustrationContainer(
+                document.querySelector('[data-message-role="turn_narration"]:last-of-type')
+            ) || document.body;
             const sceneId = getCurrentSceneId();
             const title = getCurrentSceneTitle();
             generateSceneNow(container, {

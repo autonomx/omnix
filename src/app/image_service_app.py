@@ -20,6 +20,37 @@ from app.image.service import generate_image_local
 app = FastAPI(title="Omnix Image Service")
 
 
+@app.on_event("startup")
+async def startup_load_provider():
+    provider = os.environ.get("OMNIX_IMAGE_PROVIDER", "").strip() or None
+    try:
+        print("[IMAGE SERVICE] Preloading image provider...")
+        result = load_image_provider(provider)
+        print("[IMAGE SERVICE] Image provider preload complete:", result)
+    except Exception as exc:
+        print("[IMAGE SERVICE] Image provider preload failed:", repr(exc))
+
+    if os.environ.get("OMNIX_IMAGE_WARMUP", "1").strip().lower() not in {"1", "true", "yes", "on"}:
+        return
+
+    try:
+        print("[IMAGE SERVICE] Running tiny FLUX warmup...")
+        warmup = generate_image_local({
+            "prompt": "tiny warmup image, simple fantasy torch flame, no text",
+            "negative_prompt": "text, watermark, logo",
+            "width": 256,
+            "height": 256,
+            "steps": 1,
+            "num_inference_steps": 1,
+            "seed": 1,
+            "warmup": True,
+            "no_cache": True,
+        })
+        print("[IMAGE SERVICE] Warmup complete:", {"ok": warmup.ok, "error": warmup.error})
+    except Exception as exc:
+        print("[IMAGE SERVICE] Warmup failed:", repr(exc))
+
+
 @app.get("/health")
 async def health():
     return {
