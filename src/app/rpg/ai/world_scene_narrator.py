@@ -26,6 +26,8 @@ from app.rpg.player import build_encounter_view
 
 logger = logging.getLogger(__name__)
 
+_ACTIVE_NARRATIONS = set()
+
 NARRATION_JSON_FORMAT_VERSION = "rpg_narration_v2"
 
 NARRATION_JSON_SCHEMA_HINT = {
@@ -1122,6 +1124,26 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     
     safe_context = _build_safe_prompt_context(scene, narration_context)
     
+    # Build conversation threads context
+    conversation_threads = _safe_list(narration_context.get("conversation_threads"))
+    conversation_threads_block = ""
+    if conversation_threads:
+        lines = ["ONGOING CONVERSATION THREADS:"]
+        for thread in conversation_threads[:4]:
+            thread = _safe_dict(thread)
+            topic = _safe_dict(thread.get("topic"))
+            lines.append(
+                f"- {_safe_str(thread.get('thread_id'))} | participants={', '.join(_safe_str(p) for p in _safe_list(thread.get('participants'))[:6])} | topic={_safe_str(topic.get('summary'))[:240]}"
+            )
+            for line in _safe_list(thread.get("recent_lines"))[-4:]:
+                line = _safe_dict(line)
+                lines.append(
+                    f"  {_safe_str(line.get('speaker_name') or line.get('speaker_id'))}: {_safe_str(line.get('text'))[:220]}"
+                )
+        conversation_threads_block = "\n".join(lines)
+    else:
+        conversation_threads_block = "none"
+    
     recent_authoritative_facts = _recent_authoritative_facts(narration_context)
     recent_facts_block = "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
     combat_facts_block = _build_combat_facts_block(narration_context)
@@ -1136,6 +1158,9 @@ Recent authoritative facts:
 
 Authoritative combat facts:
 {combat_facts_block}
+
+Ongoing conversation threads:
+{conversation_threads_block}
 
 YOUR ONLY TASK: Generate narration for a player's action in an RPG.
 
@@ -1167,11 +1192,19 @@ IMPORTANT RULES:
 - The reward field MUST stay empty unless the authoritative context explicitly shows XP, item, or level gain
 - Do NOT invent gold, reputation, items, guards, factions, or bystanders not present in the scene/context
 - NPC speaker MUST be one present actor or the explicit target NPC from context
-+- Keep continuity with the recent authoritative facts block below
-+- Do NOT change previously established prices, speakers, outcomes, or conflict state unless the current resolved result changed them
+- Keep continuity with the recent authoritative facts block below
+- Do NOT change previously established prices, speakers, outcomes, or conflict state unless the current resolved result changed them
 - Do not end the response with an ellipsis
 - Finish with complete sentences
 - Do not leave dialogue, action, or scene description trailing mid-thought
+
+Conversation thread rules:
+- If conversation_threads are provided, treat them as ongoing local dialogue context.
+- Do not restart the same NPC line from scratch.
+- Continue from recent_lines when the player's input references an ongoing exchange.
+- NPCs may answer, pivot, interrupt, or defer, but must not invent rewards, inventory, combat results, locations, or new NPCs.
+- If a thread has world_signals, phrase them as rumors, tension, suspicions, or social shifts only.
+- Do not resolve or mutate authoritative state unless action_result already says it happened.
 
 SCENE:
 Title: {title}
@@ -2165,68 +2198,84 @@ def narrate_scene(
 ) -> Dict[str, Any]:
     scene = _safe_dict(scene)
     narration_context = _safe_dict(narration_context)
-    if _safe_str(narration_context.get("mode")) == "ambient_conversation":
-        text = _build_ambient_conversation_line(narration_context)
+    turn_id = narration_context.get("turn_id")
+    if turn_id and turn_id in _ACTIVE_NARRATIONS:
         return {
-            "narrative": text,
-            "narration": text,
-            "structured_narration": {"markdown": text, "speaker_turns": []},
-            "speaker_turns": [],
+            "narration": "",
             "used_llm": False,
             "raw_llm_narrative": "",
-            "llm_error": False,
-        }
-
-    if llm_gateway:
-        llm_narrative = _generate_live_narrative(
-            scene,
-            narration_context,
-            llm_gateway=llm_gateway,
-            tone=tone,
-            retry_on_invalid=retry_on_invalid,
-            debug_logging=debug_logging,
-            on_chunk=on_chunk,
-        )
-
-        # Parse JSON response with tolerant fallback
-        parsed_json = _extract_json_object_from_text(llm_narrative)
-        normalized_json = _normalize_narration_json(parsed_json)
-
-        if not normalized_json.get("narration") and not normalized_json.get("action") and not _safe_str(_safe_dict(normalized_json.get("npc")).get("line")).strip():
-            logger.warning("Narration JSON parse failed or empty; recovering from raw text")
-            normalized_json = _recover_narration_from_raw_text(llm_narrative)
-
-        grounded_json = _sanitize_narration_payload(normalized_json, scene, narration_context)
-        rendered_text = _render_narration_text_from_json(grounded_json)
-
-        return {
-            "narration": rendered_text,
-            "used_llm": bool(rendered_text),
-            "raw_llm_narrative": llm_narrative,
-            "narration_json": grounded_json,
-            "speaker_presentation": {},
-            "format_warning": False if parsed_json else True,
-        }
-    else:
-        llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
-        simulated_json = _normalize_narration_json({
-            "narration": llm_narrative,
-            "action": _authoritative_action_text(narration_context),
-            "npc": {"speaker": "", "line": ""},
-            "reward": _authoritative_reward_text(narration_context),
-            "followup_hooks": [],
-        })
-        grounded_json = _sanitize_narration_payload(simulated_json, scene, narration_context)
-        rendered_text = _render_narration_text_from_json(grounded_json)
-
-        return {
-            "narration": rendered_text,
-            "used_llm": False,
-            "raw_llm_narrative": llm_narrative,
-            "narration_json": grounded_json,
+            "narration_json": {},
             "speaker_presentation": {},
             "format_warning": False,
         }
+    if turn_id:
+        _ACTIVE_NARRATIONS.add(turn_id)
+    try:
+        try_ambient = _safe_str(narration_context.get("mode")) == "ambient_conversation"
+        if try_ambient:
+            text = _build_ambient_conversation_line(narration_context)
+            return {
+                "narration": text,
+                "structured_narration": {"markdown": text, "speaker_turns": []},
+                "speaker_turns": [],
+                "used_llm": False,
+                "raw_llm_narrative": "",
+                "llm_error": False,
+            }
+
+        if llm_gateway:
+            llm_narrative = _generate_live_narrative(
+                scene,
+                narration_context,
+                llm_gateway=llm_gateway,
+                tone=tone,
+                retry_on_invalid=retry_on_invalid,
+                debug_logging=debug_logging,
+                on_chunk=on_chunk,
+            )
+
+            # Parse JSON response with tolerant fallback
+            parsed_json = _extract_json_object_from_text(llm_narrative)
+            normalized_json = _normalize_narration_json(parsed_json)
+
+            if not normalized_json.get("narration") and not normalized_json.get("action") and not _safe_str(_safe_dict(normalized_json.get("npc")).get("line")).strip():
+                logger.warning("Narration JSON parse failed or empty; recovering from raw text")
+                normalized_json = _recover_narration_from_raw_text(llm_narrative)
+
+            grounded_json = _sanitize_narration_payload(normalized_json, scene, narration_context)
+            rendered_text = _render_narration_text_from_json(grounded_json)
+
+            return {
+                "narration": rendered_text,
+                "used_llm": bool(rendered_text),
+                "raw_llm_narrative": llm_narrative,
+                "narration_json": grounded_json,
+                "speaker_presentation": {},
+                "format_warning": False if parsed_json else True,
+            }
+        else:
+            llm_narrative = _simulate_narrative(scene, narration_context, tone=tone)
+            simulated_json = _normalize_narration_json({
+                "narration": llm_narrative,
+                "action": _authoritative_action_text(narration_context),
+                "npc": {"speaker": "", "line": ""},
+                "reward": _authoritative_reward_text(narration_context),
+                "followup_hooks": [],
+            })
+            grounded_json = _sanitize_narration_payload(simulated_json, scene, narration_context)
+            rendered_text = _render_narration_text_from_json(grounded_json)
+
+            return {
+                "narration": rendered_text,
+                "used_llm": False,
+                "raw_llm_narrative": llm_narrative,
+                "narration_json": grounded_json,
+                "speaker_presentation": {},
+                "format_warning": False,
+            }
+    finally:
+        if turn_id:
+            _ACTIVE_NARRATIONS.discard(turn_id)
 
 
 def play_scene(

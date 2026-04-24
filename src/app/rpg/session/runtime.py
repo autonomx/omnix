@@ -35,6 +35,13 @@ from app.rpg.ai.ambient_dialogue import (
     build_ambient_dialogue_request,
     select_ambient_dialogue_candidate,
 )
+from app.rpg.ai.conversation_threads import (
+    add_thread_line,
+    build_conversation_thread_prompt_context,
+    expire_conversation_threads,
+    normalize_conversation_threads,
+    seed_or_update_thread,
+)
 from app.rpg.ai.npc_initiative import (
     apply_initiative_cooldowns,
     apply_world_behavior_bias,
@@ -776,8 +783,8 @@ def _enqueue_narration_request_old(
 # ── Fast-turn performance helpers ─────────────────────────────────────────
 
 _FAST_TURN_DEFAULTS = {
-    "enable_action_advisory": False,
-    "enable_semantic_action_advisory": False,
+    "enable_action_advisory": True,
+    "enable_semantic_action_advisory": True,
     "enable_live_narration_llm": True,
     "enable_narration_retry": False,
     "enable_fast_live_narrator_mode": True,
@@ -797,8 +804,8 @@ def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, 
         perf = dict(runtime_state.get("performance") or {})
     fast = bool(perf.get("fast_turn_mode", False))
     defaults = _FAST_TURN_DEFAULTS if fast else {
-        "enable_action_advisory": False,
-        "enable_semantic_action_advisory": False,
+        "enable_action_advisory": True,
+        "enable_semantic_action_advisory": True,
         "enable_live_narration_llm": True,
         "enable_narration_retry": False,
         "enable_fast_live_narrator_mode": False,
@@ -1241,6 +1248,52 @@ def _build_active_interaction_prompt_context(
     return rows[:4]
 
 
+def _seed_conversation_thread_from_active_interaction(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    interaction: Dict[str, Any],
+    current_tick: int,
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    interaction = _safe_dict(interaction)
+    participants = [
+        _safe_str(p).strip()
+        for p in _safe_list(interaction.get("participants"))
+        if _safe_str(p).strip()
+    ]
+    npc_participants = [p for p in participants if p != "player"]
+    if not npc_participants:
+        return runtime_state
+    state = _safe_dict(interaction.get("state"))
+    activity_label = _safe_str(
+        state.get("activity_label")
+        or interaction.get("subtype")
+        or interaction.get("action_type")
+        or "interaction"
+    )
+    topic_summary = _safe_str(state.get("summary")).strip()
+    if not topic_summary:
+        display_name = _safe_str(interaction.get("display_name")).strip()
+        topic_summary = f"Player interaction with {display_name or npc_participants[0]} about {activity_label}."
+    runtime_state = seed_or_update_thread(
+        runtime_state,
+        kind="player_interaction",
+        participants=participants,
+        topic={
+            "key": f"interaction:{_safe_str(interaction.get('id'))}",
+            "type": "player_interaction",
+            "summary": topic_summary,
+            "activity_label": activity_label,
+            "allowed_world_signal_types": ["rumor", "tension", "quest_lead", "relationship_shift"],
+        },
+        current_tick=current_tick,
+        location_id=_safe_str(interaction.get("location_id")),
+        scene_id=_safe_str(interaction.get("scene_id")),
+    )
+    return runtime_state
+
+
 def _run_npc_reaction_pass(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any],
@@ -1254,6 +1307,12 @@ def _run_npc_reaction_pass(
         interaction = _safe_dict(raw)
         if _safe_bool(interaction.get("resolved"), False):
             continue
+        runtime_state = _seed_conversation_thread_from_active_interaction(
+            simulation_state,
+            runtime_state,
+            interaction,
+            current_tick,
+        )
         context = build_interaction_reaction_context(simulation_state, runtime_state, interaction)
         context["tick"] = _safe_int(current_tick, 0)
         runtime_state = update_interaction_reaction_state(simulation_state, runtime_state, context)
@@ -4041,6 +4100,11 @@ def _build_semantic_state_change_prompt_contract(
         simulation_state,
         _safe_int(simulation_state.get("tick"), 0),
     )
+    conversation_threads_context = build_conversation_thread_prompt_context(
+        runtime_state,
+        current_tick=_safe_int(simulation_state.get("tick"), 0),
+        limit=4,
+    )
 
     _log_interaction_trace(
         "semantic_prompt_context",
@@ -4074,6 +4138,7 @@ def _build_semantic_state_change_prompt_contract(
         "active_interactions": interaction_rows[:8],
         "interacting_actor_ids": interacting_actor_ids[:_MAX_LLM_PROPOSAL_CANDIDATES],
         "interacting_actors": interacting_actor_rows,
+        "conversation_threads": conversation_threads_context,
     }
     if player_action_context:
         prompt_payload["recent_player_action"] = player_action_context
@@ -6271,10 +6336,45 @@ def derive_player_action(simulation_state: Dict[str, Any], player_input: str) ->
     return {}
 
 
-def derive_action_candidates(simulation_state, player_input):
+def derive_action_candidates(simulation_state, player_input, runtime_state=None):
     candidates = []
     text = str(player_input.get("text", "") if isinstance(player_input, dict) else player_input).lower()
     target_id = _find_npc_target_by_name(simulation_state, text)
+
+    # Deterministic inn / room rental fallback.
+    # This catches flows like:
+    #   "i ask bran for a room"
+    #   "ill take the best one"
+    # without letting "take" become pickup_item.
+    inn_words = ("room", "inn", "bed", "stay", "rent", "lodging", "sleep")
+    room_selection_words = ("best", "private", "cheap", "common", "standard", "normal")
+    active_interactions = _safe_list((runtime_state or {}).get("active_interactions"))
+    has_active_inn_interaction = any(
+        _safe_str(_safe_dict(i).get("action_type")).lower() in {"rent_room", "rent_bed", "use_service"}
+        or "room" in _safe_str(_safe_dict(i).get("subtype")).lower()
+        or "inn" in _safe_str(_safe_dict(i).get("subtype")).lower()
+        for i in active_interactions
+    )
+    if any(word in text for word in inn_words) or (
+        has_active_inn_interaction and any(word in text for word in room_selection_words)
+    ):
+        tier = None
+        if "best" in text or "private" in text:
+            tier = "best"
+        elif "cheap" in text or "common" in text:
+            tier = "cheap"
+        elif "standard" in text or "normal" in text:
+            tier = "standard"
+        candidates.append(
+            {
+                "action_type": "rent_room",
+                "target": "inn",
+                "tier": tier,
+                "confidence": 0.92 if tier else 0.82,
+                "source": "deterministic_room_rental_fallback",
+            }
+        )
+        return candidates
 
     # Passive observation: no XP path
     if any(w in text for w in ["look around", "look about", "observe", "glance", "scan", "take in"]):
@@ -6324,9 +6424,38 @@ def derive_action_candidates(simulation_state, player_input):
         candidates.append({"action_type": "cast_spell", "priority": 7})
     if any(w in text for w in ["threat", "warn", "menace"]):
         candidates.append({"action_type": "threat", "priority": 7, "target_id": target_id})
+    # --- Inn / room rental intent (deterministic fallback) ---
+    if any(k in text for k in ["room", "inn", "bed", "stay", "rent", "lodging"]):
+        tier = None
+        if "best" in text or "private" in text:
+            tier = "best"
+        elif "cheap" in text or "common" in text:
+            tier = "cheap"
+        elif "standard" in text or "normal" in text:
+            tier = "standard"
+
+        candidates.append({
+            "action_type": "rent_room",
+            "target": "inn",
+            "tier": tier,
+            "confidence": 0.9
+        })
+
+        return candidates
     # Items
-    if any(w in text for w in ["pick up", "pickup", "grab", "take", "loot"]):
-        candidates.append({"action_type": "pickup_item", "priority": 5})
+    if "take" in text or "pick up" in text:
+        active_interactions = _safe_list((runtime_state or {}).get("active_interactions"))
+        if active_interactions and any(
+            word in text for word in ("best", "private", "cheap", "common", "standard", "normal", "one")
+        ):
+            return []
+        candidates.append(
+            {
+                "action_type": "pickup_item",
+                "confidence": 0.6,
+                "source": "keyword_pickup",
+            }
+        )
     if any(w in text for w in ["equip", "wear", "wield"]):
         candidates.append({"action_type": "equip_item", "priority": 5})
     if any(w in text for w in ["use", "drink", "eat", "consume"]):
@@ -6689,6 +6818,11 @@ def _apply_turn_authoritative(
                 "level_up": [],
                 "skill_level_ups": [],
                 "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": build_conversation_thread_prompt_context(
+                    runtime_state,
+                    current_tick=final_tick,
+                    limit=4,
+                ),
             }
             return {
                 "ok": True,
@@ -6738,6 +6872,11 @@ def _apply_turn_authoritative(
                 "level_up": [],
                 "skill_level_ups": [],
                 "settings": runtime_state.get("runtime_settings", {}),
+                "conversation_threads": build_conversation_thread_prompt_context(
+                    runtime_state,
+                    current_tick=final_tick,
+                    limit=4,
+                ),
             }
             return {
                 "ok": True,
@@ -6860,6 +6999,11 @@ def _apply_turn_authoritative(
     )
     after_state = _expire_stale_active_interactions(after_state, _safe_int(after_state.get("tick"), current_tick))
     runtime_state = _clean_resolved_interaction_world_event_rows(after_state, runtime_state)
+    runtime_state = normalize_conversation_threads(runtime_state)
+    runtime_state = expire_conversation_threads(
+        runtime_state,
+        current_tick=_safe_int(after_state.get("tick"), current_tick),
+    )
 
     scenes = generate_scenes_from_simulation(after_state)
     current_scene = _safe_dict(scenes[0]) if scenes else _fallback_scene(after_state, player_input)
@@ -6877,6 +7021,11 @@ def _apply_turn_authoritative(
         "level_up": _safe_list(progression.get("level_up")),
         "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
         "settings": runtime_state.get("runtime_settings", {}),
+        "conversation_threads": build_conversation_thread_prompt_context(
+            runtime_state,
+            current_tick=_safe_int(after_state.get("tick"), current_tick),
+            limit=4,
+        ),
         "combat_result": combat_result,
         "npc_combat_result": npc_combat_result,
         "combat_state": combat_state,
@@ -7908,15 +8057,19 @@ def _apply_idle_tick_to_session(
             selected_reaction = None
     if selected_reaction:
         runtime_state = apply_dialogue_cooldowns(runtime_state, selected_reaction)
-        raw_updates.append(
-            _make_dialogue_update_from_candidate(
-                selected_reaction,
-                {
-                    "scene_id": _safe_str(player_context.get("scene_id")),
-                    "world_summary": _safe_str(player_context.get("world_summary")),
-                },
-            )
+        dialogue_update = _make_dialogue_update_from_candidate(
+            selected_reaction,
+            {
+                "scene_id": _safe_str(player_context.get("scene_id")),
+                "world_summary": _safe_str(player_context.get("world_summary")),
+            },
         )
+        runtime_state = _record_dialogue_update_into_conversation_thread(
+            runtime_state,
+            dialogue_update,
+            current_tick,
+        )
+        raw_updates.append(dialogue_update)
 
     # ── Idle conversation lane: only if idle gate is open ──
     idle_dialogue_candidates: List[Dict[str, Any]] = []
@@ -7928,15 +8081,19 @@ def _apply_idle_tick_to_session(
         selected_dialogue = select_ambient_dialogue_candidate(idle_dialogue_candidates, runtime_state)
     if selected_dialogue:
         runtime_state = apply_dialogue_cooldowns(runtime_state, selected_dialogue)
-        raw_updates.append(
-            _make_dialogue_update_from_candidate(
-                selected_dialogue,
-                {
-                    "scene_id": _safe_str(player_context.get("scene_id")),
-                    "world_summary": _safe_str(player_context.get("world_summary")),
-                },
-            )
+        dialogue_update = _make_dialogue_update_from_candidate(
+            selected_dialogue,
+            {
+                "scene_id": _safe_str(player_context.get("scene_id")),
+                "world_summary": _safe_str(player_context.get("world_summary")),
+            },
         )
+        runtime_state = _record_dialogue_update_into_conversation_thread(
+            runtime_state,
+            dialogue_update,
+            current_tick,
+        )
+        raw_updates.append(dialogue_update)
 
     # Record debug trace counts
     debug_trace["raw_counts"] = {
@@ -8123,6 +8280,11 @@ def _apply_idle_tick_to_session(
     simulation_state["current_tick"] = authoritative_tick
     simulation_state = _refresh_active_interactions_for_tick(simulation_state, authoritative_tick)
     simulation_state = _expire_stale_active_interactions(simulation_state, authoritative_tick)
+    runtime_state = normalize_conversation_threads(runtime_state)
+    runtime_state = expire_conversation_threads(
+        runtime_state,
+        current_tick=authoritative_tick,
+    )
     runtime_state["tick"] = authoritative_tick
     simulation_state, runtime_state = _run_npc_reaction_pass(
         simulation_state,
@@ -8140,6 +8302,11 @@ def _apply_idle_tick_to_session(
         "ok": True,
         "session": session,
         "updates": final_updates,
+        "conversation_threads": build_conversation_thread_prompt_context(
+            runtime_state,
+            current_tick=authoritative_tick,
+            limit=6,
+        ),
         "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
         "idle_streak": int(runtime_state.get("idle_streak", 0) or 0),
         "idle_debug_trace": _safe_dict(runtime_state.get("idle_debug_trace")),
@@ -8375,6 +8542,65 @@ def _make_dialogue_update_from_candidate(
         "created_at": _utc_now_iso(),
         "lane": _safe_str(candidate.get("lane") or "idle"),
     }
+
+
+def _record_dialogue_update_into_conversation_thread(
+    runtime_state: Dict[str, Any],
+    update: Dict[str, Any],
+    current_tick: int,
+) -> Dict[str, Any]:
+    runtime_state = normalize_conversation_threads(_safe_dict(runtime_state))
+    update = _safe_dict(update)
+    speaker_id = _safe_str(update.get("speaker_id")).strip()
+    target_id = _safe_str(update.get("target_id")).strip()
+    text = _safe_str(update.get("text")).strip()
+    if not speaker_id or not text:
+        return runtime_state
+    participants = [speaker_id]
+    if target_id:
+        participants.append(target_id)
+    kind = _safe_str(update.get("kind") or "npc_to_player")
+    topic_key = _safe_str(update.get("source_event_ids") or kind)
+    topic_summary = _safe_str(update.get("text") or kind)
+    runtime_state = seed_or_update_thread(
+        runtime_state,
+        kind=kind,
+        participants=participants,
+        topic={
+            "key": f"dialogue:{kind}:{topic_key}",
+            "type": kind,
+            "summary": topic_summary[:180],
+            "allowed_world_signal_types": ["rumor", "tension", "relationship_shift"],
+        },
+        current_tick=current_tick,
+        location_id=_safe_str(update.get("location_id")),
+        scene_id=_safe_str(update.get("scene_id")),
+    )
+    thread_context = build_conversation_thread_prompt_context(
+        runtime_state,
+        current_tick=current_tick,
+        limit=8,
+    )
+    matching_thread_id = ""
+    for thread in thread_context:
+        t_participants = set(_safe_list(_safe_dict(thread).get("participants")))
+        if speaker_id in t_participants and (not target_id or target_id in t_participants):
+            matching_thread_id = _safe_str(_safe_dict(thread).get("thread_id"))
+            break
+    if not matching_thread_id:
+        return runtime_state
+    runtime_state = add_thread_line(
+        runtime_state,
+        thread_id=matching_thread_id,
+        speaker_id=speaker_id,
+        speaker_name=_safe_str(update.get("speaker_name") or speaker_id),
+        target_id=target_id,
+        target_name=_safe_str(update.get("target_name")),
+        text=text,
+        kind=kind,
+        current_tick=current_tick,
+    )
+    return runtime_state
 
 
 def _make_initiative_update_from_candidate(

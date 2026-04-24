@@ -2232,9 +2232,9 @@
                     try {
                         var evt = JSON.parse(part.slice(6));
                         if (evt.type === 'authoritative_result') {
-                            finalData = evt;
-                            try { await reader.cancel(); } catch (_) {}
-                            return evt;
+                            // Do NOT cancel — narration comes after this
+                            window.__RPG_LAST_AUTHORITATIVE__ = evt.data;
+                            continue;
                         } else if (evt.type === 'done') {
                             // Keep the authoritative payload if we already have it.
                             if (!finalData) finalData = evt;
@@ -3416,6 +3416,7 @@
         if (update.map) renderMap();
         if (update.memory && update.memory.length) renderMemory();
         if (update.worldEvents && update.worldEvents.length) renderMemory();
+        if (update.session) renderRpgConversationThreads(update.session);
 
         // Dice rolls go through the queue (animated, no overlap)
         if (update.rolls && update.rolls.length) {
@@ -3900,13 +3901,26 @@
         return host;
     }
 
-    function renderSceneIllustrations(visualState) {
+    function renderSceneIllustrations(visualState, turnId) {
         var state = visualState || {};
         var illustrations = Array.isArray(state.scene_illustrations) ? state.scene_illustrations : [];
         var requests = Array.isArray(state.image_requests) ? state.image_requests : [];
-        var hosts = Array.from(document.querySelectorAll('[data-message-role="turn_narration"] .rpg-scene-illustration-host'));
-        var container = hosts.length ? hosts[hosts.length - 1] : null;
-        if (!container) return;
+
+        var container;
+        if (turnId) {
+            container =
+                document.querySelector(
+                    `[data-turn-id="${CSS.escape(String(turnId))}"] .rpg-scene-illustration-host`
+                ) ||
+                document.querySelector(
+                    `[data-turn-id="${CSS.escape(String(turnId))}"] .rpg-turn-visuals`
+                );
+            if (!container) return;
+        } else {
+            var hosts = Array.from(document.querySelectorAll('[data-message-role="turn_narration"] .rpg-scene-illustration-host'));
+            container = hosts.length ? hosts[hosts.length - 1] : null;
+            if (!container) return;
+        }
 
         if (!illustrations.length && !requests.length) {
             container.innerHTML = '';
@@ -4165,7 +4179,7 @@
 
                 if (visualState) {
                     console.log("[RPG][visual refresh]", visualState);
-                    renderSceneIllustrations(visualState);
+                    renderSceneIllustrations(visualState, rpgState.currentTurnId);
                 }
 
                 wireVisualGenerateControls();
@@ -4260,13 +4274,44 @@
         }
     }
 
+    function renderRpgConversationThreads(session) {
+        const runtimeState = session?.runtime_state || {};
+        const threads = Array.isArray(runtimeState.conversation_threads) ? runtimeState.conversation_threads : [];
+        const host = document.getElementById('rpgConversationThreads') || document.querySelector('[data-rpg-conversation-threads]');
+        if (!host) return;
+        if (!threads.length) {
+            host.innerHTML = '<div class="rpg-muted">No active conversations.</div>';
+            return;
+        }
+        host.innerHTML = threads
+            .filter((thread) => thread && thread.phase !== 'resolved')
+            .slice(0, 6)
+            .map((thread) => {
+                const topic = thread.topic || {};
+                const lines = Array.isArray(thread.lines) ? thread.lines.slice(-3) : [];
+                const lineHtml = lines.map((line) => {
+                    const speaker = escapeHtml(line.speaker_name || line.speaker_id || 'NPC');
+                    const text = escapeHtml(line.text || '');
+                    return `<div class="rpg-thread-line"><strong>${speaker}</strong>: ${text}</div>`;
+                }).join('');
+                return `
+                    <div class="rpg-thread-card">
+                        <div class="rpg-thread-title">${escapeHtml(topic.summary || thread.kind || 'Conversation')}</div>
+                        <div class="rpg-thread-meta">${escapeHtml((thread.participants || []).join(', '))}</div>
+                        <div class="rpg-thread-lines">${lineHtml}</div>
+                    </div>
+                `;
+            })
+            .join('');
+    }
+
     function queueAndRunVisualJob(container, kind, payload, url, successText) {
         return postJson(url, payload).then(function(requestResult) {
             if (!requestResult || !requestResult.ok) return requestResult;
 
             // 🔥 IMMEDIATE pending render (zero latency preview)
             if (requestResult.visual_state) {
-                renderSceneIllustrations(requestResult.visual_state);
+                renderSceneIllustrations(requestResult.visual_state, requestResult.turn_id || rpgState.currentTurnId);
             }
 
             if (requestResult.reused_existing) {
@@ -4298,7 +4343,7 @@
                         }],
                         image_requests: [],
                         visual_assets: []
-                    });
+                    }, runResult.turn_id || rpgState.currentTurnId);
                 }
 
                 if (runResult.request_id) {
