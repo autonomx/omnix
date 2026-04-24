@@ -15,7 +15,9 @@ from app.rpg.session.service import create_or_normalize_session, save_session
 from app.rpg.creator.defaults import apply_adventure_defaults
 
 
-OUTPUT_PATH = Path(__file__).parent.parent / "results" / "manual_rpg_llm_transcript.txt"
+OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "resources" / "test-results"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_llm_transcript.txt"
 
 
 PROMPTS = [

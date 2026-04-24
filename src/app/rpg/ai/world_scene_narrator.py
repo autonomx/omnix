@@ -833,7 +833,12 @@ def _sanitize_narration_payload(
         sanitized_npc["speaker"] = ""
 
     # Presentation-only narration text remains model-authored, but sanitized against hallucinations
-    narration_text = _sanitize_narration_text(_safe_str(payload.get("narration")).strip(), scene, narration_context)
+    llm_narration = _safe_str(payload.get("narration")).strip()
+    # If LLM returned valid narration, preserve it; only fall back if it's clearly invalid
+    if llm_narration and len(llm_narration) > 20:
+        narration_text = llm_narration
+    else:
+        narration_text = _sanitize_narration_text(llm_narration, scene, narration_context)
 
     # Action and reward are authoritative-only.
     normalized = _normalize_narration_json({
@@ -861,7 +866,7 @@ def _sanitize_narration_payload(
         or target_id
     )
     if target_id and target_name:
-        narration = _safe_str(normalized.get("narration"))
+        narration = _safe_str(normalized.get("narrator") or normalized.get("narration")).strip()
         if target_name.lower() not in narration.lower():
             intent = _safe_str(interpreted.get("intent") or "").lower()
             if "attack" in intent:
@@ -886,8 +891,8 @@ def _sanitize_narration_payload(
     narration_clean = _strip_meta_narration(narration_clean)
 
     if not narration_clean:
-        # fallback to deterministic in-world narration based on intent
-        narration_clean = _fallback_in_world_narration(narration_context)
+        # only fallback if LLM truly failed
+        narration_clean = ""
 
     normalized["narration"] = narration_clean
     normalized["action"] = _desystemify_text(normalized.get("action"))
@@ -1762,7 +1767,7 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
                         "portrait": "",
                     }
 
-                result["reward"] = _safe_str(parsed_json.get("reward")).strip()
+                result["reward"] = ""
 
                 logger.debug("[RPG PARSE] Parsed JSON format: narrator=%r, action=%r, npc_text=%r",
                              result["narrator"][:50], result["action"][:50], result["npc"]["text"][:50])
@@ -2616,8 +2621,23 @@ def narrate_scene(
             )
 
             # Parse JSON response with tolerant fallback
-            parsed_json = _extract_json_object_from_text(llm_narrative)
-            normalized_json = _normalize_narration_json(parsed_json)
+            parsed_json = parse_scene_response(llm_narrative)
+            # If LLM returned valid structured JSON, trust it and map keys
+            if _is_valid_scene_response(parsed_json):
+                npc = parsed_json.get("npc", {})
+                normalized_json = {
+                    "format_version": NARRATION_JSON_FORMAT_VERSION,
+                    "narration": parsed_json.get("narrator", ""),
+                    "action": parsed_json.get("action", ""),
+                    "npc": {
+                        "speaker": npc.get("name", ""),
+                        "line": npc.get("text", ""),
+                    },
+                    "reward": "",
+                    "followup_hooks": [],
+                }
+            else:
+                normalized_json = _normalize_narration_json(parsed_json)
 
             if not normalized_json.get("narration") and not normalized_json.get("action") and not _safe_str(_safe_dict(normalized_json.get("npc")).get("line")).strip():
                 logger.warning("Narration JSON parse failed or empty; recovering from raw text")
