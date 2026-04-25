@@ -121,6 +121,11 @@ def main() -> None:
                 pass
 
         result_sub = _safe_dict(result.get("result"))
+
+        raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+        narration_json = _safe_dict(raw_payload.get("narration_json"))
+        raw_llm_text = raw_payload.get("raw_llm_narrative")
+
         session = _safe_dict(result.get("session") or session)
         runtime_state = _safe_dict(session.get("runtime_state"))
 
@@ -153,6 +158,21 @@ def main() -> None:
         lines.append("")
         lines.append("RESULT SUBDICT:")
         lines.append(_compact_json(result_sub))
+        lines.append("")
+        lines.append("NARRATION DEBUG:")
+        lines.append(_compact_json({
+            "final_narration": result_sub.get("narration"),
+            "used_llm": result_sub.get("used_llm"),
+            "narration_status": result_sub.get("narration_status"),
+            "raw_llm_text": raw_llm_text,
+            "raw_payload_narration": raw_payload.get("narration"),
+            "narration_json": narration_json,
+            "json_narration": narration_json.get("narration"),
+            "json_action": narration_json.get("action"),
+            "json_npc": narration_json.get("npc"),
+            "turn_contract_action": _safe_dict(turn_contract.get("action")),
+            "turn_contract_resolved": _safe_dict(turn_contract.get("resolved_result")),
+        }))
         lines.append("")
         lines.append("RUNTIME STATE KEYS:")
         lines.append(", ".join(sorted(runtime_state.keys())))

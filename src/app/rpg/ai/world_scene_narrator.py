@@ -416,20 +416,41 @@ def _normalize_narration_json(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _parse_llm_narration_payload(raw: Any) -> Dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+
+    text = _safe_str(raw).strip()
+    if not text:
+        return {}
+
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE).strip()
+        text = re.sub(r"\s*```$", "", text).strip()
+
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            parsed = json.loads(text)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+
+    return parse_scene_response(text)
+
+
 def _strict_narration_payload(value: Dict[str, Any]) -> Dict[str, Any]:
     value = _safe_dict(value)
-
     npc = _safe_dict(value.get("npc"))
-
     return {
         "format_version": "rpg_narration_v2",
         "narration": _safe_str(value.get("narration")).strip(),
+        # IMPORTANT: never inject "You act." here.
         "action": _safe_str(value.get("action")).strip(),
         "npc": {
             "speaker": _safe_str(npc.get("speaker")).strip(),
             "line": _safe_str(npc.get("line")).strip(),
         },
-        "reward": "",  # simulation owns rewards
+        "reward": "",
         "followup_hooks": _safe_list(value.get("followup_hooks")),
     }
 
@@ -840,10 +861,12 @@ def _sanitize_narration_payload(
     payload: Dict[str, Any],
     scene: Dict[str, Any],
     narration_context: Dict[str, Any],
+    authoritative_action: str | None = None,
 ) -> Dict[str, Any]:
     payload = _normalize_narration_json(payload)
 
-    authoritative_action = _authoritative_action_text(narration_context)
+    if authoritative_action is None:
+        authoritative_action = _authoritative_action_text(narration_context)
     authoritative_reward = _authoritative_reward_text(narration_context)
     sanitized_npc = _sanitize_npc_block(payload, scene, narration_context)
 
@@ -859,10 +882,11 @@ def _sanitize_narration_payload(
         narration_text = _sanitize_narration_text(llm_narration, scene, narration_context)
 
     # Action and reward are authoritative-only.
+    llm_action = _safe_str(payload.get("action")).strip()
     normalized = _normalize_narration_json({
         "format_version": NARRATION_JSON_FORMAT_VERSION,
         "narration": narration_text,
-        "action": _desystemify_text(authoritative_action),
+        "action": llm_action,
         "npc": sanitized_npc,
         "reward": authoritative_reward,
         "followup_hooks": [],
@@ -913,23 +937,32 @@ def _sanitize_narration_payload(
         narration_clean = ""
 
     normalized["narration"] = narration_clean
-    normalized["action"] = _desystemify_text(normalized.get("action"))
+    action_raw = _safe_str(normalized.get("action"))
 
-    action_text = _safe_str(normalized["action"])
+    # Only strip CLEAR meta/system instructions
     if (
-        action_text.startswith("The player")
-        or action_text.startswith("You is ")
-        or "service or room-rental interaction" in action_text
-        or "hostile physical action" in action_text
-        or "Narrate" in action_text
-        or "Interpret" in action_text
-        or "according to the state delta" in action_text
+        "Narrate" in action_raw
+        or "Interpret" in action_raw
+        or "according to the state delta" in action_raw
     ):
         normalized["action"] = ""
+    else:
+        normalized["action"] = action_raw.strip()
     npc = _safe_dict(normalized.get("npc"))
     npc["speaker"] = _desystemify_text(npc.get("speaker"))
     npc["line"] = _desystemify_text(npc.get("line"))
     normalized["npc"] = npc
+
+    if not _safe_str(normalized.get("narration")) and _safe_str(payload.get("narration")):
+        normalized["narration"] = _safe_str(payload.get("narration")).strip()
+
+    if not _safe_str(_safe_dict(normalized.get("npc")).get("line")):
+        original_npc = _safe_dict(payload.get("npc"))
+        if _safe_str(original_npc.get("line")):
+            npc = _safe_dict(normalized.get("npc"))
+            npc["speaker"] = _safe_str(npc.get("speaker") or original_npc.get("speaker")).strip()
+            npc["line"] = _safe_str(original_npc.get("line")).strip()
+            normalized["npc"] = npc
 
     return normalized
 
@@ -1108,7 +1141,7 @@ def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
     if message:
         return f"**{action_label}:** {message}"
 
-    return f"**{action_label}:** You act."
+    return ""
 
 
 def _pick_npc_reply_text(llm_narrative: str) -> str:
@@ -1893,8 +1926,6 @@ def _with_scene_response_defaults(parsed: Dict[str, Any]) -> Dict[str, Any]:
         }
     if not parsed.get("narrator"):
         parsed["narrator"] = "You are here."
-    if not parsed.get("action"):
-        parsed["action"] = "You act."
 
     return parsed
 
@@ -2639,27 +2670,39 @@ def narrate_scene(
             )
 
             # Parse JSON response with tolerant fallback
-            parsed_json = parse_scene_response(llm_narrative)
+            parsed_json = _parse_llm_narration_payload(llm_narrative)
+            print("[RPG][LLM PARSED]", parsed_json)
             if parsed_json and _safe_str(parsed_json.get("format_version")) == "rpg_narration_v2":
                 narration_json = _strict_narration_payload(parsed_json)
             else:
                 narration_json = _strict_narration_payload(_normalize_narration_json(parsed_json or {}))
 
+            print("[RPG][LLM RAW ACTION]", _safe_dict(parsed_json).get("action"))
+            print("[RPG][STRICT ACTION]", narration_json.get("action"))
+
             if not narration_json.get("narration") and not narration_json.get("action") and not _safe_str(_safe_dict(narration_json.get("npc")).get("line")).strip():
                 logger.warning("Narration JSON parse failed or empty; recovering from raw text")
                 narration_json = _strict_narration_payload(_recover_narration_from_raw_text(llm_narrative))
 
-            grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context)
+            print("[RPG][PRE-SANITIZE ACTION]", narration_json.get("action"))
+            authoritative_action = _build_action_result_line(narration_context)
+            grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context, authoritative_action=authoritative_action)
+
+            print("[RPG][SANITIZED ACTION]", grounded_json.get("action"))
 
             parts = []
 
-            if narration_json["narration"]:
-                parts.append(narration_json["narration"])
+            if grounded_json["narration"]:
+                parts.append(grounded_json["narration"])
 
-            if narration_json["action"]:
-                parts.append(f"Action: {narration_json['action']}")
+            if authoritative_action:
+                parts.append(authoritative_action)
 
-            npc = _safe_dict(narration_json.get("npc"))
+            llm_action = _safe_str(grounded_json.get("action")).strip()
+            if llm_action and llm_action != authoritative_action:
+                parts.append(f"Result: {llm_action}")
+
+            npc = _safe_dict(grounded_json.get("npc"))
             if npc.get("speaker") and npc.get("line"):
                 parts.append(f"{npc['speaker']}: \"{npc['line']}\"")
 
@@ -2669,7 +2712,7 @@ def narrate_scene(
                 "narration": rendered,
                 "used_llm": True,
                 "raw_llm_narrative": llm_narrative,
-                "narration_json": narration_json,
+                "narration_json": grounded_json,
                 "speaker_presentation": {},
                 "format_warning": False,
             }
@@ -2685,17 +2728,27 @@ def narrate_scene(
                 "followup_hooks": [],
             })
             narration_json = _strict_narration_payload(simulated_json)
-            grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context)
+            print("[RPG][LLM RAW ACTION]", _safe_dict(simulated_json).get("action"))
+            print("[RPG][STRICT ACTION]", narration_json.get("action"))
+            print("[RPG][PRE-SANITIZE ACTION]", narration_json.get("action"))
+            authoritative_action = _build_action_result_line(narration_context)
+            grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context, authoritative_action=authoritative_action)
+
+            print("[RPG][SANITIZED ACTION]", grounded_json.get("action"))
 
             parts = []
 
-            if narration_json["narration"]:
-                parts.append(narration_json["narration"])
+            if grounded_json["narration"]:
+                parts.append(grounded_json["narration"])
 
-            if narration_json["action"]:
-                parts.append(f"Action: {narration_json['action']}")
+            if authoritative_action:
+                parts.append(authoritative_action)
 
-            npc = _safe_dict(narration_json.get("npc"))
+            llm_action = _safe_str(grounded_json.get("action")).strip()
+            if llm_action and llm_action != authoritative_action:
+                parts.append(f"Result: {llm_action}")
+
+            npc = _safe_dict(grounded_json.get("npc"))
             if npc.get("speaker") and npc.get("line"):
                 parts.append(f"{npc['speaker']}: \"{npc['line']}\"")
 
@@ -2705,7 +2758,7 @@ def narrate_scene(
                 "narration": rendered,
                 "used_llm": False,
                 "raw_llm_narrative": llm_narrative,
-                "narration_json": narration_json,
+                "narration_json": grounded_json,
                 "speaker_presentation": {},
                 "format_warning": False,
             }
