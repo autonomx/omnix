@@ -15,7 +15,8 @@ from app.rpg.session.state_normalization import _safe_dict, _safe_str
 
 
 def extract_equipment(player_state: Dict[str, Any]) -> Dict[str, Any]:
-    inventory_state = _safe_dict(_safe_dict(player_state).get("inventory_state"))
+    inventory_state = _safe_dict(player_state).get("inventory_state")
+    inventory_state = _safe_dict(inventory_state)
     return _safe_dict(inventory_state.get("equipment"))
 
 
