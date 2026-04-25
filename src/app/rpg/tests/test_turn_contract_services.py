@@ -64,6 +64,22 @@ def test_turn_contract_normalizes_outer_action_for_service_turns():
     assert contract["resolved_action"].get("reason") != "unknown_item"
 
 
+def test_turn_contract_has_primary_version_for_service_turns():
+    contract = build_turn_contract(
+        player_input="I ask Bran for a room to rent",
+        action={"action_type": "service_inquiry", "target_id": "npc:Bran", "target_name": "Bran"},
+        resolved_action={"ok": True, "outcome": "success", "action_type": "service_inquiry"},
+        simulation_state_before=_state_with_currency(),
+        simulation_state_after=_state_with_currency(),
+        runtime_state={},
+    )
+
+    assert contract["version"] == "turn_contract_v1"
+    assert contract["service_result"]["matched"] is True
+    assert contract["presentation"]["available_actions"]
+    assert contract["resolved_result"]["service_result"]["matched"] is True
+
+
 def test_turn_contract_attaches_meal_service_result():
     contract = build_turn_contract(
         player_input="I ask Bran for food",

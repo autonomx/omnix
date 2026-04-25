@@ -208,6 +208,11 @@ def _extract_memory_rumors(result: Dict[str, Any]) -> List[Any]:
     return _safe_list(memory_state.get("rumors"))
 
 
+def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
+    simulation_state = _extract_simulation_state(result)
+    return _safe_list(simulation_state.get("transaction_history"))
+
+
 def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
     session = _ensure_manual_session(session_id)
     if not session:
@@ -372,16 +377,16 @@ def _extract_turn_contract(result: Dict[str, Any]) -> Dict[str, Any]:
 
 def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
     contract = _extract_turn_contract(result)
+    contract_service_result = _safe_dict(contract.get("service_result"))
     resolved = _safe_dict(contract.get("resolved_result") or contract.get("resolved_action"))
     resolved_service_result = _safe_dict(resolved.get("service_result"))
-    contract_service_result = _safe_dict(contract.get("service_result"))
     presentation = _safe_dict(contract.get("presentation"))
 
-    # Prefer the resolved service result because runtime purchase application updates it.
     service = resolved_service_result or contract_service_result
     purchase = _safe_dict(service.get("purchase"))
     resource_changes = _safe_dict(purchase.get("resource_changes"))
-
+    applied_effects = _safe_dict(purchase.get("applied_effects"))
+    effects = _safe_dict(purchase.get("effects"))
     service_application = _safe_dict(resolved.get("service_application"))
 
     return {
@@ -392,14 +397,16 @@ def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
         "resource_changes": resource_changes,
         "purchase": purchase,
         "service_application": service_application,
+        "transaction_record": _safe_dict(
+            resolved.get("transaction_record")
+            or service_application.get("transaction_record")
+        ),
         "inventory_changes": {
             "items_added": _safe_list(
-                _safe_dict(purchase.get("applied_effects")).get("items_added")
-                or _safe_dict(purchase.get("effects")).get("items_added")
+                applied_effects.get("items_added") or effects.get("items_added")
             ),
             "items_removed": _safe_list(
-                _safe_dict(purchase.get("applied_effects")).get("items_removed")
-                or _safe_dict(purchase.get("effects")).get("items_removed")
+                applied_effects.get("items_removed") or effects.get("items_removed")
             ),
         },
     }
@@ -483,6 +490,12 @@ def _print_turn(
     _emit("")
     _emit("MEMORY RUMORS:")
     _emit(_compact_json(_extract_memory_rumors(result)))
+    _emit("")
+    _emit("TRANSACTION RECORD:")
+    _emit(_compact_json(service_debug.get("transaction_record")))
+    _emit("")
+    _emit("TRANSACTION HISTORY:")
+    _emit(_compact_json(_extract_transaction_history(result)))
     _emit("")
     _emit("RESULT SUBDICT:")
     _emit(_compact_json(result_sub))
@@ -615,6 +628,8 @@ def run_service_scenarios(selected: str = "all") -> None:
                     "items_after": _extract_player_items(result),
                     "active_services": _extract_active_services(result),
                     "memory_rumors": _extract_memory_rumors(result),
+                    "transaction_record": service_debug.get("transaction_record"),
+                    "transaction_history": _extract_transaction_history(result),
                     "service_application": service_application,
                 }
             )

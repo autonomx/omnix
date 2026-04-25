@@ -45,6 +45,13 @@ def test_apply_service_purchase_deducts_currency_for_lodging_and_adds_active_ser
     }
     assert applied["simulation_state"]["active_services"][0]["service_kind"] == "lodging"
     assert applied["simulation_state"]["active_services"][0]["offer_id"] == "bran_lodging_common_cot"
+    assert applied["transaction_record"]["kind"] == "service_purchase"
+    assert applied["transaction_record"]["provider_id"] == "npc:Bran"
+    assert applied["transaction_record"]["offer_id"] == "bran_lodging_common_cot"
+    assert (
+        applied["simulation_state"]["transaction_history"][-1]["transaction_id"]
+        == applied["transaction_record"]["transaction_id"]
+    )
 
 
 def test_apply_service_purchase_adds_shop_item():
@@ -79,6 +86,9 @@ def test_apply_service_purchase_adds_shop_item():
             "quantity": 1,
         }
     ]
+    assert applied["transaction_record"]["kind"] == "service_purchase"
+    assert applied["transaction_record"]["offer_id"] == "elara_torch"
+    assert applied["transaction_record"]["items_added"][0]["item_id"] == "torch"
 
 
 def test_apply_service_purchase_blocks_without_mutation_when_insufficient_funds():
@@ -104,6 +114,9 @@ def test_apply_service_purchase_blocks_without_mutation_when_insufficient_funds(
         "copper": 0,
     }
     assert applied["simulation_state"]["player_state"]["inventory_state"]["items"] == []
+    assert applied["transaction_record"]["kind"] == "service_purchase_blocked"
+    assert applied["transaction_record"]["blocked_reason"] == "insufficient_funds"
+    assert applied["simulation_state"]["transaction_history"][-1]["kind"] == "service_purchase_blocked"
 
 
 def test_apply_service_purchase_adds_paid_information_stub():
@@ -153,6 +166,8 @@ def test_service_authoritative_result_applies_purchase_runtime_effects():
         "copper": 0,
     }
     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["items"][0]["item_id"] == "torch"
+    assert result["transaction_record"]["offer_id"] == "elara_torch"
+    assert result["service_application"]["transaction_record"]["offer_id"] == "elara_torch"
 
 
 def test_service_authoritative_result_blocks_purchase_runtime_effects():
