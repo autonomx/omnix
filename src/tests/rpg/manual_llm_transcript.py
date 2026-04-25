@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import argparse
+import contextlib
+import difflib
 import json
 import os
+import shlex
+import signal
+import subprocess
 import sys
+import time
+import urllib.request
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -16,6 +24,21 @@ OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "resources" / "test-re
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_llm_transcript.txt"
 SERVICE_OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_service_scenarios_all.txt"
+CODE_DIFF_PATH = OUTPUT_DIR / "code-diff.txt"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SRC_ROOT = REPO_ROOT / "src"
+
+
+DEFAULT_MANAGED_SERVER_HEALTH_URLS: List[str] = []
+DEFAULT_CODE_DIFF_ROOTS = ["src"]
+CODE_DIFF_EXCLUDE_PARTS = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "test-results",
+}
+
 
 _OUTPUTS: Dict[str, List[str]] = {}
 
@@ -43,6 +66,226 @@ def _write_output(path: Path, channel: str = "main") -> None:
 def _write_all_outputs(mapping: Dict[str, Path]) -> None:
     for channel, path in mapping.items():
         _write_output(path, channel=channel)
+
+
+def _split_env_list(value: str) -> List[str]:
+    return [part.strip() for part in value.split(";") if part.strip()]
+
+
+def _command_for_shell(command: str) -> tuple[Any, bool]:
+    if os.name == "nt":
+        return command, True
+    return shlex.split(command), False
+
+
+def _wait_for_health(url: str, *, timeout_seconds: float = 60.0) -> bool:
+    deadline = time.time() + timeout_seconds
+    last_error = ""
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=3.0) as response:
+                status = getattr(response, "status", 0)
+                if 200 <= int(status) < 500:
+                    return True
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+        time.sleep(1.0)
+
+    print(f"[manual][servers] health check timed out: {url} last_error={last_error}", flush=True)
+    return False
+
+
+class ManagedServerGroup:
+    def __init__(
+        self,
+        *,
+        commands: Sequence[str],
+        health_urls: Sequence[str],
+        startup_timeout_seconds: float = 90.0,
+        enabled: bool = False,
+    ) -> None:
+        self.commands = [cmd for cmd in commands if cmd.strip()]
+        self.health_urls = [url for url in health_urls if url.strip()]
+        self.startup_timeout_seconds = startup_timeout_seconds
+        self.enabled = enabled
+        self.processes: List[subprocess.Popen[Any]] = []
+
+    def start(self) -> None:
+        if not self.enabled:
+            return
+
+        if not self.commands:
+            print("[manual][servers] --manage-servers set, but no server commands configured.", flush=True)
+            return
+
+        print(f"[manual][servers] starting {len(self.commands)} managed server process(es)", flush=True)
+        env = os.environ.copy()
+        env.setdefault("PYTHONPATH", str(SRC_ROOT))
+
+        for index, command in enumerate(self.commands, start=1):
+            popen_args, shell = _command_for_shell(command)
+            print(f"[manual][servers] start {index}: {command}", flush=True)
+            process = subprocess.Popen(
+                popen_args,
+                cwd=str(REPO_ROOT),
+                env=env,
+                shell=shell,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+                creationflags=(
+                    subprocess.CREATE_NEW_PROCESS_GROUP
+                    if os.name == "nt" and hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP")
+                    else 0
+                ),
+            )
+            self.processes.append(process)
+
+        for url in self.health_urls:
+            _wait_for_health(url, timeout_seconds=self.startup_timeout_seconds)
+
+    def stop(self) -> None:
+        if not self.processes:
+            return
+
+        print(f"[manual][servers] stopping {len(self.processes)} managed server process(es)", flush=True)
+        for process in reversed(self.processes):
+            if process.poll() is None:
+                try:
+                    if os.name == "nt":
+                        process.send_signal(signal.CTRL_BREAK_EVENT)
+                    else:
+                        process.terminate()
+                except Exception:
+                    with contextlib.suppress(Exception):
+                        process.terminate()
+
+        deadline = time.time() + 10.0
+        for process in reversed(self.processes):
+            while process.poll() is None and time.time() < deadline:
+                time.sleep(0.2)
+            if process.poll() is None:
+                with contextlib.suppress(Exception):
+                    process.kill()
+
+        self.processes.clear()
+
+
+def _run_git(args: Sequence[str]) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(REPO_ROOT),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        return completed.stdout or ""
+    except Exception as exc:
+        return f"[manual][code-diff] git command failed: git {' '.join(args)}\n{type(exc).__name__}: {exc}\n"
+
+
+def _is_diff_candidate(path: Path, roots: Sequence[str]) -> bool:
+    try:
+        rel = path.relative_to(REPO_ROOT)
+    except ValueError:
+        return False
+
+    parts = set(rel.parts)
+    if parts & CODE_DIFF_EXCLUDE_PARTS:
+        return False
+
+    rel_text = rel.as_posix()
+    if not any(rel_text == root or rel_text.startswith(f"{root.rstrip('/')}/") for root in roots):
+        return False
+
+    if path.suffix in {".pyc", ".pyo", ".pyd", ".dll", ".exe", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".zip"}:
+        return False
+
+    return path.is_file()
+
+
+def _git_untracked_files(roots: Sequence[str]) -> List[Path]:
+    status = _run_git(["status", "--porcelain", "--untracked-files=all", "--", *roots])
+    paths: List[Path] = []
+    for line in status.splitlines():
+        if not line.startswith("?? "):
+            continue
+        raw_path = line[3:].strip()
+        if not raw_path:
+            continue
+        candidate = REPO_ROOT / raw_path
+        if _is_diff_candidate(candidate, roots):
+            paths.append(candidate)
+    return sorted(paths)
+
+
+def _untracked_file_diff(path: Path) -> str:
+    rel = path.relative_to(REPO_ROOT).as_posix()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except UnicodeDecodeError:
+        return f"diff --git a/{rel} b/{rel}\nnew file mode 100644\n[manual][code-diff] binary or non-utf8 file omitted\n\n"
+    except Exception as exc:
+        return f"diff --git a/{rel} b/{rel}\nnew file mode 100644\n[manual][code-diff] failed to read file: {type(exc).__name__}: {exc}\n\n"
+
+    return "".join(
+        difflib.unified_diff(
+            [],
+            lines,
+            fromfile=f"a/{rel}",
+            tofile=f"b/{rel}",
+        )
+    )
+
+
+def write_code_diff_snapshot(
+    path: Path = CODE_DIFF_PATH,
+    *,
+    roots: Sequence[str] = DEFAULT_CODE_DIFF_ROOTS,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    tracked_diff = _run_git([
+        "--no-pager",
+        "diff",
+        "--no-ext-diff",
+        "--no-color",
+        "--",
+        *roots,
+    ])
+    untracked_paths = _git_untracked_files(roots)
+    untracked_diff = "\n".join(_untracked_file_diff(p) for p in untracked_paths)
+
+    header = [
+        "Manual RPG transcript code diff snapshot",
+        f"repo_root: {REPO_ROOT}",
+        f"roots: {', '.join(roots)}",
+        f"generated_at_unix: {time.time():.3f}",
+        "",
+        "Tracked diff:",
+        "=" * 80,
+        "",
+    ]
+
+    body = tracked_diff.strip()
+    if not body:
+        body = "[no tracked changes]"
+
+    footer = [
+        "",
+        "",
+        "Untracked new files:",
+        "=" * 80,
+        "",
+    ]
+    if untracked_diff.strip():
+        footer.append(untracked_diff.rstrip())
+    else:
+        footer.append("[no untracked source files]")
+
+    path.write_text("\n".join(header) + body + "\n".join(footer) + "\n", encoding="utf-8")
+    print(f"Wrote code diff to: {path.resolve()}", flush=True)
 
 
 MANUAL_TEST_TURNS = [
@@ -943,9 +1186,36 @@ def run_service_scenarios(selected: str = "all", *, split_files: bool = True) ->
         )
 
 
-def main() -> None:
-    import argparse
+def run_requested_transcripts(args: argparse.Namespace) -> None:
+    turns = args.turn or MANUAL_TEST_TURNS
 
+    if args.all:
+        run_manual_transcript(
+            turns,
+            session_id=args.session_id,
+            split_files=not args.single_file,
+        )
+        run_service_scenarios(
+            "all",
+            split_files=not args.single_file,
+        )
+        return
+
+    if args.service_scenarios:
+        run_service_scenarios(
+            args.scenario,
+            split_files=not args.single_file,
+        )
+        return
+
+    run_manual_transcript(
+        turns,
+        session_id=args.session_id,
+        split_files=not args.single_file,
+    )
+
+
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--session-id", default="manual_test_session")
     parser.add_argument(
@@ -975,36 +1245,89 @@ def main() -> None:
         default=[],
         help="Override scripted turns. Can be passed multiple times.",
     )
+    parser.add_argument(
+        "--manage-servers",
+        action="store_true",
+        help=(
+            "Start configured server subprocesses before the transcript run and "
+            "stop them at the end. Commands come from --server-command or "
+            "OMNIX_MANUAL_SERVER_COMMANDS."
+        ),
+    )
+    parser.add_argument(
+        "--server-command",
+        action="append",
+        default=[],
+        help=(
+            "Server command to start before running. Can be passed multiple times. "
+            "Example: --server-command \"python -m uvicorn app.tts_server:app --host 127.0.0.1 --port 5101\""
+        ),
+    )
+    parser.add_argument(
+        "--server-health-url",
+        action="append",
+        default=[],
+        help=(
+            "Health URL to wait for after starting managed servers. "
+            "Can be passed multiple times. Example: http://127.0.0.1:5101/health"
+        ),
+    )
+    parser.add_argument(
+        "--server-startup-timeout",
+        type=float,
+        default=90.0,
+        help="Seconds to wait for each configured server health URL.",
+    )
+    parser.add_argument(
+        "--no-code-diff",
+        action="store_true",
+        help="Do not write resources/test-results/code-diff.txt.",
+    )
+    parser.add_argument(
+        "--code-diff-root",
+        action="append",
+        default=[],
+        help="Path root to include in code-diff.txt. Defaults to src. Can be passed multiple times.",
+    )
 
     args = parser.parse_args()
 
-    turns = args.turn or MANUAL_TEST_TURNS
+    server_commands = list(args.server_command or [])
+    server_commands.extend(_split_env_list(os.environ.get("OMNIX_MANUAL_SERVER_COMMANDS", "")))
 
-    if args.all:
-        run_manual_transcript(
-            turns,
-            session_id=args.session_id,
-            split_files=not args.single_file,
-        )
-        run_service_scenarios(
-            "all",
-            split_files=not args.single_file,
-        )
-        return
+    health_urls = list(args.server_health_url or [])
+    health_urls.extend(_split_env_list(os.environ.get("OMNIX_MANUAL_SERVER_HEALTH_URLS", "")))
+    if not health_urls:
+        health_urls = DEFAULT_MANAGED_SERVER_HEALTH_URLS
 
-    if args.service_scenarios:
-        run_service_scenarios(
-            args.scenario,
-            split_files=not args.single_file,
-        )
-        return
+    code_diff_roots = args.code_diff_root or DEFAULT_CODE_DIFF_ROOTS
 
-    run_manual_transcript(
-        turns,
-        session_id=args.session_id,
-        split_files=not args.single_file,
+    servers = ManagedServerGroup(
+        commands=server_commands,
+        health_urls=health_urls,
+        startup_timeout_seconds=args.server_startup_timeout,
+        enabled=args.manage_servers,
     )
-    return
+
+    exit_code = 0
+    try:
+        servers.start()
+        run_requested_transcripts(args)
+    except KeyboardInterrupt:
+        exit_code = 130
+        raise
+    except Exception:
+        exit_code = 1
+        raise
+    finally:
+        try:
+            if not args.no_code_diff:
+                write_code_diff_snapshot(roots=code_diff_roots)
+        finally:
+            servers.stop()
+
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":
