@@ -173,6 +173,13 @@ from app.rpg.session.ambient_policy import (
     classify_ambient_delivery,
     record_interrupt,
 )
+from app.rpg.session.inventory_runtime import (
+    drop_item_action,
+    equip_item_action,
+    extract_equipment,
+    pickup_item_action,
+    unequip_item_action,
+)
 from app.rpg.session.narration_worker import (
     ensure_narration_worker_running,
     publish_narration_event,
@@ -225,6 +232,12 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
+
+_extract_equipment = extract_equipment
+_pickup_item_action = pickup_item_action
+_drop_item_action = drop_item_action
+_equip_item_action = equip_item_action
+_unequip_item_action = unequip_item_action
 
 _service_action_from_result = service_action_from_result
 _service_semantic_action_from_result = service_semantic_action_from_result
@@ -5234,9 +5247,6 @@ def _get_player_location_id(simulation_state: Dict[str, Any], runtime_state: Dic
     )
 
 
-def _extract_equipment(player_state: Dict[str, Any]) -> Dict[str, Any]:
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    return _safe_dict(inventory_state.get("equipment"))
 
 
 def select_primary_action(simulation_state: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any] | None:
@@ -5270,93 +5280,12 @@ def _structured_action_prompt(action: Dict[str, Any]) -> str:
 
 
 
-def _pickup_item_action(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    instance_id = _safe_str(action.get("instance_id")).strip()
-    result = pickup_world_item(simulation_state, instance_id)
-    next_state = _safe_dict(result.get("simulation_state"))
-    picked_item = _safe_dict(result.get("picked_up_item"))
-    if picked_item.get("item_id"):
-        player_state = _safe_dict(next_state.get("player_state"))
-        inventory_state = _safe_dict(player_state.get("inventory_state"))
-        inventory_state = add_inventory_items(inventory_state, [picked_item])
-        player_state["inventory_state"] = inventory_state
-        next_state["player_state"] = player_state
-    return {
-        "simulation_state": next_state,
-        "result": _safe_dict(result.get("result")),
-        "picked_up_item": picked_item,
-    }
 
 
-def _drop_item_action(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    item_id = _safe_str(action.get("item_id")).strip()
-    qty = int(action.get("qty", 1) or 1)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    dropped_item = get_inventory_item_for_drop(inventory_state, item_id)
-    inventory_state = remove_inventory_item(inventory_state, item_id, qty=qty)
-    player_state["inventory_state"] = inventory_state
-    simulation_state["player_state"] = player_state
-
-    location_id = _get_player_location_id(simulation_state, runtime_state)
-    drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": qty}
-    result = drop_world_item(simulation_state, drop_payload, location_id, qty=qty)
-    next_state = _safe_dict(result.get("simulation_state"))
-    return {
-        "simulation_state": next_state,
-        "result": _safe_dict(result.get("result")),
-    }
 
 
-def _equip_item_action(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    item_id = _safe_str(action.get("item_id")).strip()
-    slot = _safe_str(action.get("slot")).strip()
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    inventory_state = equip_inventory_item(inventory_state, item_id, slot)
-    player_state["inventory_state"] = inventory_state
-    simulation_state["player_state"] = player_state
-    return {
-        "simulation_state": simulation_state,
-        "result": {
-            "ok": True,
-            "action_type": "equip_item",
-            "item_id": item_id,
-            "slot": slot or _safe_str(_safe_dict(_extract_equipment(player_state)).get("main_hand")),
-            "equipment": _safe_dict(inventory_state.get("equipment")),
-        },
-    }
 
 
-def _unequip_item_action(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    slot = _safe_str(action.get("slot")).strip()
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    inventory_state = unequip_inventory_slot(inventory_state, slot)
-    player_state["inventory_state"] = inventory_state
-    simulation_state["player_state"] = player_state
-    return {
-        "simulation_state": simulation_state,
-        "result": {
-            "ok": True,
-            "action_type": "unequip_item",
-            "slot": slot,
-            "equipment": _safe_dict(inventory_state.get("equipment")),
-        },
-    }
 
 
 def _use_item_action(
@@ -5595,13 +5524,17 @@ def _apply_authoritative_action(
         }
 
     if action_type == "pickup_item":
-        return _pickup_item_action(simulation_state, action)
+        return pickup_item_action(simulation_state, action)
     if action_type == "drop_item":
-        return _drop_item_action(simulation_state, runtime_state, action)
+        return drop_item_action(
+            simulation_state,
+            action,
+            location_id=_get_player_location_id(simulation_state, runtime_state),
+        )
     if action_type == "equip_item":
-        return _equip_item_action(simulation_state, action)
+        return equip_item_action(simulation_state, action)
     if action_type == "unequip_item":
-        return _unequip_item_action(simulation_state, action)
+        return unequip_item_action(simulation_state, action)
     if action_type == "use_item":
         return _use_item_action(simulation_state, action)
 
