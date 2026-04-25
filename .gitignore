@@ -87,3 +87,6 @@ chatterbox/
 faster-qwen3-tts-main/
 tts/*.wav
 src/data/rpg_sessions/*.json
+src/.mypy_cache/
+src/.pytest_cache/
+src/.ruff_cache/
