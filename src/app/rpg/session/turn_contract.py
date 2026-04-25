@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from app.rpg.economy.service_resolver import resolve_service_turn
+
 
 def safe_dict(v: Any) -> Dict[str, Any]:
     return v if isinstance(v, dict) else {}
@@ -86,7 +88,33 @@ def interpret_turn_action(
     apology_words = ("sorry", "apologize", "apologise", "forgive", "make amends")
     question_words = ("ask", "how", "what", "why", "where", "when", "who")
     performance_words = ("dance", "sing", "perform", "juggle", "play music")
-    service_words = ("room", "rent", "inn", "bed", "stay", "lodging", "price", "cost")
+    service_words = (
+        "room",
+        "rent",
+        "inn",
+        "bed",
+        "stay",
+        "lodging",
+        "accommodation",
+        "price",
+        "cost",
+        "buy",
+        "purchase",
+        "sell",
+        "sells",
+        "shop",
+        "goods",
+        "food",
+        "meal",
+        "drink",
+        "ale",
+        "rumor",
+        "rumour",
+        "information",
+        "repair",
+        "train",
+        "transport",
+    )
 
     intent = action_type
     if any(w in text_l for w in hostile_words):
@@ -271,10 +299,31 @@ def build_narration_brief(
         )
         tone = "wary"
     elif intent == "service":
-        summary = (
-            f"The player is engaging a service or room-rental interaction: {raw_input}. "
-            "The NPC should answer concretely and in character. Do not invent completed payment unless resolved_action says it happened."
-        )
+        service_result = safe_dict(resolved_action.get("service_result"))
+        service_kind = safe_str(service_result.get("service_kind"))
+        provider_name = safe_str(service_result.get("provider_name") or target_name or "the provider")
+        status = safe_str(service_result.get("status"))
+        offers = safe_list(service_result.get("offers"))
+
+        if offers:
+            offer_labels = [
+                safe_str(safe_dict(offer).get("label"))
+                for offer in offers
+                if safe_str(safe_dict(offer).get("label"))
+            ]
+            summary = (
+                f"The player is making a deterministic service inquiry with {provider_name}: {raw_input}. "
+                f"Service kind: {service_kind or 'unknown'}. "
+                f"Registered offers: {', '.join(offer_labels)}. "
+                "Narration may mention only these registered offers and must not invent payment, purchase completion, inventory changes, rewards, rooms, prices, or services."
+            )
+        else:
+            summary = (
+                f"The player is making a deterministic service inquiry with {provider_name}: {raw_input}. "
+                f"Service kind: {service_kind or 'unknown'}. "
+                f"Service status: {status or 'unknown'}. "
+                "No registered offer is available; narration must not invent one."
+            )
         tone = "practical"
     elif intent == "ask":
         summary = (
@@ -392,6 +441,58 @@ def build_npc_behavior_context(
     }
 
 
+def normalize_service_action_contract(
+    action: Dict[str, Any],
+    resolved_action: Dict[str, Any],
+    service_result: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    action = dict(safe_dict(action))
+    resolved_action = dict(safe_dict(resolved_action))
+    service_result = safe_dict(service_result)
+
+    if not service_result.get("matched"):
+        return action, resolved_action
+
+    service_action_type = safe_str(service_result.get("kind") or "service_inquiry")
+    provider_id = safe_str(service_result.get("provider_id"))
+    provider_name = safe_str(service_result.get("provider_name"))
+    service_kind = safe_str(service_result.get("service_kind"))
+
+    action["action_type"] = service_action_type
+    action["service_kind"] = service_kind
+    action["target_id"] = provider_id
+    action["target_name"] = provider_name
+    action["provider_id"] = provider_id
+    action["provider_name"] = provider_name
+    action["source"] = "deterministic_service_resolver"
+
+    metadata = safe_dict(action.get("metadata"))
+    metadata["service_result"] = service_result
+    metadata["service_kind"] = service_kind
+    metadata["service_status"] = safe_str(service_result.get("status"))
+    action["metadata"] = metadata
+
+    resolved_action["action_type"] = service_action_type
+    resolved_action["service_kind"] = service_kind
+    resolved_action["target_id"] = provider_id
+    resolved_action["target_name"] = provider_name
+    resolved_action["service_result"] = service_result
+
+    action_metadata = safe_dict(resolved_action.get("action_metadata"))
+    action_metadata["transaction_kind"] = service_action_type
+    action_metadata["service_kind"] = service_kind
+    action_metadata["provider_id"] = provider_id
+    action_metadata["provider_name"] = provider_name
+    action_metadata["price_source"] = (
+        "deterministic_service_registry"
+        if safe_list(service_result.get("offers"))
+        else ""
+    )
+    resolved_action["action_metadata"] = action_metadata
+
+    return action, resolved_action
+
+
 def build_turn_contract(
     *,
     player_input: str,
@@ -407,18 +508,42 @@ def build_turn_contract(
         player_input,
         action,
     )
+
+    service_result = resolve_service_turn(
+        player_input=player_input,
+        action=action,
+        resolved_action=resolved_action,
+        simulation_state=simulation_state_before,
+        runtime_state=runtime_state,
+    )
+    action, resolved_action = normalize_service_action_contract(
+        action,
+        resolved_action,
+        service_result,
+    )
+    if service_result.get("matched"):
+        interpreted["intent"] = "service"
+        interpreted["service_kind"] = safe_str(service_result.get("service_kind"))
+        interpreted["service_kind_status"] = safe_str(service_result.get("status"))
+        interpreted["target_id"] = safe_str(service_result.get("provider_id"))
+        interpreted["target_name"] = safe_str(service_result.get("provider_name"))
+
+    resolved_for_contract = dict(safe_dict(resolved_action))
+    if service_result.get("matched"):
+        resolved_for_contract["service_result"] = service_result
+
     state_delta = derive_state_delta(
         simulation_state_before,
         interpreted,
-        safe_dict(resolved_action),
+        resolved_for_contract,
     )
     narration_brief = build_narration_brief(
         interpreted,
-        safe_dict(resolved_action),
+        resolved_for_contract,
         state_delta,
     )
     resolved = supplement_generic_resolved_action(
-        safe_dict(resolved_action),
+        resolved_for_contract,
         interpreted,
         narration_brief,
     )
@@ -432,9 +557,17 @@ def build_turn_contract(
     return {
         "version": "turn_contract_v1",
         "player_input": player_input,
+        "action": action,
         "interpreted_action": interpreted,
         "resolved_action": resolved,
+        "resolved_result": resolved,
+        "service_result": service_result,
         "state_delta": state_delta,
         "npc_behavior_context": npc_behavior_context,
         "narration_brief": narration_brief,
+        "presentation": {
+            "available_actions": safe_list(service_result.get("available_actions"))
+            if service_result.get("matched")
+            else [],
+        },
     }

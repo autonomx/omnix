@@ -1907,3 +1907,341 @@ def test_accommodation_grounding_blocks_vacancy_and_follow_me_claims():
 
     assert "let me check what i can offer" in text
     assert narration_json["reward"] == ""
+
+
+def test_service_narration_uses_registered_lodging_offers():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Bran watches you from behind the counter.",'
+                    '"action":"You politely inquire about renting a room from Bran.",'
+                    '"npc":{"speaker":"Bran","line":"Rooms, you say? I have a few, but they are not cheap."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran"}],
+    }
+
+    narration_context = {
+        "player_input": "I ask Bran for a room to rent",
+        "turn_contract": {
+            "player_input": "I ask Bran for a room to rent",
+            "service_result": {
+                "matched": True,
+                "kind": "service_inquiry",
+                "service_kind": "lodging",
+                "provider_id": "npc:Bran",
+                "provider_name": "Bran",
+                "location_id": "loc_tavern",
+                "status": "offers_available",
+                "offers": [
+                    {
+                        "offer_id": "bran_lodging_common_cot",
+                        "service_kind": "lodging",
+                        "label": "Common room cot",
+                        "price": {"gold": 0, "silver": 5, "copper": 0},
+                    },
+                    {
+                        "offer_id": "bran_lodging_private_room",
+                        "service_kind": "lodging",
+                        "label": "Private room",
+                        "price": {"gold": 1, "silver": 0, "copper": 0},
+                    },
+                ],
+                "selected_offer_id": "",
+                "purchase": None,
+                "available_actions": [],
+                "source": "deterministic_service_resolver",
+            },
+            "narration_brief": {
+                "summary": "I ask Bran for a room to rent",
+            },
+            "resolved_result": {
+                "service_result": {
+                    "matched": True,
+                    "kind": "service_inquiry",
+                    "service_kind": "lodging",
+                    "provider_id": "npc:Bran",
+                    "provider_name": "Bran",
+                    "location_id": "loc_tavern",
+                    "status": "offers_available",
+                    "offers": [
+                        {
+                            "offer_id": "bran_lodging_common_cot",
+                            "service_kind": "lodging",
+                            "label": "Common room cot",
+                            "price": {"gold": 0, "silver": 5, "copper": 0},
+                        },
+                        {
+                            "offer_id": "bran_lodging_private_room",
+                            "service_kind": "lodging",
+                            "label": "Private room",
+                            "price": {"gold": 1, "silver": 0, "copper": 0},
+                        },
+                    ],
+                    "selected_offer_id": "",
+                    "purchase": None,
+                    "available_actions": [],
+                    "source": "deterministic_service_resolver",
+                }
+            },
+        },
+        "resolved_result": {
+            "service_result": {
+                "matched": True,
+                "kind": "service_inquiry",
+                "service_kind": "lodging",
+                "provider_id": "npc:Bran",
+                "provider_name": "Bran",
+                "location_id": "loc_tavern",
+                "status": "offers_available",
+                "offers": [
+                    {
+                        "offer_id": "bran_lodging_common_cot",
+                        "service_kind": "lodging",
+                        "label": "Common room cot",
+                        "price": {"gold": 0, "silver": 5, "copper": 0},
+                    },
+                    {
+                        "offer_id": "bran_lodging_private_room",
+                        "service_kind": "lodging",
+                        "label": "Private room",
+                        "price": {"gold": 1, "silver": 0, "copper": 0},
+                    },
+                ],
+                "selected_offer_id": "",
+                "purchase": None,
+                "available_actions": [],
+                "source": "deterministic_service_resolver",
+            }
+        },
+    }
+
+    result = narrate_scene(
+        scene,
+        narration_context,
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "action: you ask bran for a room to rent" in text
+    assert "result: bran checks the available options." in text
+
+    assert "i have a few" not in text
+    assert "not cheap" not in text
+
+    assert "common room cot for 5 silver" in text
+    assert "private room for 1 gold" in text
+    assert narration_json["action"] == "Bran checks the available options."
+    assert narration_json["npc"]["line"] == (
+        "I can offer Common room cot for 5 silver or Private room for 1 gold."
+    )
+
+
+def test_service_narration_paragraph_does_not_repeat_player_input():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"As you ask Bran about a room to rent, the tavern grows quiet.",'
+                    '"action":"You ask Bran for a room to rent.",'
+                    '"npc":{"speaker":"Bran","line":"I have a few rooms."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_inquiry",
+        "service_kind": "lodging",
+        "provider_id": "npc:Bran",
+        "provider_name": "Bran",
+        "location_id": "loc_tavern",
+        "status": "offers_available",
+        "offers": [
+            {
+                "offer_id": "bran_lodging_common_cot",
+                "service_kind": "lodging",
+                "label": "Common room cot",
+                "price": {"gold": 0, "silver": 5, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "",
+        "purchase": None,
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "The Rusty Flagon Tavern", "actors": [{"name": "Bran"}]},
+        {
+            "player_input": "I ask Bran for a room to rent",
+            "turn_contract": {
+                "player_input": "I ask Bran for a room to rent",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+                "narration_brief": {"summary": "I ask Bran for a room to rent"},
+            },
+            "resolved_result": {"service_result": service_result},
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "as you ask" not in text
+    assert "about a room to rent" not in text
+    assert narration_json["narration"] == "Bran looks over the registered lodging options."
+
+
+def test_service_narration_uses_registered_shop_offers():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara folds her hands over the counter.",'
+                    '"action":"You ask Elara what she sells.",'
+                    '"npc":{"speaker":"Elara","line":"I have all sorts of goods for sale."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_inquiry",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "location_id": "loc_market",
+        "status": "offers_available",
+        "offers": [
+            {
+                "offer_id": "elara_torch",
+                "service_kind": "shop_goods",
+                "label": "Torch",
+                "price": {"gold": 0, "silver": 1, "copper": 0},
+            },
+            {
+                "offer_id": "elara_rope",
+                "service_kind": "shop_goods",
+                "label": "Rope",
+                "price": {"gold": 0, "silver": 3, "copper": 0},
+            },
+        ],
+        "selected_offer_id": "",
+        "purchase": None,
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "Central Market", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I ask Elara what she sells",
+            "turn_contract": {
+                "player_input": "I ask Elara what she sells",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+                "narration_brief": {"summary": "I ask Elara what she sells"},
+            },
+            "resolved_result": {"service_result": service_result},
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+
+    assert "result: elara checks the available options." in text
+    assert "all sorts of goods" not in text
+    assert "torch for 1 silver" in text
+    assert "rope for 3 silver" in text
+
+
+def test_service_purchase_ready_narration_is_not_state_mutation():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara reaches below the counter.",'
+                    '"action":"You buy a torch from Elara.",'
+                    '"npc":{"speaker":"Elara","line":"The torch is yours."},'
+                    '"reward":"Torch","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "location_id": "loc_market",
+        "status": "purchase_ready",
+        "offers": [
+            {
+                "offer_id": "elara_torch",
+                "service_kind": "shop_goods",
+                "label": "Torch",
+                "price": {"gold": 0, "silver": 1, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "elara_torch",
+        "purchase": {
+            "blocked": False,
+            "blocked_reason": "",
+            "price": {"gold": 0, "silver": 1, "copper": 0},
+            "can_afford": True,
+            "resource_changes": {"currency": {"gold": 0, "silver": -1, "copper": 0}},
+            "effects": {"items_added": [{"item_id": "torch", "name": "Torch", "quantity": 1}]},
+            "note": "Phase 7.0D detects purchase intent but does not mutate state yet.",
+        },
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "Central Market", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I buy a torch from Elara",
+            "turn_contract": {
+                "player_input": "I buy a torch from Elara",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+                "narration_brief": {"summary": "I buy a torch from Elara"},
+            },
+            "resolved_result": {"service_result": service_result},
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "result: elara is ready to complete the purchase." in text
+    assert "the torch is yours" not in text
+    assert "i can settle torch once you confirm the purchase" in text
+    assert "reward:" not in text
+    assert narration_json["reward"] == ""

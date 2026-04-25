@@ -420,10 +420,239 @@ def _ground_accommodation_npc_line(line: str, narration_context: Dict[str, Any])
     )
 
 
+def _service_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
+    narration_context = _safe_dict(narration_context)
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+
+    direct = _safe_dict(turn_contract.get("service_result"))
+    if direct.get("matched"):
+        return direct
+
+    resolved = _safe_dict(
+        narration_context.get("resolved_result")
+        or turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+    nested = _safe_dict(resolved.get("service_result"))
+    if nested.get("matched"):
+        return nested
+
+    action = _safe_dict(turn_contract.get("action"))
+    action_nested = _safe_dict(action.get("service_result"))
+    if action_nested.get("matched"):
+        return action_nested
+
+    return {}
+
+
+def _service_offer_label_with_price(offer: Dict[str, Any]) -> str:
+    offer = _safe_dict(offer)
+    label = _safe_str(offer.get("label") or offer.get("offer_id")).strip()
+    price = _safe_dict(offer.get("price"))
+
+    parts = []
+    gold = int(price.get("gold") or 0)
+    silver = int(price.get("silver") or 0)
+    copper = int(price.get("copper") or 0)
+
+    if gold:
+        parts.append(f"{gold} gold")
+    if silver:
+        parts.append(f"{silver} silver")
+    if copper:
+        parts.append(f"{copper} copper")
+
+    if parts:
+        return f"{label} for {', '.join(parts)}"
+    return label
+
+
+def _join_natural(items: List[str]) -> str:
+    items = [item for item in items if _safe_str(item).strip()]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} or {items[1]}"
+    return f"{', '.join(items[:-1])}, or {items[-1]}"
+
+
+def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
+    service_result = _service_result_from_context(narration_context)
+    if not service_result:
+        return ""
+
+    provider_name = _safe_str(service_result.get("provider_name") or "The provider").strip()
+    kind = _safe_str(service_result.get("kind"))
+    status = _safe_str(service_result.get("status"))
+
+    if kind == "service_purchase":
+        if status == "purchase_ready":
+            return f"{provider_name} is ready to complete the purchase."
+        if status == "blocked":
+            return f"{provider_name} names the price, but you do not have enough coin."
+        if status == "purchase_offer_not_found":
+            return f"{provider_name} cannot find a matching registered offer."
+
+    if status == "offers_available":
+        return f"{provider_name} checks the available options."
+
+    if status == "no_registered_offers":
+        return f"{provider_name} has no registered offer for that request."
+
+    return f"{provider_name} considers the service request."
+
+
+def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
+    service_result = _service_result_from_context(narration_context)
+    if not service_result:
+        return ""
+
+    provider_name = _safe_str(service_result.get("provider_name") or "I").strip()
+    kind = _safe_str(service_result.get("kind"))
+    status = _safe_str(service_result.get("status"))
+    offers = [_safe_dict(offer) for offer in _safe_list(service_result.get("offers"))]
+
+    if kind == "service_purchase":
+        purchase = _safe_dict(service_result.get("purchase"))
+        selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
+        selected = {}
+        for offer in offers:
+            if _safe_str(offer.get("offer_id")) == selected_offer_id:
+                selected = offer
+                break
+
+        selected_label = _safe_str(selected.get("label") or selected_offer_id or "that").strip()
+
+        if status == "purchase_ready":
+            return f"I can settle {selected_label} once you confirm the purchase."
+
+        if status == "blocked":
+            price = _safe_dict(purchase.get("price"))
+            price_text = _service_offer_label_with_price({"label": selected_label, "price": price})
+            return f"{price_text} is the price, but you do not have enough coin."
+
+        if status == "purchase_offer_not_found":
+            return "I do not have that listed among my registered offers."
+
+    if status == "offers_available" and offers:
+        offer_texts = [_service_offer_label_with_price(offer) for offer in offers]
+        joined = _join_natural(offer_texts)
+        if joined:
+            return f"I can offer {joined}."
+
+    if status == "no_registered_offers":
+        return "I do not have a registered offer for that right now."
+
+    return "Let me check what I can offer before we settle the details."
+
+
+def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
+    service_result = _service_result_from_context(narration_context)
+    if not service_result:
+        return ""
+
+    provider_name = _safe_str(service_result.get("provider_name") or "The provider").strip()
+    service_kind = _safe_str(service_result.get("service_kind")).replace("_", " ").strip()
+    status = _safe_str(service_result.get("status"))
+
+    if status == "offers_available":
+        if service_kind:
+            return f"{provider_name} looks over the registered {service_kind} options."
+        return f"{provider_name} looks over the registered service options."
+
+    if status == "blocked":
+        return f"{provider_name} checks the price against your available coin."
+
+    if status == "purchase_ready":
+        return f"{provider_name} confirms the selected registered offer."
+
+    return f"{provider_name} considers the service request."
+
+
+def _service_narration_needs_grounding(text: str) -> bool:
+    lower = _safe_str(text).lower()
+    if not lower:
+        return False
+
+    repeated_action_phrases = (
+        "as you ask",
+        "you ask",
+        "you asked",
+        "you inquire",
+        "you inquired",
+        "about a room",
+        "room to rent",
+        "what she sells",
+        "heard any rumors",
+        "buy a torch",
+        "from elara",
+        "from bran",
+    )
+    return any(phrase in lower for phrase in repeated_action_phrases)
+
+
+def _service_claim_needs_grounding(text: str) -> bool:
+    lower = _safe_str(text).lower()
+    if not lower:
+        return False
+
+    claim_terms = (
+        "i have",
+        "i've got",
+        "ive got",
+        "we have",
+        "we've got",
+        "rooms",
+        "room",
+        "cheap",
+        "not cheap",
+        "price",
+        "cost",
+        "available",
+        "offer",
+        "offers",
+        "buy",
+        "sell",
+        "sells",
+        "food",
+        "meal",
+        "stew",
+        "ale",
+        "drink",
+        "rumor",
+        "rumour",
+        "repair",
+        "torch",
+        "rope",
+    )
+    return any(term in lower for term in claim_terms)
+
+
 def _ground_action_result_text(action_text: str, narration_context: Dict[str, Any]) -> str:
     text = _safe_str(action_text).strip()
     if not text:
         return text
+
+    service_result = _service_result_from_context(narration_context)
+    if service_result.get("matched"):
+        lower_service_text = text.lower()
+        repeats_service_action = (
+            lower_service_text.startswith("you ")
+            or "you ask" in lower_service_text
+            or "you inquire" in lower_service_text
+            or "you request" in lower_service_text
+            or "renting a room" in lower_service_text
+            or "from bran" in lower_service_text
+            or "from elara" in lower_service_text
+            or "what she sells" in lower_service_text
+            or "heard any rumors" in lower_service_text
+        )
+        if repeats_service_action:
+            grounded = _service_grounded_action_result(narration_context)
+            if grounded:
+                return grounded
 
     lower = text.lower()
 
@@ -1136,6 +1365,12 @@ def _sanitize_narration_payload(
     narration_clean = _desystemify_text(_safe_str(normalized.get("narration")))
     narration_clean = _strip_meta_narration(narration_clean)
 
+    service_result = _service_result_from_context(narration_context)
+    if service_result.get("matched") and _service_narration_needs_grounding(narration_clean):
+        grounded_narration = _service_grounded_narration_text(narration_context)
+        if grounded_narration:
+            narration_clean = grounded_narration
+
     if not narration_clean:
         # only fallback if LLM truly failed
         narration_clean = ""
@@ -1159,7 +1394,15 @@ def _sanitize_narration_payload(
     npc = _safe_dict(normalized.get("npc"))
     npc["speaker"] = _desystemify_text(_safe_str(npc.get("speaker")))
     npc["line"] = _clean_npc_dialogue_line(_desystemify_text(_safe_str(npc.get("line"))))
-    npc["line"] = _ground_accommodation_npc_line(npc["line"], narration_context)
+
+    service_result = _service_result_from_context(narration_context)
+    if service_result.get("matched") and _service_claim_needs_grounding(npc["line"]):
+        grounded_line = _service_grounded_npc_line(narration_context)
+        if grounded_line:
+            npc["line"] = grounded_line
+    else:
+        npc["line"] = _ground_accommodation_npc_line(npc["line"], narration_context)
+
     normalized["npc"] = npc
 
     if not _safe_str(normalized.get("narration")) and _safe_str(payload.get("narration")):
@@ -1170,10 +1413,13 @@ def _sanitize_narration_payload(
         if _safe_str(original_npc.get("line")):
             npc = _safe_dict(normalized.get("npc"))
             npc["speaker"] = _safe_str(npc.get("speaker") or original_npc.get("speaker")).strip()
-            npc["line"] = _ground_accommodation_npc_line(
-                _clean_npc_dialogue_line(original_npc.get("line")),
-                narration_context,
-            )
+            restored_line = _clean_npc_dialogue_line(original_npc.get("line"))
+            service_result = _service_result_from_context(narration_context)
+            if service_result.get("matched") and _service_claim_needs_grounding(restored_line):
+                restored_line = _service_grounded_npc_line(narration_context)
+            else:
+                restored_line = _ground_accommodation_npc_line(restored_line, narration_context)
+            npc["line"] = restored_line
             normalized["npc"] = npc
 
     return normalized

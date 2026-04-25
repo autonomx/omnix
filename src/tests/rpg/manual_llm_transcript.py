@@ -19,6 +19,17 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_llm_transcript.txt"
 
 
+MANUAL_TEST_TURNS = [
+    "I ask Bran for a room to rent",
+    "I ask Bran for food",
+    "I ask Bran if he has heard any rumors",
+    "I ask Elara what she sells",
+    "I buy a torch from Elara",
+    "I try to buy a sword I cannot afford",
+    "I ask Elara to repair my gear",
+    "I ask Bran for directions to the market",
+]
+
 PROMPTS = [
     "I ask Bran for a room to rent",
     "I want a better room. I then punch Bran",
@@ -31,6 +42,10 @@ PROMPTS = [
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _extract_narration(result: Dict[str, Any]) -> str:
@@ -81,6 +96,42 @@ def _extract_narration(result: Dict[str, Any]) -> str:
 
 def _compact_json(value: Any) -> str:
     return json.dumps(value, indent=2, ensure_ascii=False, default=str)
+
+
+def _extract_turn_contract(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    payload = _safe_dict(result.get("result") or result)
+    contract = _safe_dict(payload.get("turn_contract"))
+    if contract:
+        return contract
+
+    session = _safe_dict(result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    return _safe_dict(runtime_state.get("last_turn_contract"))
+
+
+def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    contract = _extract_turn_contract(result)
+    service_result = _safe_dict(contract.get("service_result"))
+    resolved = _safe_dict(contract.get("resolved_result") or contract.get("resolved_action"))
+    resolved_service_result = _safe_dict(resolved.get("service_result"))
+    presentation = _safe_dict(contract.get("presentation"))
+
+    service = service_result or resolved_service_result
+    purchase = _safe_dict(service.get("purchase"))
+    resource_changes = _safe_dict(purchase.get("resource_changes"))
+    effects = _safe_dict(purchase.get("effects"))
+
+    return {
+        "service_result": service,
+        "available_actions": _safe_list(presentation.get("available_actions") or service.get("available_actions")),
+        "resource_changes": resource_changes,
+        "inventory_changes": {
+            "items_added": _safe_list(effects.get("items_added")),
+            "items_removed": _safe_list(effects.get("items_removed")),
+        },
+        "purchase": purchase,
+    }
 
 
 def main() -> None:
@@ -135,6 +186,7 @@ def main() -> None:
             or result_sub.get("turn_contract")
             or runtime_state.get("last_turn_contract")
         )
+        service_debug = _extract_service_debug(result)
 
         lines.append("=" * 80)
         lines.append(f"TURN {index}")
@@ -154,6 +206,18 @@ def main() -> None:
         lines.append("")
         lines.append("TURN CONTRACT:")
         lines.append(_compact_json(turn_contract))
+        lines.append("")
+        lines.append("SERVICE RESULT:")
+        lines.append(_compact_json(service_debug.get("service_result")))
+        lines.append("")
+        lines.append("AVAILABLE ACTIONS:")
+        lines.append(_compact_json(service_debug.get("available_actions")))
+        lines.append("")
+        lines.append("RESOURCE CHANGES:")
+        lines.append(_compact_json(service_debug.get("resource_changes")))
+        lines.append("")
+        lines.append("INVENTORY CHANGES:")
+        lines.append(_compact_json(service_debug.get("inventory_changes")))
         lines.append("")
         lines.append("RESULT SUBDICT:")
         lines.append(_compact_json(result_sub))
