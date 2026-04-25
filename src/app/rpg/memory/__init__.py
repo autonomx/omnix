@@ -100,6 +100,11 @@ from app.rpg.memory.retrieval import (
     retrieve_with_filters,
     score_memory,
 )
+from app.rpg.memory.service_memory_recall import (
+    has_backing_service_memory,
+    recall_service_memories,
+    recall_service_memories_for_narration,
+)
 from app.rpg.memory.summarizer import MemorySummarizer
 
 # Phase 14.2 — World Memory / Rumor Propagation
@@ -176,6 +181,9 @@ __all__ = [
     "CampaignMemoryBuilder",
     "MemoryPresenter",
     "CampaignMemoryCore",
+    "recall_service_memories",
+    "recall_service_memories_for_narration",
+    "has_backing_service_memory",
     "update_memory",
     # Phase 14.0
     "append_long_term_memory",

@@ -9,10 +9,13 @@ from app.rpg.economy.currency import (
     subtract_currency_cost,
 )
 from app.rpg.economy.service_registry import get_provider_offers
-from app.rpg.economy.service_stock import annotate_offer_availability, filter_available_offers
 from app.rpg.economy.service_resolver import (
     resolve_service_intent,
     resolve_service_turn,
+)
+from app.rpg.economy.service_stock import (
+    annotate_offer_availability,
+    filter_available_offers,
 )
 
 

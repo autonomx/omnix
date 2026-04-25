@@ -79,12 +79,23 @@ def _extract_llm_text(response):
 def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
     """Call the LLM gateway and return the response as a clean string."""
     logger.info("[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
+    gateway_call = getattr(llm_gateway, "call", None)
+    gateway_generate = getattr(llm_gateway, "generate", None)
+    gateway_generate_stream = getattr(llm_gateway, "generate_stream", None)
+
     if on_chunk:
         # Try streaming if callback provided
         chunks = []
         try:
             print("[RPG][LLM] calling provider.stream")
-            for event in llm_gateway.call("generate_stream", prompt, context=context or {}):
+            if callable(gateway_call):
+                events = gateway_call("generate_stream", prompt, context=context or {})
+            elif callable(gateway_generate_stream):
+                events = gateway_generate_stream(prompt, context=context or {})
+            else:
+                raise AttributeError("gateway has no streaming interface")
+
+            for event in events:
                 piece = _safe_str(_safe_dict(event).get("text"))
                 if piece:
                     chunks.append(piece)
@@ -101,7 +112,19 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
     try:
         print("[RPG][LLM] calling provider.generate")
         print("[ACTIVE PROVIDER]", llm_gateway)
-        response = llm_gateway.call("generate", prompt, context=context or {})
+        if callable(gateway_call):
+            response = gateway_call("generate", prompt, context=context or {})
+        elif callable(gateway_generate):
+            response = gateway_generate(prompt, context=context or {})
+        elif callable(gateway_generate_stream):
+            chunks = []
+            for event in gateway_generate_stream(prompt, context=context or {}):
+                piece = _safe_str(_safe_dict(event).get("text"))
+                if piece:
+                    chunks.append(piece)
+            response = "".join(chunks).strip()
+        else:
+            raise AttributeError("gateway has no generate or call interface")
         print("[RPG][LLM] raw response:", repr(response)[:500])
         logger.info("[RPG LLM GATEWAY] Received response type: %s, length: %d", type(response), len(str(response)) if response else 0)
     except Exception as exc:
@@ -196,9 +219,7 @@ def _force_live_llm_required(narration_context: Dict[str, Any]) -> bool:
     runtime_settings = _safe_dict(narration_context.get("runtime_settings"))
     performance = _safe_dict(narration_context.get("performance"))
     return bool(
-        narration_context.get("force_sync_narration")
-        or runtime_settings.get("force_sync_narration")
-        or performance.get("force_sync_narration")
+        narration_context.get("require_live_llm_narration")
         or runtime_settings.get("require_live_llm_narration")
         or performance.get("require_live_llm_narration")
     )
@@ -292,8 +313,6 @@ def _is_accommodation_request(narration_context: Dict[str, Any]) -> bool:
 
     haystack = " ".join(
         [
-            _safe_str(turn_contract.get("player_input")),
-            _safe_str(_safe_dict(turn_contract.get("narration_brief")).get("summary")),
             _safe_str(semantic_action.get("activity_label")),
             _safe_str(semantic_action.get("reason")),
             _safe_str(semantic_action.get("action_type")),
@@ -465,6 +484,151 @@ def _service_result_from_context(narration_context: Dict[str, Any]) -> Dict[str,
 
     return {}
 
+def _recalled_service_memories_from_context(narration_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    narration_context = _safe_dict(narration_context)
+    memories = narration_context.get("recalled_service_memories")
+    if isinstance(memories, list):
+        return [_safe_dict(memory) for memory in memories if _safe_dict(memory)]
+    return []
+
+
+def _format_recalled_service_memories_for_prompt(narration_context: Dict[str, Any]) -> str:
+    memories = _recalled_service_memories_from_context(narration_context)
+    if not memories:
+        return "None."
+
+    lines: List[str] = []
+    for memory in memories[:5]:
+        summary = _safe_str(memory.get("summary"))
+        kind = _safe_str(memory.get("kind"))
+        sentiment = _safe_str(memory.get("sentiment"))
+        service_kind = _safe_str(memory.get("service_kind"))
+        if not summary:
+            continue
+        details = ", ".join(
+            part
+            for part in [
+                f"kind={kind}" if kind else "",
+                f"service={service_kind}" if service_kind else "",
+                f"sentiment={sentiment}" if sentiment else "",
+            ]
+            if part
+        )
+        if details:
+            lines.append(f"- {summary} ({details})")
+        else:
+            lines.append(f"- {summary}")
+
+    return "\n".join(lines) if lines else "None."
+
+
+def _line_has_prior_memory_reference(line: str) -> bool:
+    lower = _safe_str(line).lower()
+    if not lower:
+        return False
+    markers = (
+        "remember",
+        "last time",
+        "again",
+        "earlier",
+        "still short",
+        "short on coin",
+        "same as before",
+        "as i told you",
+        "as i said",
+        "you came by",
+        "you asked",
+        "you bought",
+        "you tried",
+    )
+    return any(marker in lower for marker in markers)
+
+
+def _memory_reference_is_backed(line: str, narration_context: Dict[str, Any]) -> bool:
+    if not _line_has_prior_memory_reference(line):
+        return True
+
+    memories = _recalled_service_memories_from_context(narration_context)
+    if not memories:
+        return False
+
+    lower = _safe_str(line).lower()
+    for memory in memories:
+        summary = _safe_str(memory.get("summary")).lower()
+        kind = _safe_str(memory.get("kind"))
+        if kind and kind in lower:
+            return True
+        if "short" in lower and _safe_str(memory.get("blocked_reason")) == "insufficient_funds":
+            return True
+        if "coin" in lower and _safe_str(memory.get("blocked_reason")) == "insufficient_funds":
+            return True
+        if "bought" in lower and kind == "service_purchase":
+            return True
+        if "asked" in lower and kind == "service_inquiry":
+            return True
+        if summary and any(token in summary for token in lower.split() if len(token) > 5):
+            return True
+
+    specific_claim_terms = ("short", "coin", "bought", "paid", "purchased", "failed")
+    if not any(term in lower for term in specific_claim_terms):
+        return True
+
+    return False
+
+
+def _strip_unbacked_memory_reference_from_npc_line(
+    line: str,
+    narration_context: Dict[str, Any],
+) -> str:
+    if _memory_reference_is_backed(line, narration_context):
+        return line
+
+    grounded_line = _service_grounded_npc_line(narration_context)
+    if grounded_line:
+        return grounded_line
+
+    return "What can I help you with?"
+
+
+def _strip_service_meta_language(text: str, narration_context: Dict[str, Any]) -> str:
+    text = _safe_str(text)
+    if not text:
+        return text
+
+    lower = text.lower()
+    service_result = _service_result_from_context(narration_context)
+    if not service_result.get("matched"):
+        return text
+
+    provider_name = _safe_str(service_result.get("provider_name") or "The provider")
+    purchase = _safe_dict(service_result.get("purchase"))
+    service_application = _safe_dict(narration_context.get("service_application"))
+    blocked_reason = _safe_str(
+        service_application.get("blocked_reason")
+        or purchase.get("blocked_reason")
+    )
+
+    meta_markers = (
+        "the system confirms",
+        "the request to purchase",
+        "is processed by",
+        "the transaction is processed",
+        "the intent to buy",
+    )
+    if not any(marker in lower for marker in meta_markers):
+        return text
+
+    if blocked_reason == "insufficient_funds":
+        return f"{provider_name} checks the registered offer and current coin, then finds the purchase cannot be completed."
+
+    if blocked_reason == "offer_not_found":
+        return f"{provider_name} checks the registered offers and finds no matching item or service."
+
+    if _safe_str(service_result.get("kind")) == "service_purchase":
+        return f"{provider_name} checks the registered offer and current terms."
+
+    return text
+
 
 def _service_offer_label_with_price(offer: Dict[str, Any]) -> str:
     offer = _safe_dict(offer)
@@ -531,7 +695,7 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
             return f"{provider_name} completes the purchase."
         if status == "purchase_ready":
             return f"{provider_name} is ready to complete the purchase."
-        if status == "blocked":
+        if status == "blocked" or blocked_reason == "insufficient_funds":
             return f"{provider_name} names the price, but you do not have enough coin."
 
     if status == "offers_available":
@@ -603,6 +767,72 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
     return "Let me check what I can offer before we settle the details."
 
 
+def _normalized_text_for_compare(value: Any) -> str:
+    text = _safe_str(value).strip().lower()
+    return " ".join(text.split())
+
+
+def _fallback_non_service_narration(narration_context: Dict[str, Any]) -> str:
+    narration_context = _safe_dict(narration_context)
+    player_input = _safe_str(narration_context.get("player_input"))
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    resolved = _safe_dict(
+        narration_context.get("resolved_result")
+        or turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+    action_type = _safe_str(resolved.get("action_type") or _safe_dict(turn_contract.get("action")).get("action_type"))
+    target_name = _safe_str(resolved.get("target_name") or _safe_dict(turn_contract.get("action")).get("target_name"))
+    outcome = _safe_str(resolved.get("outcome"))
+
+    if target_name and action_type in {"social_activity", "persuade", "investigate"}:
+        if outcome == "success":
+            return f"{target_name} gives the request their attention and responds."
+        if outcome == "partial":
+            return f"{target_name} considers the request, but the answer comes with some uncertainty."
+        return f"{target_name} considers the request."
+
+    if action_type:
+        return "The action resolves against the current situation."
+
+    if player_input:
+        return "The moment shifts in response to your action."
+
+    return "The scene continues."
+
+
+def _sanitize_repeated_player_input_narration(
+    payload: Dict[str, Any],
+    narration_context: Dict[str, Any],
+) -> None:
+    narration = _safe_str(payload.get("narration"))
+    player_input = _safe_str(narration_context.get("player_input"))
+    if not narration or not player_input:
+        return
+
+    if _normalized_text_for_compare(narration) == _normalized_text_for_compare(player_input):
+        payload["narration"] = _fallback_non_service_narration(narration_context)
+
+
+def _naturalize_service_debug_language(text: str) -> str:
+    text = _safe_str(text)
+    if not text:
+        return text
+    replacements = {
+        "registered lodging options": "available lodging options",
+        "registered meal options": "available meal options",
+        "registered paid information options": "available information options",
+        "registered shop goods options": "available goods",
+        "registered repair options": "available repair options",
+        "registered offers": "available offers",
+        "registered offer": "available offer",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+        text = text.replace(old.title(), new)
+    return text
+
+
 def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
     service_result = _service_result_from_context(narration_context)
     if not service_result:
@@ -625,7 +855,12 @@ def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
             or blocked_reason == "offer_not_found"
         )
     ):
-        return f"{provider_name} checks the registered offers and finds no matching item or service."
+        return f"{provider_name} checks the available offers and finds no matching item or service."
+
+    if status == "offers_available":
+        if service_kind:
+            return f"{provider_name} looks over the available {service_kind} options."
+        return f"{provider_name} looks over the available options."
 
     if status == "offers_available":
         if service_kind:
@@ -633,7 +868,7 @@ def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
         return f"{provider_name} looks over the registered service options."
 
     if status == "blocked":
-        return f"{provider_name} checks the price against your available coin."
+        return f"{provider_name} checks the registered offer and current coin, then finds the purchase cannot be completed."
 
     if status == "purchased":
         return f"{provider_name} completes the registered service purchase."
@@ -728,8 +963,22 @@ def _ground_action_result_text(action_text: str, narration_context: Dict[str, An
     if not text:
         return text
 
+    lower_text = text.lower()
+
     service_result = _service_result_from_context(narration_context)
     if service_result.get("matched"):
+        if lower_text in {
+            "the attempt fails.",
+            "the attempt fails",
+            "you fail.",
+            "you fail",
+            "it fails.",
+            "it fails",
+        }:
+            grounded = _service_grounded_action_result(narration_context)
+            if grounded:
+                return grounded
+
         purchase = _safe_dict(service_result.get("purchase"))
         service_application = _safe_dict(narration_context.get("service_application"))
         service_status = _safe_str(service_result.get("status"))
@@ -737,6 +986,18 @@ def _ground_action_result_text(action_text: str, narration_context: Dict[str, An
             service_application.get("blocked_reason")
             or purchase.get("blocked_reason")
         )
+
+        if (
+            _safe_str(service_result.get("kind")) == "service_purchase"
+            and (
+                service_status == "blocked"
+                or blocked_reason == "insufficient_funds"
+            )
+        ):
+            grounded = _service_grounded_action_result(narration_context)
+            if grounded:
+                return grounded
+
         if (
             _safe_str(service_result.get("kind")) == "service_purchase"
             and (
@@ -951,12 +1212,18 @@ def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
     if not text:
         return {}
 
+    candidates = [text]
+    normalized_quotes = text.replace("\\'", "'")
+    if normalized_quotes != text:
+        candidates.append(normalized_quotes)
+
     # Fast path: raw JSON
-    try:
-        value = json.loads(text)
-        return value if isinstance(value, dict) else {}
-    except Exception:
-        pass
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+            return value if isinstance(value, dict) else {}
+        except Exception:
+            pass
 
     # Fenced code block path
     if "```" in text:
@@ -967,22 +1234,32 @@ def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
                 candidate = candidate[4:].strip()
             if not candidate:
                 continue
-            try:
-                value = json.loads(candidate)
-                return value if isinstance(value, dict) else {}
-            except Exception:
-                continue
+            candidate_variants = [candidate]
+            normalized_candidate = candidate.replace("\\'", "'")
+            if normalized_candidate != candidate:
+                candidate_variants.append(normalized_candidate)
+            for candidate_variant in candidate_variants:
+                try:
+                    value = json.loads(candidate_variant)
+                    return value if isinstance(value, dict) else {}
+                except Exception:
+                    continue
 
     # Loose substring path: first balanced {...}
     start = text.find("{")
     end = text.rfind("}")
     if start >= 0 and end > start:
         candidate = text[start:end + 1]
-        try:
-            value = json.loads(candidate)
-            return value if isinstance(value, dict) else {}
-        except Exception:
-            pass
+        candidate_variants = [candidate]
+        normalized_candidate = candidate.replace("\\'", "'")
+        if normalized_candidate != candidate:
+            candidate_variants.append(normalized_candidate)
+        for candidate_variant in candidate_variants:
+            try:
+                value = json.loads(candidate_variant)
+                return value if isinstance(value, dict) else {}
+            except Exception:
+                pass
 
     return {}
 
@@ -1016,12 +1293,9 @@ def _parse_llm_narration_payload(raw: Any) -> Dict[str, Any]:
         text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE).strip()
         text = re.sub(r"\s*```$", "", text).strip()
 
-    if text.startswith("{") and text.endswith("}"):
-        try:
-            parsed = json.loads(text)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
+    parsed_json = _extract_json_object_from_text(text)
+    if parsed_json:
+        return parsed_json
 
     return parse_scene_response(text)
 
@@ -1105,7 +1379,8 @@ def _extract_present_actor_names(scene: Dict[str, Any], narration_context: Dict[
 
 
 def _extract_price_tokens(text: str) -> set:
-    return set(re.findall(r"\b\d+\s*(gold|silver|copper)\b", text.lower()))
+    number_pattern = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    return set(re.findall(rf"\b{number_pattern}\s*(gold|silver|copper)\b", text.lower()))
 
 
 def _sanitize_narration_text(
@@ -1151,7 +1426,7 @@ def _sanitize_narration_text(
         # Reject invented off-scene enforcement / faction actors unless they are present.
         if any(term in lower for term in banned_generic_terms):
             # allow passive mentions, reject active invention
-            if not re.search(r"\b(call|signal|summon|order|arrive|rush|draw|attack)\b", lower):
+            if not re.search(r"\b(call|calls|called|signal|signals|signaled|summon|summons|summoned|order|orders|ordered|arrive|arrives|arrived|rush|rushes|rushed|draw|draws|drew|attack|attacks|attacked|spread|spreads|spreads)\b", lower):
                 kept.append(sentence)
                 continue
             else:
@@ -1201,7 +1476,9 @@ def _sanitize_narration_text(
 
 
 def _authoritative_action_text(narration_context: Dict[str, Any]) -> str:
-    return _strip_basic_markdown(_build_action_result_line(narration_context))
+    text = _strip_basic_markdown(_build_action_result_line(narration_context)).strip()
+    text = re.sub(r"^(?:\*\*)?action(?:\*\*)?\s*:\s*", "", text, flags=re.IGNORECASE)
+    return text.strip()
 
 
 def _authoritative_reward_text(narration_context: Dict[str, Any]) -> str:
@@ -1415,6 +1692,7 @@ def _sanitize_narration_payload(
 
     if authoritative_action is None:
         authoritative_action = _authoritative_action_text(narration_context)
+    authoritative_result_action = _authoritative_action_text(narration_context)
     authoritative_reward = _authoritative_reward_text(narration_context)
     sanitized_npc = _sanitize_npc_block(payload, scene, narration_context)
 
@@ -1423,11 +1701,7 @@ def _sanitize_narration_payload(
 
     # Presentation-only narration text remains model-authored, but sanitized against hallucinations
     llm_narration = _safe_str(payload.get("narration")).strip()
-    # If LLM returned valid narration, preserve it; only fall back if it's clearly invalid
-    if llm_narration and len(llm_narration) > 20:
-        narration_text = llm_narration
-    else:
-        narration_text = _sanitize_narration_text(llm_narration, scene, narration_context)
+    narration_text = _sanitize_narration_text(llm_narration, scene, narration_context)
 
     # Action and reward are authoritative-only.
     llm_action = _safe_str(payload.get("action")).strip()
@@ -1490,8 +1764,8 @@ def _sanitize_narration_payload(
 
     service_result = _service_result_from_context(narration_context)
     grounded_narration = _service_grounded_narration_text(narration_context)
-    if grounded_narration:
-        normalized["narration"] = grounded_narration
+    if service_result.get("matched") and grounded_narration:
+        narration_clean = grounded_narration
 
     if service_result.get("matched") and _service_narration_needs_grounding(narration_clean):
         grounded_narration = _service_grounded_narration_text(narration_context)
@@ -1502,7 +1776,10 @@ def _sanitize_narration_payload(
         # only fallback if LLM truly failed
         narration_clean = ""
 
+    narration_clean = _strip_service_meta_language(narration_clean, narration_context)
     normalized["narration"] = narration_clean
+    normalized["narration"] = _naturalize_service_debug_language(normalized["narration"])
+    _sanitize_repeated_player_input_narration(normalized, narration_context)
     action_raw = _safe_str(normalized.get("action"))
 
     # Only strip CLEAR meta/system instructions
@@ -1518,6 +1795,8 @@ def _sanitize_narration_payload(
             normalized["action"],
             narration_context,
         )
+        if authoritative_result_action:
+            normalized["action"] = authoritative_result_action
     npc = _safe_dict(normalized.get("npc"))
     npc["speaker"] = _desystemify_text(_safe_str(npc.get("speaker")))
     npc["line"] = _clean_npc_dialogue_line(_desystemify_text(_safe_str(npc.get("line"))))
@@ -1546,10 +1825,36 @@ def _sanitize_narration_payload(
         )
     )
 
+    if not service_result.get("matched"):
+        continuity_price_facts = _extract_continuity_price_facts(narration_context)
+        npc_lower = _safe_str(npc.get("line")).lower()
+        if continuity_price_facts and ("gold" in npc_lower or "silver" in npc_lower or "copper" in npc_lower):
+            prior_price_tokens = set()
+            for fact in continuity_price_facts:
+                prior_price_tokens.update(_extract_price_tokens(fact))
+            current_price_tokens = _extract_price_tokens(npc["line"])
+            if current_price_tokens and not current_price_tokens.issubset(prior_price_tokens):
+                resolved_dialogue = _safe_str(_safe_dict(narration_context.get("resolved_result")).get("dialogue")).strip()
+                npc["line"] = _clean_npc_dialogue_line(resolved_dialogue)
+
+    preserve_backed_memory_reference = (
+        _line_has_prior_memory_reference(npc["line"])
+        and _memory_reference_is_backed(npc["line"], narration_context)
+    )
+
     if (
         service_result.get("matched")
+        and not preserve_backed_memory_reference
         and (
-            service_purchase_applied
+            service_status in {
+                "offers_available",
+                "no_registered_offers",
+                "blocked",
+                "purchased",
+                "purchase_ready",
+                "purchase_offer_not_found",
+            }
+            or service_purchase_applied
             or service_purchase_offer_not_found
             or _service_claim_needs_grounding(npc["line"])
         )
@@ -1560,10 +1865,12 @@ def _sanitize_narration_payload(
     else:
         npc["line"] = _ground_accommodation_npc_line(npc["line"], narration_context)
 
-    normalized["npc"] = npc
+    npc["line"] = _strip_unbacked_memory_reference_from_npc_line(
+        npc["line"],
+        narration_context,
+    )
 
-    if not _safe_str(normalized.get("narration")) and _safe_str(payload.get("narration")):
-        normalized["narration"] = _safe_str(payload.get("narration")).strip()
+    normalized["npc"] = npc
 
     if not _safe_str(_safe_dict(normalized.get("npc")).get("line")):
         original_npc = _safe_dict(payload.get("npc"))
@@ -1576,6 +1883,10 @@ def _sanitize_narration_payload(
                 restored_line = _service_grounded_npc_line(narration_context)
             else:
                 restored_line = _ground_accommodation_npc_line(restored_line, narration_context)
+            restored_line = _strip_unbacked_memory_reference_from_npc_line(
+                restored_line,
+                narration_context,
+            )
             npc["line"] = restored_line
             normalized["npc"] = npc
 
@@ -1609,6 +1920,12 @@ def _render_narration_text_from_json(payload: Dict[str, Any]) -> str:
 def _recover_narration_from_raw_text(text: str) -> Dict[str, Any]:
     text = _safe_str(text).strip()
     if not text:
+        return _normalize_narration_json({})
+
+    if text.startswith("{") or '"format_version"' in text or '"narration"' in text:
+        extracted = _extract_json_object_from_text(text)
+        if extracted:
+            return _normalize_narration_json(extracted)
         return _normalize_narration_json({})
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -2197,6 +2514,14 @@ Conversation thread rules:
 - NPCs may answer, pivot, interrupt, or defer, but must not invent rewards, inventory, combat results, locations, or new NPCs.
 - If a thread has world_signals, phrase them as rumors, tension, suspicions, or social shifts only.
 - Do not resolve or mutate authoritative state unless action_result already says it happened.
+
+Relevant NPC memories from deterministic simulation:
+{_format_recalled_service_memories_for_prompt(narration_context)}
+
+Memory rules:
+- NPCs may reference prior interactions only if they appear in Relevant NPC memories.
+- Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.
+- If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.
 
 SCENE:
 Title: {title}

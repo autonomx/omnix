@@ -19,8 +19,8 @@ from app.rpg.economy.service_registry import (
     SERVICE_KIND_TRAINING,
     SERVICE_KIND_TRANSPORT,
     find_provider_by_text,
-    get_service_provider,
     get_provider_offers,
+    get_service_provider,
 )
 from app.rpg.economy.service_stock import filter_available_offers
 

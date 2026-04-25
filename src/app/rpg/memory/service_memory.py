@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-
 MAX_SERVICE_MEMORIES = 80
 MAX_NPC_SERVICE_MEMORIES = 40
 

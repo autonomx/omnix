@@ -3,6 +3,7 @@ import copy
 import json
 from unittest.mock import call, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -24,6 +25,11 @@ def _make_test_app():
     app = FastAPI()
     app.include_router(rpg_session_bp)
     return app
+
+
+@pytest.fixture
+def client():
+    return TestClient(_make_test_app())
 
 
 def test_authoritative_turn_queues_narration_instead_of_generating_inline():
@@ -774,6 +780,279 @@ def test_player_turn_job_is_not_marked_stale_when_runtime_tick_advances():
         job = runtime_state["narration_jobs_by_turn"]["turn:6"]
         assert job["status"] == "completed"
         assert "stale" not in job.get("error", "")
+
+
+def test_service_npc_dialogue_removes_unbacked_prior_memory_reference():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara looks over the goods.",'
+                    '"action":"Elara checks the available options.",'
+                    '"npc":{"speaker":"Elara","line":"Still short on coin from last time, are you?"},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_inquiry",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "status": "offers_available",
+        "offers": [
+            {
+                "offer_id": "elara_torch",
+                "label": "Torch",
+                "price": {"gold": 0, "silver": 1, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "",
+        "purchase": None,
+        "available_actions": [],
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I ask Elara what she sells",
+            "service_result": service_result,
+            "service_application": {},
+            "recalled_service_memories": [],
+            "turn_contract": {
+                "player_input": "I ask Elara what she sells",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert "last time" not in result["narration"].lower()
+    assert "still short" not in result["narration"].lower()
+    assert result["narration_json"]["npc"]["line"] != "Still short on coin from last time, are you?"
+
+
+def test_service_npc_dialogue_allows_backed_prior_memory_reference():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara looks over the goods.",'
+                    '"action":"Elara checks the available options.",'
+                    '"npc":{"speaker":"Elara","line":"Still short on coin from last time, or ready to buy today?"},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_inquiry",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "status": "offers_available",
+        "offers": [
+            {
+                "offer_id": "elara_torch",
+                "label": "Torch",
+                "price": {"gold": 0, "silver": 1, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "",
+        "purchase": None,
+        "available_actions": [],
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I ask Elara what she sells",
+            "service_result": service_result,
+            "service_application": {},
+            "recalled_service_memories": [
+                {
+                    "memory_id": "memory:test",
+                    "kind": "service_purchase_blocked",
+                    "owner_id": "npc:Elara",
+                    "owner_name": "Elara",
+                    "subject_id": "player",
+                    "service_kind": "shop_goods",
+                    "offer_id": "elara_torch",
+                    "summary": "The player tried to buy Torch from Elara without enough coin.",
+                    "blocked_reason": "insufficient_funds",
+                }
+            ],
+            "turn_contract": {
+                "player_input": "I ask Elara what she sells",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert "still short on coin" in result["narration"].lower()
+    assert result["narration_json"]["npc"]["line"] == (
+        "Still short on coin from last time, or ready to buy today?"
+    )
+
+
+def test_service_purchase_blocked_narration_strips_meta_processed_language():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"The request to purchase a torch is processed by Elara. The system confirms stock.",'
+                    '"action":"Elara names the price, but you do not have enough coin.",'
+                    '"npc":{"speaker":"Elara","line":"Torch for 1 silver is the price, but you do not have enough coin."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "status": "blocked",
+        "offers": [{"offer_id": "elara_torch", "label": "Torch"}],
+        "selected_offer_id": "elara_torch",
+        "purchase": {
+            "blocked": True,
+            "blocked_reason": "insufficient_funds",
+            "applied": False,
+        },
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I buy a torch from Elara",
+            "service_result": service_result,
+            "service_application": {"blocked": True, "blocked_reason": "insufficient_funds"},
+            "turn_contract": {
+                "player_input": "I buy a torch from Elara",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    assert "the system confirms" not in text
+    assert "processed by elara" not in text
+    assert "current coin" in text
+
+
+def test_service_purchase_blocked_result_keeps_specific_grounded_reason():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara checks the offer.",'
+                    '"action":"The attempt fails.",'
+                    '"npc":{"speaker":"Elara","line":"Torch for 1 silver is the price, but you do not have enough coin."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "status": "blocked",
+        "selected_offer_id": "elara_torch",
+        "purchase": {
+            "blocked": True,
+            "blocked_reason": "insufficient_funds",
+            "applied": False,
+        },
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I buy a torch from Elara",
+            "service_result": service_result,
+            "service_application": {"blocked": True, "blocked_reason": "insufficient_funds"},
+            "turn_contract": {
+                "player_input": "I buy a torch from Elara",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert result["narration_json"]["action"] == "Elara names the price, but you do not have enough coin."
+    assert "Result: Elara names the price, but you do not have enough coin." in result["narration"]
+
+
+def test_non_service_narration_does_not_repeat_player_input():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"I ask Bran for directions to the market",'
+                    '"action":"Bran responds.",'
+                    '"npc":{"speaker":"Bran","line":"The market is east of the fountain."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    result = narrate_scene(
+        {"title": "Tavern", "actors": [{"name": "Bran"}]},
+        {
+            "player_input": "I ask Bran for directions to the market",
+            "turn_contract": {
+                "player_input": "I ask Bran for directions to the market",
+                "action": {
+                    "action_type": "investigate",
+                    "target_name": "Bran",
+                },
+                "resolved_result": {
+                    "outcome": "success",
+                    "action_type": "investigate",
+                    "target_name": "Bran",
+                },
+            },
+            "resolved_result": {
+                "outcome": "success",
+                "action_type": "investigate",
+                "target_name": "Bran",
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert result["narration_json"]["narration"] != "I ask Bran for directions to the market"
+    assert "gives the request their attention" in result["narration_json"]["narration"]
 
 
 def test_ambient_conversation_job_is_marked_stale_when_far_behind():
@@ -1679,6 +1958,133 @@ def test_narrate_scene_does_not_emit_format_invalid_on_non_json_llm_text():
 
     assert "[ERROR: LLM FORMAT INVALID]" not in result.get("narration", "")
     assert result.get("used_llm") is True
+
+
+def test_narrate_scene_force_sync_can_fallback_when_provider_fails():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class FailingGateway:
+        def generate(self, *args, **kwargs):
+            raise RuntimeError("provider_down")
+
+    result = narrate_scene(
+        {"title": "The Rusty Flagon Tavern"},
+        {
+            "player_input": "I wait",
+            "force_sync_narration": True,
+            "resolved_result": {"ok": True, "message": "You wait and watch the room."},
+        },
+        llm_gateway=FailingGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert result.get("used_llm") is True
+    assert "You wait and watch the room." in result.get("narration", "")
+
+
+def test_assemble_turn_narration_response_sync_does_not_force_live_llm():
+    from app.rpg.session.narration_runtime import assemble_turn_narration_response
+
+    captured = {}
+
+    def _fake_narrate_scene(scene, narration_context, llm_gateway=None):
+        captured["scene"] = scene
+        captured["narration_context"] = narration_context
+        return {
+            "narration": "You wait and watch the room.",
+            "narration_json": {"narration": "You wait and watch the room."},
+            "used_llm": False,
+        }
+
+    with patch("app.rpg.session.narration_runtime.narrate_scene", side_effect=_fake_narrate_scene), \
+         patch("app.rpg.session.narration_runtime.build_app_llm_gateway", return_value=object()):
+        result = assemble_turn_narration_response(
+            session={"session_id": "test_session"},
+            authoritative={},
+            turn_contract={},
+            narration_request={
+                "scene": {"title": "The Rusty Flagon Tavern"},
+                "narration_context": {"player_input": "I wait"},
+            },
+            runtime_state={
+                "force_sync_narration": True,
+                "performance": {},
+                "runtime_settings": {},
+            },
+            perf={"enable_live_narration_llm": True},
+            resolved_result={"ok": True, "message": "You wait and watch the room."},
+        )
+
+    assert result["result"]["narration"] == "You wait and watch the room."
+    assert captured["narration_context"]["force_sync_narration"] is True
+    assert captured["narration_context"]["require_live_llm_narration"] is False
+
+
+def test_assemble_turn_narration_response_sync_recomputes_service_recall_when_missing():
+    from app.rpg.session.narration_runtime import assemble_turn_narration_response
+
+    captured = {}
+
+    def _fake_narrate_scene(scene, narration_context, llm_gateway=None):
+        captured["narration_context"] = narration_context
+        return {
+            "narration": "Elara recognizes the earlier failed purchase.",
+            "narration_json": {"narration": "Elara recognizes the earlier failed purchase."},
+            "used_llm": False,
+        }
+
+    with patch("app.rpg.session.narration_runtime.narrate_scene", side_effect=_fake_narrate_scene), \
+         patch("app.rpg.session.narration_runtime.build_app_llm_gateway", return_value=object()):
+        result = assemble_turn_narration_response(
+            session={"session_id": "test_session"},
+            authoritative={},
+            turn_contract={},
+            narration_request={
+                "scene": {"title": "Market Stall"},
+                "narration_context": {
+                    "player_input": "I buy Torch from Elara",
+                    "simulation_state": {
+                        "memory_state": {
+                            "service_memories": [
+                                {
+                                    "memory_id": "memory:test",
+                                    "kind": "service_purchase_blocked",
+                                    "owner_id": "npc:Elara",
+                                    "owner_name": "Elara",
+                                    "subject_id": "player",
+                                    "service_kind": "shop_goods",
+                                    "offer_id": "elara_torch",
+                                    "summary": "The player tried to buy Torch from Elara without enough coin.",
+                                    "blocked_reason": "insufficient_funds",
+                                    "importance": 0.35,
+                                    "tick": 20,
+                                }
+                            ]
+                        }
+                    },
+                },
+            },
+            runtime_state={
+                "force_sync_narration": True,
+                "performance": {},
+                "runtime_settings": {},
+            },
+            perf={"enable_live_narration_llm": True},
+            resolved_result={
+                "service_result": {
+                    "matched": True,
+                    "kind": "service_purchase",
+                    "service_kind": "shop_goods",
+                    "provider_id": "npc:Elara",
+                    "provider_name": "Elara",
+                    "selected_offer_id": "elara_torch",
+                }
+            },
+        )
+
+    assert result["result"]["narration"] == "Elara recognizes the earlier failed purchase."
+    assert len(captured["narration_context"]["recalled_service_memories"]) == 1
+    assert captured["narration_context"]["service_memory_recall_debug"]["count"] == 1
 
 
 def test_narrator_reward_and_action_are_authoritative_only():

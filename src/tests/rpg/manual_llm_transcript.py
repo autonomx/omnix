@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import zipfile
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
@@ -25,6 +26,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_llm_transcript.txt"
 SERVICE_OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_service_scenarios_all.txt"
 CODE_DIFF_PATH = OUTPUT_DIR / "code-diff.txt"
+RESULTS_ZIP_PATH = OUTPUT_DIR / "manual-rpg-test-results.zip"
+TOKEN_USAGE_PATH = OUTPUT_DIR / "token-usage.txt"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOT = REPO_ROOT / "src"
 
@@ -41,6 +44,195 @@ CODE_DIFF_EXCLUDE_PARTS = {
 
 
 _OUTPUTS: Dict[str, List[str]] = {}
+_TOKEN_USAGE_ROWS: List[Dict[str, Any]] = []
+
+
+def _estimate_tokens_from_text(value: Any) -> int:
+    text = "" if value is None else str(value)
+    if not text:
+        return 0
+    # Rough English/code estimate. This is intentionally conservative and
+    # provider-agnostic. Exact provider usage is preferred when available.
+    return max(1, int(len(text) / 4))
+
+
+def _extract_token_usage_from_any(value: Any) -> Dict[str, Any]:
+    value_dict = _safe_dict(value)
+    if not value_dict:
+        return {}
+
+    usage = _safe_dict(
+        value_dict.get("usage")
+        or value_dict.get("token_usage")
+        or value_dict.get("tokens")
+        or value_dict.get("llm_usage")
+    )
+
+    if not usage:
+        result = _safe_dict(value_dict.get("result"))
+        usage = _safe_dict(
+            result.get("usage")
+            or result.get("token_usage")
+            or result.get("tokens")
+            or result.get("llm_usage")
+        )
+
+    if not usage:
+        narration_debug = _safe_dict(_safe_dict(value_dict.get("result")).get("narration_debug"))
+        usage = _safe_dict(
+            narration_debug.get("usage")
+            or narration_debug.get("token_usage")
+            or narration_debug.get("tokens")
+            or narration_debug.get("llm_usage")
+        )
+
+    if not usage:
+        return {}
+
+    prompt_tokens = (
+        usage.get("prompt_tokens")
+        or usage.get("input_tokens")
+        or usage.get("prompt")
+        or usage.get("input")
+        or 0
+    )
+    completion_tokens = (
+        usage.get("completion_tokens")
+        or usage.get("output_tokens")
+        or usage.get("completion")
+        or usage.get("output")
+        or 0
+    )
+    total_tokens = (
+        usage.get("total_tokens")
+        or usage.get("total")
+        or 0
+    )
+
+    try:
+        prompt_tokens = int(prompt_tokens or 0)
+    except Exception:
+        prompt_tokens = 0
+    try:
+        completion_tokens = int(completion_tokens or 0)
+    except Exception:
+        completion_tokens = 0
+    try:
+        total_tokens = int(total_tokens or 0)
+    except Exception:
+        total_tokens = 0
+
+    if not total_tokens:
+        total_tokens = prompt_tokens + completion_tokens
+
+    return {
+        "source": "provider",
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "raw_usage": usage,
+    }
+
+
+def _extract_token_usage_from_result(result: Dict[str, Any], *, player_input: str = "") -> Dict[str, Any]:
+    exact = _extract_token_usage_from_any(result)
+    if exact:
+        return exact
+
+    narration = _extract_narration(result)
+    turn_contract = _extract_turn_contract(result)
+    result_sub = _safe_dict(result.get("result"))
+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
+    raw_llm = (
+        narration_debug.get("raw_llm_narrative")
+        or narration_debug.get("raw_llm_text")
+        or result_sub.get("raw_llm_narrative")
+        or result_sub.get("raw_llm_text")
+        or narration
+    )
+
+    estimated_prompt = _estimate_tokens_from_text(player_input) + _estimate_tokens_from_text(turn_contract)
+    estimated_completion = _estimate_tokens_from_text(raw_llm or narration)
+    return {
+        "source": "estimated",
+        "prompt_tokens": estimated_prompt,
+        "completion_tokens": estimated_completion,
+        "total_tokens": estimated_prompt + estimated_completion,
+        "raw_usage": {},
+    }
+
+
+def _record_token_usage(
+    *,
+    scope: str,
+    label: str,
+    turn: int,
+    player_input: str,
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    usage = _extract_token_usage_from_result(result, player_input=player_input)
+    row = {
+        "scope": scope,
+        "label": label,
+        "turn": turn,
+        "player_input": player_input,
+        "source": usage.get("source", ""),
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+    }
+    _TOKEN_USAGE_ROWS.append(row)
+    return row
+
+
+def _reset_token_usage() -> None:
+    _TOKEN_USAGE_ROWS.clear()
+
+
+def _token_usage_totals(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    return {
+        "prompt_tokens": sum(int(row.get("prompt_tokens") or 0) for row in rows),
+        "completion_tokens": sum(int(row.get("completion_tokens") or 0) for row in rows),
+        "total_tokens": sum(int(row.get("total_tokens") or 0) for row in rows),
+    }
+
+
+def write_token_usage_report(path: Path = TOKEN_USAGE_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    by_scope: Dict[str, List[Dict[str, Any]]] = {}
+    for row in _TOKEN_USAGE_ROWS:
+        by_scope.setdefault(str(row.get("scope") or "unknown"), []).append(row)
+
+    lines: List[str] = []
+    lines.append("Manual RPG transcript token usage")
+    lines.append("=" * 80)
+    lines.append("")
+    lines.append("NOTE:")
+    lines.append("- source=provider means token counts came from provider/runtime usage metadata.")
+    lines.append("- source=estimated means counts are rough char/4 estimates from transcript data.")
+    lines.append("")
+
+    totals = _token_usage_totals(_TOKEN_USAGE_ROWS)
+    lines.append("TOTALS")
+    lines.append("-" * 80)
+    lines.append(_compact_json(totals))
+    lines.append("")
+
+    lines.append("TOTALS BY SCOPE")
+    lines.append("-" * 80)
+    for scope in sorted(by_scope):
+        lines.append(scope)
+        lines.append(_compact_json(_token_usage_totals(by_scope[scope])))
+    lines.append("")
+
+    lines.append("ROWS")
+    lines.append("-" * 80)
+    lines.append(_compact_json(_TOKEN_USAGE_ROWS))
+    lines.append("")
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"Wrote token usage to: {path.resolve()}", flush=True)
 
 
 def _emit(value: Any = "", channel: str = "main") -> None:
@@ -288,6 +480,50 @@ def write_code_diff_snapshot(
     print(f"Wrote code diff to: {path.resolve()}", flush=True)
 
 
+def _is_result_zip_candidate(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if path.resolve() == RESULTS_ZIP_PATH.resolve():
+        return False
+    if path.suffix.lower() == ".zip":
+        return False
+    if path.name in {
+        "code-diff.txt",
+        "token-usage.txt",
+        "manual_rpg_llm_transcript.txt",
+        "manual_rpg_service_scenarios_all.txt",
+    }:
+        return True
+    if path.name.startswith("manual_rpg_llm_transcript__") and path.suffix == ".txt":
+        return True
+    if path.name.startswith("manual_rpg_service_scenarios__") and path.suffix == ".txt":
+        return True
+    if path.name.startswith("manual_rpg_service_scenarios_") and path.suffix == ".txt":
+        return True
+    return False
+
+
+def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    candidates = sorted(
+        candidate
+        for candidate in OUTPUT_DIR.iterdir()
+        if _is_result_zip_candidate(candidate)
+    )
+
+    if path.exists():
+        path.unlink()
+
+    with zipfile.ZipFile(path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for candidate in candidates:
+            archive.write(candidate, arcname=candidate.name)
+
+    print(
+        f"Wrote results zip to: {path.resolve()} ({len(candidates)} file(s))",
+        flush=True,
+    )
+
+
 MANUAL_TEST_TURNS = [
     "I ask Bran for a room to rent",
     "I ask Bran for food",
@@ -428,14 +664,32 @@ def _extract_session(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
     session = _extract_session(result)
-    direct = _safe_dict(session.get("simulation_state"))
+    direct = dict(_safe_dict(session.get("simulation_state")))
     if direct:
+        if _safe_dict(result_sub.get("memory_state")):
+            direct["memory_state"] = _safe_dict(result_sub.get("memory_state"))
+        if _safe_dict(result_sub.get("relationship_state")):
+            direct["relationship_state"] = _safe_dict(result_sub.get("relationship_state"))
+        if _safe_dict(result_sub.get("npc_emotion_state")):
+            direct["npc_emotion_state"] = _safe_dict(result_sub.get("npc_emotion_state"))
+        if _safe_dict(result_sub.get("service_offer_state")):
+            direct["service_offer_state"] = _safe_dict(result_sub.get("service_offer_state"))
         return direct
 
     setup_payload = _safe_dict(session.get("setup_payload"))
     metadata = _safe_dict(setup_payload.get("metadata"))
-    return _safe_dict(metadata.get("simulation_state"))
+    simulation_state = dict(_safe_dict(metadata.get("simulation_state")))
+    if _safe_dict(result_sub.get("memory_state")):
+        simulation_state["memory_state"] = _safe_dict(result_sub.get("memory_state"))
+    if _safe_dict(result_sub.get("relationship_state")):
+        simulation_state["relationship_state"] = _safe_dict(result_sub.get("relationship_state"))
+    if _safe_dict(result_sub.get("npc_emotion_state")):
+        simulation_state["npc_emotion_state"] = _safe_dict(result_sub.get("npc_emotion_state"))
+    if _safe_dict(result_sub.get("service_offer_state")):
+        simulation_state["service_offer_state"] = _safe_dict(result_sub.get("service_offer_state"))
+    return simulation_state
 
 
 def _extract_player_inventory(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -563,6 +817,54 @@ def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
     return service_offer_state
 
 
+def _extract_recalled_service_memories(result: Dict[str, Any]) -> List[Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
+    direct = _safe_list(narration_debug.get("recalled_service_memories"))
+    current_memory_id = _safe_str(_safe_dict(_extract_service_debug(result).get("memory_entry")).get("memory_id"))
+    if direct:
+        return [
+            memory
+            for memory in direct
+            if _safe_str(_safe_dict(memory).get("memory_id")) != current_memory_id
+        ]
+
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    return [
+        memory
+        for memory in _safe_list(resolved.get("recalled_service_memories"))
+        if _safe_str(_safe_dict(memory).get("memory_id")) != current_memory_id
+    ]
+
+
+def _extract_service_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
+    direct = _safe_dict(narration_debug.get("service_memory_recall_debug"))
+    if direct:
+        return direct
+
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    return _safe_dict(resolved.get("service_memory_recall_debug"))
+
+
+def _extract_living_world_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    service_debug = _extract_service_debug(result)
+    resolved = _safe_dict(service_debug.get("resolved_result"))
+    direct = _safe_dict(resolved.get("living_world_debug"))
+    if direct:
+        return direct
+    return {
+        "memory_entry": service_debug.get("memory_entry"),
+        "social_effects": service_debug.get("social_effects"),
+        "stock_update": service_debug.get("stock_update"),
+    }
+
+
 def _effective_service_status(
     service_result: Dict[str, Any],
     service_application: Dict[str, Any],
@@ -623,11 +925,16 @@ def _compact_turn_summary(
         "transaction_history_count": len(_extract_transaction_history(result)),
         "memory_entry": service_debug.get("memory_entry"),
         "service_memory_count": len(_extract_service_memories(result)),
+        "recalled_service_memories": _extract_recalled_service_memories(result),
+        "recalled_service_memory_count": len(_extract_recalled_service_memories(result)),
+        "service_memory_recall_debug": _extract_service_memory_recall_debug(result),
         "relationship_state": _extract_relationship_state(result),
         "npc_emotion_state": _extract_npc_emotion_state(result),
         "social_effects": service_debug.get("social_effects"),
         "stock_update": service_debug.get("stock_update"),
         "service_offer_state": _extract_service_offer_state(result),
+        "living_world_debug": _extract_living_world_debug(result),
+        "token_usage": _extract_token_usage_from_result(result, player_input=player_input),
         "available_actions": service_debug.get("available_actions"),
         "narration_preview": narration[:500] if narration else "",
         "ok": not bool(_safe_dict(result).get("error")),
@@ -820,6 +1127,7 @@ def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
     service_application = _safe_dict(resolved.get("service_application"))
 
     return {
+        "resolved_result": resolved,
         "service_result": service,
         "available_actions": _safe_list(
             presentation.get("available_actions") or service.get("available_actions")
@@ -943,6 +1251,12 @@ def _print_turn(
     _emit("SERVICE MEMORIES:", channel=channel)
     _emit(_compact_json(_extract_service_memories(result)), channel=channel)
     _emit("", channel=channel)
+    _emit("RECALLED SERVICE MEMORIES:", channel=channel)
+    _emit(_compact_json(_extract_recalled_service_memories(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("SERVICE MEMORY RECALL DEBUG:", channel=channel)
+    _emit(_compact_json(_extract_service_memory_recall_debug(result)), channel=channel)
+    _emit("", channel=channel)
     _emit("RELATIONSHIP STATE:", channel=channel)
     _emit(_compact_json(_extract_relationship_state(result)), channel=channel)
     _emit("", channel=channel)
@@ -957,6 +1271,7 @@ def _print_turn(
         "memory_entry": service_debug.get("memory_entry"),
         "social_effects": service_debug.get("social_effects"),
         "stock_update": service_debug.get("stock_update"),
+        "living_world_debug": _extract_living_world_debug(result),
     }), channel=channel)
     _emit("", channel=channel)
     _emit("RESULT SUBDICT:", channel=channel)
@@ -1015,6 +1330,13 @@ def run_manual_transcript(
         before_currency = _extract_player_currency(before_result)
         before_items = _extract_player_items(before_result)
         result = apply_turn(session_id=session_id, player_input=player_input)
+        _record_token_usage(
+            scope="flat",
+            label=session_id,
+            turn=index,
+            player_input=player_input,
+            result=result,
+        )
 
         summary_rows.append(
             _compact_turn_summary(
@@ -1137,6 +1459,13 @@ def run_service_scenarios(selected: str = "all", *, split_files: bool = True) ->
             before_items = _extract_player_items(last_result) if last_result else []
 
             result = apply_turn(session_id=session_id, player_input=player_input)
+            _record_token_usage(
+                scope="service_scenario",
+                label=scenario_name,
+                turn=index,
+                player_input=player_input,
+                result=result,
+            )
             _print_turn(
                 index,
                 player_input,
@@ -1187,6 +1516,7 @@ def run_service_scenarios(selected: str = "all", *, split_files: bool = True) ->
 
 
 def run_requested_transcripts(args: argparse.Namespace) -> None:
+    _reset_token_usage()
     turns = args.turn or MANUAL_TEST_TURNS
 
     if args.all:
@@ -1284,6 +1614,16 @@ def main() -> None:
         help="Do not write resources/test-results/code-diff.txt.",
     )
     parser.add_argument(
+        "--no-results-zip",
+        action="store_true",
+        help="Do not write resources/test-results/manual-rpg-test-results.zip.",
+    )
+    parser.add_argument(
+        "--no-token-usage",
+        action="store_true",
+        help="Do not write resources/test-results/token-usage.txt.",
+    )
+    parser.add_argument(
         "--code-diff-root",
         action="append",
         default=[],
@@ -1321,8 +1661,12 @@ def main() -> None:
         raise
     finally:
         try:
+            if not args.no_token_usage:
+                write_token_usage_report()
             if not args.no_code_diff:
                 write_code_diff_snapshot(roots=code_diff_roots)
+            if not args.no_results_zip:
+                write_results_zip()
         finally:
             servers.stop()
 

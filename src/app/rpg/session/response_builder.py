@@ -13,7 +13,6 @@ from app.rpg.presentation import (
 from app.rpg.session.state_normalization import _safe_dict, _safe_list, _safe_str
 
 
-
 def build_turn_payload(
     session: Dict[str, Any],
     narration_result: Dict[str, Any],
@@ -88,6 +87,18 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
     authoritative = _safe_dict(authoritative_result.get("authoritative"))
     turn_contract = _safe_dict(authoritative.get("turn_contract"))
     result_sub = _safe_dict(authoritative_result.get("result"))
+    narration = result_sub.get("narration")
+    if narration is None:
+        narration = authoritative.get("deterministic_fallback_narration")
+    raw_llm_narrative = result_sub.get("raw_llm_narrative")
+    if raw_llm_narrative is None:
+        raw_llm_narrative = ""
+    used_llm = result_sub.get("used_llm")
+    if used_llm is None:
+        used_llm = False
+    narration_status = result_sub.get("narration_status")
+    if narration_status is None:
+        narration_status = "queued"
 
     return {
         "ok": True,
@@ -105,9 +116,17 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
             "summary": authoritative.get("summary"),
             "presentation": authoritative.get("presentation"),
             "response_length": authoritative.get("response_length"),
-            "narration": result_sub.get("narration"),
-            "raw_llm_narrative": result_sub.get("raw_llm_narrative"),
-            "used_llm": result_sub.get("used_llm"),
-            "narration_status": result_sub.get("narration_status"),
+            "narration": narration,
+            "raw_llm_narrative": raw_llm_narrative,
+            "used_llm": used_llm,
+            "narration_status": narration_status,
+            "narration_debug": _safe_dict(result_sub.get("narration_debug")),
+            "living_world_debug": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("living_world_debug")),
+            "memory_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("memory_state")),
+            "relationship_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("relationship_state")),
+            "npc_emotion_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("npc_emotion_state")),
+            "service_offer_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("service_offer_state")),
+            "recalled_service_memories": _safe_list(_safe_dict(authoritative.get("resolved_result")).get("recalled_service_memories")),
+            "service_memory_recall_debug": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("service_memory_recall_debug")),
         },
     }

@@ -1,36 +1,32 @@
-Below is a literal apply-this-patch spec for:
+Below is a literal apply-this-patch diff spec for:
 
-Phase 7.5–7.7 — Service Effects Into Living World
+Bundle B — Phase 7.8 + 7.9
 
-Includes:
-- 7.4J manual transcript service_status cleanup
-- 7.5 service-aware NPC memory
-- 7.6 relationship/emotion effects from service outcomes
-- 7.7 offer availability rules + stock
-- manual transcript summary updates
-- tests
+- service/living-world debug visibility
+- manual transcript cleanup for remaining meta phrasing
+- NPC memory recall from service memories
+- narrator context includes relevant NPC memories
+- NPC dialogue can reference prior service interactions only when backed by memory
+- update manual_llm_transcript.py to print recalled memories
+- update/add tests
 
-This builds on the current refactored state where service scenarios are passing, but the compact service summary can still report service_status: purchase_ready while purchase_applied: true.
+This builds on the current state where code-diff.txt generation works and service/living-world fields are visible in transcript summaries.
 
-PATCH 1 — Add deterministic service memory
-File: src/app/rpg/memory/service_memory.py
-
-Create this file:
-
-diff --git a/src/app/rpg/memory/service_memory.py b/src/app/rpg/memory/service_memory.py
+PATCH 1 — Add deterministic service memory recall
+New file: src/app/rpg/memory/service_memory_recall.py
+diff --git a/src/app/rpg/memory/service_memory_recall.py b/src/app/rpg/memory/service_memory_recall.py
 new file mode 100644
-index 0000000..a7117e1
+index 0000000..8a1b8f4
 --- /dev/null
-+++ b/src/app/rpg/memory/service_memory.py
-@@ -0,0 +1,171 @@
++++ b/src/app/rpg/memory/service_memory_recall.py
+@@ -0,0 +1,193 @@
 +from __future__ import annotations
 +
 +from copy import deepcopy
 +from typing import Any, Dict, List
 +
 +
-+MAX_SERVICE_MEMORIES = 80
-+MAX_NPC_SERVICE_MEMORIES = 40
++DEFAULT_SERVICE_MEMORY_RECALL_LIMIT = 5
 +
 +
 +def _safe_str(value: Any) -> str:
@@ -45,1362 +41,1236 @@ index 0000000..a7117e1
 +    return value if isinstance(value, list) else []
 +
 +
-+def _selected_offer(service_result: Dict[str, Any]) -> Dict[str, Any]:
-+    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-+    for offer in _safe_list(service_result.get("offers")):
-+        offer = _safe_dict(offer)
-+        if _safe_str(offer.get("offer_id")) == selected_offer_id:
-+            return deepcopy(offer)
-+    return {}
-+
-+
-+def _ensure_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = _safe_dict(simulation_state)
-+    memory_state = _safe_dict(state.get("memory_state"))
-+    if not memory_state:
-+        memory_state = {}
-+        state["memory_state"] = memory_state
-+
-+    service_memories = memory_state.get("service_memories")
-+    if not isinstance(service_memories, list):
-+        service_memories = []
-+        memory_state["service_memories"] = service_memories
-+
-+    npc_memories = memory_state.get("npc_memories")
-+    if not isinstance(npc_memories, dict):
-+        npc_memories = {}
-+        memory_state["npc_memories"] = npc_memories
-+
-+    return memory_state
-+
-+
-+def _append_bounded_unique(
-+    entries: List[Dict[str, Any]],
-+    entry: Dict[str, Any],
-+    *,
-+    max_entries: int,
-+) -> Dict[str, Any]:
-+    memory_id = _safe_str(entry.get("memory_id"))
-+    if memory_id:
-+        for existing in entries:
-+            if _safe_str(_safe_dict(existing).get("memory_id")) == memory_id:
-+                return deepcopy(existing)
-+
-+    entries.append(deepcopy(entry))
-+    if max_entries > 0 and len(entries) > max_entries:
-+        del entries[:-max_entries]
-+    return deepcopy(entry)
-+
-+
-+def _memory_kind(service_result: Dict[str, Any], service_application: Dict[str, Any]) -> str:
-+    kind = _safe_str(service_result.get("kind"))
-+    status = _safe_str(service_result.get("status"))
-+    purchase = _safe_dict(service_result.get("purchase"))
-+
-+    if kind == "service_inquiry":
-+        return "service_inquiry"
-+
-+    if kind == "service_purchase" and (
-+        service_application.get("applied")
-+        or purchase.get("applied")
-+        or status == "purchased"
-+    ):
-+        return "service_purchase"
-+
-+    if kind == "service_purchase":
-+        return "service_purchase_blocked"
-+
-+    return "service_interaction"
-+
-+
-+def _sentiment_for_memory(kind: str, blocked_reason: str) -> str:
-+    if kind == "service_purchase":
-+        return "positive"
-+    if kind == "service_purchase_blocked":
-+        if blocked_reason == "insufficient_funds":
-+            return "slightly_negative"
-+        return "neutral_negative"
-+    return "neutral"
-+
-+
-+def _importance_for_memory(kind: str) -> float:
-+    if kind == "service_purchase":
-+        return 0.4
-+    if kind == "service_purchase_blocked":
-+        return 0.35
-+    return 0.25
-+
-+
-+def _summary_for_memory(
-+    service_result: Dict[str, Any],
-+    service_application: Dict[str, Any],
-+    kind: str,
-+) -> str:
-+    provider_name = _safe_str(service_result.get("provider_name") or "the provider")
-+    service_kind = _safe_str(service_result.get("service_kind") or "service")
-+    offer = _selected_offer(service_result)
-+    offer_label = _safe_str(offer.get("label") or service_result.get("selected_offer_id"))
-+    purchase = _safe_dict(service_result.get("purchase"))
-+    blocked_reason = _safe_str(
-+        service_application.get("blocked_reason")
-+        or purchase.get("blocked_reason")
-+    )
-+
-+    if kind == "service_purchase" and offer_label:
-+        return f"The player bought {offer_label} from {provider_name}."
-+
-+    if kind == "service_purchase_blocked" and offer_label:
-+        if blocked_reason == "insufficient_funds":
-+            return f"The player tried to buy {offer_label} from {provider_name} without enough coin."
-+        return f"The player tried to buy {offer_label} from {provider_name}, but the purchase was blocked."
-+
-+    if kind == "service_purchase_blocked":
-+        return f"The player tried to buy an unavailable service from {provider_name}."
-+
-+    return f"The player asked {provider_name} about {service_kind}."
-+
-+
-+def build_service_memory_entry(
-+    service_result: Dict[str, Any],
-+    service_application: Dict[str, Any] | None = None,
-+    *,
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    service_result = _safe_dict(service_result)
-+    service_application = _safe_dict(service_application)
-+    if not service_result.get("matched"):
-+        return {}
-+
-+    provider_id = _safe_str(service_result.get("provider_id"))
-+    provider_name = _safe_str(service_result.get("provider_name"))
-+    service_kind = _safe_str(service_result.get("service_kind"))
-+    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-+    kind = _memory_kind(service_result, service_application)
-+    purchase = _safe_dict(service_result.get("purchase"))
-+    blocked_reason = _safe_str(
-+        service_application.get("blocked_reason")
-+        or purchase.get("blocked_reason")
-+    )
-+
-+    memory_id = (
-+        f"memory:service:{tick}:{provider_id or 'provider'}:"
-+        f"{kind}:{selected_offer_id or service_kind or 'service'}"
-+    )
-+
-+    return {
-+        "memory_id": memory_id,
-+        "kind": kind,
-+        "owner_id": provider_id,
-+        "owner_name": provider_name,
-+        "subject_id": "player",
-+        "service_kind": service_kind,
-+        "offer_id": selected_offer_id,
-+        "summary": _summary_for_memory(service_result, service_application, kind),
-+        "sentiment": _sentiment_for_memory(kind, blocked_reason),
-+        "importance": _importance_for_memory(kind),
-+        "blocked_reason": blocked_reason,
-+        "tick": int(tick or 0),
-+        "source": "deterministic_service_runtime",
-+    }
-+
-+
-+def append_service_memory(
-+    simulation_state: Dict[str, Any],
-+    service_result: Dict[str, Any],
-+    service_application: Dict[str, Any] | None = None,
-+    *,
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    entry = build_service_memory_entry(
-+        service_result,
-+        service_application,
-+        tick=tick,
-+    )
-+    if not entry:
-+        return {}
-+
-+    memory_state = _ensure_memory_state(simulation_state)
-+    service_memories = _safe_list(memory_state.get("service_memories"))
-+    appended = _append_bounded_unique(
-+        service_memories,
-+        entry,
-+        max_entries=MAX_SERVICE_MEMORIES,
-+    )
-+
-+    owner_id = _safe_str(entry.get("owner_id"))
-+    if owner_id:
-+        npc_memories = _safe_dict(memory_state.get("npc_memories"))
-+        owner_entries = npc_memories.get(owner_id)
-+        if not isinstance(owner_entries, list):
-+            owner_entries = []
-+            npc_memories[owner_id] = owner_entries
-+        _append_bounded_unique(
-+            owner_entries,
-+            entry,
-+            max_entries=MAX_NPC_SERVICE_MEMORIES,
-+        )
-+
-+    return appended
-PATCH 2 — Add service relationship/emotion effects
-File: src/app/rpg/memory/service_social_effects.py
-
-Create this file:
-
-diff --git a/src/app/rpg/memory/service_social_effects.py b/src/app/rpg/memory/service_social_effects.py
-new file mode 100644
-index 0000000..6d77859
---- /dev/null
-+++ b/src/app/rpg/memory/service_social_effects.py
-@@ -0,0 +1,192 @@
-+from __future__ import annotations
-+
-+from copy import deepcopy
-+from typing import Any, Dict
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _clamp(value: float, low: float, high: float) -> float:
-+    return max(low, min(high, value))
-+
-+
-+def _round(value: float) -> float:
-+    return round(float(value), 3)
-+
-+
-+def _relationship_key(owner_id: str, subject_id: str = "player") -> str:
-+    return f"{owner_id}::{subject_id}"
-+
-+
-+def _ensure_relationship_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = _safe_dict(simulation_state)
-+    relationships = state.get("relationship_state")
-+    if not isinstance(relationships, dict):
-+        relationships = {}
-+        state["relationship_state"] = relationships
-+    return relationships
-+
-+
-+def _ensure_emotion_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = _safe_dict(simulation_state)
-+    emotion_state = state.get("npc_emotion_state")
-+    if not isinstance(emotion_state, dict):
-+        emotion_state = {}
-+        state["npc_emotion_state"] = emotion_state
-+    return emotion_state
-+
-+
-+def _effect_profile(service_result: Dict[str, Any], service_application: Dict[str, Any]) -> Dict[str, float]:
-+    kind = _safe_str(service_result.get("kind"))
-+    status = _safe_str(service_result.get("status"))
-+    purchase = _safe_dict(service_result.get("purchase"))
-+    blocked_reason = _safe_str(
-+        service_application.get("blocked_reason")
-+        or purchase.get("blocked_reason")
-+    )
-+    applied = bool(
-+        service_application.get("applied")
-+        or purchase.get("applied")
-+        or status == "purchased"
-+    )
-+
-+    if kind == "service_inquiry":
-+        return {
-+            "familiarity": 0.25,
-+            "trust": 0.0,
-+            "annoyance": 0.0,
-+            "valence": 0.02,
-+            "arousal": 0.03,
-+        }
-+
-+    if kind == "service_purchase" and applied:
-+        return {
-+            "familiarity": 1.0,
-+            "trust": 0.25,
-+            "annoyance": -0.1,
-+            "valence": 0.1,
-+            "arousal": 0.05,
-+        }
-+
-+    if kind == "service_purchase" and blocked_reason == "insufficient_funds":
-+        return {
-+            "familiarity": 0.25,
-+            "trust": 0.0,
-+            "annoyance": 0.25,
-+            "valence": -0.1,
-+            "arousal": 0.18,
-+        }
-+
-+    if kind == "service_purchase":
-+        return {
-+            "familiarity": 0.1,
-+            "trust": 0.0,
-+            "annoyance": 0.1,
-+            "valence": -0.04,
-+            "arousal": 0.1,
-+        }
-+
-+    return {
-+        "familiarity": 0.0,
-+        "trust": 0.0,
-+        "annoyance": 0.0,
-+        "valence": 0.0,
-+        "arousal": 0.0,
-+    }
-+
-+
-+def _dominant_emotion(valence: float, arousal: float, annoyance: float) -> str:
-+    if annoyance >= 0.75:
-+        return "annoyed"
-+    if annoyance >= 0.25:
-+        return "mildly_annoyed"
-+    if valence >= 0.2:
-+        return "pleased"
-+    if valence <= -0.2:
-+        return "displeased"
-+    if arousal >= 0.4:
-+        return "alert"
-+    return "neutral"
-+
-+
-+def apply_service_social_effects(
-+    simulation_state: Dict[str, Any],
-+    service_result: Dict[str, Any],
-+    service_application: Dict[str, Any] | None = None,
-+    *,
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    service_result = _safe_dict(service_result)
-+    service_application = _safe_dict(service_application)
-+    if not service_result.get("matched"):
-+        return {}
-+
-+    owner_id = _safe_str(service_result.get("provider_id"))
-+    owner_name = _safe_str(service_result.get("provider_name"))
-+    if not owner_id:
-+        return {}
-+
-+    profile = _effect_profile(service_result, service_application)
-+    relationships = _ensure_relationship_state(simulation_state)
-+    key = _relationship_key(owner_id)
-+    relationship = _safe_dict(relationships.get(key))
-+    axes = _safe_dict(relationship.get("axes"))
-+
-+    before_axes = deepcopy(axes)
-+    familiarity = _clamp(float(axes.get("familiarity") or 0.0) + profile["familiarity"], 0.0, 100.0)
-+    trust = _clamp(float(axes.get("trust") or 0.0) + profile["trust"], -100.0, 100.0)
-+    annoyance = _clamp(float(axes.get("annoyance") or 0.0) + profile["annoyance"], 0.0, 100.0)
-+
-+    axes["familiarity"] = _round(familiarity)
-+    axes["trust"] = _round(trust)
-+    axes["annoyance"] = _round(annoyance)
-+
-+    relationship = {
-+        **relationship,
-+        "owner_id": owner_id,
-+        "owner_name": owner_name,
-+        "subject_id": "player",
-+        "axes": axes,
-+        "updated_tick": int(tick or 0),
-+        "source": "deterministic_service_runtime",
-+    }
-+    relationships[key] = relationship
-+
-+    emotion_state = _ensure_emotion_state(simulation_state)
-+    emotion = _safe_dict(emotion_state.get(owner_id))
-+    valence = _clamp(float(emotion.get("valence") or 0.0) + profile["valence"], -1.0, 1.0)
-+    arousal = _clamp(float(emotion.get("arousal") or 0.0) + profile["arousal"], 0.0, 1.0)
-+    dominant = _dominant_emotion(valence, arousal, annoyance)
-+
-+    emotion = {
-+        **emotion,
-+        "owner_id": owner_id,
-+        "owner_name": owner_name,
-+        "dominant_emotion": dominant,
-+        "valence": _round(valence),
-+        "arousal": _round(arousal),
-+        "updated_tick": int(tick or 0),
-+        "source": "deterministic_service_runtime",
-+    }
-+    emotion_state[owner_id] = emotion
-+
-+    return {
-+        "relationship_key": key,
-+        "relationship": deepcopy(relationship),
-+        "emotion": deepcopy(emotion),
-+        "deltas": {
-+            "familiarity": profile["familiarity"],
-+            "trust": profile["trust"],
-+            "annoyance": profile["annoyance"],
-+            "valence": profile["valence"],
-+            "arousal": profile["arousal"],
-+        },
-+        "before_axes": before_axes,
-+    }
-PATCH 3 — Add offer stock/availability runtime
-File: src/app/rpg/economy/service_stock.py
-
-Create this file:
-
-diff --git a/src/app/rpg/economy/service_stock.py b/src/app/rpg/economy/service_stock.py
-new file mode 100644
-index 0000000..ba30e31
---- /dev/null
-+++ b/src/app/rpg/economy/service_stock.py
-@@ -0,0 +1,230 @@
-+from __future__ import annotations
-+
-+from copy import deepcopy
-+from typing import Any, Dict, List
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_int(value: Any, default: int = 0) -> int:
++def _safe_float(value: Any, default: float = 0.0) -> float:
 +    try:
-+        return int(value)
++        return float(value)
 +    except Exception:
 +        return default
 +
 +
-+def _current_location_id(simulation_state: Dict[str, Any]) -> str:
-+    state = _safe_dict(simulation_state)
-+    player_state = _safe_dict(state.get("player_state"))
-+    return _safe_str(
-+        state.get("location_id")
-+        or state.get("current_location_id")
-+        or player_state.get("location_id")
-+        or player_state.get("current_location_id")
++def _memory_tick(memory: Dict[str, Any]) -> int:
++    try:
++        return int(memory.get("tick") or 0)
++    except Exception:
++        return 0
++
++
++def _memory_score(
++    memory: Dict[str, Any],
++    *,
++    provider_id: str,
++    provider_name: str,
++    service_kind: str,
++    selected_offer_id: str,
++) -> float:
++    score = 0.0
++
++    owner_id = _safe_str(memory.get("owner_id"))
++    owner_name = _safe_str(memory.get("owner_name"))
++    if provider_id and owner_id == provider_id:
++        score += 5.0
++    elif provider_name and owner_name.lower() == provider_name.lower():
++        score += 4.0
++
++    if service_kind and _safe_str(memory.get("service_kind")) == service_kind:
++        score += 2.0
++
++    if selected_offer_id and _safe_str(memory.get("offer_id")) == selected_offer_id:
++        score += 3.0
++
++    kind = _safe_str(memory.get("kind"))
++    if kind == "service_purchase":
++        score += 1.0
++    elif kind == "service_purchase_blocked":
++        score += 0.75
++    elif kind == "service_inquiry":
++        score += 0.25
++
++    score += min(_safe_float(memory.get("importance"), 0.0), 1.0)
++    score += min(_memory_tick(memory) / 100000.0, 0.25)
++    return score
++
++
++def _service_result_from_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
++    turn_contract = _safe_dict(turn_contract)
++
++    resolved = _safe_dict(
++        turn_contract.get("resolved_result")
++        or turn_contract.get("resolved_action")
 +    )
++    resolved_service = _safe_dict(resolved.get("service_result"))
++    if resolved_service.get("matched"):
++        return resolved_service
++
++    direct = _safe_dict(turn_contract.get("service_result"))
++    if direct.get("matched"):
++        return direct
++
++    action = _safe_dict(turn_contract.get("action"))
++    action_service = _safe_dict(action.get("service_result"))
++    if action_service.get("matched"):
++        return action_service
++
++    metadata = _safe_dict(action.get("metadata"))
++    metadata_service = _safe_dict(metadata.get("service_result"))
++    if metadata_service.get("matched"):
++        return metadata_service
++
++    return {}
 +
 +
-+def _provider_present(simulation_state: Dict[str, Any], provider_id: str, provider_name: str) -> bool:
-+    state = _safe_dict(simulation_state)
-+    present = (
-+        state.get("present_npcs")
-+        or state.get("present_actors")
-+        or state.get("actors_present")
-+    )
-+    if not isinstance(present, list):
-+        # Missing presence list means the starter/manual world does not track
-+        # presence yet; do not make every service unavailable.
-+        return True
++def recall_service_memories(
++    simulation_state: Dict[str, Any],
++    *,
++    provider_id: str = "",
++    provider_name: str = "",
++    service_kind: str = "",
++    selected_offer_id: str = "",
++    limit: int = DEFAULT_SERVICE_MEMORY_RECALL_LIMIT,
++) -> List[Dict[str, Any]]:
++    simulation_state = _safe_dict(simulation_state)
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++    service_memories = _safe_list(memory_state.get("service_memories"))
 +
-+    provider_id_l = provider_id.lower()
-+    provider_name_l = provider_name.lower()
-+    for actor in present:
-+        if isinstance(actor, str):
-+            actor_l = actor.lower()
-+            if actor_l in {provider_id_l, provider_name_l}:
-+                return True
++    candidates: List[Dict[str, Any]] = []
++    for raw_memory in service_memories:
++        memory = _safe_dict(raw_memory)
++        if not memory:
 +            continue
 +
-+        actor = _safe_dict(actor)
-+        actor_id = _safe_str(actor.get("id") or actor.get("actor_id") or actor.get("npc_id")).lower()
-+        actor_name = _safe_str(actor.get("name") or actor.get("display_name")).lower()
-+        if actor_id == provider_id_l or actor_name == provider_name_l:
++        owner_id = _safe_str(memory.get("owner_id"))
++        owner_name = _safe_str(memory.get("owner_name"))
++
++        if provider_id and owner_id and owner_id != provider_id:
++            continue
++        if not provider_id and provider_name and owner_name.lower() != provider_name.lower():
++            continue
++
++        candidates.append(deepcopy(memory))
++
++    candidates.sort(
++        key=lambda memory: (
++            _memory_score(
++                memory,
++                provider_id=provider_id,
++                provider_name=provider_name,
++                service_kind=service_kind,
++                selected_offer_id=selected_offer_id,
++            ),
++            _memory_tick(memory),
++            _safe_str(memory.get("memory_id")),
++        ),
++        reverse=True,
++    )
++
++    if limit <= 0:
++        return candidates
++    return candidates[:limit]
++
++
++def recall_service_memories_for_narration(
++    simulation_state: Dict[str, Any],
++    narration_context: Dict[str, Any] | None = None,
++    *,
++    turn_contract: Dict[str, Any] | None = None,
++    service_result: Dict[str, Any] | None = None,
++    limit: int = DEFAULT_SERVICE_MEMORY_RECALL_LIMIT,
++) -> Dict[str, Any]:
++    narration_context = _safe_dict(narration_context)
++    turn_contract = _safe_dict(turn_contract or narration_context.get("turn_contract"))
++
++    effective_service_result = _safe_dict(service_result)
++    if not effective_service_result:
++        effective_service_result = _safe_dict(narration_context.get("service_result"))
++    if not effective_service_result:
++        resolved = _safe_dict(narration_context.get("resolved_result"))
++        effective_service_result = _safe_dict(resolved.get("service_result"))
++    if not effective_service_result:
++        effective_service_result = _service_result_from_turn_contract(turn_contract)
++
++    if not effective_service_result.get("matched"):
++        return {
++            "recalled_service_memories": [],
++            "debug": {
++                "source": "deterministic_service_memory_recall",
++                "reason": "not_service",
++                "provider_id": "",
++                "provider_name": "",
++                "service_kind": "",
++                "selected_offer_id": "",
++            },
++        }
++
++    provider_id = _safe_str(effective_service_result.get("provider_id"))
++    provider_name = _safe_str(effective_service_result.get("provider_name"))
++    service_kind = _safe_str(effective_service_result.get("service_kind"))
++    selected_offer_id = _safe_str(effective_service_result.get("selected_offer_id"))
++
++    memories = recall_service_memories(
++        simulation_state,
++        provider_id=provider_id,
++        provider_name=provider_name,
++        service_kind=service_kind,
++        selected_offer_id=selected_offer_id,
++        limit=limit,
++    )
++
++    return {
++        "recalled_service_memories": memories,
++        "debug": {
++            "source": "deterministic_service_memory_recall",
++            "reason": "matched",
++            "provider_id": provider_id,
++            "provider_name": provider_name,
++            "service_kind": service_kind,
++            "selected_offer_id": selected_offer_id,
++            "count": len(memories),
++            "memory_ids": [_safe_str(memory.get("memory_id")) for memory in memories],
++        },
++    }
++
++
++def has_backing_service_memory(
++    recalled_service_memories: List[Dict[str, Any]],
++    *,
++    kinds: List[str] | None = None,
++    service_kind: str = "",
++    offer_id: str = "",
++) -> bool:
++    kinds = kinds or []
++    for memory in _safe_list(recalled_service_memories):
++        memory = _safe_dict(memory)
++        if kinds and _safe_str(memory.get("kind")) not in kinds:
++            continue
++        if service_kind and _safe_str(memory.get("service_kind")) != service_kind:
++            continue
++        if offer_id and _safe_str(memory.get("offer_id")) != offer_id:
++            continue
++        return True
++    return False
+PATCH 2 — Export recall helpers
+File: src/app/rpg/memory/__init__.py
+diff --git a/src/app/rpg/memory/__init__.py b/src/app/rpg/memory/__init__.py
+--- a/src/app/rpg/memory/__init__.py
++++ b/src/app/rpg/memory/__init__.py
+@@
+ from app.rpg.memory.service_memory import append_service_memory, build_service_memory_entry
++from app.rpg.memory.service_memory_recall import (
++    has_backing_service_memory,
++    recall_service_memories,
++    recall_service_memories_for_narration,
++)
+ from app.rpg.memory.service_social_effects import apply_service_social_effects
+
+Skip this file if your memory/__init__.py is intentionally empty and you prefer direct imports.
+
+PATCH 3 — Add recalled memories to narration context
+File: src/app/rpg/session/narration_runtime.py
+3A. Add import
+diff --git a/src/app/rpg/session/narration_runtime.py b/src/app/rpg/session/narration_runtime.py
+--- a/src/app/rpg/session/narration_runtime.py
++++ b/src/app/rpg/session/narration_runtime.py
+@@
++from app.rpg.memory.service_memory_recall import recall_service_memories_for_narration
+ from app.rpg.session.state_normalization import _safe_dict
+
+If _safe_dict import already exists, only add recall_service_memories_for_narration.
+
+3B. Patch build_narration_context(...)
+
+Find the function that builds the narration context. It should include fields like:
+
+"player_input": player_input,
+"turn_contract": turn_contract,
+"resolved_result": resolved_result,
+"service_result": ...
+"service_application": ...
+"transaction_record": ...
+"simulation_state": simulation_state,
+
+Add recalled memories before returning the context.
+
+@@
+ def build_narration_context(
+@@
+ ) -> Dict[str, Any]:
++    service_result = _safe_dict(resolved_result.get("service_result"))
++    service_application = _safe_dict(resolved_result.get("service_application"))
++    transaction_record = _safe_dict(
++        resolved_result.get("transaction_record")
++        or service_application.get("transaction_record")
++    )
++
++    recall_payload = recall_service_memories_for_narration(
++        simulation_state,
++        turn_contract=turn_contract,
++        service_result=service_result,
++    )
++
+     return {
+         "player_input": player_input,
+         "turn_contract": turn_contract,
+         "resolved_result": resolved_result,
+-        "service_result": _safe_dict(resolved_result.get("service_result")),
+-        "service_application": _safe_dict(resolved_result.get("service_application")),
+-        "transaction_record": _safe_dict(
+-            resolved_result.get("transaction_record")
+-            or _safe_dict(resolved_result.get("service_application")).get("transaction_record")
+-        ),
++        "service_result": service_result,
++        "service_application": service_application,
++        "transaction_record": transaction_record,
++        "recalled_service_memories": recall_payload.get("recalled_service_memories") or [],
++        "service_memory_recall_debug": recall_payload.get("debug") or {},
+         "runtime_state": runtime_state,
+         "simulation_state": simulation_state,
+     }
+
+If the context is currently built inline, apply the same inserted values to that dict.
+
+PATCH 4 — Runtime fallback if narration context is still built inline
+File: src/app/rpg/session/runtime.py
+
+Only apply this if runtime.py still directly builds a narration_context dict in any path.
+
+4A. Add import
+diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
+--- a/src/app/rpg/session/runtime.py
++++ b/src/app/rpg/session/runtime.py
+@@
++from app.rpg.memory.service_memory_recall import recall_service_memories_for_narration
+4B. Patch inline narration context construction
+
+Find any inline dict containing:
+
+"player_input": player_input,
+"turn_contract": turn_contract,
+"resolved_result": resolved_result,
+
+Add before the dict:
+
+@@
++    service_memory_recall = recall_service_memories_for_narration(
++        simulation_state,
++        turn_contract=turn_contract,
++        service_result=_safe_dict(resolved_result.get("service_result")),
++    )
+     narration_context = {
+         "player_input": player_input,
+         "turn_contract": turn_contract,
+         "resolved_result": resolved_result,
+         "service_result": _safe_dict(resolved_result.get("service_result")),
+         "service_application": _safe_dict(resolved_result.get("service_application")),
+         "transaction_record": _safe_dict(
+             resolved_result.get("transaction_record")
+             or _safe_dict(resolved_result.get("service_application")).get("transaction_record")
+         ),
++        "recalled_service_memories": service_memory_recall.get("recalled_service_memories") or [],
++        "service_memory_recall_debug": service_memory_recall.get("debug") or {},
+         "runtime_state": runtime_state,
+         "simulation_state": simulation_state,
+     }
+
+If build_narration_context(...) is already used everywhere, skip Patch 4.
+
+PATCH 5 — Add memory recall to narrator prompt and grounding
+File: src/app/rpg/ai/world_scene_narrator.py
+5A. Add recall helpers
+
+Add near other _safe_* / service grounding helpers:
+
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+--- a/src/app/rpg/ai/world_scene_narrator.py
++++ b/src/app/rpg/ai/world_scene_narrator.py
+@@
++def _recalled_service_memories_from_context(narration_context: Dict[str, Any]) -> List[Dict[str, Any]]:
++    narration_context = _safe_dict(narration_context)
++    memories = narration_context.get("recalled_service_memories")
++    if isinstance(memories, list):
++        return [_safe_dict(memory) for memory in memories if _safe_dict(memory)]
++    return []
++
++
++def _format_recalled_service_memories_for_prompt(narration_context: Dict[str, Any]) -> str:
++    memories = _recalled_service_memories_from_context(narration_context)
++    if not memories:
++        return "None."
++
++    lines: List[str] = []
++    for memory in memories[:5]:
++        summary = _safe_str(memory.get("summary"))
++        kind = _safe_str(memory.get("kind"))
++        sentiment = _safe_str(memory.get("sentiment"))
++        service_kind = _safe_str(memory.get("service_kind"))
++        if not summary:
++            continue
++        details = ", ".join(
++            part
++            for part in [
++                f"kind={kind}" if kind else "",
++                f"service={service_kind}" if service_kind else "",
++                f"sentiment={sentiment}" if sentiment else "",
++            ]
++            if part
++        )
++        if details:
++            lines.append(f"- {summary} ({details})")
++        else:
++            lines.append(f"- {summary}")
++
++    return "\n".join(lines) if lines else "None."
++
++
++def _line_has_prior_memory_reference(line: str) -> bool:
++    lower = _safe_str(line).lower()
++    if not lower:
++        return False
++    markers = (
++        "remember",
++        "last time",
++        "again",
++        "before",
++        "earlier",
++        "still short",
++        "short on coin",
++        "same as before",
++        "as i told you",
++        "as i said",
++        "you came by",
++        "you asked",
++        "you bought",
++        "you tried",
++    )
++    return any(marker in lower for marker in markers)
++
++
++def _memory_reference_is_backed(line: str, narration_context: Dict[str, Any]) -> bool:
++    if not _line_has_prior_memory_reference(line):
++        return True
++    memories = _recalled_service_memories_from_context(narration_context)
++    if not memories:
++        return False
++
++    lower = _safe_str(line).lower()
++    for memory in memories:
++        summary = _safe_str(memory.get("summary")).lower()
++        kind = _safe_str(memory.get("kind"))
++        if kind and kind in lower:
 +            return True
++        if "short" in lower and _safe_str(memory.get("blocked_reason")) == "insufficient_funds":
++            return True
++        if "coin" in lower and _safe_str(memory.get("blocked_reason")) == "insufficient_funds":
++            return True
++        if "bought" in lower and kind == "service_purchase":
++            return True
++        if "asked" in lower and kind == "service_inquiry":
++            return True
++        if summary and any(token in summary for token in lower.split() if len(token) > 5):
++            return True
++
++    # If there are recalled memories, allow generic "again/before" references,
++    # but not specific insufficient-funds or purchase claims unless matched above.
++    specific_claim_terms = ("short", "coin", "bought", "paid", "purchased", "failed")
++    if not any(term in lower for term in specific_claim_terms):
++        return True
 +
 +    return False
 +
 +
-+def _ensure_offer_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = _safe_dict(simulation_state)
-+    service_offer_state = _safe_dict(state.get("service_offer_state"))
-+    if not service_offer_state:
-+        service_offer_state = {}
-+        state["service_offer_state"] = service_offer_state
++def _strip_unbacked_memory_reference_from_npc_line(
++    line: str,
++    narration_context: Dict[str, Any],
++) -> str:
++    if _memory_reference_is_backed(line, narration_context):
++        return line
 +
-+    offers = service_offer_state.get("offers")
-+    if not isinstance(offers, dict):
-+        offers = {}
-+        service_offer_state["offers"] = offers
++    grounded_line = _service_grounded_npc_line(narration_context)
++    if grounded_line:
++        return grounded_line
 +
-+    return service_offer_state
-+
-+
-+def _runtime_offer_record(
-+    simulation_state: Dict[str, Any],
-+    offer: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    offer = _safe_dict(offer)
-+    offer_id = _safe_str(offer.get("offer_id"))
-+    service_offer_state = _ensure_offer_state(simulation_state)
-+    offers = _safe_dict(service_offer_state.get("offers"))
-+    record = _safe_dict(offers.get(offer_id))
-+    if not record:
-+        record = {}
-+        offers[offer_id] = record
-+
-+    if "stock" in offer and "stock_remaining" not in record:
-+        record["stock_remaining"] = max(0, _safe_int(offer.get("stock"), 0))
-+        record["stock_initial"] = max(0, _safe_int(offer.get("stock"), 0))
-+
-+    return record
-+
-+
-+def get_offer_runtime_state(
-+    simulation_state: Dict[str, Any],
-+    offer_id: str,
-+) -> Dict[str, Any]:
-+    service_offer_state = _safe_dict(_safe_dict(simulation_state).get("service_offer_state"))
-+    offers = _safe_dict(service_offer_state.get("offers"))
-+    return deepcopy(_safe_dict(offers.get(_safe_str(offer_id))))
-+
-+
-+def annotate_offer_availability(
-+    simulation_state: Dict[str, Any],
-+    offer: Dict[str, Any],
-+    *,
-+    provider: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    offer = deepcopy(_safe_dict(offer))
-+    provider = _safe_dict(provider)
-+    rules = _safe_dict(offer.get("availability_rules"))
-+    provider_id = _safe_str(provider.get("provider_id"))
-+    provider_name = _safe_str(provider.get("provider_name"))
-+
-+    runtime_record = _runtime_offer_record(simulation_state, offer)
-+    unavailable_reasons: List[str] = []
-+
-+    stock_remaining = None
-+    if "stock" in offer or "stock_remaining" in runtime_record:
-+        stock_remaining = max(0, _safe_int(runtime_record.get("stock_remaining"), _safe_int(offer.get("stock"), 0)))
-+        offer["stock"] = max(0, _safe_int(offer.get("stock"), stock_remaining))
-+        offer["stock_remaining"] = stock_remaining
-+        if stock_remaining <= 0:
-+            unavailable_reasons.append("out_of_stock")
-+
-+    required_location = _safe_str(rules.get("requires_location"))
-+    current_location = _current_location_id(simulation_state)
-+    if required_location and current_location and current_location != required_location:
-+        unavailable_reasons.append("wrong_location")
-+
-+    if rules.get("requires_provider_present") is True:
-+        if not _provider_present(simulation_state, provider_id, provider_name):
-+            unavailable_reasons.append("provider_absent")
-+
-+    if unavailable_reasons:
-+        offer["availability"] = "unavailable"
-+        offer["unavailable_reason"] = unavailable_reasons[0]
-+        offer["unavailable_reasons"] = unavailable_reasons
-+    else:
-+        offer["availability"] = _safe_str(offer.get("availability") or "available")
-+        offer["unavailable_reason"] = ""
-+        offer["unavailable_reasons"] = []
-+
-+    return offer
-+
-+
-+def filter_available_offers(
-+    simulation_state: Dict[str, Any],
-+    offers: List[Dict[str, Any]],
-+    *,
-+    provider: Dict[str, Any] | None = None,
-+) -> List[Dict[str, Any]]:
-+    available: List[Dict[str, Any]] = []
-+    for offer in _safe_list(offers):
-+        annotated = annotate_offer_availability(
-+            simulation_state,
-+            _safe_dict(offer),
-+            provider=provider,
-+        )
-+        if _safe_str(annotated.get("availability")) == "available":
-+            available.append(annotated)
-+    return available
-+
-+
-+def apply_service_stock_purchase(
-+    simulation_state: Dict[str, Any],
-+    service_result: Dict[str, Any],
-+    *,
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    service_result = _safe_dict(service_result)
-+    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-+    if not selected_offer_id:
-+        return {}
-+
-+    selected_offer = {}
-+    for offer in _safe_list(service_result.get("offers")):
-+        offer = _safe_dict(offer)
-+        if _safe_str(offer.get("offer_id")) == selected_offer_id:
-+            selected_offer = offer
-+            break
-+
-+    if not selected_offer or "stock" not in selected_offer:
-+        return {}
-+
-+    service_offer_state = _ensure_offer_state(simulation_state)
-+    offers = _safe_dict(service_offer_state.get("offers"))
-+    record = _safe_dict(offers.get(selected_offer_id))
-+    if not record:
-+        record = {}
-+        offers[selected_offer_id] = record
-+
-+    stock_initial = max(0, _safe_int(selected_offer.get("stock"), 0))
-+    before = max(0, _safe_int(record.get("stock_remaining"), stock_initial))
-+    after = max(0, before - 1)
-+
-+    record["stock_initial"] = max(0, _safe_int(record.get("stock_initial"), stock_initial))
-+    record["stock_remaining"] = after
-+    record["updated_tick"] = int(tick or 0)
-+    record["provider_id"] = _safe_str(service_result.get("provider_id"))
-+    record["provider_name"] = _safe_str(service_result.get("provider_name"))
-+    record["service_kind"] = _safe_str(service_result.get("service_kind"))
-+    record["offer_id"] = selected_offer_id
-+    record["label"] = _safe_str(selected_offer.get("label") or selected_offer_id)
-+
-+    return {
-+        "offer_id": selected_offer_id,
-+        "provider_id": _safe_str(service_result.get("provider_id")),
-+        "before": before,
-+        "after": after,
-+        "decrement": 1,
-+        "exhausted": after <= 0,
-+        "runtime_state": deepcopy(record),
-+        "tick": int(tick or 0),
-+    }
-PATCH 4 — Add service living-world coordinator
-File: src/app/rpg/session/service_living_world.py
++    return "What can I help you with?"
 
-Create this file:
+If List is not imported in this file, update imports:
 
-diff --git a/src/app/rpg/session/service_living_world.py b/src/app/rpg/session/service_living_world.py
-new file mode 100644
-index 0000000..d192819
---- /dev/null
-+++ b/src/app/rpg/session/service_living_world.py
-@@ -0,0 +1,90 @@
-+from __future__ import annotations
+@@
+-from typing import Any, Dict
++from typing import Any, Dict, List
+5B. Add memories to the LLM prompt
+
+Find the prompt construction in narrate_scene(...). It likely has sections for scene, authoritative state, and turn contract.
+
+Add this section near the turn/service context:
+
+@@
++Relevant NPC memories from deterministic simulation:
++{_format_recalled_service_memories_for_prompt(narration_context)}
 +
-+from typing import Any, Dict
++Memory rules:
++- NPCs may reference prior interactions only if they appear in Relevant NPC memories.
++- Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.
++- If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.
 +
-+from app.rpg.economy.service_stock import apply_service_stock_purchase
-+from app.rpg.memory.service_memory import append_service_memory
-+from app.rpg.memory.service_social_effects import apply_service_social_effects
-+from app.rpg.session.state_normalization import _safe_dict, _safe_str
+
+If the prompt is built as a list, add:
+
+prompt_parts.append("Relevant NPC memories from deterministic simulation:")
+prompt_parts.append(_format_recalled_service_memories_for_prompt(narration_context))
+prompt_parts.append(
+    "Memory rules:\n"
+    "- NPCs may reference prior interactions only if they appear in Relevant NPC memories.\n"
+    "- Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.\n"
+    "- If Relevant NPC memories is None, do not say \"again\", \"last time\", \"remember\", or imply a previous encounter."
+)
+5C. Sanitize NPC dialogue memory references
+
+In _sanitize_narration_payload(...), after current NPC line grounding logic and before returning payload, add:
+
+@@
+     if (
+         service_result.get("matched")
+         and (
+             service_purchase_applied
+             or service_purchase_offer_not_found
+             or _service_claim_needs_grounding(npc["line"])
+         )
+     ):
+         grounded_line = _service_grounded_npc_line(narration_context)
+         if grounded_line:
+             npc["line"] = grounded_line
+     else:
+         npc["line"] = _ground_accommodation_npc_line(npc["line"], narration_context)
 +
++    npc["line"] = _strip_unbacked_memory_reference_from_npc_line(
++        npc["line"],
++        narration_context,
++    )
+
+If the local variable is payload["npc"] instead of npc, apply to that.
+
+5D. Clean remaining meta/service phrasing in narration
+
+Add this helper near other sanitizers:
+
+@@
++def _strip_service_meta_language(text: str, narration_context: Dict[str, Any]) -> str:
++    text = _safe_str(text)
++    if not text:
++        return text
 +
-+def apply_service_living_world_effects(
-+    simulation_state: Dict[str, Any],
-+    service_result: Dict[str, Any],
-+    service_application: Dict[str, Any] | None = None,
-+    *,
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    service_result = _safe_dict(service_result)
-+    service_application = _safe_dict(service_application)
++    lower = text.lower()
++    service_result = _service_result_from_context(narration_context)
 +    if not service_result.get("matched"):
-+        return {
-+            "memory_entry": {},
-+            "social_effects": {},
-+            "stock_update": {},
-+        }
++        return text
 +
-+    stock_update = {}
-+    if (
-+        _safe_str(service_result.get("kind")) == "service_purchase"
-+        and bool(service_application.get("applied"))
-+    ):
-+        stock_update = apply_service_stock_purchase(
-+            simulation_state,
-+            service_result,
-+            tick=tick,
-+        )
-+
-+    memory_entry = append_service_memory(
-+        simulation_state,
-+        service_result,
-+        service_application,
-+        tick=tick,
-+    )
-+    social_effects = apply_service_social_effects(
-+        simulation_state,
-+        service_result,
-+        service_application,
-+        tick=tick,
++    provider_name = _safe_str(service_result.get("provider_name") or "The provider")
++    purchase = _safe_dict(service_result.get("purchase"))
++    service_application = _safe_dict(narration_context.get("service_application"))
++    blocked_reason = _safe_str(
++        service_application.get("blocked_reason")
++        or purchase.get("blocked_reason")
 +    )
 +
-+    return {
-+        "memory_entry": memory_entry,
-+        "social_effects": social_effects,
-+        "stock_update": stock_update,
-+    }
-PATCH 5 — Add stock metadata to registered offers
-File: src/app/rpg/economy/service_registry.py
-
-Add stock and availability_rules to finite offers.
-
-diff --git a/src/app/rpg/economy/service_registry.py b/src/app/rpg/economy/service_registry.py
---- a/src/app/rpg/economy/service_registry.py
-+++ b/src/app/rpg/economy/service_registry.py
-@@
-         {
-             "offer_id": "bran_lodging_common_cot",
-             "service_kind": SERVICE_KIND_LODGING,
-             "label": "Common room cot",
-             "description": "A simple cot in the common room for one night.",
-             "price": {"gold": 0, "silver": 5, "copper": 0},
-+            "stock": 6,
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_tavern",
-+            },
-             "availability": "available",
-             "effects": {
-                 "lodging_reserved": True,
-                 "rest_quality": "basic",
-                 "duration": "one_night",
-@@
-         {
-             "offer_id": "bran_lodging_private_room",
-             "service_kind": SERVICE_KIND_LODGING,
-             "label": "Private room",
-             "description": "A private room for one night.",
-             "price": {"gold": 1, "silver": 0, "copper": 0},
-+            "stock": 1,
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_tavern",
-+            },
-             "availability": "available",
-             "effects": {
-                 "lodging_reserved": True,
-                 "rest_quality": "good",
-                 "duration": "one_night",
-@@
-         {
-             "offer_id": "bran_meal_stew",
-             "service_kind": SERVICE_KIND_MEAL,
-             "label": "Hot stew",
-             "description": "A hot bowl of stew and bread.",
-             "price": {"gold": 0, "silver": 1, "copper": 5},
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_tavern",
-+            },
-             "availability": "available",
-             "effects": {
-                 "meal_consumed": True,
-                 "morale": 1,
-             },
-@@
-         {
-             "offer_id": "bran_drink_ale",
-             "service_kind": SERVICE_KIND_DRINK,
-             "label": "Mug of ale",
-             "description": "A mug of local ale.",
-             "price": {"gold": 0, "silver": 0, "copper": 8},
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_tavern",
-+            },
-             "availability": "available",
-             "effects": {
-                 "drink_consumed": True,
-             },
-@@
-         {
-             "offer_id": "bran_paid_rumor",
-             "service_kind": SERVICE_KIND_PAID_INFORMATION,
-             "label": "Local rumor",
-             "description": "A useful rumor from tavern gossip.",
-             "price": {"gold": 0, "silver": 2, "copper": 0},
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_tavern",
-+            },
-             "availability": "available",
-             "effects": {
-                 "rumor_added": True,
-             },
-@@
-         {
-             "offer_id": "elara_torch",
-             "service_kind": SERVICE_KIND_SHOP_GOODS,
-             "label": "Torch",
-             "description": "A simple torch for dark places.",
-             "price": {"gold": 0, "silver": 1, "copper": 0},
-+            "stock": 3,
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_market",
-+            },
-             "availability": "available",
-             "effects": {
-                 "items_added": [
-                     {
-                         "item_id": "torch",
-@@
-         {
-             "offer_id": "elara_rope",
-             "service_kind": SERVICE_KIND_SHOP_GOODS,
-             "label": "Rope",
-             "description": "Fifty feet of sturdy hemp rope.",
-             "price": {"gold": 0, "silver": 3, "copper": 0},
-+            "stock": 2,
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_market",
-+            },
-             "availability": "available",
-             "effects": {
-                 "items_added": [
-                     {
-                         "item_id": "rope",
-@@
-         {
-             "offer_id": "elara_paid_information",
-             "service_kind": SERVICE_KIND_PAID_INFORMATION,
-             "label": "Market rumor",
-             "description": "A rumor about market activity.",
-             "price": {"gold": 0, "silver": 1, "copper": 0},
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_market",
-+            },
-             "availability": "available",
-             "effects": {
-                 "rumor_added": True,
-             },
-@@
-         {
-             "offer_id": "elara_basic_repair",
-             "service_kind": SERVICE_KIND_REPAIR,
-             "label": "Basic gear repair",
-             "description": "Minor repair work on worn equipment.",
-             "price": {"gold": 0, "silver": 4, "copper": 0},
-+            "availability_rules": {
-+                "requires_provider_present": True,
-+                "requires_location": "loc_market",
-+            },
-             "availability": "available",
-             "effects": {
-                 "repair_quality": "basic",
-             },
-PATCH 6 — Resolver filters unavailable / out-of-stock offers
-File: src/app/rpg/economy/service_resolver.py
-1. Add imports
-diff --git a/src/app/rpg/economy/service_resolver.py b/src/app/rpg/economy/service_resolver.py
---- a/src/app/rpg/economy/service_resolver.py
-+++ b/src/app/rpg/economy/service_resolver.py
-@@
- from app.rpg.economy.service_registry import (
-@@
-     find_provider_by_text,
-+    get_service_provider,
-     get_provider_offers,
- )
-+from app.rpg.economy.service_stock import filter_available_offers
-
-If get_service_provider already exists in the import list, only add filter_available_offers.
-
-2. Filter offers by deterministic availability
-
-Find:
-
-    offers = get_provider_offers(provider_id, service_kind)
-
-Replace with:
-
-@@
--    offers = get_provider_offers(provider_id, service_kind)
-+    provider = get_service_provider(provider_id)
-+    offers = filter_available_offers(
-+        simulation_state,
-+        get_provider_offers(provider_id, service_kind),
-+        provider=provider,
++    meta_markers = (
++        "the system confirms",
++        "the request to purchase",
++        "is processed by",
++        "the transaction is processed",
++        "the intent to buy",
 +    )
-3. Preserve unavailable status when stock is exhausted
++    if not any(marker in lower for marker in meta_markers):
++        return text
++
++    if blocked_reason == "insufficient_funds":
++        return f"{provider_name} checks the registered offer and current coin, then finds the purchase cannot be completed."
++
++    if blocked_reason == "offer_not_found":
++        return f"{provider_name} checks the registered offers and finds no matching item or service."
++
++    if _safe_str(service_result.get("kind")) == "service_purchase":
++        return f"{provider_name} checks the registered offer and current terms."
++
++    return text
 
-No extra purchase logic is required. Once an offer is filtered out, a purchase request for that depleted offer naturally becomes:
+Then in _sanitize_narration_payload(...), after any existing narration grounding:
 
-purchase_offer_not_found
+@@
++    payload["narration"] = _strip_service_meta_language(
++        _safe_str(payload.get("narration")),
++        narration_context,
++    )
 
-and inquiry available actions exclude it.
+If your dict is named narration_json, use:
 
-PATCH 7 — Apply living-world effects from service runtime
+narration_json["narration"] = _strip_service_meta_language(...)
+
+This specifically cleans lines like “The system confirms...” or “processed by Elara,” which appeared in turn 5.
+
+PATCH 6 — Add living-world debug block to service result
 File: src/app/rpg/session/service_runtime.py
-1. Add import
+
+Find the result = { ... } dict in service_authoritative_result(...), where you already added:
+
+"memory_state": ...
+"relationship_state": ...
+"npc_emotion_state": ...
+"service_offer_state": ...
+
+Add a compact debug object:
+
 diff --git a/src/app/rpg/session/service_runtime.py b/src/app/rpg/session/service_runtime.py
 --- a/src/app/rpg/session/service_runtime.py
 +++ b/src/app/rpg/session/service_runtime.py
 @@
- from app.rpg.economy.service_effects import apply_service_purchase_result
-+from app.rpg.session.service_living_world import apply_service_living_world_effects
- from app.rpg.session.state_normalization import _safe_dict, _safe_int, _safe_list, _safe_str
-2. Add default living-world fields
-
-Find the default purchase_application dict in service_authoritative_result(...):
-
-    purchase_application = {
-        "applied": False,
-        "blocked": bool(purchase.get("blocked")) if purchase else False,
-        ...
-        "transaction_record": {},
-    }
-
-Replace with:
-
-@@
-     purchase_application = {
-         "applied": False,
-         "blocked": bool(purchase.get("blocked")) if purchase else False,
-         "blocked_reason": _safe_str(purchase.get("blocked_reason")) if purchase and purchase.get("blocked") else "",
-         "currency_before": {},
-         "currency_after": {},
-         "items_added": [],
-         "active_service": {},
-         "rumor_added": {},
-         "transaction_record": {},
-+        "memory_entry": {},
-+        "social_effects": {},
-+        "stock_update": {},
-     }
-3. Apply living-world effects after purchase/no-purchase resolution
-
-Find this block after purchase application:
-
-    blocked = bool(purchase_application.get("blocked"))
-    blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
-    applied = bool(purchase_application.get("applied"))
-
-Insert immediately before it:
-
-@@
-+    if service_result.get("matched"):
-+        living_world = apply_service_living_world_effects(
-+            simulation_state,
-+            service_result,
-+            purchase_application,
-+            tick=tick,
-+        )
-+        purchase_application["memory_entry"] = living_world.get("memory_entry") or {}
-+        purchase_application["social_effects"] = living_world.get("social_effects") or {}
-+        purchase_application["stock_update"] = living_world.get("stock_update") or {}
-+
-     blocked = bool(purchase_application.get("blocked"))
-
-This makes service inquiries create memory/social effects, and completed purchases also update stock.
-
-4. Include living-world fields in result
-
-Find:
-
-        "service_application": {
-            "applied": applied,
-            "currency_before": purchase_application.get("currency_before") or {},
-            "currency_after": purchase_application.get("currency_after") or {},
-            "items_added": purchase_application.get("items_added") or [],
-            "active_service": purchase_application.get("active_service") or {},
-            "rumor_added": purchase_application.get("rumor_added") or {},
-            "transaction_record": purchase_application.get("transaction_record") or {},
-        },
-
-Replace with:
-
-@@
-         "service_application": {
-             "applied": applied,
-             "currency_before": purchase_application.get("currency_before") or {},
-             "currency_after": purchase_application.get("currency_after") or {},
-             "items_added": purchase_application.get("items_added") or [],
-             "active_service": purchase_application.get("active_service") or {},
-             "rumor_added": purchase_application.get("rumor_added") or {},
-             "transaction_record": purchase_application.get("transaction_record") or {},
+         "memory_state": _safe_dict(simulation_state.get("memory_state")),
+         "relationship_state": _safe_dict(simulation_state.get("relationship_state")),
+         "npc_emotion_state": _safe_dict(simulation_state.get("npc_emotion_state")),
+         "service_offer_state": _safe_dict(simulation_state.get("service_offer_state")),
++        "living_world_debug": {
 +            "memory_entry": purchase_application.get("memory_entry") or {},
 +            "social_effects": purchase_application.get("social_effects") or {},
 +            "stock_update": purchase_application.get("stock_update") or {},
-         },
-         "transaction_record": purchase_application.get("transaction_record") or {},
-+        "memory_entry": purchase_application.get("memory_entry") or {},
-+        "social_effects": purchase_application.get("social_effects") or {},
-+        "stock_update": purchase_application.get("stock_update") or {},
-PATCH 8 — Manual transcript service status cleanup + new summary fields
-File: src/tests/rpg/manual_llm_transcript.py
-1. Add extract helpers
++            "memory_state_count": len(
++                _safe_list(
++                    _safe_dict(_safe_dict(simulation_state.get("memory_state")).get("service_memories"))
++                )
++            )
++            if False
++            else len(
++                _safe_list(
++                    _safe_dict(simulation_state.get("memory_state")).get("service_memories")
++                )
++            ),
++            "relationship_keys": sorted(_safe_dict(simulation_state.get("relationship_state")).keys()),
++            "emotion_keys": sorted(_safe_dict(simulation_state.get("npc_emotion_state")).keys()),
++            "offer_state_keys": sorted(
++                _safe_dict(
++                    _safe_dict(simulation_state.get("service_offer_state")).get("offers")
++                ).keys()
++            ),
++        },
+     }
 
-Add after _extract_transaction_history(...):
+Then immediately clean up the weird conditional block by replacing it with a simple expression if your linter dislikes it:
+
+@@
+-            "memory_state_count": len(
+-                _safe_list(
+-                    _safe_dict(_safe_dict(simulation_state.get("memory_state")).get("service_memories"))
+-                )
+-            )
+-            if False
+-            else len(
+-                _safe_list(
+-                    _safe_dict(simulation_state.get("memory_state")).get("service_memories")
+-                )
+-            ),
++            "memory_state_count": len(
++                _safe_list(
++                    _safe_dict(simulation_state.get("memory_state")).get("service_memories")
++                )
++            ),
+
+Use the final cleaned version:
+
+"memory_state_count": len(
+    _safe_list(
+        _safe_dict(simulation_state.get("memory_state")).get("service_memories")
+    )
+),
+PATCH 7 — Manual transcript: print recalled memories and debug
+File: src/tests/rpg/manual_llm_transcript.py
+7A. Add extract helpers
+
+Add after the current service/living-world extract helpers:
 
 diff --git a/src/tests/rpg/manual_llm_transcript.py b/src/tests/rpg/manual_llm_transcript.py
 --- a/src/tests/rpg/manual_llm_transcript.py
 +++ b/src/tests/rpg/manual_llm_transcript.py
 @@
- def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
+ def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
 @@
-     return history
+     return service_offer_state
 +
 +
-+def _extract_service_memories(result: Dict[str, Any]) -> List[Any]:
-+    simulation_state = _extract_simulation_state(result)
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+    return _safe_list(memory_state.get("service_memories"))
++def _extract_recalled_service_memories(result: Dict[str, Any]) -> List[Any]:
++    result = _safe_dict(result)
++    result_sub = _safe_dict(result.get("result"))
++    narration_debug = _safe_dict(result_sub.get("narration_debug"))
++    direct = _safe_list(narration_debug.get("recalled_service_memories"))
++    if direct:
++        return direct
++
++    turn_contract = _extract_turn_contract(result)
++    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
++    return _safe_list(resolved.get("recalled_service_memories"))
 +
 +
-+def _extract_relationship_state(result: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _extract_simulation_state(result)
-+    return _safe_dict(simulation_state.get("relationship_state"))
++def _extract_service_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
++    result = _safe_dict(result)
++    result_sub = _safe_dict(result.get("result"))
++    narration_debug = _safe_dict(result_sub.get("narration_debug"))
++    direct = _safe_dict(narration_debug.get("service_memory_recall_debug"))
++    if direct:
++        return direct
++
++    turn_contract = _extract_turn_contract(result)
++    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
++    return _safe_dict(resolved.get("service_memory_recall_debug"))
 +
 +
-+def _extract_npc_emotion_state(result: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _extract_simulation_state(result)
-+    return _safe_dict(simulation_state.get("npc_emotion_state"))
-+
-+
-+def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
-+    simulation_state = _extract_simulation_state(result)
-+    return _safe_dict(simulation_state.get("service_offer_state"))
-+
-+
-+def _effective_service_status(service_result: Dict[str, Any], service_application: Dict[str, Any]) -> str:
-+    purchase = _safe_dict(service_result.get("purchase"))
-+    if bool(service_application.get("applied") or purchase.get("applied")):
-+        return "purchased"
-+    return _safe_str(service_result.get("status"))
-2. Include living-world fields in _extract_service_debug(...)
++def _extract_living_world_debug(result: Dict[str, Any]) -> Dict[str, Any]:
++    service_debug = _extract_service_debug(result)
++    resolved = _safe_dict(service_debug.get("resolved_result"))
++    direct = _safe_dict(resolved.get("living_world_debug"))
++    if direct:
++        return direct
++    return {
++        "memory_entry": service_debug.get("memory_entry"),
++        "social_effects": service_debug.get("social_effects"),
++        "stock_update": service_debug.get("stock_update"),
++    }
 
-Find return dict in _extract_service_debug(...) and add these fields:
-
-@@
-         "transaction_record": _safe_dict(
-             resolved.get("transaction_record")
-             or service_application.get("transaction_record")
-         ),
-+        "memory_entry": _safe_dict(
-+            resolved.get("memory_entry")
-+            or service_application.get("memory_entry")
-+        ),
-+        "social_effects": _safe_dict(
-+            resolved.get("social_effects")
-+            or service_application.get("social_effects")
-+        ),
-+        "stock_update": _safe_dict(
-+            resolved.get("stock_update")
-+            or service_application.get("stock_update")
-+        ),
-         "inventory_changes": {
-3. Fix compact summary status and add fields
-
-In _compact_turn_summary(...), find:
-
-        "service_status": service_result.get("status"),
-
-Replace with:
+If _extract_service_debug(...) does not currently expose resolved_result, patch it:
 
 @@
--        "service_status": service_result.get("status"),
-+        "service_status": _effective_service_status(service_result, service_application),
+     return {
++        "resolved_result": resolved,
+         "service_result": service_result,
+7B. Add fields to compact summary
 
-Then after:
+In _compact_turn_summary(...), after:
 
-        "transaction_history_count": len(_extract_transaction_history(result)),
+"service_memory_count": len(_extract_service_memories(result)),
+
+add:
+
+@@
+         "service_memory_count": len(_extract_service_memories(result)),
++        "recalled_service_memories": _extract_recalled_service_memories(result),
++        "recalled_service_memory_count": len(_extract_recalled_service_memories(result)),
++        "service_memory_recall_debug": _extract_service_memory_recall_debug(result),
+         "relationship_state": _extract_relationship_state(result),
+         "npc_emotion_state": _extract_npc_emotion_state(result),
+         "social_effects": service_debug.get("social_effects"),
+         "stock_update": service_debug.get("stock_update"),
+         "service_offer_state": _extract_service_offer_state(result),
++        "living_world_debug": _extract_living_world_debug(result),
+7C. Print in full turn files
+
+In _print_turn(...), after:
+
+_emit("SERVICE MEMORIES:", channel=channel)
+_emit(_compact_json(_extract_service_memories(result)), channel=channel)
+_emit("", channel=channel)
+
+add:
+
+@@
+     _emit("SERVICE MEMORIES:", channel=channel)
+     _emit(_compact_json(_extract_service_memories(result)), channel=channel)
+     _emit("", channel=channel)
++    _emit("RECALLED SERVICE MEMORIES:", channel=channel)
++    _emit(_compact_json(_extract_recalled_service_memories(result)), channel=channel)
++    _emit("", channel=channel)
++    _emit("SERVICE MEMORY RECALL DEBUG:", channel=channel)
++    _emit(_compact_json(_extract_service_memory_recall_debug(result)), channel=channel)
++    _emit("", channel=channel)
+     _emit("RELATIONSHIP STATE:", channel=channel)
+
+After SERVICE LIVING WORLD APPLICATION, add:
+
+@@
+     _emit("SERVICE LIVING WORLD APPLICATION:", channel=channel)
+     _emit(_compact_json({
+         "memory_entry": service_debug.get("memory_entry"),
+         "social_effects": service_debug.get("social_effects"),
+         "stock_update": service_debug.get("stock_update"),
++        "living_world_debug": _extract_living_world_debug(result),
+     }), channel=channel)
+PATCH 8 — Ensure narration debug stores recalled memories
+File: src/app/rpg/session/narration_runtime.py
+
+Find where narration debug/result is assembled. Look for a dict containing fields like:
+
+"narration_json": ...
+"used_llm": ...
+"narration_status": ...
 
 Add:
 
 @@
-         "transaction_history_count": len(_extract_transaction_history(result)),
-+        "memory_entry": service_debug.get("memory_entry"),
-+        "service_memory_count": len(_extract_service_memories(result)),
-+        "relationship_state": _extract_relationship_state(result),
-+        "npc_emotion_state": _extract_npc_emotion_state(result),
-+        "social_effects": service_debug.get("social_effects"),
-+        "stock_update": service_debug.get("stock_update"),
-+        "service_offer_state": _extract_service_offer_state(result),
-         "available_actions": service_debug.get("available_actions"),
-4. Print new fields in full turn files
+         "narration_debug": {
+             ...
++            "recalled_service_memories": narration_context.get("recalled_service_memories") or [],
++            "service_memory_recall_debug": narration_context.get("service_memory_recall_debug") or {},
+         }
 
-In _print_turn(...), after TRANSACTION HISTORY, add:
+If there is no nested narration_debug, add the keys to whatever debug dict is currently returned alongside narration.
 
-@@
-     _emit("TRANSACTION HISTORY:", channel=channel)
-     _emit(_compact_json(_extract_transaction_history(result)), channel=channel)
-     _emit("", channel=channel)
-+    _emit("SERVICE MEMORIES:", channel=channel)
-+    _emit(_compact_json(_extract_service_memories(result)), channel=channel)
-+    _emit("", channel=channel)
-+    _emit("RELATIONSHIP STATE:", channel=channel)
-+    _emit(_compact_json(_extract_relationship_state(result)), channel=channel)
-+    _emit("", channel=channel)
-+    _emit("NPC EMOTION STATE:", channel=channel)
-+    _emit(_compact_json(_extract_npc_emotion_state(result)), channel=channel)
-+    _emit("", channel=channel)
-+    _emit("SERVICE OFFER STATE:", channel=channel)
-+    _emit(_compact_json(_extract_service_offer_state(result)), channel=channel)
-+    _emit("", channel=channel)
-PATCH 9 — Tests for service living-world effects
-File: src/app/rpg/tests/test_service_living_world_effects.py
+If narration is assembled in runtime.py rather than narration_runtime.py, apply the same patch there.
 
-Create this file:
-
-diff --git a/src/app/rpg/tests/test_service_living_world_effects.py b/src/app/rpg/tests/test_service_living_world_effects.py
+PATCH 9 — Tests for service memory recall
+New file: src/app/rpg/tests/test_service_memory_recall.py
+diff --git a/src/app/rpg/tests/test_service_memory_recall.py b/src/app/rpg/tests/test_service_memory_recall.py
 new file mode 100644
-index 0000000..34fd77c
+index 0000000..7c9e9c1
 --- /dev/null
-+++ b/src/app/rpg/tests/test_service_living_world_effects.py
-@@ -0,0 +1,159 @@
-+from app.rpg.economy.service_resolver import resolve_service_turn
-+from app.rpg.session.service_runtime import (
-+    service_action_from_result,
-+    service_authoritative_result,
++++ b/src/app/rpg/tests/test_service_memory_recall.py
+@@ -0,0 +1,105 @@
++from app.rpg.memory.service_memory_recall import (
++    has_backing_service_memory,
++    recall_service_memories,
++    recall_service_memories_for_narration,
 +)
 +
 +
-+def _state(currency=None):
-+    return {
-+        "tick": 12,
-+        "location_id": "loc_market",
-+        "present_npcs": [
-+            {"id": "npc:Elara", "name": "Elara"},
-+            {"id": "npc:Bran", "name": "Bran"},
++def test_recall_service_memories_filters_by_provider_and_sorts_recent_relevant():
++    simulation_state = {
++        "memory_state": {
++            "service_memories": [
++                {
++                    "memory_id": "old-bran",
++                    "kind": "service_inquiry",
++                    "owner_id": "npc:Bran",
++                    "owner_name": "Bran",
++                    "subject_id": "player",
++                    "service_kind": "lodging",
++                    "summary": "The player asked Bran about lodging.",
++                    "importance": 0.25,
++                    "tick": 1,
++                },
++                {
++                    "memory_id": "elara-blocked",
++                    "kind": "service_purchase_blocked",
++                    "owner_id": "npc:Elara",
++                    "owner_name": "Elara",
++                    "subject_id": "player",
++                    "service_kind": "shop_goods",
++                    "offer_id": "elara_rope",
++                    "summary": "The player tried to buy Rope from Elara without enough coin.",
++                    "blocked_reason": "insufficient_funds",
++                    "importance": 0.35,
++                    "tick": 20,
++                },
++                {
++                    "memory_id": "elara-inquiry",
++                    "kind": "service_inquiry",
++                    "owner_id": "npc:Elara",
++                    "owner_name": "Elara",
++                    "subject_id": "player",
++                    "service_kind": "shop_goods",
++                    "summary": "The player asked Elara about shop goods.",
++                    "importance": 0.25,
++                    "tick": 10,
++                },
++            ]
++        }
++    }
++
++    recalled = recall_service_memories(
++        simulation_state,
++        provider_id="npc:Elara",
++        service_kind="shop_goods",
++        selected_offer_id="elara_rope",
++    )
++
++    assert [memory["memory_id"] for memory in recalled] == [
++        "elara-blocked",
++        "elara-inquiry",
++    ]
++
++
++def test_recall_service_memories_for_narration_uses_service_result_context():
++    simulation_state = {
++        "memory_state": {
++            "service_memories": [
++                {
++                    "memory_id": "elara-blocked",
++                    "kind": "service_purchase_blocked",
++                    "owner_id": "npc:Elara",
++                    "owner_name": "Elara",
++                    "subject_id": "player",
++                    "service_kind": "shop_goods",
++                    "offer_id": "elara_rope",
++                    "summary": "The player tried to buy Rope from Elara without enough coin.",
++                    "blocked_reason": "insufficient_funds",
++                    "importance": 0.35,
++                    "tick": 20,
++                }
++            ]
++        }
++    }
++    service_result = {
++        "matched": True,
++        "kind": "service_inquiry",
++        "service_kind": "shop_goods",
++        "provider_id": "npc:Elara",
++        "provider_name": "Elara",
++        "selected_offer_id": "",
++    }
++
++    payload = recall_service_memories_for_narration(
++        simulation_state,
++        service_result=service_result,
++    )
++
++    assert payload["debug"]["count"] == 1
++    assert payload["recalled_service_memories"][0]["memory_id"] == "elara-blocked"
++
++
++def test_has_backing_service_memory_matches_kind_and_offer():
++    memories = [
++        {
++            "kind": "service_purchase_blocked",
++            "service_kind": "shop_goods",
++            "offer_id": "elara_rope",
++            "blocked_reason": "insufficient_funds",
++        }
++    ]
++
++    assert has_backing_service_memory(
++        memories,
++        kinds=["service_purchase_blocked"],
++        service_kind="shop_goods",
++        offer_id="elara_rope",
++    )
++    assert not has_backing_service_memory(
++        memories,
++        kinds=["service_purchase"],
++        service_kind="shop_goods",
++        offer_id="elara_rope",
++    )
+PATCH 10 — Narrator tests for backed/unbacked memory references
+File: src/app/rpg/tests/test_narration_queue.py
+
+Add these tests near existing service narration tests.
+
+diff --git a/src/app/rpg/tests/test_narration_queue.py b/src/app/rpg/tests/test_narration_queue.py
+--- a/src/app/rpg/tests/test_narration_queue.py
++++ b/src/app/rpg/tests/test_narration_queue.py
+@@
+ def test_service_purchase_offer_not_found_narration_does_not_invent_item_details():
+@@
+     assert narration_json["action"] == "Elara cannot find a matching registered offer."
+     assert narration_json["npc"]["line"] == "I do not have that listed among my registered offers."
++
++
++def test_service_npc_dialogue_removes_unbacked_prior_memory_reference():
++    from app.rpg.ai.world_scene_narrator import narrate_scene
++
++    class StubGateway:
++        def generate_stream(self, *args, **kwargs):
++            yield {
++                "text": (
++                    '{"format_version":"rpg_narration_v2",'
++                    '"narration":"Elara looks over the goods.",'
++                    '"action":"Elara checks the available options.",'
++                    '"npc":{"speaker":"Elara","line":"Still short on coin from last time, are you?"},'
++                    '"reward":"","followup_hooks":[]}'
++                )
++            }
++
++    service_result = {
++        "matched": True,
++        "kind": "service_inquiry",
++        "service_kind": "shop_goods",
++        "provider_id": "npc:Elara",
++        "provider_name": "Elara",
++        "status": "offers_available",
++        "offers": [
++            {
++                "offer_id": "elara_torch",
++                "label": "Torch",
++                "price": {"gold": 0, "silver": 1, "copper": 0},
++            }
 +        ],
-+        "player_state": {
-+            "location_id": "loc_market",
-+            "inventory_state": {
-+                "currency": currency or {"gold": 0, "silver": 0, "copper": 0},
-+                "items": [],
-+                "equipment": {},
-+                "last_loot": [],
++        "selected_offer_id": "",
++        "purchase": None,
++        "available_actions": [],
++    }
++
++    result = narrate_scene(
++        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
++        {
++            "player_input": "I ask Elara what she sells",
++            "service_result": service_result,
++            "service_application": {},
++            "recalled_service_memories": [],
++            "turn_contract": {
++                "player_input": "I ask Elara what she sells",
++                "service_result": service_result,
++                "resolved_result": {"service_result": service_result},
++            },
++        },
++        llm_gateway=StubGateway(),
++        retry_on_invalid=False,
++    )
++
++    assert "last time" not in result["narration"].lower()
++    assert "still short" not in result["narration"].lower()
++    assert result["narration_json"]["npc"]["line"] != "Still short on coin from last time, are you?"
++
++
++def test_service_npc_dialogue_allows_backed_prior_memory_reference():
++    from app.rpg.ai.world_scene_narrator import narrate_scene
++
++    class StubGateway:
++        def generate_stream(self, *args, **kwargs):
++            yield {
++                "text": (
++                    '{"format_version":"rpg_narration_v2",'
++                    '"narration":"Elara looks over the goods.",'
++                    '"action":"Elara checks the available options.",'
++                    '"npc":{"speaker":"Elara","line":"Still short on coin from last time, or ready to buy today?"},'
++                    '"reward":"","followup_hooks":[]}'
++                )
 +            }
++
++    service_result = {
++        "matched": True,
++        "kind": "service_inquiry",
++        "service_kind": "shop_goods",
++        "provider_id": "npc:Elara",
++        "provider_name": "Elara",
++        "status": "offers_available",
++        "offers": [
++            {
++                "offer_id": "elara_torch",
++                "label": "Torch",
++                "price": {"gold": 0, "silver": 1, "copper": 0},
++            }
++        ],
++        "selected_offer_id": "",
++        "purchase": None,
++        "available_actions": [],
++    }
++
++    result = narrate_scene(
++        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
++        {
++            "player_input": "I ask Elara what she sells",
++            "service_result": service_result,
++            "service_application": {},
++            "recalled_service_memories": [
++                {
++                    "memory_id": "memory:test",
++                    "kind": "service_purchase_blocked",
++                    "owner_id": "npc:Elara",
++                    "owner_name": "Elara",
++                    "subject_id": "player",
++                    "service_kind": "shop_goods",
++                    "offer_id": "elara_torch",
++                    "summary": "The player tried to buy Torch from Elara without enough coin.",
++                    "blocked_reason": "insufficient_funds",
++                }
++            ],
++            "turn_contract": {
++                "player_input": "I ask Elara what she sells",
++                "service_result": service_result,
++                "resolved_result": {"service_result": service_result},
++            },
++        },
++        llm_gateway=StubGateway(),
++        retry_on_invalid=False,
++    )
++
++    assert "still short on coin" in result["narration"].lower()
++    assert result["narration_json"]["npc"]["line"] == (
++        "Still short on coin from last time, or ready to buy today?"
++    )
++
++
++def test_service_purchase_blocked_narration_strips_meta_processed_language():
++    from app.rpg.ai.world_scene_narrator import narrate_scene
++
++    class StubGateway:
++        def generate_stream(self, *args, **kwargs):
++            yield {
++                "text": (
++                    '{"format_version":"rpg_narration_v2",'
++                    '"narration":"The request to purchase a torch is processed by Elara. The system confirms stock.",'
++                    '"action":"Elara names the price, but you do not have enough coin.",'
++                    '"npc":{"speaker":"Elara","line":"Torch for 1 silver is the price, but you do not have enough coin."},'
++                    '"reward":"","followup_hooks":[]}'
++                )
++            }
++
++    service_result = {
++        "matched": True,
++        "kind": "service_purchase",
++        "service_kind": "shop_goods",
++        "provider_id": "npc:Elara",
++        "provider_name": "Elara",
++        "status": "blocked",
++        "offers": [{"offer_id": "elara_torch", "label": "Torch"}],
++        "selected_offer_id": "elara_torch",
++        "purchase": {
++            "blocked": True,
++            "blocked_reason": "insufficient_funds",
++            "applied": False,
 +        },
 +    }
 +
-+
-+def _authoritative_for(player_input, state):
-+    service_result = resolve_service_turn(
-+        player_input=player_input,
-+        action={},
-+        resolved_action={},
-+        simulation_state=state,
-+        runtime_state={},
++    result = narrate_scene(
++        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
++        {
++            "player_input": "I buy a torch from Elara",
++            "service_result": service_result,
++            "service_application": {"blocked": True, "blocked_reason": "insufficient_funds"},
++            "turn_contract": {
++                "player_input": "I buy a torch from Elara",
++                "service_result": service_result,
++                "resolved_result": {"service_result": service_result},
++            },
++        },
++        llm_gateway=StubGateway(),
++        retry_on_invalid=False,
 +    )
-+    action = service_action_from_result(player_input, {}, service_result)
-+    return service_authoritative_result(state, action)
++
++    text = result["narration"].lower()
++    assert "the system confirms" not in text
++    assert "processed by elara" not in text
++    assert "current coin" in text
+PATCH 11 — Manual transcript mode test for recall fields
+File: src/app/rpg/tests/test_manual_transcript_modes.py
+
+Add after existing living-world extractor tests:
+
+diff --git a/src/app/rpg/tests/test_manual_transcript_modes.py b/src/app/rpg/tests/test_manual_transcript_modes.py
+--- a/src/app/rpg/tests/test_manual_transcript_modes.py
++++ b/src/app/rpg/tests/test_manual_transcript_modes.py
+@@
+ def test_living_world_extractors_include_current_turn_application_fields():
+@@
+     assert (
+         service_offer_state["offers"]["elara_torch"]["stock_remaining"]
+         == 2
+     )
 +
 +
-+def test_service_inquiry_adds_memory_and_social_state_without_purchase():
-+    state = _state({"gold": 0, "silver": 2, "copper": 0})
-+
-+    authoritative = _authoritative_for("I ask Elara what she sells", state)
-+    result = authoritative["result"]
-+    simulation_state = authoritative["simulation_state"]
-+
-+    assert result["action_type"] == "service_inquiry"
-+    assert result["purchase_applied"] is False
-+    assert result["service_application"]["memory_entry"]["kind"] == "service_inquiry"
-+    assert result["service_application"]["social_effects"]["relationship_key"] == "npc:Elara::player"
-+
-+    memory_state = simulation_state["memory_state"]
-+    assert memory_state["service_memories"][0]["kind"] == "service_inquiry"
-+    assert memory_state["npc_memories"]["npc:Elara"][0]["owner_id"] == "npc:Elara"
-+
-+    relationship = simulation_state["relationship_state"]["npc:Elara::player"]
-+    assert relationship["axes"]["familiarity"] > 0
-+    assert simulation_state["npc_emotion_state"]["npc:Elara"]["dominant_emotion"]
-+
-+
-+def test_successful_service_purchase_updates_memory_social_and_stock():
-+    state = _state({"gold": 0, "silver": 2, "copper": 0})
-+
-+    authoritative = _authoritative_for("I buy a torch from Elara", state)
-+    result = authoritative["result"]
-+    simulation_state = authoritative["simulation_state"]
-+
-+    assert result["purchase_applied"] is True
-+    assert result["service_result"]["status"] == "purchased"
-+    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase"
-+    assert result["service_application"]["social_effects"]["relationship"]["axes"]["trust"] > 0
-+    assert result["service_application"]["stock_update"]["offer_id"] == "elara_torch"
-+    assert result["service_application"]["stock_update"]["before"] == 3
-+    assert result["service_application"]["stock_update"]["after"] == 2
-+
-+    assert simulation_state["service_offer_state"]["offers"]["elara_torch"]["stock_remaining"] == 2
-+    assert simulation_state["memory_state"]["service_memories"][-1]["kind"] == "service_purchase"
-+    assert simulation_state["relationship_state"]["npc:Elara::player"]["axes"]["familiarity"] >= 1
-+    assert simulation_state["npc_emotion_state"]["npc:Elara"]["valence"] > 0
-+
-+
-+def test_blocked_purchase_updates_memory_and_annoyance_but_does_not_decrement_stock():
-+    state = _state({"gold": 0, "silver": 1, "copper": 0})
-+
-+    authoritative = _authoritative_for("I buy rope from Elara", state)
-+    result = authoritative["result"]
-+    simulation_state = authoritative["simulation_state"]
-+
-+    assert result["purchase_applied"] is False
-+    assert result["blocked_reason"] == "insufficient_funds"
-+    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase_blocked"
-+    assert result["service_application"]["stock_update"] == {}
-+
-+    relationship = simulation_state["relationship_state"]["npc:Elara::player"]
-+    assert relationship["axes"]["annoyance"] > 0
-+    assert "elara_rope" not in simulation_state.get("service_offer_state", {}).get("offers", {})
-+
-+
-+def test_stock_exhaustion_removes_offer_from_available_actions():
-+    state = _state({"gold": 0, "silver": 5, "copper": 0})
-+    state["service_offer_state"] = {
-+        "offers": {
-+            "elara_torch": {
-+                "stock_remaining": 0,
-+                "stock_initial": 1,
++def test_manual_summary_includes_recalled_service_memories_from_narration_debug():
++    result = {
++        "result": {
++            "narration_debug": {
++                "recalled_service_memories": [
++                    {
++                        "memory_id": "memory:recall",
++                        "kind": "service_purchase_blocked",
++                        "summary": "The player tried to buy Torch without enough coin.",
++                    }
++                ],
++                "service_memory_recall_debug": {
++                    "source": "deterministic_service_memory_recall",
++                    "count": 1,
++                    "memory_ids": ["memory:recall"],
++                },
 +            }
-+        }
++        },
++        "session": {
++            "setup_payload": {
++                "metadata": {
++                    "simulation_state": {}
++                }
++            },
++            "runtime_state": {
++                "last_turn_contract": {
++                    "resolved_result": {},
++                    "presentation": {},
++                }
++            },
++        },
 +    }
 +
-+    result = resolve_service_turn(
-+        player_input="I ask Elara what she sells",
-+        action={},
-+        resolved_action={},
-+        simulation_state=state,
-+        runtime_state={},
-+    )
++    recalled = transcript._extract_recalled_service_memories(result)
++    debug = transcript._extract_service_memory_recall_debug(result)
 +
-+    offer_ids = {offer["offer_id"] for offer in result["offers"]}
-+    action_ids = {action["offer_id"] for action in result["available_actions"]}
-+
-+    assert "elara_torch" not in offer_ids
-+    assert "elara_torch" not in action_ids
-+    assert "elara_rope" in offer_ids
-PATCH 10 — Extend existing purchase runtime tests
-File: src/app/rpg/tests/test_service_purchase_runtime.py
++    assert recalled[0]["memory_id"] == "memory:recall"
++    assert debug["count"] == 1
+PATCH 12 — Optional debug visibility in API/session response builder
 
-Add assertions to existing tests.
+If your refactor has src/app/rpg/session/response_builder.py, add the living-world debug into the response result/presentation debug area.
 
-1. In test_apply_service_purchase_deducts_currency_for_lodging_and_adds_active_service
+File: src/app/rpg/session/response_builder.py
 
-After transaction assertions, add:
-
-@@
-     assert applied["transaction_record"]["kind"] == "service_purchase"
-     assert applied["transaction_record"]["provider_id"] == "npc:Bran"
-     assert applied["transaction_record"]["offer_id"] == "bran_lodging_common_cot"
-     assert applied["simulation_state"]["transaction_history"][-1]["transaction_id"] == applied["transaction_record"]["transaction_id"]
-
-No change required here if those assertions already exist. Stock/social is applied from service_authoritative_result, not raw apply_service_purchase_result.
-
-2. In test_service_authoritative_result_applies_purchase_runtime_effects
+Find where result payload is assembled from authoritative / resolved_result.
 
 Add:
 
+diff --git a/src/app/rpg/session/response_builder.py b/src/app/rpg/session/response_builder.py
+--- a/src/app/rpg/session/response_builder.py
++++ b/src/app/rpg/session/response_builder.py
 @@
-     assert result["transaction_record"]["offer_id"] == "elara_torch"
-     assert result["service_application"]["transaction_record"]["offer_id"] == "elara_torch"
-+    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase"
-+    assert result["service_application"]["social_effects"]["relationship_key"] == "npc:Elara::player"
-+    assert result["service_application"]["stock_update"]["offer_id"] == "elara_torch"
-+    assert authoritative["simulation_state"]["service_offer_state"]["offers"]["elara_torch"]["stock_remaining"] == 2
-3. In test_service_authoritative_result_blocks_purchase_runtime_effects
-
-Add:
-
-@@
-     assert result["purchase_applied"] is False
-     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["currency"] == {
-         "gold": 0,
-         "silver": 1,
-         "copper": 0,
+     result_payload = {
+         **result_payload,
++        "living_world_debug": _safe_dict(resolved_result.get("living_world_debug")),
++        "memory_state": _safe_dict(resolved_result.get("memory_state")),
++        "relationship_state": _safe_dict(resolved_result.get("relationship_state")),
++        "npc_emotion_state": _safe_dict(resolved_result.get("npc_emotion_state")),
++        "service_offer_state": _safe_dict(resolved_result.get("service_offer_state")),
++        "recalled_service_memories": _safe_list(resolved_result.get("recalled_service_memories")),
++        "service_memory_recall_debug": _safe_dict(resolved_result.get("service_memory_recall_debug")),
      }
-     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["items"] == []
-+    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase_blocked"
-+    assert result["service_application"]["social_effects"]["relationship_key"] == "npc:Elara::player"
-+    assert result["service_application"]["stock_update"] == {}
-PATCH 11 — Add stock tests to economy services
-File: src/app/rpg/tests/test_economy_services.py
 
-Add import:
+If response_builder.py does not use a result_payload variable, skip this patch. The manual transcript debug already exposes these fields.
 
-diff --git a/src/app/rpg/tests/test_economy_services.py b/src/app/rpg/tests/test_economy_services.py
---- a/src/app/rpg/tests/test_economy_services.py
-+++ b/src/app/rpg/tests/test_economy_services.py
-@@
- from app.rpg.economy.service_registry import get_provider_offers
-+from app.rpg.economy.service_stock import annotate_offer_availability, filter_available_offers
+PATCH 13 — Ensure resolved result carries recall debug
+File: src/app/rpg/session/narration_runtime.py
 
-Add tests near registry tests:
+After building narration_context, but before returning/applying narration, set these on resolved_result if mutable:
 
 @@
- def test_service_registry_has_lodging_meal_info_and_goods():
-@@
-     assert any(offer["offer_id"] == "elara_torch" for offer in elara_goods)
-+
-+
-+def test_service_stock_annotates_out_of_stock_offer():
-+    offer = {
-+        "offer_id": "test_offer",
-+        "label": "Test Offer",
-+        "stock": 1,
-+        "availability": "available",
-+    }
-+    state = {
-+        "service_offer_state": {
-+            "offers": {
-+                "test_offer": {
-+                    "stock_remaining": 0,
-+                    "stock_initial": 1,
-+                }
-+            }
-+        }
-+    }
-+
-+    annotated = annotate_offer_availability(state, offer)
-+
-+    assert annotated["availability"] == "unavailable"
-+    assert annotated["unavailable_reason"] == "out_of_stock"
-+    assert annotated["stock_remaining"] == 0
-+
-+
-+def test_service_stock_filters_unavailable_offer():
-+    state = {
-+        "service_offer_state": {
-+            "offers": {
-+                "elara_torch": {
-+                    "stock_remaining": 0,
-+                    "stock_initial": 1,
-+                }
-+            }
-+        }
-+    }
-+    offers = get_provider_offers("npc:Elara", "shop_goods")
-+
-+    filtered = filter_available_offers(
-+        state,
-+        offers,
-+        provider={
-+            "provider_id": "npc:Elara",
-+            "provider_name": "Elara",
-+            "location_id": "loc_market",
-+        },
-+    )
-+
-+    assert not any(offer["offer_id"] == "elara_torch" for offer in filtered)
-+    assert any(offer["offer_id"] == "elara_rope" for offer in filtered)
-PATCH 12 — Optional: update memory package exports
-File: src/app/rpg/memory/__init__.py
++    resolved_result["recalled_service_memories"] = narration_context.get("recalled_service_memories") or []
++    resolved_result["service_memory_recall_debug"] = narration_context.get("service_memory_recall_debug") or {}
 
-Add exports if this package is used elsewhere.
+If mutation of resolved_result is not allowed in that function, set these in the authoritative result assembly immediately after narration context is built in runtime.py.
 
-diff --git a/src/app/rpg/memory/__init__.py b/src/app/rpg/memory/__init__.py
---- a/src/app/rpg/memory/__init__.py
-+++ b/src/app/rpg/memory/__init__.py
-@@
-+from app.rpg.memory.service_memory import append_service_memory, build_service_memory_entry
-+from app.rpg.memory.service_social_effects import apply_service_social_effects
+Run
+cd F:\LLM\omnix
+$env:PYTHONPATH="F:\LLM\omnix\src"
 
-If __init__.py has strict curated exports or this causes import cycles, skip this patch. The new modules are imported directly by service_living_world.py.
+pytest src/app/rpg/tests/test_service_memory_recall.py -q
+pytest src/app/rpg/tests/test_narration_queue.py -q
+pytest src/app/rpg/tests/test_manual_transcript_modes.py -q
+pytest src/app/rpg/tests/test_service_living_world_effects.py -q
+pytest src/app/rpg/tests/test_service_purchase_runtime.py -q
+
+python src/tests/rpg/manual_llm_transcript.py --all
+
+Expected transcript changes:
+
+RECALLED SERVICE MEMORIES:
+[...]
+
+SERVICE MEMORY RECALL DEBUG:
+{
+  "source": "deterministic_service_memory_recall",
+  "reason": "matched",
+  "count": ...
+}
+
+Expected flat summary new fields:
+
+{
+  "recalled_service_memories": [],
+  "recalled_service_memory_count": 0,
+  "service_memory_recall_debug": {
+    "source": "deterministic_service_memory_recall"
+  },
+  "living_world_debug": {
+    "memory_entry": {},
+    "social_effects": {},
+    "stock_update": {}
+  }
+}
+
+For service turns after prior interactions with the same NPC/provider, recalled_service_memory_count should become greater than 0.
+
+Expected narration cleanup:
+
+No "The system confirms..."
+No "processed by Elara..."
+No unbacked "last time" / "again" / "remember" references
+
+Suggested commit after passing:
+
+feat(rpg): recall service memories in narration context

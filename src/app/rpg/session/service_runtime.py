@@ -6,7 +6,12 @@ from typing import Any, Dict
 
 from app.rpg.economy.service_effects import apply_service_purchase_result
 from app.rpg.session.service_living_world import apply_service_living_world_effects
-from app.rpg.session.state_normalization import _safe_dict, _safe_int, _safe_list, _safe_str
+from app.rpg.session.state_normalization import (
+    _safe_dict,
+    _safe_int,
+    _safe_list,
+    _safe_str,
+)
 
 
 def service_action_from_result(
@@ -198,6 +203,23 @@ def service_authoritative_result(
         "relationship_state": _safe_dict(simulation_state.get("relationship_state")),
         "npc_emotion_state": _safe_dict(simulation_state.get("npc_emotion_state")),
         "service_offer_state": _safe_dict(simulation_state.get("service_offer_state")),
+        "living_world_debug": {
+            "memory_entry": purchase_application.get("memory_entry") or {},
+            "social_effects": purchase_application.get("social_effects") or {},
+            "stock_update": purchase_application.get("stock_update") or {},
+            "memory_state_count": len(
+                _safe_list(
+                    _safe_dict(simulation_state.get("memory_state")).get("service_memories")
+                )
+            ),
+            "relationship_keys": sorted(_safe_dict(simulation_state.get("relationship_state")).keys()),
+            "emotion_keys": sorted(_safe_dict(simulation_state.get("npc_emotion_state")).keys()),
+            "offer_state_keys": sorted(
+                _safe_dict(
+                    _safe_dict(simulation_state.get("service_offer_state")).get("offers")
+                ).keys()
+            ),
+        },
     }
 
     if purchase:

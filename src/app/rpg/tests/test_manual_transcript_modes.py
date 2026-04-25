@@ -158,3 +158,125 @@ def test_living_world_extractors_include_current_turn_application_fields():
         service_offer_state["offers"]["elara_torch"]["stock_remaining"]
         == 2
     )
+
+
+def test_manual_summary_includes_recalled_service_memories_from_narration_debug():
+    result = {
+        "result": {
+            "narration_debug": {
+                "recalled_service_memories": [
+                    {
+                        "memory_id": "memory:recall",
+                        "kind": "service_purchase_blocked",
+                        "summary": "The player tried to buy Torch without enough coin.",
+                    }
+                ],
+                "service_memory_recall_debug": {
+                    "source": "deterministic_service_memory_recall",
+                    "count": 1,
+                    "memory_ids": ["memory:recall"],
+                },
+            }
+        },
+        "session": {
+            "setup_payload": {
+                "metadata": {
+                    "simulation_state": {}
+                }
+            },
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {},
+                    "presentation": {},
+                }
+            },
+        },
+    }
+
+    recalled = transcript._extract_recalled_service_memories(result)
+    debug = transcript._extract_service_memory_recall_debug(result)
+
+    assert recalled[0]["memory_id"] == "memory:recall"
+    assert debug["count"] == 1
+
+
+def test_manual_summary_recalled_memories_excludes_current_memory_entry():
+    result = {
+        "result": {
+            "narration_debug": {
+                "recalled_service_memories": [
+                    {"memory_id": "prior", "kind": "service_inquiry"},
+                    {"memory_id": "current", "kind": "service_inquiry"},
+                ],
+                "service_memory_recall_debug": {"count": 2},
+            }
+        },
+        "session": {
+            "setup_payload": {
+                "metadata": {
+                    "simulation_state": {}
+                }
+            },
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {
+                        "memory_entry": {
+                            "memory_id": "current",
+                            "kind": "service_inquiry",
+                        },
+                        "service_application": {
+                            "memory_entry": {
+                                "memory_id": "current",
+                                "kind": "service_inquiry",
+                            }
+                        },
+                    },
+                    "presentation": {},
+                }
+            },
+        },
+    }
+
+    recalled = transcript._extract_recalled_service_memories(result)
+
+    assert [memory["memory_id"] for memory in recalled] == ["prior"]
+
+
+def test_extract_simulation_state_prefers_fresh_result_state_over_session_metadata():
+    result = {
+        "result": {
+            "memory_state": {
+                "service_memories": [
+                    {"memory_id": "memory:fresh"}
+                ]
+            },
+            "relationship_state": {"npc:Elara::player": {"axes": {"familiarity": 1.0}}},
+            "npc_emotion_state": {"npc:Elara": {"dominant_emotion": "neutral"}},
+            "service_offer_state": {"offers": {"elara_torch": {"stock_remaining": 2}}},
+        },
+        "session": {
+            "setup_payload": {
+                "metadata": {
+                    "simulation_state": {
+                        "memory_state": {"service_memories": []},
+                        "relationship_state": {},
+                        "npc_emotion_state": {},
+                        "service_offer_state": {},
+                    }
+                }
+            },
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {},
+                    "presentation": {},
+                }
+            },
+        },
+    }
+
+    simulation_state = transcript._extract_simulation_state(result)
+
+    assert simulation_state["memory_state"]["service_memories"][0]["memory_id"] == "memory:fresh"
+    assert simulation_state["relationship_state"]["npc:Elara::player"]["axes"]["familiarity"] == 1.0
+    assert simulation_state["npc_emotion_state"]["npc:Elara"]["dominant_emotion"] == "neutral"
+    assert simulation_state["service_offer_state"]["offers"]["elara_torch"]["stock_remaining"] == 2

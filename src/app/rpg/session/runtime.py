@@ -185,19 +185,28 @@ from app.rpg.session.inventory_runtime import (
     pickup_item_action,
     unequip_item_action,
 )
-from app.rpg.session.narration_worker import (
-    ensure_narration_worker_running,
-    publish_narration_event,
-    signal_narration_work,
-)
 from app.rpg.session.narration_runtime import (
     assemble_turn_narration_response,
     build_turn_narration_context,
     build_turn_narration_request,
 )
+from app.rpg.session.narration_worker import (
+    ensure_narration_worker_running,
+    publish_narration_event,
+    signal_narration_work,
+)
 from app.rpg.session.response_builder import (
     build_apply_turn_response,
     build_turn_payload,
+)
+from app.rpg.session.service import load_session as load_canonical_session
+from app.rpg.session.service import save_session as save_canonical_session
+from app.rpg.session.service_runtime import (
+    merge_service_result_into_contract_resolved,
+    mirror_service_result,
+    service_action_from_result,
+    service_authoritative_result,
+    service_semantic_action_from_result,
 )
 from app.rpg.session.state_normalization import (
     _apply_starting_resources_to_player_state,
@@ -222,15 +231,6 @@ from app.rpg.session.state_normalization import (
     _story_policy_save_load_stable,
     _story_policy_strict_replay,
 )
-from app.rpg.session.service_runtime import (
-    merge_service_result_into_contract_resolved,
-    mirror_service_result,
-    service_action_from_result,
-    service_authoritative_result,
-    service_semantic_action_from_result,
-)
-from app.rpg.session.service import load_session as load_canonical_session
-from app.rpg.session.service import save_session as save_canonical_session
 from app.rpg.session.turn_contract import (
     apply_state_delta,
     build_turn_contract,
@@ -6909,7 +6909,7 @@ def _generate_turn_narration_artifact(
 
     session = load_runtime_session(session_id)
     if session is None:
-        return {"ok": False, "error": "session_not_found_after_authoritative_commit", "artifact": artifact}
+        return {"ok": True, "session": None, "artifact": artifact}
 
     runtime_state = _copy_dict(session.get("runtime_state"))
     current_tick = int(runtime_state.get("tick", 0) or 0)
