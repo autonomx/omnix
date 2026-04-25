@@ -352,20 +352,64 @@ def _ground_accommodation_npc_line(line: str, narration_context: Dict[str, Any])
 
     lower = _safe_str(line).lower()
     invented_terms = (
+        # Availability / offer claims
         "vacant room",
         "vacant rooms",
+        "available room",
+        "available rooms",
         "room available",
         "rooms available",
         "we do have",
+        "i do have",
+        "i've got",
+        "ive got",
+        "we've got",
+        "we have a room",
+        "i have a room",
+        "got a room",
+        "got a cozy",
+        "cozy little room",
+        "vacancies",
+        "vacancy",
+        "no vacancies",
+        "haven't had any vacancies",
+        "havent had any vacancies",
+        "might have somethin",
+        "might have something",
+        "something for you",
+        "somethin' for you",
+
+        # Scene movement / transition claims
+        "follow me",
+        "come with me",
+        "let me show you",
+        "show you the room",
+
+        # Specific room/location facts
         "top floor",
-        "best view",
+        "above the inn",
         "down the hall",
-        "five silver",
-        "gold",
-        "silver",
-        "copper",
+        "down the corridor",
+        "best view",
+        "garden out back",
         "stable accommodations",
         "accommodations in town",
+
+        # Price / transaction claims
+        "what'll it cost",
+        "what will it cost",
+        "cost you",
+        "price",
+        "five silver",
+        "silver",
+        "gold",
+        "copper",
+
+        # Quality/assignment claims
+        "perfect for a traveler",
+        "perfect for you",
+        "just right for",
+        "settle you in",
     )
 
     if not any(term in lower for term in invented_terms):
@@ -374,6 +418,33 @@ def _ground_accommodation_npc_line(line: str, narration_context: Dict[str, Any])
     return (
         "A room, you say? Let me check what I can offer before we settle the details."
     )
+
+
+def _ground_action_result_text(action_text: str, narration_context: Dict[str, Any]) -> str:
+    text = _safe_str(action_text).strip()
+    if not text:
+        return text
+
+    lower = text.lower()
+
+    repeats_player_action = any(
+        phrase in lower
+        for phrase in (
+            "you approach",
+            "you ask",
+            "you inquire",
+            "you request",
+            "with a hopeful glint",
+            "if he has a room",
+            "if they have a room",
+            "has a room to rent",
+        )
+    )
+
+    if repeats_player_action and _is_accommodation_request(narration_context):
+        return "Bran considers your request."
+
+    return text
 
 
 def _player_input_action_text(narration_context: Dict[str, Any]) -> str:
@@ -781,41 +852,6 @@ def _authoritative_action_text(narration_context: Dict[str, Any]) -> str:
     return _strip_basic_markdown(_build_action_result_line(narration_context))
 
 
-def _allowed_npc_speakers(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> List[str]:
-    scene = _safe_dict(scene)
-    narration_context = _safe_dict(narration_context)
-    resolved = _safe_dict(narration_context.get("resolved_result"))
-
-    allowed: List[str] = []
-    seen = set()
-
-    def _add(value: Any) -> None:
-        name = _safe_str(value).strip()
-        if not name:
-            return
-        key = name.lower()
-        if key in seen:
-            return
-        seen.add(key)
-        allowed.append(name)
-
-    for actor in _safe_list(scene.get("actors")):
-        if isinstance(actor, dict):
-            _add(actor.get("name") or actor.get("id"))
-        else:
-            _add(actor)
-
-    for actor in _safe_list(_safe_dict(narration_context.get("grounded")).get("present_actor_names")):
-        _add(actor)
-
-    _add(resolved.get("target_name"))
-    _add(resolved.get("npc_name"))
-    _add(resolved.get("speaker_name"))
-    _add(_safe_dict(resolved.get("npc")).get("name"))
-
-    return allowed
-
-
 def _authoritative_reward_text(narration_context: Dict[str, Any]) -> str:
     return _strip_basic_markdown(_build_rewards_block(narration_context))
 
@@ -1048,9 +1084,17 @@ def _sanitize_narration_payload(
         "narration": narration_text,
         "action": llm_action,
         "npc": sanitized_npc,
-        "reward": authoritative_reward,
+        "reward": _safe_str(payload.get("reward")).strip(),
         "followup_hooks": [],
     })
+
+    reward_text = _desystemify_text(_safe_str(normalized.get("reward")))
+    authoritative_reward = _authoritative_reward_text(narration_context)
+
+    if reward_text and not authoritative_reward:
+        reward_text = ""
+
+    normalized["reward"] = reward_text
 
     normalized = _enforce_npc_behavior(normalized, narration_context)
 
@@ -1089,7 +1133,7 @@ def _sanitize_narration_payload(
                     prefix = f"{target_name} stiffens, clearly affected by what just happened. "
             normalized["narration"] = prefix + narration
 
-    narration_clean = _desystemify_text(normalized.get("narration"))
+    narration_clean = _desystemify_text(_safe_str(normalized.get("narration")))
     narration_clean = _strip_meta_narration(narration_clean)
 
     if not narration_clean:
@@ -1107,10 +1151,14 @@ def _sanitize_narration_payload(
     ):
         normalized["action"] = ""
     else:
-        normalized["action"] = action_raw.strip()
+        normalized["action"] = _desystemify_text(action_raw.strip())
+        normalized["action"] = _ground_action_result_text(
+            normalized["action"],
+            narration_context,
+        )
     npc = _safe_dict(normalized.get("npc"))
-    npc["speaker"] = _desystemify_text(npc.get("speaker"))
-    npc["line"] = _clean_npc_dialogue_line(_desystemify_text(npc.get("line")))
+    npc["speaker"] = _desystemify_text(_safe_str(npc.get("speaker")))
+    npc["line"] = _clean_npc_dialogue_line(_desystemify_text(_safe_str(npc.get("line"))))
     npc["line"] = _ground_accommodation_npc_line(npc["line"], narration_context)
     normalized["npc"] = npc
 

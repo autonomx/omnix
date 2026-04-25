@@ -1528,6 +1528,87 @@ def test_accommodation_dialogue_does_not_invent_room_offer_without_service_resul
     assert "let me check what i can offer" in text
 
 
+def test_accommodation_grounding_catches_cozy_room_and_cost_invention():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"The tavern quiets as Bran looks your way.",'
+                    '"action":"With a hopeful glint in your eye, you approach Bran and ask if he has a room to rent.",'
+                    '"npc":{"speaker":"Bran","line":"Aye, I\\\'ve got a cozy little room above the inn, perfect for a traveler such as yourself. What\\\'ll it cost you?"},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran"}],
+    }
+
+    narration_context = {
+        "player_input": "I ask Bran for a room to rent",
+        "turn_contract": {
+            "player_input": "I ask Bran for a room to rent",
+            "semantic_action": {
+                "action_type": "social_activity",
+                "activity_label": "requesting_rental",
+                "target_name": "Bran",
+                "reason": "rent_room",
+            },
+            "narration_brief": {
+                "summary": "I ask Bran for a room to rent",
+            },
+            "resolved_result": {
+                "action_metadata": {
+                    "transaction_kind": "",
+                    "price_source": "",
+                    "provider_id": "",
+                    "provider_name": "",
+                },
+                "effect_result": {
+                    "service_effects": {},
+                },
+            },
+        },
+        "resolved_result": {
+            "outcome": "success",
+            "target_name": "Bran",
+            "action_metadata": {
+                "transaction_kind": "",
+                "price_source": "",
+                "provider_id": "",
+                "provider_name": "",
+            },
+            "effect_result": {
+                "service_effects": {},
+            },
+        },
+    }
+
+    result = narrate_scene(
+        scene,
+        narration_context,
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+
+    assert "action: you ask bran for a room to rent" in text
+    assert "result: bran considers your request" in text
+
+    assert "cozy little room" not in text
+    assert "above the inn" not in text
+    assert "perfect for a traveler" not in text
+    assert "what'll it cost" not in text
+    assert "cost you" not in text
+
+    assert "let me check what i can offer" in text
+
+
 def test_live_narrator_renders_authoritative_action_and_preserves_npc_dialogue():
     from app.rpg.ai.world_scene_narrator import narrate_scene
 
@@ -1744,3 +1825,85 @@ def test_normalize_final_narration_text_adds_terminal_punctuation():
     )
 
     assert value == "Bran the Innkeeper names his price."
+
+
+def test_accommodation_grounding_blocks_vacancy_and_follow_me_claims():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"The inn common room quiets as Bran looks your way.",'
+                    '"action":"You ask Bran for a room to rent, your persuasive voice carrying across the room.",'
+                    '"npc":{"speaker":"Bran","line":"A room, you say? Well, we haven\\\'t had any vacancies lately, but I might have somethin\\\' for you. Follow me."},'
+                    '"reward":"+6 persuasion XP","followup_hooks":[]}'
+                )
+            }
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran"}],
+    }
+
+    narration_context = {
+        "player_input": "I ask Bran for a room to rent",
+        "turn_contract": {
+            "player_input": "I ask Bran for a room to rent",
+            "semantic_action": {
+                "action_type": "social_activity",
+                "activity_label": "asking_for_room_rental",
+                "target_name": "Bran",
+                "reason": "asking_for_room_rental",
+            },
+            "narration_brief": {
+                "summary": "I ask Bran for a room to rent",
+            },
+            "resolved_result": {
+                "action_metadata": {
+                    "transaction_kind": "",
+                    "price_source": "",
+                    "provider_id": "",
+                    "provider_name": "",
+                },
+                "effect_result": {
+                    "service_effects": {},
+                },
+            },
+        },
+        "resolved_result": {
+            "outcome": "success",
+            "target_name": "Bran",
+            "action_metadata": {
+                "transaction_kind": "",
+                "price_source": "",
+                "provider_id": "",
+                "provider_name": "",
+            },
+            "effect_result": {
+                "service_effects": {},
+            },
+        },
+    }
+
+    result = narrate_scene(
+        scene,
+        narration_context,
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "action: you ask bran for a room to rent" in text
+    assert "result: bran considers your request" in text
+
+    assert "vacancies" not in text
+    assert "might have somethin" not in text
+    assert "something for you" not in text
+    assert "follow me" not in text
+
+    assert "let me check what i can offer" in text
+    assert narration_json["reward"] == ""
