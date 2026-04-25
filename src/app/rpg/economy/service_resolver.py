@@ -20,8 +20,10 @@ from app.rpg.economy.service_registry import (
     SERVICE_KIND_TRAINING,
     SERVICE_KIND_TRANSPORT,
     find_provider_by_text,
+    get_service_provider,
     get_provider_offers,
 )
+from app.rpg.economy.service_stock import filter_available_offers
 
 
 def _safe_str(value: Any) -> str:
@@ -304,7 +306,12 @@ def resolve_service_turn(
     provider_id = _safe_str(intent.get("provider_id"))
     service_kind = _safe_str(intent.get("service_kind"))
     kind = _safe_str(intent.get("kind"))
-    offers = get_provider_offers(provider_id, service_kind)
+    provider = get_service_provider(provider_id)
+    offers = filter_available_offers(
+        simulation_state,
+        get_provider_offers(provider_id, service_kind),
+        provider=provider,
+    )
     player_currency = get_player_currency(simulation_state)
 
     result: Dict[str, Any] = {

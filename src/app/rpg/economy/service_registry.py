@@ -49,6 +49,11 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Common room cot",
             "description": "A simple cot in the common room for one night.",
             "price": {"gold": 0, "silver": 5, "copper": 0},
+            "stock": 6,
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_tavern",
+            },
             "availability": "available",
             "effects": {
                 "lodging_reserved": True,
@@ -62,6 +67,11 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Private room",
             "description": "A private room for one night.",
             "price": {"gold": 1, "silver": 0, "copper": 0},
+            "stock": 1,
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_tavern",
+            },
             "availability": "available",
             "effects": {
                 "lodging_reserved": True,
@@ -75,6 +85,10 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Hot stew",
             "description": "A hot bowl of stew and bread.",
             "price": {"gold": 0, "silver": 1, "copper": 5},
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_tavern",
+            },
             "availability": "available",
             "effects": {
                 "meal_consumed": True,
@@ -87,6 +101,10 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Mug of ale",
             "description": "A mug of local ale.",
             "price": {"gold": 0, "silver": 0, "copper": 8},
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_tavern",
+            },
             "availability": "available",
             "effects": {
                 "drink_consumed": True,
@@ -98,6 +116,10 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Local rumor",
             "description": "A useful rumor from tavern gossip.",
             "price": {"gold": 0, "silver": 2, "copper": 0},
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_tavern",
+            },
             "availability": "available",
             "effects": {
                 "rumor_added": True,
@@ -111,6 +133,11 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Torch",
             "description": "A simple torch for dark places.",
             "price": {"gold": 0, "silver": 1, "copper": 0},
+            "stock": 3,
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_market",
+            },
             "availability": "available",
             "effects": {
                 "items_added": [
@@ -128,6 +155,11 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Rope",
             "description": "Fifty feet of sturdy hemp rope.",
             "price": {"gold": 0, "silver": 3, "copper": 0},
+            "stock": 2,
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_market",
+            },
             "availability": "available",
             "effects": {
                 "items_added": [
@@ -145,6 +177,10 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Market information",
             "description": "A piece of useful market intelligence.",
             "price": {"gold": 0, "silver": 2, "copper": 0},
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_market",
+            },
             "availability": "available",
             "effects": {
                 "rumor_added": True,
@@ -156,6 +192,10 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
             "label": "Basic gear repair",
             "description": "Minor repair work on worn equipment.",
             "price": {"gold": 0, "silver": 4, "copper": 0},
+            "availability_rules": {
+                "requires_provider_present": True,
+                "requires_location": "loc_market",
+            },
             "availability": "available",
             "effects": {
                 "repair_quality": "basic",

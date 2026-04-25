@@ -241,6 +241,37 @@ def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
     return history
 
 
+def _extract_service_memories(result: Dict[str, Any]) -> List[Any]:
+    simulation_state = _extract_simulation_state(result)
+    memory_state = _safe_dict(simulation_state.get("memory_state"))
+    return _safe_list(memory_state.get("service_memories"))
+
+
+def _extract_relationship_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("relationship_state"))
+
+
+def _extract_npc_emotion_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("npc_emotion_state"))
+
+
+def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("service_offer_state"))
+
+
+def _effective_service_status(
+    service_result: Dict[str, Any],
+    service_application: Dict[str, Any],
+) -> str:
+    purchase = _safe_dict(service_result.get("purchase"))
+    if bool(service_application.get("applied") or purchase.get("applied")):
+        return "purchased"
+    return _safe_str(service_result.get("status"))
+
+
 def _compact_turn_summary(
     *,
     index: int,
@@ -273,7 +304,7 @@ def _compact_turn_summary(
         "semantic_family": semantic_action.get("semantic_family"),
         "activity_label": semantic_action.get("activity_label"),
         "service_kind": service_result.get("service_kind"),
-        "service_status": service_result.get("status"),
+        "service_status": _effective_service_status(service_result, service_application),
         "selected_offer_id": service_result.get("selected_offer_id"),
         "purchase_blocked": purchase.get("blocked"),
         "purchase_applied": bool(
@@ -289,6 +320,13 @@ def _compact_turn_summary(
         "memory_rumors": _extract_memory_rumors(result),
         "transaction_record": service_debug.get("transaction_record"),
         "transaction_history_count": len(_extract_transaction_history(result)),
+        "memory_entry": service_debug.get("memory_entry"),
+        "service_memory_count": len(_extract_service_memories(result)),
+        "relationship_state": _extract_relationship_state(result),
+        "npc_emotion_state": _extract_npc_emotion_state(result),
+        "social_effects": service_debug.get("social_effects"),
+        "stock_update": service_debug.get("stock_update"),
+        "service_offer_state": _extract_service_offer_state(result),
         "available_actions": service_debug.get("available_actions"),
         "narration_preview": narration[:500] if narration else "",
         "ok": not bool(_safe_dict(result).get("error")),
@@ -492,6 +530,18 @@ def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
             resolved.get("transaction_record")
             or service_application.get("transaction_record")
         ),
+        "memory_entry": _safe_dict(
+            resolved.get("memory_entry")
+            or service_application.get("memory_entry")
+        ),
+        "social_effects": _safe_dict(
+            resolved.get("social_effects")
+            or service_application.get("social_effects")
+        ),
+        "stock_update": _safe_dict(
+            resolved.get("stock_update")
+            or service_application.get("stock_update")
+        ),
         "inventory_changes": {
             "items_added": _safe_list(
                 applied_effects.get("items_added") or effects.get("items_added")
@@ -588,6 +638,18 @@ def _print_turn(
     _emit("", channel=channel)
     _emit("TRANSACTION HISTORY:", channel=channel)
     _emit(_compact_json(_extract_transaction_history(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("SERVICE MEMORIES:", channel=channel)
+    _emit(_compact_json(_extract_service_memories(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("RELATIONSHIP STATE:", channel=channel)
+    _emit(_compact_json(_extract_relationship_state(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("NPC EMOTION STATE:", channel=channel)
+    _emit(_compact_json(_extract_npc_emotion_state(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("SERVICE OFFER STATE:", channel=channel)
+    _emit(_compact_json(_extract_service_offer_state(result)), channel=channel)
     _emit("", channel=channel)
     _emit("RESULT SUBDICT:", channel=channel)
     _emit(_compact_json(result_sub), channel=channel)
