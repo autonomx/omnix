@@ -173,10 +173,61 @@ from app.rpg.session.ambient_policy import (
     classify_ambient_delivery,
     record_interrupt,
 )
+from app.rpg.session.idle_runtime import (
+    advance_simulation_for_idle,
+    build_idle_player_context,
+    compute_idle_tick_count,
+)
+from app.rpg.session.inventory_runtime import (
+    drop_item_action,
+    equip_item_action,
+    extract_equipment,
+    pickup_item_action,
+    unequip_item_action,
+)
 from app.rpg.session.narration_worker import (
     ensure_narration_worker_running,
     publish_narration_event,
     signal_narration_work,
+)
+from app.rpg.session.narration_runtime import (
+    assemble_turn_narration_response,
+    build_turn_narration_context,
+    build_turn_narration_request,
+)
+from app.rpg.session.response_builder import (
+    build_apply_turn_response,
+    build_turn_payload,
+)
+from app.rpg.session.state_normalization import (
+    _apply_starting_resources_to_player_state,
+    _copy_dict,
+    _ensure_active_interactions,
+    _ensure_npc_reaction_runtime_state,
+    _ensure_semantic_action_runtime_state,
+    _ensure_simulation_state,
+    _normalize_active_interactions,
+    _normalize_final_narration_text,
+    _normalize_performance_settings,
+    _normalize_runtime_settings,
+    _normalize_social_axes,
+    _normalize_story_policy,
+    _normalize_structured_action,
+    _safe_bool,
+    _safe_dict,
+    _safe_int,
+    _safe_list,
+    _safe_str,
+    _story_policy_record_replay_artifacts,
+    _story_policy_save_load_stable,
+    _story_policy_strict_replay,
+)
+from app.rpg.session.service_runtime import (
+    merge_service_result_into_contract_resolved,
+    mirror_service_result,
+    service_action_from_result,
+    service_authoritative_result,
+    service_semantic_action_from_result,
 )
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
@@ -190,6 +241,19 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
+
+_advance_simulation_for_idle = advance_simulation_for_idle
+_build_idle_player_context = build_idle_player_context
+
+_extract_equipment = extract_equipment
+_pickup_item_action = pickup_item_action
+_drop_item_action = drop_item_action
+_equip_item_action = equip_item_action
+_unequip_item_action = unequip_item_action
+
+_service_action_from_result = service_action_from_result
+_service_semantic_action_from_result = service_semantic_action_from_result
+_service_authoritative_result = service_authoritative_result
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
@@ -231,86 +295,14 @@ _MAX_NPC_REACTION_RECORDS = 64
 _MAX_INTERACTION_REACTION_STATE = 16
 
 
-def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize runtime settings to allowed values only."""
-    if not isinstance(value, dict):
-        value = {}
-    result: Dict[str, Any] = {}
-    # mode
-    result["mode"] = _safe_str(value.get("mode") or "live").strip().lower() or "live"
-    interaction_duration_mode = _safe_str(
-        value.get("interaction_duration_mode") or "until_next_command"
-    ).strip().lower()
-    if interaction_duration_mode not in {"ticks", "until_next_command"}:
-        interaction_duration_mode = "ticks"
-
-    interaction_duration_ticks = _safe_int(value.get("interaction_duration_ticks"), 5)
-    if interaction_duration_ticks < 1:
-        interaction_duration_ticks = 1
-    if interaction_duration_ticks > 20:
-        interaction_duration_ticks = 20
-
-    result["interaction_duration_mode"] = interaction_duration_mode
-    result["interaction_duration_ticks"] = interaction_duration_ticks
-    result["interaction_trace"] = _safe_bool(value.get("interaction_trace"), True)
-    # response_length: keep existing semantics
-    rl = value.get("response_length")
-    if isinstance(rl, str):
-        rl_value = rl.strip().lower()
-        result["response_length"] = rl_value if rl_value in ("short", "medium", "long") else "short"
-    elif isinstance(rl, dict):
-        # Backward compatibility for older/broken frontend payloads that posted:
-        # {"response_length": {"narrator_length": "...", "character_length": "..."}}
-        fallback = str(rl.get("narrator_length") or rl.get("character_length") or "").strip().lower()
-        result["response_length"] = fallback if fallback in ("short", "medium", "long") else "short"
-    else:
-        result["response_length"] = "short"
-    # idle_conversation_seconds: only allowed values
-    ics = value.get("idle_conversation_seconds")
-    try:
-        ics = int(ics)
-    except (TypeError, ValueError):
-        ics = 15
-    result["idle_conversation_seconds"] = ics if ics in _ALLOWED_IDLE_SECONDS else 15
-    # booleans
-    for bkey in (
-        "idle_conversations_enabled",
-        "idle_npc_to_player_enabled",
-        "idle_npc_to_npc_enabled",
-        "follow_reactions_enabled",
-        "console_debug_enabled",
-        "world_events_panel_enabled",
-    ):
-        result[bkey] = bool(value.get(bkey, True))
-    # reaction_style: only allowed enum
-    rs = value.get("reaction_style")
-    result["reaction_style"] = rs if isinstance(rs, str) and rs.strip().lower() in _ALLOWED_REACTION_STYLES else "normal"
-    result["verbose_semantic_trace"] = _safe_bool(value.get("verbose_semantic_trace"), False)
-    return result
 
 
-def _normalize_story_policy(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    runtime_state = _safe_dict(runtime_state)
-    raw = runtime_state.get("story_policy")
-    if not isinstance(raw, dict):
-        raw = {}
-    result = dict(_DEFAULT_STORY_POLICY)
-    for key in _DEFAULT_STORY_POLICY.keys():
-        if raw.get(key) is not None:
-            result[key] = bool(raw.get(key))
-    return result
 
 
-def _story_policy_record_replay_artifacts(runtime_state: Dict[str, Any]) -> bool:
-    return bool(_normalize_story_policy(runtime_state).get("record_replay_artifacts", False))
 
 
-def _story_policy_strict_replay(runtime_state: Dict[str, Any]) -> bool:
-    return bool(_normalize_story_policy(runtime_state).get("strict_replay", False))
 
 
-def _story_policy_save_load_stable(runtime_state: Dict[str, Any]) -> bool:
-    return bool(_normalize_story_policy(runtime_state).get("save_load_stable", True))
 
 
 def _ensure_narration_artifact_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -804,33 +796,6 @@ _FAST_TURN_DEFAULTS = {
 }
 
 
-def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    """Return the effective performance settings for this turn.
-
-    When ``fast_turn_mode`` is enabled, individual flags default to the
-    fast-turn defaults but can still be overridden explicitly.
-    """
-    perf = {}
-    if isinstance(runtime_state, dict):
-        perf = dict(runtime_state.get("performance") or {})
-    fast = bool(perf.get("fast_turn_mode", False))
-    defaults = _FAST_TURN_DEFAULTS if fast else {
-        "enable_action_advisory": True,
-        "enable_semantic_action_advisory": True,
-        "enable_live_narration_llm": True,
-        "enable_narration_retry": False,
-        "enable_fast_live_narrator_mode": False,
-        "enable_continuity_grounding": True,
-        "compact_save": False,
-    }
-    result: Dict[str, Any] = {"fast_turn_mode": fast}
-    for key, default_val in defaults.items():
-        val = perf.get(key)
-        result[key] = bool(val) if val is not None else default_val
-    result["live_narrator_temperature"] = float(perf.get("live_narrator_temperature", 0.2) or 0.2)
-    result["live_narrator_top_p"] = float(perf.get("live_narrator_top_p", 0.9) or 0.9)
-    result["continuity_turn_window"] = int(perf.get("continuity_turn_window", 3) or 3)
-    return result
 
 
 def _runtime_fast_turn_enabled(runtime_state: Dict[str, Any]) -> bool:
@@ -908,22 +873,8 @@ def _build_fast_semantic_action_record(
     }
 
 
-def _ensure_semantic_action_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    runtime_state = _copy_dict(runtime_state)
-    runtime_state.setdefault("semantic_action_records", [])
-    runtime_state.setdefault("semantic_action_index", {})
-    return runtime_state
 
 
-def _ensure_npc_reaction_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
-    runtime_state = _copy_dict(runtime_state)
-    runtime_state.setdefault("npc_reaction_records", [])
-    runtime_state.setdefault("interaction_reaction_state", [])
-    records = _safe_list(runtime_state.get("npc_reaction_records"))
-    runtime_state["npc_reaction_records"] = records[-_MAX_NPC_REACTION_RECORDS:]
-    state_rows = _safe_list(runtime_state.get("interaction_reaction_state"))
-    runtime_state["interaction_reaction_state"] = state_rows[-_MAX_INTERACTION_REACTION_STATE:]
-    return runtime_state
 
 
 def _build_last_player_action_record(
@@ -972,11 +923,6 @@ def _clear_stale_last_player_action(
     return runtime_state
 
 
-def _ensure_active_interactions(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    interactions = _safe_list(simulation_state.get("active_interactions"))
-    simulation_state["active_interactions"] = interactions
-    return simulation_state
 
 
 def _semantic_action_starts_persistent_interaction(record: Dict[str, Any]) -> bool:
@@ -1588,25 +1534,6 @@ def _coerce_action_target(simulation_state: Dict[str, Any], action: Dict[str, An
     return action
 
 
-def _normalize_social_axes(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    seen: set[tuple[str, int]] = set()
-    for item in _safe_list(items)[:4]:
-        item = _safe_dict(item)
-        axis = _safe_str(item.get("axis")).strip().lower()
-        delta = _safe_int(item.get("delta"), 0)
-        if not axis or delta == 0:
-            continue
-        if delta > 2:
-            delta = 2
-        if delta < -2:
-            delta = -2
-        key = (axis, delta)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"axis": axis, "delta": delta})
-    return out
 
 
 def _compile_semantic_action_record(
@@ -2304,52 +2231,14 @@ def _seconds_since_iso(iso_str: str) -> int:
         return 9999
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
 
 
-def _copy_dict(value: Any) -> Dict[str, Any]:
-    if isinstance(value, dict):
-        return dict(value)
-    return {}
 
 
-def _normalize_final_narration_text(text: str) -> str:
-    text = _safe_str(text).strip()
-    if not text:
-        return ""
-
-    # Normalize whitespace inside paragraphs while preserving paragraph breaks.
-    normalized_lines: List[str] = []
-    for raw_line in text.splitlines():
-        line = " ".join(_safe_str(raw_line).split()).strip()
-        if line:
-            normalized_lines.append(line)
-        elif normalized_lines and normalized_lines[-1] != "":
-            normalized_lines.append("")
-
-    text = "\n".join(normalized_lines).strip()
-
-    # Do not globally remove ellipses. Dialogue may intentionally contain
-    # pauses, and truncation must be fixed at the sanitizer/source layer.
-
-    # Ensure final sentence completion for transcript readability.
-    if text and not text.endswith("...") and text[-1] not in ".!?\"'":
-        text += "."
-
-    return text
 
 
 def _derive_transaction_context_tags(
@@ -4442,13 +4331,6 @@ def maybe_enqueue_llm_semantic_state_change_proposals(
     return runtime_state
 
 
-def _safe_int(value, default=0):
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _build_recent_narration_continuity(runtime_state: Dict[str, Any], current_turn_id: str, limit: int = 3) -> List[Dict[str, Any]]:
@@ -4505,15 +4387,6 @@ def _build_recent_authoritative_turn_facts(runtime_state: Dict[str, Any], curren
     return facts
 
 
-def _safe_bool(value: Any, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in ("true", "1", "yes", "on")
-    try:
-        return bool(value)
-    except Exception:
-        return default
 
 
 def _get_combat_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -4607,8 +4480,6 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _copy_dict(value: Any) -> Dict[str, Any]:
-    return dict(_safe_dict(value))
 
 
 def _stable_unique_labeled_items(values: List[Any], limit: int) -> List[str]:
@@ -4757,79 +4628,6 @@ def _recap_has_meaningful_sections(recap: Dict[str, Any]) -> bool:
     )
 
 
-def _normalize_active_interactions(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    simulation_state = _safe_dict(simulation_state)
-    runtime_state = _safe_dict(runtime_state)
-
-    raw_items = _safe_list(simulation_state.get("active_interactions"))
-    if not raw_items:
-        single = _safe_dict(
-            simulation_state.get("active_interaction")
-            or runtime_state.get("active_interaction")
-        )
-        if single:
-            raw_items = [single]
-
-    out: List[Dict[str, Any]] = []
-    for item in raw_items:
-        item = _safe_dict(item)
-        if not item:
-            continue
-        interaction_id = _safe_str(item.get("id")) or _safe_str(item.get("interaction_id"))
-        interaction_type = _safe_str(item.get("type")) or "interaction"
-        interaction_subtype = _safe_str(item.get("subtype")) or interaction_type
-        scene_id = _safe_str(item.get("scene_id"))
-        location_id = _safe_str(item.get("location_id"))
-        phase = _safe_str(item.get("phase"))
-        resolved = bool(item.get("resolved"))
-        winner = _safe_str(item.get("winner"))
-
-        participants = [_safe_str(x) for x in _safe_list(item.get("participants")) if _safe_str(x)]
-        if not participants:
-            opponent_id = _safe_str(item.get("opponent_id")) or _safe_str(item.get("npc_id"))
-            participants = ["player"] + ([opponent_id] if opponent_id else [])
-
-        display_name = (
-            _safe_str(item.get("opponent_name"))
-            or _safe_str(item.get("npc_name"))
-            or _safe_str(item.get("target_name"))
-            or _safe_str(item.get("name"))
-            or "your opponent"
-        )
-
-        state = _safe_dict(item.get("state"))
-        if not state:
-            # Backward-compatible flattening for older interaction shapes.
-            state = {
-                "player_progress": item.get("player_progress"),
-                "opponent_progress": item.get("npc_progress"),
-                "momentum": item.get("momentum_side"),
-                "advantage": item.get("advantage"),
-                "crowd_attention": item.get("crowd_attention"),
-                "stakes": item.get("stakes"),
-                "tone": item.get("tone"),
-                "clue_found": item.get("clue_found"),
-            }
-
-        out.append(
-            {
-                "id": interaction_id or f"{interaction_type}:{interaction_subtype}:{scene_id or location_id or 'unknown'}",
-                "type": interaction_type,
-                "subtype": interaction_subtype,
-                "scene_id": scene_id,
-                "location_id": location_id,
-                "phase": phase,
-                "participants": participants,
-                "display_name": display_name,
-                "resolved": resolved,
-                "winner": winner,
-                "state": state,
-            }
-        )
-    return out
 
 
 def _interaction_memory_key(interaction: Dict[str, Any]) -> str:
@@ -5251,43 +5049,6 @@ def get_effective_world_behavior(session: Dict[str, Any]) -> Dict[str, Any]:
 # ── Phase 1 — idle tick cadence policy ────────────────────────────────────
 
 
-def compute_idle_tick_count(
-    session: Dict[str, Any],
-    *,
-    elapsed_seconds: int = 0,
-    reason: str = "heartbeat",
-) -> int:
-    """Decide how many idle ticks to apply based on context.
-
-    Rules:
-    - tab open heartbeat: usually 1 tick
-    - resume catch-up: capped batch via elapsed_seconds
-    - active encounter: suppress or reduce ambient chatter ticks
-    - recent player action: lower ambient aggression briefly
-    """
-    session = _safe_dict(session)
-    runtime = _safe_dict(session.get("runtime_state"))
-    sim = _safe_dict(session.get("simulation_state"))
-
-    encounter_active = bool(
-        sim.get("encounter_active") or sim.get("active_encounter")
-    )
-    quiet_ticks = int(runtime.get("post_player_quiet_ticks", 0) or 0)
-
-    if reason == "resume_catchup":
-        raw = max(0, elapsed_seconds // 5)
-        return min(raw, _MAX_RESUME_CATCHUP_TICKS)
-
-    if reason == "heartbeat":
-        # Suppress during active encounters
-        if encounter_active:
-            return 0
-        # Reduce during quiet window after player action
-        if quiet_ticks > 0:
-            return 0
-        return 1
-
-    return 1
 
 
 # ── Phase 5 — opening-aware runtime metadata ─────────────────────────────
@@ -5461,9 +5222,6 @@ def _get_player_location_id(simulation_state: Dict[str, Any], runtime_state: Dic
     )
 
 
-def _extract_equipment(player_state: Dict[str, Any]) -> Dict[str, Any]:
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    return _safe_dict(inventory_state.get("equipment"))
 
 
 def select_primary_action(simulation_state: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any] | None:
@@ -5489,242 +5247,20 @@ def _structured_action_prompt(action: Dict[str, Any]) -> str:
     return ""
 
 
-def _normalize_structured_action(action: Any, player_input: str = "") -> Dict[str, Any]:
-    normalized = _safe_dict(action)
-    if not normalized:
-        raw_input = _safe_str(player_input).strip()
-        if raw_input.startswith("{") and raw_input.endswith("}"):
-            try:
-                normalized = _safe_dict(json.loads(raw_input))
-            except Exception:
-                normalized = {}
-
-    if not normalized:
-        return {}
-
-    if normalized.get("action_type"):
-        action_type = _safe_str(normalized.get("action_type")).strip().lower()
-        if action_type == "talk":
-            normalized["action_type"] = "persuade"
-        elif action_type == "threaten":
-            normalized["action_type"] = "intimidate"
-        elif action_type == "threat":
-            normalized["action_type"] = "threat"
-        elif action_type == "social":
-            normalized["action_type"] = "social_activity"
-        normalized.setdefault(
-            "target_id",
-            _safe_str(normalized.get("target_id") or normalized.get("npc_id")).strip(),
-        )
-        return normalized
-
-    legacy_type = _safe_str(normalized.get("type")).strip().lower()
-    legacy_action = _safe_str(normalized.get("action")).strip().lower()
-    npc_id = _safe_str(normalized.get("npc_id")).strip()
-    npc_name = _safe_str(normalized.get("npc_name")).strip()
-
-    if legacy_type == "npc_action":
-        if legacy_action == "talk":
-            return {
-                "action_type": "persuade",
-                "npc_id": npc_id,
-                "npc_name": npc_name,
-                "target_id": npc_id,
-                "interaction": "talk",
-                "difficulty": "normal",
-            }
-        if legacy_action == "threaten":
-            return {
-                "action_type": "intimidate",
-                "npc_id": npc_id,
-                "npc_name": npc_name,
-                "target_id": npc_id,
-                "interaction": "threaten",
-                "difficulty": "normal",
-            }
-
-    normalized.setdefault("target_id", _safe_str(normalized.get("target_id") or npc_id).strip())
-    if normalized.get("type") and not normalized.get("action_type"):
-        normalized["action_type"] = _safe_str(normalized.get("type")).strip()
-    return normalized
 
 
-def _coerce_starting_inventory_items(resources: Dict[str, Any]) -> list[Dict[str, Any]]:
-    resources = _safe_dict(resources)
-    items: list[Dict[str, Any]] = []
-
-    for key, raw_value in sorted(resources.items()):
-        qty = int(raw_value or 0)
-        if qty <= 0:
-            continue
-
-        resource_id = _safe_str(key).strip().lower()
-        if not resource_id or resource_id == "gold":
-            continue
-
-        item_id = resource_id
-        name = resource_id.replace("_", " ").title()
-        items.append({
-            "item_id": item_id,
-            "qty": qty,
-            "name": name,
-        })
-
-    return items
 
 
-def _apply_starting_resources_to_player_state(
-    simulation_state: Dict[str, Any],
-    setup_payload: Dict[str, Any],
-) -> Dict[str, Any]:
-    simulation_state = _copy_dict(simulation_state)
-    setup_payload = _safe_dict(setup_payload)
-
-    simulation_state = ensure_player_state(simulation_state)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    player_state = ensure_player_progression_state(player_state)
-
-    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
-    currency = _safe_dict(inventory_state.get("currency"))
-    items = _safe_list(inventory_state.get("items"))
-
-    starting_resources = _safe_dict(setup_payload.get("starting_resources"))
-    if not starting_resources:
-        player_state["inventory_state"] = inventory_state
-        simulation_state["player_state"] = player_state
-        return simulation_state
-
-    currency = normalize_currency(currency)
-
-    current_currency_value = currency_to_copper_value(currency)
-    starting_currency = normalize_currency({
-        "gold": starting_resources.get("gold", 0),
-        "silver": starting_resources.get("silver", 0),
-        "copper": starting_resources.get("copper", 0),
-    })
-
-    if current_currency_value <= 0 and currency_to_copper_value(starting_currency) > 0:
-        currency = starting_currency
-
-    # Apply non-gold resources as inventory items only if inventory is still empty.
-    if not items:
-        bootstrap_items = _coerce_starting_inventory_items(starting_resources)
-        if bootstrap_items:
-            inventory_state = add_inventory_items(inventory_state, bootstrap_items)
-
-    inventory_state["currency"] = currency
-    player_state["inventory_state"] = normalize_inventory_state(inventory_state)
-    simulation_state["player_state"] = player_state
-    return simulation_state
 
 
-def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _copy_dict(simulation_state)
-    simulation_state = ensure_player_state(simulation_state)
-    simulation_state = ensure_player_party(simulation_state)
-    simulation_state = ensure_memory_state(simulation_state)
-    simulation_state = ensure_actor_memory_state(simulation_state)
-    simulation_state = ensure_world_memory_state(simulation_state)
-    simulation_state = ensure_personality_state(simulation_state)
-    simulation_state = ensure_visual_state(simulation_state)
-    simulation_state = ensure_world_item_state(simulation_state)
-    simulation_state = _ensure_active_interactions(simulation_state)
-
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    player_state = ensure_player_progression_state(player_state)
-    inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
-    player_state["inventory_state"] = inventory_state
-    simulation_state["player_state"] = player_state
-    return simulation_state
 
 
-def _pickup_item_action(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    instance_id = _safe_str(action.get("instance_id")).strip()
-    result = pickup_world_item(simulation_state, instance_id)
-    next_state = _safe_dict(result.get("simulation_state"))
-    picked_item = _safe_dict(result.get("picked_up_item"))
-    if picked_item.get("item_id"):
-        player_state = _safe_dict(next_state.get("player_state"))
-        inventory_state = _safe_dict(player_state.get("inventory_state"))
-        inventory_state = add_inventory_items(inventory_state, [picked_item])
-        player_state["inventory_state"] = inventory_state
-        next_state["player_state"] = player_state
-    return {
-        "simulation_state": next_state,
-        "result": _safe_dict(result.get("result")),
-        "picked_up_item": picked_item,
-    }
 
 
-def _drop_item_action(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    item_id = _safe_str(action.get("item_id")).strip()
-    qty = int(action.get("qty", 1) or 1)
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    dropped_item = get_inventory_item_for_drop(inventory_state, item_id)
-    inventory_state = remove_inventory_item(inventory_state, item_id, qty=qty)
-    player_state["inventory_state"] = inventory_state
-    simulation_state["player_state"] = player_state
-
-    location_id = _get_player_location_id(simulation_state, runtime_state)
-    drop_payload = dropped_item if dropped_item else {"item_id": item_id, "qty": qty}
-    result = drop_world_item(simulation_state, drop_payload, location_id, qty=qty)
-    next_state = _safe_dict(result.get("simulation_state"))
-    return {
-        "simulation_state": next_state,
-        "result": _safe_dict(result.get("result")),
-    }
 
 
-def _equip_item_action(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    item_id = _safe_str(action.get("item_id")).strip()
-    slot = _safe_str(action.get("slot")).strip()
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    inventory_state = equip_inventory_item(inventory_state, item_id, slot)
-    player_state["inventory_state"] = inventory_state
-    simulation_state["player_state"] = player_state
-    return {
-        "simulation_state": simulation_state,
-        "result": {
-            "ok": True,
-            "action_type": "equip_item",
-            "item_id": item_id,
-            "slot": slot or _safe_str(_safe_dict(_extract_equipment(player_state)).get("main_hand")),
-            "equipment": _safe_dict(inventory_state.get("equipment")),
-        },
-    }
 
 
-def _unequip_item_action(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    slot = _safe_str(action.get("slot")).strip()
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    inventory_state = unequip_inventory_slot(inventory_state, slot)
-    player_state["inventory_state"] = inventory_state
-    simulation_state["player_state"] = player_state
-    return {
-        "simulation_state": simulation_state,
-        "result": {
-            "ok": True,
-            "action_type": "unequip_item",
-            "slot": slot,
-            "equipment": _safe_dict(inventory_state.get("equipment")),
-        },
-    }
 
 
 def _use_item_action(
@@ -5915,190 +5451,10 @@ def _is_action_provider_available(
     return provider_id in available_ids
 
 
-def _service_action_from_result(
-    player_input: str,
-    action: Dict[str, Any],
-    service_result: Dict[str, Any],
-) -> Dict[str, Any]:
-    action = _safe_dict(action)
-    service_result = _safe_dict(service_result)
-    if not service_result.get("matched"):
-        return action
-
-    service_action = dict(action)
-    service_action["action_type"] = _safe_str(service_result.get("kind") or "service_inquiry")
-    service_action["service_kind"] = _safe_str(service_result.get("service_kind"))
-    service_action["target_id"] = _safe_str(service_result.get("provider_id"))
-    service_action["target_name"] = _safe_str(service_result.get("provider_name"))
-    service_action["provider_id"] = _safe_str(service_result.get("provider_id"))
-    service_action["provider_name"] = _safe_str(service_result.get("provider_name"))
-    service_action["source"] = "deterministic_service_resolver"
-
-    metadata = _safe_dict(service_action.get("metadata"))
-    metadata["player_input"] = _safe_str(player_input)
-    metadata["service_result"] = service_result
-    metadata["service_kind"] = _safe_str(service_result.get("service_kind"))
-    metadata["service_status"] = _safe_str(service_result.get("status"))
-    service_action["metadata"] = metadata
-    return service_action
 
 
-def _service_semantic_action_from_result(
-    player_input: str,
-    service_result: Dict[str, Any],
-    *,
-    tick: int = 0,
-    existing: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    existing = _safe_dict(existing)
-    service_result = _safe_dict(service_result)
-    if not service_result.get("matched"):
-        return existing
-
-    service_kind = _safe_str(service_result.get("service_kind"))
-    action_type = _safe_str(service_result.get("kind") or "service_inquiry")
-    provider_id = _safe_str(service_result.get("provider_id"))
-    provider_name = _safe_str(service_result.get("provider_name"))
-    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-
-    if action_type == "service_purchase":
-        activity_label = f"{service_kind}_purchase" if service_kind else "service_purchase"
-    else:
-        activity_label = f"{service_kind}_inquiry" if service_kind else "service_inquiry"
-
-    semantic_id = _safe_str(existing.get("semantic_action_id"))
-    if not semantic_id:
-        seed = f"{_safe_str(player_input)}|{provider_id}|{service_kind}|{_safe_int(tick, 0)}"
-        semantic_id = f"semantic_service_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:16]}"
-
-    return {
-        **existing,
-        "semantic_action_id": semantic_id,
-        "tick": _safe_int(existing.get("tick"), tick),
-        "player_input": _safe_str(player_input),
-        "action_type": action_type,
-        "semantic_family": "commerce",
-        "interaction_mode": "solo",
-        "activity_label": activity_label,
-        "target_id": provider_id,
-        "target_name": provider_name,
-        "secondary_actor_ids": [],
-        "location_id": _safe_str(service_result.get("location_id")),
-        "visibility": "local",
-        "intensity": 1,
-        "stakes": 1,
-        "social_axes": [],
-        "observer_hooks": [],
-        "scene_impact": "none",
-        "reason": _safe_str(service_result.get("status")),
-        "summary": f"{provider_name} / {activity_label}".strip(" /"),
-        "tags": sorted(
-            {
-                "commerce",
-                action_type or "service_inquiry",
-                service_kind or "service",
-                "player_action",
-            }
-        ),
-        "service_result": service_result,
-        "selected_offer_id": selected_offer_id,
-    }
 
 
-def _service_authoritative_result(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    action = _safe_dict(action)
-    metadata = _safe_dict(action.get("metadata"))
-    service_result = _safe_dict(metadata.get("service_result"))
-    service_result = copy.deepcopy(service_result)
-    service_kind = _safe_str(service_result.get("service_kind"))
-    purchase = _safe_dict(service_result.get("purchase"))
-
-    tick = _safe_int(_safe_dict(simulation_state).get("tick"), 0)
-    purchase_application = {
-        "applied": False,
-        "blocked": bool(purchase.get("blocked")) if purchase else False,
-        "blocked_reason": _safe_str(purchase.get("blocked_reason")) if purchase and purchase.get("blocked") else "",
-        "currency_before": {},
-        "currency_after": {},
-        "items_added": [],
-        "active_service": {},
-        "rumor_added": {},
-        "transaction_record": {},
-    }
-
-    if (
-        _safe_str(service_result.get("kind")) == "service_purchase"
-        and purchase
-        and _safe_str(service_result.get("selected_offer_id"))
-    ):
-        purchase_application = apply_service_purchase_result(
-            simulation_state,
-            service_result,
-            tick=tick,
-        )
-        simulation_state = _safe_dict(purchase_application.get("simulation_state"))
-        service_result = _safe_dict(purchase_application.get("service_result"))
-        purchase = _safe_dict(service_result.get("purchase"))
-
-    blocked = bool(purchase_application.get("blocked"))
-    blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
-    applied = bool(purchase_application.get("applied"))
-
-    result = {
-        "ok": not blocked,
-        "outcome": "blocked" if blocked else "success",
-        "action_type": _safe_str(action.get("action_type") or service_result.get("kind")),
-        "service_kind": service_kind,
-        "target_name": _safe_str(service_result.get("provider_name") or action.get("target_name")),
-        "target_id": _safe_str(service_result.get("provider_id") or action.get("target_id")),
-        "blocked": blocked,
-        "blocked_reason": blocked_reason,
-        "purchase_applied": applied,
-        "service_result": service_result,
-        "action_metadata": {
-            "transaction_kind": _safe_str(service_result.get("kind")),
-            "service_kind": service_kind,
-            "provider_id": _safe_str(service_result.get("provider_id")),
-            "provider_name": _safe_str(service_result.get("provider_name")),
-            "price_source": "deterministic_service_registry" if service_result.get("offers") else "",
-        },
-        "resource_changes": {
-            "currency": {"gold": 0, "silver": 0, "copper": 0},
-        },
-        "service_application": {
-            "applied": applied,
-            "currency_before": purchase_application.get("currency_before") or {},
-            "currency_after": purchase_application.get("currency_after") or {},
-            "items_added": purchase_application.get("items_added") or [],
-            "active_service": purchase_application.get("active_service") or {},
-            "rumor_added": purchase_application.get("rumor_added") or {},
-            "transaction_record": purchase_application.get("transaction_record") or {},
-        },
-        "transaction_record": purchase_application.get("transaction_record") or {},
-    }
-
-    if purchase:
-        result["resource_changes"] = _safe_dict(
-            purchase.get("resource_changes")
-            or {"currency": {"gold": 0, "silver": 0, "copper": 0}}
-        )
-        result["effect_result"] = {
-            "items_added": _safe_list(
-                _safe_dict(purchase.get("applied_effects")).get("items_added")
-                or _safe_dict(purchase.get("effects")).get("items_added")
-            ),
-            "service_effects": _safe_dict(purchase.get("effects")),
-            "applied_effects": _safe_dict(purchase.get("applied_effects")),
-        }
-        result["purchase_note"] = _safe_str(purchase.get("note"))
-
-    return {
-        "simulation_state": simulation_state,
-        "result": result,
-    }
 
 
 def _apply_authoritative_action(
@@ -6109,7 +5465,7 @@ def _apply_authoritative_action(
     action_type = _safe_str(action.get("action_type")).strip()
 
     if action_type in {"service_inquiry", "service_purchase"}:
-        return _service_authoritative_result(simulation_state, action)
+        return service_authoritative_result(simulation_state, action)
 
     action = enrich_action_with_registry_price(action)
 
@@ -6143,13 +5499,17 @@ def _apply_authoritative_action(
         }
 
     if action_type == "pickup_item":
-        return _pickup_item_action(simulation_state, action)
+        return pickup_item_action(simulation_state, action)
     if action_type == "drop_item":
-        return _drop_item_action(simulation_state, runtime_state, action)
+        return drop_item_action(
+            simulation_state,
+            action,
+            location_id=_get_player_location_id(simulation_state, runtime_state),
+        )
     if action_type == "equip_item":
-        return _equip_item_action(simulation_state, action)
+        return equip_item_action(simulation_state, action)
     if action_type == "unequip_item":
-        return _unequip_item_action(simulation_state, action)
+        return unequip_item_action(simulation_state, action)
     if action_type == "use_item":
         return _use_item_action(simulation_state, action)
 
@@ -6701,69 +6061,15 @@ def _fallback_scene(simulation_state: Dict[str, Any], player_input: str) -> Dict
     }
 
 
-def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any], summary: List[str]) -> Dict[str, Any]:
-    session = _safe_dict(session)
-    simulation_state = _safe_dict(session.get("simulation_state"))
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    current_scene = _safe_dict(runtime_state.get("current_scene"))
-    memory_context = build_dialogue_memory_context(
-        simulation_state,
-        actor_id="player",
-    )
-    # Phase 18.3A — extract player state for XP/progression fields
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    last_turn = _safe_dict(runtime_state.get("last_turn_result"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    equipment = _safe_dict(inventory_state.get("equipment"))
 
-    transaction_menus = _build_transaction_menus_for_state(simulation_state, runtime_state)
-    
-    return {
-        "success": True,
-        "session_id": _safe_str(_safe_dict(session.get("manifest")).get("id")),
-        "narration": _safe_str(narration_result.get("narrative") or current_scene.get("summary")),
-        "choices": _safe_list(narration_result.get("choices")),
-        "npcs": _safe_list(runtime_state.get("npcs")),
-        "player": {
-            "stats": _safe_dict(player_state.get("stats")),
-            "skills": _safe_dict(player_state.get("skills")),
-            "level": int(player_state.get("level", 1) or 1),
-            "xp": int(player_state.get("xp", 0) or 0),
-            "xp_to_next": int(player_state.get("xp_to_next", 0) or 0),
-            "inventory_state": inventory_state,
-            "equipment": equipment,
-            "currency": _safe_dict(inventory_state.get("currency")),
-            "inventory_items": _safe_list(inventory_state.get("items")),
-            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
-            "available_checks": _safe_list(player_state.get("available_checks")),
-        },
-        "memory": _safe_list(memory_context.get("items")),
-        "worldEvents": _safe_list(simulation_state.get("events"))[-8:],
-        "world_events": _safe_list(simulation_state.get("events"))[-8:],
-        "summary": summary[:8],
-        "scene": current_scene,
-        "scene_presentation": build_scene_presentation_payload(simulation_state, current_scene),
-        "presentation": build_runtime_presentation_payload(simulation_state),
-        "dialogue_memory_context": memory_context,
-        "llm_memory_prompt_block": build_llm_memory_prompt_block(memory_context),
-        "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
-        "npc_reactions": _safe_list(narration_result.get("npc_reactions")),
-        "dialogue_blocks": _safe_list(narration_result.get("dialogue_blocks")),
-        "metadata": _safe_dict(narration_result.get("metadata")),
-        "turn": int(runtime_state.get("tick", 0) or 0),
-        # Phase 18.3A — XP and progression in turn response
-        "player_level": int(player_state.get("level", 1) or 1),
-        "player_xp": int(player_state.get("xp", 0) or 0),
-        "player_skills": _safe_dict(player_state.get("skills")),
-        "level_up": bool(last_turn.get("level_up")),
-        "skill_level_ups": _safe_list(last_turn.get("skill_level_ups")),
-        "combat_result": _safe_dict(last_turn.get("combat_result")),
-        "xp_result": _safe_dict(last_turn.get("xp_result")),
-        "resource_changes": _safe_dict(last_turn.get("resource_changes")),
-        "player_resources": _safe_dict(last_turn.get("player_resources")),
-        "effect_result": _safe_dict(last_turn.get("effect_result")),
-        "transaction_menus": transaction_menus,
-    }
+
+def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any], summary: List[str]) -> Dict[str, Any]:
+    return build_turn_payload(
+        session,
+        narration_result,
+        summary,
+        build_transaction_menus_for_state=_build_transaction_menus_for_state,
+    )
 
 
 def load_runtime_session(session_id: str) -> Dict[str, Any] | None:
@@ -6838,7 +6144,7 @@ def _apply_turn_authoritative(
         runtime_state=runtime_state,
     )
     if service_first_result.get("matched"):
-        action = _service_action_from_result(player_input, action, service_first_result)
+        action = service_action_from_result(player_input, action, service_first_result)
         action_type = _safe_str(action.get("action_type")).strip()
 
     # Lazy LLM gateway: build at most once per authoritative turn.
@@ -6983,7 +6289,7 @@ def _apply_turn_authoritative(
         runtime_state=runtime_state,
     )
     if service_after_advisory.get("matched"):
-        action = _service_action_from_result(player_input, action, service_after_advisory)
+        action = service_action_from_result(player_input, action, service_after_advisory)
         action_type = _safe_str(action.get("action_type")).strip()
 
     semantic_compiled_key = f"semantic_action_compiled:{current_tick}"
@@ -7029,9 +6335,9 @@ def _apply_turn_authoritative(
         runtime_state=runtime_state,
     )
     if service_after_semantic.get("matched"):
-        action = _service_action_from_result(player_input, action, service_after_semantic)
+        action = service_action_from_result(player_input, action, service_after_semantic)
         action_type = _safe_str(action.get("action_type")).strip()
-        semantic_action_record = _service_semantic_action_from_result(
+        semantic_action_record = service_semantic_action_from_result(
             player_input,
             service_after_semantic,
             tick=_safe_int(current_tick, 0),
@@ -7053,23 +6359,14 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)
 
-    service_metadata_result = _safe_dict(_safe_dict(action.get("metadata")).get("service_result"))
-    if service_metadata_result.get("matched"):
-        resolved_service_result = _safe_dict(resolved_result.get("service_result")) or service_metadata_result
-        resolved_result["service_result"] = resolved_service_result
-        # Ensure applied purchase status survives later mirroring
-        if _safe_dict(resolved_result.get("service_application")).get("applied"):
-            resolved_service_result["status"] = "purchased"
-        resolved_result["action_type"] = _safe_str(resolved_service_result.get("kind") or action_type)
-        resolved_result["service_kind"] = _safe_str(resolved_service_result.get("service_kind"))
-        resolved_result["target_id"] = _safe_str(resolved_service_result.get("provider_id"))
-        resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
-        resolved_result["semantic_action"] = semantic_action_record
-
-        if resolved_service_result is not service_metadata_result:
-            action_metadata = _safe_dict(action.get("metadata"))
-            action_metadata["service_result"] = resolved_service_result
-            action["metadata"] = action_metadata
+    service_resolution = mirror_service_result(
+        resolved_result,
+        action,
+        action_type=action_type,
+        semantic_action_record=semantic_action_record,
+    )
+    resolved_result = _safe_dict(service_resolution.get("resolved_result"))
+    action = _safe_dict(service_resolution.get("action"))
 
     combat_state = _get_combat_state(runtime_state)
 
@@ -7214,23 +6511,14 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)
 
-    service_metadata_result = _safe_dict(_safe_dict(action.get("metadata")).get("service_result"))
-    if service_metadata_result.get("matched"):
-        resolved_service_result = _safe_dict(resolved_result.get("service_result")) or service_metadata_result
-        resolved_result["service_result"] = resolved_service_result
-        # Ensure applied purchase status survives later mirroring
-        if _safe_dict(resolved_result.get("service_application")).get("applied"):
-            resolved_service_result["status"] = "purchased"
-        resolved_result["action_type"] = _safe_str(resolved_service_result.get("kind") or action_type)
-        resolved_result["service_kind"] = _safe_str(resolved_service_result.get("service_kind"))
-        resolved_result["target_id"] = _safe_str(resolved_service_result.get("provider_id"))
-        resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
-        resolved_result["semantic_action"] = semantic_action_record
-
-        if resolved_service_result is not service_metadata_result:
-            action_metadata = _safe_dict(action.get("metadata"))
-            action_metadata["service_result"] = resolved_service_result
-            action["metadata"] = action_metadata
+    service_resolution = mirror_service_result(
+        resolved_result,
+        action,
+        action_type=action_type,
+        semantic_action_record=semantic_action_record,
+    )
+    resolved_result = _safe_dict(service_resolution.get("resolved_result"))
+    action = _safe_dict(service_resolution.get("action"))
 
     _t_authoritative = _time.monotonic()
 
@@ -7256,22 +6544,10 @@ def _apply_turn_authoritative(
             resolved_for_contract["semantic_action"] = semantic_action_record
             turn_contract["resolved_result"] = resolved_for_contract
             turn_contract["resolved_action"] = resolved_for_contract
-        contract_resolved = _safe_dict(turn_contract.get("resolved_action") or resolved_result)
-        for key in (
-            "service_application",
-            "transaction_record",
-            "purchase_applied",
-            "effect_result",
-            "resource_changes",
-            "blocked",
-            "blocked_reason",
-            "semantic_action",
-        ):
-            if key in resolved_result and key not in contract_resolved:
-                contract_resolved[key] = resolved_result[key]
-
-        if _safe_dict(resolved_result.get("service_result")).get("matched"):
-            contract_resolved["service_result"] = _safe_dict(resolved_result.get("service_result"))
+        contract_resolved = merge_service_result_into_contract_resolved(
+            resolved_result,
+            _safe_dict(turn_contract.get("resolved_action") or resolved_result),
+        )
 
         resolved_result = contract_resolved
         after_action_state = apply_state_delta(
@@ -7402,39 +6678,18 @@ def _apply_turn_authoritative(
     current_scene["items"] = list_scene_items(after_state, current_location_id)
     current_scene["nearby_npcs"] = build_nearby_npc_cards(after_state, current_scene)
 
-    narration_context = {
-        "simulation_state": after_state,
-        "player_input": player_input,
-        "resolved_result": resolved_result,
-        "turn_contract": turn_contract,
-        # Direct authoritative result fields.
-        #
-        # Do not force the narrator to recover applied service state from
-        # nested/stale copies in the contract. Service purchase mutation
-        # happens in resolved_result, so pass those fields directly.
-        "service_result": _safe_dict(resolved_result.get("service_result")),
-        "service_application": _safe_dict(resolved_result.get("service_application")),
-        "transaction_record": _safe_dict(
-            resolved_result.get("transaction_record")
-            or _safe_dict(resolved_result.get("service_application")).get("transaction_record")
-        ),
-        "narration_brief": _safe_dict(turn_contract.get("narration_brief")),
-        "state_delta": _safe_dict(turn_contract.get("state_delta")),
-        "npc_behavior_context": _safe_dict(turn_contract.get("npc_behavior_context")),
-        "xp_result": _safe_dict(progression.get("xp_result")),
-        "skill_xp_result": _safe_dict(progression.get("skill_xp_result")),
-        "level_up": _safe_list(progression.get("level_up")),
-        "skill_level_ups": _safe_list(progression.get("skill_level_ups")),
-        "settings": runtime_state.get("runtime_settings", {}),
-        "conversation_threads": build_conversation_thread_prompt_context(
-            runtime_state,
-            current_tick=_safe_int(after_state.get("tick"), current_tick),
-            limit=4,
-        ),
-        "combat_result": combat_result,
-        "npc_combat_result": npc_combat_result,
-        "combat_state": combat_state,
-    }
+    narration_context = build_turn_narration_context(
+        after_state=after_state,
+        player_input=player_input,
+        resolved_result=resolved_result,
+        turn_contract=turn_contract,
+        progression=progression,
+        runtime_state=runtime_state,
+        current_tick=current_tick,
+        combat_result=combat_result,
+        npc_combat_result=npc_combat_result,
+        combat_state=combat_state,
+    )
 
     grounded = _derive_grounded_scene_context(after_state, runtime_state, resolved_result)
     current_scene = _apply_grounded_scene_overlay(current_scene, grounded)
@@ -7555,98 +6810,24 @@ def _apply_turn_authoritative(
     narration_context["recent_turns"] = continuity_rows
     narration_context["recent_authoritative_facts"] = continuity_facts
 
-    narration_request = {
-        "turn_id": turn_id,
-        "tick": final_tick,
-        "session_id": session_id,
-        "scene": _safe_dict(current_scene),
-        "narration_context": _safe_dict(narration_context),
-        "performance": _safe_dict(perf),
-    }
+    narration_request = build_turn_narration_request(
+        turn_id=turn_id,
+        tick=final_tick,
+        session_id=session_id,
+        scene=current_scene,
+        narration_context=narration_context,
+        performance=perf,
+    )
 
-    force_sync = bool(runtime_state.get("force_sync_narration", False))
-
-    if force_sync:
-        print("[RPG][narration][sync] calling narrate_scene")
-
-        sync_scene = _safe_dict(narration_request.get("scene") or runtime_state.get("current_scene"))
-        sync_context = _safe_dict(narration_request.get("narration_context"))
-
-        sync_context["turn_contract"] = turn_contract
-        sync_context["resolved_result"] = resolved_result
-        sync_context["narration_brief"] = _safe_dict(turn_contract.get("narration_brief"))
-        sync_context["state_delta"] = _safe_dict(turn_contract.get("state_delta"))
-        sync_context["npc_behavior_context"] = _safe_dict(turn_contract.get("npc_behavior_context"))
-        sync_context["force_sync_narration"] = True
-        sync_context["require_live_llm_narration"] = True
-        sync_context["performance"] = _safe_dict(runtime_state.get("performance"))
-        sync_context["runtime_settings"] = _safe_dict(runtime_state.get("runtime_settings") or runtime_state.get("settings"))
-
-        llm_enabled = bool(perf.get("enable_live_narration_llm", True))
-        llm_gateway = build_app_llm_gateway() if llm_enabled else None
-
-        try:
-            narration_payload = narrate_scene(sync_scene, sync_context, llm_gateway=llm_gateway)
-        except Exception as exc:
-            print("[RPG][narration][sync] failed", {"error": repr(exc)})
-            raise
-
-        rendered = _safe_str(
-            narration_payload.get("text")
-            or narration_payload.get("narration")
-            or narration_payload.get("rendered_text")
-        )
-
-        authoritative["narration"] = _safe_str(narration_payload.get("narration"))
-        authoritative["narration_json"] = _safe_dict(narration_payload.get("narration_json"))
-        authoritative["raw_llm_narrative"] = narration_payload
-        authoritative["used_llm"] = _safe_bool(narration_payload.get("used_llm"), False)
-        authoritative["narration_status"] = "completed"
-        authoritative["turn_contract"] = turn_contract
-
-        print(
-            "[RPG][narration][sync] completed",
-            {
-                "used_llm": authoritative["used_llm"],
-                "has_text": bool(authoritative["narration"].strip()),
-                "has_turn_contract": bool(turn_contract),
-            },
-        )
-    else:
-        narration = _safe_str(authoritative.get("deterministic_fallback_narration"))
-        raw_llm_narrative = ""
-        used_llm = False
-        narration_status = "queued"
-
-    # Ensure variables are set from authoritative if sync was done
-    if force_sync:
-        narration = _safe_str(authoritative.get("narration"))
-        raw_llm_narrative = authoritative.get("raw_llm_narrative")
-        used_llm = _safe_bool(authoritative.get("used_llm"), False)
-        narration_status = _safe_str(authoritative.get("narration_status"))
-
-    return {
-        "ok": True,
-        "session": session,
-        "turn_contract": _safe_dict(authoritative.get("turn_contract") or turn_contract),
-        "result": {
-            "turn_id": authoritative.get("turn_id"),
-            "tick": authoritative.get("tick"),
-            "resolved_result": authoritative.get("resolved_result"),
-            "combat_result": authoritative.get("combat_result"),
-            "xp_result": authoritative.get("xp_result"),
-            "skill_xp_result": authoritative.get("skill_xp_result"),
-            "level_up": authoritative.get("level_up"),
-            "skill_level_ups": authoritative.get("skill_level_ups"),
-            "summary": authoritative.get("summary"),
-            "presentation": authoritative.get("presentation"),
-            "response_length": authoritative.get("response_length"),
-            "narration": narration,
-            "raw_llm_narrative": raw_llm_narrative,
-            "used_llm": used_llm,
-            "narration_status": narration_status,
-        },
-    }
+    return assemble_turn_narration_response(
+        session=session,
+        authoritative=authoritative,
+        turn_contract=turn_contract,
+        narration_request=narration_request,
+        runtime_state=runtime_state,
+        perf=perf,
+        resolved_result=resolved_result,
+    )
 
 def _generate_turn_narration_artifact(
     session_id: str,
@@ -8212,99 +7393,11 @@ def apply_turn(
     )
     if not authoritative_result.get("ok"):
         return authoritative_result
-
-    authoritative = _safe_dict(authoritative_result.get("authoritative"))
-    turn_contract = _safe_dict(authoritative.get("turn_contract"))
-    narration_request = _safe_dict(authoritative_result.get("narration_request"))
-    result_sub = _safe_dict(authoritative_result.get("result"))
-
-    narration = result_sub.get("narration")
-    raw_llm_narrative = result_sub.get("raw_llm_narrative")
-    used_llm = result_sub.get("used_llm")
-    narration_status = result_sub.get("narration_status")
-
-    result_dict = {
-        "ok": True,
-        "session": authoritative_result.get("session"),
-        "turn_contract": turn_contract,
-        "result": {
-            "turn_id": authoritative.get("turn_id"),
-            "tick": authoritative.get("tick"),
-            "resolved_result": authoritative.get("resolved_result"),
-            "combat_result": authoritative.get("combat_result"),
-            "xp_result": authoritative.get("xp_result"),
-            "skill_xp_result": authoritative.get("skill_xp_result"),
-            "level_up": authoritative.get("level_up"),
-            "skill_level_ups": authoritative.get("skill_level_ups"),
-            "summary": authoritative.get("summary"),
-            "presentation": authoritative.get("presentation"),
-            "response_length": authoritative.get("response_length"),
-            "narration": narration,
-            "raw_llm_narrative": raw_llm_narrative,
-            "used_llm": used_llm,
-            "narration_status": narration_status,
-        },
-    }
-    return result_dict
+    return build_apply_turn_response(authoritative_result)
 
 
-def _advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "heartbeat") -> Dict[str, Any]:
-    """Step simulation forward without player input.
-
-    Uses existing step_simulation_state() but does not require player action.
-    Preserves canonical tick order and records metadata.
-    """
-    setup = apply_adventure_defaults(_copy_dict(session.get("setup_payload")))
-    simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
-
-    metadata = _safe_dict(setup.get("metadata"))
-    metadata["simulation_state"] = simulation_state
-    setup["metadata"] = metadata
-
-    step_result = step_simulation_state(setup)
-    after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
-    next_setup = _safe_dict(step_result.get("next_setup")) or setup
-
-    # step_simulation_state evolves factions/locations/events but does not
-    # know about runtime-level active_interactions.  Carry them forward from
-    # the pre-step simulation state so they survive idle ticks.
-    after_state["active_interactions"] = _safe_list(simulation_state.get("active_interactions"))
-
-    return {
-        "ok": True,
-        "before_state": _safe_dict(step_result.get("before_state")),
-        "after_state": after_state,
-        "next_setup": next_setup,
-        "step_result": step_result,
-        "reason": reason,
-    }
 
 
-def _build_idle_player_context(
-    after_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
-    player_state = _safe_dict(after_state.get("player_state"))
-    current_scene = _safe_dict(runtime_state.get("current_scene"))
-    idle_streak = int(runtime_state.get("idle_streak", 0) or 0)
-    return {
-        "player_location": _safe_str(
-            player_state.get("location_id")
-            or current_scene.get("location_id")
-        ),
-        "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
-        "scene_id": _safe_str(current_scene.get("scene_id")),
-        "world_summary": _safe_str(current_scene.get("summary") or current_scene.get("scene")),
-        "player_idle": idle_streak > 0,
-        "active_conflict": _safe_str(
-            _safe_dict(after_state.get("active_conflict")).get("conflict_id")
-            if isinstance(after_state.get("active_conflict"), dict) else ""
-        ),
-        "recent_incidents": _safe_list(after_state.get("incidents"))[-4:],
-        "salient_events": _filter_salient_player_events(
-            _safe_list(after_state.get("events"))
-        ),
-    }
 
 
 def _apply_idle_tick_to_session(
@@ -8379,7 +7472,7 @@ def _apply_idle_tick_to_session(
             "idle_streak": int(captured.get("idle_streak", 0) or 0),
         }
 
-    advance_result = _advance_simulation_for_idle(session, reason=reason)
+    advance_result = advance_simulation_for_idle(session, reason=reason)
     if not advance_result.get("ok"):
         return {"ok": False, "error": "idle_advance_failed"}
 
@@ -8428,7 +7521,11 @@ def _apply_idle_tick_to_session(
     )
     debug_trace["conversation_idle_seconds"] = conversation_idle_seconds
 
-    player_context = _build_idle_player_context(after_state, runtime_state)
+    player_context = build_idle_player_context(
+        after_state,
+        runtime_state,
+        filter_salient_player_events=_filter_salient_player_events,
+    )
     context = {
         "player_location": _safe_str(player_context.get("player_location")),
         "nearby_npc_ids": _safe_list(player_context.get("nearby_npc_ids")),
