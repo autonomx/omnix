@@ -17,3 +17,24 @@ from app.rpg.economy.service_resolver import (
     resolve_service_intent,
     resolve_service_turn,
 )
+from app.rpg.economy.service_transactions import (
+    append_service_transaction_record,
+    build_service_transaction_record,
+    get_transaction_history,
+)
+
+__all__ = [
+    "add_currency",
+    "append_service_transaction_record",
+    "build_service_transaction_record",
+    "can_afford",
+    "currency_to_copper",
+    "format_currency",
+    "get_provider_offers",
+    "get_service_provider",
+    "get_transaction_history",
+    "normalize_currency",
+    "resolve_service_intent",
+    "resolve_service_turn",
+    "subtract_currency",
+]

@@ -476,7 +476,12 @@ def normalize_service_action_contract(
     resolved_action["service_kind"] = service_kind
     resolved_action["target_id"] = provider_id
     resolved_action["target_name"] = provider_name
-    resolved_action["service_result"] = service_result
+    if safe_str(resolved_action.get("reason")) == "unknown_item":
+        resolved_action["reason"] = "deterministic_service_resolver"
+    existing_resolved_service = safe_dict(resolved_action.get("service_result"))
+    resolved_action["service_result"] = (
+        existing_resolved_service if existing_resolved_service.get("matched") else service_result
+    )
 
     action_metadata = safe_dict(resolved_action.get("action_metadata"))
     action_metadata["transaction_kind"] = service_action_type
@@ -547,6 +552,23 @@ def build_turn_contract(
         interpreted,
         narration_brief,
     )
+    for key in (
+        "service_application",
+        "transaction_record",
+        "purchase_applied",
+        "effect_result",
+        "resource_changes",
+        "blocked",
+        "blocked_reason",
+        "semantic_action",
+    ):
+        if key in resolved_for_contract:
+            resolved[key] = resolved_for_contract[key]
+
+    if service_result.get("matched"):
+        resolved["service_result"] = safe_dict(
+            resolved_for_contract.get("service_result") or service_result
+        )
 
     npc_behavior_context = build_npc_behavior_context(
         simulation_state_after,
@@ -562,6 +584,7 @@ def build_turn_contract(
         "resolved_action": resolved,
         "resolved_result": resolved,
         "service_result": service_result,
+        "semantic_action": safe_dict(resolved.get("semantic_action")),
         "state_delta": state_delta,
         "npc_behavior_context": npc_behavior_context,
         "narration_brief": narration_brief,

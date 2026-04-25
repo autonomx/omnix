@@ -8,6 +8,10 @@ from app.rpg.economy.currency import (
     get_player_currency,
     set_player_currency,
 )
+from app.rpg.economy.service_transactions import (
+    append_service_transaction_record,
+    build_service_transaction_record,
+)
 
 
 def _safe_str(value: Any) -> str:
@@ -191,6 +195,7 @@ def apply_service_purchase_result(
             "items_added": [],
             "active_service": {},
             "rumor_added": {},
+            "transaction_record": {},
         }
 
     purchase = _safe_dict(service_result.get("purchase"))
@@ -206,12 +211,29 @@ def apply_service_purchase_result(
             "items_added": [],
             "active_service": {},
             "rumor_added": {},
+            "transaction_record": {},
         }
 
     if purchase.get("blocked"):
         purchase["applied"] = False
         service_result["purchase"] = purchase
         service_result["status"] = "blocked"
+        purchase_application = {
+            "applied": False,
+            "blocked": True,
+            "blocked_reason": _safe_str(purchase.get("blocked_reason") or "blocked"),
+            "currency_before": get_player_currency(state),
+            "currency_after": get_player_currency(state),
+            "items_added": [],
+            "active_service": {},
+            "rumor_added": {},
+        }
+        transaction_record = build_service_transaction_record(
+            service_result=service_result,
+            purchase_application=purchase_application,
+            tick=tick,
+        )
+        append_service_transaction_record(state, transaction_record)
         return {
             "simulation_state": state,
             "service_result": service_result,
@@ -223,6 +245,7 @@ def apply_service_purchase_result(
             "items_added": [],
             "active_service": {},
             "rumor_added": {},
+            "transaction_record": transaction_record,
         }
 
     currency_before = get_player_currency(state)
@@ -260,6 +283,22 @@ def apply_service_purchase_result(
     }
     service_result["purchase"] = purchase
     service_result["status"] = "purchased"
+    purchase_application = {
+        "applied": True,
+        "blocked": False,
+        "blocked_reason": "",
+        "currency_before": currency_before,
+        "currency_after": currency_after,
+        "items_added": added_items,
+        "active_service": active_service,
+        "rumor_added": rumor_added,
+    }
+    transaction_record = build_service_transaction_record(
+        service_result=service_result,
+        purchase_application=purchase_application,
+        tick=tick,
+    )
+    append_service_transaction_record(state, transaction_record)
 
     return {
         "simulation_state": state,
@@ -272,4 +311,5 @@ def apply_service_purchase_result(
         "items_added": added_items,
         "active_service": active_service,
         "rumor_added": rumor_added,
+        "transaction_record": transaction_record,
     }

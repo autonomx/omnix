@@ -1013,12 +1013,104 @@
     function escapeHtml(str) {
         if (!str) return '';
         return String(str)
-            .replace(/&/g, '&')
-            .replace(/</g, '<')
-            .replace(/>/g, '>')
-            .replace(/"/g, '"')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
     }
+
+    function rpgServiceActionsFromPayload(payload) {
+        payload = payload || {};
+        var contract = payload.turn_contract || payload.contract || {};
+        var presentation = payload.presentation || contract.presentation || {};
+        var actions = presentation.available_actions || [];
+
+        if ((!actions || !actions.length) && payload.result && payload.result.presentation) {
+            actions = payload.result.presentation.available_actions || [];
+        }
+
+        if ((!actions || !actions.length) && payload.raw && payload.raw.presentation) {
+            actions = payload.raw.presentation.available_actions || [];
+        }
+
+        return Array.isArray(actions) ? actions : [];
+    }
+
+    function renderRpgServiceActions(container, actions) {
+        if (!container) return;
+        actions = Array.isArray(actions) ? actions : [];
+
+        if (!actions.length) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = '';
+        container.innerHTML =
+            '<div class="rpg-service-actions-title">Available actions</div>' +
+            '<div class="rpg-service-actions-list">' +
+            actions.map(function(action) {
+                var label = String(action.label || action.command || action.action_id || 'Action');
+                var command = String(action.command || '');
+                var actionId = String(action.action_id || '');
+                return (
+                    '<button type="button" class="rpg-service-action-btn" ' +
+                    'data-rpg-service-command="' + escapeHtml(command) + '" ' +
+                    'data-rpg-service-action-id="' + escapeHtml(actionId) + '">' +
+                    escapeHtml(label) +
+                    '</button>'
+                );
+            }).join('') +
+            '</div>';
+    }
+
+    function updateRpgServiceActionsFromPayload(payload) {
+        var container =
+            document.getElementById('rpg-service-actions') ||
+            document.querySelector('[data-rpg-service-actions]');
+        if (!container) return;
+        renderRpgServiceActions(container, rpgServiceActionsFromPayload(payload || {}));
+    }
+
+    document.addEventListener('click', function(event) {
+        var button = event.target && event.target.closest
+            ? event.target.closest('.rpg-service-action-btn')
+            : null;
+        if (!button) return;
+
+        var command = button.getAttribute('data-rpg-service-command') || '';
+        if (!command) return;
+
+        event.preventDefault();
+
+        var input =
+            document.getElementById('rpgInput') ||
+            document.getElementById('rpg-input') ||
+            document.querySelector('[data-rpg-input]') ||
+            document.getElementById('messageInput');
+
+        if (input) {
+            input.value = command;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        if (typeof window.sendRpgCommand === 'function') {
+            window.sendRpgCommand(command);
+            return;
+        }
+
+        var sendButton =
+            document.getElementById('rpgSendBtn') ||
+            document.getElementById('rpg-send-btn') ||
+            document.querySelector('[data-rpg-send]') ||
+            document.getElementById('sendBtn');
+
+        if (sendButton) {
+            sendButton.click();
+        }
+    });
 
     function formatCurrency(currency) {
         currency = (currency && typeof currency === 'object') ? currency : {};
@@ -2086,7 +2178,8 @@
                 voice_assignments: game.voice_assignments || {},
                 messages: [], // Clear messages for fresh start
             });
-            
+            updateRpgServiceActionsFromPayload(game || {});
+
             // Render transaction menus on initial load
             var transactionContainer = document.getElementById('rpg-transaction-menus');
             if (transactionContainer) {
@@ -3162,6 +3255,7 @@
                     presentation: data.presentation,
                 });
                 applyUpdate(update);
+                updateRpgServiceActionsFromPayload(data || {});
                 if (update.player) {
                     updateState({ player: update.player });
                     renderPlayerPanel(update.player);
@@ -3418,6 +3512,7 @@
         if (update.worldEvents && update.worldEvents.length) renderMemory();
         if (update.session) renderRpgConversationThreads(update.session);
         if (update.turn_contract) renderRpgTurnContract(update.turn_contract);
+        updateRpgServiceActionsFromPayload(update || {});
 
         // Dice rolls go through the queue (animated, no overlap)
         if (update.rolls && update.rolls.length) {
@@ -4927,6 +5022,7 @@
                         npcs: game.npcs,
                         voice_assignments: game.voice_assignments || {},
                     });
+                    updateRpgServiceActionsFromPayload(game || {});
                 }).catch(function() {});
             }
 
@@ -6104,6 +6200,7 @@
                 settings: res.settings || rpgState.settings || {},
                 worldEventsSummary: res.world_events_summary || {},
             });
+            updateRpgServiceActionsFromPayload(res || {});
 
             if (res.opening && res.opening.trim()) {
                 applyUpdate(transformResponse({ narration: res.opening }));

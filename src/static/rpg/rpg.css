@@ -111,4 +111,36 @@
     overflow: auto;
 }
 
+.rpg-service-actions {
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+}
 
+.rpg-service-actions-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    opacity: 0.85;
+    margin-bottom: 8px;
+}
+
+.rpg-service-actions-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.rpg-service-action-btn {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    cursor: pointer;
+}
+
+.rpg-service-action-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
