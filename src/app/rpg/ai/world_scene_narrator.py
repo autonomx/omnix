@@ -663,6 +663,57 @@ def _join_natural(items: List[str]) -> str:
     return f"{', '.join(items[:-1])}, or {items[-1]}"
 
 
+def _final_grounded_service_action_text(
+    action_text: str,
+    narration_context: Dict[str, Any],
+) -> str:
+    """Final authority pass for Result/action text.
+
+    This runs after generic sanitization because phrases like
+    "The attempt fails." can be introduced late by fallback cleanup. Service
+    purchase failures must remain specific and deterministic.
+    """
+    service_result = _service_result_from_context(narration_context)
+    if not service_result.get("matched"):
+        return action_text
+
+    if _safe_str(service_result.get("kind")) != "service_purchase":
+        return action_text
+
+    purchase = _safe_dict(service_result.get("purchase"))
+    service_application = _safe_dict(narration_context.get("service_application"))
+    status = _safe_str(service_result.get("status"))
+    blocked_reason = _safe_str(
+        service_application.get("blocked_reason")
+        or purchase.get("blocked_reason")
+    )
+
+    if status == "blocked" or blocked_reason == "insufficient_funds":
+        grounded = _service_grounded_action_result(narration_context)
+        if grounded:
+            return grounded
+
+    if status == "purchase_offer_not_found" or blocked_reason == "offer_not_found":
+        grounded = _service_grounded_action_result(narration_context)
+        if grounded:
+            return grounded
+
+    generic = _safe_str(action_text).strip().lower()
+    if generic in {
+        "the attempt fails",
+        "the attempt fails.",
+        "you fail",
+        "you fail.",
+        "it fails",
+        "it fails.",
+    }:
+        grounded = _service_grounded_action_result(narration_context)
+        if grounded:
+            return grounded
+
+    return action_text
+
+
 def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
     service_result = _service_result_from_context(narration_context)
     if not service_result:
@@ -682,8 +733,8 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
 
         if status == "purchase_offer_not_found" or blocked_reason == "offer_not_found":
             if provider_name:
-                return f"{provider_name} cannot find a matching registered offer."
-            return "No matching registered offer is available."
+                return f"{provider_name} cannot find a matching available offer."
+            return "No matching available offer is available."
 
         purchase_applied = (
             _safe_str(service_result.get("status")) == "purchased"
@@ -712,7 +763,6 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
     if not service_result:
         return ""
 
-    provider_name = _safe_str(service_result.get("provider_name") or "I").strip()
     kind = _safe_str(service_result.get("kind"))
     status = _safe_str(service_result.get("status"))
     offers = [_safe_dict(offer) for offer in _safe_list(service_result.get("offers"))]
@@ -819,17 +869,23 @@ def _naturalize_service_debug_language(text: str) -> str:
     if not text:
         return text
     replacements = {
+        "registered shop goods options": "available goods",
         "registered lodging options": "available lodging options",
         "registered meal options": "available meal options",
         "registered paid information options": "available information options",
-        "registered shop goods options": "available goods",
         "registered repair options": "available repair options",
         "registered offers": "available offers",
         "registered offer": "available offer",
+        "Registered shop goods options": "available goods",
+        "Registered lodging options": "available lodging options",
+        "Registered meal options": "available meal options",
+        "Registered paid information options": "available information options",
+        "Registered repair options": "available repair options",
+        "Registered offers": "available offers",
+        "Registered offer": "available offer",
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
-        text = text.replace(old.title(), new)
     return text
 
 
@@ -1797,7 +1853,20 @@ def _sanitize_narration_payload(
         )
         if authoritative_result_action:
             normalized["action"] = authoritative_result_action
+    normalized["action"] = _final_grounded_service_action_text(
+        _safe_str(normalized.get("action")),
+        narration_context,
+    )
+    normalized["narration"] = _naturalize_service_debug_language(
+        _safe_str(normalized.get("narration"))
+    )
+    normalized["action"] = _naturalize_service_debug_language(
+        _safe_str(normalized.get("action"))
+    )
     npc = _safe_dict(normalized.get("npc"))
+    if npc:
+        npc["line"] = _naturalize_service_debug_language(_safe_str(npc.get("line")))
+        normalized["npc"] = npc
     npc["speaker"] = _desystemify_text(_safe_str(npc.get("speaker")))
     npc["line"] = _clean_npc_dialogue_line(_desystemify_text(_safe_str(npc.get("line"))))
 
@@ -2381,9 +2450,6 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
             actor_list = "\n".join(f"  - {k}: {v}" for k, v in actors.items())
         else:
             actor_list = str(actors)
-
-    settings = _safe_dict(narration_context.get("settings"))
-    response_length = _normalize_response_length(settings.get("response_length"))
 
     safe_context = _build_safe_prompt_context(scene, narration_context)
     
@@ -3645,10 +3711,10 @@ def narrate_scene(
             if npc.get("speaker") and npc.get("line"):
                 parts.append(f"{npc['speaker']}: \"{npc['line']}\"")
 
-            rendered = "\n\n".join(parts).strip()
+            rendered_narration = _naturalize_service_debug_language("\n\n".join(parts).strip())
 
             return {
-                "narration": rendered,
+                "narration": rendered_narration,
                 "used_llm": True,
                 "raw_llm_narrative": llm_narrative,
                 "narration_json": grounded_json,
@@ -3691,10 +3757,10 @@ def narrate_scene(
             if npc.get("speaker") and npc.get("line"):
                 parts.append(f"{npc['speaker']}: \"{npc['line']}\"")
 
-            rendered = "\n\n".join(parts).strip()
+            rendered_narration = _naturalize_service_debug_language("\n\n".join(parts).strip())
 
             return {
-                "narration": rendered,
+                "narration": rendered_narration,
                 "used_llm": False,
                 "raw_llm_narrative": llm_narrative,
                 "narration_json": grounded_json,

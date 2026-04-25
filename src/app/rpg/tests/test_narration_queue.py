@@ -3022,3 +3022,117 @@ def test_service_purchase_narration_uses_direct_service_application_when_contrac
     assert "done. common room cot is settled." in text
     assert narration_json["action"] == "Bran completes the purchase."
     assert narration_json["npc"]["line"] == "Done. Common room cot is settled."
+
+
+def test_service_purchase_blocked_result_keeps_specific_grounded_reason_after_final_pass():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"The request to purchase a torch is processed by Elara.",'
+                    '"action":"The attempt fails.",'
+                    '"npc":{"speaker":"Elara","line":"Torch for 1 silver is the price, but you do not have enough coin."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "status": "blocked",
+        "selected_offer_id": "elara_torch",
+        "purchase": {
+            "blocked": True,
+            "blocked_reason": "insufficient_funds",
+            "applied": False,
+        },
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I buy a torch from Elara",
+            "service_result": service_result,
+            "service_application": {
+                "blocked": True,
+                "blocked_reason": "insufficient_funds",
+            },
+            "turn_contract": {
+                "player_input": "I buy a torch from Elara",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert result["narration_json"]["action"] == (
+        "Elara names the price, but you do not have enough coin."
+    )
+    assert "Result: Elara names the price, but you do not have enough coin." in result["narration"]
+    assert "The attempt fails" not in result["narration"]
+    assert "registered" not in result["narration"].lower()
+
+
+def test_service_purchase_offer_not_found_result_keeps_specific_grounded_reason_after_final_pass():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara checks the registered offers.",'
+                    '"action":"The attempt fails.",'
+                    '"npc":{"speaker":"Elara","line":"I do not have that listed among my registered offers."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "status": "purchase_offer_not_found",
+        "selected_offer_id": "",
+        "purchase": {
+            "blocked": True,
+            "blocked_reason": "offer_not_found",
+            "applied": False,
+        },
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I try to buy a sword I cannot afford",
+            "service_result": service_result,
+            "service_application": {
+                "blocked": True,
+                "blocked_reason": "offer_not_found",
+            },
+            "turn_contract": {
+                "player_input": "I try to buy a sword I cannot afford",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert result["narration_json"]["action"] == (
+        "Elara cannot find a matching available offer."
+    )
+    assert "Result: Elara cannot find a matching available offer." in result["narration"]
+    assert "The attempt fails" not in result["narration"]
+    assert "registered" not in result["narration"].lower()
