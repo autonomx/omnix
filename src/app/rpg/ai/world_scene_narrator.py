@@ -424,23 +424,44 @@ def _service_result_from_context(narration_context: Dict[str, Any]) -> Dict[str,
     narration_context = _safe_dict(narration_context)
     turn_contract = _safe_dict(narration_context.get("turn_contract"))
 
+    # 1. Prefer direct authoritative/applied service result.
+    #
+    # Runtime service purchase mutation updates resolved_result. Older copies
+    # under turn_contract.service_result or action.metadata.service_result may
+    # still say purchase_ready. The narrator must use the applied copy.
+    direct_service = _safe_dict(narration_context.get("service_result"))
+    if direct_service.get("matched"):
+        return direct_service
+
+    direct_resolved = _safe_dict(narration_context.get("resolved_result"))
+    direct_resolved_service = _safe_dict(direct_resolved.get("service_result"))
+    if direct_resolved_service.get("matched"):
+        return direct_resolved_service
+
+    # 2. Then use resolved contract state.
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+    resolved_service = _safe_dict(resolved.get("service_result"))
+    if resolved_service.get("matched"):
+        return resolved_service
+
+    # 3. Then fallback to top-level contract state.
     direct = _safe_dict(turn_contract.get("service_result"))
     if direct.get("matched"):
         return direct
 
-    resolved = _safe_dict(
-        narration_context.get("resolved_result")
-        or turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
-    )
-    nested = _safe_dict(resolved.get("service_result"))
-    if nested.get("matched"):
-        return nested
-
+    # 4. Then fallback to action metadata.
     action = _safe_dict(turn_contract.get("action"))
     action_nested = _safe_dict(action.get("service_result"))
     if action_nested.get("matched"):
         return action_nested
+
+    metadata = _safe_dict(action.get("metadata"))
+    metadata_nested = _safe_dict(metadata.get("service_result"))
+    if metadata_nested.get("matched"):
+        return metadata_nested
 
     return {}
 
@@ -489,7 +510,14 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
 
     if kind == "service_purchase":
         purchase = _safe_dict(service_result.get("purchase"))
-        if status == "purchased" or purchase.get("applied"):
+        service_application = _safe_dict(narration_context.get("service_application"))
+        purchase_applied = (
+            _safe_str(service_result.get("status")) == "purchased"
+            or bool(purchase.get("applied"))
+            or bool(service_application.get("applied"))
+        )
+
+        if purchase_applied:
             return f"{provider_name} completes the purchase."
         if status == "purchase_ready":
             return f"{provider_name} is ready to complete the purchase."
@@ -519,6 +547,12 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
 
     if kind == "service_purchase":
         purchase = _safe_dict(service_result.get("purchase"))
+        service_application = _safe_dict(narration_context.get("service_application"))
+        purchase_applied = (
+            _safe_str(service_result.get("status")) == "purchased"
+            or bool(purchase.get("applied"))
+            or bool(service_application.get("applied"))
+        )
         selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
         selected = {}
         for offer in offers:
@@ -528,7 +562,7 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
 
         selected_label = _safe_str(selected.get("label") or selected_offer_id or "that").strip()
 
-        if status == "purchased" or purchase.get("applied"):
+        if purchase_applied:
             if selected_label and selected_label != "that":
                 return f"Done. {selected_label} is settled."
             return "Done. The purchase is settled."
@@ -650,6 +684,13 @@ def _service_claim_needs_grounding(text: str) -> bool:
         "completed",
         "purchase",
         "paid",
+        "settle",
+        "can settle",
+        "once you confirm",
+        "confirm the purchase",
+        "complete the purchase",
+        "ready to complete",
+        "ready to settle",
     )
     return any(term in lower for term in claim_terms)
 
@@ -661,6 +702,20 @@ def _ground_action_result_text(action_text: str, narration_context: Dict[str, An
 
     service_result = _service_result_from_context(narration_context)
     if service_result.get("matched"):
+        purchase = _safe_dict(service_result.get("purchase"))
+        service_application = _safe_dict(narration_context.get("service_application"))
+        if (
+            _safe_str(service_result.get("kind")) == "service_purchase"
+            and (
+                _safe_str(service_result.get("status")) == "purchased"
+                or bool(purchase.get("applied"))
+                or bool(service_application.get("applied"))
+            )
+        ):
+            grounded = _service_grounded_action_result(narration_context)
+            if grounded:
+                return grounded
+
         lower_service_text = text.lower()
         repeats_service_action = (
             lower_service_text.startswith("you ")
@@ -1420,7 +1475,24 @@ def _sanitize_narration_payload(
     npc["line"] = _clean_npc_dialogue_line(_desystemify_text(_safe_str(npc.get("line"))))
 
     service_result = _service_result_from_context(narration_context)
-    if service_result.get("matched") and _service_claim_needs_grounding(npc["line"]):
+    service_purchase = _safe_dict(service_result.get("purchase"))
+    service_application = _safe_dict(narration_context.get("service_application"))
+    service_purchase_applied = (
+        _safe_str(service_result.get("kind")) == "service_purchase"
+        and (
+            _safe_str(service_result.get("status")) == "purchased"
+            or bool(service_purchase.get("applied"))
+            or bool(service_application.get("applied"))
+        )
+    )
+
+    if (
+        service_result.get("matched")
+        and (
+            service_purchase_applied
+            or _service_claim_needs_grounding(npc["line"])
+        )
+    ):
         grounded_line = _service_grounded_npc_line(narration_context)
         if grounded_line:
             npc["line"] = grounded_line

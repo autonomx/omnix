@@ -2325,3 +2325,198 @@ def test_service_purchase_blocked_narration_reports_insufficient_funds():
     assert "result: elara names the price, but you do not have enough coin." in text
     assert "rope for 3 silver is the price, but you do not have enough coin." in text
     assert narration_json["reward"] == ""
+
+
+def test_service_purchase_narration_prefers_resolved_applied_result():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Bran reaches for the ledger.",'
+                    '"action":"You buy Common room cot from Bran.",'
+                    '"npc":{"speaker":"Bran","line":"I can settle Common room cot once you confirm the purchase."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    stale_service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "lodging",
+        "provider_id": "npc:Bran",
+        "provider_name": "Bran",
+        "location_id": "loc_tavern",
+        "status": "purchase_ready",
+        "offers": [
+            {
+                "offer_id": "bran_lodging_common_cot",
+                "service_kind": "lodging",
+                "label": "Common room cot",
+                "price": {"gold": 0, "silver": 5, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "bran_lodging_common_cot",
+        "purchase": {
+            "blocked": False,
+            "blocked_reason": "",
+            "price": {"gold": 0, "silver": 5, "copper": 0},
+            "can_afford": True,
+            "applied": False,
+            "resource_changes": {"currency": {"gold": 0, "silver": -5, "copper": 0}},
+            "effects": {"lodging_reserved": True, "rest_quality": "basic", "duration": "one_night"},
+        },
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    applied_service_result = {
+        **stale_service_result,
+        "status": "purchased",
+        "purchase": {
+            **stale_service_result["purchase"],
+            "applied": True,
+            "applied_effects": {
+                "currency_changed": True,
+                "items_added": [],
+                "active_service": {
+                    "service_id": "bran_lodging_common_cot",
+                    "offer_id": "bran_lodging_common_cot",
+                    "service_kind": "lodging",
+                    "provider_id": "npc:Bran",
+                    "provider_name": "Bran",
+                    "label": "Common room cot",
+                    "started_tick": 12,
+                    "duration": "one_night",
+                    "status": "active",
+                },
+                "rumor_added": {},
+            },
+        },
+    }
+
+    result = narrate_scene(
+        {"title": "The Rusty Flagon Tavern", "actors": [{"name": "Bran"}]},
+        {
+            "player_input": "I buy Common room cot from Bran",
+            "turn_contract": {
+                "player_input": "I buy Common room cot from Bran",
+                "service_result": stale_service_result,
+                "resolved_result": {
+                    "service_result": applied_service_result,
+                    "service_application": {"applied": True},
+                },
+            },
+            "resolved_result": {
+                "service_result": applied_service_result,
+                "service_application": {"applied": True},
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "once you confirm" not in text
+    assert "result: bran completes the purchase." in text
+    assert "done. common room cot is settled." in text
+    assert narration_json["action"] == "Bran completes the purchase."
+    assert narration_json["npc"]["line"] == "Done. Common room cot is settled."
+
+
+def test_service_purchase_narration_uses_direct_service_application_when_contract_is_stale():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Bran waits with the ledger open.",'
+                    '"action":"Bran is ready to complete the purchase.",'
+                    '"npc":{"speaker":"Bran","line":"I can settle Common room cot once you confirm the purchase."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    stale_service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "lodging",
+        "provider_id": "npc:Bran",
+        "provider_name": "Bran",
+        "location_id": "loc_tavern",
+        "status": "purchase_ready",
+        "offers": [
+            {
+                "offer_id": "bran_lodging_common_cot",
+                "service_kind": "lodging",
+                "label": "Common room cot",
+                "price": {"gold": 0, "silver": 5, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "bran_lodging_common_cot",
+        "purchase": {
+            "blocked": False,
+            "blocked_reason": "",
+            "price": {"gold": 0, "silver": 5, "copper": 0},
+            "can_afford": True,
+            "applied": False,
+            "resource_changes": {"currency": {"gold": 0, "silver": -5, "copper": 0}},
+            "effects": {"lodging_reserved": True, "rest_quality": "basic", "duration": "one_night"},
+        },
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "The Rusty Flagon Tavern", "actors": [{"name": "Bran"}]},
+        {
+            "player_input": "I buy Common room cot from Bran",
+            "turn_contract": {
+                "player_input": "I buy Common room cot from Bran",
+                "service_result": stale_service_result,
+                "resolved_result": {
+                    "service_result": stale_service_result,
+                    "service_application": {"applied": False},
+                },
+            },
+            # This is what runtime should now pass directly after mutation.
+            "resolved_result": {
+                "service_result": {
+                    **stale_service_result,
+                    "status": "purchased",
+                    "purchase": {
+                        **stale_service_result["purchase"],
+                        "applied": True,
+                    },
+                },
+                "service_application": {"applied": True},
+            },
+            "service_result": {
+                **stale_service_result,
+                "status": "purchased",
+                "purchase": {
+                    **stale_service_result["purchase"],
+                    "applied": True,
+                },
+            },
+            "service_application": {"applied": True},
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "ready to complete" not in text
+    assert "once you confirm" not in text
+    assert "result: bran completes the purchase." in text
+    assert "done. common room cot is settled." in text
+    assert narration_json["action"] == "Bran completes the purchase."
+    assert narration_json["npc"]["line"] == "Done. Common room cot is settled."

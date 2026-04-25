@@ -1,6 +1,9 @@
 from app.rpg.economy.service_effects import apply_service_purchase_result
 from app.rpg.economy.service_resolver import resolve_service_turn
-from app.rpg.session.runtime import _service_action_from_result, _service_authoritative_result
+from app.rpg.session.runtime import (
+    _service_action_from_result,
+    _service_authoritative_result,
+)
 
 
 def _state(currency=None):

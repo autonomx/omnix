@@ -107,8 +107,8 @@ from app.rpg.economy.provider_catalog import (
     derive_npc_transaction_providers,
     derive_world_transaction_providers,
 )
-from app.rpg.economy.service_resolver import resolve_service_turn
 from app.rpg.economy.service_effects import apply_service_purchase_result
+from app.rpg.economy.service_resolver import resolve_service_turn
 from app.rpg.economy.transaction_effects import apply_transaction_effects
 from app.rpg.economy.transactions import (
     build_transaction_metadata,
@@ -7407,6 +7407,17 @@ def _apply_turn_authoritative(
         "player_input": player_input,
         "resolved_result": resolved_result,
         "turn_contract": turn_contract,
+        # Direct authoritative result fields.
+        #
+        # Do not force the narrator to recover applied service state from
+        # nested/stale copies in the contract. Service purchase mutation
+        # happens in resolved_result, so pass those fields directly.
+        "service_result": _safe_dict(resolved_result.get("service_result")),
+        "service_application": _safe_dict(resolved_result.get("service_application")),
+        "transaction_record": _safe_dict(
+            resolved_result.get("transaction_record")
+            or _safe_dict(resolved_result.get("service_application")).get("transaction_record")
+        ),
         "narration_brief": _safe_dict(turn_contract.get("narration_brief")),
         "state_delta": _safe_dict(turn_contract.get("state_delta")),
         "npc_behavior_context": _safe_dict(turn_contract.get("npc_behavior_context")),

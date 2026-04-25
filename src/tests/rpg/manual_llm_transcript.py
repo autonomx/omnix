@@ -15,24 +15,34 @@ from app.rpg.session.runtime import apply_turn
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "resources" / "test-results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_llm_transcript.txt"
+SERVICE_OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_service_scenarios_all.txt"
 
-_OUTPUT_LINES: List[str] = []
+_OUTPUTS: Dict[str, List[str]] = {}
 
 
-def _emit(value: Any = "") -> None:
+def _emit(value: Any = "", channel: str = "main") -> None:
     text = "" if value is None else str(value)
-    print(text)
-    _OUTPUT_LINES.append(text)
+    print(text, flush=True)
+    _OUTPUTS.setdefault(channel, []).append(text)
 
 
-def _reset_output() -> None:
-    _OUTPUT_LINES.clear()
+def _reset_output(channel: str | None = None) -> None:
+    if channel is None:
+        _OUTPUTS.clear()
+        return
+    _OUTPUTS[channel] = []
 
 
-def _write_output(path: Path = OUTPUT_PATH) -> None:
+def _write_output(path: Path, channel: str = "main") -> None:
+    lines = _OUTPUTS.get(channel, [])
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(_OUTPUT_LINES) + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Wrote transcript to: {path.resolve()}")
+
+
+def _write_all_outputs(mapping: Dict[str, Path]) -> None:
+    for channel, path in mapping.items():
+        _write_output(path, channel=channel)
 
 
 MANUAL_TEST_TURNS = [
@@ -95,6 +105,10 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return value if isinstance(value, str) else ""
 
 
 def _clone_or_create_manual_session(session_id: str) -> Dict[str, Any]:
@@ -210,7 +224,84 @@ def _extract_memory_rumors(result: Dict[str, Any]) -> List[Any]:
 
 def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
     simulation_state = _extract_simulation_state(result)
-    return _safe_list(simulation_state.get("transaction_history"))
+    history = list(_safe_list(simulation_state.get("transaction_history")))
+
+    service_debug = _extract_service_debug(result)
+    current_record = _safe_dict(service_debug.get("transaction_record"))
+
+    if current_record:
+        current_id = _safe_str(current_record.get("transaction_id"))
+        existing_ids = {
+            _safe_str(_safe_dict(record).get("transaction_id"))
+            for record in history
+        }
+        if not current_id or current_id not in existing_ids:
+            history.append(current_record)
+
+    return history
+
+
+def _compact_turn_summary(
+    *,
+    index: int,
+    player_input: str,
+    result: Dict[str, Any],
+    before_currency: Dict[str, Any] | None = None,
+    before_items: List[Any] | None = None,
+) -> Dict[str, Any]:
+    service_debug = _extract_service_debug(result)
+    service_result = _safe_dict(service_debug.get("service_result"))
+    purchase = _safe_dict(service_debug.get("purchase"))
+    service_application = _safe_dict(service_debug.get("service_application"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    semantic_action = _safe_dict(
+        resolved.get("semantic_action")
+        or turn_contract.get("semantic_action")
+        or _safe_dict(_safe_dict(turn_contract.get("action")).get("metadata")).get("semantic_action")
+    )
+
+    narration = _extract_narration(result)
+
+    return {
+        "turn": index,
+        "player_input": player_input,
+        "contract_version": turn_contract.get("version"),
+        "contract_source": turn_contract.get("contract_source"),
+        "action_type": resolved.get("action_type"),
+        "semantic_action_type": semantic_action.get("action_type"),
+        "semantic_family": semantic_action.get("semantic_family"),
+        "activity_label": semantic_action.get("activity_label"),
+        "service_kind": service_result.get("service_kind"),
+        "service_status": service_result.get("status"),
+        "selected_offer_id": service_result.get("selected_offer_id"),
+        "purchase_blocked": purchase.get("blocked"),
+        "purchase_applied": bool(
+            purchase.get("applied")
+            or service_application.get("applied")
+        ),
+        "blocked_reason": purchase.get("blocked_reason"),
+        "currency_before": before_currency or {},
+        "currency_after": _effective_player_currency_after(result),
+        "items_before_count": len(before_items or []),
+        "items_after": _extract_player_items(result),
+        "active_services": _extract_active_services(result),
+        "memory_rumors": _extract_memory_rumors(result),
+        "transaction_record": service_debug.get("transaction_record"),
+        "transaction_history_count": len(_extract_transaction_history(result)),
+        "available_actions": service_debug.get("available_actions"),
+        "narration_preview": narration[:500] if narration else "",
+        "ok": not bool(_safe_dict(result).get("error")),
+        "error": _safe_dict(result).get("error"),
+    }
+
+
+def _emit_summary_block(title: str, rows: List[Dict[str, Any]], channel: str) -> None:
+    _emit(title, channel=channel)
+    _emit("=" * len(title), channel=channel)
+    _emit("", channel=channel)
+    _emit(_compact_json(rows), channel=channel)
+    _emit("", channel=channel)
 
 
 def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
@@ -431,6 +522,7 @@ def _print_turn(
     result: Dict[str, Any],
     before_currency: Dict[str, Any] | None = None,
     before_items: List[Any] | None = None,
+    channel: str = "main",
 ) -> None:
     result_sub = _safe_dict(result.get("result"))
     raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
@@ -442,65 +534,65 @@ def _print_turn(
     turn_contract = _extract_turn_contract(result)
     service_debug = _extract_service_debug(result)
 
-    _emit("=" * 80)
-    _emit(f"TURN {index}")
-    _emit(f"PLAYER: {player_input}")
-    _emit("")
+    _emit("=" * 80, channel=channel)
+    _emit(f"TURN {index}", channel=channel)
+    _emit(f"PLAYER: {player_input}", channel=channel)
+    _emit("", channel=channel)
 
     if result.get("error"):
-        _emit("ERROR:")
-        _emit(result["error"])
-        _emit("")
-        _emit("TRACEBACK:")
-        _emit(result.get("traceback", "")[:2000])
-        _emit("")
+        _emit("ERROR:", channel=channel)
+        _emit(result["error"], channel=channel)
+        _emit("", channel=channel)
+        _emit("TRACEBACK:", channel=channel)
+        _emit(result.get("traceback", "")[:2000], channel=channel)
+        _emit("", channel=channel)
 
-    _emit("NARRATION:")
-    _emit(narration or "[no narration found]")
-    _emit("")
-    _emit("TURN CONTRACT:")
-    _emit(_compact_json(turn_contract))
-    _emit("")
-    _emit("SERVICE RESULT:")
-    _emit(_compact_json(service_debug.get("service_result")))
-    _emit("")
-    _emit("AVAILABLE ACTIONS:")
-    _emit(_compact_json(service_debug.get("available_actions")))
-    _emit("")
-    _emit("RESOURCE CHANGES:")
-    _emit(_compact_json(service_debug.get("resource_changes")))
-    _emit("")
-    _emit("INVENTORY CHANGES:")
-    _emit(_compact_json(service_debug.get("inventory_changes")))
-    _emit("")
-    _emit("PLAYER CURRENCY BEFORE:")
-    _emit(_compact_json(before_currency or {}))
-    _emit("")
-    _emit("PLAYER CURRENCY AFTER:")
-    _emit(_compact_json(_effective_player_currency_after(result)))
-    _emit("")
-    _emit("PLAYER ITEMS BEFORE:")
-    _emit(_compact_json(before_items or []))
-    _emit("")
-    _emit("PLAYER ITEMS AFTER:")
-    _emit(_compact_json(_extract_player_items(result)))
-    _emit("")
-    _emit("ACTIVE SERVICES:")
-    _emit(_compact_json(_extract_active_services(result)))
-    _emit("")
-    _emit("MEMORY RUMORS:")
-    _emit(_compact_json(_extract_memory_rumors(result)))
-    _emit("")
-    _emit("TRANSACTION RECORD:")
-    _emit(_compact_json(service_debug.get("transaction_record")))
-    _emit("")
-    _emit("TRANSACTION HISTORY:")
-    _emit(_compact_json(_extract_transaction_history(result)))
-    _emit("")
-    _emit("RESULT SUBDICT:")
-    _emit(_compact_json(result_sub))
-    _emit("")
-    _emit("NARRATION DEBUG:")
+    _emit("NARRATION:", channel=channel)
+    _emit(narration or "[no narration found]", channel=channel)
+    _emit("", channel=channel)
+    _emit("TURN CONTRACT:", channel=channel)
+    _emit(_compact_json(turn_contract), channel=channel)
+    _emit("", channel=channel)
+    _emit("SERVICE RESULT:", channel=channel)
+    _emit(_compact_json(service_debug.get("service_result")), channel=channel)
+    _emit("", channel=channel)
+    _emit("AVAILABLE ACTIONS:", channel=channel)
+    _emit(_compact_json(service_debug.get("available_actions")), channel=channel)
+    _emit("", channel=channel)
+    _emit("RESOURCE CHANGES:", channel=channel)
+    _emit(_compact_json(service_debug.get("resource_changes")), channel=channel)
+    _emit("", channel=channel)
+    _emit("INVENTORY CHANGES:", channel=channel)
+    _emit(_compact_json(service_debug.get("inventory_changes")), channel=channel)
+    _emit("", channel=channel)
+    _emit("PLAYER CURRENCY BEFORE:", channel=channel)
+    _emit(_compact_json(before_currency or {}), channel=channel)
+    _emit("", channel=channel)
+    _emit("PLAYER CURRENCY AFTER:", channel=channel)
+    _emit(_compact_json(_effective_player_currency_after(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("PLAYER ITEMS BEFORE:", channel=channel)
+    _emit(_compact_json(before_items or []), channel=channel)
+    _emit("", channel=channel)
+    _emit("PLAYER ITEMS AFTER:", channel=channel)
+    _emit(_compact_json(_extract_player_items(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("ACTIVE SERVICES:", channel=channel)
+    _emit(_compact_json(_extract_active_services(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("MEMORY RUMORS:", channel=channel)
+    _emit(_compact_json(_extract_memory_rumors(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("TRANSACTION RECORD:", channel=channel)
+    _emit(_compact_json(service_debug.get("transaction_record")), channel=channel)
+    _emit("", channel=channel)
+    _emit("TRANSACTION HISTORY:", channel=channel)
+    _emit(_compact_json(_extract_transaction_history(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("RESULT SUBDICT:", channel=channel)
+    _emit(_compact_json(result_sub), channel=channel)
+    _emit("", channel=channel)
+    _emit("NARRATION DEBUG:", channel=channel)
     _emit(_compact_json({
         "final_narration": result_sub.get("narration"),
         "used_llm": result_sub.get("used_llm"),
@@ -513,33 +605,91 @@ def _print_turn(
         "json_npc": narration_json.get("npc"),
         "turn_contract_action": _safe_dict(turn_contract.get("action")),
         "turn_contract_resolved": _safe_dict(turn_contract.get("resolved_result")),
-    }))
-    _emit("")
-    _emit("RUNTIME STATE KEYS:")
-    _emit(", ".join(sorted(runtime_state.keys())))
-    _emit("")
-    _emit("RAW RESULT:")
-    _emit(_compact_json(result))
-    _emit("")
+    }), channel=channel)
+    _emit("", channel=channel)
+    _emit("RUNTIME STATE KEYS:", channel=channel)
+    _emit(", ".join(sorted(runtime_state.keys())), channel=channel)
+    _emit("", channel=channel)
+    _emit("RAW RESULT:", channel=channel)
+    _emit(_compact_json(result), channel=channel)
+    _emit("", channel=channel)
 
 
-def run_manual_transcript(turns: List[str], session_id: str = "manual_test_session") -> None:
+def run_manual_transcript(
+    turns: List[str],
+    session_id: str = "manual_test_session",
+    *,
+    split_files: bool = True,
+) -> None:
     _reset_output()
-    _emit("Manual RPG LLM Transcript")
-    _emit("")
-    _emit(f"session_id: {session_id}")
+
+    summary_channel = "flat_summary"
+    legacy_channel = "flat_legacy"
+    output_map: Dict[str, Path] = {}
+    summary_rows: List[Dict[str, Any]] = []
+
+    _emit("Manual RPG LLM Transcript Summary", channel=summary_channel)
+    _emit("", channel=summary_channel)
+    _emit(f"session_id: {session_id}", channel=summary_channel)
+    _emit("", channel=summary_channel)
+
+    if not split_files:
+        _emit("Manual RPG LLM Transcript", channel=legacy_channel)
+        _emit("", channel=legacy_channel)
+        _emit(f"session_id: {session_id}", channel=legacy_channel)
 
     for index, player_input in enumerate(turns, start=1):
+        print(f"[manual] flat turn {index}/{len(turns)}: {player_input}", flush=True)
+
         before_result = apply_turn(session_id=session_id, player_input="I wait")
         before_currency = _extract_player_currency(before_result)
         before_items = _extract_player_items(before_result)
         result = apply_turn(session_id=session_id, player_input=player_input)
-        _print_turn(index, player_input, result, before_currency, before_items)
 
-    _write_output(OUTPUT_PATH)
+        summary_rows.append(
+            _compact_turn_summary(
+                index=index,
+                player_input=player_input,
+                result=result,
+                before_currency=before_currency,
+                before_items=before_items,
+            )
+        )
+
+        if split_files:
+            turn_channel = f"flat_turn_{index:02d}"
+            _emit("Manual RPG LLM Transcript", channel=turn_channel)
+            _emit("", channel=turn_channel)
+            _emit(f"session_id: {session_id}", channel=turn_channel)
+            _print_turn(
+                index,
+                player_input,
+                result,
+                before_currency,
+                before_items,
+                channel=turn_channel,
+            )
+            output_map[turn_channel] = OUTPUT_DIR / f"manual_rpg_llm_transcript__turn_{index:02d}.txt"
+        else:
+            _print_turn(
+                index,
+                player_input,
+                result,
+                before_currency,
+                before_items,
+                channel=legacy_channel,
+            )
+
+    _emit_summary_block("Flat Manual Transcript Summary", summary_rows, summary_channel)
+
+    if split_files:
+        output_map[summary_channel] = OUTPUT_DIR / "manual_rpg_llm_transcript__summary.txt"
+        _write_all_outputs(output_map)
+    else:
+        _write_output(OUTPUT_PATH, channel=legacy_channel)
 
 
-def run_service_scenarios(selected: str = "all") -> None:
+def run_service_scenarios(selected: str = "all", *, split_files: bool = True) -> None:
     _reset_output()
 
     if selected == "all":
@@ -547,33 +697,49 @@ def run_service_scenarios(selected: str = "all") -> None:
     else:
         scenario_items = [(selected, SERVICE_SCENARIOS[selected])]
 
-    _emit("Manual RPG Service Scenario Transcript")
-    _emit("")
-    _emit(f"scenario_filter: {selected}")
-    _emit(f"scenario_count: {len(scenario_items)}")
-    _emit("")
-
+    summary_channel = "service_summary"
+    legacy_channel = "service_legacy"
+    output_map: Dict[str, Path] = {}
     scenario_summaries: List[Dict[str, Any]] = []
 
+    _emit("Manual RPG Service Scenario Summary", channel=summary_channel)
+    _emit("", channel=summary_channel)
+    _emit(f"scenario_filter: {selected}", channel=summary_channel)
+    _emit(f"scenario_count: {len(scenario_items)}", channel=summary_channel)
+    _emit("", channel=summary_channel)
+
+    if not split_files:
+        _emit("Manual RPG Service Scenario Transcript", channel=legacy_channel)
+        _emit("", channel=legacy_channel)
+        _emit(f"scenario_filter: {selected}", channel=legacy_channel)
+        _emit(f"scenario_count: {len(scenario_items)}", channel=legacy_channel)
+        _emit("", channel=legacy_channel)
+
     for scenario_name, scenario in scenario_items:
+        scenario_channel = f"service_{scenario_name}"
+        target_channel = scenario_channel if split_files else legacy_channel
         session_id = f"manual_service_{scenario_name}"
         currency = _safe_dict(scenario.get("currency"))
         turns = _safe_list(scenario.get("turns"))
 
-        _emit("")
-        _emit("#" * 80)
-        _emit(f"SCENARIO: {scenario_name}")
-        _emit(f"session_id: {session_id}")
-        _emit("SEEDED CURRENCY:")
-        _emit(_compact_json(currency))
-        _emit("#" * 80)
+        print(f"[manual] scenario {scenario_name}: {len(turns)} turns", flush=True)
+
+        _emit("", channel=target_channel)
+        _emit("#" * 80, channel=target_channel)
+        _emit(f"SCENARIO: {scenario_name}", channel=target_channel)
+        _emit(f"session_id: {session_id}", channel=target_channel)
+        _emit("SEEDED CURRENCY:", channel=target_channel)
+        _emit(_compact_json(currency), channel=target_channel)
+        _emit("#" * 80, channel=target_channel)
 
         seeded = _seed_session_currency(session_id, currency)
         if not seeded:
-            _emit("ERROR:")
-            _emit(f"Could not create or seed scenario session: {session_id}")
-            _emit("Make sure manual_test_session exists, or update _ensure_manual_session to use your session creation API.")
-            _emit("")
+            _emit("ERROR:", channel=target_channel)
+            _emit(f"Could not create or seed scenario session: {session_id}", channel=target_channel)
+            _emit(
+                "Make sure manual_test_session exists, or update _ensure_manual_session to use your session creation API.",
+                channel=target_channel,
+            )
             scenario_summaries.append(
                 {
                     "scenario": scenario_name,
@@ -590,6 +756,8 @@ def run_service_scenarios(selected: str = "all") -> None:
         current_currency = currency
 
         for index, player_input in enumerate(turns, start=1):
+            print(f"[manual] scenario {scenario_name} turn {index}/{len(turns)}: {player_input}", flush=True)
+
             if current_currency:
                 _write_session_currency(session_id, current_currency)
 
@@ -599,39 +767,23 @@ def run_service_scenarios(selected: str = "all") -> None:
             before_items = _extract_player_items(last_result) if last_result else []
 
             result = apply_turn(session_id=session_id, player_input=player_input)
-            _print_turn(index, player_input, result, before_currency, before_items)
-
-            service_debug = _extract_service_debug(result)
-            service_result = _safe_dict(service_debug.get("service_result"))
-            purchase = _safe_dict(service_debug.get("purchase"))
-            service_application = _safe_dict(service_debug.get("service_application"))
+            _print_turn(
+                index,
+                player_input,
+                result,
+                before_currency,
+                before_items,
+                channel=target_channel,
+            )
 
             scenario_results.append(
-                {
-                    "turn": index,
-                    "player_input": player_input,
-                    "service_kind": service_result.get("service_kind"),
-                    "kind": service_result.get("kind"),
-                    "status": (
-                        "purchased"
-                        if service_application.get("applied")
-                        else service_result.get("status")
-                    ),
-                    "selected_offer_id": service_result.get("selected_offer_id"),
-                    "purchase_blocked": purchase.get("blocked"),
-                    "purchase_applied": bool(
-                        purchase.get("applied") or service_application.get("applied")
-                    ),
-                    "blocked_reason": purchase.get("blocked_reason"),
-                    "currency_before": before_currency,
-                    "currency_after": _effective_player_currency_after(result),
-                    "items_after": _extract_player_items(result),
-                    "active_services": _extract_active_services(result),
-                    "memory_rumors": _extract_memory_rumors(result),
-                    "transaction_record": service_debug.get("transaction_record"),
-                    "transaction_history": _extract_transaction_history(result),
-                    "service_application": service_application,
-                }
+                _compact_turn_summary(
+                    index=index,
+                    player_input=player_input,
+                    result=result,
+                    before_currency=before_currency,
+                    before_items=before_items,
+                )
             )
 
             next_currency = _effective_player_currency_after(result)
@@ -648,14 +800,20 @@ def run_service_scenarios(selected: str = "all") -> None:
             }
         )
 
-    _emit("")
-    _emit("=" * 80)
-    _emit("SCENARIO SUMMARY")
-    _emit("=" * 80)
-    _emit(_compact_json(scenario_summaries))
+        if split_files:
+            output_map[scenario_channel] = OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
 
-    suffix = selected if selected != "all" else "all"
-    _write_output(OUTPUT_DIR / f"manual_rpg_service_scenarios_{suffix}.txt")
+    _emit_summary_block("Service Scenario Summary", scenario_summaries, summary_channel)
+
+    if split_files:
+        output_map[summary_channel] = OUTPUT_DIR / "manual_rpg_service_scenarios__summary.txt"
+        _write_all_outputs(output_map)
+    else:
+        suffix = selected if selected != "all" else "all"
+        _write_output(
+            OUTPUT_DIR / f"manual_rpg_service_scenarios_{suffix}.txt",
+            channel=legacy_channel,
+        )
 
 
 def main() -> None:
@@ -667,6 +825,11 @@ def main() -> None:
         "--all",
         action="store_true",
         help="Run the flat manual transcript and all service scenarios.",
+    )
+    parser.add_argument(
+        "--single-file",
+        action="store_true",
+        help="Write legacy giant transcript files instead of split summary/detail files.",
     )
     parser.add_argument(
         "--service-scenarios",
@@ -691,15 +854,29 @@ def main() -> None:
     turns = args.turn or MANUAL_TEST_TURNS
 
     if args.all:
-        run_manual_transcript(turns, session_id=args.session_id)
-        run_service_scenarios("all")
+        run_manual_transcript(
+            turns,
+            session_id=args.session_id,
+            split_files=not args.single_file,
+        )
+        run_service_scenarios(
+            "all",
+            split_files=not args.single_file,
+        )
         return
 
     if args.service_scenarios:
-        run_service_scenarios(args.scenario)
+        run_service_scenarios(
+            args.scenario,
+            split_files=not args.single_file,
+        )
         return
 
-    run_manual_transcript(turns, session_id=args.session_id)
+    run_manual_transcript(
+        turns,
+        session_id=args.session_id,
+        split_files=not args.single_file,
+    )
     return
 
 
