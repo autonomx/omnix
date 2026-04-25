@@ -173,6 +173,11 @@ from app.rpg.session.ambient_policy import (
     classify_ambient_delivery,
     record_interrupt,
 )
+from app.rpg.session.idle_runtime import (
+    advance_simulation_for_idle,
+    build_idle_player_context,
+    compute_idle_tick_count,
+)
 from app.rpg.session.inventory_runtime import (
     drop_item_action,
     equip_item_action,
@@ -232,6 +237,9 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
+
+_advance_simulation_for_idle = advance_simulation_for_idle
+_build_idle_player_context = build_idle_player_context
 
 _extract_equipment = extract_equipment
 _pickup_item_action = pickup_item_action
@@ -5037,43 +5045,6 @@ def get_effective_world_behavior(session: Dict[str, Any]) -> Dict[str, Any]:
 # ── Phase 1 — idle tick cadence policy ────────────────────────────────────
 
 
-def compute_idle_tick_count(
-    session: Dict[str, Any],
-    *,
-    elapsed_seconds: int = 0,
-    reason: str = "heartbeat",
-) -> int:
-    """Decide how many idle ticks to apply based on context.
-
-    Rules:
-    - tab open heartbeat: usually 1 tick
-    - resume catch-up: capped batch via elapsed_seconds
-    - active encounter: suppress or reduce ambient chatter ticks
-    - recent player action: lower ambient aggression briefly
-    """
-    session = _safe_dict(session)
-    runtime = _safe_dict(session.get("runtime_state"))
-    sim = _safe_dict(session.get("simulation_state"))
-
-    encounter_active = bool(
-        sim.get("encounter_active") or sim.get("active_encounter")
-    )
-    quiet_ticks = int(runtime.get("post_player_quiet_ticks", 0) or 0)
-
-    if reason == "resume_catchup":
-        raw = max(0, elapsed_seconds // 5)
-        return min(raw, _MAX_RESUME_CATCHUP_TICKS)
-
-    if reason == "heartbeat":
-        # Suppress during active encounters
-        if encounter_active:
-            return 0
-        # Reduce during quiet window after player action
-        if quiet_ticks > 0:
-            return 0
-        return 1
-
-    return 1
 
 
 # ── Phase 5 — opening-aware runtime metadata ─────────────────────────────
@@ -7508,63 +7479,8 @@ def apply_turn(
     return result_dict
 
 
-def _advance_simulation_for_idle(session: Dict[str, Any], *, reason: str = "heartbeat") -> Dict[str, Any]:
-    """Step simulation forward without player input.
-
-    Uses existing step_simulation_state() but does not require player action.
-    Preserves canonical tick order and records metadata.
-    """
-    setup = apply_adventure_defaults(_copy_dict(session.get("setup_payload")))
-    simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
-
-    metadata = _safe_dict(setup.get("metadata"))
-    metadata["simulation_state"] = simulation_state
-    setup["metadata"] = metadata
-
-    step_result = step_simulation_state(setup)
-    after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
-    next_setup = _safe_dict(step_result.get("next_setup")) or setup
-
-    # step_simulation_state evolves factions/locations/events but does not
-    # know about runtime-level active_interactions.  Carry them forward from
-    # the pre-step simulation state so they survive idle ticks.
-    after_state["active_interactions"] = _safe_list(simulation_state.get("active_interactions"))
-
-    return {
-        "ok": True,
-        "before_state": _safe_dict(step_result.get("before_state")),
-        "after_state": after_state,
-        "next_setup": next_setup,
-        "step_result": step_result,
-        "reason": reason,
-    }
 
 
-def _build_idle_player_context(
-    after_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
-    player_state = _safe_dict(after_state.get("player_state"))
-    current_scene = _safe_dict(runtime_state.get("current_scene"))
-    idle_streak = int(runtime_state.get("idle_streak", 0) or 0)
-    return {
-        "player_location": _safe_str(
-            player_state.get("location_id")
-            or current_scene.get("location_id")
-        ),
-        "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
-        "scene_id": _safe_str(current_scene.get("scene_id")),
-        "world_summary": _safe_str(current_scene.get("summary") or current_scene.get("scene")),
-        "player_idle": idle_streak > 0,
-        "active_conflict": _safe_str(
-            _safe_dict(after_state.get("active_conflict")).get("conflict_id")
-            if isinstance(after_state.get("active_conflict"), dict) else ""
-        ),
-        "recent_incidents": _safe_list(after_state.get("incidents"))[-4:],
-        "salient_events": _filter_salient_player_events(
-            _safe_list(after_state.get("events"))
-        ),
-    }
 
 
 def _apply_idle_tick_to_session(
@@ -7639,7 +7555,7 @@ def _apply_idle_tick_to_session(
             "idle_streak": int(captured.get("idle_streak", 0) or 0),
         }
 
-    advance_result = _advance_simulation_for_idle(session, reason=reason)
+    advance_result = advance_simulation_for_idle(session, reason=reason)
     if not advance_result.get("ok"):
         return {"ok": False, "error": "idle_advance_failed"}
 
@@ -7688,7 +7604,11 @@ def _apply_idle_tick_to_session(
     )
     debug_trace["conversation_idle_seconds"] = conversation_idle_seconds
 
-    player_context = _build_idle_player_context(after_state, runtime_state)
+    player_context = build_idle_player_context(
+        after_state,
+        runtime_state,
+        filter_salient_player_events=_filter_salient_player_events,
+    )
     context = {
         "player_location": _safe_str(player_context.get("player_location")),
         "nearby_npc_ids": _safe_list(player_context.get("nearby_npc_ids")),
