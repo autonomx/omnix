@@ -2428,6 +2428,102 @@ def test_service_purchase_narration_prefers_resolved_applied_result():
     assert narration_json["npc"]["line"] == "Done. Common room cot is settled."
 
 
+def test_service_purchase_offer_not_found_narration_does_not_invent_item_details():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara gestures toward a fine sword displayed among her wares.",'
+                    '"action":"Elara considers the sword purchase.",'
+                    '"npc":{"speaker":"Elara","line":"That sword requires more than good intentions."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "location_id": "loc_market",
+        "status": "purchase_offer_not_found",
+        "offers": [
+            {
+                "offer_id": "elara_torch",
+                "service_kind": "shop_goods",
+                "label": "Torch",
+                "price": {"gold": 0, "silver": 1, "copper": 0},
+            },
+            {
+                "offer_id": "elara_rope",
+                "service_kind": "shop_goods",
+                "label": "Rope",
+                "price": {"gold": 0, "silver": 3, "copper": 0},
+            },
+        ],
+        "selected_offer_id": "",
+        "purchase": {
+            "blocked": True,
+            "blocked_reason": "offer_not_found",
+            "price": {"gold": 0, "silver": 0, "copper": 0},
+            "can_afford": False,
+            "applied": False,
+            "resource_changes": {"currency": {"gold": 0, "silver": 0, "copper": 0}},
+            "effects": {},
+        },
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I try to buy a sword I cannot afford",
+            "turn_contract": {
+                "player_input": "I try to buy a sword I cannot afford",
+                "service_result": service_result,
+                "resolved_result": {
+                    "service_result": service_result,
+                    "service_application": {
+                        "applied": False,
+                        "blocked": True,
+                        "blocked_reason": "offer_not_found",
+                    },
+                },
+            },
+            "resolved_result": {
+                "service_result": service_result,
+                "service_application": {
+                    "applied": False,
+                    "blocked": True,
+                    "blocked_reason": "offer_not_found",
+                },
+            },
+            "service_result": service_result,
+            "service_application": {
+                "applied": False,
+                "blocked": True,
+                "blocked_reason": "offer_not_found",
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "fine sword" not in text
+    assert "displayed among her wares" not in text
+    assert "good intentions" not in text
+    assert narration_json["action"] == "Elara cannot find a matching registered offer."
+    assert narration_json["npc"]["line"] == "I do not have that listed among my registered offers."
+
+
 def test_service_purchase_narration_uses_direct_service_application_when_contract_is_stale():
     from app.rpg.ai.world_scene_narrator import narrate_scene
 

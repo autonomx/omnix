@@ -244,22 +244,80 @@ def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
 def _extract_service_memories(result: Dict[str, Any]) -> List[Any]:
     simulation_state = _extract_simulation_state(result)
     memory_state = _safe_dict(simulation_state.get("memory_state"))
-    return _safe_list(memory_state.get("service_memories"))
+    memories = list(_safe_list(memory_state.get("service_memories")))
+
+    # Fallback: some result envelopes expose the current deterministic memory
+    # entry before the mutated memory_state root is visible in the saved session.
+    service_debug = _extract_service_debug(result)
+    current_entry = _safe_dict(service_debug.get("memory_entry"))
+    if current_entry:
+        current_id = _safe_str(current_entry.get("memory_id"))
+        existing_ids = {
+            _safe_str(_safe_dict(entry).get("memory_id"))
+            for entry in memories
+        }
+        if not current_id or current_id not in existing_ids:
+            memories.append(current_entry)
+
+    return memories
 
 
 def _extract_relationship_state(result: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("relationship_state"))
+    relationship_state = dict(_safe_dict(simulation_state.get("relationship_state")))
+    service_debug = _extract_service_debug(result)
+    social_effects = _safe_dict(service_debug.get("social_effects"))
+    key = _safe_str(social_effects.get("relationship_key"))
+    relationship = _safe_dict(social_effects.get("relationship"))
+
+    # Prefer the freshly applied deterministic relationship when the persisted
+    # state is stale/empty for this key.
+    if key and relationship:
+        existing = _safe_dict(relationship_state.get(key))
+        existing_axes = _safe_dict(existing.get("axes"))
+        fresh_axes = _safe_dict(relationship.get("axes"))
+        if fresh_axes and not existing_axes:
+            relationship_state[key] = relationship
+
+    return relationship_state
 
 
 def _extract_npc_emotion_state(result: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("npc_emotion_state"))
+    npc_emotion_state = dict(_safe_dict(simulation_state.get("npc_emotion_state")))
+    service_debug = _extract_service_debug(result)
+    social_effects = _safe_dict(service_debug.get("social_effects"))
+    emotion = _safe_dict(social_effects.get("emotion"))
+    owner_id = _safe_str(emotion.get("owner_id"))
+
+    if owner_id and emotion and owner_id not in npc_emotion_state:
+        npc_emotion_state[owner_id] = emotion
+
+    return npc_emotion_state
 
 
 def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
     simulation_state = _extract_simulation_state(result)
-    return _safe_dict(simulation_state.get("service_offer_state"))
+    service_offer_state = dict(_safe_dict(simulation_state.get("service_offer_state")))
+    offers = _safe_dict(service_offer_state.get("offers"))
+    if not offers:
+        offers = {}
+        service_offer_state["offers"] = offers
+
+    service_debug = _extract_service_debug(result)
+    stock_update = _safe_dict(service_debug.get("stock_update"))
+    offer_id = _safe_str(stock_update.get("offer_id"))
+    runtime_state = _safe_dict(stock_update.get("runtime_state"))
+
+    if offer_id and runtime_state and offer_id not in offers:
+        offers[offer_id] = runtime_state
+
+    # Keep output compact: if there are still no offers, return the original
+    # empty state rather than {"offers": {}}.
+    if not offers and not _safe_dict(simulation_state.get("service_offer_state")):
+        return {}
+
+    return service_offer_state
 
 
 def _effective_service_status(
@@ -650,6 +708,13 @@ def _print_turn(
     _emit("", channel=channel)
     _emit("SERVICE OFFER STATE:", channel=channel)
     _emit(_compact_json(_extract_service_offer_state(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("SERVICE LIVING WORLD APPLICATION:", channel=channel)
+    _emit(_compact_json({
+        "memory_entry": service_debug.get("memory_entry"),
+        "social_effects": service_debug.get("social_effects"),
+        "stock_update": service_debug.get("stock_update"),
+    }), channel=channel)
     _emit("", channel=channel)
     _emit("RESULT SUBDICT:", channel=channel)
     _emit(_compact_json(result_sub), channel=channel)

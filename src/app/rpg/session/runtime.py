@@ -6355,6 +6355,9 @@ def _apply_turn_authoritative(
 
     before_state = copy.deepcopy(simulation_state)
     authoritative = _apply_authoritative_action(simulation_state, runtime_state, action)
+    authoritative_simulation_state = _safe_dict(authoritative.get("simulation_state"))
+    if authoritative_simulation_state:
+        simulation_state = authoritative_simulation_state
     after_action_state = _ensure_simulation_state(_safe_dict(authoritative.get("simulation_state")))
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)

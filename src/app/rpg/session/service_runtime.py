@@ -191,6 +191,13 @@ def service_authoritative_result(
         "memory_entry": purchase_application.get("memory_entry") or {},
         "social_effects": purchase_application.get("social_effects") or {},
         "stock_update": purchase_application.get("stock_update") or {},
+        # Expose canonical living-world roots after deterministic service
+        # effects have mutated simulation_state. This keeps response builders
+        # and manual transcript tools from seeing stale copies.
+        "memory_state": _safe_dict(simulation_state.get("memory_state")),
+        "relationship_state": _safe_dict(simulation_state.get("relationship_state")),
+        "npc_emotion_state": _safe_dict(simulation_state.get("npc_emotion_state")),
+        "service_offer_state": _safe_dict(simulation_state.get("service_offer_state")),
     }
 
     if purchase:

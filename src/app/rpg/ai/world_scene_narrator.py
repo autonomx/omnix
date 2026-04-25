@@ -511,6 +511,16 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
     if kind == "service_purchase":
         purchase = _safe_dict(service_result.get("purchase"))
         service_application = _safe_dict(narration_context.get("service_application"))
+        blocked_reason = _safe_str(
+            service_application.get("blocked_reason")
+            or purchase.get("blocked_reason")
+        )
+
+        if status == "purchase_offer_not_found" or blocked_reason == "offer_not_found":
+            if provider_name:
+                return f"{provider_name} cannot find a matching registered offer."
+            return "No matching registered offer is available."
+
         purchase_applied = (
             _safe_str(service_result.get("status")) == "purchased"
             or bool(purchase.get("applied"))
@@ -523,8 +533,6 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
             return f"{provider_name} is ready to complete the purchase."
         if status == "blocked":
             return f"{provider_name} names the price, but you do not have enough coin."
-        if status == "purchase_offer_not_found":
-            return f"{provider_name} cannot find a matching registered offer."
 
     if status == "offers_available":
         return f"{provider_name} checks the available options."
@@ -548,6 +556,14 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
     if kind == "service_purchase":
         purchase = _safe_dict(service_result.get("purchase"))
         service_application = _safe_dict(narration_context.get("service_application"))
+        blocked_reason = _safe_str(
+            service_application.get("blocked_reason")
+            or purchase.get("blocked_reason")
+        )
+
+        if status == "purchase_offer_not_found" or blocked_reason == "offer_not_found":
+            return "I do not have that listed among my registered offers."
+
         purchase_applied = (
             _safe_str(service_result.get("status")) == "purchased"
             or bool(purchase.get("applied"))
@@ -575,9 +591,6 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
             price_text = _service_offer_label_with_price({"label": selected_label, "price": price})
             return f"{price_text} is the price, but you do not have enough coin."
 
-        if status == "purchase_offer_not_found":
-            return "I do not have that listed among my registered offers."
-
     if status == "offers_available" and offers:
         offer_texts = [_service_offer_label_with_price(offer) for offer in offers]
         joined = _join_natural(offer_texts)
@@ -598,6 +611,21 @@ def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
     provider_name = _safe_str(service_result.get("provider_name") or "The provider").strip()
     service_kind = _safe_str(service_result.get("service_kind")).replace("_", " ").strip()
     status = _safe_str(service_result.get("status"))
+    purchase = _safe_dict(service_result.get("purchase"))
+    service_application = _safe_dict(narration_context.get("service_application"))
+    blocked_reason = _safe_str(
+        service_application.get("blocked_reason")
+        or purchase.get("blocked_reason")
+    )
+
+    if (
+        _safe_str(service_result.get("kind")) == "service_purchase"
+        and (
+            status == "purchase_offer_not_found"
+            or blocked_reason == "offer_not_found"
+        )
+    ):
+        return f"{provider_name} checks the registered offers and finds no matching item or service."
 
     if status == "offers_available":
         if service_kind:
@@ -704,6 +732,22 @@ def _ground_action_result_text(action_text: str, narration_context: Dict[str, An
     if service_result.get("matched"):
         purchase = _safe_dict(service_result.get("purchase"))
         service_application = _safe_dict(narration_context.get("service_application"))
+        service_status = _safe_str(service_result.get("status"))
+        blocked_reason = _safe_str(
+            service_application.get("blocked_reason")
+            or purchase.get("blocked_reason")
+        )
+        if (
+            _safe_str(service_result.get("kind")) == "service_purchase"
+            and (
+                service_status == "purchase_offer_not_found"
+                or blocked_reason == "offer_not_found"
+            )
+        ):
+            grounded = _service_grounded_action_result(narration_context)
+            if grounded:
+                return grounded
+
         if (
             _safe_str(service_result.get("kind")) == "service_purchase"
             and (
@@ -1445,6 +1489,10 @@ def _sanitize_narration_payload(
     narration_clean = _strip_meta_narration(narration_clean)
 
     service_result = _service_result_from_context(narration_context)
+    grounded_narration = _service_grounded_narration_text(narration_context)
+    if grounded_narration:
+        normalized["narration"] = grounded_narration
+
     if service_result.get("matched") and _service_narration_needs_grounding(narration_clean):
         grounded_narration = _service_grounded_narration_text(narration_context)
         if grounded_narration:
@@ -1477,12 +1525,24 @@ def _sanitize_narration_payload(
     service_result = _service_result_from_context(narration_context)
     service_purchase = _safe_dict(service_result.get("purchase"))
     service_application = _safe_dict(narration_context.get("service_application"))
+    service_status = _safe_str(service_result.get("status"))
+    blocked_reason = _safe_str(
+        service_application.get("blocked_reason")
+        or service_purchase.get("blocked_reason")
+    )
     service_purchase_applied = (
         _safe_str(service_result.get("kind")) == "service_purchase"
         and (
-            _safe_str(service_result.get("status")) == "purchased"
+            service_status == "purchased"
             or bool(service_purchase.get("applied"))
             or bool(service_application.get("applied"))
+        )
+    )
+    service_purchase_offer_not_found = (
+        _safe_str(service_result.get("kind")) == "service_purchase"
+        and (
+            service_status == "purchase_offer_not_found"
+            or blocked_reason == "offer_not_found"
         )
     )
 
@@ -1490,6 +1550,7 @@ def _sanitize_narration_payload(
         service_result.get("matched")
         and (
             service_purchase_applied
+            or service_purchase_offer_not_found
             or _service_claim_needs_grounding(npc["line"])
         )
     ):
