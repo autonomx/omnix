@@ -17,7 +17,7 @@ import logging
 import os
 import time as _time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -744,7 +744,7 @@ def _enqueue_narration_request(
 
     logger.info(
         "[RPG NARRATION QUEUE] enqueue session=%s turn_id=%s tick=%s job_kind=%s priority=%s existing_active=%s queue_len=%d",
-        session_id if 'session_id' in locals() else runtime_state.get('session_id', 'unknown'),
+        runtime_state.get('session_id', 'unknown'),
         turn_id,
         tick,
         job_kind,
@@ -2340,14 +2340,11 @@ def _normalize_final_narration_text(text: str) -> str:
 
     text = "\n".join(normalized_lines).strip()
 
-    # Remove trailing ellipsis if it appears to be accidental truncation.
-    if text.endswith("..."):
-        stripped = text[:-3].rstrip()
-        if stripped and stripped[-1].isalnum():
-            text = stripped
+    # Do not globally remove ellipses. Dialogue may intentionally contain
+    # pauses, and truncation must be fixed at the sanitizer/source layer.
 
     # Ensure final sentence completion for transcript readability.
-    if text and text[-1] not in ".!?\"'":
+    if text and not text.endswith("...") and text[-1] not in ".!?\"'":
         text += "."
 
     return text

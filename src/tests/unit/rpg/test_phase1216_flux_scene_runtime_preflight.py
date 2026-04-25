@@ -1,6 +1,6 @@
 import app.rpg.visual.providers as providers
-from app.rpg.visual.runtime_status import validate_flux_klein_runtime
 from app.rpg.visual.flux_pipeline_compat import validate_flux_pipeline_import
+from app.rpg.visual.runtime_status import validate_flux_klein_runtime
 
 
 def test_flux_klein_runtime_preflight_is_ready_for_real_environment():

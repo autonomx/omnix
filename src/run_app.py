@@ -10,30 +10,30 @@ Key optimizations:
 - Pre-loaded TTS model
 """
 
-import logging
-from logging.handlers import RotatingFileHandler
 import asyncio
 import base64
 import json
-import queue
-import uuid
-import re
+import logging
 import os
+import queue
+import re
 
 # Import existing infrastructure
 import sys
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import numpy as np
 import requests
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -77,9 +77,14 @@ for logger_name in ['app.rpg', 'rpg']:
     rpg_logger.propagate = True
 
 import app.shared as shared
+from app.image.api import router as image_router
 from app.image.chat_hooks import maybe_enqueue_chat_image
 from app.image.story_hooks import maybe_enqueue_story_scene_image
 from app.providers.base import ChatMessage
+from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
+from app.rpg.api.rpg_game_routes import rpg_game_bp
+from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
+from app.rpg.api.rpg_session_routes import rpg_session_bp
 from app.runtime_services import get_runtime_status_bundle
 from app.tts_http_client import (
     decode_float32_audio_base64,
@@ -94,11 +99,6 @@ from app.tts_stream_audio import (
     find_best_offset,
     soft_clip,
 )
-from app.rpg.api.rpg_adventure_routes import rpg_adventure_bp
-from app.rpg.api.rpg_game_routes import rpg_game_bp
-from app.rpg.api.rpg_presentation_routes import rpg_presentation_bp
-from app.rpg.api.rpg_session_routes import rpg_session_bp
-from app.image.api import router as image_router
 
 # RPG imports
 
@@ -2910,7 +2910,10 @@ class _HttpTtsProvider:
         )
 
     def generate_audio_stream(self, *, text: str, speaker: str, language: str, **kwargs):
-        from app.tts_http_client import tts_generate_stream_audio, decode_float32_audio_base64
+        from app.tts_http_client import (
+            decode_float32_audio_base64,
+            tts_generate_stream_audio,
+        )
 
         result = tts_generate_stream_audio(
             text=text,

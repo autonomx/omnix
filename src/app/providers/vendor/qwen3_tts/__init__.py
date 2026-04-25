@@ -9,7 +9,7 @@ from .bootstrap import ensure_vendored_qwen3_tts_available
 from .loader import get_or_create_tts_model, reset_tts_model_cache
 from .speakers import list_available_speakers
 from .synth import synthesize_speech
-from .types import SpeakerRecord, SynthesisResult, RuntimeStatus, ModelConfig
+from .types import ModelConfig, RuntimeStatus, SpeakerRecord, SynthesisResult
 
 __all__ = [
     "ensure_vendored_qwen3_tts_available",

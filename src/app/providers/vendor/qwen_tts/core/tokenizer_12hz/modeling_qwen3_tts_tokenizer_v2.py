@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Callable, Optional, Union, List
+from typing import Callable, List, Optional, Union
 
 import numpy as np
 import torch

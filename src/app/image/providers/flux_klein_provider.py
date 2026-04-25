@@ -10,7 +10,6 @@ from typing import Any, Dict
 
 import torch
 
-
 from app.image.downloads import get_flux_local_model_status
 from app.image.flux_pipeline_compat import (
     build_flux_pipeline,

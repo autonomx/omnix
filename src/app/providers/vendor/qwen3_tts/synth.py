@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 
 from app.shared import VOICE_CLONES_DIR
+
 from .types import SynthesisResult
 
 logger = logging.getLogger(__name__)

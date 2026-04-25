@@ -12,10 +12,13 @@ from fastapi import FastAPI, Request
 
 os.environ["OMNIX_IMAGE_SERVICE_MODE"] = "1"
 
-from app.image.lifecycle import load_image_provider, unload_image_provider, unload_all_image_providers
+from app.image.lifecycle import (
+    load_image_provider,
+    unload_all_image_providers,
+    unload_image_provider,
+)
 from app.image.runtime_status import validate_global_image_runtime
 from app.image.service import generate_image_local
-
 
 app = FastAPI(title="Omnix Image Service")
 

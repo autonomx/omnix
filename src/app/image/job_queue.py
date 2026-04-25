@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 _QUEUE: List[Dict[str, Any]] = []
 

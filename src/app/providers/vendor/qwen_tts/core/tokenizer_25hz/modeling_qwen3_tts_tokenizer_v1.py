@@ -16,29 +16,27 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import Parameter
 from torch.nn import functional as F
+from torch.nn.utils.rnn import pad_sequence
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.utils import ModelOutput, auto_docstring, logging
 from transformers.utils.hub import cached_file
 
-from torch.nn.utils.rnn import pad_sequence
-
-from .vq.whisper_encoder import get_mel_audio, get_T_after_cnn
-from .vq.speech_vq import WhisperEncoderVQ, XVectorExtractor
-
 from .configuration_qwen3_tts_tokenizer_v1 import (
     Qwen3TTSTokenizerV1Config,
-    Qwen3TTSTokenizerV1EncoderConfig,
-    Qwen3TTSTokenizerV1DecoderConfig,
     Qwen3TTSTokenizerV1DecoderBigVGANConfig,
-    Qwen3TTSTokenizerV1DecoderDiTConfig
+    Qwen3TTSTokenizerV1DecoderConfig,
+    Qwen3TTSTokenizerV1DecoderDiTConfig,
+    Qwen3TTSTokenizerV1EncoderConfig,
 )
+from .vq.speech_vq import WhisperEncoderVQ, XVectorExtractor
+from .vq.whisper_encoder import get_mel_audio, get_T_after_cnn
 
 logger = logging.get_logger(__name__)
 

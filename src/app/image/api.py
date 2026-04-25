@@ -1,19 +1,29 @@
 """Global image API routes."""
 from __future__ import annotations
 
-from fastapi import APIRouter
-from fastapi import Request
+from fastapi import APIRouter, Request
 
-from app.image.downloads import download_flux_klein_model, get_flux_local_model_status
-from app.image.runtime_status import validate_global_flux_klein_runtime, validate_global_image_runtime
-from app.image.service import generate_image, enqueue_chat_image, enqueue_story_image
-from app.image.job_queue import enqueue_image_job, list_image_jobs
-from app.image.queue_runner import run_one_image_job
-from app.image.asset_store import get_image_asset_manifest, cleanup_unused_image_assets
-from app.image.lifecycle import load_image_provider, unload_image_provider, unload_all_image_providers, get_image_provider_cache_status
-from app.image.settings_api import get_image_settings_payload, update_image_settings_payload
-from app.image.providers.registry import list_image_providers
+from app.image.asset_store import cleanup_unused_image_assets, get_image_asset_manifest
 from app.image.config import get_active_image_provider_name
+from app.image.downloads import download_flux_klein_model, get_flux_local_model_status
+from app.image.job_queue import enqueue_image_job, list_image_jobs
+from app.image.lifecycle import (
+    get_image_provider_cache_status,
+    load_image_provider,
+    unload_all_image_providers,
+    unload_image_provider,
+)
+from app.image.providers.registry import list_image_providers
+from app.image.queue_runner import run_one_image_job
+from app.image.runtime_status import (
+    validate_global_flux_klein_runtime,
+    validate_global_image_runtime,
+)
+from app.image.service import enqueue_chat_image, enqueue_story_image, generate_image
+from app.image.settings_api import (
+    get_image_settings_payload,
+    update_image_settings_payload,
+)
 from app.shared import load_settings
 
 router = APIRouter()

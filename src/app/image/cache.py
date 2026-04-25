@@ -9,7 +9,6 @@ from typing import Any, Dict
 
 from app.shared import DATA_DIR
 
-
 CACHE_DIR = os.path.join(DATA_DIR, "generated_images", "_cache")
 INDEX_PATH = os.path.join(CACHE_DIR, "index.json")
 

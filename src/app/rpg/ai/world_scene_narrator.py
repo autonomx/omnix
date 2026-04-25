@@ -262,6 +262,171 @@ def _bound_text(value: Any, limit: int = 180) -> str:
     return text
 
 
+def _clean_npc_dialogue_line(value: Any) -> str:
+    """Clean NPC dialogue without presentation truncation."""
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+
+    text = text.strip().strip('"').strip("'").strip()
+    if text.startswith("{") or text.startswith("["):
+        return ""
+
+    # Hard safety cap only. Do not insert ellipses into normal dialogue.
+    max_chars = 1200
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+        if text and not text.endswith((".", "!", "?", '"', "'")):
+            text += "."
+
+    return text
+
+
+def _is_accommodation_request(narration_context: Dict[str, Any]) -> bool:
+    narration_context = _safe_dict(narration_context)
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    semantic_action = _safe_dict(turn_contract.get("semantic_action"))
+    action = _safe_dict(turn_contract.get("action"))
+    metadata = _safe_dict(action.get("metadata"))
+    nested_semantic = _safe_dict(metadata.get("semantic_action"))
+
+    haystack = " ".join(
+        [
+            _safe_str(turn_contract.get("player_input")),
+            _safe_str(_safe_dict(turn_contract.get("narration_brief")).get("summary")),
+            _safe_str(semantic_action.get("activity_label")),
+            _safe_str(semantic_action.get("reason")),
+            _safe_str(semantic_action.get("action_type")),
+            _safe_str(nested_semantic.get("activity_label")),
+            _safe_str(nested_semantic.get("reason")),
+            _safe_str(nested_semantic.get("action_type")),
+        ]
+    ).lower()
+
+    return any(
+        token in haystack
+        for token in (
+            "room",
+            "rent",
+            "accommodation",
+            "lodging",
+            "inn",
+            "request_accommodation",
+            "asking_to_rent",
+        )
+    )
+
+
+def _has_authoritative_accommodation_offer(narration_context: Dict[str, Any]) -> bool:
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    resolved_from_contract = _safe_dict(
+        turn_contract.get("resolved_result")
+        or turn_contract.get("resolved_action")
+    )
+
+    for source in (resolved, resolved_from_contract):
+        action_metadata = _safe_dict(source.get("action_metadata"))
+        effect_result = _safe_dict(source.get("effect_result"))
+        service_effects = _safe_dict(effect_result.get("service_effects"))
+
+        if _safe_str(action_metadata.get("transaction_kind")):
+            return True
+        if _safe_str(action_metadata.get("price_source")):
+            return True
+        if service_effects:
+            return True
+        if _safe_str(source.get("service_id") or source.get("room_id") or source.get("offer_id")):
+            return True
+
+    return False
+
+
+def _ground_accommodation_npc_line(line: str, narration_context: Dict[str, Any]) -> str:
+    if not _is_accommodation_request(narration_context):
+        return line
+
+    if _has_authoritative_accommodation_offer(narration_context):
+        return line
+
+    lower = _safe_str(line).lower()
+    invented_terms = (
+        "vacant room",
+        "vacant rooms",
+        "room available",
+        "rooms available",
+        "we do have",
+        "top floor",
+        "best view",
+        "down the hall",
+        "five silver",
+        "gold",
+        "silver",
+        "copper",
+        "stable accommodations",
+        "accommodations in town",
+    )
+
+    if not any(term in lower for term in invented_terms):
+        return line
+
+    return (
+        "A room, you say? Let me check what I can offer before we settle the details."
+    )
+
+
+def _player_input_action_text(narration_context: Dict[str, Any]) -> str:
+    """Return the visible authoritative player-action text."""
+    narration_context = _safe_dict(narration_context)
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    narration_brief = _safe_dict(turn_contract.get("narration_brief"))
+    semantic_action = _safe_dict(turn_contract.get("semantic_action"))
+
+    text = _first_nonempty(
+        narration_context.get("player_input"),
+        turn_contract.get("player_input"),
+        narration_brief.get("summary"),
+        semantic_action.get("player_input"),
+        _safe_dict(narration_context.get("last_player_action")).get("text"),
+    )
+    text = _strip_basic_markdown(text)
+    if not text:
+        return ""
+
+    lowered = text.lower()
+    replacements = (
+        ("i am ", "you are "),
+        ("i'm ", "you are "),
+        ("i ask ", "you ask "),
+        ("i tell ", "you tell "),
+        ("i say ", "you say "),
+        ("i want ", "you want "),
+        ("i try ", "you try "),
+        ("i attempt ", "you attempt "),
+        ("i punch ", "you punch "),
+        ("i attack ", "you attack "),
+        ("i ", "you "),
+    )
+    for prefix, replacement in replacements:
+        if lowered.startswith(prefix):
+            text = replacement + text[len(prefix):]
+            break
+    else:
+        if not lowered.startswith("you "):
+            text = "you " + text
+
+    text = " ".join(text.split()).strip()
+    return text[:1].upper() + text[1:]
+
+
+def _build_authoritative_action_line(narration_context: Dict[str, Any]) -> str:
+    action = _player_input_action_text(narration_context)
+    if not action:
+        return ""
+    return f"Action: {action}"
+
+
 def _titleize_action(action_type: str) -> str:
     value = _safe_str(action_type).strip().replace("_", " ")
     return value[:1].upper() + value[1:] if value else "Action"
@@ -699,13 +864,9 @@ def _sanitize_npc_block(
     elif preferred and preferred.lower() in allowed_lut:
         speaker = allowed_lut.get(preferred.lower(), preferred)
 
-    # Strip accidental nested quoting / JSON quoting artifacts.
-    line = line.strip().strip('"').strip("'").strip()
-    if line.startswith("{") or line.startswith("["):
+    line = _clean_npc_dialogue_line(line)
+    if not line:
         return {"speaker": "", "line": ""}
-
-    # Clamp dialogue verbosity to prevent hallucinated escalation
-    line = _bound_text(line, 120)
 
     return {
         "speaker": speaker,
@@ -779,7 +940,6 @@ def _fallback_in_world_narration(narration_context: Dict[str, Any]) -> str:
     )
 
     intent = _safe_str(interpreted.get("intent")).lower()
-    raw = _safe_str(interpreted.get("raw_input"))
     target_name = _safe_str(
         npc_behavior.get("target_name")
         or interpreted.get("target_name")
@@ -950,7 +1110,8 @@ def _sanitize_narration_payload(
         normalized["action"] = action_raw.strip()
     npc = _safe_dict(normalized.get("npc"))
     npc["speaker"] = _desystemify_text(npc.get("speaker"))
-    npc["line"] = _desystemify_text(npc.get("line"))
+    npc["line"] = _clean_npc_dialogue_line(_desystemify_text(npc.get("line")))
+    npc["line"] = _ground_accommodation_npc_line(npc["line"], narration_context)
     normalized["npc"] = npc
 
     if not _safe_str(normalized.get("narration")) and _safe_str(payload.get("narration")):
@@ -961,7 +1122,10 @@ def _sanitize_narration_payload(
         if _safe_str(original_npc.get("line")):
             npc = _safe_dict(normalized.get("npc"))
             npc["speaker"] = _safe_str(npc.get("speaker") or original_npc.get("speaker")).strip()
-            npc["line"] = _safe_str(original_npc.get("line")).strip()
+            npc["line"] = _ground_accommodation_npc_line(
+                _clean_npc_dialogue_line(original_npc.get("line")),
+                narration_context,
+            )
             normalized["npc"] = npc
 
     return normalized
@@ -1452,8 +1616,7 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
 
     settings = _safe_dict(narration_context.get("settings"))
     response_length = _normalize_response_length(settings.get("response_length"))
-    length_rules = _response_length_prompt_rules(response_length)
-    
+
     safe_context = _build_safe_prompt_context(scene, narration_context)
     
     # Build conversation threads context
@@ -2685,7 +2848,7 @@ def narrate_scene(
                 narration_json = _strict_narration_payload(_recover_narration_from_raw_text(llm_narrative))
 
             print("[RPG][PRE-SANITIZE ACTION]", narration_json.get("action"))
-            authoritative_action = _build_action_result_line(narration_context)
+            authoritative_action = _build_authoritative_action_line(narration_context)
             grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context, authoritative_action=authoritative_action)
 
             print("[RPG][SANITIZED ACTION]", grounded_json.get("action"))
@@ -2731,7 +2894,7 @@ def narrate_scene(
             print("[RPG][LLM RAW ACTION]", _safe_dict(simulated_json).get("action"))
             print("[RPG][STRICT ACTION]", narration_json.get("action"))
             print("[RPG][PRE-SANITIZE ACTION]", narration_json.get("action"))
-            authoritative_action = _build_action_result_line(narration_context)
+            authoritative_action = _build_authoritative_action_line(narration_context)
             grounded_json = _sanitize_narration_payload(narration_json, scene, narration_context, authoritative_action=authoritative_action)
 
             print("[RPG][SANITIZED ACTION]", grounded_json.get("action"))

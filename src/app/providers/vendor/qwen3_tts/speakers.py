@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from app.shared import VOICE_CLONES_DIR
+
 from .types import SpeakerRecord
 
 

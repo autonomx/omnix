@@ -1,10 +1,11 @@
 """Global image configuration helpers."""
 from __future__ import annotations
+
 import os
 from typing import Any, Dict
 
-from app.shared import load_settings, MODELS_DIR
 from app.image.providers.registry import is_supported_image_provider
+from app.shared import MODELS_DIR, load_settings
 
 DEFAULT_MODEL_DIR = os.path.join(MODELS_DIR, 'image')
 

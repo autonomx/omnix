@@ -61,10 +61,11 @@ def _ensure_transformers_qwen3_compat() -> None:
     except Exception:
         pass
 
-    import transformers
+    import functools
     import sys
     import types
-    import functools
+
+    import transformers
 
     # ---- 0. Patch safetensors metadata contract ----
     # Some model shards return ``None`` for ``safe_open(...).metadata()``.
@@ -402,7 +403,7 @@ def _ensure_transformers_qwen3_compat() -> None:
         if not hasattr(transformers.modeling_flash_attention_utils, "FlashAttentionKwargs"):
             logger.info("Adding missing FlashAttentionKwargs compatibility shim")
             # This was renamed/moved/removed in newer transformers
-            from typing import TypedDict, Optional
+            from typing import Optional, TypedDict
 
             class FlashAttentionKwargs(TypedDict, total=False):
                 attention_dropout: Optional[float]

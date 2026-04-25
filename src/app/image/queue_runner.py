@@ -1,12 +1,12 @@
 """Global queue runner (IMG-4)."""
 from __future__ import annotations
 
+from app.image.asset_store import (
+    register_image_asset_file,
+    save_image_asset_bytes,
+)
 from app.image.job_queue import claim_next_image_job, complete_image_job
 from app.image.service import generate_image
-from app.image.asset_store import (
-    save_image_asset_bytes,
-    register_image_asset_file,
-)
 
 
 def run_one_image_job():

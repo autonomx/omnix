@@ -5,7 +5,10 @@ import threading
 from typing import Any, Dict
 
 from app.image.config import get_active_image_provider_name, get_provider_config
-from app.image.providers.registry import is_supported_image_provider, get_image_provider_keys
+from app.image.providers.registry import (
+    get_image_provider_keys,
+    is_supported_image_provider,
+)
 
 _PROVIDER_CACHE: Dict[str, Any] = {}
 _PROVIDER_LOCK = threading.Lock()

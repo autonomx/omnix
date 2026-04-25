@@ -1,6 +1,6 @@
 from app.image.providers.registry import (
-    list_image_providers,
     is_supported_image_provider,
+    list_image_providers,
 )
 
 

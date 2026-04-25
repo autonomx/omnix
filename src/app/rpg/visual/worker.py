@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict
 
 from app.rpg.presentation.visual_state import (
@@ -17,9 +17,9 @@ from app.rpg.presentation.visual_state import (
     upsert_character_visual_identity,
 )
 from app.rpg.visual.asset_store import save_asset_bytes
-from app.shared import DATA_DIR
 from app.rpg.visual.global_image_adapter import generate_rpg_image
 from app.rpg.visual.providers import image_generation_enabled
+from app.shared import DATA_DIR
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

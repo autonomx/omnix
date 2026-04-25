@@ -10,8 +10,9 @@ from pathlib import Path
 # File now lives inside src/, so add this directory directly
 sys.path.insert(0, str(Path(__file__).parent))
 
-from run_app import HOST, PORT, app
 import uvicorn
+
+from run_app import HOST, PORT, app
 
 
 def create_app():

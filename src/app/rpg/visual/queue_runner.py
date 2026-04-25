@@ -5,13 +5,18 @@ from pathlib import Path
 from typing import Any, Dict
 
 from app.image.asset_store import save_image_asset_bytes as save_asset_bytes
-from app.shared import DATA_DIR
 from app.image.job_queue import complete_image_job, fail_image_job
+from app.rpg.session.durable_store import load_session_from_disk as load_runtime_session
+from app.rpg.session.durable_store import save_session_to_disk as save_runtime_session
 from app.rpg.visual.global_image_adapter import generate_rpg_image
-from app.rpg.visual.job_queue import claim_next_visual_job, complete_visual_job, release_visual_job
+from app.rpg.visual.job_queue import (
+    claim_next_visual_job,
+    complete_visual_job,
+    release_visual_job,
+)
 from app.rpg.visual.providers import image_generation_enabled
 from app.rpg.visual.worker import process_pending_image_requests
-from app.rpg.session.durable_store import load_session_from_disk as load_runtime_session, save_session_to_disk as save_runtime_session
+from app.shared import DATA_DIR
 
 
 def _safe_str(value: Any) -> str:

@@ -4,10 +4,10 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Set
 
 from app.image.asset_store import (
-    save_image_asset_bytes,
-    register_image_asset_file,
-    get_image_asset_manifest,
     cleanup_unused_image_assets,
+    get_image_asset_manifest,
+    register_image_asset_file,
+    save_image_asset_bytes,
 )
 
 

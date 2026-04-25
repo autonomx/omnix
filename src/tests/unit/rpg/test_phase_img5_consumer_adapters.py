@@ -1,4 +1,7 @@
-from app.image.consumer_adapters import build_chat_image_request, build_story_image_request
+from app.image.consumer_adapters import (
+    build_chat_image_request,
+    build_story_image_request,
+)
 
 
 def test_build_chat_image_request_sets_source():

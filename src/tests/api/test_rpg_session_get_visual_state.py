@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from app.rpg.session.runtime import build_frontend_bootstrap_payload, ensure_visual_state
+from app.rpg.session.runtime import (
+    build_frontend_bootstrap_payload,
+    ensure_visual_state,
+)
 
 
 def test_build_frontend_bootstrap_payload_includes_visual_state():

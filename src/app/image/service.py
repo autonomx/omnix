@@ -1,17 +1,20 @@
 """Global image generation service."""
 from __future__ import annotations
-import os
 
+import os
 from typing import Any, Dict
 
-from app.image.config import get_active_image_provider_name, get_provider_config
 from app.image.cache import image_cache_key, lookup_image_cache, store_image_cache
-from app.image.lifecycle import get_or_create_image_provider
-from app.image_http_client import generate_image_via_service, is_image_service_enabled
+from app.image.config import get_active_image_provider_name, get_provider_config
+from app.image.consumer_adapters import (
+    build_chat_image_request,
+    build_story_image_request,
+)
 from app.image.job_queue import enqueue_image_job
+from app.image.lifecycle import get_or_create_image_provider
 from app.image.models import ImageGenerationRequest, ImageGenerationResponse
-from app.image.consumer_adapters import build_chat_image_request, build_story_image_request
 from app.image.providers.registry import is_supported_image_provider
+from app.image_http_client import generate_image_via_service, is_image_service_enabled
 
 
 def _safe_str(value: Any) -> str:

@@ -32,14 +32,14 @@
 """Core vector quantization implementation."""
 import random
 import typing as tp
+from math import ceil
 from random import randrange
 
 import numpy as np
-from einops import rearrange, repeat
-from math import ceil
 import torch
-from torch import nn
 import torch.nn.functional as F
+from einops import rearrange, repeat
+from torch import nn
 
 
 def round_up_multiple(num, mult):

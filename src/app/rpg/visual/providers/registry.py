@@ -7,7 +7,6 @@ from .base import BaseImageProvider
 from .disabled_provider import DisabledImageProvider
 from .flux_klein_provider import FluxKleinImageProvider
 
-
 ProviderFactory = Callable[[Dict[str, Any]], BaseImageProvider]
 
 

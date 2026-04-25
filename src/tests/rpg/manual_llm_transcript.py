@@ -10,10 +10,9 @@ from typing import Any, Dict, List
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from app.rpg.creator.defaults import apply_adventure_defaults
 from app.rpg.session.runtime import apply_turn
 from app.rpg.session.service import create_or_normalize_session, save_session
-from app.rpg.creator.defaults import apply_adventure_defaults
-
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "resources" / "test-results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

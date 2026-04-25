@@ -136,7 +136,7 @@ def validate_flux_python_stack() -> Dict[str, Any]:
         return {"ok": False, "error": f"transformers_import_failed:{exc!r}", "details": details}
 
     try:
-        from transformers import Qwen3ForCausalLM, AutoTokenizer  # noqa: F401
+        from transformers import AutoTokenizer, Qwen3ForCausalLM  # noqa: F401
         details["qwen3_probe"] = "ok"
     except Exception as exc:
         details["traceback"] = traceback.format_exc(limit=20)

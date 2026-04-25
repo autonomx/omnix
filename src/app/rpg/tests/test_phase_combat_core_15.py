@@ -1,4 +1,4 @@
-from app.rpg.combat.initiative import begin_combat, advance_turn
+from app.rpg.combat.initiative import advance_turn, begin_combat
 from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.npc_turns import run_npc_turn
 from app.rpg.combat.state import build_empty_combat_state, get_current_actor_id

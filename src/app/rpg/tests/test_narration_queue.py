@@ -11,7 +11,6 @@ from app.rpg.session.runtime import (
     _apply_idle_tick_to_session,
     _enqueue_narration_request,
     _generate_turn_narration_artifact,
-    _get_narration_job_for_turn,
     apply_turn,
     process_next_narration_job,
 )
@@ -1446,6 +1445,145 @@ def test_narration_json_contract_recovers_from_label_text():
     assert 'Bran the Innkeeper: "A room is five silver."' in rendered
 
 
+def test_accommodation_dialogue_does_not_invent_room_offer_without_service_result():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def call(self, method, *args, **kwargs):
+            if method == "generate_stream":
+                return self.generate_stream(*args, **kwargs)
+            if method == "generate":
+                return {
+                    "text": (
+                        '{"format_version":"rpg_narration_v2",'
+                        '"narration":"Bran looks up from behind the counter.",'
+                        '"action":"Bran considers your request.",'
+                        '"npc":{"speaker":"Bran","line":"A room, you say? Well, we do have a few vacant rooms available on the top floor with the best view in town."},'
+                        '"reward":"","followup_hooks":[]}'
+                    )
+                }
+            return {}
+
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Bran looks up from behind the counter.",'
+                    '"action":"Bran considers your request.",'
+                    '"npc":{"speaker":"Bran","line":"A room, you say? Well, we do have a few vacant rooms available on the top floor with the best view in town."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran"}],
+    }
+    narration_context = {
+        "player_input": "I ask Bran for a room to rent",
+        "turn_contract": {
+            "player_input": "I ask Bran for a room to rent",
+            "semantic_action": {
+                "action_type": "trade",
+                "activity_label": "request_accommodation",
+                "target_name": "Bran",
+            },
+            "narration_brief": {"summary": "I ask Bran for a room to rent"},
+            "resolved_result": {
+                "action_metadata": {
+                    "transaction_kind": "",
+                    "price_source": "",
+                    "provider_id": "",
+                    "provider_name": "",
+                },
+                "effect_result": {"service_effects": {}},
+            },
+        },
+        "resolved_result": {
+            "ok": True,
+            "target_name": "Bran",
+            "action_metadata": {
+                "transaction_kind": "",
+                "price_source": "",
+                "provider_id": "",
+                "provider_name": "",
+            },
+            "effect_result": {"service_effects": {}},
+        },
+    }
+
+    result = narrate_scene(
+        scene,
+        narration_context,
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+    text = result["narration"].lower()
+
+    assert "action: you ask bran for a room to rent" in text
+    assert "result: bran considers your request" in text
+    assert "vacant rooms" not in text
+    assert "top floor" not in text
+    assert "best view" not in text
+    assert "let me check what i can offer" in text
+
+
+def test_live_narrator_renders_authoritative_action_and_preserves_npc_dialogue():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    full_line = (
+        "Ah, you're looking to rent a room, eh? We've got a cozy little number "
+        "on the top floor, just down the hall from the kitchen. It's the best "
+        "view in town, aside from the garden out back."
+    )
+
+    class StubGateway:
+        def call(self, method, *args, **kwargs):
+            if method == "generate_stream":
+                return self.generate_stream(*args, **kwargs)
+            elif method == "generate":
+                return {"text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"You approach the innkeeper as you inquire about available lodgings.",'
+                    '"action":"Bran nods thoughtfully as he considers your request.",'
+                    f'"npc":{{"speaker":"Bran","line":{json.dumps(full_line)}}},'
+                    '"reward":"","followup_hooks":[]}'
+                )}
+            return {}
+
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"You approach the innkeeper as you inquire about available lodgings.",'
+                    '"action":"Bran nods thoughtfully as he considers your request.",'
+                    f'"npc":{{"speaker":"Bran","line":{json.dumps(full_line)}}},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    scene = {
+        "title": "The Rusty Flagon Tavern",
+        "actors": [{"name": "Bran"}],
+    }
+    narration_context = {
+        "player_input": "I ask Bran for a room to rent",
+        "turn_contract": {
+            "player_input": "I ask Bran for a room to rent",
+            "narration_brief": {"summary": "I ask Bran for a room to rent"},
+        },
+        "resolved_result": {"ok": True, "target_name": "Bran"},
+    }
+
+    result = narrate_scene(scene, narration_context, llm_gateway=StubGateway(), retry_on_invalid=False)
+    text = result["narration"]
+
+    assert "Action: You ask Bran for a room to rent" in text
+    assert "Result: Bran nods thoughtfully as he considers your request." in text
+    assert full_line in text
+    assert "kitc..." not in text
+
+
 def test_narrate_scene_does_not_emit_format_invalid_on_non_json_llm_text():
     from app.rpg.ai.world_scene_narrator import narrate_scene
 
@@ -1588,14 +1726,14 @@ def test_narrator_rejects_invented_guards_and_guilds_from_narration_text():
     assert "merchant guild" not in text
 
 
-def test_normalize_final_narration_text_removes_dangling_ellipsis():
+def test_normalize_final_narration_text_preserves_dialogue_ellipsis():
     from app.rpg.session.runtime import _normalize_final_narration_text
 
     value = _normalize_final_narration_text(
-        "Captain Aldric watches you closely..."
+        'Bran: "I was thinking..."'
     )
 
-    assert value == "Captain Aldric watches you closely."
+    assert value == 'Bran: "I was thinking..."'
 
 
 def test_normalize_final_narration_text_adds_terminal_punctuation():

@@ -18,6 +18,9 @@ from typing import Any, Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from app.image.downloads import download_flux_klein_model, get_flux_local_model_status
+from app.image.lifecycle import load_image_provider, unload_image_provider
+from app.image.settings_api import get_image_settings_payload
 from app.rpg.compat.character_cards import (
     export_canonical_character_card,
     import_external_character_card,
@@ -42,7 +45,6 @@ from app.rpg.memory.dialogue_context import (
 from app.rpg.memory.lifecycle import apply_dialogue_memory_hooks
 
 # Phase 14.4 — Memory Decay / Reinforcement
-
 # Phase 14.0 — Memory system
 from app.rpg.memory.memory_state import (
     append_long_term_memory,
@@ -96,15 +98,11 @@ from app.rpg.presentation.visual_state import (
     ensure_visual_state,
     mark_image_request_complete,
     normalize_visual_status,
-    update_image_request,
     stable_visual_seed_from_text,
+    update_image_request,
     upsert_appearance_profile,
     upsert_character_visual_identity,
     validate_visual_prompt,
-)
-from app.rpg.visual.worker import (
-    _complete_character_portrait,
-    _complete_scene_illustration,
 )
 
 # Phase 15.0 — Durable persistence
@@ -113,14 +111,13 @@ from app.rpg.session.durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
+from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.runtime import (
     load_runtime_session,
     save_runtime_session,
 )
-from app.rpg.session.migrations import migrate_session_payload
 
 # Phase 15.2 — Session/package bridge with validation and normalization
-
 # Phase 15.3 — Canonical session service
 from app.rpg.session.service import (
     export_session_as_package,
@@ -165,9 +162,6 @@ from app.rpg.validation.integrity import (
 
 # Phase 12.14 — Asset dedupe and cleanup
 from app.rpg.visual.asset_store import cleanup_unused_assets, get_asset_manifest
-from app.image.downloads import download_flux_klein_model, get_flux_local_model_status
-from app.image.lifecycle import load_image_provider, unload_image_provider
-from app.image.settings_api import get_image_settings_payload
 
 # Phase 12.13.5 — Visual queue management with hardening
 from app.rpg.visual.job_queue import (
@@ -184,13 +178,17 @@ from app.rpg.visual.providers import (
     is_image_provider_loaded,
     preload_image_provider,
     switch_image_provider_runtime,
+    unload_image_provider_cache,
 )
-from app.rpg.visual.providers import unload_image_provider_cache
-from app.shared import load_settings, save_settings
 from app.rpg.visual.queue_runner import run_one_queued_job
 
 # Phase 12.10 — Visual worker executor
-from app.rpg.visual.worker import process_pending_image_requests
+from app.rpg.visual.worker import (
+    _complete_character_portrait,
+    _complete_scene_illustration,
+    process_pending_image_requests,
+)
+from app.shared import load_settings, save_settings
 
 rpg_presentation_bp = APIRouter()
 

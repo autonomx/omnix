@@ -11,7 +11,6 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-
 app = FastAPI(title="Omnix TTS Service", version="1.0")
 
 
@@ -72,8 +71,8 @@ def _load_qwen3_provider() -> Any:
     Load the dedicated TTS provider.
     This function is intentionally isolated so failures stay local to the TTS service.
     """
-    from app.shared import load_settings
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+    from app.shared import load_settings
 
     settings = load_settings() or {}
     provider_settings = dict(settings.get("faster-qwen3-tts") or {})

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Dict, List, Tuple
 
-from app.rpg.combat.state import normalize_combat_state, get_current_actor_id
+from app.rpg.combat.state import get_current_actor_id, normalize_combat_state
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

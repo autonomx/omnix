@@ -4,11 +4,11 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.image.job_queue import (
-    enqueue_image_job,
     claim_next_image_job,
     complete_image_job,
-    release_image_job,
+    enqueue_image_job,
     list_image_jobs,
+    release_image_job,
 )
 
 

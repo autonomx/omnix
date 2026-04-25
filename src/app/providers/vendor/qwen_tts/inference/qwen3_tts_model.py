@@ -13,9 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
 import base64
 import io
+import logging
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -27,7 +27,11 @@ import soundfile as sf
 import torch
 from transformers import AutoConfig, AutoModel, AutoProcessor
 
-from ..core.models import Qwen3TTSConfig, Qwen3TTSForConditionalGeneration, Qwen3TTSProcessor
+from ..core.models import (
+    Qwen3TTSConfig,
+    Qwen3TTSForConditionalGeneration,
+    Qwen3TTSProcessor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +130,9 @@ class Qwen3TTSModel:
             )
 
             # Local import avoids circular import at module import time.
-            from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+            from app.providers.vendor.faster_qwen3_tts.model import (
+                _ensure_transformers_qwen3_compat,
+            )
 
             _ensure_transformers_qwen3_compat()
             model = AutoModel.from_pretrained(pretrained_model_name_or_path, **kwargs)

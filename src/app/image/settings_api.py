@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.shared import load_settings, save_settings
 from app.image.lifecycle import unload_all_image_providers
+from app.shared import load_settings, save_settings
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

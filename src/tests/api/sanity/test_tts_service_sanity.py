@@ -10,10 +10,10 @@ Tests both the TTS backend service (port 5101) and the frontend API proxy (port 
 
 from __future__ import annotations
 
+from typing import Any, Dict
+
 import pytest
 import requests
-from typing import Dict, Any
-
 
 # Test configuration
 TTS_SERVICE_BASE = "http://127.0.0.1:5101"

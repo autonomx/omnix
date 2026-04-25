@@ -1,6 +1,6 @@
+from app.rpg.combat.apply import apply_attack_resolution
 from app.rpg.combat.models import AttackIntent
 from app.rpg.combat.resolver import resolve_attack
-from app.rpg.combat.apply import apply_attack_resolution
 from app.rpg.combat.state import build_empty_combat_state
 
 

@@ -7,10 +7,13 @@ Flask has been completely removed.
 See root app.py for the main FastAPI application entry point.
 """
 
-from pathlib import Path
-from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+
 from app.rpg.visual.runtime_status import log_flux_klein_runtime_status
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

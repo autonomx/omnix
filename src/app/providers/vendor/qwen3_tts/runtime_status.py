@@ -111,7 +111,9 @@ def validate_qwen3_tts_runtime() -> Dict[str, Any]:
         return _fail_payload("qwen3_tts", f"transformers_utils_failed:{exc!r}", {"versions": versions, "vendor_paths": vendor_paths})
 
     try:
-        from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+        from app.providers.vendor.faster_qwen3_tts.model import (
+            _ensure_transformers_qwen3_compat,
+        )
         _ensure_transformers_qwen3_compat()
     except Exception as exc:
         return _fail_payload(

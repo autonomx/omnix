@@ -1,5 +1,8 @@
-from app.image.settings_api import get_image_settings_payload, update_image_settings_payload
 from app.image.lifecycle import unload_all_image_providers
+from app.image.settings_api import (
+    get_image_settings_payload,
+    update_image_settings_payload,
+)
 
 
 def test_get_image_settings_payload_returns_ok():

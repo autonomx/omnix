@@ -7,7 +7,7 @@ from app.rpg.combat.initiative import advance_turn
 from app.rpg.combat.lifecycle import evaluate_combat_exit
 from app.rpg.combat.models import AttackIntent
 from app.rpg.combat.resolver import resolve_attack
-from app.rpg.combat.state import normalize_combat_state, get_current_actor_id
+from app.rpg.combat.state import get_current_actor_id, normalize_combat_state
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

@@ -42,7 +42,11 @@ def test_run_one_uses_request_metadata_not_fallbacks(monkeypatch):
 
 
 def test_update_image_request_drops_completed_requests():
-    from app.rpg.presentation.visual_state import ensure_visual_state, append_image_request, update_image_request
+    from app.rpg.presentation.visual_state import (
+        append_image_request,
+        ensure_visual_state,
+        update_image_request,
+    )
 
     simulation_state = ensure_visual_state({})
     simulation_state = append_image_request(simulation_state, {

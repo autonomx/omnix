@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 import re
-from typing import Dict, Any
+from typing import Any, Dict
 
 ASSET_DIR = os.path.join("resources", "data", "generated_images")
 MANIFEST_PATH = os.path.join(ASSET_DIR, "manifest.json")

@@ -13,24 +13,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import math
-import torch
 import operator
+import os
+from functools import lru_cache
+from itertools import accumulate
+from typing import List, Optional, Union
 
 import numpy as np
+import torch
 import torch.nn.functional as F
-
-from functools import lru_cache
-from typing import Optional, Union, List
-from torch import nn, Tensor
-from itertools import accumulate
+from torch import Tensor, nn
 
 try:
-    from flash_attn.flash_attn_interface import flash_attn_varlen_func as flash_attn_varlen_func
+    from flash_attn.flash_attn_interface import (
+        flash_attn_varlen_func as flash_attn_varlen_func,
+    )
 except ImportError:
     try:
-        from flash_attn.flash_attn_interface import flash_attn_unpadded_func as flash_attn_varlen_func
+        from flash_attn.flash_attn_interface import (
+            flash_attn_unpadded_func as flash_attn_varlen_func,
+        )
     except ImportError:
         print("\n********\nWarning: flash-attn is not installed. Will only run the manual PyTorch version. Please install flash-attn for faster inference.\n********\n ")
         flash_attn_varlen_func = None

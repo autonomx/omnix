@@ -7,6 +7,7 @@ All other code should use this loader interface.
 # Fix PyTorch DLL loading hang on Windows (PyTorch 2.9+)
 import os
 import platform
+
 if platform.system() == "Windows":
     import ctypes
     from importlib.util import find_spec
@@ -282,7 +283,9 @@ def load_tts_model(model_name: str, device: str, **kwargs) -> Any:
         )
 
     # Import only after bootstrap validation is complete
-    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+    from app.providers.vendor.faster_qwen3_tts.model import (
+        _ensure_transformers_qwen3_compat,
+    )
     _ensure_transformers_qwen3_compat()
     
     from app.providers.vendor.faster_qwen3_tts.model import FasterQwen3TTS

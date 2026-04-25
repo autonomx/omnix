@@ -13,23 +13,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sox
 import copy
-import torch
 import operator
-import onnxruntime
+from itertools import accumulate
+from typing import List
 
+import onnxruntime
+import sox
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio.compliance.kaldi as kaldi
-
 from librosa.filters import mel as librosa_mel_fn
-from itertools import accumulate
-from typing import List
 from torch import Tensor
 
 from .core_vq import DistributedGroupResidualVectorQuantization
-from .whisper_encoder import WhisperEncoder, Conv1d, ConvTranspose1d
+from .whisper_encoder import Conv1d, ConvTranspose1d, WhisperEncoder
 
 
 def dynamic_range_compression_torch(x, C=1, clip_val=1e-5):

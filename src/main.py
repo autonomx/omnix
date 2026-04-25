@@ -10,8 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from run_app import HOST, PORT, app
 import uvicorn
+
+from run_app import HOST, PORT, app
 
 
 def create_app():

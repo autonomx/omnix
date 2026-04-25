@@ -5,8 +5,14 @@ import os
 from typing import Any, Dict
 
 from app.image.config import get_active_image_provider_name
-from app.image.downloads import get_flux_local_model_status, resolve_flux_local_dir_from_settings
-from app.image.flux_pipeline_compat import validate_flux_pipeline_import, validate_flux_repo_runtime
+from app.image.downloads import (
+    get_flux_local_model_status,
+    resolve_flux_local_dir_from_settings,
+)
+from app.image.flux_pipeline_compat import (
+    validate_flux_pipeline_import,
+    validate_flux_repo_runtime,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:

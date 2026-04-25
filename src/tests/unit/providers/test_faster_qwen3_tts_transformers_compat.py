@@ -1,6 +1,6 @@
+import importlib
 import sys
 import types
-import importlib
 
 from app.providers.vendor.faster_qwen3_tts.model import (
     _ensure_transformers_qwen3_compat,

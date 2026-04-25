@@ -8,6 +8,7 @@ local nemo folder in models/stt/parakeet-tdt-0.6b-v2/
 # Fix PyTorch DLL loading hang on Windows (PyTorch 2.9+)
 import os
 import platform
+
 if platform.system() == "Windows":
     import ctypes
     from importlib.util import find_spec
@@ -28,6 +29,7 @@ import shutil
 import tempfile
 import traceback
 import uuid
+
 
 # --- WebSocket dependency validation ---
 def _validate_websocket_support():
@@ -424,8 +426,8 @@ async def startup_event():
 @app.get("/health")
 async def health():
     try:
-        import torch
         import nemo.collections.asr as nemo_asr
+        import torch
         return {
             "ok": True,
             "status": "ready",

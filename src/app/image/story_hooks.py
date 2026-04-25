@@ -1,7 +1,7 @@
 """Story auto-generation hooks."""
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any, Dict
 
 from app.image.service import enqueue_story_image
 

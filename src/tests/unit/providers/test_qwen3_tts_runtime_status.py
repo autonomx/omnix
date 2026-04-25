@@ -141,9 +141,12 @@ def test_validate_qwen3_tts_runtime_returns_structured_payload(monkeypatch):
 
 
 def test_transformers_masking_utils_shim_exposes_create_masks_for_generate():
-    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
     import importlib
     import sys
+
+    from app.providers.vendor.faster_qwen3_tts.model import (
+        _ensure_transformers_qwen3_compat,
+    )
 
     # Clear any existing module first and save original
     original = sys.modules.pop("transformers.masking_utils", None)
@@ -175,8 +178,12 @@ def test_transformers_masking_utils_shim_exposes_create_masks_for_generate():
 
 def test_transformers_modeling_utils_safe_open_is_rebound(monkeypatch):
     import types
+
     import transformers.modeling_utils as modeling_utils
-    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+
+    from app.providers.vendor.faster_qwen3_tts.model import (
+        _ensure_transformers_qwen3_compat,
+    )
 
     class _Handle:
         def metadata(self):
@@ -203,8 +210,12 @@ def test_transformers_modeling_utils_safe_open_is_rebound(monkeypatch):
 def test_gradient_checkpointing_layer_shim_is_module_subclass():
     import importlib
     import sys
+
     import torch.nn as nn
-    from app.providers.vendor.faster_qwen3_tts.model import _ensure_transformers_qwen3_compat
+
+    from app.providers.vendor.faster_qwen3_tts.model import (
+        _ensure_transformers_qwen3_compat,
+    )
 
     if "transformers.modeling_layers" in sys.modules:
         del sys.modules["transformers.modeling_layers"]
