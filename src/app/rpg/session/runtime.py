@@ -201,6 +201,13 @@ from app.rpg.session.state_normalization import (
     _story_policy_save_load_stable,
     _story_policy_strict_replay,
 )
+from app.rpg.session.service_runtime import (
+    merge_service_result_into_contract_resolved,
+    mirror_service_result,
+    service_action_from_result,
+    service_authoritative_result,
+    service_semantic_action_from_result,
+)
 from app.rpg.session.service import load_session as load_canonical_session
 from app.rpg.session.service import save_session as save_canonical_session
 from app.rpg.session.turn_contract import (
@@ -213,6 +220,10 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
+
+_service_action_from_result = service_action_from_result
+_service_semantic_action_from_result = service_semantic_action_from_result
+_service_authoritative_result = service_authoritative_result
 
 _SCHEMA_VERSION = 4
 _MAX_HISTORY = 64
@@ -5531,190 +5542,10 @@ def _is_action_provider_available(
     return provider_id in available_ids
 
 
-def _service_action_from_result(
-    player_input: str,
-    action: Dict[str, Any],
-    service_result: Dict[str, Any],
-) -> Dict[str, Any]:
-    action = _safe_dict(action)
-    service_result = _safe_dict(service_result)
-    if not service_result.get("matched"):
-        return action
-
-    service_action = dict(action)
-    service_action["action_type"] = _safe_str(service_result.get("kind") or "service_inquiry")
-    service_action["service_kind"] = _safe_str(service_result.get("service_kind"))
-    service_action["target_id"] = _safe_str(service_result.get("provider_id"))
-    service_action["target_name"] = _safe_str(service_result.get("provider_name"))
-    service_action["provider_id"] = _safe_str(service_result.get("provider_id"))
-    service_action["provider_name"] = _safe_str(service_result.get("provider_name"))
-    service_action["source"] = "deterministic_service_resolver"
-
-    metadata = _safe_dict(service_action.get("metadata"))
-    metadata["player_input"] = _safe_str(player_input)
-    metadata["service_result"] = service_result
-    metadata["service_kind"] = _safe_str(service_result.get("service_kind"))
-    metadata["service_status"] = _safe_str(service_result.get("status"))
-    service_action["metadata"] = metadata
-    return service_action
 
 
-def _service_semantic_action_from_result(
-    player_input: str,
-    service_result: Dict[str, Any],
-    *,
-    tick: int = 0,
-    existing: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    existing = _safe_dict(existing)
-    service_result = _safe_dict(service_result)
-    if not service_result.get("matched"):
-        return existing
-
-    service_kind = _safe_str(service_result.get("service_kind"))
-    action_type = _safe_str(service_result.get("kind") or "service_inquiry")
-    provider_id = _safe_str(service_result.get("provider_id"))
-    provider_name = _safe_str(service_result.get("provider_name"))
-    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-
-    if action_type == "service_purchase":
-        activity_label = f"{service_kind}_purchase" if service_kind else "service_purchase"
-    else:
-        activity_label = f"{service_kind}_inquiry" if service_kind else "service_inquiry"
-
-    semantic_id = _safe_str(existing.get("semantic_action_id"))
-    if not semantic_id:
-        seed = f"{_safe_str(player_input)}|{provider_id}|{service_kind}|{_safe_int(tick, 0)}"
-        semantic_id = f"semantic_service_{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:16]}"
-
-    return {
-        **existing,
-        "semantic_action_id": semantic_id,
-        "tick": _safe_int(existing.get("tick"), tick),
-        "player_input": _safe_str(player_input),
-        "action_type": action_type,
-        "semantic_family": "commerce",
-        "interaction_mode": "solo",
-        "activity_label": activity_label,
-        "target_id": provider_id,
-        "target_name": provider_name,
-        "secondary_actor_ids": [],
-        "location_id": _safe_str(service_result.get("location_id")),
-        "visibility": "local",
-        "intensity": 1,
-        "stakes": 1,
-        "social_axes": [],
-        "observer_hooks": [],
-        "scene_impact": "none",
-        "reason": _safe_str(service_result.get("status")),
-        "summary": f"{provider_name} / {activity_label}".strip(" /"),
-        "tags": sorted(
-            {
-                "commerce",
-                action_type or "service_inquiry",
-                service_kind or "service",
-                "player_action",
-            }
-        ),
-        "service_result": service_result,
-        "selected_offer_id": selected_offer_id,
-    }
 
 
-def _service_authoritative_result(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
-    action = _safe_dict(action)
-    metadata = _safe_dict(action.get("metadata"))
-    service_result = _safe_dict(metadata.get("service_result"))
-    service_result = copy.deepcopy(service_result)
-    service_kind = _safe_str(service_result.get("service_kind"))
-    purchase = _safe_dict(service_result.get("purchase"))
-
-    tick = _safe_int(_safe_dict(simulation_state).get("tick"), 0)
-    purchase_application = {
-        "applied": False,
-        "blocked": bool(purchase.get("blocked")) if purchase else False,
-        "blocked_reason": _safe_str(purchase.get("blocked_reason")) if purchase and purchase.get("blocked") else "",
-        "currency_before": {},
-        "currency_after": {},
-        "items_added": [],
-        "active_service": {},
-        "rumor_added": {},
-        "transaction_record": {},
-    }
-
-    if (
-        _safe_str(service_result.get("kind")) == "service_purchase"
-        and purchase
-        and _safe_str(service_result.get("selected_offer_id"))
-    ):
-        purchase_application = apply_service_purchase_result(
-            simulation_state,
-            service_result,
-            tick=tick,
-        )
-        simulation_state = _safe_dict(purchase_application.get("simulation_state"))
-        service_result = _safe_dict(purchase_application.get("service_result"))
-        purchase = _safe_dict(service_result.get("purchase"))
-
-    blocked = bool(purchase_application.get("blocked"))
-    blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
-    applied = bool(purchase_application.get("applied"))
-
-    result = {
-        "ok": not blocked,
-        "outcome": "blocked" if blocked else "success",
-        "action_type": _safe_str(action.get("action_type") or service_result.get("kind")),
-        "service_kind": service_kind,
-        "target_name": _safe_str(service_result.get("provider_name") or action.get("target_name")),
-        "target_id": _safe_str(service_result.get("provider_id") or action.get("target_id")),
-        "blocked": blocked,
-        "blocked_reason": blocked_reason,
-        "purchase_applied": applied,
-        "service_result": service_result,
-        "action_metadata": {
-            "transaction_kind": _safe_str(service_result.get("kind")),
-            "service_kind": service_kind,
-            "provider_id": _safe_str(service_result.get("provider_id")),
-            "provider_name": _safe_str(service_result.get("provider_name")),
-            "price_source": "deterministic_service_registry" if service_result.get("offers") else "",
-        },
-        "resource_changes": {
-            "currency": {"gold": 0, "silver": 0, "copper": 0},
-        },
-        "service_application": {
-            "applied": applied,
-            "currency_before": purchase_application.get("currency_before") or {},
-            "currency_after": purchase_application.get("currency_after") or {},
-            "items_added": purchase_application.get("items_added") or [],
-            "active_service": purchase_application.get("active_service") or {},
-            "rumor_added": purchase_application.get("rumor_added") or {},
-            "transaction_record": purchase_application.get("transaction_record") or {},
-        },
-        "transaction_record": purchase_application.get("transaction_record") or {},
-    }
-
-    if purchase:
-        result["resource_changes"] = _safe_dict(
-            purchase.get("resource_changes")
-            or {"currency": {"gold": 0, "silver": 0, "copper": 0}}
-        )
-        result["effect_result"] = {
-            "items_added": _safe_list(
-                _safe_dict(purchase.get("applied_effects")).get("items_added")
-                or _safe_dict(purchase.get("effects")).get("items_added")
-            ),
-            "service_effects": _safe_dict(purchase.get("effects")),
-            "applied_effects": _safe_dict(purchase.get("applied_effects")),
-        }
-        result["purchase_note"] = _safe_str(purchase.get("note"))
-
-    return {
-        "simulation_state": simulation_state,
-        "result": result,
-    }
 
 
 def _apply_authoritative_action(
@@ -5725,7 +5556,7 @@ def _apply_authoritative_action(
     action_type = _safe_str(action.get("action_type")).strip()
 
     if action_type in {"service_inquiry", "service_purchase"}:
-        return _service_authoritative_result(simulation_state, action)
+        return service_authoritative_result(simulation_state, action)
 
     action = enrich_action_with_registry_price(action)
 
@@ -6454,7 +6285,7 @@ def _apply_turn_authoritative(
         runtime_state=runtime_state,
     )
     if service_first_result.get("matched"):
-        action = _service_action_from_result(player_input, action, service_first_result)
+        action = service_action_from_result(player_input, action, service_first_result)
         action_type = _safe_str(action.get("action_type")).strip()
 
     # Lazy LLM gateway: build at most once per authoritative turn.
@@ -6599,7 +6430,7 @@ def _apply_turn_authoritative(
         runtime_state=runtime_state,
     )
     if service_after_advisory.get("matched"):
-        action = _service_action_from_result(player_input, action, service_after_advisory)
+        action = service_action_from_result(player_input, action, service_after_advisory)
         action_type = _safe_str(action.get("action_type")).strip()
 
     semantic_compiled_key = f"semantic_action_compiled:{current_tick}"
@@ -6645,9 +6476,9 @@ def _apply_turn_authoritative(
         runtime_state=runtime_state,
     )
     if service_after_semantic.get("matched"):
-        action = _service_action_from_result(player_input, action, service_after_semantic)
+        action = service_action_from_result(player_input, action, service_after_semantic)
         action_type = _safe_str(action.get("action_type")).strip()
-        semantic_action_record = _service_semantic_action_from_result(
+        semantic_action_record = service_semantic_action_from_result(
             player_input,
             service_after_semantic,
             tick=_safe_int(current_tick, 0),
@@ -6669,23 +6500,14 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)
 
-    service_metadata_result = _safe_dict(_safe_dict(action.get("metadata")).get("service_result"))
-    if service_metadata_result.get("matched"):
-        resolved_service_result = _safe_dict(resolved_result.get("service_result")) or service_metadata_result
-        resolved_result["service_result"] = resolved_service_result
-        # Ensure applied purchase status survives later mirroring
-        if _safe_dict(resolved_result.get("service_application")).get("applied"):
-            resolved_service_result["status"] = "purchased"
-        resolved_result["action_type"] = _safe_str(resolved_service_result.get("kind") or action_type)
-        resolved_result["service_kind"] = _safe_str(resolved_service_result.get("service_kind"))
-        resolved_result["target_id"] = _safe_str(resolved_service_result.get("provider_id"))
-        resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
-        resolved_result["semantic_action"] = semantic_action_record
-
-        if resolved_service_result is not service_metadata_result:
-            action_metadata = _safe_dict(action.get("metadata"))
-            action_metadata["service_result"] = resolved_service_result
-            action["metadata"] = action_metadata
+    service_resolution = mirror_service_result(
+        resolved_result,
+        action,
+        action_type=action_type,
+        semantic_action_record=semantic_action_record,
+    )
+    resolved_result = _safe_dict(service_resolution.get("resolved_result"))
+    action = _safe_dict(service_resolution.get("action"))
 
     combat_state = _get_combat_state(runtime_state)
 
@@ -6830,23 +6652,14 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)
 
-    service_metadata_result = _safe_dict(_safe_dict(action.get("metadata")).get("service_result"))
-    if service_metadata_result.get("matched"):
-        resolved_service_result = _safe_dict(resolved_result.get("service_result")) or service_metadata_result
-        resolved_result["service_result"] = resolved_service_result
-        # Ensure applied purchase status survives later mirroring
-        if _safe_dict(resolved_result.get("service_application")).get("applied"):
-            resolved_service_result["status"] = "purchased"
-        resolved_result["action_type"] = _safe_str(resolved_service_result.get("kind") or action_type)
-        resolved_result["service_kind"] = _safe_str(resolved_service_result.get("service_kind"))
-        resolved_result["target_id"] = _safe_str(resolved_service_result.get("provider_id"))
-        resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
-        resolved_result["semantic_action"] = semantic_action_record
-
-        if resolved_service_result is not service_metadata_result:
-            action_metadata = _safe_dict(action.get("metadata"))
-            action_metadata["service_result"] = resolved_service_result
-            action["metadata"] = action_metadata
+    service_resolution = mirror_service_result(
+        resolved_result,
+        action,
+        action_type=action_type,
+        semantic_action_record=semantic_action_record,
+    )
+    resolved_result = _safe_dict(service_resolution.get("resolved_result"))
+    action = _safe_dict(service_resolution.get("action"))
 
     _t_authoritative = _time.monotonic()
 
@@ -6872,22 +6685,10 @@ def _apply_turn_authoritative(
             resolved_for_contract["semantic_action"] = semantic_action_record
             turn_contract["resolved_result"] = resolved_for_contract
             turn_contract["resolved_action"] = resolved_for_contract
-        contract_resolved = _safe_dict(turn_contract.get("resolved_action") or resolved_result)
-        for key in (
-            "service_application",
-            "transaction_record",
-            "purchase_applied",
-            "effect_result",
-            "resource_changes",
-            "blocked",
-            "blocked_reason",
-            "semantic_action",
-        ):
-            if key in resolved_result and key not in contract_resolved:
-                contract_resolved[key] = resolved_result[key]
-
-        if _safe_dict(resolved_result.get("service_result")).get("matched"):
-            contract_resolved["service_result"] = _safe_dict(resolved_result.get("service_result"))
+        contract_resolved = merge_service_result_into_contract_resolved(
+            resolved_result,
+            _safe_dict(turn_contract.get("resolved_action") or resolved_result),
+        )
 
         resolved_result = contract_resolved
         after_action_state = apply_state_delta(
