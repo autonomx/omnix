@@ -91,18 +91,9 @@ def _runtime_offer_record(
 ) -> Dict[str, Any]:
     offer = _safe_dict(offer)
     offer_id = _safe_str(offer.get("offer_id"))
-    service_offer_state = _ensure_offer_state(simulation_state)
+    service_offer_state = _safe_dict(_safe_dict(simulation_state).get("service_offer_state"))
     offers = _safe_dict(service_offer_state.get("offers"))
-    record = _safe_dict(offers.get(offer_id))
-    if not record:
-        record = {}
-        offers[offer_id] = record
-
-    if "stock" in offer and "stock_remaining" not in record:
-        record["stock_remaining"] = max(0, _safe_int(offer.get("stock"), 0))
-        record["stock_initial"] = max(0, _safe_int(offer.get("stock"), 0))
-
-    return record
+    return _safe_dict(offers.get(offer_id))
 
 
 def get_offer_runtime_state(

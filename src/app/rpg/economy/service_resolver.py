@@ -11,7 +11,6 @@ from app.rpg.economy.currency import (
 )
 from app.rpg.economy.service_registry import (
     SERVICE_KIND_DRINK,
-    SERVICE_KIND_HEALING,
     SERVICE_KIND_LODGING,
     SERVICE_KIND_MEAL,
     SERVICE_KIND_PAID_INFORMATION,
