@@ -7293,6 +7293,9 @@ def _apply_turn_authoritative(
 
         turn_contract = {
             "version": "turn_contract_v1",
+            # Keep the primary contract version so downstream tooling treats this
+            # bridge payload like the authoritative contract, while still marking
+            # the fallback origin explicitly for debugging.
             "contract_source": "runtime_fallback_bridge",
             "player_input": player_input,
             "action": action,
