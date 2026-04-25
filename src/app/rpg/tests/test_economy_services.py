@@ -187,7 +187,8 @@ def test_service_turn_detects_purchase_without_mutating_state():
         "silver": -1,
         "copper": 0,
     }
-    assert "does not mutate state yet" in result["purchase"]["note"]
+    assert result["purchase"]["applied"] is False
+    assert "runtime applies mutation" in result["purchase"]["note"]
 
 
 def test_service_turn_blocks_purchase_when_insufficient_funds():

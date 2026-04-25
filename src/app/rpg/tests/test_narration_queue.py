@@ -2176,7 +2176,7 @@ def test_service_narration_uses_registered_shop_offers():
     assert "rope for 3 silver" in text
 
 
-def test_service_purchase_ready_narration_is_not_state_mutation():
+def test_service_purchase_applied_narration_reports_completed_purchase():
     from app.rpg.ai.world_scene_narrator import narrate_scene
 
     class StubGateway:
@@ -2198,7 +2198,7 @@ def test_service_purchase_ready_narration_is_not_state_mutation():
         "provider_id": "npc:Elara",
         "provider_name": "Elara",
         "location_id": "loc_market",
-        "status": "purchase_ready",
+        "status": "purchased",
         "offers": [
             {
                 "offer_id": "elara_torch",
@@ -2213,9 +2213,16 @@ def test_service_purchase_ready_narration_is_not_state_mutation():
             "blocked_reason": "",
             "price": {"gold": 0, "silver": 1, "copper": 0},
             "can_afford": True,
+            "applied": True,
             "resource_changes": {"currency": {"gold": 0, "silver": -1, "copper": 0}},
             "effects": {"items_added": [{"item_id": "torch", "name": "Torch", "quantity": 1}]},
-            "note": "Phase 7.0D detects purchase intent but does not mutate state yet.",
+            "applied_effects": {
+                "currency_changed": True,
+                "items_added": [{"item_id": "torch", "name": "Torch", "quantity": 1}],
+                "active_service": {},
+                "rumor_added": {},
+            },
+            "note": "Purchase intent resolved deterministically; runtime applies mutation.",
         },
         "available_actions": [],
         "source": "deterministic_service_resolver",
@@ -2240,8 +2247,81 @@ def test_service_purchase_ready_narration_is_not_state_mutation():
     text = result["narration"].lower()
     narration_json = result["narration_json"]
 
-    assert "result: elara is ready to complete the purchase." in text
+    assert "result: elara completes the purchase." in text
     assert "the torch is yours" not in text
-    assert "i can settle torch once you confirm the purchase" in text
+    assert "done. torch is settled" in text
     assert "reward:" not in text
+    assert narration_json["reward"] == ""
+
+
+def test_service_purchase_blocked_narration_reports_insufficient_funds():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara hands you the rope.",'
+                    '"action":"You buy rope from Elara.",'
+                    '"npc":{"speaker":"Elara","line":"The rope is yours."},'
+                    '"reward":"Rope","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "shop_goods",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "location_id": "loc_market",
+        "status": "blocked",
+        "offers": [
+            {
+                "offer_id": "elara_rope",
+                "service_kind": "shop_goods",
+                "label": "Rope",
+                "price": {"gold": 0, "silver": 3, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "elara_rope",
+        "purchase": {
+            "blocked": True,
+            "blocked_reason": "insufficient_funds",
+            "price": {"gold": 0, "silver": 3, "copper": 0},
+            "can_afford": False,
+            "applied": False,
+            "resource_changes": {"currency": {"gold": 0, "silver": 0, "copper": 0}},
+            "effects": {},
+            "note": "No mutation was applied.",
+        },
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "Central Market", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I buy rope from Elara",
+            "turn_contract": {
+                "player_input": "I buy rope from Elara",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+                "narration_brief": {"summary": "I buy rope from Elara"},
+            },
+            "resolved_result": {"service_result": service_result},
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+    narration_json = result["narration_json"]
+
+    assert "hands you the rope" not in text
+    assert "the rope is yours" not in text
+    assert "reward:" not in text
+    assert "result: elara names the price, but you do not have enough coin." in text
+    assert "rope for 3 silver is the price, but you do not have enough coin." in text
     assert narration_json["reward"] == ""

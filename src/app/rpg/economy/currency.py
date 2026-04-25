@@ -72,6 +72,12 @@ def subtract_currency(left: Any, right: Any) -> Currency:
     return copper_to_currency(left_total - right_total)
 
 
+def apply_currency_delta(current: Any, delta: Any) -> Currency:
+    current_total = currency_to_copper(current)
+    delta_total = currency_to_copper(delta)
+    return copper_to_currency(current_total + delta_total)
+
+
 def negative_currency(value: Any) -> Currency:
     currency = normalize_currency(value)
     return {
@@ -119,6 +125,22 @@ def get_player_currency(simulation_state: Dict[str, Any]) -> Currency:
             return normalize_currency({"gold": source.get("gold"), "silver": 0, "copper": 0})
 
     return normalize_currency({})
+
+
+def set_player_currency(simulation_state: Dict[str, Any], currency: Any) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state)
+    player_state = _safe_dict(state.get("player_state"))
+    if not player_state:
+        player_state = {}
+        state["player_state"] = player_state
+
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    if not inventory_state:
+        inventory_state = {}
+        player_state["inventory_state"] = inventory_state
+
+    inventory_state["currency"] = normalize_currency(currency)
+    return state
 
 
 def currency_to_copper_value(currency: Any) -> int:

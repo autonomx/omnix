@@ -341,11 +341,12 @@ def resolve_service_turn(
                 "blocked_reason": "" if afford else "insufficient_funds",
                 "price": price,
                 "can_afford": afford,
+                "applied": False,
                 "resource_changes": {
                     "currency": negative_currency(price) if afford else {"gold": 0, "silver": 0, "copper": 0}
                 },
                 "effects": _safe_dict(selected.get("effects")) if afford else {},
-                "note": "Phase 7.0D detects purchase intent but does not mutate state yet.",
+                "note": "Purchase intent resolved deterministically; runtime applies mutation.",
             }
         else:
             result["status"] = "purchase_offer_not_found"
@@ -354,6 +355,7 @@ def resolve_service_turn(
                 "blocked_reason": "offer_not_found",
                 "price": {"gold": 0, "silver": 0, "copper": 0},
                 "can_afford": False,
+                "applied": False,
                 "resource_changes": {"currency": {"gold": 0, "silver": 0, "copper": 0}},
                 "effects": {},
                 "note": "No matching deterministic offer was found.",

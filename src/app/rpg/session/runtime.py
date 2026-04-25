@@ -108,6 +108,7 @@ from app.rpg.economy.provider_catalog import (
     derive_world_transaction_providers,
 )
 from app.rpg.economy.service_resolver import resolve_service_turn
+from app.rpg.economy.service_effects import apply_service_purchase_result
 from app.rpg.economy.transaction_effects import apply_transaction_effects
 from app.rpg.economy.transactions import (
     build_transaction_metadata,
@@ -5949,12 +5950,39 @@ def _service_authoritative_result(
     action = _safe_dict(action)
     metadata = _safe_dict(action.get("metadata"))
     service_result = _safe_dict(metadata.get("service_result"))
+    service_result = copy.deepcopy(service_result)
     service_kind = _safe_str(service_result.get("service_kind"))
-    status = _safe_str(service_result.get("status"))
     purchase = _safe_dict(service_result.get("purchase"))
 
-    blocked = bool(purchase.get("blocked")) if purchase else False
-    blocked_reason = _safe_str(purchase.get("blocked_reason")) if blocked else ""
+    tick = _safe_int(_safe_dict(simulation_state).get("tick"), 0)
+    purchase_application = {
+        "applied": False,
+        "blocked": bool(purchase.get("blocked")) if purchase else False,
+        "blocked_reason": _safe_str(purchase.get("blocked_reason")) if purchase and purchase.get("blocked") else "",
+        "currency_before": {},
+        "currency_after": {},
+        "items_added": [],
+        "active_service": {},
+        "rumor_added": {},
+    }
+
+    if (
+        _safe_str(service_result.get("kind")) == "service_purchase"
+        and purchase
+        and _safe_str(service_result.get("selected_offer_id"))
+    ):
+        purchase_application = apply_service_purchase_result(
+            simulation_state,
+            service_result,
+            tick=tick,
+        )
+        simulation_state = _safe_dict(purchase_application.get("simulation_state"))
+        service_result = _safe_dict(purchase_application.get("service_result"))
+        purchase = _safe_dict(service_result.get("purchase"))
+
+    blocked = bool(purchase_application.get("blocked"))
+    blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
+    applied = bool(purchase_application.get("applied"))
 
     result = {
         "ok": not blocked,
@@ -5965,6 +5993,7 @@ def _service_authoritative_result(
         "target_id": _safe_str(service_result.get("provider_id") or action.get("target_id")),
         "blocked": blocked,
         "blocked_reason": blocked_reason,
+        "purchase_applied": applied,
         "service_result": service_result,
         "action_metadata": {
             "transaction_kind": _safe_str(service_result.get("kind")),
@@ -5973,12 +6002,16 @@ def _service_authoritative_result(
             "provider_name": _safe_str(service_result.get("provider_name")),
             "price_source": "deterministic_service_registry" if service_result.get("offers") else "",
         },
-        "effect_result": {
-            "items_added": [],
-            "service_effects": {},
-        },
         "resource_changes": {
             "currency": {"gold": 0, "silver": 0, "copper": 0},
+        },
+        "service_application": {
+            "applied": applied,
+            "currency_before": purchase_application.get("currency_before") or {},
+            "currency_after": purchase_application.get("currency_after") or {},
+            "items_added": purchase_application.get("items_added") or [],
+            "active_service": purchase_application.get("active_service") or {},
+            "rumor_added": purchase_application.get("rumor_added") or {},
         },
     }
 
@@ -5988,8 +6021,12 @@ def _service_authoritative_result(
             or {"currency": {"gold": 0, "silver": 0, "copper": 0}}
         )
         result["effect_result"] = {
-            "items_added": _safe_list(_safe_dict(purchase.get("effects")).get("items_added")),
+            "items_added": _safe_list(
+                _safe_dict(purchase.get("applied_effects")).get("items_added")
+                or _safe_dict(purchase.get("effects")).get("items_added")
+            ),
             "service_effects": _safe_dict(purchase.get("effects")),
+            "applied_effects": _safe_dict(purchase.get("applied_effects")),
         }
         result["purchase_note"] = _safe_str(purchase.get("note"))
 
@@ -6944,11 +6981,20 @@ def _apply_turn_authoritative(
 
     service_metadata_result = _safe_dict(_safe_dict(action.get("metadata")).get("service_result"))
     if service_metadata_result.get("matched"):
-        resolved_result["service_result"] = service_metadata_result
-        resolved_result["action_type"] = _safe_str(service_metadata_result.get("kind") or action_type)
-        resolved_result["service_kind"] = _safe_str(service_metadata_result.get("service_kind"))
-        resolved_result["target_id"] = _safe_str(service_metadata_result.get("provider_id"))
-        resolved_result["target_name"] = _safe_str(service_metadata_result.get("provider_name"))
+        resolved_service_result = _safe_dict(resolved_result.get("service_result")) or service_metadata_result
+        resolved_result["service_result"] = resolved_service_result
+        # Ensure applied purchase status survives later mirroring
+        if _safe_dict(resolved_result.get("service_application")).get("applied"):
+            resolved_service_result["status"] = "purchased"
+        resolved_result["action_type"] = _safe_str(resolved_service_result.get("kind") or action_type)
+        resolved_result["service_kind"] = _safe_str(resolved_service_result.get("service_kind"))
+        resolved_result["target_id"] = _safe_str(resolved_service_result.get("provider_id"))
+        resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
+
+        if resolved_service_result is not service_metadata_result:
+            action_metadata = _safe_dict(action.get("metadata"))
+            action_metadata["service_result"] = resolved_service_result
+            action["metadata"] = action_metadata
 
     combat_state = _get_combat_state(runtime_state)
 
@@ -7095,11 +7141,20 @@ def _apply_turn_authoritative(
 
     service_metadata_result = _safe_dict(_safe_dict(action.get("metadata")).get("service_result"))
     if service_metadata_result.get("matched"):
-        resolved_result["service_result"] = service_metadata_result
-        resolved_result["action_type"] = _safe_str(service_metadata_result.get("kind") or action_type)
-        resolved_result["service_kind"] = _safe_str(service_metadata_result.get("service_kind"))
-        resolved_result["target_id"] = _safe_str(service_metadata_result.get("provider_id"))
-        resolved_result["target_name"] = _safe_str(service_metadata_result.get("provider_name"))
+        resolved_service_result = _safe_dict(resolved_result.get("service_result")) or service_metadata_result
+        resolved_result["service_result"] = resolved_service_result
+        # Ensure applied purchase status survives later mirroring
+        if _safe_dict(resolved_result.get("service_application")).get("applied"):
+            resolved_service_result["status"] = "purchased"
+        resolved_result["action_type"] = _safe_str(resolved_service_result.get("kind") or action_type)
+        resolved_result["service_kind"] = _safe_str(resolved_service_result.get("service_kind"))
+        resolved_result["target_id"] = _safe_str(resolved_service_result.get("provider_id"))
+        resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
+
+        if resolved_service_result is not service_metadata_result:
+            action_metadata = _safe_dict(action.get("metadata"))
+            action_metadata["service_result"] = resolved_service_result
+            action["metadata"] = action_metadata
 
     _t_authoritative = _time.monotonic()
 

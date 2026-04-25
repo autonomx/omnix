@@ -488,6 +488,9 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
     status = _safe_str(service_result.get("status"))
 
     if kind == "service_purchase":
+        purchase = _safe_dict(service_result.get("purchase"))
+        if status == "purchased" or purchase.get("applied"):
+            return f"{provider_name} completes the purchase."
         if status == "purchase_ready":
             return f"{provider_name} is ready to complete the purchase."
         if status == "blocked":
@@ -524,6 +527,11 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
                 break
 
         selected_label = _safe_str(selected.get("label") or selected_offer_id or "that").strip()
+
+        if status == "purchased" or purchase.get("applied"):
+            if selected_label and selected_label != "that":
+                return f"Done. {selected_label} is settled."
+            return "Done. The purchase is settled."
 
         if status == "purchase_ready":
             return f"I can settle {selected_label} once you confirm the purchase."
@@ -565,6 +573,9 @@ def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
     if status == "blocked":
         return f"{provider_name} checks the price against your available coin."
 
+    if status == "purchased":
+        return f"{provider_name} completes the registered service purchase."
+
     if status == "purchase_ready":
         return f"{provider_name} confirms the selected registered offer."
 
@@ -589,6 +600,12 @@ def _service_narration_needs_grounding(text: str) -> bool:
         "buy a torch",
         "from elara",
         "from bran",
+        "request for lodging",
+        "seeking shelter",
+        "seeking lodging",
+        "as you address",
+        "address bran",
+        "travelers seeking shelter",
     )
     return any(phrase in lower for phrase in repeated_action_phrases)
 
@@ -626,6 +643,13 @@ def _service_claim_needs_grounding(text: str) -> bool:
         "repair",
         "torch",
         "rope",
+        "done",
+        "yours",
+        "settled",
+        "complete",
+        "completed",
+        "purchase",
+        "paid",
     )
     return any(term in lower for term in claim_terms)
 
