@@ -7271,17 +7271,18 @@ def _apply_turn_authoritative(
             or narration_payload.get("rendered_text")
         )
 
-        narration = rendered
-        raw_llm_narrative = narration_payload
-        used_llm = llm_gateway is not None
-        narration_status = "completed"
+        authoritative["narration"] = _safe_str(narration_payload.get("narration"))
+        authoritative["narration_json"] = _safe_dict(narration_payload.get("narration_json"))
+        authoritative["raw_llm_narrative"] = narration_payload
+        authoritative["used_llm"] = _safe_bool(narration_payload.get("used_llm"), False)
+        authoritative["narration_status"] = "completed"
         authoritative["turn_contract"] = turn_contract
 
         print(
             "[RPG][narration][sync] completed",
             {
-                "used_llm": used_llm,
-                "has_text": bool(rendered.strip()),
+                "used_llm": authoritative["used_llm"],
+                "has_text": bool(authoritative["narration"].strip()),
                 "has_turn_contract": bool(turn_contract),
             },
         )
@@ -7290,6 +7291,13 @@ def _apply_turn_authoritative(
         raw_llm_narrative = ""
         used_llm = False
         narration_status = "queued"
+
+    # Ensure variables are set from authoritative if sync was done
+    if force_sync:
+        narration = _safe_str(authoritative.get("narration"))
+        raw_llm_narrative = authoritative.get("raw_llm_narrative")
+        used_llm = _safe_bool(authoritative.get("used_llm"), False)
+        narration_status = _safe_str(authoritative.get("narration_status"))
 
     return {
         "ok": True,
