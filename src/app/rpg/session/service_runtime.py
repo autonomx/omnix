@@ -5,6 +5,7 @@ import hashlib
 from typing import Any, Dict
 
 from app.rpg.economy.service_effects import apply_service_purchase_result
+from app.rpg.session.service_living_world import apply_service_living_world_effects
 from app.rpg.session.state_normalization import _safe_dict, _safe_int, _safe_list, _safe_str
 
 
@@ -119,6 +120,9 @@ def service_authoritative_result(
         "active_service": {},
         "rumor_added": {},
         "transaction_record": {},
+        "memory_entry": {},
+        "social_effects": {},
+        "stock_update": {},
     }
 
     if (
@@ -134,6 +138,17 @@ def service_authoritative_result(
         simulation_state = _safe_dict(purchase_application.get("simulation_state"))
         service_result = _safe_dict(purchase_application.get("service_result"))
         purchase = _safe_dict(service_result.get("purchase"))
+
+    if service_result.get("matched"):
+        living_world = apply_service_living_world_effects(
+            simulation_state,
+            service_result,
+            purchase_application,
+            tick=tick,
+        )
+        purchase_application["memory_entry"] = living_world.get("memory_entry") or {}
+        purchase_application["social_effects"] = living_world.get("social_effects") or {}
+        purchase_application["stock_update"] = living_world.get("stock_update") or {}
 
     blocked = bool(purchase_application.get("blocked"))
     blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
@@ -168,8 +183,14 @@ def service_authoritative_result(
             "active_service": purchase_application.get("active_service") or {},
             "rumor_added": purchase_application.get("rumor_added") or {},
             "transaction_record": purchase_application.get("transaction_record") or {},
+            "memory_entry": purchase_application.get("memory_entry") or {},
+            "social_effects": purchase_application.get("social_effects") or {},
+            "stock_update": purchase_application.get("stock_update") or {},
         },
         "transaction_record": purchase_application.get("transaction_record") or {},
+        "memory_entry": purchase_application.get("memory_entry") or {},
+        "social_effects": purchase_application.get("social_effects") or {},
+        "stock_update": purchase_application.get("stock_update") or {},
     }
 
     if purchase:

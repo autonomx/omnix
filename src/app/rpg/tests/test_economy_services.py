@@ -9,6 +9,7 @@ from app.rpg.economy.currency import (
     subtract_currency_cost,
 )
 from app.rpg.economy.service_registry import get_provider_offers
+from app.rpg.economy.service_stock import annotate_offer_availability, filter_available_offers
 from app.rpg.economy.service_resolver import (
     resolve_service_intent,
     resolve_service_turn,
@@ -77,6 +78,58 @@ def test_service_registry_has_lodging_meal_info_and_goods():
     assert any(offer["offer_id"] == "bran_lodging_common_cot" for offer in bran_lodging)
     assert any(offer["offer_id"] == "bran_meal_stew" for offer in bran_meals)
     assert any(offer["offer_id"] == "elara_torch" for offer in elara_goods)
+
+
+def test_service_stock_annotates_out_of_stock_offer():
+    offer = {
+        "offer_id": "test_offer",
+        "label": "Test Offer",
+        "stock": 1,
+        "availability": "available",
+    }
+    state = {
+        "service_offer_state": {
+            "offers": {
+                "test_offer": {
+                    "stock_remaining": 0,
+                    "stock_initial": 1,
+                }
+            }
+        }
+    }
+
+    annotated = annotate_offer_availability(state, offer)
+
+    assert annotated["availability"] == "unavailable"
+    assert annotated["unavailable_reason"] == "out_of_stock"
+    assert annotated["stock_remaining"] == 0
+
+
+def test_service_stock_filters_unavailable_offer():
+    state = {
+        "service_offer_state": {
+            "offers": {
+                "elara_torch": {
+                    "stock_remaining": 0,
+                    "stock_initial": 1,
+                }
+            }
+        }
+    }
+    offers = get_provider_offers("npc:Elara", "shop_goods")
+
+    filtered = filter_available_offers(
+        state,
+        offers,
+        provider={
+            "provider_id": "npc:Elara",
+            "provider_name": "Elara",
+            "location_id": "loc_market",
+        },
+    )
+
+    assert not any(offer["offer_id"] == "elara_torch" for offer in filtered)
+    assert any(offer["offer_id"] == "elara_rope" for offer in filtered)
 
 
 def test_service_intent_detects_lodging_inquiry():

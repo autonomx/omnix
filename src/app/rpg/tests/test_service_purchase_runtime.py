@@ -171,6 +171,13 @@ def test_service_authoritative_result_applies_purchase_runtime_effects():
     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["items"][0]["item_id"] == "torch"
     assert result["transaction_record"]["offer_id"] == "elara_torch"
     assert result["service_application"]["transaction_record"]["offer_id"] == "elara_torch"
+    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase"
+    assert (
+        result["service_application"]["social_effects"]["relationship_key"]
+        == "npc:Elara::player"
+    )
+    assert result["service_application"]["stock_update"]["offer_id"] == "elara_torch"
+    assert authoritative["simulation_state"]["service_offer_state"]["offers"]["elara_torch"]["stock_remaining"] == 2
 
 
 def test_service_authoritative_result_blocks_purchase_runtime_effects():
@@ -202,3 +209,9 @@ def test_service_authoritative_result_blocks_purchase_runtime_effects():
         "copper": 0,
     }
     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["items"] == []
+    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase_blocked"
+    assert (
+        result["service_application"]["social_effects"]["relationship_key"]
+        == "npc:Elara::player"
+    )
+    assert result["service_application"]["stock_update"] == {}
