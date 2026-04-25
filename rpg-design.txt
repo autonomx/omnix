@@ -1,27 +1,459 @@
-Below is a literal apply-this-patch spec for Bundle A:
+Below is a literal apply-this-patch spec for:
 
-Phase 7.2 + 7.3 + 7.4 + 7.8
+Phase 7.5–7.7 — Service Effects Into Living World
 
-- UI service action buttons
-- primary service turn contract cleanup
-- service-aware semantic action alignment
-- transaction audit log
-- manual transcript --all prints transactions
+Includes:
+- 7.4J manual transcript service_status cleanup
+- 7.5 service-aware NPC memory
+- 7.6 relationship/emotion effects from service outcomes
+- 7.7 offer availability rules + stock
+- manual transcript summary updates
 - tests
 
-This builds on the current state where backend deterministic service purchases are passing in manual_llm_transcript.py --all, but transcripts still show fallback_turn_contract_v1 and semantic action is still often observe.
+This builds on the current refactored state where service scenarios are passing, but the compact service summary can still report service_status: purchase_ready while purchase_applied: true.
 
-PATCH 1 — Add transaction audit helpers
-File: src/app/rpg/economy/service_transactions.py
+PATCH 1 — Add deterministic service memory
+File: src/app/rpg/memory/service_memory.py
 
 Create this file:
 
-diff --git a/src/app/rpg/economy/service_transactions.py b/src/app/rpg/economy/service_transactions.py
+diff --git a/src/app/rpg/memory/service_memory.py b/src/app/rpg/memory/service_memory.py
 new file mode 100644
-index 0000000..3b1f5c7
+index 0000000..a7117e1
 --- /dev/null
-+++ b/src/app/rpg/economy/service_transactions.py
-@@ -0,0 +1,184 @@
++++ b/src/app/rpg/memory/service_memory.py
+@@ -0,0 +1,171 @@
++from __future__ import annotations
++
++from copy import deepcopy
++from typing import Any, Dict, List
++
++
++MAX_SERVICE_MEMORIES = 80
++MAX_NPC_SERVICE_MEMORIES = 40
++
++
++def _safe_str(value: Any) -> str:
++    return "" if value is None else str(value)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
++
++
++def _selected_offer(service_result: Dict[str, Any]) -> Dict[str, Any]:
++    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
++    for offer in _safe_list(service_result.get("offers")):
++        offer = _safe_dict(offer)
++        if _safe_str(offer.get("offer_id")) == selected_offer_id:
++            return deepcopy(offer)
++    return {}
++
++
++def _ensure_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    state = _safe_dict(simulation_state)
++    memory_state = _safe_dict(state.get("memory_state"))
++    if not memory_state:
++        memory_state = {}
++        state["memory_state"] = memory_state
++
++    service_memories = memory_state.get("service_memories")
++    if not isinstance(service_memories, list):
++        service_memories = []
++        memory_state["service_memories"] = service_memories
++
++    npc_memories = memory_state.get("npc_memories")
++    if not isinstance(npc_memories, dict):
++        npc_memories = {}
++        memory_state["npc_memories"] = npc_memories
++
++    return memory_state
++
++
++def _append_bounded_unique(
++    entries: List[Dict[str, Any]],
++    entry: Dict[str, Any],
++    *,
++    max_entries: int,
++) -> Dict[str, Any]:
++    memory_id = _safe_str(entry.get("memory_id"))
++    if memory_id:
++        for existing in entries:
++            if _safe_str(_safe_dict(existing).get("memory_id")) == memory_id:
++                return deepcopy(existing)
++
++    entries.append(deepcopy(entry))
++    if max_entries > 0 and len(entries) > max_entries:
++        del entries[:-max_entries]
++    return deepcopy(entry)
++
++
++def _memory_kind(service_result: Dict[str, Any], service_application: Dict[str, Any]) -> str:
++    kind = _safe_str(service_result.get("kind"))
++    status = _safe_str(service_result.get("status"))
++    purchase = _safe_dict(service_result.get("purchase"))
++
++    if kind == "service_inquiry":
++        return "service_inquiry"
++
++    if kind == "service_purchase" and (
++        service_application.get("applied")
++        or purchase.get("applied")
++        or status == "purchased"
++    ):
++        return "service_purchase"
++
++    if kind == "service_purchase":
++        return "service_purchase_blocked"
++
++    return "service_interaction"
++
++
++def _sentiment_for_memory(kind: str, blocked_reason: str) -> str:
++    if kind == "service_purchase":
++        return "positive"
++    if kind == "service_purchase_blocked":
++        if blocked_reason == "insufficient_funds":
++            return "slightly_negative"
++        return "neutral_negative"
++    return "neutral"
++
++
++def _importance_for_memory(kind: str) -> float:
++    if kind == "service_purchase":
++        return 0.4
++    if kind == "service_purchase_blocked":
++        return 0.35
++    return 0.25
++
++
++def _summary_for_memory(
++    service_result: Dict[str, Any],
++    service_application: Dict[str, Any],
++    kind: str,
++) -> str:
++    provider_name = _safe_str(service_result.get("provider_name") or "the provider")
++    service_kind = _safe_str(service_result.get("service_kind") or "service")
++    offer = _selected_offer(service_result)
++    offer_label = _safe_str(offer.get("label") or service_result.get("selected_offer_id"))
++    purchase = _safe_dict(service_result.get("purchase"))
++    blocked_reason = _safe_str(
++        service_application.get("blocked_reason")
++        or purchase.get("blocked_reason")
++    )
++
++    if kind == "service_purchase" and offer_label:
++        return f"The player bought {offer_label} from {provider_name}."
++
++    if kind == "service_purchase_blocked" and offer_label:
++        if blocked_reason == "insufficient_funds":
++            return f"The player tried to buy {offer_label} from {provider_name} without enough coin."
++        return f"The player tried to buy {offer_label} from {provider_name}, but the purchase was blocked."
++
++    if kind == "service_purchase_blocked":
++        return f"The player tried to buy an unavailable service from {provider_name}."
++
++    return f"The player asked {provider_name} about {service_kind}."
++
++
++def build_service_memory_entry(
++    service_result: Dict[str, Any],
++    service_application: Dict[str, Any] | None = None,
++    *,
++    tick: int = 0,
++) -> Dict[str, Any]:
++    service_result = _safe_dict(service_result)
++    service_application = _safe_dict(service_application)
++    if not service_result.get("matched"):
++        return {}
++
++    provider_id = _safe_str(service_result.get("provider_id"))
++    provider_name = _safe_str(service_result.get("provider_name"))
++    service_kind = _safe_str(service_result.get("service_kind"))
++    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
++    kind = _memory_kind(service_result, service_application)
++    purchase = _safe_dict(service_result.get("purchase"))
++    blocked_reason = _safe_str(
++        service_application.get("blocked_reason")
++        or purchase.get("blocked_reason")
++    )
++
++    memory_id = (
++        f"memory:service:{tick}:{provider_id or 'provider'}:"
++        f"{kind}:{selected_offer_id or service_kind or 'service'}"
++    )
++
++    return {
++        "memory_id": memory_id,
++        "kind": kind,
++        "owner_id": provider_id,
++        "owner_name": provider_name,
++        "subject_id": "player",
++        "service_kind": service_kind,
++        "offer_id": selected_offer_id,
++        "summary": _summary_for_memory(service_result, service_application, kind),
++        "sentiment": _sentiment_for_memory(kind, blocked_reason),
++        "importance": _importance_for_memory(kind),
++        "blocked_reason": blocked_reason,
++        "tick": int(tick or 0),
++        "source": "deterministic_service_runtime",
++    }
++
++
++def append_service_memory(
++    simulation_state: Dict[str, Any],
++    service_result: Dict[str, Any],
++    service_application: Dict[str, Any] | None = None,
++    *,
++    tick: int = 0,
++) -> Dict[str, Any]:
++    entry = build_service_memory_entry(
++        service_result,
++        service_application,
++        tick=tick,
++    )
++    if not entry:
++        return {}
++
++    memory_state = _ensure_memory_state(simulation_state)
++    service_memories = _safe_list(memory_state.get("service_memories"))
++    appended = _append_bounded_unique(
++        service_memories,
++        entry,
++        max_entries=MAX_SERVICE_MEMORIES,
++    )
++
++    owner_id = _safe_str(entry.get("owner_id"))
++    if owner_id:
++        npc_memories = _safe_dict(memory_state.get("npc_memories"))
++        owner_entries = npc_memories.get(owner_id)
++        if not isinstance(owner_entries, list):
++            owner_entries = []
++            npc_memories[owner_id] = owner_entries
++        _append_bounded_unique(
++            owner_entries,
++            entry,
++            max_entries=MAX_NPC_SERVICE_MEMORIES,
++        )
++
++    return appended
+PATCH 2 — Add service relationship/emotion effects
+File: src/app/rpg/memory/service_social_effects.py
+
+Create this file:
+
+diff --git a/src/app/rpg/memory/service_social_effects.py b/src/app/rpg/memory/service_social_effects.py
+new file mode 100644
+index 0000000..6d77859
+--- /dev/null
++++ b/src/app/rpg/memory/service_social_effects.py
+@@ -0,0 +1,192 @@
++from __future__ import annotations
++
++from copy import deepcopy
++from typing import Any, Dict
++
++
++def _safe_str(value: Any) -> str:
++    return "" if value is None else str(value)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++def _clamp(value: float, low: float, high: float) -> float:
++    return max(low, min(high, value))
++
++
++def _round(value: float) -> float:
++    return round(float(value), 3)
++
++
++def _relationship_key(owner_id: str, subject_id: str = "player") -> str:
++    return f"{owner_id}::{subject_id}"
++
++
++def _ensure_relationship_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    state = _safe_dict(simulation_state)
++    relationships = state.get("relationship_state")
++    if not isinstance(relationships, dict):
++        relationships = {}
++        state["relationship_state"] = relationships
++    return relationships
++
++
++def _ensure_emotion_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    state = _safe_dict(simulation_state)
++    emotion_state = state.get("npc_emotion_state")
++    if not isinstance(emotion_state, dict):
++        emotion_state = {}
++        state["npc_emotion_state"] = emotion_state
++    return emotion_state
++
++
++def _effect_profile(service_result: Dict[str, Any], service_application: Dict[str, Any]) -> Dict[str, float]:
++    kind = _safe_str(service_result.get("kind"))
++    status = _safe_str(service_result.get("status"))
++    purchase = _safe_dict(service_result.get("purchase"))
++    blocked_reason = _safe_str(
++        service_application.get("blocked_reason")
++        or purchase.get("blocked_reason")
++    )
++    applied = bool(
++        service_application.get("applied")
++        or purchase.get("applied")
++        or status == "purchased"
++    )
++
++    if kind == "service_inquiry":
++        return {
++            "familiarity": 0.25,
++            "trust": 0.0,
++            "annoyance": 0.0,
++            "valence": 0.02,
++            "arousal": 0.03,
++        }
++
++    if kind == "service_purchase" and applied:
++        return {
++            "familiarity": 1.0,
++            "trust": 0.25,
++            "annoyance": -0.1,
++            "valence": 0.1,
++            "arousal": 0.05,
++        }
++
++    if kind == "service_purchase" and blocked_reason == "insufficient_funds":
++        return {
++            "familiarity": 0.25,
++            "trust": 0.0,
++            "annoyance": 0.25,
++            "valence": -0.1,
++            "arousal": 0.18,
++        }
++
++    if kind == "service_purchase":
++        return {
++            "familiarity": 0.1,
++            "trust": 0.0,
++            "annoyance": 0.1,
++            "valence": -0.04,
++            "arousal": 0.1,
++        }
++
++    return {
++        "familiarity": 0.0,
++        "trust": 0.0,
++        "annoyance": 0.0,
++        "valence": 0.0,
++        "arousal": 0.0,
++    }
++
++
++def _dominant_emotion(valence: float, arousal: float, annoyance: float) -> str:
++    if annoyance >= 0.75:
++        return "annoyed"
++    if annoyance >= 0.25:
++        return "mildly_annoyed"
++    if valence >= 0.2:
++        return "pleased"
++    if valence <= -0.2:
++        return "displeased"
++    if arousal >= 0.4:
++        return "alert"
++    return "neutral"
++
++
++def apply_service_social_effects(
++    simulation_state: Dict[str, Any],
++    service_result: Dict[str, Any],
++    service_application: Dict[str, Any] | None = None,
++    *,
++    tick: int = 0,
++) -> Dict[str, Any]:
++    service_result = _safe_dict(service_result)
++    service_application = _safe_dict(service_application)
++    if not service_result.get("matched"):
++        return {}
++
++    owner_id = _safe_str(service_result.get("provider_id"))
++    owner_name = _safe_str(service_result.get("provider_name"))
++    if not owner_id:
++        return {}
++
++    profile = _effect_profile(service_result, service_application)
++    relationships = _ensure_relationship_state(simulation_state)
++    key = _relationship_key(owner_id)
++    relationship = _safe_dict(relationships.get(key))
++    axes = _safe_dict(relationship.get("axes"))
++
++    before_axes = deepcopy(axes)
++    familiarity = _clamp(float(axes.get("familiarity") or 0.0) + profile["familiarity"], 0.0, 100.0)
++    trust = _clamp(float(axes.get("trust") or 0.0) + profile["trust"], -100.0, 100.0)
++    annoyance = _clamp(float(axes.get("annoyance") or 0.0) + profile["annoyance"], 0.0, 100.0)
++
++    axes["familiarity"] = _round(familiarity)
++    axes["trust"] = _round(trust)
++    axes["annoyance"] = _round(annoyance)
++
++    relationship = {
++        **relationship,
++        "owner_id": owner_id,
++        "owner_name": owner_name,
++        "subject_id": "player",
++        "axes": axes,
++        "updated_tick": int(tick or 0),
++        "source": "deterministic_service_runtime",
++    }
++    relationships[key] = relationship
++
++    emotion_state = _ensure_emotion_state(simulation_state)
++    emotion = _safe_dict(emotion_state.get(owner_id))
++    valence = _clamp(float(emotion.get("valence") or 0.0) + profile["valence"], -1.0, 1.0)
++    arousal = _clamp(float(emotion.get("arousal") or 0.0) + profile["arousal"], 0.0, 1.0)
++    dominant = _dominant_emotion(valence, arousal, annoyance)
++
++    emotion = {
++        **emotion,
++        "owner_id": owner_id,
++        "owner_name": owner_name,
++        "dominant_emotion": dominant,
++        "valence": _round(valence),
++        "arousal": _round(arousal),
++        "updated_tick": int(tick or 0),
++        "source": "deterministic_service_runtime",
++    }
++    emotion_state[owner_id] = emotion
++
++    return {
++        "relationship_key": key,
++        "relationship": deepcopy(relationship),
++        "emotion": deepcopy(emotion),
++        "deltas": {
++            "familiarity": profile["familiarity"],
++            "trust": profile["trust"],
++            "annoyance": profile["annoyance"],
++            "valence": profile["valence"],
++            "arousal": profile["arousal"],
++        },
++        "before_axes": before_axes,
++    }
+PATCH 3 — Add offer stock/availability runtime
+File: src/app/rpg/economy/service_stock.py
+
+Create this file:
+
+diff --git a/src/app/rpg/economy/service_stock.py b/src/app/rpg/economy/service_stock.py
+new file mode 100644
+index 0000000..ba30e31
+--- /dev/null
++++ b/src/app/rpg/economy/service_stock.py
+@@ -0,0 +1,230 @@
 +from __future__ import annotations
 +
 +from copy import deepcopy
@@ -47,368 +479,542 @@ index 0000000..3b1f5c7
 +        return default
 +
 +
-+def _selected_offer(service_result: Dict[str, Any]) -> Dict[str, Any]:
++def _current_location_id(simulation_state: Dict[str, Any]) -> str:
++    state = _safe_dict(simulation_state)
++    player_state = _safe_dict(state.get("player_state"))
++    return _safe_str(
++        state.get("location_id")
++        or state.get("current_location_id")
++        or player_state.get("location_id")
++        or player_state.get("current_location_id")
++    )
++
++
++def _provider_present(simulation_state: Dict[str, Any], provider_id: str, provider_name: str) -> bool:
++    state = _safe_dict(simulation_state)
++    present = (
++        state.get("present_npcs")
++        or state.get("present_actors")
++        or state.get("actors_present")
++    )
++    if not isinstance(present, list):
++        # Missing presence list means the starter/manual world does not track
++        # presence yet; do not make every service unavailable.
++        return True
++
++    provider_id_l = provider_id.lower()
++    provider_name_l = provider_name.lower()
++    for actor in present:
++        if isinstance(actor, str):
++            actor_l = actor.lower()
++            if actor_l in {provider_id_l, provider_name_l}:
++                return True
++            continue
++
++        actor = _safe_dict(actor)
++        actor_id = _safe_str(actor.get("id") or actor.get("actor_id") or actor.get("npc_id")).lower()
++        actor_name = _safe_str(actor.get("name") or actor.get("display_name")).lower()
++        if actor_id == provider_id_l or actor_name == provider_name_l:
++            return True
++
++    return False
++
++
++def _ensure_offer_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    state = _safe_dict(simulation_state)
++    service_offer_state = _safe_dict(state.get("service_offer_state"))
++    if not service_offer_state:
++        service_offer_state = {}
++        state["service_offer_state"] = service_offer_state
++
++    offers = service_offer_state.get("offers")
++    if not isinstance(offers, dict):
++        offers = {}
++        service_offer_state["offers"] = offers
++
++    return service_offer_state
++
++
++def _runtime_offer_record(
++    simulation_state: Dict[str, Any],
++    offer: Dict[str, Any],
++) -> Dict[str, Any]:
++    offer = _safe_dict(offer)
++    offer_id = _safe_str(offer.get("offer_id"))
++    service_offer_state = _ensure_offer_state(simulation_state)
++    offers = _safe_dict(service_offer_state.get("offers"))
++    record = _safe_dict(offers.get(offer_id))
++    if not record:
++        record = {}
++        offers[offer_id] = record
++
++    if "stock" in offer and "stock_remaining" not in record:
++        record["stock_remaining"] = max(0, _safe_int(offer.get("stock"), 0))
++        record["stock_initial"] = max(0, _safe_int(offer.get("stock"), 0))
++
++    return record
++
++
++def get_offer_runtime_state(
++    simulation_state: Dict[str, Any],
++    offer_id: str,
++) -> Dict[str, Any]:
++    service_offer_state = _safe_dict(_safe_dict(simulation_state).get("service_offer_state"))
++    offers = _safe_dict(service_offer_state.get("offers"))
++    return deepcopy(_safe_dict(offers.get(_safe_str(offer_id))))
++
++
++def annotate_offer_availability(
++    simulation_state: Dict[str, Any],
++    offer: Dict[str, Any],
++    *,
++    provider: Dict[str, Any] | None = None,
++) -> Dict[str, Any]:
++    offer = deepcopy(_safe_dict(offer))
++    provider = _safe_dict(provider)
++    rules = _safe_dict(offer.get("availability_rules"))
++    provider_id = _safe_str(provider.get("provider_id"))
++    provider_name = _safe_str(provider.get("provider_name"))
++
++    runtime_record = _runtime_offer_record(simulation_state, offer)
++    unavailable_reasons: List[str] = []
++
++    stock_remaining = None
++    if "stock" in offer or "stock_remaining" in runtime_record:
++        stock_remaining = max(0, _safe_int(runtime_record.get("stock_remaining"), _safe_int(offer.get("stock"), 0)))
++        offer["stock"] = max(0, _safe_int(offer.get("stock"), stock_remaining))
++        offer["stock_remaining"] = stock_remaining
++        if stock_remaining <= 0:
++            unavailable_reasons.append("out_of_stock")
++
++    required_location = _safe_str(rules.get("requires_location"))
++    current_location = _current_location_id(simulation_state)
++    if required_location and current_location and current_location != required_location:
++        unavailable_reasons.append("wrong_location")
++
++    if rules.get("requires_provider_present") is True:
++        if not _provider_present(simulation_state, provider_id, provider_name):
++            unavailable_reasons.append("provider_absent")
++
++    if unavailable_reasons:
++        offer["availability"] = "unavailable"
++        offer["unavailable_reason"] = unavailable_reasons[0]
++        offer["unavailable_reasons"] = unavailable_reasons
++    else:
++        offer["availability"] = _safe_str(offer.get("availability") or "available")
++        offer["unavailable_reason"] = ""
++        offer["unavailable_reasons"] = []
++
++    return offer
++
++
++def filter_available_offers(
++    simulation_state: Dict[str, Any],
++    offers: List[Dict[str, Any]],
++    *,
++    provider: Dict[str, Any] | None = None,
++) -> List[Dict[str, Any]]:
++    available: List[Dict[str, Any]] = []
++    for offer in _safe_list(offers):
++        annotated = annotate_offer_availability(
++            simulation_state,
++            _safe_dict(offer),
++            provider=provider,
++        )
++        if _safe_str(annotated.get("availability")) == "available":
++            available.append(annotated)
++    return available
++
++
++def apply_service_stock_purchase(
++    simulation_state: Dict[str, Any],
++    service_result: Dict[str, Any],
++    *,
++    tick: int = 0,
++) -> Dict[str, Any]:
++    service_result = _safe_dict(service_result)
 +    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
++    if not selected_offer_id:
++        return {}
++
++    selected_offer = {}
 +    for offer in _safe_list(service_result.get("offers")):
 +        offer = _safe_dict(offer)
 +        if _safe_str(offer.get("offer_id")) == selected_offer_id:
-+            return deepcopy(offer)
-+    return {}
++            selected_offer = offer
++            break
 +
-+
-+def _ensure_transaction_state(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    state = _safe_dict(simulation_state)
-+    transactions = state.get("transaction_history")
-+    if not isinstance(transactions, list):
-+        transactions = []
-+        state["transaction_history"] = transactions
-+    return transactions
-+
-+
-+def get_transaction_history(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    return deepcopy(_safe_list(_safe_dict(simulation_state).get("transaction_history")))
-+
-+
-+def build_service_transaction_record(
-+    *,
-+    service_result: Dict[str, Any],
-+    purchase_application: Dict[str, Any],
-+    tick: int,
-+) -> Dict[str, Any]:
-+    service_result = _safe_dict(service_result)
-+    purchase_application = _safe_dict(purchase_application)
-+    purchase = _safe_dict(service_result.get("purchase"))
-+    offer = _selected_offer(service_result)
-+
-+    provider_id = _safe_str(service_result.get("provider_id"))
-+    provider_name = _safe_str(service_result.get("provider_name"))
-+    offer_id = _safe_str(service_result.get("selected_offer_id") or offer.get("offer_id"))
-+    service_kind = _safe_str(service_result.get("service_kind"))
-+    blocked = bool(purchase_application.get("blocked") or purchase.get("blocked"))
-+    applied = bool(purchase_application.get("applied") or purchase.get("applied"))
-+
-+    kind = "service_purchase"
-+    if blocked:
-+        kind = "service_purchase_blocked"
-+
-+    transaction_id = f"txn:{tick}:{provider_id or 'provider'}:{offer_id or service_kind or 'service'}:{kind}"
-+
-+    return {
-+        "transaction_id": transaction_id,
-+        "kind": kind,
-+        "service_kind": service_kind,
-+        "provider_id": provider_id,
-+        "provider_name": provider_name,
-+        "offer_id": offer_id,
-+        "label": _safe_str(offer.get("label") or offer_id),
-+        "status": _safe_str(service_result.get("status")),
-+        "applied": applied,
-+        "blocked": blocked,
-+        "blocked_reason": _safe_str(
-+            purchase_application.get("blocked_reason")
-+            or purchase.get("blocked_reason")
-+        ),
-+        "currency_delta": deepcopy(
-+            _safe_dict(_safe_dict(purchase.get("resource_changes")).get("currency"))
-+        ),
-+        "currency_before": deepcopy(_safe_dict(purchase_application.get("currency_before"))),
-+        "currency_after": deepcopy(_safe_dict(purchase_application.get("currency_after"))),
-+        "items_added": deepcopy(_safe_list(purchase_application.get("items_added"))),
-+        "active_service": deepcopy(_safe_dict(purchase_application.get("active_service"))),
-+        "rumor_added": deepcopy(_safe_dict(purchase_application.get("rumor_added"))),
-+        "tick": _safe_int(tick, 0),
-+        "source": "deterministic_service_runtime",
-+    }
-+
-+
-+def append_service_transaction_record(
-+    simulation_state: Dict[str, Any],
-+    record: Dict[str, Any],
-+    *,
-+    max_records: int = 100,
-+) -> Dict[str, Any]:
-+    state = _safe_dict(simulation_state)
-+    transactions = _ensure_transaction_state(state)
-+    record = deepcopy(_safe_dict(record))
-+    if not record:
++    if not selected_offer or "stock" not in selected_offer:
 +        return {}
 +
-+    transaction_id = _safe_str(record.get("transaction_id"))
-+    if transaction_id:
-+        for existing in transactions:
-+            if _safe_str(_safe_dict(existing).get("transaction_id")) == transaction_id:
-+                return deepcopy(existing)
++    service_offer_state = _ensure_offer_state(simulation_state)
++    offers = _safe_dict(service_offer_state.get("offers"))
++    record = _safe_dict(offers.get(selected_offer_id))
++    if not record:
++        record = {}
++        offers[selected_offer_id] = record
 +
-+    transactions.append(record)
-+    if max_records > 0 and len(transactions) > max_records:
-+        del transactions[:-max_records]
-+    return deepcopy(record)
-PATCH 2 — Export transaction helpers
-File: src/app/rpg/economy/__init__.py
++    stock_initial = max(0, _safe_int(selected_offer.get("stock"), 0))
++    before = max(0, _safe_int(record.get("stock_remaining"), stock_initial))
++    after = max(0, before - 1)
++
++    record["stock_initial"] = max(0, _safe_int(record.get("stock_initial"), stock_initial))
++    record["stock_remaining"] = after
++    record["updated_tick"] = int(tick or 0)
++    record["provider_id"] = _safe_str(service_result.get("provider_id"))
++    record["provider_name"] = _safe_str(service_result.get("provider_name"))
++    record["service_kind"] = _safe_str(service_result.get("service_kind"))
++    record["offer_id"] = selected_offer_id
++    record["label"] = _safe_str(selected_offer.get("label") or selected_offer_id)
++
++    return {
++        "offer_id": selected_offer_id,
++        "provider_id": _safe_str(service_result.get("provider_id")),
++        "before": before,
++        "after": after,
++        "decrement": 1,
++        "exhausted": after <= 0,
++        "runtime_state": deepcopy(record),
++        "tick": int(tick or 0),
++    }
+PATCH 4 — Add service living-world coordinator
+File: src/app/rpg/session/service_living_world.py
 
-Add imports:
+Create this file:
 
-diff --git a/src/app/rpg/economy/__init__.py b/src/app/rpg/economy/__init__.py
---- a/src/app/rpg/economy/__init__.py
-+++ b/src/app/rpg/economy/__init__.py
+diff --git a/src/app/rpg/session/service_living_world.py b/src/app/rpg/session/service_living_world.py
+new file mode 100644
+index 0000000..d192819
+--- /dev/null
++++ b/src/app/rpg/session/service_living_world.py
+@@ -0,0 +1,90 @@
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from app.rpg.economy.service_stock import apply_service_stock_purchase
++from app.rpg.memory.service_memory import append_service_memory
++from app.rpg.memory.service_social_effects import apply_service_social_effects
++from app.rpg.session.state_normalization import _safe_dict, _safe_str
++
++
++def apply_service_living_world_effects(
++    simulation_state: Dict[str, Any],
++    service_result: Dict[str, Any],
++    service_application: Dict[str, Any] | None = None,
++    *,
++    tick: int = 0,
++) -> Dict[str, Any]:
++    service_result = _safe_dict(service_result)
++    service_application = _safe_dict(service_application)
++    if not service_result.get("matched"):
++        return {
++            "memory_entry": {},
++            "social_effects": {},
++            "stock_update": {},
++        }
++
++    stock_update = {}
++    if (
++        _safe_str(service_result.get("kind")) == "service_purchase"
++        and bool(service_application.get("applied"))
++    ):
++        stock_update = apply_service_stock_purchase(
++            simulation_state,
++            service_result,
++            tick=tick,
++        )
++
++    memory_entry = append_service_memory(
++        simulation_state,
++        service_result,
++        service_application,
++        tick=tick,
++    )
++    social_effects = apply_service_social_effects(
++        simulation_state,
++        service_result,
++        service_application,
++        tick=tick,
++    )
++
++    return {
++        "memory_entry": memory_entry,
++        "social_effects": social_effects,
++        "stock_update": stock_update,
++    }
+PATCH 5 — Add stock metadata to registered offers
+File: src/app/rpg/economy/service_registry.py
+
+Add stock and availability_rules to finite offers.
+
+diff --git a/src/app/rpg/economy/service_registry.py b/src/app/rpg/economy/service_registry.py
+--- a/src/app/rpg/economy/service_registry.py
++++ b/src/app/rpg/economy/service_registry.py
 @@
- from app.rpg.economy.service_resolver import (
-     resolve_service_intent,
-     resolve_service_turn,
+         {
+             "offer_id": "bran_lodging_common_cot",
+             "service_kind": SERVICE_KIND_LODGING,
+             "label": "Common room cot",
+             "description": "A simple cot in the common room for one night.",
+             "price": {"gold": 0, "silver": 5, "copper": 0},
++            "stock": 6,
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_tavern",
++            },
+             "availability": "available",
+             "effects": {
+                 "lodging_reserved": True,
+                 "rest_quality": "basic",
+                 "duration": "one_night",
+@@
+         {
+             "offer_id": "bran_lodging_private_room",
+             "service_kind": SERVICE_KIND_LODGING,
+             "label": "Private room",
+             "description": "A private room for one night.",
+             "price": {"gold": 1, "silver": 0, "copper": 0},
++            "stock": 1,
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_tavern",
++            },
+             "availability": "available",
+             "effects": {
+                 "lodging_reserved": True,
+                 "rest_quality": "good",
+                 "duration": "one_night",
+@@
+         {
+             "offer_id": "bran_meal_stew",
+             "service_kind": SERVICE_KIND_MEAL,
+             "label": "Hot stew",
+             "description": "A hot bowl of stew and bread.",
+             "price": {"gold": 0, "silver": 1, "copper": 5},
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_tavern",
++            },
+             "availability": "available",
+             "effects": {
+                 "meal_consumed": True,
+                 "morale": 1,
+             },
+@@
+         {
+             "offer_id": "bran_drink_ale",
+             "service_kind": SERVICE_KIND_DRINK,
+             "label": "Mug of ale",
+             "description": "A mug of local ale.",
+             "price": {"gold": 0, "silver": 0, "copper": 8},
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_tavern",
++            },
+             "availability": "available",
+             "effects": {
+                 "drink_consumed": True,
+             },
+@@
+         {
+             "offer_id": "bran_paid_rumor",
+             "service_kind": SERVICE_KIND_PAID_INFORMATION,
+             "label": "Local rumor",
+             "description": "A useful rumor from tavern gossip.",
+             "price": {"gold": 0, "silver": 2, "copper": 0},
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_tavern",
++            },
+             "availability": "available",
+             "effects": {
+                 "rumor_added": True,
+             },
+@@
+         {
+             "offer_id": "elara_torch",
+             "service_kind": SERVICE_KIND_SHOP_GOODS,
+             "label": "Torch",
+             "description": "A simple torch for dark places.",
+             "price": {"gold": 0, "silver": 1, "copper": 0},
++            "stock": 3,
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_market",
++            },
+             "availability": "available",
+             "effects": {
+                 "items_added": [
+                     {
+                         "item_id": "torch",
+@@
+         {
+             "offer_id": "elara_rope",
+             "service_kind": SERVICE_KIND_SHOP_GOODS,
+             "label": "Rope",
+             "description": "Fifty feet of sturdy hemp rope.",
+             "price": {"gold": 0, "silver": 3, "copper": 0},
++            "stock": 2,
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_market",
++            },
+             "availability": "available",
+             "effects": {
+                 "items_added": [
+                     {
+                         "item_id": "rope",
+@@
+         {
+             "offer_id": "elara_paid_information",
+             "service_kind": SERVICE_KIND_PAID_INFORMATION,
+             "label": "Market rumor",
+             "description": "A rumor about market activity.",
+             "price": {"gold": 0, "silver": 1, "copper": 0},
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_market",
++            },
+             "availability": "available",
+             "effects": {
+                 "rumor_added": True,
+             },
+@@
+         {
+             "offer_id": "elara_basic_repair",
+             "service_kind": SERVICE_KIND_REPAIR,
+             "label": "Basic gear repair",
+             "description": "Minor repair work on worn equipment.",
+             "price": {"gold": 0, "silver": 4, "copper": 0},
++            "availability_rules": {
++                "requires_provider_present": True,
++                "requires_location": "loc_market",
++            },
+             "availability": "available",
+             "effects": {
+                 "repair_quality": "basic",
+             },
+PATCH 6 — Resolver filters unavailable / out-of-stock offers
+File: src/app/rpg/economy/service_resolver.py
+1. Add imports
+diff --git a/src/app/rpg/economy/service_resolver.py b/src/app/rpg/economy/service_resolver.py
+--- a/src/app/rpg/economy/service_resolver.py
++++ b/src/app/rpg/economy/service_resolver.py
+@@
+ from app.rpg.economy.service_registry import (
+@@
+     find_provider_by_text,
++    get_service_provider,
+     get_provider_offers,
  )
- from app.rpg.economy.service_registry import get_provider_offers, get_service_provider
-+from app.rpg.economy.service_transactions import (
-+    append_service_transaction_record,
-+    build_service_transaction_record,
-+    get_transaction_history,
-+)
-PATCH 3 — Add transaction audit log to service effects
-File: src/app/rpg/economy/service_effects.py
-1. Add import
-diff --git a/src/app/rpg/economy/service_effects.py b/src/app/rpg/economy/service_effects.py
---- a/src/app/rpg/economy/service_effects.py
-+++ b/src/app/rpg/economy/service_effects.py
-@@
- from app.rpg.economy.currency import (
-     apply_currency_delta,
-     get_player_currency,
-     set_player_currency,
- )
-+from app.rpg.economy.service_transactions import (
-+    append_service_transaction_record,
-+    build_service_transaction_record,
-+)
-2. Add a default transaction field to non-service/no-purchase returns
++from app.rpg.economy.service_stock import filter_available_offers
 
-In apply_service_purchase_result(...), every returned dict should include:
+If get_service_provider already exists in the import list, only add filter_available_offers.
 
-"transaction_record": {},
+2. Filter offers by deterministic availability
 
-Add it to the not_service and no purchase return blocks:
+Find:
 
-@@
-         return {
-             "simulation_state": state,
-             "service_result": service_result,
-             "applied": False,
-             "blocked": False,
-             "blocked_reason": "not_service",
-             "currency_before": get_player_currency(state),
-             "currency_after": get_player_currency(state),
-             "items_added": [],
-             "active_service": {},
-             "rumor_added": {},
-+            "transaction_record": {},
-         }
-@@
-         return {
-             "simulation_state": state,
-             "service_result": service_result,
-             "applied": False,
-             "blocked": False,
-             "blocked_reason": "",
-             "currency_before": get_player_currency(state),
-             "currency_after": get_player_currency(state),
-             "items_added": [],
-             "active_service": {},
-             "rumor_added": {},
-+            "transaction_record": {},
-         }
-3. Add blocked transaction record
-
-Find the blocked-purchase return block:
-
-    if purchase.get("blocked"):
-        purchase["applied"] = False
-        service_result["purchase"] = purchase
-        service_result["status"] = "blocked"
-        return {
+    offers = get_provider_offers(provider_id, service_kind)
 
 Replace with:
 
 @@
-     if purchase.get("blocked"):
-         purchase["applied"] = False
-         service_result["purchase"] = purchase
-         service_result["status"] = "blocked"
-+
-+        purchase_application = {
-+            "applied": False,
-+            "blocked": True,
-+            "blocked_reason": _safe_str(purchase.get("blocked_reason") or "blocked"),
-+            "currency_before": get_player_currency(state),
-+            "currency_after": get_player_currency(state),
-+            "items_added": [],
-+            "active_service": {},
-+            "rumor_added": {},
-+        }
-+        transaction_record = build_service_transaction_record(
-+            service_result=service_result,
-+            purchase_application=purchase_application,
-+            tick=tick,
-+        )
-+        append_service_transaction_record(state, transaction_record)
-+
-         return {
-             "simulation_state": state,
-             "service_result": service_result,
-             "applied": False,
-             "blocked": True,
-             "blocked_reason": _safe_str(purchase.get("blocked_reason") or "blocked"),
-             "currency_before": get_player_currency(state),
-             "currency_after": get_player_currency(state),
-             "items_added": [],
-             "active_service": {},
-             "rumor_added": {},
-+            "transaction_record": transaction_record,
-         }
-4. Add successful transaction record
-
-Find the final success return block:
-
-    return {
-        "simulation_state": state,
-        "service_result": service_result,
-        "applied": True,
-
-Immediately before it, insert:
-
-@@
-     purchase["applied_effects"] = {
-         "currency_changed": currency_before != currency_after,
-         "items_added": added_items,
-         "active_service": active_service,
-         "rumor_added": rumor_added,
-     }
-     service_result["purchase"] = purchase
-     service_result["status"] = "purchased"
-+
-+    purchase_application = {
-+        "applied": True,
-+        "blocked": False,
-+        "blocked_reason": "",
-+        "currency_before": currency_before,
-+        "currency_after": currency_after,
-+        "items_added": added_items,
-+        "active_service": active_service,
-+        "rumor_added": rumor_added,
-+    }
-+    transaction_record = build_service_transaction_record(
-+        service_result=service_result,
-+        purchase_application=purchase_application,
-+        tick=tick,
+-    offers = get_provider_offers(provider_id, service_kind)
++    provider = get_service_provider(provider_id)
++    offers = filter_available_offers(
++        simulation_state,
++        get_provider_offers(provider_id, service_kind),
++        provider=provider,
 +    )
-+    append_service_transaction_record(state, transaction_record)
- 
-     return {
-         "simulation_state": state,
-         "service_result": service_result,
-         "applied": True,
+3. Preserve unavailable status when stock is exhausted
+
+No extra purchase logic is required. Once an offer is filtered out, a purchase request for that depleted offer naturally becomes:
+
+purchase_offer_not_found
+
+and inquiry available actions exclude it.
+
+PATCH 7 — Apply living-world effects from service runtime
+File: src/app/rpg/session/service_runtime.py
+1. Add import
+diff --git a/src/app/rpg/session/service_runtime.py b/src/app/rpg/session/service_runtime.py
+--- a/src/app/rpg/session/service_runtime.py
++++ b/src/app/rpg/session/service_runtime.py
 @@
-         "currency_after": currency_after,
-         "items_added": added_items,
-         "active_service": active_service,
-         "rumor_added": rumor_added,
-+        "transaction_record": transaction_record,
-     }
-PATCH 4 — Runtime: primary contract cleanup + semantic alignment + transaction passthrough
-File: src/app/rpg/session/runtime.py
-1. Add semantic helper near _service_action_from_result(...)
+ from app.rpg.economy.service_effects import apply_service_purchase_result
++from app.rpg.session.service_living_world import apply_service_living_world_effects
+ from app.rpg.session.state_normalization import _safe_dict, _safe_int, _safe_list, _safe_str
+2. Add default living-world fields
 
-Add after _service_action_from_result(...):
+Find the default purchase_application dict in service_authoritative_result(...):
 
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@
- def _service_action_from_result(
-     player_input: str,
-     action: Dict[str, Any],
-     service_result: Dict[str, Any],
- ) -> Dict[str, Any]:
-@@
-     service_action["metadata"] = metadata
-     return service_action
-+
-+
-+def _service_semantic_action_from_result(
-+    player_input: str,
-+    service_result: Dict[str, Any],
-+    *,
-+    tick: int = 0,
-+    existing: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    existing = _safe_dict(existing)
-+    service_result = _safe_dict(service_result)
-+    if not service_result.get("matched"):
-+        return existing
-+
-+    service_kind = _safe_str(service_result.get("service_kind"))
-+    action_type = _safe_str(service_result.get("kind") or "service_inquiry")
-+    provider_id = _safe_str(service_result.get("provider_id"))
-+    provider_name = _safe_str(service_result.get("provider_name"))
-+    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-+
-+    if action_type == "service_purchase":
-+        activity_label = f"{service_kind}_purchase" if service_kind else "service_purchase"
-+    else:
-+        activity_label = f"{service_kind}_inquiry" if service_kind else "service_inquiry"
-+
-+    semantic_id = _safe_str(existing.get("semantic_action_id"))
-+    if not semantic_id:
-+        semantic_id = f"semantic_service_{abs(hash((_safe_str(player_input), provider_id, service_kind, tick))) & 0xffffffff:x}"
-+
-+    return {
-+        **existing,
-+        "semantic_action_id": semantic_id,
-+        "tick": _safe_int(existing.get("tick"), tick),
-+        "player_input": _safe_str(player_input),
-+        "action_type": action_type,
-+        "semantic_family": "commerce",
-+        "interaction_mode": "solo",
-+        "activity_label": activity_label,
-+        "target_id": provider_id,
-+        "target_name": provider_name,
-+        "secondary_actor_ids": [],
-+        "location_id": _safe_str(service_result.get("location_id")),
-+        "visibility": "local",
-+        "intensity": 1,
-+        "stakes": 1,
-+        "social_axes": [],
-+        "observer_hooks": [],
-+        "scene_impact": "none",
-+        "reason": _safe_str(service_result.get("status")),
-+        "summary": f"{provider_name} / {activity_label}".strip(" /"),
-+        "tags": [
-+            "commerce",
-+            service_kind,
-+            action_type,
-+            "player_action",
-+        ],
-+        "service_result": service_result,
-+        "selected_offer_id": selected_offer_id,
-+    }
-2. Add transaction record to _service_authoritative_result(...)
+    purchase_application = {
+        "applied": False,
+        "blocked": bool(purchase.get("blocked")) if purchase else False,
+        ...
+        "transaction_record": {},
+    }
 
-Find the default purchase_application dict:
-
-        "rumor_added": {},
-
-Add:
+Replace with:
 
 @@
+     purchase_application = {
+         "applied": False,
+         "blocked": bool(purchase.get("blocked")) if purchase else False,
+         "blocked_reason": _safe_str(purchase.get("blocked_reason")) if purchase and purchase.get("blocked") else "",
+         "currency_before": {},
+         "currency_after": {},
          "items_added": [],
          "active_service": {},
          "rumor_added": {},
-+        "transaction_record": {},
+         "transaction_record": {},
++        "memory_entry": {},
++        "social_effects": {},
++        "stock_update": {},
      }
+3. Apply living-world effects after purchase/no-purchase resolution
 
-Find service_application in the result dict:
+Find this block after purchase application:
+
+    blocked = bool(purchase_application.get("blocked"))
+    blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
+    applied = bool(purchase_application.get("applied"))
+
+Insert immediately before it:
+
+@@
++    if service_result.get("matched"):
++        living_world = apply_service_living_world_effects(
++            simulation_state,
++            service_result,
++            purchase_application,
++            tick=tick,
++        )
++        purchase_application["memory_entry"] = living_world.get("memory_entry") or {}
++        purchase_application["social_effects"] = living_world.get("social_effects") or {}
++        purchase_application["stock_update"] = living_world.get("stock_update") or {}
++
+     blocked = bool(purchase_application.get("blocked"))
+
+This makes service inquiries create memory/social effects, and completed purchases also update stock.
+
+4. Include living-world fields in result
+
+Find:
 
         "service_application": {
             "applied": applied,
+            "currency_before": purchase_application.get("currency_before") or {},
+            "currency_after": purchase_application.get("currency_after") or {},
+            "items_added": purchase_application.get("items_added") or [],
+            "active_service": purchase_application.get("active_service") or {},
+            "rumor_added": purchase_application.get("rumor_added") or {},
+            "transaction_record": purchase_application.get("transaction_record") or {},
+        },
 
-Add:
+Replace with:
 
 @@
          "service_application": {
@@ -418,724 +1024,383 @@ Add:
              "items_added": purchase_application.get("items_added") or [],
              "active_service": purchase_application.get("active_service") or {},
              "rumor_added": purchase_application.get("rumor_added") or {},
-+            "transaction_record": purchase_application.get("transaction_record") or {},
+             "transaction_record": purchase_application.get("transaction_record") or {},
++            "memory_entry": purchase_application.get("memory_entry") or {},
++            "social_effects": purchase_application.get("social_effects") or {},
++            "stock_update": purchase_application.get("stock_update") or {},
          },
-
-Also add top-level convenience field:
-
-@@
-         "service_application": {
-@@
-         },
-+        "transaction_record": purchase_application.get("transaction_record") or {},
-3. Align semantic action after service resolution
-
-Find the block where semantic_action_record is attached:
-
-    action_metadata = _safe_dict(action.get("metadata"))
-    action_metadata["semantic_action"] = semantic_action_record
-    action["metadata"] = action_metadata
-
-Immediately after the later service_after_semantic block that re-applies service intent, add:
-
-@@
-     if service_after_semantic.get("matched"):
-         action = _service_action_from_result(player_input, action, service_after_semantic)
-         action_type = _safe_str(action.get("action_type")).strip()
-+        semantic_action_record = _service_semantic_action_from_result(
-+            player_input,
-+            service_after_semantic,
-+            tick=_safe_int(current_tick, 0),
-+            existing=semantic_action_record,
-+        )
-+        action_metadata = _safe_dict(action.get("metadata"))
-+        action_metadata["semantic_action"] = semantic_action_record
-+        action["metadata"] = action_metadata
-
-If your file does not have the exact service_after_semantic block, add the same semantic override immediately after the last place where service_result.get("matched") changes action_type to service_inquiry or service_purchase.
-
-4. Preserve applied transaction result in service mirroring blocks
-
-You should already have this pattern in both service mirroring blocks:
-
-resolved_service_result = _safe_dict(resolved_result.get("service_result")) or service_metadata_result
-
-In both blocks, after:
-
-resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
-
-add:
-
-@@
-         resolved_result["target_name"] = _safe_str(resolved_service_result.get("provider_name"))
-+        resolved_result["semantic_action"] = semantic_action_record
-
-This keeps the final resolved result aligned with service semantic action.
-
-5. Primary contract cleanup: keep primary contract when build succeeds
-
-Find this block:
-
-        resolved_result = _safe_dict(turn_contract.get("resolved_action") or resolved_result)
-        after_action_state = apply_state_delta(
-
-Replace with:
-
-@@
--        resolved_result = _safe_dict(turn_contract.get("resolved_action") or resolved_result)
-+        contract_resolved = _safe_dict(turn_contract.get("resolved_action") or resolved_result)
-+        # Preserve authoritative runtime fields that are not created by the generic
-+        # turn contract builder, especially service purchase applications.
-+        for key in (
-+            "service_application",
-+            "transaction_record",
-+            "purchase_applied",
-+            "effect_result",
-+            "resource_changes",
-+            "blocked",
-+            "blocked_reason",
-+            "semantic_action",
-+        ):
-+            if key in resolved_result and key not in contract_resolved:
-+                contract_resolved[key] = resolved_result[key]
-+
-+        if _safe_dict(resolved_result.get("service_result")).get("matched"):
-+            contract_resolved["service_result"] = _safe_dict(resolved_result.get("service_result"))
-+
-+        resolved_result = contract_resolved
-         after_action_state = apply_state_delta(
-6. Ensure primary contract gets semantic action
-
-After the build_turn_contract(...) call and before runtime_state["last_turn_contract"] = turn_contract, add:
-
-@@
-         turn_contract = build_turn_contract(
-             player_input=player_input,
-             action=action,
-             resolved_action=resolved_result,
-             simulation_state_before=before_state_for_contract,
-             simulation_state_after=after_action_state,
-             runtime_state=runtime_state,
-         )
-+        if turn_contract:
-+            turn_contract["semantic_action"] = semantic_action_record
-+            resolved_for_contract = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+            resolved_for_contract["semantic_action"] = semantic_action_record
-+            turn_contract["resolved_result"] = resolved_for_contract
-+            turn_contract["resolved_action"] = resolved_for_contract
-         contract_resolved = _safe_dict(turn_contract.get("resolved_action") or resolved_result)
-7. Fallback contract should report primary version
-
-Find fallback contract construction:
-
-        turn_contract = {
-            "version": "fallback_turn_contract_v1",
-
-Replace with:
-
-@@
-         turn_contract = {
--            "version": "fallback_turn_contract_v1",
-+            "version": "turn_contract_v1",
-+            "contract_source": "runtime_fallback_bridge",
-
-This preserves truth in contract_source, but stops downstream tooling from treating service turns as a legacy contract.
-
-PATCH 5 — Turn contract: normalize service action + semantic passthrough
-File: src/app/rpg/session/turn_contract.py
-
-Your current build_turn_contract(...) already creates turn_contract_v1, attaches service_result, and emits presentation.available_actions.
-
-1. Add service action normalizer if not already present
-
-Add above build_turn_contract(...):
-
-diff --git a/src/app/rpg/session/turn_contract.py b/src/app/rpg/session/turn_contract.py
---- a/src/app/rpg/session/turn_contract.py
-+++ b/src/app/rpg/session/turn_contract.py
-@@
-+def normalize_service_action_contract(
-+    action: Dict[str, Any],
-+    resolved_action: Dict[str, Any],
-+    service_result: Dict[str, Any],
-+) -> tuple[Dict[str, Any], Dict[str, Any]]:
-+    action = dict(safe_dict(action))
-+    resolved_action = dict(safe_dict(resolved_action))
-+    service_result = safe_dict(service_result)
-+
-+    if not service_result.get("matched"):
-+        return action, resolved_action
-+
-+    service_action_type = safe_str(service_result.get("kind") or "service_inquiry")
-+    provider_id = safe_str(service_result.get("provider_id"))
-+    provider_name = safe_str(service_result.get("provider_name"))
-+    service_kind = safe_str(service_result.get("service_kind"))
-+
-+    action["action_type"] = service_action_type
-+    action["service_kind"] = service_kind
-+    action["target_id"] = provider_id
-+    action["target_name"] = provider_name
-+    action["provider_id"] = provider_id
-+    action["provider_name"] = provider_name
-+    action["source"] = "deterministic_service_resolver"
-+
-+    metadata = safe_dict(action.get("metadata"))
-+    metadata["service_result"] = service_result
-+    metadata["service_kind"] = service_kind
-+    metadata["service_status"] = safe_str(service_result.get("status"))
-+    action["metadata"] = metadata
-+
-+    resolved_action["action_type"] = service_action_type
-+    resolved_action["service_kind"] = service_kind
-+    resolved_action["target_id"] = provider_id
-+    resolved_action["target_name"] = provider_name
-+    resolved_action["service_result"] = service_result
-+
-+    action_metadata = safe_dict(resolved_action.get("action_metadata"))
-+    action_metadata["transaction_kind"] = service_action_type
-+    action_metadata["service_kind"] = service_kind
-+    action_metadata["provider_id"] = provider_id
-+    action_metadata["provider_name"] = provider_name
-+    action_metadata["price_source"] = (
-+        "deterministic_service_registry"
-+        if safe_list(service_result.get("offers"))
-+        else ""
-+    )
-+    resolved_action["action_metadata"] = action_metadata
-+
-+    return action, resolved_action
-
-If this helper already exists, skip this chunk.
-
-2. Call normalizer immediately after service resolution
-
-Find:
-
-    service_result = resolve_service_turn(
-        player_input=player_input,
-        action=action,
-        resolved_action=resolved_action,
-        simulation_state=simulation_state_before,
-        runtime_state=runtime_state,
-    )
-
-Add immediately after:
-
-@@
-     service_result = resolve_service_turn(
-         player_input=player_input,
-         action=action,
-         resolved_action=resolved_action,
-         simulation_state=simulation_state_before,
-         runtime_state=runtime_state,
-     )
-+    action, resolved_action = normalize_service_action_contract(
-+        action,
-+        resolved_action,
-+        service_result,
-+    )
-3. Preserve runtime service application fields in resolved contract
-
-Find:
-
-    resolved = supplement_generic_resolved_action(
-        resolved_for_contract,
-        interpreted,
-        narration_brief,
-    )
-
-Immediately after, add:
-
-@@
-     resolved = supplement_generic_resolved_action(
-         resolved_for_contract,
-         interpreted,
-         narration_brief,
-     )
-+    for key in (
-+        "service_application",
-+        "transaction_record",
-+        "purchase_applied",
-+        "effect_result",
-+        "resource_changes",
-+        "blocked",
-+        "blocked_reason",
-+        "semantic_action",
-+    ):
-+        if key in resolved_for_contract:
-+            resolved[key] = resolved_for_contract[key]
-+
-+    if service_result.get("matched"):
-+        resolved["service_result"] = safe_dict(resolved_for_contract.get("service_result") or service_result)
-4. Add action and semantic action to return object
-
-Find return object:
-
-    return {
-        "version": "turn_contract_v1",
-        "player_input": player_input,
-        "interpreted_action": interpreted,
-
-Replace with:
-
-@@
-     return {
-         "version": "turn_contract_v1",
-         "player_input": player_input,
-+        "action": action,
-         "interpreted_action": interpreted,
-         "resolved_action": resolved,
-         "resolved_result": resolved,
-         "service_result": service_result,
-+        "semantic_action": safe_dict(resolved.get("semantic_action")),
-         "state_delta": state_delta,
-PATCH 6 — UI service action buttons
-
-This assumes your active legacy UI uses src/static/rpg.js. If your current service rendering lives under src/static/rpg/*.js, apply the same functions there instead.
-
-File: src/static/rpg.js
-1. Add service action renderer helpers
-
-Add near other RPG render helpers:
-
-diff --git a/src/static/rpg.js b/src/static/rpg.js
---- a/src/static/rpg.js
-+++ b/src/static/rpg.js
-@@
-+function rpgServiceActionsFromPayload(payload) {
-+    payload = payload || {};
-+    var contract = payload.turn_contract || payload.contract || {};
-+    var presentation = payload.presentation || contract.presentation || {};
-+    var actions = presentation.available_actions || [];
-+
-+    if ((!actions || !actions.length) && payload.result && payload.result.presentation) {
-+        actions = payload.result.presentation.available_actions || [];
-+    }
-+
-+    if ((!actions || !actions.length) && payload.raw && payload.raw.presentation) {
-+        actions = payload.raw.presentation.available_actions || [];
-+    }
-+
-+    return Array.isArray(actions) ? actions : [];
-+}
-+
-+function renderRpgServiceActions(container, actions) {
-+    if (!container) return;
-+    actions = Array.isArray(actions) ? actions : [];
-+
-+    if (!actions.length) {
-+        container.innerHTML = '';
-+        container.style.display = 'none';
-+        return;
-+    }
-+
-+    container.style.display = '';
-+    container.innerHTML =
-+        '<div class="rpg-service-actions-title">Available actions</div>' +
-+        '<div class="rpg-service-actions-list">' +
-+        actions.map(function(action) {
-+            var label = String(action.label || action.command || action.action_id || 'Action');
-+            var command = String(action.command || '');
-+            var actionId = String(action.action_id || '');
-+            return (
-+                '<button type="button" class="rpg-service-action-btn" ' +
-+                'data-rpg-service-command="' + escapeHtml(command) + '" ' +
-+                'data-rpg-service-action-id="' + escapeHtml(actionId) + '">' +
-+                escapeHtml(label) +
-+                '</button>'
-+            );
-+        }).join('') +
-+        '</div>';
-+}
-+
-+function updateRpgServiceActionsFromPayload(payload) {
-+    var container =
-+        document.getElementById('rpg-service-actions') ||
-+        document.querySelector('[data-rpg-service-actions]');
-+    if (!container) return;
-+    renderRpgServiceActions(container, rpgServiceActionsFromPayload(payload || {}));
-+}
-+
-+document.addEventListener('click', function(event) {
-+    var button = event.target && event.target.closest
-+        ? event.target.closest('.rpg-service-action-btn')
-+        : null;
-+    if (!button) return;
-+
-+    var command = button.getAttribute('data-rpg-service-command') || '';
-+    if (!command) return;
-+
-+    event.preventDefault();
-+
-+    var input =
-+        document.getElementById('rpgInput') ||
-+        document.getElementById('rpg-input') ||
-+        document.querySelector('[data-rpg-input]');
-+
-+    if (input) {
-+        input.value = command;
-+        input.dispatchEvent(new Event('input', { bubbles: true }));
-+    }
-+
-+    if (typeof window.sendRpgCommand === 'function') {
-+        window.sendRpgCommand(command);
-+        return;
-+    }
-+
-+    var sendButton =
-+        document.getElementById('rpgSendBtn') ||
-+        document.getElementById('rpg-send-btn') ||
-+        document.querySelector('[data-rpg-send]');
-+
-+    if (sendButton) {
-+        sendButton.click();
-+    }
-+});
-
-If your file does not define escapeHtml(...), add this small helper before the renderer:
-
-function escapeHtml(value) {
-    return String(value == null ? '' : value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-2. Add service actions container if not present
-
-Find the RPG side/top panel HTML template, wherever panels are created.
-
-Add:
-
-<div id="rpg-service-actions" class="rpg-service-actions" data-rpg-service-actions style="display:none"></div>
-
-If your UI is pure JS-created, add it near the narrative controls or top panels:
-
-@@
-+    '<div id="rpg-service-actions" class="rpg-service-actions" data-rpg-service-actions style="display:none"></div>' +
-3. Hook renderer after turn response
-
-Find the code path that handles RPG turn response, usually after narration/result rendering.
-
-Add:
-
-@@
-+    updateRpgServiceActionsFromPayload(result || data || payload || {});
-
-Use the variable name available in that scope. If the handler receives data, use:
-
-updateRpgServiceActionsFromPayload(data);
-
-If it receives result, use:
-
-updateRpgServiceActionsFromPayload(result);
-4. Hook renderer after session/bootstrap load
-
-Find RPG session/bootstrap render completion and add:
-
-@@
-+    updateRpgServiceActionsFromPayload(data || session || {});
-5. Add minimal CSS
-
-If src/static/rpg.css exists, patch there. Otherwise add to the CSS block used by RPG.
-
-File: src/static/rpg.css
-diff --git a/src/static/rpg.css b/src/static/rpg.css
---- a/src/static/rpg.css
-+++ b/src/static/rpg.css
-@@
-+.rpg-service-actions {
-+    margin: 10px 0;
-+    padding: 10px;
-+    border: 1px solid rgba(255, 255, 255, 0.12);
-+    border-radius: 10px;
-+    background: rgba(0, 0, 0, 0.18);
-+}
-+
-+.rpg-service-actions-title {
-+    font-size: 0.85rem;
-+    font-weight: 700;
-+    opacity: 0.85;
-+    margin-bottom: 8px;
-+}
-+
-+.rpg-service-actions-list {
-+    display: flex;
-+    flex-wrap: wrap;
-+    gap: 8px;
-+}
-+
-+.rpg-service-action-btn {
-+    border: 1px solid rgba(255, 255, 255, 0.16);
-+    border-radius: 999px;
-+    padding: 6px 10px;
-+    background: rgba(255, 255, 255, 0.08);
-+    color: inherit;
-+    cursor: pointer;
-+}
-+
-+.rpg-service-action-btn:hover {
-+    background: rgba(255, 255, 255, 0.14);
-+}
-PATCH 7 — Manual transcript: print transaction audit log
+         "transaction_record": purchase_application.get("transaction_record") or {},
++        "memory_entry": purchase_application.get("memory_entry") or {},
++        "social_effects": purchase_application.get("social_effects") or {},
++        "stock_update": purchase_application.get("stock_update") or {},
+PATCH 8 — Manual transcript service status cleanup + new summary fields
 File: src/tests/rpg/manual_llm_transcript.py
+1. Add extract helpers
 
-Your current transcript script already supports --all and writes flat + scenario files.
-
-1. Add extract helper
-
-Add after _extract_memory_rumors(...):
+Add after _extract_transaction_history(...):
 
 diff --git a/src/tests/rpg/manual_llm_transcript.py b/src/tests/rpg/manual_llm_transcript.py
 --- a/src/tests/rpg/manual_llm_transcript.py
 +++ b/src/tests/rpg/manual_llm_transcript.py
 @@
- def _extract_memory_rumors(result: Dict[str, Any]) -> List[Any]:
-     simulation_state = _extract_simulation_state(result)
-     memory_state = _safe_dict(simulation_state.get("memory_state"))
-     return _safe_list(memory_state.get("rumors"))
+ def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
+@@
+     return history
 +
 +
-+def _extract_transaction_history(result: Dict[str, Any]) -> List[Any]:
++def _extract_service_memories(result: Dict[str, Any]) -> List[Any]:
 +    simulation_state = _extract_simulation_state(result)
-+    return _safe_list(simulation_state.get("transaction_history"))
-2. Include transaction in service debug
++    memory_state = _safe_dict(simulation_state.get("memory_state"))
++    return _safe_list(memory_state.get("service_memories"))
++
++
++def _extract_relationship_state(result: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _extract_simulation_state(result)
++    return _safe_dict(simulation_state.get("relationship_state"))
++
++
++def _extract_npc_emotion_state(result: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _extract_simulation_state(result)
++    return _safe_dict(simulation_state.get("npc_emotion_state"))
++
++
++def _extract_service_offer_state(result: Dict[str, Any]) -> Dict[str, Any]:
++    simulation_state = _extract_simulation_state(result)
++    return _safe_dict(simulation_state.get("service_offer_state"))
++
++
++def _effective_service_status(service_result: Dict[str, Any], service_application: Dict[str, Any]) -> str:
++    purchase = _safe_dict(service_result.get("purchase"))
++    if bool(service_application.get("applied") or purchase.get("applied")):
++        return "purchased"
++    return _safe_str(service_result.get("status"))
+2. Include living-world fields in _extract_service_debug(...)
 
-Find _extract_service_debug(...).
-
-Replace the service selection with resolved-first:
+Find return dict in _extract_service_debug(...) and add these fields:
 
 @@
- def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
-     contract = _extract_turn_contract(result)
--    service_result = _safe_dict(contract.get("service_result"))
-     resolved = _safe_dict(contract.get("resolved_result") or contract.get("resolved_action"))
-     resolved_service_result = _safe_dict(resolved.get("service_result"))
-+    service_result = _safe_dict(contract.get("service_result"))
-     presentation = _safe_dict(contract.get("presentation"))
- 
--    service = service_result or resolved_service_result
-+    service = resolved_service_result or service_result
-     purchase = _safe_dict(service.get("purchase"))
-     resource_changes = _safe_dict(purchase.get("resource_changes"))
--    effects = _safe_dict(purchase.get("effects"))
-+    applied_effects = _safe_dict(purchase.get("applied_effects"))
-+    effects = _safe_dict(purchase.get("effects"))
-+    service_application = _safe_dict(resolved.get("service_application"))
- 
-     return {
-         "service_result": service,
-         "available_actions": _safe_list(presentation.get("available_actions") or service.get("available_actions")),
-         "resource_changes": resource_changes,
-         "purchase": purchase,
--        "service_application": _safe_dict(
--            _safe_dict(contract.get("resolved_result") or contract.get("resolved_action")).get("service_application")
--        ),
-+        "service_application": service_application,
-+        "transaction_record": _safe_dict(
-+            resolved.get("transaction_record")
-+            or service_application.get("transaction_record")
+         "transaction_record": _safe_dict(
+             resolved.get("transaction_record")
+             or service_application.get("transaction_record")
+         ),
++        "memory_entry": _safe_dict(
++            resolved.get("memory_entry")
++            or service_application.get("memory_entry")
++        ),
++        "social_effects": _safe_dict(
++            resolved.get("social_effects")
++            or service_application.get("social_effects")
++        ),
++        "stock_update": _safe_dict(
++            resolved.get("stock_update")
++            or service_application.get("stock_update")
 +        ),
          "inventory_changes": {
--            "items_added": _safe_list(effects.get("items_added")),
--            "items_removed": _safe_list(effects.get("items_removed")),
-+            "items_added": _safe_list(applied_effects.get("items_added") or effects.get("items_added")),
-+            "items_removed": _safe_list(applied_effects.get("items_removed") or effects.get("items_removed")),
-         },
-     }
-3. Print transaction record/history per turn
+3. Fix compact summary status and add fields
 
-In _print_turn(...), after MEMORY RUMORS, add:
+In _compact_turn_summary(...), find:
+
+        "service_status": service_result.get("status"),
+
+Replace with:
 
 @@
-     _emit("MEMORY RUMORS:")
-     _emit(_compact_json(_extract_memory_rumors(result)))
-     _emit("")
-+    _emit("TRANSACTION RECORD:")
-+    _emit(_compact_json(service_debug.get("transaction_record")))
-+    _emit("")
-+    _emit("TRANSACTION HISTORY:")
-+    _emit(_compact_json(_extract_transaction_history(result)))
-+    _emit("")
+-        "service_status": service_result.get("status"),
++        "service_status": _effective_service_status(service_result, service_application),
 
-If your _print_turn(...) still uses print(...), use the equivalent print(...) calls. The current intended writer path uses _emit(...).
+Then after:
 
-4. Add transactions to scenario summary
-
-In run_service_scenarios(...), find scenario_results.append({ ... }).
+        "transaction_history_count": len(_extract_transaction_history(result)),
 
 Add:
 
 @@
-                     "memory_rumors": _extract_memory_rumors(result),
-+                    "transaction_record": service_debug.get("transaction_record"),
-+                    "transaction_history": _extract_transaction_history(result),
-                     "service_application": service_application,
-PATCH 8 — Tests: transaction audit log
-File: src/app/rpg/tests/test_service_purchase_runtime.py
+         "transaction_history_count": len(_extract_transaction_history(result)),
++        "memory_entry": service_debug.get("memory_entry"),
++        "service_memory_count": len(_extract_service_memories(result)),
++        "relationship_state": _extract_relationship_state(result),
++        "npc_emotion_state": _extract_npc_emotion_state(result),
++        "social_effects": service_debug.get("social_effects"),
++        "stock_update": service_debug.get("stock_update"),
++        "service_offer_state": _extract_service_offer_state(result),
+         "available_actions": service_debug.get("available_actions"),
+4. Print new fields in full turn files
 
-Add tests:
+In _print_turn(...), after TRANSACTION HISTORY, add:
 
-diff --git a/src/app/rpg/tests/test_service_purchase_runtime.py b/src/app/rpg/tests/test_service_purchase_runtime.py
---- a/src/app/rpg/tests/test_service_purchase_runtime.py
-+++ b/src/app/rpg/tests/test_service_purchase_runtime.py
 @@
- def test_apply_service_purchase_deducts_currency_for_lodging_and_adds_active_service():
-@@
-     assert applied["simulation_state"]["active_services"][0]["service_kind"] == "lodging"
-     assert applied["simulation_state"]["active_services"][0]["offer_id"] == "bran_lodging_common_cot"
-+    assert applied["transaction_record"]["kind"] == "service_purchase"
-+    assert applied["transaction_record"]["provider_id"] == "npc:Bran"
-+    assert applied["transaction_record"]["offer_id"] == "bran_lodging_common_cot"
-+    assert applied["simulation_state"]["transaction_history"][-1]["transaction_id"] == applied["transaction_record"]["transaction_id"]
-@@
- def test_apply_service_purchase_adds_shop_item():
-@@
-     assert inventory["last_loot"] == [
-         {
-             "item_id": "torch",
-             "name": "Torch",
-             "quantity": 1,
-         }
-     ]
-+    assert applied["transaction_record"]["kind"] == "service_purchase"
-+    assert applied["transaction_record"]["offer_id"] == "elara_torch"
-+    assert applied["transaction_record"]["items_added"][0]["item_id"] == "torch"
-@@
- def test_apply_service_purchase_blocks_without_mutation_when_insufficient_funds():
-@@
-     assert applied["simulation_state"]["player_state"]["inventory_state"]["items"] == []
-+    assert applied["transaction_record"]["kind"] == "service_purchase_blocked"
-+    assert applied["transaction_record"]["blocked_reason"] == "insufficient_funds"
-+    assert applied["simulation_state"]["transaction_history"][-1]["kind"] == "service_purchase_blocked"
-@@
- def test_service_authoritative_result_applies_purchase_runtime_effects():
-@@
-     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["items"][0]["item_id"] == "torch"
-+    assert result["transaction_record"]["offer_id"] == "elara_torch"
-+    assert result["service_application"]["transaction_record"]["offer_id"] == "elara_torch"
-PATCH 9 — Tests: contract + semantic alignment
-File: src/app/rpg/tests/test_turn_contract_services.py
+     _emit("TRANSACTION HISTORY:", channel=channel)
+     _emit(_compact_json(_extract_transaction_history(result)), channel=channel)
+     _emit("", channel=channel)
++    _emit("SERVICE MEMORIES:", channel=channel)
++    _emit(_compact_json(_extract_service_memories(result)), channel=channel)
++    _emit("", channel=channel)
++    _emit("RELATIONSHIP STATE:", channel=channel)
++    _emit(_compact_json(_extract_relationship_state(result)), channel=channel)
++    _emit("", channel=channel)
++    _emit("NPC EMOTION STATE:", channel=channel)
++    _emit(_compact_json(_extract_npc_emotion_state(result)), channel=channel)
++    _emit("", channel=channel)
++    _emit("SERVICE OFFER STATE:", channel=channel)
++    _emit(_compact_json(_extract_service_offer_state(result)), channel=channel)
++    _emit("", channel=channel)
+PATCH 9 — Tests for service living-world effects
+File: src/app/rpg/tests/test_service_living_world_effects.py
 
-Add/extend tests:
+Create this file:
 
-diff --git a/src/app/rpg/tests/test_turn_contract_services.py b/src/app/rpg/tests/test_turn_contract_services.py
---- a/src/app/rpg/tests/test_turn_contract_services.py
-+++ b/src/app/rpg/tests/test_turn_contract_services.py
-@@
- def test_turn_contract_normalizes_outer_action_for_service_turns():
-@@
-     assert contract["resolved_action"]["target_name"] == "Bran"
-     assert contract["resolved_action"].get("reason") != "unknown_item"
+diff --git a/src/app/rpg/tests/test_service_living_world_effects.py b/src/app/rpg/tests/test_service_living_world_effects.py
+new file mode 100644
+index 0000000..34fd77c
+--- /dev/null
++++ b/src/app/rpg/tests/test_service_living_world_effects.py
+@@ -0,0 +1,159 @@
++from app.rpg.economy.service_resolver import resolve_service_turn
++from app.rpg.session.service_runtime import (
++    service_action_from_result,
++    service_authoritative_result,
++)
 +
 +
-+def test_turn_contract_has_primary_version_for_service_turns():
-+    contract = build_turn_contract(
-+        player_input="I ask Bran for a room to rent",
-+        action={"action_type": "service_inquiry", "target_id": "npc:Bran", "target_name": "Bran"},
-+        resolved_action={"ok": True, "outcome": "success", "action_type": "service_inquiry"},
-+        simulation_state_before=_state_with_currency(),
-+        simulation_state_after=_state_with_currency(),
++def _state(currency=None):
++    return {
++        "tick": 12,
++        "location_id": "loc_market",
++        "present_npcs": [
++            {"id": "npc:Elara", "name": "Elara"},
++            {"id": "npc:Bran", "name": "Bran"},
++        ],
++        "player_state": {
++            "location_id": "loc_market",
++            "inventory_state": {
++                "currency": currency or {"gold": 0, "silver": 0, "copper": 0},
++                "items": [],
++                "equipment": {},
++                "last_loot": [],
++            }
++        },
++    }
++
++
++def _authoritative_for(player_input, state):
++    service_result = resolve_service_turn(
++        player_input=player_input,
++        action={},
++        resolved_action={},
++        simulation_state=state,
 +        runtime_state={},
 +    )
-+
-+    assert contract["version"] == "turn_contract_v1"
-+    assert contract["service_result"]["matched"] is True
-+    assert contract["presentation"]["available_actions"]
-+    assert contract["resolved_result"]["service_result"]["matched"] is True
-PATCH 10 — Tests: UI service action extraction
-
-If you have JS tests, add this there. If not, add a backend contract test that protects the UI-facing shape.
-
-File: src/app/rpg/tests/test_service_presentation_actions.py
-
-Create:
-
-diff --git a/src/app/rpg/tests/test_service_presentation_actions.py b/src/app/rpg/tests/test_service_presentation_actions.py
-new file mode 100644
-index 0000000..6b829fd
---- /dev/null
-+++ b/src/app/rpg/tests/test_service_presentation_actions.py
-@@ -0,0 +1,53 @@
-+from app.rpg.session.turn_contract import build_turn_contract
++    action = service_action_from_result(player_input, {}, service_result)
++    return service_authoritative_result(state, action)
 +
 +
-+def test_service_presentation_actions_are_ui_safe_commands():
-+    state = {
-+        "player_state": {
-+            "inventory_state": {
-+                "currency": {"gold": 1, "silver": 0, "copper": 0},
-+                "items": [],
++def test_service_inquiry_adds_memory_and_social_state_without_purchase():
++    state = _state({"gold": 0, "silver": 2, "copper": 0})
++
++    authoritative = _authoritative_for("I ask Elara what she sells", state)
++    result = authoritative["result"]
++    simulation_state = authoritative["simulation_state"]
++
++    assert result["action_type"] == "service_inquiry"
++    assert result["purchase_applied"] is False
++    assert result["service_application"]["memory_entry"]["kind"] == "service_inquiry"
++    assert result["service_application"]["social_effects"]["relationship_key"] == "npc:Elara::player"
++
++    memory_state = simulation_state["memory_state"]
++    assert memory_state["service_memories"][0]["kind"] == "service_inquiry"
++    assert memory_state["npc_memories"]["npc:Elara"][0]["owner_id"] == "npc:Elara"
++
++    relationship = simulation_state["relationship_state"]["npc:Elara::player"]
++    assert relationship["axes"]["familiarity"] > 0
++    assert simulation_state["npc_emotion_state"]["npc:Elara"]["dominant_emotion"]
++
++
++def test_successful_service_purchase_updates_memory_social_and_stock():
++    state = _state({"gold": 0, "silver": 2, "copper": 0})
++
++    authoritative = _authoritative_for("I buy a torch from Elara", state)
++    result = authoritative["result"]
++    simulation_state = authoritative["simulation_state"]
++
++    assert result["purchase_applied"] is True
++    assert result["service_result"]["status"] == "purchased"
++    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase"
++    assert result["service_application"]["social_effects"]["relationship"]["axes"]["trust"] > 0
++    assert result["service_application"]["stock_update"]["offer_id"] == "elara_torch"
++    assert result["service_application"]["stock_update"]["before"] == 3
++    assert result["service_application"]["stock_update"]["after"] == 2
++
++    assert simulation_state["service_offer_state"]["offers"]["elara_torch"]["stock_remaining"] == 2
++    assert simulation_state["memory_state"]["service_memories"][-1]["kind"] == "service_purchase"
++    assert simulation_state["relationship_state"]["npc:Elara::player"]["axes"]["familiarity"] >= 1
++    assert simulation_state["npc_emotion_state"]["npc:Elara"]["valence"] > 0
++
++
++def test_blocked_purchase_updates_memory_and_annoyance_but_does_not_decrement_stock():
++    state = _state({"gold": 0, "silver": 1, "copper": 0})
++
++    authoritative = _authoritative_for("I buy rope from Elara", state)
++    result = authoritative["result"]
++    simulation_state = authoritative["simulation_state"]
++
++    assert result["purchase_applied"] is False
++    assert result["blocked_reason"] == "insufficient_funds"
++    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase_blocked"
++    assert result["service_application"]["stock_update"] == {}
++
++    relationship = simulation_state["relationship_state"]["npc:Elara::player"]
++    assert relationship["axes"]["annoyance"] > 0
++    assert "elara_rope" not in simulation_state.get("service_offer_state", {}).get("offers", {})
++
++
++def test_stock_exhaustion_removes_offer_from_available_actions():
++    state = _state({"gold": 0, "silver": 5, "copper": 0})
++    state["service_offer_state"] = {
++        "offers": {
++            "elara_torch": {
++                "stock_remaining": 0,
++                "stock_initial": 1,
 +            }
 +        }
 +    }
 +
-+    contract = build_turn_contract(
-+        player_input="I ask Bran for a room to rent",
-+        action={"action_type": "service_inquiry", "target_id": "npc:Bran", "target_name": "Bran"},
-+        resolved_action={"ok": True, "outcome": "success", "action_type": "service_inquiry"},
-+        simulation_state_before=state,
-+        simulation_state_after=state,
++    result = resolve_service_turn(
++        player_input="I ask Elara what she sells",
++        action={},
++        resolved_action={},
++        simulation_state=state,
 +        runtime_state={},
 +    )
 +
-+    actions = contract["presentation"]["available_actions"]
++    offer_ids = {offer["offer_id"] for offer in result["offers"]}
++    action_ids = {action["offer_id"] for action in result["available_actions"]}
 +
-+    assert actions
-+    assert actions[0]["action_id"].startswith("service:purchase:")
-+    assert actions[0]["command"] == "I buy Common room cot from Bran"
-+    assert actions[0]["label"] == "Common room cot — 5 silver"
-+    assert actions[0]["provider_id"] == "npc:Bran"
-+    assert actions[0]["offer_id"] == "bran_lodging_common_cot"
-PATCH 11 — Manual transcript regression expectations
-File: src/app/rpg/tests/test_manual_transcript_modes.py
++    assert "elara_torch" not in offer_ids
++    assert "elara_torch" not in action_ids
++    assert "elara_rope" in offer_ids
+PATCH 10 — Extend existing purchase runtime tests
+File: src/app/rpg/tests/test_service_purchase_runtime.py
 
-Create a lightweight test for the transcript helpers if importing the manual script is safe:
+Add assertions to existing tests.
 
-diff --git a/src/app/rpg/tests/test_manual_transcript_modes.py b/src/app/rpg/tests/test_manual_transcript_modes.py
-new file mode 100644
-index 0000000..8794c9a
---- /dev/null
-+++ b/src/app/rpg/tests/test_manual_transcript_modes.py
-@@ -0,0 +1,39 @@
-+from tests.rpg import manual_llm_transcript as transcript
+1. In test_apply_service_purchase_deducts_currency_for_lodging_and_adds_active_service
+
+After transaction assertions, add:
+
+@@
+     assert applied["transaction_record"]["kind"] == "service_purchase"
+     assert applied["transaction_record"]["provider_id"] == "npc:Bran"
+     assert applied["transaction_record"]["offer_id"] == "bran_lodging_common_cot"
+     assert applied["simulation_state"]["transaction_history"][-1]["transaction_id"] == applied["transaction_record"]["transaction_id"]
+
+No change required here if those assertions already exist. Stock/social is applied from service_authoritative_result, not raw apply_service_purchase_result.
+
+2. In test_service_authoritative_result_applies_purchase_runtime_effects
+
+Add:
+
+@@
+     assert result["transaction_record"]["offer_id"] == "elara_torch"
+     assert result["service_application"]["transaction_record"]["offer_id"] == "elara_torch"
++    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase"
++    assert result["service_application"]["social_effects"]["relationship_key"] == "npc:Elara::player"
++    assert result["service_application"]["stock_update"]["offer_id"] == "elara_torch"
++    assert authoritative["simulation_state"]["service_offer_state"]["offers"]["elara_torch"]["stock_remaining"] == 2
+3. In test_service_authoritative_result_blocks_purchase_runtime_effects
+
+Add:
+
+@@
+     assert result["purchase_applied"] is False
+     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["currency"] == {
+         "gold": 0,
+         "silver": 1,
+         "copper": 0,
+     }
+     assert authoritative["simulation_state"]["player_state"]["inventory_state"]["items"] == []
++    assert result["service_application"]["memory_entry"]["kind"] == "service_purchase_blocked"
++    assert result["service_application"]["social_effects"]["relationship_key"] == "npc:Elara::player"
++    assert result["service_application"]["stock_update"] == {}
+PATCH 11 — Add stock tests to economy services
+File: src/app/rpg/tests/test_economy_services.py
+
+Add import:
+
+diff --git a/src/app/rpg/tests/test_economy_services.py b/src/app/rpg/tests/test_economy_services.py
+--- a/src/app/rpg/tests/test_economy_services.py
++++ b/src/app/rpg/tests/test_economy_services.py
+@@
+ from app.rpg.economy.service_registry import get_provider_offers
++from app.rpg.economy.service_stock import annotate_offer_availability, filter_available_offers
+
+Add tests near registry tests:
+
+@@
+ def test_service_registry_has_lodging_meal_info_and_goods():
+@@
+     assert any(offer["offer_id"] == "elara_torch" for offer in elara_goods)
 +
 +
-+def test_extract_service_debug_prefers_resolved_applied_service_result():
-+    result = {
-+        "session": {
-+            "runtime_state": {
-+                "last_turn_contract": {
-+                    "service_result": {
-+                        "matched": True,
-+                        "kind": "service_purchase",
-+                        "status": "purchase_ready",
-+                        "purchase": {"applied": False},
-+                    },
-+                    "resolved_result": {
-+                        "service_result": {
-+                            "matched": True,
-+                            "kind": "service_purchase",
-+                            "status": "purchased",
-+                            "purchase": {"applied": True},
-+                        },
-+                        "service_application": {
-+                            "applied": True,
-+                            "transaction_record": {"transaction_id": "txn:test"},
-+                        },
-+                    },
-+                    "presentation": {},
++def test_service_stock_annotates_out_of_stock_offer():
++    offer = {
++        "offer_id": "test_offer",
++        "label": "Test Offer",
++        "stock": 1,
++        "availability": "available",
++    }
++    state = {
++        "service_offer_state": {
++            "offers": {
++                "test_offer": {
++                    "stock_remaining": 0,
++                    "stock_initial": 1,
 +                }
 +            }
 +        }
 +    }
 +
-+    debug = transcript._extract_service_debug(result)
++    annotated = annotate_offer_availability(state, offer)
 +
-+    assert debug["service_result"]["status"] == "purchased"
-+    assert debug["purchase"]["applied"] is True
-+    assert debug["service_application"]["applied"] is True
-+    assert debug["transaction_record"]["transaction_id"] == "txn:test"
++    assert annotated["availability"] == "unavailable"
++    assert annotated["unavailable_reason"] == "out_of_stock"
++    assert annotated["stock_remaining"] == 0
++
++
++def test_service_stock_filters_unavailable_offer():
++    state = {
++        "service_offer_state": {
++            "offers": {
++                "elara_torch": {
++                    "stock_remaining": 0,
++                    "stock_initial": 1,
++                }
++            }
++        }
++    }
++    offers = get_provider_offers("npc:Elara", "shop_goods")
++
++    filtered = filter_available_offers(
++        state,
++        offers,
++        provider={
++            "provider_id": "npc:Elara",
++            "provider_name": "Elara",
++            "location_id": "loc_market",
++        },
++    )
++
++    assert not any(offer["offer_id"] == "elara_torch" for offer in filtered)
++    assert any(offer["offer_id"] == "elara_rope" for offer in filtered)
+PATCH 12 — Optional: update memory package exports
+File: src/app/rpg/memory/__init__.py
 
-If import path fails because src/tests is not a package, skip this file and rely on the manual --all run.
+Add exports if this package is used elsewhere.
+
+diff --git a/src/app/rpg/memory/__init__.py b/src/app/rpg/memory/__init__.py
+--- a/src/app/rpg/memory/__init__.py
++++ b/src/app/rpg/memory/__init__.py
+@@
++from app.rpg.memory.service_memory import append_service_memory, build_service_memory_entry
++from app.rpg.memory.service_social_effects import apply_service_social_effects
+
+If __init__.py has strict curated exports or this causes import cycles, skip this patch. The new modules are imported directly by service_living_world.py.
