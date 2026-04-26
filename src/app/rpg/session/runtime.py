@@ -232,10 +232,12 @@ from app.rpg.session.state_normalization import (
     _story_policy_save_load_stable,
     _story_policy_strict_replay,
 )
+from app.rpg.session.travel_runtime import resolve_travel_turn, travel_resolved_result
 from app.rpg.session.turn_contract import (
     apply_state_delta,
     build_turn_contract,
 )
+from app.rpg.world.location_registry import ensure_location_state
 from app.rpg.world.world_event_director import (
     apply_world_behavior_to_events,
     build_world_event_candidates,
@@ -6524,6 +6526,26 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(service_resolution.get("resolved_result"))
     action = _safe_dict(service_resolution.get("action"))
 
+    # Phase 9.0: deterministic travel/scene transition runtime.
+    # Service turns remain service-first. Travel only claims the turn when no
+    # deterministic service result has matched.
+    _service_result_for_travel = _safe_dict(resolved_result.get("service_result"))
+    if not _service_result_for_travel.get("matched"):
+        ensure_location_state(after_action_state)
+        _travel_result = resolve_travel_turn(
+            player_input=player_input,
+            simulation_state=after_action_state,
+            tick=current_tick,
+        )
+        if _travel_result.get("matched"):
+            _travel_resolved = travel_resolved_result(_travel_result)
+            resolved_result.update(_travel_resolved)
+            authoritative["travel_result"] = _travel_result
+            authoritative["resolved_result"] = resolved_result
+            authoritative["location_state"] = _safe_dict(after_action_state.get("location_state"))
+            authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
+            authoritative["simulation_state"] = after_action_state
+
     social_living_world_effects = apply_general_social_effects(
         after_action_state,
         resolved_result,
@@ -6544,6 +6566,20 @@ def _apply_turn_authoritative(
         authoritative["npc_emotion_state"] = _safe_dict(after_action_state.get("npc_emotion_state"))
         authoritative["memory_state"] = _safe_dict(after_action_state.get("memory_state"))
         authoritative["result"] = resolved_result
+
+    # Always refresh location debug after the turn. This keeps service turns,
+    # social turns, and travel turns consistent for transcript/UI inspection.
+    ensure_location_state(after_action_state)
+    resolved_result["location_state"] = _safe_dict(after_action_state.get("location_state"))
+    resolved_result["current_location_id"] = _safe_str(
+        _safe_dict(after_action_state.get("location_state")).get("current_location_id")
+        or after_action_state.get("location_id")
+        or after_action_state.get("current_location_id")
+    )
+    authoritative["location_state"] = _safe_dict(after_action_state.get("location_state"))
+    authoritative["current_location_id"] = resolved_result["current_location_id"]
+    authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
+    authoritative["simulation_state"] = after_action_state
 
     _t_authoritative = _time.monotonic()
 

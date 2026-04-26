@@ -696,6 +696,42 @@ def _join_natural(items: List[str]) -> str:
     return f"{', '.join(items[:-1])}, or {items[-1]}"
 
 
+def _travel_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    travel = _safe_dict(resolved.get("travel_result"))
+    if travel:
+        return travel
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    return _safe_dict(resolved.get("travel_result"))
+
+
+def _grounded_travel_narration(narration_context: Dict[str, Any]) -> str:
+    travel = _travel_result_from_context(narration_context)
+    if not travel.get("matched"):
+        return ""
+    if not travel.get("applied"):
+        exits = _safe_dict(travel.get("available_exits"))
+        if exits:
+            return "No clear route matches that destination from here."
+        return "There is no available route from here."
+    to_location = _safe_dict(travel.get("to_location"))
+    name = _safe_str(to_location.get("name") or travel.get("to_location_id"))
+    return f"You arrive at {name}."
+
+
+def _grounded_travel_action(narration_context: Dict[str, Any]) -> str:
+    travel = _travel_result_from_context(narration_context)
+    if not travel.get("matched"):
+        return ""
+    if travel.get("applied"):
+        to_location = _safe_dict(travel.get("to_location"))
+        name = _safe_str(to_location.get("name") or travel.get("to_location_id"))
+        return f"You travel to {name}."
+    return "No available route matches that destination."
+
+
 def _final_grounded_service_action_text(
     action_text: str,
     narration_context: Dict[str, Any],
@@ -1991,6 +2027,13 @@ def _sanitize_narration_payload(
             )
             npc["line"] = restored_line
             normalized["npc"] = npc
+
+    travel_narration = _grounded_travel_narration(narration_context)
+    travel_action = _grounded_travel_action(narration_context)
+    if travel_narration:
+        normalized["narration"] = travel_narration
+    if travel_action:
+        normalized["action"] = travel_action
 
     return normalized
 

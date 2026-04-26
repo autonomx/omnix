@@ -53,6 +53,7 @@ CODE_DIFF_EXCLUDE_PARTS = {
 
 _OUTPUTS: Dict[str, List[str]] = {}
 _TOKEN_USAGE_ROWS: List[Dict[str, Any]] = []
+_REGRESSION_WARNING_ROWS: List[Dict[str, Any]] = []
 _OUTPUT_LOCK = threading.RLock()
 _TOKEN_USAGE_LOCK = threading.RLock()
 
@@ -199,6 +200,16 @@ def _record_token_usage(
 def _reset_token_usage() -> None:
     with _TOKEN_USAGE_LOCK:
         _TOKEN_USAGE_ROWS.clear()
+
+
+def _reset_regression_warnings() -> None:
+    _REGRESSION_WARNING_ROWS.clear()
+
+
+def _record_regression_warnings(row: Dict[str, Any]) -> None:
+    warnings = _safe_list(row.get("regression_warnings")) + _safe_list(row.get("scenario_warnings"))
+    if warnings:
+        _REGRESSION_WARNING_ROWS.append(row)
 
 
 def _token_usage_totals(rows: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -838,11 +849,11 @@ MANUAL_TEST_TURNS = [
     "I ask Bran for a room to rent",
     "I ask Bran for food",
     "I ask Bran if he has heard any rumors",
+    "I ask Bran for directions to the market",
+    "I follow Bran's directions to the market",
     "I ask Elara what she sells",
     "I buy a torch from Elara",
-    "I try to buy a sword I cannot afford",
     "I ask Elara to repair my gear",
-    "I ask Bran for directions to the market",
 ]
 
 SERVICE_SCENARIOS = {
@@ -856,6 +867,7 @@ SERVICE_SCENARIOS = {
     "shop_success": {
         "currency": {"gold": 0, "silver": 2, "copper": 0},
         "turns": [
+            "I follow Bran's directions to the market",
             "I ask Elara what she sells",
             "I buy a torch from Elara",
         ],
@@ -863,6 +875,7 @@ SERVICE_SCENARIOS = {
     "blocked_purchase": {
         "currency": {"gold": 0, "silver": 1, "copper": 0},
         "turns": [
+            "I follow Bran's directions to the market",
             "I ask Elara what she sells",
             "I buy rope from Elara",
         ],
@@ -1242,6 +1255,53 @@ def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(simulation_state.get("world_event_state"))
 
 
+def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("location_state"))
+    if direct:
+        return direct
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("location_state"))
+
+
+def _extract_current_location_id(result: Dict[str, Any]) -> str:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    if _safe_str(result_sub.get("current_location_id")):
+        return _safe_str(result_sub.get("current_location_id"))
+
+    location_state = _extract_location_state(result)
+    if _safe_str(location_state.get("current_location_id")):
+        return _safe_str(location_state.get("current_location_id"))
+
+    service_result = _safe_dict(_extract_service_debug(result).get("service_result"))
+    if _safe_str(service_result.get("current_location_id")):
+        return _safe_str(service_result.get("current_location_id"))
+
+    travel_result = _extract_travel_result(result)
+    if _safe_str(travel_result.get("to_location_id")):
+        return _safe_str(travel_result.get("to_location_id"))
+    if _safe_str(travel_result.get("from_location_id")):
+        return _safe_str(travel_result.get("from_location_id"))
+
+    simulation_state = _extract_simulation_state(result)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    return (
+        _safe_str(player_state.get("location_id"))
+        or _safe_str(simulation_state.get("location_id"))
+        or _safe_str(simulation_state.get("current_location_id"))
+    )
+
+
+def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("travel_result"))
+    if direct:
+        return direct
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    return _safe_dict(resolved.get("travel_result"))
+
+
 def _effective_service_status(
     service_result: Dict[str, Any],
     service_application: Dict[str, Any],
@@ -1319,6 +1379,14 @@ def _compact_turn_summary(
         "journal_entry_count": len(_safe_list(_extract_journal_state(result).get("entries"))),
         "world_event_state": _extract_world_event_state(result),
         "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
+        "current_location_id": _extract_current_location_id(result),
+        "location_state": _extract_location_state(result),
+        "travel_result": _extract_travel_result(result),
+        "regression_warnings": _manual_regression_warnings(
+            turn_index=index,
+            player_input=player_input,
+            result=result,
+        ),
         "token_usage": _extract_token_usage_from_result(result, player_input=player_input),
         "available_actions": service_debug.get("available_actions"),
         "narration_preview": narration[:500] if narration else "",
@@ -1373,6 +1441,158 @@ def _scenario_contamination_warnings(
     return warnings
 
 
+def _player_facing_text_for_regression_scan(result: Dict[str, Any]) -> str:
+    text = _extract_narration(result)
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    if not text:
+        text = _safe_str(result_sub.get("narration"))
+    return text or ""
+
+
+def _current_memory_ids(result: Dict[str, Any]) -> set[str]:
+    service_debug = _extract_service_debug(result)
+    ids: set[str] = set()
+
+    for candidate in (
+        service_debug.get("memory_entry"),
+        _safe_dict(_extract_social_living_world_effects(result)).get("memory_entry"),
+    ):
+        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
+        if memory_id:
+            ids.add(memory_id)
+
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    for candidate in (
+        resolved.get("memory_entry"),
+        _safe_dict(resolved.get("service_application")).get("memory_entry"),
+        _safe_dict(resolved.get("social_living_world_effects")).get("memory_entry"),
+    ):
+        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
+        if memory_id:
+            ids.add(memory_id)
+
+    return ids
+
+
+def _manual_regression_warnings(
+    *,
+    scenario_name: str = "",
+    turn_index: int,
+    player_input: str,
+    result: Dict[str, Any],
+) -> List[str]:
+    warnings: List[str] = []
+    text = _player_facing_text_for_regression_scan(result)
+    lower = text.lower()
+
+    if "the attempt fails" in lower:
+        warnings.append("player_facing_generic_attempt_fails")
+    if "registered offer" in lower or "registered offers" in lower:
+        warnings.append("player_facing_registered_offer_leak")
+    if "session_not_found" in lower or _safe_str(_safe_dict(result).get("error")) == "session_not_found":
+        warnings.append("session_not_found")
+
+    current_ids = _current_memory_ids(result)
+    if current_ids:
+        recalled = _extract_recalled_service_memories(result) + _extract_recalled_npc_memories(result)
+        recalled_ids = {
+            _safe_str(_safe_dict(memory).get("memory_id"))
+            for memory in recalled
+            if _safe_str(_safe_dict(memory).get("memory_id"))
+        }
+        overlap = sorted(current_ids & recalled_ids)
+        if overlap:
+            warnings.append(f"current_turn_memory_recalled:{','.join(overlap)}")
+
+    service_debug = _extract_service_debug(result)
+    service_result = _safe_dict(service_debug.get("service_result"))
+    purchase = _safe_dict(service_debug.get("purchase"))
+    service_application = _safe_dict(service_debug.get("service_application"))
+    service_status = _effective_service_status(service_result, service_application)
+    travel_result = _extract_travel_result(result)
+    player_lower = _safe_str(player_input).lower()
+
+    if (
+        "ask" in player_lower
+        and "directions" in player_lower
+        and bool(travel_result.get("applied"))
+    ):
+        warnings.append("directions_inquiry_unexpectedly_travelled")
+
+    if (
+        ("follow" in player_lower and "directions" in player_lower)
+        and not bool(travel_result.get("applied"))
+    ):
+        warnings.append("follow_directions_expected_travel_success")
+
+    if _safe_str(service_result.get("kind")) == "service_purchase":
+        if service_status == "blocked" and not _safe_str(purchase.get("blocked_reason")):
+            warnings.append("blocked_purchase_missing_reason")
+        if bool(purchase.get("applied") or service_application.get("applied")) and not _safe_dict(service_debug.get("transaction_record")):
+            warnings.append("applied_purchase_missing_transaction_record")
+
+    # Scenario-specific expectations.
+    if scenario_name == "shop_success" and turn_index == 3:
+        if not bool(purchase.get("applied") or service_application.get("applied")):
+            warnings.append("shop_success_expected_purchase_applied")
+    if scenario_name == "lodging_success" and turn_index == 2:
+        if not bool(purchase.get("applied") or service_application.get("applied")):
+            warnings.append("lodging_success_expected_purchase_applied")
+    if scenario_name == "paid_info" and turn_index == 2:
+        if not _safe_dict(service_debug.get("rumor_added")).get("rumor_id"):
+            warnings.append("paid_info_missing_rumor_added")
+        if not _safe_dict(service_debug.get("journal_entry")).get("entry_id"):
+            warnings.append("paid_info_missing_journal_entry")
+    if scenario_name == "blocked_purchase" and turn_index == 3:
+        if bool(purchase.get("applied") or service_application.get("applied")):
+            warnings.append("blocked_purchase_unexpectedly_applied")
+        if _safe_str(purchase.get("blocked_reason")) != "insufficient_funds":
+            warnings.append("blocked_purchase_expected_insufficient_funds")
+
+    current_location_id = _extract_current_location_id(result)
+
+    provider_name = _safe_str(service_result.get("provider_name"))
+    service_kind = _safe_str(service_result.get("service_kind"))
+    if provider_name == "Elara" and service_kind in {"shop_goods", "repair"}:
+        if current_location_id and current_location_id != "loc_market":
+            warnings.append("elara_service_resolved_outside_market")
+    if provider_name == "Bran" and service_kind in {"lodging", "meal", "paid_information"}:
+        if current_location_id and current_location_id != "loc_tavern":
+            warnings.append("bran_service_resolved_outside_tavern")
+
+    if scenario_name in {"shop_success", "blocked_purchase"} and turn_index == 1:
+        if not bool(travel_result.get("applied")):
+            warnings.append(f"{scenario_name}_turn_1_expected_travel_applied")
+        if current_location_id != "loc_market":
+            warnings.append(f"{scenario_name}_turn_1_expected_loc_market")
+
+    if scenario_name in {"shop_success", "blocked_purchase"} and turn_index in {2, 3}:
+        if current_location_id != "loc_market":
+            warnings.append(f"{scenario_name}_turn_{turn_index}_expected_loc_market")
+
+    if scenario_name in {"lodging_success", "paid_info"}:
+        if current_location_id not in {"loc_tavern", ""}:
+            warnings.append(f"{scenario_name}_expected_loc_tavern")
+
+    # Flat transcript expected location progression:
+    # turn 4 asks directions but should remain in tavern;
+    # turn 5 follows directions and should arrive at market.
+    if not scenario_name and turn_index == 4:
+        if bool(travel_result.get("applied")):
+            warnings.append("flat_turn_4_directions_inquiry_should_not_travel")
+        if _extract_current_location_id(result) not in {"loc_tavern", ""}:
+            warnings.append("flat_turn_4_expected_tavern")
+
+    if not scenario_name and turn_index == 5:
+        if not bool(travel_result.get("applied")):
+            warnings.append("flat_turn_5_follow_directions_should_travel")
+        if _extract_current_location_id(result) != "loc_market":
+            warnings.append("flat_turn_5_expected_market")
+
+    return warnings
+
+
 def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
     session = _ensure_manual_session(session_id)
     if not session:
@@ -1399,11 +1619,23 @@ def _write_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
     except Exception:
         return False
 
-    session = load_session(session_id)
+    session = _safe_dict(load_session(session_id))
     if not session:
         return False
 
     simulation_state = _ensure_manual_simulation_roots(session)
+
+    # Preserve current location fields exactly as loaded. This helper is only
+    # allowed to adjust currency; it must not bounce a scenario back to the
+    # template/default tavern state after a travel turn.
+    loaded_location_id = (
+        _safe_str(simulation_state.get("location_id"))
+        or _safe_str(simulation_state.get("current_location_id"))
+        or _safe_str(_safe_dict(simulation_state.get("player_state")).get("location_id"))
+        or _safe_str(_safe_dict(simulation_state.get("player_state")).get("current_location_id"))
+    )
+    loaded_location_state = _safe_dict(simulation_state.get("location_state"))
+    loaded_present_npcs = _safe_list(simulation_state.get("present_npcs"))
 
     player_state = _safe_dict(simulation_state.get("player_state"))
     if not player_state:
@@ -1425,6 +1657,16 @@ def _write_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
         "silver": int(currency.get("silver") or 0),
         "copper": int(currency.get("copper") or 0),
     }
+
+    if loaded_location_id:
+        simulation_state["location_id"] = loaded_location_id
+        simulation_state["current_location_id"] = loaded_location_id
+        player_state["location_id"] = loaded_location_id
+        player_state["current_location_id"] = loaded_location_id
+    if loaded_location_state:
+        simulation_state["location_state"] = loaded_location_state
+    if loaded_present_npcs:
+        simulation_state["present_npcs"] = loaded_present_npcs
 
     _sync_manual_simulation_state(session, simulation_state)
 
@@ -1841,6 +2083,12 @@ def _print_turn(
     _emit("WORLD EVENT STATE:", channel=channel)
     _emit(_compact_json(_extract_world_event_state(result)), channel=channel)
     _emit("", channel=channel)
+    _emit("LOCATION STATE:", channel=channel)
+    _emit(_compact_json(_extract_location_state(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("TRAVEL RESULT:", channel=channel)
+    _emit(_compact_json(_extract_travel_result(result)), channel=channel)
+    _emit("", channel=channel)
     _emit("SERVICE LIVING WORLD APPLICATION:", channel=channel)
     _emit(_compact_json({
         "memory_entry": service_debug.get("memory_entry"),
@@ -1964,15 +2212,15 @@ def run_manual_transcript(
             result=result,
         )
 
-        summary_rows.append(
-            _compact_turn_summary(
-                index=index,
-                player_input=player_input,
-                result=result,
-                before_currency=before_currency,
-                before_items=before_items,
-            )
+        summary_row = _compact_turn_summary(
+            index=index,
+            player_input=player_input,
+            result=result,
+            before_currency=before_currency,
+            before_items=before_items,
         )
+        _record_regression_warnings(summary_row)
+        summary_rows.append(summary_row)
 
         if split_files:
             turn_channel = f"flat_turn_{index:02d}"
@@ -2070,6 +2318,7 @@ def _run_one_service_scenario(
     last_result: Dict[str, Any] = {}
     scenario_results: List[Dict[str, Any]] = []
     current_currency = currency
+    current_location_id = ""
 
     for index, player_input in enumerate(turns, start=1):
         print(
@@ -2078,15 +2327,16 @@ def _run_one_service_scenario(
             flush=True,
         )
 
-        if current_currency:
-            _write_session_currency(session_id, current_currency)
-
         before_currency = current_currency or (
             _extract_player_currency(last_result) if last_result else currency
         )
         before_items = _extract_player_items(last_result) if last_result else []
 
         result = apply_turn(session_id=session_id, player_input=player_input)
+        extracted_location_id = _extract_current_location_id(result)
+        if extracted_location_id:
+            current_location_id = extracted_location_id
+
         if console_llm:
             _log_llm_response(
                 scope="scenario",
@@ -2120,6 +2370,8 @@ def _run_one_service_scenario(
             before_currency=before_currency,
             before_items=before_items,
         )
+        summary_row["scenario_current_location_id"] = current_location_id
+
         summary_row["scenario_warnings"] = _scenario_contamination_warnings(
             scenario_name=scenario_name,
             turn_index=index,
@@ -2127,6 +2379,13 @@ def _run_one_service_scenario(
             before_items=before_items,
             result=result,
         )
+        summary_row["regression_warnings"] = _manual_regression_warnings(
+            scenario_name=scenario_name,
+            turn_index=index,
+            player_input=player_input,
+            result=result,
+        )
+        _record_regression_warnings(summary_row)
         scenario_results.append(summary_row)
 
         if _turn_applied_currency_mutation(result):
@@ -2293,6 +2552,7 @@ def run_service_scenarios(
 def run_requested_transcripts(args: argparse.Namespace) -> None:
     _reset_output()
     _reset_token_usage()
+    _reset_regression_warnings()
     turns = args.turn or MANUAL_TEST_TURNS
     run_id = args.run_id or _new_manual_run_id()
     args._manual_run_id = run_id
@@ -2405,6 +2665,11 @@ def main() -> None:
         type=int,
         default=1200,
         help="Maximum characters to print per console LLM response block.",
+    )
+    parser.add_argument(
+        "--fail-on-regression-warnings",
+        action="store_true",
+        help="Exit non-zero if manual transcript summary contains regression_warnings or scenario_warnings.",
     )
     parser.add_argument(
         "--all",
@@ -2526,6 +2791,10 @@ def main() -> None:
                 write_code_diff_snapshot(roots=code_diff_roots)
             if not args.no_results_zip:
                 write_results_zip()
+            if args.fail_on_regression_warnings and _REGRESSION_WARNING_ROWS:
+                print("[manual][regression] warnings detected:", flush=True)
+                print(_compact_json(_REGRESSION_WARNING_ROWS), flush=True)
+                raise SystemExit(2)
         finally:
             servers.stop()
 

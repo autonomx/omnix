@@ -3256,6 +3256,9 @@
                 });
                 applyUpdate(update);
                 updateRpgServiceActionsFromPayload(data || {});
+                if (window.RpgLivingWorldInspector && typeof window.RpgLivingWorldInspector.render === "function") {
+                    window.RpgLivingWorldInspector.render(data);
+                }
                 if (update.player) {
                     updateState({ player: update.player });
                     renderPlayerPanel(update.player);

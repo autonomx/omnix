@@ -1,387 +1,314 @@
-Below is a single handoff spec for the coding LLM.
+Below is the literal apply-this-patch diff spec for Bundle D: Phase 8.4 + 8.5 + 9.0.
 
-It is intentionally split into Bundle C1 and Bundle C2, with a hard instruction:
+Apply in this order:
 
-Apply Bundle C1 first.
-Run tests + python src/tests/rpg/manual_llm_transcript.py --all.
-Review generated resources/test-results/manual-rpg-test-results.zip.
-Fix C1 regressions before starting C2.
+D1 — Harness/regression hardening
+D2 — Location registry + deterministic travel runtime
+D3 — Service availability respects current location
+D4 — Response/debug/UI visibility
+D5 — Tests
 
-Only after C1 passes, apply Bundle C2.
-Run tests + transcript again.
-Fix C2 regressions.
-Coding LLM Instructions
+After each section, run the listed tests. Do not continue if the manual transcript regresses.
 
-You are working on a deterministic AI-driven RPG engine.
+Bundle D — Phase 8.4 + 8.5 + 9.0
+Required validation gate
 
-Hard rules:
+Run after the full patch:
 
-Simulation is truth.
-LLM is presentation only.
-Do not let the LLM invent rewards, quests, memories, rumors, relationships, stock, or outcomes.
-Do not break existing service purchase behavior.
-Do not break manual transcript output.
-Do not break resources/test-results/manual-rpg-test-results.zip generation.
-
-Required validation after each bundle:
-
-pytest src/app/rpg/tests/test_service_memory_recall.py -q
-pytest src/app/rpg/tests/test_narration_queue.py -q
-pytest src/app/rpg/tests/test_service_living_world_effects.py -q
-pytest src/app/rpg/tests/test_service_purchase_runtime.py -q
+pytest src/app/rpg/tests/test_location_registry.py -q
+pytest src/app/rpg/tests/test_travel_runtime.py -q
+pytest src/app/rpg/tests/test_service_location_availability.py -q
 pytest src/app/rpg/tests/test_manual_transcript_modes.py -q
+pytest src/app/rpg/tests/test_service_purchase_runtime.py -q
+pytest src/app/rpg/tests/test_service_living_world_effects.py -q
+pytest src/app/rpg/tests/test_narration_queue.py -q
 
 python src/tests/rpg/manual_llm_transcript.py --all
 
-Then inspect:
+Expected:
 
-resources/test-results/manual-rpg-test-results.zip
-resources/test-results/manual_rpg_llm_transcript__summary.txt
-resources/test-results/manual_rpg_service_scenarios__summary.txt
-resources/test-results/token-usage.txt
-resources/test-results/code-diff.txt
+manual transcript zip includes all files
+scenario_warnings: []
+regression_warnings: []
+shop_success travels to market before Elara purchase
+paid_info still creates rumor:old_mill_bandits
+no "The attempt fails"
+no player-facing "registered offer"
+no current-turn recall
+D1 PATCH — Harden manual transcript regression warnings
+File: src/tests/rpg/manual_llm_transcript.py
+1. Add regression warning helpers
 
-Before moving from C1 to C2, fix any regressions found in the transcript.
+Add after _scenario_contamination_warnings(...).
 
-Bundle C1 — Phase 8.0 + 8.1
-Phase 8.0 — NPC memory recall v2
-Phase 8.1 — General relationship/emotion effects for social actions
-C1 goals
-- NPC memory recall v2.
-- Exclude current-turn memory.
-- Narrator context gets bounded recalled memories.
-- NPC dialogue can reference prior interactions only when backed by memory.
-- General relationship/emotion effects for social actions.
-- Manual transcript prints recalled memories and social deltas.
-- Update/add tests.
-C1 PATCH 1 — Add general NPC memory recall module
-New file: src/app/rpg/memory/npc_memory_recall.py
-diff --git a/src/app/rpg/memory/npc_memory_recall.py b/src/app/rpg/memory/npc_memory_recall.py
-new file mode 100644
-index 0000000..7efc111
---- /dev/null
-+++ b/src/app/rpg/memory/npc_memory_recall.py
-@@ -0,0 +1,245 @@
-+from __future__ import annotations
-+
-+from copy import deepcopy
-+from typing import Any, Dict, List
+diff --git a/src/tests/rpg/manual_llm_transcript.py b/src/tests/rpg/manual_llm_transcript.py
+--- a/src/tests/rpg/manual_llm_transcript.py
++++ b/src/tests/rpg/manual_llm_transcript.py
+@@
+ def _scenario_contamination_warnings(
+@@
+     return warnings
 +
 +
-+DEFAULT_NPC_MEMORY_RECALL_LIMIT = 6
++def _player_facing_text_for_regression_scan(result: Dict[str, Any]) -> str:
++    text = _extract_narration(result)
++    result_sub = _safe_dict(_safe_dict(result).get("result"))
++    if not text:
++        text = _safe_str(result_sub.get("narration"))
++    return text or ""
 +
 +
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
++def _current_memory_ids(result: Dict[str, Any]) -> set[str]:
++    service_debug = _extract_service_debug(result)
++    ids: set[str] = set()
 +
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _safe_float(value: Any, default: float = 0.0) -> float:
-+    try:
-+        return float(value)
-+    except Exception:
-+        return default
-+
-+
-+def _safe_int(value: Any, default: int = 0) -> int:
-+    try:
-+        return int(value)
-+    except Exception:
-+        return default
-+
-+
-+def _memory_tick(memory: Dict[str, Any]) -> int:
-+    return _safe_int(_safe_dict(memory).get("tick"), 0)
-+
-+
-+def _iter_memory_roots(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    simulation_state = _safe_dict(simulation_state)
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+
-+    memories: List[Dict[str, Any]] = []
-+
-+    for memory in _safe_list(memory_state.get("service_memories")):
-+        memory = _safe_dict(memory)
-+        if memory:
-+            memories.append(deepcopy(memory))
-+
-+    for memory in _safe_list(memory_state.get("social_memories")):
-+        memory = _safe_dict(memory)
-+        if memory:
-+            memories.append(deepcopy(memory))
-+
-+    for memory in _safe_list(memory_state.get("npc_memories_flat")):
-+        memory = _safe_dict(memory)
-+        if memory:
-+            memories.append(deepcopy(memory))
-+
-+    # Preserve compatibility with the per-NPC dict created by service memory.
-+    npc_memories = _safe_dict(memory_state.get("npc_memories"))
-+    for owner_entries in npc_memories.values():
-+        for memory in _safe_list(owner_entries):
-+            memory = _safe_dict(memory)
-+            if memory:
-+                memories.append(deepcopy(memory))
-+
-+    # Deduplicate by memory_id while preserving newest copy.
-+    by_id: Dict[str, Dict[str, Any]] = {}
-+    without_id: List[Dict[str, Any]] = []
-+    for memory in memories:
-+        memory_id = _safe_str(memory.get("memory_id"))
++    for candidate in (
++        service_debug.get("memory_entry"),
++        _safe_dict(_extract_social_living_world_effects(result)).get("memory_entry"),
++    ):
++        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
 +        if memory_id:
-+            existing = by_id.get(memory_id)
-+            if not existing or _memory_tick(memory) >= _memory_tick(existing):
-+                by_id[memory_id] = memory
-+        else:
-+            without_id.append(memory)
++            ids.add(memory_id)
 +
-+    return list(by_id.values()) + without_id
++    turn_contract = _extract_turn_contract(result)
++    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
++    for candidate in (
++        resolved.get("memory_entry"),
++        _safe_dict(resolved.get("service_application")).get("memory_entry"),
++        _safe_dict(resolved.get("social_living_world_effects")).get("memory_entry"),
++    ):
++        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
++        if memory_id:
++            ids.add(memory_id)
++
++    return ids
 +
 +
-+def _extract_target_context(
++def _manual_regression_warnings(
 +    *,
-+    narration_context: Dict[str, Any] | None = None,
-+    turn_contract: Dict[str, Any] | None = None,
-+    resolved_result: Dict[str, Any] | None = None,
-+    service_result: Dict[str, Any] | None = None,
-+) -> Dict[str, str]:
-+    narration_context = _safe_dict(narration_context)
-+    turn_contract = _safe_dict(turn_contract or narration_context.get("turn_contract"))
-+    resolved_result = _safe_dict(
-+        resolved_result
-+        or narration_context.get("resolved_result")
-+        or turn_contract.get("resolved_result")
-+        or turn_contract.get("resolved_action")
-+    )
-+    service_result = _safe_dict(
-+        service_result
-+        or narration_context.get("service_result")
-+        or resolved_result.get("service_result")
-+    )
-+    action = _safe_dict(turn_contract.get("action"))
++    scenario_name: str = "",
++    turn_index: int,
++    player_input: str,
++    result: Dict[str, Any],
++) -> List[str]:
++    warnings: List[str] = []
++    text = _player_facing_text_for_regression_scan(result)
++    lower = text.lower()
 +
-+    provider_id = _safe_str(service_result.get("provider_id"))
-+    provider_name = _safe_str(service_result.get("provider_name"))
-+    target_id = _safe_str(
-+        provider_id
-+        or resolved_result.get("target_id")
-+        or action.get("target_id")
-+    )
-+    target_name = _safe_str(
-+        provider_name
-+        or resolved_result.get("target_name")
-+        or action.get("target_name")
-+    )
-+    service_kind = _safe_str(service_result.get("service_kind"))
-+    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-+    location_id = _safe_str(
-+        service_result.get("location_id")
-+        or resolved_result.get("location_id")
-+        or action.get("location_id")
-+    )
-+    action_type = _safe_str(
-+        resolved_result.get("action_type")
-+        or action.get("action_type")
-+        or service_result.get("kind")
-+    )
++    if "the attempt fails" in lower:
++        warnings.append("player_facing_generic_attempt_fails")
++    if "registered offer" in lower or "registered offers" in lower:
++        warnings.append("player_facing_registered_offer_leak")
++    if "session_not_found" in lower or _safe_str(_safe_dict(result).get("error")) == "session_not_found":
++        warnings.append("session_not_found")
 +
-+    return {
-+        "target_id": target_id,
-+        "target_name": target_name,
-+        "provider_id": provider_id,
-+        "provider_name": provider_name,
-+        "service_kind": service_kind,
-+        "selected_offer_id": selected_offer_id,
-+        "location_id": location_id,
-+        "action_type": action_type,
-+    }
++    current_ids = _current_memory_ids(result)
++    if current_ids:
++        recalled = _extract_recalled_service_memories(result) + _extract_recalled_npc_memories(result)
++        recalled_ids = {
++            _safe_str(_safe_dict(memory).get("memory_id"))
++            for memory in recalled
++            if _safe_str(_safe_dict(memory).get("memory_id"))
++        }
++        overlap = sorted(current_ids & recalled_ids)
++        if overlap:
++            warnings.append(f"current_turn_memory_recalled:{','.join(overlap)}")
 +
++    service_debug = _extract_service_debug(result)
++    service_result = _safe_dict(service_debug.get("service_result"))
++    purchase = _safe_dict(service_debug.get("purchase"))
++    service_application = _safe_dict(service_debug.get("service_application"))
++    service_status = _effective_service_status(service_result, service_application)
 +
-+def _score_memory(memory: Dict[str, Any], context: Dict[str, str]) -> float:
-+    score = 0.0
-+    owner_id = _safe_str(memory.get("owner_id"))
-+    owner_name = _safe_str(memory.get("owner_name"))
-+    subject_id = _safe_str(memory.get("subject_id"))
-+    target_id = _safe_str(context.get("target_id"))
-+    target_name = _safe_str(context.get("target_name"))
++    if _safe_str(service_result.get("kind")) == "service_purchase":
++        if service_status == "blocked" and not _safe_str(purchase.get("blocked_reason")):
++            warnings.append("blocked_purchase_missing_reason")
++        if bool(purchase.get("applied") or service_application.get("applied")) and not _safe_dict(service_debug.get("transaction_record")):
++            warnings.append("applied_purchase_missing_transaction_record")
 +
-+    if target_id and owner_id == target_id:
-+        score += 6.0
-+    elif target_name and owner_name.lower() == target_name.lower():
-+        score += 5.0
++    # Scenario-specific expectations.
++    if scenario_name == "shop_success" and turn_index == 3:
++        if not bool(purchase.get("applied") or service_application.get("applied")):
++            warnings.append("shop_success_expected_purchase_applied")
++    if scenario_name == "lodging_success" and turn_index == 2:
++        if not bool(purchase.get("applied") or service_application.get("applied")):
++            warnings.append("lodging_success_expected_purchase_applied")
++    if scenario_name == "paid_info" and turn_index == 2:
++        if not _safe_dict(service_debug.get("rumor_added")).get("rumor_id"):
++            warnings.append("paid_info_missing_rumor_added")
++        if not _safe_dict(service_debug.get("journal_entry")).get("entry_id"):
++            warnings.append("paid_info_missing_journal_entry")
++    if scenario_name == "blocked_purchase" and turn_index == 3:
++        if bool(purchase.get("applied") or service_application.get("applied")):
++            warnings.append("blocked_purchase_unexpectedly_applied")
++        if _safe_str(purchase.get("blocked_reason")) != "insufficient_funds":
++            warnings.append("blocked_purchase_expected_insufficient_funds")
 +
-+    if subject_id == "player":
-+        score += 2.0
-+
-+    if context.get("service_kind") and _safe_str(memory.get("service_kind")) == context["service_kind"]:
-+        score += 1.5
-+
-+    if context.get("selected_offer_id") and _safe_str(memory.get("offer_id")) == context["selected_offer_id"]:
-+        score += 2.0
-+
-+    if context.get("location_id") and _safe_str(memory.get("location_id")) == context["location_id"]:
-+        score += 0.75
-+
-+    kind = _safe_str(memory.get("kind"))
-+    if kind in {"service_purchase", "social_positive"}:
-+        score += 1.0
-+    elif kind in {"service_purchase_blocked", "social_negative"}:
-+        score += 0.9
-+    elif kind in {"service_inquiry", "social_interaction"}:
-+        score += 0.4
-+
-+    score += min(_safe_float(memory.get("importance"), 0.0), 1.0)
-+    score += min(_memory_tick(memory) / 100000.0, 0.25)
-+    return score
-+
-+
-+def recall_npc_memories(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    narration_context: Dict[str, Any] | None = None,
-+    turn_contract: Dict[str, Any] | None = None,
-+    resolved_result: Dict[str, Any] | None = None,
-+    service_result: Dict[str, Any] | None = None,
-+    current_tick: int = 0,
-+    exclude_memory_ids: List[str] | None = None,
-+    limit: int = DEFAULT_NPC_MEMORY_RECALL_LIMIT,
-+) -> Dict[str, Any]:
-+    context = _extract_target_context(
-+        narration_context=narration_context,
-+        turn_contract=turn_contract,
-+        resolved_result=resolved_result,
-+        service_result=service_result,
-+    )
-+
-+    excluded = {
-+        _safe_str(memory_id)
-+        for memory_id in (exclude_memory_ids or [])
-+        if _safe_str(memory_id)
-+    }
-+
-+    memories: List[Dict[str, Any]] = []
-+    for memory in _iter_memory_roots(simulation_state):
-+        memory_id = _safe_str(memory.get("memory_id"))
-+        if memory_id and memory_id in excluded:
-+            continue
-+        if current_tick and _memory_tick(memory) >= int(current_tick):
-+            continue
-+
-+        owner_id = _safe_str(memory.get("owner_id"))
-+        owner_name = _safe_str(memory.get("owner_name"))
-+        target_id = context.get("target_id", "")
-+        target_name = context.get("target_name", "")
-+
-+        if target_id and owner_id and owner_id != target_id:
-+            continue
-+        if not target_id and target_name and owner_name.lower() != target_name.lower():
-+            continue
-+
-+        memories.append(deepcopy(memory))
-+
-+    memories.sort(
-+        key=lambda memory: (
-+            _score_memory(memory, context),
-+            _memory_tick(memory),
-+            _safe_str(memory.get("memory_id")),
++    return warnings
+2. Add warnings to summaries
+
+In _compact_turn_summary(...), before "token_usage" add:
+
+@@
+         "world_event_state": _extract_world_event_state(result),
+         "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
++        "regression_warnings": _manual_regression_warnings(
++            turn_index=index,
++            player_input=player_input,
++            result=result,
 +        ),
-+        reverse=True,
+         "token_usage": _extract_token_usage_from_result(result, player_input=player_input),
+
+Then in _run_one_service_scenario(...), after summary_row["scenario_warnings"] = ..., add:
+
+@@
+         summary_row["scenario_warnings"] = _scenario_contamination_warnings(
+             scenario_name=scenario_name,
+             turn_index=index,
+             before_currency=before_currency,
+             before_items=before_items,
+             result=result,
+             pre_turn_snapshot=pre_turn_snapshot,
+         )
++        summary_row["regression_warnings"] = _manual_regression_warnings(
++            scenario_name=scenario_name,
++            turn_index=index,
++            player_input=player_input,
++            result=result,
++        )
+         scenario_results.append(summary_row)
+
+If _compact_turn_summary(...) already adds generic regression warnings, this second assignment intentionally replaces them with scenario-aware warnings.
+
+3. Add fail-on-warning CLI
+
+In main() parser setup:
+
+@@
+     parser.add_argument(
+         "--console-llm-max-chars",
+         type=int,
+         default=1200,
+         help="Maximum characters to print per console LLM response block.",
+     )
++    parser.add_argument(
++        "--fail-on-regression-warnings",
++        action="store_true",
++        help="Exit non-zero if manual transcript summary contains regression_warnings or scenario_warnings.",
 +    )
-+
-+    if limit > 0:
-+        memories = memories[:limit]
-+
-+    return {
-+        "recalled_memories": memories,
-+        "debug": {
-+            "source": "deterministic_npc_memory_recall",
-+            "target_id": context.get("target_id", ""),
-+            "target_name": context.get("target_name", ""),
-+            "service_kind": context.get("service_kind", ""),
-+            "selected_offer_id": context.get("selected_offer_id", ""),
-+            "location_id": context.get("location_id", ""),
-+            "action_type": context.get("action_type", ""),
-+            "count": len(memories),
-+            "memory_ids": [_safe_str(memory.get("memory_id")) for memory in memories],
-+            "excluded_memory_ids": sorted(excluded),
-+            "current_tick": int(current_tick or 0),
-+        },
-+    }
+
+Add helper near write_results_zip(...):
+
+@@
+ def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
+@@
+     print(
+         f"Wrote results zip to: {path.resolve()} ({len(candidates)} file(s))",
+         flush=True,
+     )
 +
 +
-+def memory_reference_is_backed(
-+    line: str,
-+    recalled_memories: List[Dict[str, Any]],
-+) -> bool:
-+    lower = _safe_str(line).lower()
-+    if not lower:
-+        return True
++def _collect_manual_warning_rows() -> List[Dict[str, Any]]:
++    rows: List[Dict[str, Any]] = []
++    with _OUTPUT_LOCK:
++        channels = list(_OUTPUTS.keys())
 +
-+    markers = (
-+        "remember",
-+        "last time",
-+        "again",
-+        "before",
-+        "earlier",
-+        "still short",
-+        "short on coin",
-+        "you bought",
-+        "you tried",
-+        "you asked",
-+    )
-+    if not any(marker in lower for marker in markers):
-+        return True
++    for channel in channels:
++        if not (channel.startswith("flat_turn_") or channel.startswith("service_")):
++            continue
++        # Detailed parsing from text is intentionally avoided. The compact
++        # summaries carry canonical warnings; this hook is kept for future
++        # expansion. Current warning enforcement happens directly in runners.
++    return rows
+
+Add global:
+
+@@
+ _OUTPUTS: Dict[str, List[str]] = {}
+ _TOKEN_USAGE_ROWS: List[Dict[str, Any]] = []
++_REGRESSION_WARNING_ROWS: List[Dict[str, Any]] = []
+
+Add helper:
+
+@@
+ def _reset_token_usage() -> None:
+     with _TOKEN_USAGE_LOCK:
+         _TOKEN_USAGE_ROWS.clear()
 +
-+    if not recalled_memories:
-+        return False
 +
-+    for memory in recalled_memories:
-+        memory = _safe_dict(memory)
-+        kind = _safe_str(memory.get("kind"))
-+        summary = _safe_str(memory.get("summary")).lower()
-+        blocked_reason = _safe_str(memory.get("blocked_reason"))
++def _reset_regression_warnings() -> None:
++    _REGRESSION_WARNING_ROWS.clear()
 +
-+        if "short" in lower and blocked_reason == "insufficient_funds":
-+            return True
-+        if "coin" in lower and blocked_reason == "insufficient_funds":
-+            return True
-+        if "bought" in lower and kind == "service_purchase":
-+            return True
-+        if "tried" in lower and kind in {"service_purchase_blocked", "social_negative"}:
-+            return True
-+        if "asked" in lower and kind in {"service_inquiry", "social_interaction"}:
-+            return True
-+        if summary and any(token in summary for token in lower.split() if len(token) > 5):
-+            return True
 +
-+    generic_terms = ("again", "before", "earlier", "last time", "remember")
-+    specific_terms = ("short", "coin", "bought", "paid", "purchased", "failed", "tried")
-+    if any(term in lower for term in generic_terms) and not any(term in lower for term in specific_terms):
-+        return bool(recalled_memories)
-+
-+    return False
-C1 PATCH 2 — Add general social effects module
-New file: src/app/rpg/memory/social_effects.py
-diff --git a/src/app/rpg/memory/social_effects.py b/src/app/rpg/memory/social_effects.py
++def _record_regression_warnings(row: Dict[str, Any]) -> None:
++    warnings = _safe_list(row.get("regression_warnings")) + _safe_list(row.get("scenario_warnings"))
++    if warnings:
++        _REGRESSION_WARNING_ROWS.append(row)
+
+In run_requested_transcripts(...) after _reset_token_usage():
+
+@@
+     _reset_output()
+     _reset_token_usage()
++    _reset_regression_warnings()
+
+In run_manual_transcript(...), after building summary_row:
+
+@@
+-        summary_rows.append(
+-            _compact_turn_summary(
+-                index=index,
+-                player_input=player_input,
+-                result=result,
+-                before_currency=before_currency,
+-                before_items=before_items,
+-            )
+-        )
++        summary_row = _compact_turn_summary(
++            index=index,
++            player_input=player_input,
++            result=result,
++            before_currency=before_currency,
++            before_items=before_items,
++        )
++        _record_regression_warnings(summary_row)
++        summary_rows.append(summary_row)
+
+In _run_one_service_scenario(...), after both warning fields are set:
+
+@@
+         summary_row["regression_warnings"] = _manual_regression_warnings(
+             scenario_name=scenario_name,
+             turn_index=index,
+             player_input=player_input,
+             result=result,
+         )
++        _record_regression_warnings(summary_row)
+         scenario_results.append(summary_row)
+
+In main() finally block, after write_results_zip() and before servers.stop():
+
+@@
+             if not args.no_results_zip:
+                 write_results_zip()
++            if args.fail_on_regression_warnings and _REGRESSION_WARNING_ROWS:
++                print("[manual][regression] warnings detected:", flush=True)
++                print(_compact_json(_REGRESSION_WARNING_ROWS), flush=True)
++                raise SystemExit(2)
+         finally:
+             servers.stop()
+D2 PATCH — Add deterministic location registry
+New file: src/app/rpg/world/location_registry.py
+diff --git a/src/app/rpg/world/location_registry.py b/src/app/rpg/world/location_registry.py
 new file mode 100644
-index 0000000..db12af7
+index 0000000..9bde777
 --- /dev/null
-+++ b/src/app/rpg/memory/social_effects.py
-@@ -0,0 +1,253 @@
++++ b/src/app/rpg/world/location_registry.py
+@@ -0,0 +1,233 @@
 +from __future__ import annotations
 +
 +from copy import deepcopy
 +from typing import Any, Dict, List
-+
-+
-+MAX_SOCIAL_MEMORIES = 100
 +
 +
 +def _safe_str(value: Any) -> str:
@@ -396,289 +323,335 @@ index 0000000..db12af7
 +    return value if isinstance(value, list) else []
 +
 +
-+def _safe_int(value: Any, default: int = 0) -> int:
-+    try:
-+        return int(value)
-+    except Exception:
-+        return default
++LOCATIONS: Dict[str, Dict[str, Any]] = {
++    "loc_tavern": {
++        "location_id": "loc_tavern",
++        "name": "The Rusty Flagon Tavern",
++        "short_name": "tavern",
++        "aliases": ["tavern", "inn", "rusty flagon", "the rusty flagon"],
++        "description": "A warm tavern with worn beams, busy tables, and the smell of stew.",
++        "present_npcs": [
++            {"id": "npc:Bran", "name": "Bran", "role": "innkeeper"},
++        ],
++        "services": ["lodging", "meal", "paid_information"],
++        "exits": {
++            "market": "loc_market",
++            "market square": "loc_market",
++            "outside": "loc_market",
++        },
++    },
++    "loc_market": {
++        "location_id": "loc_market",
++        "name": "Market Square",
++        "short_name": "market",
++        "aliases": ["market", "market square", "square", "bazaar"],
++        "description": "A busy market square of stalls, carts, shouted prices, and foot traffic.",
++        "present_npcs": [
++            {"id": "npc:Elara", "name": "Elara", "role": "merchant"},
++        ],
++        "services": ["shop_goods", "repair"],
++        "exits": {
++            "tavern": "loc_tavern",
++            "inn": "loc_tavern",
++            "rusty flagon": "loc_tavern",
++            "old mill road": "loc_old_mill_road",
++        },
++    },
++    "loc_old_mill_road": {
++        "location_id": "loc_old_mill_road",
++        "name": "Old Mill Road",
++        "short_name": "old mill road",
++        "aliases": ["old mill", "old mill road", "mill road"],
++        "description": "A rutted road leading toward the old mill and the quieter edge of town.",
++        "present_npcs": [],
++        "services": [],
++        "exits": {
++            "market": "loc_market",
++            "market square": "loc_market",
++        },
++    },
++}
 +
 +
-+def _clamp(value: float, low: float, high: float) -> float:
-+    return max(low, min(high, value))
++def list_locations() -> List[Dict[str, Any]]:
++    return [deepcopy(location) for location in LOCATIONS.values()]
 +
 +
-+def _round(value: float) -> float:
-+    return round(float(value), 3)
++def get_location(location_id: str) -> Dict[str, Any]:
++    return deepcopy(_safe_dict(LOCATIONS.get(_safe_str(location_id))))
 +
 +
-+def _relationship_key(owner_id: str, subject_id: str = "player") -> str:
-+    return f"{owner_id}::{subject_id}"
++def default_location_id() -> str:
++    return "loc_tavern"
 +
 +
-+def _ensure_relationship_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    relationships = simulation_state.get("relationship_state")
-+    if not isinstance(relationships, dict):
-+        relationships = {}
-+        simulation_state["relationship_state"] = relationships
-+    return relationships
++def current_location_id(simulation_state: Dict[str, Any]) -> str:
++    simulation_state = _safe_dict(simulation_state)
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    location_id = (
++        _safe_str(player_state.get("location_id"))
++        or _safe_str(player_state.get("current_location_id"))
++        or _safe_str(simulation_state.get("location_id"))
++        or _safe_str(simulation_state.get("current_location_id"))
++    )
++    return location_id or default_location_id()
 +
 +
-+def _ensure_emotion_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    emotions = simulation_state.get("npc_emotion_state")
-+    if not isinstance(emotions, dict):
-+        emotions = {}
-+        simulation_state["npc_emotion_state"] = emotions
-+    return emotions
++def normalize_location_name(value: str) -> str:
++    value = _safe_str(value).strip().lower()
++    value = value.replace("the ", "", 1) if value.startswith("the ") else value
++    return " ".join(value.split())
 +
 +
-+def _ensure_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    memory_state = simulation_state.get("memory_state")
-+    if not isinstance(memory_state, dict):
-+        memory_state = {}
-+        simulation_state["memory_state"] = memory_state
-+    social_memories = memory_state.get("social_memories")
-+    if not isinstance(social_memories, list):
-+        social_memories = []
-+        memory_state["social_memories"] = social_memories
-+    return memory_state
++def find_location_by_name(value: str) -> Dict[str, Any]:
++    needle = normalize_location_name(value)
++    if not needle:
++        return {}
++
++    for location in LOCATIONS.values():
++        names = [
++            _safe_str(location.get("location_id")),
++            _safe_str(location.get("name")),
++            _safe_str(location.get("short_name")),
++            *_safe_list(location.get("aliases")),
++        ]
++        if any(normalize_location_name(name) == needle for name in names):
++            return deepcopy(location)
++
++    for location in LOCATIONS.values():
++        names = [
++            _safe_str(location.get("name")),
++            _safe_str(location.get("short_name")),
++            *_safe_list(location.get("aliases")),
++        ]
++        if any(normalize_location_name(name) in needle for name in names):
++            return deepcopy(location)
++
++    return {}
 +
 +
-+def _dominant_emotion(valence: float, arousal: float, annoyance: float) -> str:
-+    if annoyance >= 0.75:
-+        return "annoyed"
-+    if annoyance >= 0.25:
-+        return "mildly_annoyed"
-+    if valence >= 0.2:
-+        return "pleased"
-+    if valence <= -0.2:
-+        return "displeased"
-+    if arousal >= 0.4:
-+        return "alert"
-+    return "neutral"
++def available_exits(simulation_state: Dict[str, Any]) -> Dict[str, str]:
++    location = get_location(current_location_id(simulation_state))
++    return dict(_safe_dict(location.get("exits")))
 +
 +
-+def _profile_for_social_action(resolved_result: Dict[str, Any]) -> Dict[str, float]:
-+    action_type = _safe_str(resolved_result.get("action_type"))
-+    outcome = _safe_str(resolved_result.get("outcome"))
-+    margin = _safe_int(resolved_result.get("margin"), 0)
-+    metadata = _safe_dict(resolved_result.get("action_metadata") or resolved_result.get("metadata"))
-+    intent_tags = set(_safe_list(metadata.get("intent_tags")))
++def resolve_exit_destination(simulation_state: Dict[str, Any], destination_text: str) -> str:
++    destination_text = normalize_location_name(destination_text)
++    exits = available_exits(simulation_state)
++    for alias, destination_id in exits.items():
++        if normalize_location_name(alias) == destination_text:
++            return _safe_str(destination_id)
++    for alias, destination_id in exits.items():
++        if normalize_location_name(alias) in destination_text:
++            return _safe_str(destination_id)
 +
-+    profile = {
-+        "familiarity": 0.1,
-+        "trust": 0.0,
-+        "annoyance": 0.0,
-+        "valence": 0.0,
-+        "arousal": 0.02,
++    direct = find_location_by_name(destination_text)
++    direct_id = _safe_str(direct.get("location_id"))
++    if direct_id and direct_id in set(exits.values()):
++        return direct_id
++    return ""
++
++
++def set_current_location(simulation_state: Dict[str, Any], location_id: str) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    location_id = _safe_str(location_id) or default_location_id()
++    location = get_location(location_id)
++    if not location:
++        location_id = default_location_id()
++        location = get_location(location_id)
++
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    if not player_state:
++        player_state = {}
++        simulation_state["player_state"] = player_state
++
++    simulation_state["location_id"] = location_id
++    simulation_state["current_location_id"] = location_id
++    simulation_state["location_state"] = {
++        "current_location_id": location_id,
++        "current_location": location,
++        "available_exits": available_exits({"location_id": location_id}),
 +    }
-+
-+    if action_type in {"social_activity", "persuade", "investigate", "observe"}:
-+        profile["familiarity"] = 0.2
-+        if outcome == "success":
-+            profile["familiarity"] += 0.15
-+            profile["trust"] += 0.1
-+            profile["valence"] += 0.04
-+        elif outcome == "failure":
-+            profile["annoyance"] += 0.1
-+            profile["valence"] -= 0.04
-+
-+    if action_type in {"intimidate", "threaten"} or "threat" in intent_tags:
-+        profile["familiarity"] += 0.25
-+        profile["trust"] -= 0.75
-+        profile["annoyance"] += 1.0
-+        profile["valence"] -= 0.2
-+        profile["arousal"] += 0.25
-+
-+    if action_type in {"help", "assist"} or "helpful" in intent_tags:
-+        profile["familiarity"] += 0.4
-+        profile["trust"] += 0.35
-+        profile["annoyance"] -= 0.1
-+        profile["valence"] += 0.15
-+
-+    if action_type in {"insult", "mock"} or "insult" in intent_tags:
-+        profile["familiarity"] += 0.25
-+        profile["trust"] -= 1.0
-+        profile["annoyance"] += 1.25
-+        profile["valence"] -= 0.25
-+        profile["arousal"] += 0.2
-+
-+    if margin >= 5:
-+        profile["trust"] += 0.05
-+        profile["valence"] += 0.02
-+    elif margin <= -5:
-+        profile["annoyance"] += 0.05
-+        profile["valence"] -= 0.02
-+
-+    return profile
++    simulation_state["present_npcs"] = deepcopy(_safe_list(location.get("present_npcs")))
++    player_state["location_id"] = location_id
++    player_state["current_location_id"] = location_id
++    return simulation_state
 +
 +
-+def _social_memory_kind(resolved_result: Dict[str, Any], profile: Dict[str, float]) -> str:
-+    if profile.get("annoyance", 0.0) > 0.5 or profile.get("trust", 0.0) < -0.5:
-+        return "social_negative"
-+    if profile.get("trust", 0.0) > 0.15 or profile.get("valence", 0.0) > 0.1:
-+        return "social_positive"
-+    return "social_interaction"
++def ensure_location_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    location_id = current_location_id(simulation_state)
++    return set_current_location(simulation_state, location_id)
 +
 +
-+def _social_summary(resolved_result: Dict[str, Any], owner_name: str) -> str:
-+    action_type = _safe_str(resolved_result.get("action_type") or "interaction")
-+    outcome = _safe_str(resolved_result.get("outcome"))
-+    if owner_name:
-+        if outcome:
-+            return f"The player had a {outcome} {action_type} interaction with {owner_name}."
-+        return f"The player interacted with {owner_name}."
-+    if outcome:
-+        return f"The player had a {outcome} {action_type} interaction."
-+    return "The player had a social interaction."
++def provider_present_at_location(simulation_state: Dict[str, Any], provider_id: str = "", provider_name: str = "") -> bool:
++    location = get_location(current_location_id(simulation_state))
++    npcs = _safe_list(location.get("present_npcs"))
++    provider_id = _safe_str(provider_id)
++    provider_name = _safe_str(provider_name).lower()
++    for npc in npcs:
++        npc = _safe_dict(npc)
++        if provider_id and _safe_str(npc.get("id")) == provider_id:
++            return True
++        if provider_name and _safe_str(npc.get("name")).lower() == provider_name:
++            return True
++    return False
 +
 +
-+def apply_general_social_effects(
-+    simulation_state: Dict[str, Any],
-+    resolved_result: Dict[str, Any],
++def location_allows_service(simulation_state: Dict[str, Any], service_kind: str) -> bool:
++    location = get_location(current_location_id(simulation_state))
++    return _safe_str(service_kind) in set(_safe_list(location.get("services")))
+D3 PATCH — Deterministic travel runtime
+New file: src/app/rpg/session/travel_runtime.py
+diff --git a/src/app/rpg/session/travel_runtime.py b/src/app/rpg/session/travel_runtime.py
+new file mode 100644
+index 0000000..6732add
+--- /dev/null
++++ b/src/app/rpg/session/travel_runtime.py
+@@ -0,0 +1,198 @@
++from __future__ import annotations
++
++from copy import deepcopy
++from typing import Any, Dict
++
++from app.rpg.world.location_registry import (
++    available_exits,
++    current_location_id,
++    get_location,
++    resolve_exit_destination,
++    set_current_location,
++)
++from app.rpg.world.world_event_log import add_world_event
++
++
++def _safe_str(value: Any) -> str:
++    return "" if value is None else str(value)
++
++
++def _safe_dict(value: Any) -> Dict[str, Any]:
++    return value if isinstance(value, dict) else {}
++
++
++TRAVEL_VERBS = (
++    "go to ",
++    "travel to ",
++    "walk to ",
++    "head to ",
++    "move to ",
++    "return to ",
++    "follow bran",
++    "follow the directions",
++    "follow his directions",
++    "follow bran's directions",
++)
++
++
++def detect_travel_destination_text(player_input: str) -> str:
++    lower = _safe_str(player_input).strip().lower()
++    if not lower:
++        return ""
++
++    if "market" in lower:
++        return "market"
++    if "tavern" in lower or "inn" in lower or "rusty flagon" in lower:
++        return "tavern"
++    if "old mill" in lower or "mill road" in lower:
++        return "old mill road"
++
++    for verb in TRAVEL_VERBS:
++        if verb in lower:
++            return lower.split(verb, 1)[1].strip(" .")
++    return ""
++
++
++def resolve_travel_turn(
 +    *,
++    player_input: str,
++    simulation_state: Dict[str, Any],
 +    tick: int = 0,
 +) -> Dict[str, Any]:
 +    simulation_state = _safe_dict(simulation_state)
-+    resolved_result = _safe_dict(resolved_result)
-+    action_type = _safe_str(resolved_result.get("action_type"))
++    from_location_id = current_location_id(simulation_state)
++    destination_text = detect_travel_destination_text(player_input)
++    if not destination_text:
++        return {"matched": False}
 +
-+    service_result = _safe_dict(resolved_result.get("service_result"))
-+    if service_result.get("matched"):
-+        return {}
++    destination_id = resolve_exit_destination(simulation_state, destination_text)
++    if not destination_id:
++        return {
++            "matched": True,
++            "applied": False,
++            "status": "travel_destination_unavailable",
++            "action_type": "travel",
++            "from_location_id": from_location_id,
++            "to_location_id": "",
++            "destination_text": destination_text,
++            "available_exits": available_exits(simulation_state),
++            "summary": "No available route matches that destination.",
++            "source": "deterministic_travel_runtime",
++        }
 +
-+    social_action_types = {
-+        "social_activity",
-+        "persuade",
-+        "investigate",
-+        "observe",
-+        "intimidate",
-+        "threaten",
-+        "help",
-+        "assist",
-+        "insult",
-+        "mock",
-+    }
-+    if action_type not in social_action_types:
-+        return {}
++    before = get_location(from_location_id)
++    after = get_location(destination_id)
++    set_current_location(simulation_state, destination_id)
 +
-+    owner_id = _safe_str(resolved_result.get("target_id"))
-+    owner_name = _safe_str(resolved_result.get("target_name"))
-+    if not owner_id and owner_name:
-+        owner_id = owner_name if owner_name.startswith("npc:") else f"npc:{owner_name}"
-+    if not owner_id:
-+        return {}
-+
-+    profile = _profile_for_social_action(resolved_result)
-+
-+    relationships = _ensure_relationship_state(simulation_state)
-+    relationship_key = _relationship_key(owner_id)
-+    relationship = _safe_dict(relationships.get(relationship_key))
-+    axes = _safe_dict(relationship.get("axes"))
-+    before_axes = deepcopy(axes)
-+
-+    familiarity = _clamp(float(axes.get("familiarity") or 0.0) + profile["familiarity"], 0.0, 100.0)
-+    trust = _clamp(float(axes.get("trust") or 0.0) + profile["trust"], -100.0, 100.0)
-+    annoyance = _clamp(float(axes.get("annoyance") or 0.0) + profile["annoyance"], 0.0, 100.0)
-+
-+    axes["familiarity"] = _round(familiarity)
-+    axes["trust"] = _round(trust)
-+    axes["annoyance"] = _round(annoyance)
-+
-+    relationship = {
-+        **relationship,
-+        "owner_id": owner_id,
-+        "owner_name": owner_name,
-+        "subject_id": "player",
-+        "axes": axes,
-+        "updated_tick": int(tick or 0),
-+        "source": "deterministic_social_runtime",
-+    }
-+    relationships[relationship_key] = relationship
-+
-+    emotions = _ensure_emotion_state(simulation_state)
-+    emotion = _safe_dict(emotions.get(owner_id))
-+    valence = _clamp(float(emotion.get("valence") or 0.0) + profile["valence"], -1.0, 1.0)
-+    arousal = _clamp(float(emotion.get("arousal") or 0.0) + profile["arousal"], 0.0, 1.0)
-+    dominant = _dominant_emotion(valence, arousal, annoyance)
-+    emotion = {
-+        **emotion,
-+        "owner_id": owner_id,
-+        "owner_name": owner_name,
-+        "dominant_emotion": dominant,
-+        "valence": _round(valence),
-+        "arousal": _round(arousal),
-+        "updated_tick": int(tick or 0),
-+        "source": "deterministic_social_runtime",
-+    }
-+    emotions[owner_id] = emotion
-+
-+    memory_kind = _social_memory_kind(resolved_result, profile)
-+    memory = {
-+        "memory_id": f"memory:social:{int(tick or 0)}:{owner_id}:{action_type}",
-+        "kind": memory_kind,
-+        "owner_id": owner_id,
-+        "owner_name": owner_name,
-+        "subject_id": "player",
-+        "summary": _social_summary(resolved_result, owner_name),
-+        "sentiment": "positive" if memory_kind == "social_positive" else "negative" if memory_kind == "social_negative" else "neutral",
-+        "importance": 0.3 if memory_kind == "social_interaction" else 0.45,
-+        "action_type": action_type,
-+        "outcome": _safe_str(resolved_result.get("outcome")),
-+        "tick": int(tick or 0),
-+        "source": "deterministic_social_runtime",
-+    }
-+
-+    memory_state = _ensure_memory_state(simulation_state)
-+    social_memories = _safe_list(memory_state.get("social_memories"))
-+    if not any(_safe_str(existing.get("memory_id")) == memory["memory_id"] for existing in social_memories if isinstance(existing, dict)):
-+        social_memories.append(deepcopy(memory))
-+        if len(social_memories) > MAX_SOCIAL_MEMORIES:
-+            del social_memories[:-MAX_SOCIAL_MEMORIES]
++    world_event = add_world_event(
++        simulation_state,
++        {
++            "event_id": f"world:event:travel:{int(tick or 0)}:{from_location_id}:{destination_id}",
++            "kind": "travel",
++            "title": "Location changed",
++            "summary": f"Travelled from {_safe_str(before.get('name')) or from_location_id} to {_safe_str(after.get('name')) or destination_id}.",
++            "from_location_id": from_location_id,
++            "to_location_id": destination_id,
++            "tick": int(tick or 0),
++            "source": "deterministic_travel_runtime",
++        },
++    )
 +
 +    return {
-+        "memory_entry": deepcopy(memory),
-+        "relationship_key": relationship_key,
-+        "relationship": deepcopy(relationship),
-+        "emotion": deepcopy(emotion),
-+        "deltas": deepcopy(profile),
-+        "before_axes": before_axes,
-+        "source": "deterministic_social_runtime",
++        "matched": True,
++        "applied": True,
++        "status": "travelled",
++        "action_type": "travel",
++        "from_location_id": from_location_id,
++        "to_location_id": destination_id,
++        "from_location": before,
++        "to_location": after,
++        "destination_text": destination_text,
++        "available_exits": available_exits(simulation_state),
++        "present_npcs": deepcopy(after.get("present_npcs") or []),
++        "world_event": world_event,
++        "summary": f"You travel to {_safe_str(after.get('name')) or destination_id}.",
++        "source": "deterministic_travel_runtime",
 +    }
-C1 PATCH 3 — Update memory exports
-File: src/app/rpg/memory/__init__.py
-diff --git a/src/app/rpg/memory/__init__.py b/src/app/rpg/memory/__init__.py
---- a/src/app/rpg/memory/__init__.py
-+++ b/src/app/rpg/memory/__init__.py
-@@
- from app.rpg.memory.service_memory import append_service_memory, build_service_memory_entry
- from app.rpg.memory.service_memory_recall import (
-     has_backing_service_memory,
-     recall_service_memories,
-     recall_service_memories_for_narration,
- )
- from app.rpg.memory.service_social_effects import apply_service_social_effects
-+from app.rpg.memory.npc_memory_recall import (
-+    memory_reference_is_backed,
-+    recall_npc_memories,
-+)
-+from app.rpg.memory.social_effects import apply_general_social_effects
-
-Skip if your __init__.py is intentionally empty.
-
-C1 PATCH 4 — Add C1 social effects into runtime
++
++
++def travel_resolved_result(travel_result: Dict[str, Any]) -> Dict[str, Any]:
++    travel_result = _safe_dict(travel_result)
++    if not travel_result.get("matched"):
++        return {}
++    return {
++        "action_type": "travel",
++        "outcome": "success" if travel_result.get("applied") else "failure",
++        "travel_result": travel_result,
++        "location_id": travel_result.get("to_location_id") or travel_result.get("from_location_id"),
++        "summary": travel_result.get("summary"),
++        "world_event": travel_result.get("world_event") or {},
++        "source": "deterministic_travel_runtime",
++    }
+D4 PATCH — Wire travel runtime into turn runtime
 File: src/app/rpg/session/runtime.py
 
-Find the place after the authoritative/resolved result is produced and before narration context is built. You need to apply general social effects only for non-service turns.
-
-Add import:
+Add imports:
 
 diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
 --- a/src/app/rpg/session/runtime.py
 +++ b/src/app/rpg/session/runtime.py
 @@
-+from app.rpg.memory.social_effects import apply_general_social_effects
++from app.rpg.session.travel_runtime import resolve_travel_turn, travel_resolved_result
++from app.rpg.world.location_registry import ensure_location_state
 
-Then after resolved_result / authoritative_result is available:
+Find the section after the authoritative/resolved action is produced and before narration context is built. Add this after service resolution, and only when no service matched:
 
 @@
      resolved_result = _safe_dict(
@@ -686,1158 +659,753 @@ Then after resolved_result / authoritative_result is available:
          or authoritative_result.get("resolved_action")
          or authoritative_result
      )
-+    social_living_world_effects = apply_general_social_effects(
-+        simulation_state,
-+        resolved_result,
-+        tick=current_tick,
-+    )
-+    if social_living_world_effects:
-+        resolved_result["social_living_world_effects"] = social_living_world_effects
-+        resolved_result["memory_entry"] = (
-+            resolved_result.get("memory_entry")
-+            or social_living_world_effects.get("memory_entry")
-+            or {}
++
++    # Phase 9.0: deterministic travel/scene transition runtime.
++    # Service turns remain service-first. Travel only claims the turn when no
++    # deterministic service result has matched.
++    service_result = _safe_dict(resolved_result.get("service_result"))
++    if not service_result.get("matched"):
++        ensure_location_state(simulation_state)
++        travel_result = resolve_travel_turn(
++            player_input=player_input,
++            simulation_state=simulation_state,
++            tick=current_tick,
 +        )
-+        resolved_result["relationship_state"] = _safe_dict(simulation_state.get("relationship_state"))
-+        resolved_result["npc_emotion_state"] = _safe_dict(simulation_state.get("npc_emotion_state"))
-+        resolved_result["memory_state"] = _safe_dict(simulation_state.get("memory_state"))
-+        authoritative_result["social_living_world_effects"] = social_living_world_effects
-+        authoritative_result["relationship_state"] = _safe_dict(simulation_state.get("relationship_state"))
-+        authoritative_result["npc_emotion_state"] = _safe_dict(simulation_state.get("npc_emotion_state"))
-+        authoritative_result["memory_state"] = _safe_dict(simulation_state.get("memory_state"))
++        if travel_result.get("matched"):
++            travel_resolved = travel_resolved_result(travel_result)
++            resolved_result.update(travel_resolved)
++            authoritative_result["travel_result"] = travel_result
++            authoritative_result["resolved_result"] = resolved_result
++            authoritative_result["location_state"] = _safe_dict(simulation_state.get("location_state"))
++            authoritative_result["world_event_state"] = _safe_dict(simulation_state.get("world_event_state"))
++            authoritative_result["simulation_state"] = simulation_state
 
-If your runtime variable is named differently, apply this to the authoritative turn result after action resolution but before response assembly.
+If your runtime uses a different variable name than authoritative_result, apply the same logic to the final result dict that gets returned by apply_turn(...).
 
-C1 PATCH 5 — Narration context uses bounded NPC memory recall
-File: src/app/rpg/session/narration_runtime.py
-
-Add imports:
-
-diff --git a/src/app/rpg/session/narration_runtime.py b/src/app/rpg/session/narration_runtime.py
---- a/src/app/rpg/session/narration_runtime.py
-+++ b/src/app/rpg/session/narration_runtime.py
-@@
- from app.rpg.memory.service_memory_recall import recall_service_memories_for_narration
-+from app.rpg.memory.npc_memory_recall import recall_npc_memories
-
-In build_narration_context(...), after recall_payload = ..., add general NPC recall:
-
-@@
-     recall_payload = recall_service_memories_for_narration(
-         simulation_state,
-         turn_contract=turn_contract,
-         service_result=service_result,
-         current_memory_entry=_safe_dict(
-             resolved_result.get("memory_entry")
-             or service_application.get("memory_entry")
-         ),
-         current_tick=int(
-             _safe_dict(
-                 resolved_result.get("memory_entry")
-                 or service_application.get("memory_entry")
-             ).get("tick")
-             or _safe_dict(simulation_state).get("tick")
-             or 0
-         ),
-     )
-+    current_memory_entry = _safe_dict(
-+        resolved_result.get("memory_entry")
-+        or service_application.get("memory_entry")
-+        or _safe_dict(resolved_result.get("social_living_world_effects")).get("memory_entry")
-+    )
-+    current_memory_id = _safe_str(current_memory_entry.get("memory_id"))
-+    npc_recall_payload = recall_npc_memories(
-+        simulation_state,
-+        turn_contract=turn_contract,
-+        resolved_result=resolved_result,
-+        service_result=service_result,
-+        current_tick=int(current_memory_entry.get("tick") or _safe_dict(simulation_state).get("tick") or 0),
-+        exclude_memory_ids=[current_memory_id] if current_memory_id else [],
-+        limit=6,
-+    )
- 
-     return {
-@@
-         "recalled_service_memories": recall_payload.get("recalled_service_memories") or [],
-         "service_memory_recall_debug": recall_payload.get("debug") or {},
-+        "recalled_npc_memories": npc_recall_payload.get("recalled_memories") or [],
-+        "npc_memory_recall_debug": npc_recall_payload.get("debug") or {},
-         "runtime_state": runtime_state,
-         "simulation_state": simulation_state,
-     }
-
-If _safe_str is not imported, add it from state_normalization.
-
-C1 PATCH 6 — Narrator prompt and memory-backed dialogue
+D5 PATCH — Narrator grounding for travel
 File: src/app/rpg/ai/world_scene_narrator.py
 
-Add import if needed:
+Add helpers near other grounding helpers:
 
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+--- a/src/app/rpg/ai/world_scene_narrator.py
++++ b/src/app/rpg/ai/world_scene_narrator.py
 @@
--from typing import Any, Dict, List
-+from typing import Any, Dict, List
-+from app.rpg.memory.npc_memory_recall import memory_reference_is_backed
-
-Add helpers:
-
-@@
- def _recalled_service_memories_from_context(narration_context: Dict[str, Any]) -> List[Dict[str, Any]]:
-@@
-     return []
-+
-+
-+def _recalled_npc_memories_from_context(narration_context: Dict[str, Any]) -> List[Dict[str, Any]]:
++def _travel_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
 +    narration_context = _safe_dict(narration_context)
-+    memories = narration_context.get("recalled_npc_memories")
-+    if isinstance(memories, list):
-+        return [_safe_dict(memory) for memory in memories if _safe_dict(memory)]
-+    return []
++    resolved = _safe_dict(narration_context.get("resolved_result"))
++    travel = _safe_dict(resolved.get("travel_result"))
++    if travel:
++        return travel
++    turn_contract = _safe_dict(narration_context.get("turn_contract"))
++    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
++    return _safe_dict(resolved.get("travel_result"))
 +
 +
-+def _format_recalled_npc_memories_for_prompt(narration_context: Dict[str, Any]) -> str:
-+    memories = _recalled_npc_memories_from_context(narration_context)
-+    if not memories:
-+        return "None."
-+    lines: List[str] = []
-+    for memory in memories[:6]:
-+        summary = _safe_str(memory.get("summary"))
-+        kind = _safe_str(memory.get("kind"))
-+        sentiment = _safe_str(memory.get("sentiment"))
-+        if not summary:
-+            continue
-+        suffix = ", ".join(part for part in [kind, sentiment] if part)
-+        lines.append(f"- {summary}" + (f" ({suffix})" if suffix else ""))
-+    return "\n".join(lines) if lines else "None."
++def _grounded_travel_narration(narration_context: Dict[str, Any]) -> str:
++    travel = _travel_result_from_context(narration_context)
++    if not travel.get("matched"):
++        return ""
++    if not travel.get("applied"):
++        exits = _safe_dict(travel.get("available_exits"))
++        if exits:
++            return "No clear route matches that destination from here."
++        return "There is no available route from here."
++    to_location = _safe_dict(travel.get("to_location"))
++    name = _safe_str(to_location.get("name") or travel.get("to_location_id"))
++    return f"You arrive at {name}."
++
++
++def _grounded_travel_action(narration_context: Dict[str, Any]) -> str:
++    travel = _travel_result_from_context(narration_context)
++    if not travel.get("matched"):
++        return ""
++    if travel.get("applied"):
++        to_location = _safe_dict(travel.get("to_location"))
++        name = _safe_str(to_location.get("name") or travel.get("to_location_id"))
++        return f"You travel to {name}."
++    return "No available route matches that destination."
 
-In prompt construction, add:
+In _sanitize_narration_payload(...), near the end before return:
 
 @@
- Relevant NPC memories from deterministic simulation:
- {_format_recalled_service_memories_for_prompt(narration_context)}
+     payload["action"] = _final_grounded_service_action_text(
+         _safe_str(payload.get("action")),
+         narration_context,
+     )
 +
-+Relevant general NPC memories:
-+{_format_recalled_npc_memories_for_prompt(narration_context)}
- 
- Memory rules:
--- NPCs may reference prior interactions only if they appear in Relevant NPC memories.
-+- NPCs may reference prior interactions only if they appear in Relevant NPC memories or Relevant general NPC memories.
- - Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.
- - If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.
++    travel_narration = _grounded_travel_narration(narration_context)
++    travel_action = _grounded_travel_action(narration_context)
++    if travel_narration:
++        payload["narration"] = travel_narration
++    if travel_action:
++        payload["action"] = travel_action
 
-Patch unbacked memory stripping:
+This keeps travel deterministic and prevents the LLM from inventing arrival facts.
+
+D6 PATCH — Service availability respects current location
+File: src/app/rpg/economy/service_resolver.py
+
+Add import:
+
+diff --git a/src/app/rpg/economy/service_resolver.py b/src/app/rpg/economy/service_resolver.py
+--- a/src/app/rpg/economy/service_resolver.py
++++ b/src/app/rpg/economy/service_resolver.py
+@@
++from app.rpg.world.location_registry import (
++    current_location_id,
++    location_allows_service,
++    provider_present_at_location,
++)
+
+Add helpers near resolver helper functions:
 
 @@
- def _strip_unbacked_memory_reference_from_npc_line(
-     line: str,
-     narration_context: Dict[str, Any],
- ) -> str:
--    if _memory_reference_is_backed(line, narration_context):
-+    service_backed = _memory_reference_is_backed(line, narration_context)
-+    npc_backed = memory_reference_is_backed(
-+        line,
-+        _recalled_npc_memories_from_context(narration_context),
++def _offer_location_allowed(offer: Dict[str, Any], simulation_state: Dict[str, Any]) -> bool:
++    availability_rules = _safe_dict(offer.get("availability_rules"))
++    required_location = _safe_str(
++        availability_rules.get("requires_location")
++        or offer.get("location_id")
 +    )
-+    if service_backed or npc_backed:
-         return line
-C1 PATCH 7 — Response builder debug propagation
++    if required_location and current_location_id(simulation_state) != required_location:
++        return False
++
++    service_kind = _safe_str(offer.get("service_kind"))
++    if service_kind and not location_allows_service(simulation_state, service_kind):
++        return False
++
++    provider_id = _safe_str(offer.get("provider_id"))
++    provider_name = _safe_str(offer.get("provider_name"))
++    if provider_id or provider_name:
++        return provider_present_at_location(
++            simulation_state,
++            provider_id=provider_id,
++            provider_name=provider_name,
++        )
++
++    return True
++
++
++def _filter_offers_for_current_location(
++    offers: List[Dict[str, Any]],
++    simulation_state: Dict[str, Any],
++) -> List[Dict[str, Any]]:
++    return [
++        offer
++        for offer in offers
++        if _offer_location_allowed(_safe_dict(offer), simulation_state)
++    ]
+
+Then find where offers are collected before presenting or matching. Apply the filter:
+
+@@
+-    offers = _collect_service_offers(...)
++    offers = _collect_service_offers(...)
++    offers = _filter_offers_for_current_location(offers, simulation_state)
+
+If the function is named differently, apply the filter immediately after the candidate offers list is built and before selecting/matching an offer.
+
+Also include current location in service result debug:
+
+@@
+     result = {
+         ...
++        "current_location_id": current_location_id(simulation_state),
+File: src/app/rpg/economy/service_registry.py
+
+Ensure Elara offers require market and Bran offers require tavern.
+
+Patch offer definitions:
+
+@@
+         "offer_id": "elara_torch",
+         "service_kind": "shop_goods",
+         "label": "Torch",
++        "provider_id": "npc:Elara",
++        "provider_name": "Elara",
++        "availability_rules": {
++            "requires_location": "loc_market"
++        },
+@@
+         "offer_id": "elara_rope",
+         "service_kind": "shop_goods",
+         "label": "Rope",
++        "provider_id": "npc:Elara",
++        "provider_name": "Elara",
++        "availability_rules": {
++            "requires_location": "loc_market"
++        },
+@@
+         "offer_id": "elara_repair_basic",
+         "service_kind": "repair",
++        "provider_id": "npc:Elara",
++        "provider_name": "Elara",
++        "availability_rules": {
++            "requires_location": "loc_market"
++        },
+@@
+         "offer_id": "bran_common_room_cot",
+         "service_kind": "lodging",
++        "provider_id": "npc:Bran",
++        "provider_name": "Bran",
++        "availability_rules": {
++            "requires_location": "loc_tavern"
++        },
+@@
+         "offer_id": "bran_meal",
+         "service_kind": "meal",
++        "provider_id": "npc:Bran",
++        "provider_name": "Bran",
++        "availability_rules": {
++            "requires_location": "loc_tavern"
++        },
+@@
+         "offer_id": "bran_paid_rumor",
+         "service_kind": "paid_information",
++        "provider_id": "npc:Bran",
++        "provider_name": "Bran",
++        "availability_rules": {
++            "requires_location": "loc_tavern"
++        },
+
+Use your actual offer IDs if they differ. Preserve existing fields.
+
+D7 PATCH — Response/debug visibility
 File: src/app/rpg/session/response_builder.py
 
-Extend existing _attach_living_world_debug_fields(...) or equivalent:
+In _attach_living_world_debug_fields(...), add location/travel fields:
 
+diff --git a/src/app/rpg/session/response_builder.py b/src/app/rpg/session/response_builder.py
+--- a/src/app/rpg/session/response_builder.py
++++ b/src/app/rpg/session/response_builder.py
 @@
-     result_payload["recalled_service_memories"] = _first_list(
-         result_payload.get("recalled_service_memories"),
-         resolved_result.get("recalled_service_memories"),
-         narration_debug.get("recalled_service_memories"),
+     result_payload["world_event_state"] = _first_dict(
+         result_payload.get("world_event_state"),
+         resolved_result.get("world_event_state"),
+         service_application.get("world_event_state"),
      )
-     result_payload["service_memory_recall_debug"] = _first_dict(
-         result_payload.get("service_memory_recall_debug"),
-         resolved_result.get("service_memory_recall_debug"),
-         narration_debug.get("service_memory_recall_debug"),
-     )
-+    result_payload["recalled_npc_memories"] = _first_list(
-+        result_payload.get("recalled_npc_memories"),
-+        resolved_result.get("recalled_npc_memories"),
-+        narration_debug.get("recalled_npc_memories"),
++    result_payload["location_state"] = _first_dict(
++        result_payload.get("location_state"),
++        resolved_result.get("location_state"),
 +    )
-+    result_payload["npc_memory_recall_debug"] = _first_dict(
-+        result_payload.get("npc_memory_recall_debug"),
-+        resolved_result.get("npc_memory_recall_debug"),
-+        narration_debug.get("npc_memory_recall_debug"),
++    result_payload["travel_result"] = _first_dict(
++        result_payload.get("travel_result"),
++        resolved_result.get("travel_result"),
 +    )
-+    result_payload["social_living_world_effects"] = _first_dict(
-+        result_payload.get("social_living_world_effects"),
-+        resolved_result.get("social_living_world_effects"),
-+    )
-C1 PATCH 8 — Narration debug stores NPC recall
-File: src/app/rpg/session/narration_runtime.py
 
-Where narration_debug is assembled, add:
+If resolved_result does not carry location_state, also add fallback from the session/simulation state where available in that function.
 
-@@
-         "recalled_service_memories": narration_context.get("recalled_service_memories") or [],
-         "service_memory_recall_debug": narration_context.get("service_memory_recall_debug") or {},
-+        "recalled_npc_memories": narration_context.get("recalled_npc_memories") or [],
-+        "npc_memory_recall_debug": narration_context.get("npc_memory_recall_debug") or {},
-
-Also after narration context is built, if resolved_result is mutable:
-
-@@
-     resolved_result["recalled_service_memories"] = narration_context.get("recalled_service_memories") or []
-     resolved_result["service_memory_recall_debug"] = narration_context.get("service_memory_recall_debug") or {}
-+    resolved_result["recalled_npc_memories"] = narration_context.get("recalled_npc_memories") or []
-+    resolved_result["npc_memory_recall_debug"] = narration_context.get("npc_memory_recall_debug") or {}
-C1 PATCH 9 — Manual transcript prints NPC recall/social deltas
+D8 PATCH — Manual transcript location/travel output
 File: src/tests/rpg/manual_llm_transcript.py
 
-Add helpers:
+Add extractors:
 
 @@
- def _extract_service_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+ def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
 @@
-     return _safe_dict(resolved.get("service_memory_recall_debug"))
+     simulation_state = _extract_simulation_state(result)
+     return _safe_dict(simulation_state.get("world_event_state"))
 +
 +
-+def _extract_recalled_npc_memories(result: Dict[str, Any]) -> List[Any]:
-+    result = _safe_dict(result)
-+    result_sub = _safe_dict(result.get("result"))
-+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-+    direct = _safe_list(narration_debug.get("recalled_npc_memories"))
-+    if direct:
-+        return direct
-+    turn_contract = _extract_turn_contract(result)
-+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+    return _safe_list(resolved.get("recalled_npc_memories"))
-+
-+
-+def _extract_npc_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
-+    result = _safe_dict(result)
-+    result_sub = _safe_dict(result.get("result"))
-+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
-+    direct = _safe_dict(narration_debug.get("npc_memory_recall_debug"))
-+    if direct:
-+        return direct
-+    turn_contract = _extract_turn_contract(result)
-+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+    return _safe_dict(resolved.get("npc_memory_recall_debug"))
-+
-+
-+def _extract_social_living_world_effects(result: Dict[str, Any]) -> Dict[str, Any]:
++def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
 +    result_sub = _safe_dict(_safe_dict(result).get("result"))
-+    direct = _safe_dict(result_sub.get("social_living_world_effects"))
++    direct = _safe_dict(result_sub.get("location_state"))
++    if direct:
++        return direct
++    simulation_state = _extract_simulation_state(result)
++    return _safe_dict(simulation_state.get("location_state"))
++
++
++def _extract_current_location_id(result: Dict[str, Any]) -> str:
++    location_state = _extract_location_state(result)
++    if _safe_str(location_state.get("current_location_id")):
++        return _safe_str(location_state.get("current_location_id"))
++    simulation_state = _extract_simulation_state(result)
++    player_state = _safe_dict(simulation_state.get("player_state"))
++    return (
++        _safe_str(player_state.get("location_id"))
++        or _safe_str(simulation_state.get("location_id"))
++        or _safe_str(simulation_state.get("current_location_id"))
++    )
++
++
++def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
++    result_sub = _safe_dict(_safe_dict(result).get("result"))
++    direct = _safe_dict(result_sub.get("travel_result"))
 +    if direct:
 +        return direct
 +    turn_contract = _extract_turn_contract(result)
 +    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+    return _safe_dict(resolved.get("social_living_world_effects"))
++    return _safe_dict(resolved.get("travel_result"))
 
 In _compact_turn_summary(...), add:
 
 @@
-         "recalled_service_memories": _extract_recalled_service_memories(result),
-         "recalled_service_memory_count": len(_extract_recalled_service_memories(result)),
-         "service_memory_recall_debug": _extract_service_memory_recall_debug(result),
-+        "recalled_npc_memories": _extract_recalled_npc_memories(result),
-+        "recalled_npc_memory_count": len(_extract_recalled_npc_memories(result)),
-+        "npc_memory_recall_debug": _extract_npc_memory_recall_debug(result),
-+        "social_living_world_effects": _extract_social_living_world_effects(result),
-         "relationship_state": _extract_relationship_state(result),
+         "world_event_state": _extract_world_event_state(result),
+         "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
++        "current_location_id": _extract_current_location_id(result),
++        "location_state": _extract_location_state(result),
++        "travel_result": _extract_travel_result(result),
+         "regression_warnings": _manual_regression_warnings(
 
-In _print_turn(...), after service recall debug:
+In _print_turn(...), after WORLD EVENT STATE:
 
 @@
-     _emit("SERVICE MEMORY RECALL DEBUG:", channel=channel)
-     _emit(_compact_json(_extract_service_memory_recall_debug(result)), channel=channel)
+     _emit("WORLD EVENT STATE:", channel=channel)
+     _emit(_compact_json(_extract_world_event_state(result)), channel=channel)
      _emit("", channel=channel)
-+    _emit("RECALLED NPC MEMORIES:", channel=channel)
-+    _emit(_compact_json(_extract_recalled_npc_memories(result)), channel=channel)
++    _emit("LOCATION STATE:", channel=channel)
++    _emit(_compact_json(_extract_location_state(result)), channel=channel)
 +    _emit("", channel=channel)
-+    _emit("NPC MEMORY RECALL DEBUG:", channel=channel)
-+    _emit(_compact_json(_extract_npc_memory_recall_debug(result)), channel=channel)
++    _emit("TRAVEL RESULT:", channel=channel)
++    _emit(_compact_json(_extract_travel_result(result)), channel=channel)
 +    _emit("", channel=channel)
-+    _emit("SOCIAL LIVING WORLD EFFECTS:", channel=channel)
-+    _emit(_compact_json(_extract_social_living_world_effects(result)), channel=channel)
-+    _emit("", channel=channel)
-C1 PATCH 10 — C1 tests
-New file: src/app/rpg/tests/test_npc_memory_recall.py
-diff --git a/src/app/rpg/tests/test_npc_memory_recall.py b/src/app/rpg/tests/test_npc_memory_recall.py
+D9 PATCH — Update manual scenarios to include travel
+File: src/tests/rpg/manual_llm_transcript.py
+
+Update MANUAL_TEST_TURNS.
+
+@@
+ MANUAL_TEST_TURNS = [
+     "I ask Bran for a room to rent",
+     "I ask Bran for food",
+     "I ask Bran if he has heard any rumors",
+-    "I ask Elara what she sells",
+-    "I buy a torch from Elara",
+-    "I try to buy a sword I cannot afford",
+-    "I ask Elara to repair my gear",
+     "I ask Bran for directions to the market",
++    "I follow Bran's directions to the market",
++    "I ask Elara what she sells",
++    "I buy a torch from Elara",
++    "I ask Elara to repair my gear",
+ ]
+
+Update service scenarios:
+
+@@
+     "shop_success": {
+         "currency": {"gold": 0, "silver": 2, "copper": 0},
+         "turns": [
++            "I follow Bran's directions to the market",
+             "I ask Elara what she sells",
+             "I buy a torch from Elara",
+         ],
+     },
+     "blocked_purchase": {
+         "currency": {"gold": 0, "silver": 1, "copper": 0},
+         "turns": [
++            "I follow Bran's directions to the market",
+             "I ask Elara what she sells",
+             "I buy rope from Elara",
+         ],
+     },
+
+Adjust scenario-specific regression warning turn indexes from D1:
+
+@@
+-    if scenario_name == "shop_success" and turn_index == 3:
++    if scenario_name == "shop_success" and turn_index == 3:
+@@
+-    if scenario_name == "blocked_purchase" and turn_index == 3:
++    if scenario_name == "blocked_purchase" and turn_index == 3:
+
+Those remain 3 because travel is now turn 1, inquiry turn 2, purchase turn 3.
+
+D10 PATCH — Lightweight RPG inspector/debug UI
+New file: src/static/rpg-living-world-inspector.js
+diff --git a/src/static/rpg-living-world-inspector.js b/src/static/rpg-living-world-inspector.js
 new file mode 100644
-index 0000000..d16c912
+index 0000000..a0c28bb
 --- /dev/null
-+++ b/src/app/rpg/tests/test_npc_memory_recall.py
-@@ -0,0 +1,88 @@
-+from app.rpg.memory.npc_memory_recall import (
-+    memory_reference_is_backed,
-+    recall_npc_memories,
-+)
++++ b/src/static/rpg-living-world-inspector.js
+@@ -0,0 +1,196 @@
++(function () {
++  "use strict";
 +
++  function safeObj(value) {
++    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
++  }
 +
-+def test_recall_npc_memories_excludes_current_tick_and_filters_target():
-+    state = {
-+        "memory_state": {
-+            "service_memories": [
-+                {
-+                    "memory_id": "prior-elara",
-+                    "kind": "service_purchase_blocked",
-+                    "owner_id": "npc:Elara",
-+                    "owner_name": "Elara",
-+                    "subject_id": "player",
-+                    "service_kind": "shop_goods",
-+                    "summary": "The player tried to buy Torch from Elara without enough coin.",
-+                    "blocked_reason": "insufficient_funds",
-+                    "tick": 10,
-+                },
-+                {
-+                    "memory_id": "current-elara",
-+                    "kind": "service_inquiry",
-+                    "owner_id": "npc:Elara",
-+                    "owner_name": "Elara",
-+                    "subject_id": "player",
-+                    "service_kind": "shop_goods",
-+                    "summary": "The player asked Elara about shop goods.",
-+                    "tick": 20,
-+                },
-+                {
-+                    "memory_id": "bran",
-+                    "kind": "service_inquiry",
-+                    "owner_id": "npc:Bran",
-+                    "owner_name": "Bran",
-+                    "subject_id": "player",
-+                    "service_kind": "lodging",
-+                    "summary": "The player asked Bran about lodging.",
-+                    "tick": 5,
-+                },
-+            ]
-+        }
++  function safeArr(value) {
++    return Array.isArray(value) ? value : [];
++  }
++
++  function escapeHtml(value) {
++    return String(value ?? "")
++      .replace(/&/g, "&amp;")
++      .replace(/</g, "&lt;")
++      .replace(/>/g, "&gt;")
++      .replace(/"/g, "&quot;");
++  }
++
++  function resultRoot(payload) {
++    const root = safeObj(payload);
++    return safeObj(root.result || root);
++  }
++
++  function findOrCreatePanel() {
++    const host =
++      document.getElementById("rpgInspectorPanel") ||
++      document.getElementById("rpg-inspector-panel") ||
++      document.getElementById("rpg-top-panels") ||
++      document.querySelector("[data-rpg-inspector]") ||
++      document.body;
++
++    let panel = document.getElementById("rpgLivingWorldDebugPanel");
++    if (!panel) {
++      panel = document.createElement("section");
++      panel.id = "rpgLivingWorldDebugPanel";
++      panel.className = "rpg-living-world-debug-panel";
++      host.appendChild(panel);
 +    }
++    return panel;
++  }
 +
-+    payload = recall_npc_memories(
-+        state,
-+        turn_contract={
-+            "action": {"target_id": "npc:Elara", "target_name": "Elara"},
-+            "resolved_result": {"action_type": "social_activity", "target_id": "npc:Elara", "target_name": "Elara"},
-+        },
-+        current_tick=20,
-+        exclude_memory_ids=["current-elara"],
-+    )
-+
-+    assert [memory["memory_id"] for memory in payload["recalled_memories"]] == ["prior-elara"]
-+    assert payload["debug"]["excluded_memory_ids"] == ["current-elara"]
-+
-+
-+def test_memory_reference_requires_backing():
-+    memories = [
-+        {
-+            "kind": "service_purchase_blocked",
-+            "summary": "The player tried to buy Torch from Elara without enough coin.",
-+            "blocked_reason": "insufficient_funds",
-+        }
-+    ]
-+
-+    assert memory_reference_is_backed("Still short on coin from last time?", memories)
-+    assert not memory_reference_is_backed("You bought this before, remember?", memories)
-+    assert not memory_reference_is_backed("Still short on coin from last time?", [])
-New file: src/app/rpg/tests/test_social_living_world_effects.py
-diff --git a/src/app/rpg/tests/test_social_living_world_effects.py b/src/app/rpg/tests/test_social_living_world_effects.py
-new file mode 100644
-index 0000000..969acfa
---- /dev/null
-+++ b/src/app/rpg/tests/test_social_living_world_effects.py
-@@ -0,0 +1,72 @@
-+from app.rpg.memory.social_effects import apply_general_social_effects
-+
-+
-+def test_social_interaction_updates_relationship_emotion_and_memory():
-+    state = {}
-+    result = {
-+        "action_type": "social_activity",
-+        "outcome": "success",
-+        "margin": 2,
-+        "target_id": "npc:Bran",
-+        "target_name": "Bran",
++  function renderList(title, rows, renderRow) {
++    rows = safeArr(rows);
++    if (!rows.length) {
++      return `<details class="rpg-debug-section"><summary>${escapeHtml(title)} (0)</summary><div class="rpg-debug-empty">None</div></details>`;
 +    }
++    return `
++      <details class="rpg-debug-section" open>
++        <summary>${escapeHtml(title)} (${rows.length})</summary>
++        <div class="rpg-debug-list">
++          ${rows.map(renderRow).join("")}
++        </div>
++      </details>
++    `;
++  }
 +
-+    effects = apply_general_social_effects(state, result, tick=42)
-+
-+    assert effects["relationship_key"] == "npc:Bran::player"
-+    assert state["relationship_state"]["npc:Bran::player"]["axes"]["familiarity"] > 0
-+    assert "npc:Bran" in state["npc_emotion_state"]
-+    assert state["memory_state"]["social_memories"][0]["owner_id"] == "npc:Bran"
-+
-+
-+def test_service_result_is_ignored_by_general_social_effects():
-+    state = {}
-+    result = {
-+        "action_type": "service_inquiry",
-+        "target_id": "npc:Bran",
-+        "target_name": "Bran",
-+        "service_result": {"matched": True},
++  function renderMap(title, obj, renderRow) {
++    obj = safeObj(obj);
++    const entries = Object.entries(obj);
++    if (!entries.length) {
++      return `<details class="rpg-debug-section"><summary>${escapeHtml(title)} (0)</summary><div class="rpg-debug-empty">None</div></details>`;
 +    }
++    return `
++      <details class="rpg-debug-section">
++        <summary>${escapeHtml(title)} (${entries.length})</summary>
++        <div class="rpg-debug-list">
++          ${entries.map(([key, value]) => renderRow(key, safeObj(value))).join("")}
++        </div>
++      </details>
++    `;
++  }
 +
-+    assert apply_general_social_effects(state, result, tick=1) == {}
-+    assert state == {}
-C1 VALIDATION GATE
++  function render(payload) {
++    const result = resultRoot(payload);
++    const locationState = safeObj(result.location_state);
++    const currentLocation = safeObj(locationState.current_location);
++    const currentLocationId =
++      locationState.current_location_id ||
++      result.current_location_id ||
++      safeObj(result.travel_result).to_location_id ||
++      "";
++
++    const txHistory = safeArr(result.transaction_history || safeObj(result.living_world_debug).transaction_history);
++    const memoryState = safeObj(result.memory_state);
++    const serviceMemories = safeArr(memoryState.service_memories);
++    const socialMemories = safeArr(memoryState.social_memories);
++    const relationshipState = safeObj(result.relationship_state);
++    const emotionState = safeObj(result.npc_emotion_state);
++    const journalEntries = safeArr(safeObj(result.journal_state).entries);
++    const worldEvents = safeArr(safeObj(result.world_event_state).events);
++    const serviceOfferState = safeObj(result.service_offer_state);
++    const offers = safeObj(serviceOfferState.offers);
++
++    const panel = findOrCreatePanel();
++    panel.innerHTML = `
++      <div class="rpg-debug-header">
++        <strong>Living World Debug</strong>
++        <span>${escapeHtml(currentLocation.name || currentLocationId || "unknown location")}</span>
++      </div>
++
++      ${renderMap("Service Stock / Offers", offers, (key, offer) => `
++        <div class="rpg-debug-row">
++          <strong>${escapeHtml(key)}</strong>
++          <span>${escapeHtml(offer.label || offer.offer_id || "")}</span>
++          <code>stock=${escapeHtml(offer.stock_remaining ?? offer.stock ?? "")}</code>
++        </div>
++      `)}
++
++      ${renderList("Transactions", txHistory, (tx) => `
++        <div class="rpg-debug-row">
++          <strong>${escapeHtml(tx.transaction_id || tx.id || "transaction")}</strong>
++          <span>${escapeHtml(tx.status || "")}</span>
++          <code>${escapeHtml(tx.offer_id || tx.service_kind || "")}</code>
++        </div>
++      `)}
++
++      ${renderList("Service Memories", serviceMemories, (memory) => `
++        <div class="rpg-debug-row">
++          <strong>${escapeHtml(memory.owner_name || memory.owner_id || "NPC")}</strong>
++          <span>${escapeHtml(memory.summary || "")}</span>
++        </div>
++      `)}
++
++      ${renderList("Social Memories", socialMemories, (memory) => `
++        <div class="rpg-debug-row">
++          <strong>${escapeHtml(memory.owner_name || memory.owner_id || "NPC")}</strong>
++          <span>${escapeHtml(memory.summary || "")}</span>
++        </div>
++      `)}
++
++      ${renderMap("Relationships", relationshipState, (key, rel) => {
++        const axes = safeObj(rel.axes);
++        return `
++          <div class="rpg-debug-row">
++            <strong>${escapeHtml(key)}</strong>
++            <code>trust=${escapeHtml(axes.trust ?? 0)} familiarity=${escapeHtml(axes.familiarity ?? 0)} annoyance=${escapeHtml(axes.annoyance ?? 0)}</code>
++          </div>
++        `;
++      })}
++
++      ${renderMap("NPC Emotions", emotionState, (key, emo) => `
++        <div class="rpg-debug-row">
++          <strong>${escapeHtml(key)}</strong>
++          <code>${escapeHtml(emo.dominant_emotion || "neutral")} v=${escapeHtml(emo.valence ?? 0)} a=${escapeHtml(emo.arousal ?? 0)}</code>
++        </div>
++      `)}
++
++      ${renderList("Journal", journalEntries, (entry) => `
++        <div class="rpg-debug-row">
++          <strong>${escapeHtml(entry.title || entry.entry_id || "journal")}</strong>
++          <span>${escapeHtml(entry.summary || "")}</span>
++          <code>${escapeHtml(entry.status || "")}</code>
++        </div>
++      `)}
++
++      ${renderList("World Events", worldEvents.slice(-8), (event) => `
++        <div class="rpg-debug-row">
++          <strong>${escapeHtml(event.title || event.kind || "event")}</strong>
++          <span>${escapeHtml(event.summary || "")}</span>
++          <code>${escapeHtml(event.kind || "")}</code>
++        </div>
++      `)}
++    `;
++  }
++
++  window.RpgLivingWorldInspector = { render };
++})();
+File: src/static/rpg.css
 
-Run:
+Append:
 
-pytest src/app/rpg/tests/test_npc_memory_recall.py -q
-pytest src/app/rpg/tests/test_social_living_world_effects.py -q
-pytest src/app/rpg/tests/test_service_memory_recall.py -q
-pytest src/app/rpg/tests/test_narration_queue.py -q
-pytest src/app/rpg/tests/test_manual_transcript_modes.py -q
-python src/tests/rpg/manual_llm_transcript.py --all
-
-Open:
-
-resources/test-results/manual-rpg-test-results.zip
-
-Must verify:
-
-- Current-turn memory is excluded from recalled_npc_memories and recalled_service_memories.
-- Later turns can recall prior memories for same NPC.
-- Non-service directions/social turn creates social_living_world_effects.
-- No unbacked “remember / last time / still short” dialogue.
-- No “registered” in player-facing narration.
-- No generic “The attempt fails.” for service purchase failures.
-
-Fix all C1 regressions before applying C2.
-
-Bundle C2 — Phase 8.2 + 8.3
-Phase 8.2 — Deterministic rumor/lead registry
-Phase 8.3 — Journal/world event integration
-C2 goals
-- Deterministic rumor registry.
-- Paid information creates deterministic rumor/lead.
-- journal_state entries.
-- world_event rows for service/rumor/social changes.
-- Manual transcript prints journal/world events.
-- Update/add tests.
-C2 PATCH 1 — Add rumor registry
-New file: src/app/rpg/world/rumor_registry.py
-diff --git a/src/app/rpg/world/rumor_registry.py b/src/app/rpg/world/rumor_registry.py
-new file mode 100644
-index 0000000..506de9b
---- /dev/null
-+++ b/src/app/rpg/world/rumor_registry.py
-@@ -0,0 +1,143 @@
-+from __future__ import annotations
-+
-+from copy import deepcopy
-+from typing import Any, Dict, List
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+RUMORS: Dict[str, Dict[str, Any]] = {
-+    "rumor:old_mill_bandits": {
-+        "rumor_id": "rumor:old_mill_bandits",
-+        "title": "Bandits near the old mill",
-+        "summary": "Travelers have seen armed figures near the old mill road.",
-+        "source_provider_id": "npc:Bran",
-+        "source_provider_name": "Bran",
-+        "location_id": "loc_tavern",
-+        "lead_type": "location",
-+        "unlocks": {
-+            "location_hint": "old_mill_road",
-+        },
-+        "certainty": "rumor",
-+        "source": "deterministic_rumor_registry",
-+    },
-+    "rumor:market_smugglers": {
-+        "rumor_id": "rumor:market_smugglers",
-+        "title": "Smugglers in the market",
-+        "summary": "Someone has been moving sealed crates through the market after dusk.",
-+        "source_provider_id": "npc:Elara",
-+        "source_provider_name": "Elara",
-+        "location_id": "loc_market",
-+        "lead_type": "social",
-+        "unlocks": {
-+            "npc_hint": "market_porter",
-+        },
-+        "certainty": "rumor",
-+        "source": "deterministic_rumor_registry",
-+    },
+diff --git a/src/static/rpg.css b/src/static/rpg.css
+--- a/src/static/rpg.css
++++ b/src/static/rpg.css
+@@
++.rpg-living-world-debug-panel {
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  border-radius: 10px;
++  padding: 10px;
++  margin: 10px 0;
++  background: rgba(0, 0, 0, 0.22);
++  font-size: 12px;
 +}
 +
++.rpg-debug-header {
++  display: flex;
++  justify-content: space-between;
++  gap: 8px;
++  margin-bottom: 8px;
++}
 +
-+def list_rumors() -> List[Dict[str, Any]]:
-+    return [deepcopy(rumor) for rumor in RUMORS.values()]
++.rpg-debug-section {
++  margin: 6px 0;
++}
 +
++.rpg-debug-list {
++  display: grid;
++  gap: 4px;
++  margin-top: 4px;
++}
 +
-+def get_rumor(rumor_id: str) -> Dict[str, Any]:
-+    return deepcopy(_safe_dict(RUMORS.get(_safe_str(rumor_id))))
++.rpg-debug-row {
++  display: grid;
++  grid-template-columns: minmax(90px, 160px) 1fr auto;
++  gap: 6px;
++  align-items: baseline;
++  padding: 4px 6px;
++  border-radius: 6px;
++  background: rgba(255, 255, 255, 0.05);
++}
 +
++.rpg-debug-row code {
++  opacity: 0.85;
++}
 +
-+def select_rumor_for_service(
-+    service_result: Dict[str, Any],
-+    simulation_state: Dict[str, Any] | None = None,
-+) -> Dict[str, Any]:
-+    service_result = _safe_dict(service_result)
-+    provider_id = _safe_str(service_result.get("provider_id"))
-+    provider_name = _safe_str(service_result.get("provider_name"))
-+    location_id = _safe_str(service_result.get("location_id"))
-+
-+    candidates: List[Dict[str, Any]] = []
-+    for rumor in RUMORS.values():
-+        if provider_id and _safe_str(rumor.get("source_provider_id")) == provider_id:
-+            candidates.append(deepcopy(rumor))
-+            continue
-+        if provider_name and _safe_str(rumor.get("source_provider_name")).lower() == provider_name.lower():
-+            candidates.append(deepcopy(rumor))
-+            continue
-+        if location_id and _safe_str(rumor.get("location_id")) == location_id:
-+            candidates.append(deepcopy(rumor))
-+
-+    if not candidates:
-+        candidates = list_rumors()
-+
-+    # Avoid repeating already known rumors.
-+    known_ids = set()
-+    state = _safe_dict(simulation_state)
-+    journal_state = _safe_dict(state.get("journal_state"))
-+    for entry in _safe_list(journal_state.get("entries")):
-+        entry = _safe_dict(entry)
-+        source_id = _safe_str(entry.get("source_id"))
-+        if source_id:
-+            known_ids.add(source_id)
-+
-+    for candidate in candidates:
-+        if _safe_str(candidate.get("rumor_id")) not in known_ids:
-+            return candidate
-+
-+    return candidates[0] if candidates else {}
-C2 PATCH 2 — Add journal state
-New file: src/app/rpg/journal/journal_state.py
-diff --git a/src/app/rpg/journal/journal_state.py b/src/app/rpg/journal/journal_state.py
-new file mode 100644
-index 0000000..f8c5c31
---- /dev/null
-+++ b/src/app/rpg/journal/journal_state.py
-@@ -0,0 +1,139 @@
-+from __future__ import annotations
-+
-+from copy import deepcopy
-+from typing import Any, Dict, List
-+
-+
-+MAX_JOURNAL_ENTRIES = 120
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _ensure_journal_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    journal_state = simulation_state.get("journal_state")
-+    if not isinstance(journal_state, dict):
-+        journal_state = {}
-+        simulation_state["journal_state"] = journal_state
-+    entries = journal_state.get("entries")
-+    if not isinstance(entries, list):
-+        entries = []
-+        journal_state["entries"] = entries
-+    return journal_state
-+
-+
-+def add_journal_entry(
-+    simulation_state: Dict[str, Any],
-+    entry: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    entry = deepcopy(_safe_dict(entry))
-+    if not entry:
-+        return {}
-+
-+    entry_id = _safe_str(entry.get("entry_id"))
-+    if not entry_id:
-+        return {}
-+
-+    journal_state = _ensure_journal_state(simulation_state)
-+    entries = _safe_list(journal_state.get("entries"))
-+    for existing in entries:
-+        existing = _safe_dict(existing)
-+        if _safe_str(existing.get("entry_id")) == entry_id:
-+            return deepcopy(existing)
-+
-+    entries.append(entry)
-+    if len(entries) > MAX_JOURNAL_ENTRIES:
-+        del entries[:-MAX_JOURNAL_ENTRIES]
-+    return deepcopy(entry)
-+
-+
-+def add_rumor_journal_entry(
-+    simulation_state: Dict[str, Any],
-+    rumor: Dict[str, Any],
-+    *,
-+    provider_id: str = "",
-+    provider_name: str = "",
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    rumor = _safe_dict(rumor)
-+    rumor_id = _safe_str(rumor.get("rumor_id"))
-+    if not rumor_id:
-+        return {}
-+
-+    return add_journal_entry(
-+        simulation_state,
-+        {
-+            "entry_id": f"journal:{rumor_id}",
-+            "kind": "rumor",
-+            "title": _safe_str(rumor.get("title")),
-+            "summary": _safe_str(rumor.get("summary")),
-+            "status": "active",
-+            "source_id": rumor_id,
-+            "source_provider_id": provider_id or _safe_str(rumor.get("source_provider_id")),
-+            "source_provider_name": provider_name or _safe_str(rumor.get("source_provider_name")),
-+            "created_tick": int(tick or 0),
-+            "source": "deterministic_journal_runtime",
-+        },
-+    )
-+
-+
-+def get_journal_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    return deepcopy(_ensure_journal_state(simulation_state))
-C2 PATCH 3 — Add world event state
-New file: src/app/rpg/world/world_event_log.py
-diff --git a/src/app/rpg/world/world_event_log.py b/src/app/rpg/world/world_event_log.py
-new file mode 100644
-index 0000000..071ffb5
---- /dev/null
-+++ b/src/app/rpg/world/world_event_log.py
-@@ -0,0 +1,112 @@
-+from __future__ import annotations
-+
-+from copy import deepcopy
-+from typing import Any, Dict, List
-+
-+
-+MAX_WORLD_EVENTS = 160
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def _safe_list(value: Any) -> List[Any]:
-+    return value if isinstance(value, list) else []
-+
-+
-+def _ensure_world_event_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    state = simulation_state.get("world_event_state")
-+    if not isinstance(state, dict):
-+        state = {}
-+        simulation_state["world_event_state"] = state
-+    events = state.get("events")
-+    if not isinstance(events, list):
-+        events = []
-+        state["events"] = events
-+    return state
-+
-+
-+def add_world_event(
-+    simulation_state: Dict[str, Any],
-+    event: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    event = deepcopy(_safe_dict(event))
-+    event_id = _safe_str(event.get("event_id"))
-+    if not event_id:
-+        return {}
-+
-+    state = _ensure_world_event_state(simulation_state)
-+    events = _safe_list(state.get("events"))
-+    for existing in events:
-+        existing = _safe_dict(existing)
-+        if _safe_str(existing.get("event_id")) == event_id:
-+            return deepcopy(existing)
-+
-+    events.append(event)
-+    if len(events) > MAX_WORLD_EVENTS:
-+        del events[:-MAX_WORLD_EVENTS]
-+    return deepcopy(event)
-+
-+
-+def add_service_world_event(
-+    simulation_state: Dict[str, Any],
-+    service_result: Dict[str, Any],
-+    service_application: Dict[str, Any],
-+    *,
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    service_result = _safe_dict(service_result)
-+    service_application = _safe_dict(service_application)
-+    provider_name = _safe_str(service_result.get("provider_name") or "Provider")
-+    service_kind = _safe_str(service_result.get("service_kind") or "service")
-+    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
-+    transaction = _safe_dict(service_application.get("transaction_record"))
-+    event_id = (
-+        f"world:event:service:{int(tick or 0)}:"
-+        f"{_safe_str(service_result.get('provider_id'))}:{selected_offer_id or service_kind}"
-+    )
-+
-+    if service_application.get("applied"):
-+        title = "Service purchase completed"
-+        summary = f"{provider_name} completed a {service_kind.replace('_', ' ')} service."
-+        kind = "service_purchase"
-+    elif service_application.get("blocked"):
-+        title = "Service purchase blocked"
-+        summary = f"{provider_name} could not complete the requested {service_kind.replace('_', ' ')} service."
-+        kind = "service_purchase_blocked"
-+    else:
-+        title = "Service inquiry"
-+        summary = f"{provider_name} presented {service_kind.replace('_', ' ')} options."
-+        kind = "service_inquiry"
-+
-+    return add_world_event(
-+        simulation_state,
-+        {
-+            "event_id": event_id,
-+            "kind": kind,
-+            "title": title,
-+            "summary": summary,
-+            "provider_id": _safe_str(service_result.get("provider_id")),
-+            "provider_name": provider_name,
-+            "service_kind": service_kind,
-+            "offer_id": selected_offer_id,
-+            "transaction_id": _safe_str(transaction.get("transaction_id")),
-+            "tick": int(tick or 0),
-+            "source": "deterministic_service_runtime",
-+        },
-+    )
-+
-+
-+def add_rumor_world_event(
-+    simulation_state: Dict[str, Any],
-+    rumor: Dict[str, Any],
-+    *,
-+    tick: int = 0,
-+) -> Dict[str, Any]:
-+    rumor = _safe_dict(rumor)
-+    rumor_id = _safe_str(rumor.get("rumor_id"))
-+    if not rumor_id:
-+        return {}
-+    return add_world_event(
-+        simulation_state,
-+        {
-+            "event_id": f"world:event:rumor:{int(tick or 0)}:{rumor_id}",
-+            "kind": "rumor_lead",
-+            "title": _safe_str(rumor.get("title")),
-+            "summary": _safe_str(rumor.get("summary")),
-+            "source_id": rumor_id,
-+            "tick": int(tick or 0),
-+            "source": "deterministic_rumor_registry",
-+        },
-+    )
-+
-+
-+def get_world_event_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    return deepcopy(_ensure_world_event_state(simulation_state))
-C2 PATCH 4 — Connect rumors/journal/world events to service living world
-File: src/app/rpg/session/service_living_world.py
++.rpg-debug-empty {
++  opacity: 0.7;
++  padding: 4px 0;
++}
+File: src/static/index.html
 
-Add imports:
+Add script after RPG script includes:
 
-diff --git a/src/app/rpg/session/service_living_world.py b/src/app/rpg/session/service_living_world.py
---- a/src/app/rpg/session/service_living_world.py
-+++ b/src/app/rpg/session/service_living_world.py
+diff --git a/src/static/index.html b/src/static/index.html
+--- a/src/static/index.html
++++ b/src/static/index.html
 @@
- from app.rpg.economy.service_stock import apply_service_stock_purchase
-+from app.rpg.journal.journal_state import add_rumor_journal_entry, get_journal_state
- from app.rpg.memory.service_memory import append_service_memory
- from app.rpg.memory.service_social_effects import apply_service_social_effects
- from app.rpg.session.state_normalization import _safe_dict, _safe_str
-+from app.rpg.world.rumor_registry import select_rumor_for_service
-+from app.rpg.world.world_event_log import (
-+    add_rumor_world_event,
-+    add_service_world_event,
-+    get_world_event_state,
+ <script src="/static/rpg.js"></script>
++<script src="/static/rpg-living-world-inspector.js"></script>
+
+If your HTML uses a different RPG script block, load rpg-living-world-inspector.js after the RPG UI code.
+
+File: src/static/rpg.js
+
+After handling an RPG turn response, add:
+
+diff --git a/src/static/rpg.js b/src/static/rpg.js
+--- a/src/static/rpg.js
++++ b/src/static/rpg.js
+@@
+         // existing response handling / render code
++        if (window.RpgLivingWorldInspector && typeof window.RpgLivingWorldInspector.render === "function") {
++          window.RpgLivingWorldInspector.render(data);
++        }
+
+Apply this immediately after the code that receives the JSON response from /api/rpg/.../turn or equivalent and updates the narrative feed.
+
+D11 TESTS
+New file: src/app/rpg/tests/test_location_registry.py
+diff --git a/src/app/rpg/tests/test_location_registry.py b/src/app/rpg/tests/test_location_registry.py
+new file mode 100644
+index 0000000..5949dd1
+--- /dev/null
++++ b/src/app/rpg/tests/test_location_registry.py
+@@ -0,0 +1,42 @@
++from app.rpg.world.location_registry import (
++    current_location_id,
++    find_location_by_name,
++    provider_present_at_location,
++    resolve_exit_destination,
++    set_current_location,
 +)
-
-Inside apply_service_living_world_effects(...), add rumor/journal/world events:
-
-@@
-     stock_update = {}
-+    rumor_added = {}
-+    journal_entry = {}
-+    service_world_event = {}
-+    rumor_world_event = {}
-     if (
-         _safe_str(service_result.get("kind")) == "service_purchase"
-         and bool(service_application.get("applied"))
-     ):
-         stock_update = apply_service_stock_purchase(
-             simulation_state,
-             service_result,
-             tick=tick,
-         )
-+        service_world_event = add_service_world_event(
-+            simulation_state,
-+            service_result,
-+            service_application,
-+            tick=tick,
-+        )
-+
-+        if _safe_str(service_result.get("service_kind")) == "paid_information":
-+            rumor = select_rumor_for_service(service_result, simulation_state)
-+            if rumor:
-+                rumor_added = rumor
-+                journal_entry = add_rumor_journal_entry(
-+                    simulation_state,
-+                    rumor,
-+                    provider_id=_safe_str(service_result.get("provider_id")),
-+                    provider_name=_safe_str(service_result.get("provider_name")),
-+                    tick=tick,
-+                )
-+                rumor_world_event = add_rumor_world_event(
-+                    simulation_state,
-+                    rumor,
-+                    tick=tick,
-+                )
-+    elif service_result.get("matched"):
-+        service_world_event = add_service_world_event(
-+            simulation_state,
-+            service_result,
-+            service_application,
-+            tick=tick,
-+        )
-@@
-     return {
-         "memory_entry": memory_entry,
-         "social_effects": social_effects,
-         "stock_update": stock_update,
-+        "rumor_added": rumor_added,
-+        "journal_entry": journal_entry,
-+        "service_world_event": service_world_event,
-+        "rumor_world_event": rumor_world_event,
-+        "journal_state": get_journal_state(simulation_state),
-+        "world_event_state": get_world_event_state(simulation_state),
-     }
-C2 PATCH 5 — Expose C2 fields in service runtime
-File: src/app/rpg/session/service_runtime.py
-
-Default purchase_application add:
-
-@@
-         "stock_update": {},
-+        "rumor_added": {},
-+        "journal_entry": {},
-+        "service_world_event": {},
-+        "rumor_world_event": {},
-+        "journal_state": {},
-+        "world_event_state": {},
-     }
-
-After living_world = apply_service_living_world_effects(...), add:
-
-@@
-         purchase_application["memory_entry"] = living_world.get("memory_entry") or {}
-         purchase_application["social_effects"] = living_world.get("social_effects") or {}
-         purchase_application["stock_update"] = living_world.get("stock_update") or {}
-+        purchase_application["rumor_added"] = living_world.get("rumor_added") or {}
-+        purchase_application["journal_entry"] = living_world.get("journal_entry") or {}
-+        purchase_application["service_world_event"] = living_world.get("service_world_event") or {}
-+        purchase_application["rumor_world_event"] = living_world.get("rumor_world_event") or {}
-+        purchase_application["journal_state"] = living_world.get("journal_state") or {}
-+        purchase_application["world_event_state"] = living_world.get("world_event_state") or {}
-
-In service_application result dict add:
-
-@@
-             "stock_update": purchase_application.get("stock_update") or {},
-+            "rumor_added": purchase_application.get("rumor_added") or {},
-+            "journal_entry": purchase_application.get("journal_entry") or {},
-+            "service_world_event": purchase_application.get("service_world_event") or {},
-+            "rumor_world_event": purchase_application.get("rumor_world_event") or {},
-+            "journal_state": purchase_application.get("journal_state") or {},
-+            "world_event_state": purchase_application.get("world_event_state") or {},
-         },
-@@
-         "stock_update": purchase_application.get("stock_update") or {},
-+        "rumor_added": purchase_application.get("rumor_added") or {},
-+        "journal_entry": purchase_application.get("journal_entry") or {},
-+        "service_world_event": purchase_application.get("service_world_event") or {},
-+        "rumor_world_event": purchase_application.get("rumor_world_event") or {},
-+        "journal_state": _safe_dict(simulation_state.get("journal_state")),
-+        "world_event_state": _safe_dict(simulation_state.get("world_event_state")),
-
-In living_world_debug add:
-
-@@
-             "stock_update": purchase_application.get("stock_update") or {},
-+            "rumor_added": purchase_application.get("rumor_added") or {},
-+            "journal_entry": purchase_application.get("journal_entry") or {},
-+            "service_world_event": purchase_application.get("service_world_event") or {},
-+            "rumor_world_event": purchase_application.get("rumor_world_event") or {},
-C2 PATCH 6 — Response builder includes journal/world events
-File: src/app/rpg/session/response_builder.py
-
-In _attach_living_world_debug_fields(...), add:
-
-@@
-     result_payload["service_offer_state"] = _first_dict(
-         result_payload.get("service_offer_state"),
-         resolved_result.get("service_offer_state"),
-     )
-+    result_payload["journal_state"] = _first_dict(
-+        result_payload.get("journal_state"),
-+        resolved_result.get("journal_state"),
-+        service_application.get("journal_state"),
-+    )
-+    result_payload["world_event_state"] = _first_dict(
-+        result_payload.get("world_event_state"),
-+        resolved_result.get("world_event_state"),
-+        service_application.get("world_event_state"),
-+    )
-
-Also add to living_world_debug block:
-
-@@
-             "stock_update": _first_dict(
-                 resolved_result.get("stock_update"),
-                 service_application.get("stock_update"),
-             ),
-+            "rumor_added": _first_dict(
-+                resolved_result.get("rumor_added"),
-+                service_application.get("rumor_added"),
-+            ),
-+            "journal_entry": _first_dict(
-+                resolved_result.get("journal_entry"),
-+                service_application.get("journal_entry"),
-+            ),
-+            "service_world_event": _first_dict(
-+                resolved_result.get("service_world_event"),
-+                service_application.get("service_world_event"),
-+            ),
-+            "rumor_world_event": _first_dict(
-+                resolved_result.get("rumor_world_event"),
-+                service_application.get("rumor_world_event"),
-+            ),
-C2 PATCH 7 — Manual transcript prints journal/world events
-File: src/tests/rpg/manual_llm_transcript.py
-
-Add helpers:
-
-@@
- def _extract_living_world_debug(result: Dict[str, Any]) -> Dict[str, Any]:
-@@
-     return {
-         "memory_entry": service_debug.get("memory_entry"),
-         "social_effects": service_debug.get("social_effects"),
-         "stock_update": service_debug.get("stock_update"),
-+        "rumor_added": service_debug.get("rumor_added"),
-+        "journal_entry": service_debug.get("journal_entry"),
-+        "service_world_event": service_debug.get("service_world_event"),
-+        "rumor_world_event": service_debug.get("rumor_world_event"),
-     }
 +
 +
-+def _extract_journal_state(result: Dict[str, Any]) -> Dict[str, Any]:
-+    result_sub = _safe_dict(_safe_dict(result).get("result"))
-+    direct = _safe_dict(result_sub.get("journal_state"))
-+    if direct:
-+        return direct
-+    simulation_state = _extract_simulation_state(result)
-+    return _safe_dict(simulation_state.get("journal_state"))
++def test_find_location_by_alias():
++    assert find_location_by_name("market")["location_id"] == "loc_market"
++    assert find_location_by_name("the rusty flagon")["location_id"] == "loc_tavern"
 +
 +
-+def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
-+    result_sub = _safe_dict(_safe_dict(result).get("result"))
-+    direct = _safe_dict(result_sub.get("world_event_state"))
-+    if direct:
-+        return direct
-+    simulation_state = _extract_simulation_state(result)
-+    return _safe_dict(simulation_state.get("world_event_state"))
-
-Patch _extract_service_debug(...) return dict to include:
-
-@@
-         "stock_update": _safe_dict(
-             resolved.get("stock_update")
-             or service_application.get("stock_update")
-         ),
-+        "rumor_added": _safe_dict(
-+            resolved.get("rumor_added")
-+            or service_application.get("rumor_added")
-+        ),
-+        "journal_entry": _safe_dict(
-+            resolved.get("journal_entry")
-+            or service_application.get("journal_entry")
-+        ),
-+        "service_world_event": _safe_dict(
-+            resolved.get("service_world_event")
-+            or service_application.get("service_world_event")
-+        ),
-+        "rumor_world_event": _safe_dict(
-+            resolved.get("rumor_world_event")
-+            or service_application.get("rumor_world_event")
-+        ),
-
-In _compact_turn_summary(...), add:
-
-@@
-         "living_world_debug": _extract_living_world_debug(result),
-+        "journal_state": _extract_journal_state(result),
-+        "journal_entry_count": len(_safe_list(_extract_journal_state(result).get("entries"))),
-+        "world_event_state": _extract_world_event_state(result),
-+        "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
-         "token_usage": _extract_token_usage_from_result(result, player_input=player_input),
-
-In _print_turn(...), after service offer state:
-
-@@
-     _emit("SERVICE OFFER STATE:", channel=channel)
-     _emit(_compact_json(_extract_service_offer_state(result)), channel=channel)
-     _emit("", channel=channel)
-+    _emit("JOURNAL STATE:", channel=channel)
-+    _emit(_compact_json(_extract_journal_state(result)), channel=channel)
-+    _emit("", channel=channel)
-+    _emit("WORLD EVENT STATE:", channel=channel)
-+    _emit(_compact_json(_extract_world_event_state(result)), channel=channel)
-+    _emit("", channel=channel)
-C2 PATCH 8 — Tests
-New file: src/app/rpg/tests/test_rumor_registry.py
-diff --git a/src/app/rpg/tests/test_rumor_registry.py b/src/app/rpg/tests/test_rumor_registry.py
-new file mode 100644
-index 0000000..4c9b50e
---- /dev/null
-+++ b/src/app/rpg/tests/test_rumor_registry.py
-@@ -0,0 +1,24 @@
-+from app.rpg.world.rumor_registry import get_rumor, select_rumor_for_service
++def test_resolve_exit_destination_from_tavern_to_market():
++    state = {"location_id": "loc_tavern", "player_state": {"location_id": "loc_tavern"}}
++    assert resolve_exit_destination(state, "market") == "loc_market"
 +
 +
-+def test_get_rumor():
-+    rumor = get_rumor("rumor:old_mill_bandits")
-+    assert rumor["title"] == "Bandits near the old mill"
-+
-+
-+def test_select_rumor_for_bran_paid_info():
-+    rumor = select_rumor_for_service(
-+        {
-+            "provider_id": "npc:Bran",
-+            "provider_name": "Bran",
-+            "location_id": "loc_tavern",
-+        },
-+        {},
-+    )
-+    assert rumor["rumor_id"] == "rumor:old_mill_bandits"
-New file: src/app/rpg/tests/test_journal_state.py
-diff --git a/src/app/rpg/tests/test_journal_state.py b/src/app/rpg/tests/test_journal_state.py
-new file mode 100644
-index 0000000..f40d1e6
---- /dev/null
-+++ b/src/app/rpg/tests/test_journal_state.py
-@@ -0,0 +1,36 @@
-+from app.rpg.journal.journal_state import add_rumor_journal_entry
-+
-+
-+def test_add_rumor_journal_entry_is_deduped():
++def test_set_current_location_updates_present_npcs():
 +    state = {}
-+    rumor = {
-+        "rumor_id": "rumor:old_mill_bandits",
-+        "title": "Bandits near the old mill",
-+        "summary": "Travelers have seen armed figures near the old mill road.",
++    set_current_location(state, "loc_market")
++    assert current_location_id(state) == "loc_market"
++    assert state["present_npcs"][0]["name"] == "Elara"
++    assert provider_present_at_location(state, provider_name="Elara")
++    assert not provider_present_at_location(state, provider_name="Bran")
+New file: src/app/rpg/tests/test_travel_runtime.py
+diff --git a/src/app/rpg/tests/test_travel_runtime.py b/src/app/rpg/tests/test_travel_runtime.py
+new file mode 100644
+index 0000000..437eb56
+--- /dev/null
++++ b/src/app/rpg/tests/test_travel_runtime.py
+@@ -0,0 +1,34 @@
++from app.rpg.session.travel_runtime import resolve_travel_turn, travel_resolved_result
++
++
++def test_travel_to_market_mutates_location():
++    state = {
++        "location_id": "loc_tavern",
++        "player_state": {"location_id": "loc_tavern"},
 +    }
 +
-+    first = add_rumor_journal_entry(state, rumor, provider_id="npc:Bran", provider_name="Bran", tick=1)
-+    second = add_rumor_journal_entry(state, rumor, provider_id="npc:Bran", provider_name="Bran", tick=2)
++    result = resolve_travel_turn(
++        player_input="I follow Bran's directions to the market",
++        simulation_state=state,
++        tick=7,
++    )
 +
-+    assert first["entry_id"] == "journal:rumor:old_mill_bandits"
-+    assert second["entry_id"] == "journal:rumor:old_mill_bandits"
-+    assert len(state["journal_state"]["entries"]) == 1
-Extend src/app/rpg/tests/test_service_purchase_runtime.py
-
-Add to paid-info purchase test or create one:
-
-@@
-+def test_paid_information_purchase_adds_rumor_journal_and_world_event():
-+    from app.rpg.economy.service_resolver import resolve_service_turn
-+    from app.rpg.session.service_runtime import service_action_from_result, service_authoritative_result
++    assert result["matched"] is True
++    assert result["applied"] is True
++    assert result["from_location_id"] == "loc_tavern"
++    assert result["to_location_id"] == "loc_market"
++    assert state["location_id"] == "loc_market"
++    assert state["present_npcs"][0]["name"] == "Elara"
++    assert state["world_event_state"]["events"][0]["kind"] == "travel"
 +
++
++def test_unavailable_travel_destination_does_not_mutate_location():
 +    state = {
-+        "tick": 10,
 +        "location_id": "loc_tavern",
-+        "present_npcs": [{"id": "npc:Bran", "name": "Bran"}],
++        "player_state": {"location_id": "loc_tavern"},
++    }
++    result = resolve_travel_turn(player_input="I go to the moon", simulation_state=state, tick=1)
++
++    assert result["matched"] is False or result["applied"] is False
++    assert state["location_id"] == "loc_tavern"
+New file: src/app/rpg/tests/test_service_location_availability.py
+diff --git a/src/app/rpg/tests/test_service_location_availability.py b/src/app/rpg/tests/test_service_location_availability.py
+new file mode 100644
+index 0000000..93fca21
+--- /dev/null
++++ b/src/app/rpg/tests/test_service_location_availability.py
+@@ -0,0 +1,66 @@
++from app.rpg.economy.service_resolver import resolve_service_turn
++from app.rpg.world.location_registry import set_current_location
++
++
++def _base_state(location_id: str):
++    state = {
 +        "player_state": {
-+            "location_id": "loc_tavern",
 +            "inventory_state": {
-+                "currency": {"gold": 0, "silver": 2, "copper": 0},
++                "currency": {"gold": 0, "silver": 5, "copper": 0},
 +                "items": [],
 +                "equipment": {},
 +                "last_loot": [],
 +            }
-+        },
++        }
 +    }
-+    service_result = resolve_service_turn(
-+        player_input="I buy Local rumor from Bran",
++    set_current_location(state, location_id)
++    return state
++
++
++def test_elara_shop_goods_not_available_in_tavern():
++    state = _base_state("loc_tavern")
++    result = resolve_service_turn(
++        player_input="I ask Elara what she sells",
 +        action={},
 +        resolved_action={},
 +        simulation_state=state,
 +        runtime_state={},
 +    )
-+    action = service_action_from_result("I buy Local rumor from Bran", {}, service_result)
-+    authoritative = service_authoritative_result(state, action)
-+    result = authoritative["result"]
-+    sim = authoritative["simulation_state"]
 +
-+    assert result["purchase_applied"] is True
-+    assert result["rumor_added"]["rumor_id"] == "rumor:old_mill_bandits"
-+    assert result["journal_entry"]["entry_id"] == "journal:rumor:old_mill_bandits"
-+    assert sim["journal_state"]["entries"][0]["source_id"] == "rumor:old_mill_bandits"
-+    assert any(event["kind"] == "rumor_lead" for event in sim["world_event_state"]["events"])
-C2 VALIDATION GATE
++    assert not result.get("matched") or result.get("provider_name") != "Elara"
++
++
++def test_elara_shop_goods_available_in_market():
++    state = _base_state("loc_market")
++    result = resolve_service_turn(
++        player_input="I ask Elara what she sells",
++        action={},
++        resolved_action={},
++        simulation_state=state,
++        runtime_state={},
++    )
++
++    assert result.get("matched") is True
++    assert result.get("provider_name") == "Elara"
++    assert result.get("service_kind") == "shop_goods"
++
++
++def test_bran_lodging_not_available_in_market():
++    state = _base_state("loc_market")
++    result = resolve_service_turn(
++        player_input="I ask Bran for a room to rent",
++        action={},
++        resolved_action={},
++        simulation_state=state,
++        runtime_state={},
++    )
++
++    assert not result.get("matched") or result.get("provider_name") != "Bran"
 
-Run:
-
-pytest src/app/rpg/tests/test_rumor_registry.py -q
-pytest src/app/rpg/tests/test_journal_state.py -q
-pytest src/app/rpg/tests/test_service_purchase_runtime.py -q
-pytest src/app/rpg/tests/test_service_living_world_effects.py -q
-pytest src/app/rpg/tests/test_narration_queue.py -q
-pytest src/app/rpg/tests/test_manual_transcript_modes.py -q
-
-python src/tests/rpg/manual_llm_transcript.py --all
-
-Open:
-
-resources/test-results/manual-rpg-test-results.zip
-
-Must verify:
-
-paid_info:
-  purchase_applied: true
-  rumor_added.rumor_id exists
-  journal_state.entries contains journal:rumor:...
-  world_event_state.events contains rumor_lead
-
-service purchases:
-  service_world_event exists
-  transaction behavior unchanged
-
-social/directions:
-  social_living_world_effects exists
-  no service transaction created
-
-narration:
-  no unbacked memory references
-  no “registered” in player-facing output
-  no “The attempt fails.”
+If resolve_service_turn(...) has a different signature, adapt the test to your current resolver call pattern.

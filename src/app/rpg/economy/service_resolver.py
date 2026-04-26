@@ -23,6 +23,12 @@ from app.rpg.economy.service_registry import (
     get_service_provider,
 )
 from app.rpg.economy.service_stock import filter_available_offers
+from app.rpg.world.location_registry import (
+    current_location_id,
+    has_explicit_location,
+    location_allows_service,
+    provider_present_at_location,
+)
 
 
 def _safe_str(value: Any) -> str:
@@ -198,6 +204,46 @@ def _offer_matches_purchase_text(offer: Dict[str, Any], text_l: str) -> bool:
     return bool(description and description in text_l)
 
 
+def _offer_location_allowed(offer: Dict[str, Any], simulation_state: Dict[str, Any]) -> bool:
+    # Skip location filtering when no explicit location is set in the simulation state.
+    if not has_explicit_location(simulation_state):
+        return True
+
+    availability_rules = _safe_dict(offer.get("availability_rules"))
+    required_location = _safe_str(
+        availability_rules.get("requires_location")
+        or offer.get("location_id")
+    )
+    if required_location and current_location_id(simulation_state) != required_location:
+        return False
+
+    service_kind = _safe_str(offer.get("service_kind"))
+    if service_kind and not location_allows_service(simulation_state, service_kind):
+        return False
+
+    provider_id = _safe_str(offer.get("provider_id"))
+    provider_name = _safe_str(offer.get("provider_name"))
+    if provider_id or provider_name:
+        return provider_present_at_location(
+            simulation_state,
+            provider_id=provider_id,
+            provider_name=provider_name,
+        )
+
+    return True
+
+
+def _filter_offers_for_current_location(
+    offers: List[Dict[str, Any]],
+    simulation_state: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    return [
+        offer
+        for offer in offers
+        if _offer_location_allowed(_safe_dict(offer), simulation_state)
+    ]
+
+
 def resolve_service_intent(
     player_input: str,
     action: Dict[str, Any] | None = None,
@@ -311,6 +357,29 @@ def resolve_service_turn(
         get_provider_offers(provider_id, service_kind),
         provider=provider,
     )
+    offers = _filter_offers_for_current_location(offers, simulation_state)
+
+    # If all offers were removed by location filtering, the service is not available here.
+    if not offers and provider_id and has_explicit_location(simulation_state):
+        all_provider_offers = get_provider_offers(provider_id, service_kind)
+        if all_provider_offers:
+            # The provider has offers but none are available at the current location.
+            return {
+                "matched": False,
+                "kind": kind,
+                "service_kind": service_kind,
+                "provider_id": provider_id,
+                "provider_name": _safe_str(intent.get("provider_name")),
+                "location_id": _safe_str(intent.get("location_id")),
+                "current_location_id": current_location_id(simulation_state),
+                "status": "provider_not_at_current_location",
+                "offers": [],
+                "selected_offer_id": "",
+                "purchase": None,
+                "available_actions": [],
+                "source": "deterministic_service_resolver",
+            }
+
     player_currency = get_player_currency(simulation_state)
 
     result: Dict[str, Any] = {
@@ -320,6 +389,7 @@ def resolve_service_turn(
         "provider_id": provider_id,
         "provider_name": _safe_str(intent.get("provider_name")),
         "location_id": _safe_str(intent.get("location_id")),
+        "current_location_id": current_location_id(simulation_state),
         "status": "offers_available" if offers else "no_registered_offers",
         "offers": offers,
         "selected_offer_id": "",

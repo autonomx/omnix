@@ -107,6 +107,30 @@ def _attach_living_world_debug_fields(result_payload: Dict[str, Any]) -> Dict[st
         resolved_result.get("world_event_state"),
         service_application.get("world_event_state"),
     )
+    result_payload["location_state"] = _first_dict(
+        result_payload.get("location_state"),
+        resolved_result.get("location_state"),
+    )
+    result_payload["travel_result"] = _first_dict(
+        result_payload.get("travel_result"),
+        resolved_result.get("travel_result"),
+    )
+
+    service_result = _safe_dict(
+        resolved_result.get("service_result")
+        or result_payload.get("service_result")
+    )
+    current_location_id = (
+        result_payload.get("current_location_id")
+        or resolved_result.get("current_location_id")
+        or service_result.get("current_location_id")
+    )
+    if current_location_id:
+        result_payload["current_location_id"] = current_location_id
+        if not _safe_dict(result_payload.get("location_state")):
+            result_payload["location_state"] = {
+                "current_location_id": current_location_id,
+            }
     result_payload["recalled_service_memories"] = _first_list(
         result_payload.get("recalled_service_memories"),
         resolved_result.get("recalled_service_memories"),

@@ -280,3 +280,159 @@ def test_extract_simulation_state_prefers_fresh_result_state_over_session_metada
     assert simulation_state["relationship_state"]["npc:Elara::player"]["axes"]["familiarity"] == 1.0
     assert simulation_state["npc_emotion_state"]["npc:Elara"]["dominant_emotion"] == "neutral"
     assert simulation_state["service_offer_state"]["offers"]["elara_torch"]["stock_remaining"] == 2
+
+
+def test_manual_regression_warns_when_directions_inquiry_travels():
+    result = {
+        "result": {
+            "travel_result": {
+                "matched": True,
+                "applied": True,
+                "from_location_id": "loc_tavern",
+                "to_location_id": "loc_market",
+            },
+            "current_location_id": "loc_market",
+            "narration": "You arrive at Market Square.",
+        },
+        "session": {
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {
+                        "travel_result": {
+                            "matched": True,
+                            "applied": True,
+                            "from_location_id": "loc_tavern",
+                            "to_location_id": "loc_market",
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    warnings = transcript._manual_regression_warnings(
+        turn_index=4,
+        player_input="I ask Bran for directions to the market",
+        result=result,
+    )
+
+    assert "directions_inquiry_unexpectedly_travelled" in warnings
+    assert "flat_turn_4_directions_inquiry_should_not_travel" in warnings
+
+
+def test_manual_regression_warns_when_follow_directions_does_not_travel():
+    result = {
+        "result": {
+            "travel_result": {
+                "matched": True,
+                "applied": False,
+                "from_location_id": "loc_tavern",
+            },
+            "current_location_id": "loc_tavern",
+            "narration": "No available route matches that destination.",
+        },
+        "session": {
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {
+                        "travel_result": {
+                            "matched": True,
+                            "applied": False,
+                            "from_location_id": "loc_tavern",
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    warnings = transcript._manual_regression_warnings(
+        turn_index=5,
+        player_input="I follow Bran's directions to the market",
+        result=result,
+    )
+
+    assert "follow_directions_expected_travel_success" in warnings
+    assert "flat_turn_5_follow_directions_should_travel" in warnings
+
+
+def test_manual_regression_warns_when_market_scenario_bounces_to_tavern():
+    result = {
+        "result": {
+            "current_location_id": "loc_tavern",
+            "travel_result": {},
+            "service_result": {
+                "matched": True,
+                "kind": "service_inquiry",
+                "service_kind": "shop_goods",
+                "provider_name": "Elara",
+                "current_location_id": "loc_tavern",
+            },
+            "narration": "Elara looks over the available goods.",
+        },
+        "session": {
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {
+                        "service_result": {
+                            "matched": True,
+                            "kind": "service_inquiry",
+                            "service_kind": "shop_goods",
+                            "provider_name": "Elara",
+                            "current_location_id": "loc_tavern",
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    warnings = transcript._manual_regression_warnings(
+        scenario_name="shop_success",
+        turn_index=2,
+        player_input="I ask Elara what she sells",
+        result=result,
+    )
+
+    assert "shop_success_turn_2_expected_loc_market" in warnings
+
+
+def test_manual_regression_allows_market_scenario_to_stay_in_market():
+    result = {
+        "result": {
+            "current_location_id": "loc_market",
+            "travel_result": {},
+            "service_result": {
+                "matched": True,
+                "kind": "service_inquiry",
+                "service_kind": "shop_goods",
+                "provider_name": "Elara",
+                "current_location_id": "loc_market",
+            },
+            "narration": "Elara looks over the available goods.",
+        },
+        "session": {
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {
+                        "service_result": {
+                            "matched": True,
+                            "kind": "service_inquiry",
+                            "service_kind": "shop_goods",
+                            "provider_name": "Elara",
+                            "current_location_id": "loc_market",
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    warnings = transcript._manual_regression_warnings(
+        scenario_name="shop_success",
+        turn_index=2,
+        player_input="I ask Elara what she sells",
+        result=result,
+    )
+
+    assert "shop_success_turn_2_expected_loc_market" not in warnings

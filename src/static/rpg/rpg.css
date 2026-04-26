@@ -144,3 +144,48 @@
 .rpg-service-action-btn:hover {
     background: rgba(255, 255, 255, 0.14);
 }
+
+.rpg-living-world-debug-panel {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px 0;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+}
+
+.rpg-debug-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rpg-debug-section {
+  margin: 6px 0;
+}
+
+.rpg-debug-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.rpg-debug-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 160px) 1fr auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rpg-debug-row code {
+  opacity: 0.85;
+}
+
+.rpg-debug-empty {
+  opacity: 0.7;
+  padding: 4px 0;
+}

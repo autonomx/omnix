@@ -46,6 +46,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "bran_lodging_common_cot",
             "service_kind": SERVICE_KIND_LODGING,
+            "provider_id": "npc:Bran",
+            "provider_name": "Bran",
             "label": "Common room cot",
             "description": "A simple cot in the common room for one night.",
             "price": {"gold": 0, "silver": 5, "copper": 0},
@@ -64,6 +66,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "bran_lodging_private_room",
             "service_kind": SERVICE_KIND_LODGING,
+            "provider_id": "npc:Bran",
+            "provider_name": "Bran",
             "label": "Private room",
             "description": "A private room for one night.",
             "price": {"gold": 1, "silver": 0, "copper": 0},
@@ -82,6 +86,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "bran_meal_stew",
             "service_kind": SERVICE_KIND_MEAL,
+            "provider_id": "npc:Bran",
+            "provider_name": "Bran",
             "label": "Hot stew",
             "description": "A hot bowl of stew and bread.",
             "price": {"gold": 0, "silver": 1, "copper": 5},
@@ -98,6 +104,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "bran_drink_ale",
             "service_kind": SERVICE_KIND_DRINK,
+            "provider_id": "npc:Bran",
+            "provider_name": "Bran",
             "label": "Mug of ale",
             "description": "A mug of local ale.",
             "price": {"gold": 0, "silver": 0, "copper": 8},
@@ -113,6 +121,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "bran_paid_rumor",
             "service_kind": SERVICE_KIND_PAID_INFORMATION,
+            "provider_id": "npc:Bran",
+            "provider_name": "Bran",
             "label": "Local rumor",
             "description": "A useful rumor from tavern gossip.",
             "price": {"gold": 0, "silver": 2, "copper": 0},
@@ -130,6 +140,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "elara_torch",
             "service_kind": SERVICE_KIND_SHOP_GOODS,
+            "provider_id": "npc:Elara",
+            "provider_name": "Elara",
             "label": "Torch",
             "description": "A simple torch for dark places.",
             "price": {"gold": 0, "silver": 1, "copper": 0},
@@ -152,6 +164,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "elara_rope",
             "service_kind": SERVICE_KIND_SHOP_GOODS,
+            "provider_id": "npc:Elara",
+            "provider_name": "Elara",
             "label": "Rope",
             "description": "Fifty feet of sturdy hemp rope.",
             "price": {"gold": 0, "silver": 3, "copper": 0},
@@ -174,6 +188,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "elara_paid_information",
             "service_kind": SERVICE_KIND_PAID_INFORMATION,
+            "provider_id": "npc:Elara",
+            "provider_name": "Elara",
             "label": "Market information",
             "description": "A piece of useful market intelligence.",
             "price": {"gold": 0, "silver": 2, "copper": 0},
@@ -189,6 +205,8 @@ SERVICE_OFFERS: Dict[str, List[Dict[str, Any]]] = {
         {
             "offer_id": "elara_basic_repair",
             "service_kind": SERVICE_KIND_REPAIR,
+            "provider_id": "npc:Elara",
+            "provider_name": "Elara",
             "label": "Basic gear repair",
             "description": "Minor repair work on worn equipment.",
             "price": {"gold": 0, "silver": 4, "copper": 0},

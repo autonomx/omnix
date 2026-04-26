@@ -34,5 +34,4 @@ def test_manual_service_session_id_can_use_stable_legacy_id():
             stable=True,
         )
         == "manual_service_shop_success"
-    )</content>
-<parameter name="filePath">src/app/rpg/tests/test_manual_transcript_session_isolation.py
+    )
