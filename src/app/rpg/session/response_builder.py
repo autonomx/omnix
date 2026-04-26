@@ -29,6 +29,111 @@ def _first_list(*values):
     return []
 
 
+def _first_value(*values):
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _attach_living_world_debug_fields(result_payload: Dict[str, Any]) -> Dict[str, Any]:
+    result_payload = _safe_dict(result_payload)
+    narration_debug = _safe_dict(result_payload.get("narration_debug"))
+    resolved_result = _safe_dict(
+        result_payload.get("resolved_result")
+        or result_payload.get("resolved_action")
+        or result_payload
+    )
+    service_application = _safe_dict(resolved_result.get("service_application"))
+
+    result_payload["living_world_debug"] = _first_dict(
+        result_payload.get("living_world_debug"),
+        resolved_result.get("living_world_debug"),
+        service_application.get("living_world_debug"),
+        {
+            "memory_entry": _first_dict(
+                resolved_result.get("memory_entry"),
+                service_application.get("memory_entry"),
+            ),
+            "social_effects": _first_dict(
+                resolved_result.get("social_effects"),
+                service_application.get("social_effects"),
+            ),
+            "stock_update": _first_dict(
+                resolved_result.get("stock_update"),
+                service_application.get("stock_update"),
+            ),
+            "rumor_added": _first_dict(
+                resolved_result.get("rumor_added"),
+                service_application.get("rumor_added"),
+            ),
+            "journal_entry": _first_dict(
+                resolved_result.get("journal_entry"),
+                service_application.get("journal_entry"),
+            ),
+            "service_world_event": _first_dict(
+                resolved_result.get("service_world_event"),
+                service_application.get("service_world_event"),
+            ),
+            "rumor_world_event": _first_dict(
+                resolved_result.get("rumor_world_event"),
+                service_application.get("rumor_world_event"),
+            ),
+        },
+    )
+    result_payload["memory_state"] = _first_dict(
+        result_payload.get("memory_state"),
+        resolved_result.get("memory_state"),
+    )
+    result_payload["relationship_state"] = _first_dict(
+        result_payload.get("relationship_state"),
+        resolved_result.get("relationship_state"),
+    )
+    result_payload["npc_emotion_state"] = _first_dict(
+        result_payload.get("npc_emotion_state"),
+        resolved_result.get("npc_emotion_state"),
+    )
+    result_payload["service_offer_state"] = _first_dict(
+        result_payload.get("service_offer_state"),
+        resolved_result.get("service_offer_state"),
+    )
+    result_payload["journal_state"] = _first_dict(
+        result_payload.get("journal_state"),
+        resolved_result.get("journal_state"),
+        service_application.get("journal_state"),
+    )
+    result_payload["world_event_state"] = _first_dict(
+        result_payload.get("world_event_state"),
+        resolved_result.get("world_event_state"),
+        service_application.get("world_event_state"),
+    )
+    result_payload["recalled_service_memories"] = _first_list(
+        result_payload.get("recalled_service_memories"),
+        resolved_result.get("recalled_service_memories"),
+        narration_debug.get("recalled_service_memories"),
+    )
+    result_payload["service_memory_recall_debug"] = _first_dict(
+        result_payload.get("service_memory_recall_debug"),
+        resolved_result.get("service_memory_recall_debug"),
+        narration_debug.get("service_memory_recall_debug"),
+    )
+    result_payload["recalled_npc_memories"] = _first_list(
+        result_payload.get("recalled_npc_memories"),
+        resolved_result.get("recalled_npc_memories"),
+        narration_debug.get("recalled_npc_memories"),
+    )
+    result_payload["npc_memory_recall_debug"] = _first_dict(
+        result_payload.get("npc_memory_recall_debug"),
+        resolved_result.get("npc_memory_recall_debug"),
+        narration_debug.get("npc_memory_recall_debug"),
+    )
+    result_payload["social_living_world_effects"] = _first_dict(
+        result_payload.get("social_living_world_effects"),
+        resolved_result.get("social_living_world_effects"),
+    )
+    return result_payload
+
+
 def build_turn_payload(
     session: Dict[str, Any],
     narration_result: Dict[str, Any],
@@ -101,11 +206,20 @@ def build_turn_payload(
 def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str, Any]:
     authoritative_result = _safe_dict(authoritative_result)
     authoritative = _safe_dict(authoritative_result.get("authoritative"))
-    turn_contract = _safe_dict(authoritative.get("turn_contract"))
     result_sub = _safe_dict(authoritative_result.get("result"))
+    resolved_result = _first_dict(
+        authoritative.get("resolved_result"),
+        result_sub.get("resolved_result"),
+    )
+    turn_contract = _safe_dict(
+        authoritative_result.get("turn_contract")
+        or authoritative.get("turn_contract")
+    )
     narration = result_sub.get("narration")
     if narration is None:
         narration = authoritative.get("deterministic_fallback_narration")
+    if narration is None:
+        narration = result_sub.get("deterministic_fallback_narration")
     raw_llm_narrative = result_sub.get("raw_llm_narrative")
     if raw_llm_narrative is None:
         raw_llm_narrative = ""
@@ -117,84 +231,60 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
         narration_status = "queued"
 
     result_payload = {
-        "turn_id": authoritative.get("turn_id"),
-        "tick": authoritative.get("tick"),
-        "resolved_result": authoritative.get("resolved_result"),
-        "combat_result": authoritative.get("combat_result"),
-        "xp_result": authoritative.get("xp_result"),
-        "skill_xp_result": authoritative.get("skill_xp_result"),
-        "level_up": authoritative.get("level_up"),
-        "skill_level_ups": authoritative.get("skill_level_ups"),
-        "summary": authoritative.get("summary"),
-        "presentation": authoritative.get("presentation"),
-        "response_length": authoritative.get("response_length"),
+        "turn_id": _first_value(authoritative.get("turn_id"), result_sub.get("turn_id")),
+        "tick": _first_value(authoritative.get("tick"), result_sub.get("tick")),
+        "resolved_result": resolved_result,
+        "combat_result": _first_dict(
+            authoritative.get("combat_result"),
+            result_sub.get("combat_result"),
+        ),
+        "xp_result": _first_dict(
+            authoritative.get("xp_result"),
+            result_sub.get("xp_result"),
+        ),
+        "skill_xp_result": _first_dict(
+            authoritative.get("skill_xp_result"),
+            result_sub.get("skill_xp_result"),
+        ),
+        "level_up": _first_list(
+            authoritative.get("level_up"),
+            result_sub.get("level_up"),
+        ),
+        "skill_level_ups": _first_list(
+            authoritative.get("skill_level_ups"),
+            result_sub.get("skill_level_ups"),
+        ),
+        "summary": _first_value(authoritative.get("summary"), result_sub.get("summary")),
+        "presentation": _first_dict(
+            authoritative.get("presentation"),
+            result_sub.get("presentation"),
+        ),
+        "response_length": _first_value(
+            authoritative.get("response_length"),
+            result_sub.get("response_length"),
+        ),
         "narration": narration,
         "raw_llm_narrative": raw_llm_narrative,
         "used_llm": used_llm,
         "narration_status": narration_status,
-        "narration_debug": _safe_dict(result_sub.get("narration_debug")),
-        "living_world_debug": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("living_world_debug")),
-        "memory_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("memory_state")),
-        "relationship_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("relationship_state")),
-        "npc_emotion_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("npc_emotion_state")),
-        "service_offer_state": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("service_offer_state")),
-        "recalled_service_memories": _safe_list(_safe_dict(authoritative.get("resolved_result")).get("recalled_service_memories")),
-        "service_memory_recall_debug": _safe_dict(_safe_dict(authoritative.get("resolved_result")).get("service_memory_recall_debug")),
+        "narration_debug": _safe_dict(
+            result_sub.get("narration_debug") or authoritative.get("narration_debug")
+        ),
+        "living_world_debug": _safe_dict(resolved_result.get("living_world_debug")),
+        "memory_state": _safe_dict(resolved_result.get("memory_state")),
+        "relationship_state": _safe_dict(resolved_result.get("relationship_state")),
+        "npc_emotion_state": _safe_dict(resolved_result.get("npc_emotion_state")),
+        "service_offer_state": _safe_dict(resolved_result.get("service_offer_state")),
+        "journal_state": _safe_dict(resolved_result.get("journal_state")),
+        "world_event_state": _safe_dict(resolved_result.get("world_event_state")),
+        "recalled_service_memories": _safe_list(resolved_result.get("recalled_service_memories")),
+        "service_memory_recall_debug": _safe_dict(resolved_result.get("service_memory_recall_debug")),
+        "recalled_npc_memories": _safe_list(resolved_result.get("recalled_npc_memories")),
+        "npc_memory_recall_debug": _safe_dict(resolved_result.get("npc_memory_recall_debug")),
+        "social_living_world_effects": _safe_dict(resolved_result.get("social_living_world_effects")),
     }
 
-    narration_debug = _safe_dict(result_payload.get("narration_debug"))
-    resolved_result = _safe_dict(
-        result_payload.get("resolved_result")
-        or result_payload.get("resolved_action")
-        or result_payload
-    )
-    service_application = _safe_dict(resolved_result.get("service_application"))
-
-    result_payload["living_world_debug"] = _first_dict(
-        result_payload.get("living_world_debug"),
-        resolved_result.get("living_world_debug"),
-        service_application.get("living_world_debug"),
-        {
-            "memory_entry": _first_dict(
-                resolved_result.get("memory_entry"),
-                service_application.get("memory_entry"),
-            ),
-            "social_effects": _first_dict(
-                resolved_result.get("social_effects"),
-                service_application.get("social_effects"),
-            ),
-            "stock_update": _first_dict(
-                resolved_result.get("stock_update"),
-                service_application.get("stock_update"),
-            ),
-        },
-    )
-    result_payload["memory_state"] = _first_dict(
-        result_payload.get("memory_state"),
-        resolved_result.get("memory_state"),
-    )
-    result_payload["relationship_state"] = _first_dict(
-        result_payload.get("relationship_state"),
-        resolved_result.get("resolved_result"),
-    )
-    result_payload["npc_emotion_state"] = _first_dict(
-        result_payload.get("npc_emotion_state"),
-        resolved_result.get("npc_emotion_state"),
-    )
-    result_payload["service_offer_state"] = _first_dict(
-        result_payload.get("service_offer_state"),
-        resolved_result.get("service_offer_state"),
-    )
-    result_payload["recalled_service_memories"] = _first_list(
-        result_payload.get("recalled_service_memories"),
-        resolved_result.get("recalled_service_memories"),
-        narration_debug.get("recalled_service_memories"),
-    )
-    result_payload["service_memory_recall_debug"] = _first_dict(
-        result_payload.get("service_memory_recall_debug"),
-        resolved_result.get("service_memory_recall_debug"),
-        narration_debug.get("service_memory_recall_debug"),
-    )
+    result_payload = _attach_living_world_debug_fields(result_payload)
 
     return {
         "ok": True,

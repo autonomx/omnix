@@ -76,6 +76,10 @@ from app.rpg.memory.models import (
     JournalEntry,
     RecapSnapshot,
 )
+from app.rpg.memory.npc_memory_recall import (
+    memory_reference_is_backed,
+    recall_npc_memories,
+)
 from app.rpg.memory.presenters import MemoryPresenter
 from app.rpg.memory.recap_builder import RecapBuilder as Phase77RecapBuilder
 from app.rpg.memory.reflection import (
@@ -105,6 +109,7 @@ from app.rpg.memory.service_memory_recall import (
     recall_service_memories,
     recall_service_memories_for_narration,
 )
+from app.rpg.memory.social_effects import apply_general_social_effects
 from app.rpg.memory.summarizer import MemorySummarizer
 
 # Phase 14.2 — World Memory / Rumor Propagation
@@ -184,6 +189,9 @@ __all__ = [
     "recall_service_memories",
     "recall_service_memories_for_narration",
     "has_backing_service_memory",
+    "recall_npc_memories",
+    "memory_reference_is_backed",
+    "apply_general_social_effects",
     "update_memory",
     # Phase 14.0
     "append_long_term_memory",

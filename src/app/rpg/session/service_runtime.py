@@ -128,6 +128,12 @@ def service_authoritative_result(
         "memory_entry": {},
         "social_effects": {},
         "stock_update": {},
+        "rumor_added": {},
+        "journal_entry": {},
+        "service_world_event": {},
+        "rumor_world_event": {},
+        "journal_state": {},
+        "world_event_state": {},
     }
 
     if (
@@ -154,6 +160,18 @@ def service_authoritative_result(
         purchase_application["memory_entry"] = living_world.get("memory_entry") or {}
         purchase_application["social_effects"] = living_world.get("social_effects") or {}
         purchase_application["stock_update"] = living_world.get("stock_update") or {}
+        purchase_application["rumor_added"] = living_world.get("rumor_added") or {}
+        purchase_application["journal_entry"] = living_world.get("journal_entry") or {}
+        purchase_application["service_world_event"] = living_world.get("service_world_event") or {}
+        purchase_application["rumor_world_event"] = living_world.get("rumor_world_event") or {}
+        purchase_application["journal_state"] = living_world.get("journal_state") or {}
+        purchase_application["world_event_state"] = living_world.get("world_event_state") or {}
+        canonical_rumor = _safe_dict(purchase_application.get("rumor_added"))
+        transaction_record = _safe_dict(purchase_application.get("transaction_record"))
+        if canonical_rumor and transaction_record:
+            transaction_record["rumor_added"] = canonical_rumor
+            transaction_record["rumor_id"] = _safe_str(canonical_rumor.get("rumor_id"))
+            purchase_application["transaction_record"] = transaction_record
 
     blocked = bool(purchase_application.get("blocked"))
     blocked_reason = _safe_str(purchase_application.get("blocked_reason")) if blocked else ""
@@ -191,11 +209,23 @@ def service_authoritative_result(
             "memory_entry": purchase_application.get("memory_entry") or {},
             "social_effects": purchase_application.get("social_effects") or {},
             "stock_update": purchase_application.get("stock_update") or {},
+            "rumor_added": purchase_application.get("rumor_added") or {},
+            "journal_entry": purchase_application.get("journal_entry") or {},
+            "service_world_event": purchase_application.get("service_world_event") or {},
+            "rumor_world_event": purchase_application.get("rumor_world_event") or {},
+            "journal_state": purchase_application.get("journal_state") or {},
+            "world_event_state": purchase_application.get("world_event_state") or {},
         },
         "transaction_record": purchase_application.get("transaction_record") or {},
         "memory_entry": purchase_application.get("memory_entry") or {},
         "social_effects": purchase_application.get("social_effects") or {},
         "stock_update": purchase_application.get("stock_update") or {},
+        "rumor_added": purchase_application.get("rumor_added") or {},
+        "journal_entry": purchase_application.get("journal_entry") or {},
+        "service_world_event": purchase_application.get("service_world_event") or {},
+        "rumor_world_event": purchase_application.get("rumor_world_event") or {},
+        "journal_state": _safe_dict(simulation_state.get("journal_state")),
+        "world_event_state": _safe_dict(simulation_state.get("world_event_state")),
         # Expose canonical living-world roots after deterministic service
         # effects have mutated simulation_state. This keeps response builders
         # and manual transcript tools from seeing stale copies.
@@ -207,6 +237,10 @@ def service_authoritative_result(
             "memory_entry": purchase_application.get("memory_entry") or {},
             "social_effects": purchase_application.get("social_effects") or {},
             "stock_update": purchase_application.get("stock_update") or {},
+            "rumor_added": purchase_application.get("rumor_added") or {},
+            "journal_entry": purchase_application.get("journal_entry") or {},
+            "service_world_event": purchase_application.get("service_world_event") or {},
+            "rumor_world_event": purchase_application.get("rumor_world_event") or {},
             "memory_state_count": len(
                 _safe_list(
                     _safe_dict(simulation_state.get("memory_state")).get("service_memories")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import contextlib
 import difflib
 import json
@@ -9,10 +10,13 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
+import uuid
 import zipfile
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
@@ -30,6 +34,10 @@ RESULTS_ZIP_PATH = OUTPUT_DIR / "manual-rpg-test-results.zip"
 TOKEN_USAGE_PATH = OUTPUT_DIR / "token-usage.txt"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOT = REPO_ROOT / "src"
+RPG_SESSION_DIRS = [
+    REPO_ROOT / "resources" / "data" / "rpg_sessions",
+    REPO_ROOT / "data" / "rpg_sessions",
+]
 
 
 DEFAULT_MANAGED_SERVER_HEALTH_URLS: List[str] = []
@@ -45,6 +53,8 @@ CODE_DIFF_EXCLUDE_PARTS = {
 
 _OUTPUTS: Dict[str, List[str]] = {}
 _TOKEN_USAGE_ROWS: List[Dict[str, Any]] = []
+_OUTPUT_LOCK = threading.RLock()
+_TOKEN_USAGE_LOCK = threading.RLock()
 
 
 def _estimate_tokens_from_text(value: Any) -> int:
@@ -181,12 +191,14 @@ def _record_token_usage(
         "completion_tokens": int(usage.get("completion_tokens") or 0),
         "total_tokens": int(usage.get("total_tokens") or 0),
     }
-    _TOKEN_USAGE_ROWS.append(row)
+    with _TOKEN_USAGE_LOCK:
+        _TOKEN_USAGE_ROWS.append(row)
     return row
 
 
 def _reset_token_usage() -> None:
-    _TOKEN_USAGE_ROWS.clear()
+    with _TOKEN_USAGE_LOCK:
+        _TOKEN_USAGE_ROWS.clear()
 
 
 def _token_usage_totals(rows: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -200,8 +212,11 @@ def _token_usage_totals(rows: List[Dict[str, Any]]) -> Dict[str, int]:
 def write_token_usage_report(path: Path = TOKEN_USAGE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    with _TOKEN_USAGE_LOCK:
+        rows = list(_TOKEN_USAGE_ROWS)
+
     by_scope: Dict[str, List[Dict[str, Any]]] = {}
-    for row in _TOKEN_USAGE_ROWS:
+    for row in rows:
         by_scope.setdefault(str(row.get("scope") or "unknown"), []).append(row)
 
     lines: List[str] = []
@@ -213,7 +228,7 @@ def write_token_usage_report(path: Path = TOKEN_USAGE_PATH) -> None:
     lines.append("- source=estimated means counts are rough char/4 estimates from transcript data.")
     lines.append("")
 
-    totals = _token_usage_totals(_TOKEN_USAGE_ROWS)
+    totals = _token_usage_totals(rows)
     lines.append("TOTALS")
     lines.append("-" * 80)
     lines.append(_compact_json(totals))
@@ -228,7 +243,7 @@ def write_token_usage_report(path: Path = TOKEN_USAGE_PATH) -> None:
 
     lines.append("ROWS")
     lines.append("-" * 80)
-    lines.append(_compact_json(_TOKEN_USAGE_ROWS))
+    lines.append(_compact_json(rows))
     lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -238,26 +253,321 @@ def write_token_usage_report(path: Path = TOKEN_USAGE_PATH) -> None:
 def _emit(value: Any = "", channel: str = "main") -> None:
     text = "" if value is None else str(value)
     print(text, flush=True)
-    _OUTPUTS.setdefault(channel, []).append(text)
+    with _OUTPUT_LOCK:
+        _OUTPUTS.setdefault(channel, []).append(text)
 
 
 def _reset_output(channel: str | None = None) -> None:
-    if channel is None:
-        _OUTPUTS.clear()
-        return
-    _OUTPUTS[channel] = []
+    with _OUTPUT_LOCK:
+        if channel is None:
+            _OUTPUTS.clear()
+            return
+        _OUTPUTS[channel] = []
 
 
 def _write_output(path: Path, channel: str = "main") -> None:
-    lines = _OUTPUTS.get(channel, [])
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Wrote transcript to: {path.resolve()}")
+    with _OUTPUT_LOCK:
+        lines = list(_OUTPUTS.get(channel, []))
+    path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"Wrote transcript to: {path.resolve()}", flush=True)
 
 
 def _write_all_outputs(mapping: Dict[str, Path]) -> None:
     for channel, path in mapping.items():
         _write_output(path, channel=channel)
+
+
+def _write_current_transcript_outputs() -> None:
+    """Write all known transcript channels from the current run.
+
+    This is intentionally called at the end of the top-level run. It prevents
+    --all from losing flat transcript files when service scenarios run after
+    the flat transcript, especially when scenarios run in parallel.
+    """
+    with _OUTPUT_LOCK:
+        channels = sorted(_OUTPUTS.keys())
+
+    output_map: Dict[str, Path] = {}
+
+    if "flat_summary" in channels:
+        output_map["flat_summary"] = OUTPUT_DIR / "manual_rpg_llm_transcript__summary.txt"
+
+    if "flat_legacy" in channels:
+        output_map["flat_legacy"] = OUTPUT_PATH
+
+    for channel in channels:
+        if channel.startswith("flat_turn_"):
+            suffix = channel.replace("flat_turn_", "turn_")
+            output_map[channel] = OUTPUT_DIR / f"manual_rpg_llm_transcript__{suffix}.txt"
+
+    if "service_summary" in channels:
+        output_map["service_summary"] = OUTPUT_DIR / "manual_rpg_service_scenarios__summary.txt"
+
+    if "service_legacy" in channels:
+        output_map["service_legacy"] = SERVICE_OUTPUT_PATH
+
+    for channel in channels:
+        if not channel.startswith("service_"):
+            continue
+        if channel in {"service_summary", "service_legacy"}:
+            continue
+        scenario_name = channel.replace("service_", "", 1)
+        output_map[channel] = OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
+
+    _write_all_outputs(output_map)
+
+
+def _new_manual_run_id() -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    return f"{stamp}_{uuid.uuid4().hex[:8]}"
+
+
+def _default_scenario_workers() -> int:
+    raw = os.environ.get("OMNIX_MANUAL_SCENARIO_WORKERS", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except Exception:
+            print(
+                f"[manual][parallel] invalid OMNIX_MANUAL_SCENARIO_WORKERS={raw!r}; using 4",
+                flush=True,
+            )
+            return 4
+    return 4
+
+
+def _scenario_workers_source() -> str:
+    raw = os.environ.get("OMNIX_MANUAL_SCENARIO_WORKERS", "").strip()
+    if raw:
+        return f"env:OMNIX_MANUAL_SCENARIO_WORKERS={raw}"
+    return "default:4"
+
+
+def _thread_label() -> str:
+    current = threading.current_thread()
+    return f"{current.name}:{current.ident}"
+
+
+def _effective_scenario_workers(
+    requested_workers: int,
+    scenario_count: int,
+    *,
+    parallel: bool,
+) -> int:
+    if not parallel:
+        return 1
+    if scenario_count <= 1:
+        return 1
+    return max(1, min(int(requested_workers or 1), scenario_count))
+
+
+def _scoped_session_id(base_session_id: str, run_id: str, *, stable: bool = False) -> str:
+    base = str(base_session_id or "").strip() or "manual_test_session"
+    if stable:
+        return base
+    return f"{base}_{run_id}"
+
+
+def _manual_service_session_id(scenario_name: str, run_id: str, *, stable: bool = False) -> str:
+    base = f"manual_service_{scenario_name}"
+    if stable:
+        return base
+    return f"{base}_{run_id}"
+
+
+def _reset_manual_session_artifacts(session_id: str) -> None:
+    """Best-effort delete of saved session artifacts before a manual scenario.
+
+    The normal/default path uses unique run-scoped IDs, so this is mostly for
+    --stable-session-ids runs and for local cleanup safety.
+    """
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return
+
+    candidate_names = {
+        f"{session_id}.json",
+        f"{session_id}.rpg.json",
+        f"{session_id}.session.json",
+    }
+
+    for root in RPG_SESSION_DIRS:
+        if not root.exists():
+            continue
+        for name in candidate_names:
+            candidate = root / name
+            if candidate.exists() and candidate.is_file():
+                try:
+                    candidate.unlink()
+                    print(f"[manual][session] reset saved session artifact: {candidate}", flush=True)
+                except Exception as exc:
+                     print(
+                         f"[manual][session] failed to delete {candidate}: {type(exc).__name__}: {exc}",
+                         flush=True,
+                     )
+
+
+def _default_manual_currency() -> Dict[str, int]:
+    return {"gold": 0, "silver": 0, "copper": 0}
+
+
+def _ensure_manual_simulation_roots(session: Dict[str, Any]) -> Dict[str, Any]:
+    setup_payload = _safe_dict(session.get("setup_payload"))
+    if not setup_payload:
+        setup_payload = {}
+        session["setup_payload"] = setup_payload
+
+    metadata = _safe_dict(setup_payload.get("metadata"))
+    if not metadata:
+        metadata = {}
+        setup_payload["metadata"] = metadata
+
+    simulation_state = _safe_dict(metadata.get("simulation_state"))
+    if not simulation_state:
+        simulation_state = {}
+        metadata["simulation_state"] = simulation_state
+
+    return simulation_state
+
+
+def _sync_manual_simulation_state(session: Dict[str, Any], simulation_state: Dict[str, Any]) -> None:
+    setup_payload = _safe_dict(session.get("setup_payload"))
+    if not setup_payload:
+        setup_payload = {}
+        session["setup_payload"] = setup_payload
+
+    metadata = _safe_dict(setup_payload.get("metadata"))
+    if not metadata:
+        metadata = {}
+
+    session["simulation_state"] = simulation_state
+    metadata["simulation_state"] = simulation_state
+    setup_payload["metadata"] = metadata
+    session["setup_payload"] = setup_payload
+
+
+def _sanitize_manual_simulation_state_for_test(
+    simulation_state: Dict[str, Any],
+    *,
+    currency: Dict[str, Any] | None = None,
+    reset_player_items: bool = True,
+) -> Dict[str, Any]:
+    """Remove accumulated living-world/test state from cloned manual sessions.
+
+    The template session may be dirty from previous manual transcript runs.
+    Run-scoped session ids prevent file collisions, but they do not prevent
+    cloned simulation_state roots from carrying old transaction history,
+    memories, journal entries, stock depletion, world events, active services,
+    and relationship/emotion data.
+    """
+    simulation_state = _safe_dict(simulation_state)
+
+    # Runtime/system roots that must start clean for deterministic scenarios.
+    simulation_state["transaction_history"] = []
+    simulation_state["active_services"] = []
+    simulation_state["memory_rumors"] = []
+    simulation_state["relationship_state"] = {}
+    simulation_state["npc_emotion_state"] = {}
+    simulation_state["service_offer_state"] = {}
+    simulation_state["journal_state"] = {"entries": []}
+    simulation_state["world_event_state"] = {"events": []}
+
+    simulation_state["memory_state"] = {
+        "service_memories": [],
+        "social_memories": [],
+        "npc_memories": {},
+        "npc_memories_flat": [],
+        "rumors": [],
+    }
+
+    # Keep broad scene/location context, but normalize player inventory.
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    if not player_state:
+        player_state = {}
+        simulation_state["player_state"] = player_state
+
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    if not inventory_state:
+        inventory_state = {}
+        player_state["inventory_state"] = inventory_state
+
+    if reset_player_items:
+        inventory_state["items"] = []
+        inventory_state["equipment"] = {}
+        inventory_state["last_loot"] = []
+
+    inventory_state.setdefault("capacity", 50)
+    inventory_state["currency"] = {
+        "gold": int(_safe_dict(currency or _default_manual_currency()).get("gold") or 0),
+        "silver": int(_safe_dict(currency or _default_manual_currency()).get("silver") or 0),
+        "copper": int(_safe_dict(currency or _default_manual_currency()).get("copper") or 0),
+    }
+
+    # Keep location coherent if either root exists.
+    location_id = (
+        _safe_str(simulation_state.get("location_id"))
+        or _safe_str(simulation_state.get("current_location_id"))
+        or _safe_str(player_state.get("location_id"))
+        or _safe_str(player_state.get("current_location_id"))
+    )
+    if location_id:
+        simulation_state["location_id"] = location_id
+        simulation_state["current_location_id"] = location_id
+        player_state["location_id"] = location_id
+        player_state["current_location_id"] = location_id
+
+    return simulation_state
+
+
+def _sanitize_manual_session_for_test(
+    session: Dict[str, Any],
+    *,
+    currency: Dict[str, Any] | None = None,
+    reset_player_items: bool = True,
+) -> Dict[str, Any]:
+    session = _safe_dict(session)
+    simulation_state = _ensure_manual_simulation_roots(session)
+    _sanitize_manual_simulation_state_for_test(
+        simulation_state,
+        currency=currency,
+        reset_player_items=reset_player_items,
+    )
+    _sync_manual_simulation_state(session, simulation_state)
+
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    runtime_state["tick"] = 0
+    runtime_state["turn_history"] = []
+    runtime_state["last_turn_contract"] = {}
+    runtime_state["last_turn_result"] = {}
+    runtime_state["last_narration"] = ""
+    runtime_state["last_turn_narration"] = ""
+    session["runtime_state"] = runtime_state
+    return session
+
+
+def _bootstrap_flat_manual_session(session_id: str) -> bool:
+    """Ensure the flat manual transcript session exists before apply_turn.
+
+    Service scenarios already do this through _seed_session_currency(...).
+    The flat transcript does not need special currency seeding, but it still
+    needs a valid RPG session when run-scoped session ids are used.
+    """
+    session = _ensure_manual_session(session_id)
+    if not session:
+        return False
+
+    session = _sanitize_manual_session_for_test(
+        session,
+        currency=_default_manual_currency(),
+        reset_player_items=True,
+    )
+    try:
+        from app.rpg.session.service import save_session
+        save_session(session)
+    except Exception:
+        return False
+    return True
 
 
 def _split_env_list(value: str) -> List[str]:
@@ -614,12 +924,7 @@ def _clone_or_create_manual_session(session_id: str) -> Dict[str, Any]:
             manifest["title"] = f"Manual Service Scenario: {session_id}"
             cloned["manifest"] = manifest
 
-            runtime_state = _safe_dict(cloned.get("runtime_state"))
-            runtime_state["tick"] = 0
-            runtime_state["turn_history"] = []
-            runtime_state["last_turn_contract"] = {}
-            runtime_state["last_turn_result"] = {}
-            cloned["runtime_state"] = runtime_state
+            cloned = _sanitize_manual_session_for_test(cloned)
 
             save_session(cloned)
             return cloned
@@ -648,6 +953,7 @@ def _ensure_manual_session(session_id: str) -> Dict[str, Any]:
         manifest["id"] = f"session:{session_id}"
         manifest["title"] = f"Manual Service Scenario: {session_id}"
         cloned["manifest"] = manifest
+        cloned = _sanitize_manual_session_for_test(cloned)
         save_session(cloned)
         return cloned
     except Exception:
@@ -852,6 +1158,55 @@ def _extract_service_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, An
     return _safe_dict(resolved.get("service_memory_recall_debug"))
 
 
+def _extract_recalled_npc_memories(result: Dict[str, Any]) -> List[Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
+    direct = _safe_list(narration_debug.get("recalled_npc_memories"))
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    current_memory_id = _safe_str(
+        _safe_dict(
+            resolved.get("memory_entry")
+            or _safe_dict(resolved.get("social_living_world_effects")).get("memory_entry")
+            or _safe_dict(_safe_dict(resolved.get("service_application")).get("memory_entry"))
+        ).get("memory_id")
+    )
+
+    memories = direct or _safe_list(resolved.get("recalled_npc_memories"))
+    if not current_memory_id:
+        return memories
+    return [
+        memory
+        for memory in memories
+        if _safe_str(_safe_dict(memory).get("memory_id")) != current_memory_id
+    ]
+
+
+def _extract_npc_memory_recall_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
+    direct = _safe_dict(narration_debug.get("npc_memory_recall_debug"))
+    if direct:
+        return direct
+
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    return _safe_dict(resolved.get("npc_memory_recall_debug"))
+
+
+def _extract_social_living_world_effects(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("social_living_world_effects"))
+    if direct:
+        return direct
+
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    return _safe_dict(resolved.get("social_living_world_effects"))
+
+
 def _extract_living_world_debug(result: Dict[str, Any]) -> Dict[str, Any]:
     service_debug = _extract_service_debug(result)
     resolved = _safe_dict(service_debug.get("resolved_result"))
@@ -862,7 +1217,29 @@ def _extract_living_world_debug(result: Dict[str, Any]) -> Dict[str, Any]:
         "memory_entry": service_debug.get("memory_entry"),
         "social_effects": service_debug.get("social_effects"),
         "stock_update": service_debug.get("stock_update"),
+        "rumor_added": service_debug.get("rumor_added"),
+        "journal_entry": service_debug.get("journal_entry"),
+        "service_world_event": service_debug.get("service_world_event"),
+        "rumor_world_event": service_debug.get("rumor_world_event"),
     }
+
+
+def _extract_journal_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("journal_state"))
+    if direct:
+        return direct
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("journal_state"))
+
+
+def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("world_event_state"))
+    if direct:
+        return direct
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("world_event_state"))
 
 
 def _effective_service_status(
@@ -928,12 +1305,20 @@ def _compact_turn_summary(
         "recalled_service_memories": _extract_recalled_service_memories(result),
         "recalled_service_memory_count": len(_extract_recalled_service_memories(result)),
         "service_memory_recall_debug": _extract_service_memory_recall_debug(result),
+        "recalled_npc_memories": _extract_recalled_npc_memories(result),
+        "recalled_npc_memory_count": len(_extract_recalled_npc_memories(result)),
+        "npc_memory_recall_debug": _extract_npc_memory_recall_debug(result),
         "relationship_state": _extract_relationship_state(result),
         "npc_emotion_state": _extract_npc_emotion_state(result),
         "social_effects": service_debug.get("social_effects"),
+        "social_living_world_effects": _extract_social_living_world_effects(result),
         "stock_update": service_debug.get("stock_update"),
         "service_offer_state": _extract_service_offer_state(result),
         "living_world_debug": _extract_living_world_debug(result),
+        "journal_state": _extract_journal_state(result),
+        "journal_entry_count": len(_safe_list(_extract_journal_state(result).get("entries"))),
+        "world_event_state": _extract_world_event_state(result),
+        "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
         "token_usage": _extract_token_usage_from_result(result, player_input=player_input),
         "available_actions": service_debug.get("available_actions"),
         "narration_preview": narration[:500] if narration else "",
@@ -950,41 +1335,54 @@ def _emit_summary_block(title: str, rows: List[Dict[str, Any]], channel: str) ->
     _emit("", channel=channel)
 
 
+def _scenario_contamination_warnings(
+    *,
+    scenario_name: str,
+    turn_index: int,
+    before_currency: Dict[str, Any] | None,
+    before_items: List[Any] | None,
+    result: Dict[str, Any],
+) -> List[str]:
+    warnings: List[str] = []
+    if turn_index == 1:
+        active_services = _extract_active_services(result)
+        transaction_history = _extract_transaction_history(result)
+        journal_state = _extract_journal_state(result)
+        world_event_state = _extract_world_event_state(result)
+        if transaction_history:
+            warnings.append("scenario_started_with_transaction_history")
+        if active_services:
+            warnings.append("scenario_started_with_active_services")
+        if _safe_list(journal_state.get("entries")):
+            warnings.append("scenario_started_with_journal_entries")
+        # Turn 1 may legitimately emit its own current world event, such as a
+        # service inquiry event. That is not pre-existing contamination. More
+        # than one event on turn 1 is still suspicious for the manual scenarios.
+        events = _safe_list(world_event_state.get("events"))
+        if len(events) > 1:
+            warnings.append("scenario_started_with_world_events")
+
+    if scenario_name == "shop_success" and turn_index == 1:
+        item_ids = {
+            _safe_str(_safe_dict(item).get("item_id"))
+            for item in (before_items or [])
+        }
+        if "torch" in item_ids:
+            warnings.append("shop_success_started_with_torch")
+
+    return warnings
+
+
 def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
     session = _ensure_manual_session(session_id)
     if not session:
         return False
 
-    simulation_state = _extract_simulation_state({"session": session})
-    if not simulation_state:
-        setup_payload = _safe_dict(session.get("setup_payload"))
-        metadata = _safe_dict(setup_payload.get("metadata"))
-        simulation_state = _safe_dict(metadata.get("simulation_state"))
-        if not simulation_state:
-            simulation_state = {}
-            metadata["simulation_state"] = simulation_state
-
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    if not player_state:
-        player_state = {}
-        simulation_state["player_state"] = player_state
-
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    if not inventory_state:
-        inventory_state = {"items": [], "equipment": {}, "capacity": 50, "last_loot": []}
-        player_state["inventory_state"] = inventory_state
-
-    inventory_state["currency"] = {
-        "gold": int(currency.get("gold") or 0),
-        "silver": int(currency.get("silver") or 0),
-        "copper": int(currency.get("copper") or 0),
-    }
-
-    setup_payload = _safe_dict(session.get("setup_payload"))
-    metadata = _safe_dict(setup_payload.get("metadata"))
-    if metadata is not setup_payload.get("metadata"):
-        setup_payload["metadata"] = metadata
-    metadata["simulation_state"] = simulation_state
+    session = _sanitize_manual_session_for_test(
+        session,
+        currency=currency,
+        reset_player_items=True,
+    )
 
     try:
         from app.rpg.session.service import save_session
@@ -1005,16 +1403,7 @@ def _write_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
     if not session:
         return False
 
-    simulation_state = _extract_simulation_state({"session": session})
-    if not simulation_state:
-        setup_payload = _safe_dict(session.get("setup_payload"))
-        metadata = _safe_dict(setup_payload.get("metadata"))
-        simulation_state = _safe_dict(metadata.get("simulation_state"))
-        if not simulation_state:
-            simulation_state = {}
-            metadata["simulation_state"] = simulation_state
-        setup_payload["metadata"] = metadata
-        session["setup_payload"] = setup_payload
+    simulation_state = _ensure_manual_simulation_roots(session)
 
     player_state = _safe_dict(simulation_state.get("player_state"))
     if not player_state:
@@ -1037,11 +1426,7 @@ def _write_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
         "copper": int(currency.get("copper") or 0),
     }
 
-    setup_payload = _safe_dict(session.get("setup_payload"))
-    metadata = _safe_dict(setup_payload.get("metadata"))
-    metadata["simulation_state"] = simulation_state
-    setup_payload["metadata"] = metadata
-    session["setup_payload"] = setup_payload
+    _sync_manual_simulation_state(session, simulation_state)
 
     try:
         save_session(session)
@@ -1100,6 +1485,142 @@ def _compact_json(value: Any) -> str:
     return json.dumps(value, indent=2, ensure_ascii=False, default=str)
 
 
+def _one_line_text(value: Any, *, max_chars: int = 1200) -> str:
+    text = "" if value is None else str(value)
+    text = "\n".join(line.rstrip() for line in text.splitlines()).strip()
+    if max_chars > 0 and len(text) > max_chars:
+        return text[:max_chars].rstrip() + "..."
+    return text
+
+
+def _extract_raw_llm_text(result: Dict[str, Any]) -> str:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    raw_text = (
+        raw_payload.get("raw_llm_narrative")
+        or raw_payload.get("raw_llm_text")
+        or result_sub.get("raw_llm_narrative")
+        or result_sub.get("raw_llm_text")
+    )
+    if isinstance(raw_text, dict):
+        return _compact_json(raw_text)
+    return _safe_str(raw_text)
+
+
+def _extract_raw_llm_request(result: Dict[str, Any]) -> str:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    raw_request = (
+        raw_payload.get("raw_llm_request")
+        or result_sub.get("raw_llm_request")
+    )
+    if isinstance(raw_request, dict):
+        return _compact_json(raw_request)
+    return _safe_str(raw_request)
+
+
+def _extract_llm_console_response(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    narration_json = _safe_dict(raw_payload.get("narration_json"))
+    npc = _safe_dict(narration_json.get("npc"))
+
+    final_narration = _extract_narration(result)
+    json_narration = _safe_str(narration_json.get("narration"))
+    json_action = _safe_str(narration_json.get("action"))
+    npc_speaker = _safe_str(npc.get("speaker"))
+    npc_line = _safe_str(npc.get("line"))
+    raw_text = _extract_raw_llm_text(result)
+    raw_request = _extract_raw_llm_request(result)
+
+    return {
+        "final": final_narration,
+        "json_narration": json_narration,
+        "json_action": json_action,
+        "npc_speaker": npc_speaker,
+        "npc_line": npc_line,
+        "raw": raw_text,
+        "raw_request": raw_request,
+        "used_llm": result_sub.get("used_llm"),
+        "narration_status": result_sub.get("narration_status"),
+    }
+
+
+def _log_llm_response(
+    *,
+    scope: str,
+    label: str,
+    turn: int,
+    player_input: str,
+    result: Dict[str, Any],
+    show_raw: bool = False,
+    max_chars: int = 1200,
+) -> None:
+    payload = _extract_llm_console_response(result)
+    final_text = _one_line_text(payload.get("final"), max_chars=max_chars)
+    json_narration = _one_line_text(payload.get("json_narration"), max_chars=max_chars)
+    json_action = _one_line_text(payload.get("json_action"), max_chars=max_chars)
+    npc_speaker = _safe_str(payload.get("npc_speaker"))
+    npc_line = _one_line_text(payload.get("npc_line"), max_chars=max_chars)
+    raw_text = _one_line_text(payload.get("raw"), max_chars=max_chars)
+    raw_request = _one_line_text(payload.get("raw_request"), max_chars=max_chars)
+
+    prefix = f"[manual][llm][{scope}:{label}][turn {turn}]"
+    print("", flush=True)
+    print(f"{prefix} PLAYER: {player_input}", flush=True)
+    print(
+        f"{prefix} used_llm={payload.get('used_llm')} "
+        f"narration_status={payload.get('narration_status')}",
+        flush=True,
+    )
+    if show_raw and raw_request:
+        print(f"{prefix} RAW LLM REQUEST:", flush=True)
+        print(raw_request, flush=True)
+    if final_text:
+        print(f"{prefix} FINAL RESPONSE:", flush=True)
+        print(final_text, flush=True)
+    elif json_narration or json_action or npc_line:
+        print(f"{prefix} STRUCTURED RESPONSE:", flush=True)
+        if json_narration:
+            print(json_narration, flush=True)
+        if json_action:
+            print(f"Result: {json_action}", flush=True)
+        if npc_speaker and npc_line:
+            print(f'{npc_speaker}: "{npc_line}"', flush=True)
+    else:
+        print(f"{prefix} FINAL RESPONSE: [no narration found]", flush=True)
+
+    if show_raw and raw_text:
+        print(f"{prefix} RAW LLM RESPONSE:", flush=True)
+        print(raw_text, flush=True)
+    print("", flush=True)
+    print(f"{prefix} PLAYER: {player_input}", flush=True)
+    print(
+        f"{prefix} used_llm={payload.get('used_llm')} "
+        f"narration_status={payload.get('narration_status')}",
+        flush=True,
+    )
+
+    if final_text:
+        print(f"{prefix} FINAL RESPONSE:", flush=True)
+        print(final_text, flush=True)
+    elif json_narration or json_action or npc_line:
+        print(f"{prefix} STRUCTURED RESPONSE:", flush=True)
+        if json_narration:
+            print(json_narration, flush=True)
+        if json_action:
+            print(f"Result: {json_action}", flush=True)
+        if npc_speaker and npc_line:
+            print(f'{npc_speaker}: "{npc_line}"', flush=True)
+    else:
+        print(f"{prefix} FINAL RESPONSE: [no narration found]", flush=True)
+
+    if show_raw and raw_text:
+        print(f"{prefix} RAW LLM RESPONSE:", flush=True)
+        print(raw_text, flush=True)
+    print("", flush=True)
+
+
 def _extract_turn_contract(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _safe_dict(result)
     payload = _safe_dict(result.get("result") or result)
@@ -1151,6 +1672,22 @@ def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
             resolved.get("stock_update")
             or service_application.get("stock_update")
         ),
+        "rumor_added": _safe_dict(
+            resolved.get("rumor_added")
+            or service_application.get("rumor_added")
+        ),
+        "journal_entry": _safe_dict(
+            resolved.get("journal_entry")
+            or service_application.get("journal_entry")
+        ),
+        "service_world_event": _safe_dict(
+            resolved.get("service_world_event")
+            or service_application.get("service_world_event")
+        ),
+        "rumor_world_event": _safe_dict(
+            resolved.get("rumor_world_event")
+            or service_application.get("rumor_world_event")
+        ),
         "inventory_changes": {
             "items_added": _safe_list(
                 applied_effects.get("items_added") or effects.get("items_added")
@@ -1173,6 +1710,29 @@ def _effective_player_currency_after(result: Dict[str, Any]) -> Dict[str, Any]:
         return _safe_dict(service_result.get("player_currency"))
 
     return _extract_player_currency(result)
+
+
+def _turn_applied_currency_mutation(result: Dict[str, Any]) -> bool:
+    """True only when the turn actually mutates player currency.
+
+    Service inquiry turns can expose stale/default player_currency values.
+    The scenario harness must not treat those as authoritative currency
+    changes, or seeded scenario currency gets wiped before the purchase turn.
+    """
+    service_debug = _extract_service_debug(result)
+    service_result = _safe_dict(service_debug.get("service_result"))
+    service_application = _safe_dict(service_debug.get("service_application"))
+    purchase = _safe_dict(service_debug.get("purchase"))
+    transaction_record = _safe_dict(service_debug.get("transaction_record"))
+
+    if _safe_str(service_result.get("kind")) != "service_purchase":
+        return False
+
+    return bool(
+        service_application.get("applied")
+        or purchase.get("applied")
+        or _safe_str(transaction_record.get("status")) == "purchased"
+    )
 
 
 def _print_turn(
@@ -1257,6 +1817,15 @@ def _print_turn(
     _emit("SERVICE MEMORY RECALL DEBUG:", channel=channel)
     _emit(_compact_json(_extract_service_memory_recall_debug(result)), channel=channel)
     _emit("", channel=channel)
+    _emit("RECALLED NPC MEMORIES:", channel=channel)
+    _emit(_compact_json(_extract_recalled_npc_memories(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("NPC MEMORY RECALL DEBUG:", channel=channel)
+    _emit(_compact_json(_extract_npc_memory_recall_debug(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("SOCIAL LIVING WORLD EFFECTS:", channel=channel)
+    _emit(_compact_json(_extract_social_living_world_effects(result)), channel=channel)
+    _emit("", channel=channel)
     _emit("RELATIONSHIP STATE:", channel=channel)
     _emit(_compact_json(_extract_relationship_state(result)), channel=channel)
     _emit("", channel=channel)
@@ -1265,6 +1834,12 @@ def _print_turn(
     _emit("", channel=channel)
     _emit("SERVICE OFFER STATE:", channel=channel)
     _emit(_compact_json(_extract_service_offer_state(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("JOURNAL STATE:", channel=channel)
+    _emit(_compact_json(_extract_journal_state(result)), channel=channel)
+    _emit("", channel=channel)
+    _emit("WORLD EVENT STATE:", channel=channel)
+    _emit(_compact_json(_extract_world_event_state(result)), channel=channel)
     _emit("", channel=channel)
     _emit("SERVICE LIVING WORLD APPLICATION:", channel=channel)
     _emit(_compact_json({
@@ -1305,8 +1880,45 @@ def run_manual_transcript(
     session_id: str = "manual_test_session",
     *,
     split_files: bool = True,
+    run_id: str = "",
+    stable_session_ids: bool = False,
+    reset_session_state: bool = True,
+    reset_output: bool = True,
+    console_llm: bool = True,
+    console_llm_raw: bool = True,
+    console_llm_max_chars: int = 1200,
 ) -> None:
-    _reset_output()
+    if reset_output:
+        _reset_output()
+
+    effective_session_id = _scoped_session_id(
+        session_id,
+        run_id or _new_manual_run_id(),
+        stable=stable_session_ids,
+    )
+    if reset_session_state:
+        _reset_manual_session_artifacts(effective_session_id)
+
+    if not _bootstrap_flat_manual_session(effective_session_id):
+        summary_channel = "flat_summary"
+        legacy_channel = "flat_legacy"
+        _emit("Manual RPG LLM Transcript Summary", channel=summary_channel)
+        _emit("", channel=summary_channel)
+        _emit(f"session_id: {effective_session_id}", channel=summary_channel)
+        _emit(f"base_session_id: {session_id}", channel=summary_channel)
+        _emit(f"manual_run_id: {run_id}", channel=summary_channel)
+        _emit("", channel=summary_channel)
+        _emit("ERROR:", channel=summary_channel)
+        _emit(f"Could not create or load flat manual session: {effective_session_id}", channel=summary_channel)
+        _emit("", channel=summary_channel)
+
+        if not split_files:
+            _emit("Manual RPG LLM Transcript", channel=legacy_channel)
+            _emit("", channel=legacy_channel)
+            _emit(f"session_id: {effective_session_id}", channel=legacy_channel)
+            _emit("ERROR:", channel=legacy_channel)
+            _emit(f"Could not create or load flat manual session: {effective_session_id}", channel=legacy_channel)
+        return
 
     summary_channel = "flat_summary"
     legacy_channel = "flat_legacy"
@@ -1315,21 +1927,35 @@ def run_manual_transcript(
 
     _emit("Manual RPG LLM Transcript Summary", channel=summary_channel)
     _emit("", channel=summary_channel)
-    _emit(f"session_id: {session_id}", channel=summary_channel)
+    _emit(f"session_id: {effective_session_id}", channel=summary_channel)
+    _emit(f"base_session_id: {session_id}", channel=summary_channel)
+    _emit(f"manual_run_id: {run_id}", channel=summary_channel)
     _emit("", channel=summary_channel)
 
     if not split_files:
         _emit("Manual RPG LLM Transcript", channel=legacy_channel)
         _emit("", channel=legacy_channel)
-        _emit(f"session_id: {session_id}", channel=legacy_channel)
+        _emit(f"session_id: {effective_session_id}", channel=legacy_channel)
+
+    last_result: Dict[str, Any] = {}
 
     for index, player_input in enumerate(turns, start=1):
         print(f"[manual] flat turn {index}/{len(turns)}: {player_input}", flush=True)
 
-        before_result = apply_turn(session_id=session_id, player_input="I wait")
-        before_currency = _extract_player_currency(before_result)
-        before_items = _extract_player_items(before_result)
-        result = apply_turn(session_id=session_id, player_input=player_input)
+        before_currency = _extract_player_currency(last_result) if last_result else {}
+        before_items = _extract_player_items(last_result) if last_result else []
+        result = apply_turn(session_id=effective_session_id, player_input=player_input)
+        last_result = result
+        if console_llm:
+            _log_llm_response(
+                scope="flat",
+                label=session_id,
+                turn=index,
+                player_input=player_input,
+                result=result,
+                show_raw=console_llm_raw,
+                max_chars=console_llm_max_chars,
+            )
         _record_token_usage(
             scope="flat",
             label=session_id,
@@ -1352,7 +1978,9 @@ def run_manual_transcript(
             turn_channel = f"flat_turn_{index:02d}"
             _emit("Manual RPG LLM Transcript", channel=turn_channel)
             _emit("", channel=turn_channel)
-            _emit(f"session_id: {session_id}", channel=turn_channel)
+            _emit(f"session_id: {effective_session_id}", channel=turn_channel)
+            _emit(f"base_session_id: {session_id}", channel=turn_channel)
+            _emit(f"manual_run_id: {run_id}", channel=turn_channel)
             _print_turn(
                 index,
                 player_input,
@@ -1381,8 +2009,157 @@ def run_manual_transcript(
         _write_output(OUTPUT_PATH, channel=legacy_channel)
 
 
-def run_service_scenarios(selected: str = "all", *, split_files: bool = True) -> None:
-    _reset_output()
+def _run_one_service_scenario(
+    *,
+    scenario_name: str,
+    scenario: Dict[str, Any],
+    run_id: str,
+    split_files: bool,
+    legacy_channel: str,
+    stable_session_ids: bool,
+    reset_session_state: bool,
+    console_llm: bool = True,
+    console_llm_raw: bool = True,
+    console_llm_max_chars: int = 1200,
+) -> Dict[str, Any]:
+    scenario_channel = f"service_{scenario_name}"
+    target_channel = scenario_channel if split_files else legacy_channel
+    session_id = _manual_service_session_id(
+        scenario_name,
+        run_id or _new_manual_run_id(),
+        stable=stable_session_ids,
+    )
+    currency = _safe_dict(scenario.get("currency"))
+    turns = _safe_list(scenario.get("turns"))
+
+    print(
+        f"[manual][worker {_thread_label()}] scenario {scenario_name}: "
+        f"{len(turns)} turns session_id={session_id}",
+        flush=True,
+    )
+
+    if reset_session_state:
+        _reset_manual_session_artifacts(session_id)
+
+    _emit("", channel=target_channel)
+    _emit("#" * 80, channel=target_channel)
+    _emit(f"SCENARIO: {scenario_name}", channel=target_channel)
+    _emit(f"session_id: {session_id}", channel=target_channel)
+    _emit(f"manual_run_id: {run_id}", channel=target_channel)
+    _emit("SEEDED CURRENCY:", channel=target_channel)
+    _emit(_compact_json(currency), channel=target_channel)
+    _emit("#" * 80, channel=target_channel)
+
+    seeded = _seed_session_currency(session_id, currency)
+    if not seeded:
+        _emit("ERROR:", channel=target_channel)
+        _emit(f"Could not create or seed scenario session: {session_id}", channel=target_channel)
+        _emit(
+            "Make sure manual_test_session exists, or update _ensure_manual_session to use your session creation API.",
+            channel=target_channel,
+        )
+        return {
+            "scenario": scenario_name,
+            "session_id": session_id,
+            "seeded_currency": currency,
+            "error": "scenario_session_seed_failed",
+            "turns": [],
+            "_channel": scenario_channel,
+        }
+
+    last_result: Dict[str, Any] = {}
+    scenario_results: List[Dict[str, Any]] = []
+    current_currency = currency
+
+    for index, player_input in enumerate(turns, start=1):
+        print(
+            f"[manual][worker {_thread_label()}] scenario {scenario_name} "
+            f"turn {index}/{len(turns)}: {player_input}",
+            flush=True,
+        )
+
+        if current_currency:
+            _write_session_currency(session_id, current_currency)
+
+        before_currency = current_currency or (
+            _extract_player_currency(last_result) if last_result else currency
+        )
+        before_items = _extract_player_items(last_result) if last_result else []
+
+        result = apply_turn(session_id=session_id, player_input=player_input)
+        if console_llm:
+            _log_llm_response(
+                scope="scenario",
+                label=scenario_name,
+                turn=index,
+                player_input=player_input,
+                result=result,
+                show_raw=console_llm_raw,
+                max_chars=console_llm_max_chars,
+            )
+        _record_token_usage(
+            scope="service_scenario",
+            label=scenario_name,
+            turn=index,
+            player_input=player_input,
+            result=result,
+        )
+        _print_turn(
+            index,
+            player_input,
+            result,
+            before_currency,
+            before_items,
+            channel=target_channel,
+        )
+
+        summary_row = _compact_turn_summary(
+            index=index,
+            player_input=player_input,
+            result=result,
+            before_currency=before_currency,
+            before_items=before_items,
+        )
+        summary_row["scenario_warnings"] = _scenario_contamination_warnings(
+            scenario_name=scenario_name,
+            turn_index=index,
+            before_currency=before_currency,
+            before_items=before_items,
+            result=result,
+        )
+        scenario_results.append(summary_row)
+
+        if _turn_applied_currency_mutation(result):
+            next_currency = _effective_player_currency_after(result)
+            if next_currency:
+                current_currency = next_currency
+        last_result = result
+
+    return {
+        "scenario": scenario_name,
+        "session_id": session_id,
+        "seeded_currency": currency,
+        "turns": scenario_results,
+        "_channel": scenario_channel,
+    }
+
+
+def run_service_scenarios(
+    selected: str = "all",
+    *,
+    split_files: bool = True,
+    run_id: str = "",
+    stable_session_ids: bool = False,
+    reset_session_state: bool = True,
+    parallel_scenarios: bool = True,
+    scenario_workers: int = 4,
+    reset_output: bool = True,
+    console_llm: bool = True,
+    console_llm_raw: bool = True,
+    console_llm_max_chars: int = 1200,
+) -> None:
+    if reset_output:
+        _reset_output()
 
     if selected == "all":
         scenario_items = list(SERVICE_SCENARIOS.items())
@@ -1398,6 +2175,7 @@ def run_service_scenarios(selected: str = "all", *, split_files: bool = True) ->
     _emit("", channel=summary_channel)
     _emit(f"scenario_filter: {selected}", channel=summary_channel)
     _emit(f"scenario_count: {len(scenario_items)}", channel=summary_channel)
+    _emit(f"manual_run_id: {run_id}", channel=summary_channel)
     _emit("", channel=summary_channel)
 
     if not split_files:
@@ -1407,100 +2185,97 @@ def run_service_scenarios(selected: str = "all", *, split_files: bool = True) ->
         _emit(f"scenario_count: {len(scenario_items)}", channel=legacy_channel)
         _emit("", channel=legacy_channel)
 
-    for scenario_name, scenario in scenario_items:
-        scenario_channel = f"service_{scenario_name}"
-        target_channel = scenario_channel if split_files else legacy_channel
-        session_id = f"manual_service_{scenario_name}"
-        currency = _safe_dict(scenario.get("currency"))
-        turns = _safe_list(scenario.get("turns"))
+    workers = _effective_scenario_workers(
+        scenario_workers,
+        len(scenario_items),
+        parallel=parallel_scenarios,
+    )
+    _emit(f"requested_parallel_scenarios: {parallel_scenarios}", channel=summary_channel)
+    _emit(f"requested_scenario_workers: {scenario_workers}", channel=summary_channel)
+    _emit(f"scenario_workers_source: {_scenario_workers_source()}", channel=summary_channel)
+    _emit(f"scenario_count: {len(scenario_items)}", channel=summary_channel)
+    _emit(f"parallel_scenarios: {bool(workers > 1)}", channel=summary_channel)
+    _emit(f"scenario_workers: {workers}", channel=summary_channel)
+    if parallel_scenarios and workers <= 1:
+        _emit(
+            "parallel_note: parallel requested but effective workers is 1; "
+            "this usually means only one scenario was selected or scenario-workers/env is 1.",
+            channel=summary_channel,
+        )
+    _emit("", channel=summary_channel)
 
-        print(f"[manual] scenario {scenario_name}: {len(turns)} turns", flush=True)
-
-        _emit("", channel=target_channel)
-        _emit("#" * 80, channel=target_channel)
-        _emit(f"SCENARIO: {scenario_name}", channel=target_channel)
-        _emit(f"session_id: {session_id}", channel=target_channel)
-        _emit("SEEDED CURRENCY:", channel=target_channel)
-        _emit(_compact_json(currency), channel=target_channel)
-        _emit("#" * 80, channel=target_channel)
-
-        seeded = _seed_session_currency(session_id, currency)
-        if not seeded:
-            _emit("ERROR:", channel=target_channel)
-            _emit(f"Could not create or seed scenario session: {session_id}", channel=target_channel)
-            _emit(
-                "Make sure manual_test_session exists, or update _ensure_manual_session to use your session creation API.",
-                channel=target_channel,
-            )
-            scenario_summaries.append(
-                {
-                    "scenario": scenario_name,
-                    "session_id": session_id,
-                    "seeded_currency": currency,
-                    "error": "scenario_session_seed_failed",
-                    "turns": [],
-                }
-            )
-            continue
-
-        last_result: Dict[str, Any] = {}
-        scenario_results: List[Dict[str, Any]] = []
-        current_currency = currency
-
-        for index, player_input in enumerate(turns, start=1):
-            print(f"[manual] scenario {scenario_name} turn {index}/{len(turns)}: {player_input}", flush=True)
-
-            if current_currency:
-                _write_session_currency(session_id, current_currency)
-
-            before_currency = current_currency or (
-                _extract_player_currency(last_result) if last_result else currency
-            )
-            before_items = _extract_player_items(last_result) if last_result else []
-
-            result = apply_turn(session_id=session_id, player_input=player_input)
-            _record_token_usage(
-                scope="service_scenario",
-                label=scenario_name,
-                turn=index,
-                player_input=player_input,
-                result=result,
-            )
-            _print_turn(
-                index,
-                player_input,
-                result,
-                before_currency,
-                before_items,
-                channel=target_channel,
-            )
-
-            scenario_results.append(
-                _compact_turn_summary(
-                    index=index,
-                    player_input=player_input,
-                    result=result,
-                    before_currency=before_currency,
-                    before_items=before_items,
-                )
-            )
-
-            next_currency = _effective_player_currency_after(result)
-            if next_currency:
-                current_currency = next_currency
-            last_result = result
-
-        scenario_summaries.append(
-            {
-                "scenario": scenario_name,
-                "session_id": session_id,
-                "seeded_currency": currency,
-                "turns": scenario_results,
-            }
+    def run_item(item: tuple[str, Dict[str, Any]]) -> Dict[str, Any]:
+        scenario_name, scenario = item
+        return _run_one_service_scenario(
+            scenario_name=scenario_name,
+            scenario=scenario,
+            run_id=run_id,
+            split_files=split_files,
+            legacy_channel=legacy_channel,
+            stable_session_ids=stable_session_ids,
+            reset_session_state=reset_session_state,
+            console_llm=console_llm,
+            console_llm_raw=console_llm_raw,
+            console_llm_max_chars=console_llm_max_chars,
         )
 
-        if split_files:
-            output_map[scenario_channel] = OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
+    if workers > 1:
+        print(
+            f"[manual][parallel] starting ThreadPoolExecutor max_workers={workers} "
+            f"scenario_count={len(scenario_items)}",
+            flush=True,
+        )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            future_to_name = {
+                executor.submit(run_item, item): item[0]
+                for item in scenario_items
+            }
+            completed: Dict[str, Dict[str, Any]] = {}
+            for future in concurrent.futures.as_completed(future_to_name):
+                scenario_name = future_to_name[future]
+                try:
+                    completed[scenario_name] = future.result()
+                except Exception as exc:
+                    error_channel = f"service_{scenario_name}"
+                    _emit("", channel=error_channel)
+                    _emit("#" * 80, channel=error_channel)
+                    _emit(f"SCENARIO: {scenario_name}", channel=error_channel)
+                    _emit("ERROR:", channel=error_channel)
+                    _emit(f"{type(exc).__name__}: {exc}", channel=error_channel)
+                    _emit("#" * 80, channel=error_channel)
+                    completed[scenario_name] = {
+                        "scenario": scenario_name,
+                        "session_id": "",
+                        "seeded_currency": {},
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "turns": [],
+                        "_channel": error_channel,
+                    }
+
+            for scenario_name, _scenario in scenario_items:
+                summary = completed.get(scenario_name) or {}
+                scenario_summaries.append({
+                    key: value
+                    for key, value in summary.items()
+                    if key != "_channel"
+                })
+                if split_files:
+                    output_map[f"service_{scenario_name}"] = (
+                        OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
+                    )
+    else:
+        for item in scenario_items:
+            summary = run_item(item)
+            scenario_name = item[0]
+            scenario_summaries.append({
+                key: value
+                for key, value in summary.items()
+                if key != "_channel"
+            })
+            if split_files:
+                output_map[f"service_{scenario_name}"] = (
+                    OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
+                )
 
     _emit_summary_block("Service Scenario Summary", scenario_summaries, summary_channel)
 
@@ -1516,18 +2291,39 @@ def run_service_scenarios(selected: str = "all", *, split_files: bool = True) ->
 
 
 def run_requested_transcripts(args: argparse.Namespace) -> None:
+    _reset_output()
     _reset_token_usage()
     turns = args.turn or MANUAL_TEST_TURNS
+    run_id = args.run_id or _new_manual_run_id()
+    args._manual_run_id = run_id
 
     if args.all:
+        # Run service scenarios first so parallel execution is visible early.
+        # Flat transcript remains sequential because its turns depend on state.
+        run_service_scenarios(
+            "all",
+            split_files=not args.single_file,
+            run_id=run_id,
+            stable_session_ids=args.stable_session_ids,
+            reset_session_state=not args.no_reset_session_state,
+            parallel_scenarios=not args.no_parallel_scenarios,
+            scenario_workers=args.scenario_workers,
+            reset_output=False,
+            console_llm=not args.no_console_llm,
+            console_llm_raw=args.console_llm_raw,
+            console_llm_max_chars=args.console_llm_max_chars,
+        )
         run_manual_transcript(
             turns,
             session_id=args.session_id,
             split_files=not args.single_file,
-        )
-        run_service_scenarios(
-            "all",
-            split_files=not args.single_file,
+            run_id=run_id,
+            stable_session_ids=args.stable_session_ids,
+            reset_session_state=not args.no_reset_session_state,
+            reset_output=False,
+            console_llm=not args.no_console_llm,
+            console_llm_raw=args.console_llm_raw,
+            console_llm_max_chars=args.console_llm_max_chars,
         )
         return
 
@@ -1535,6 +2331,15 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
         run_service_scenarios(
             args.scenario,
             split_files=not args.single_file,
+            run_id=run_id,
+            stable_session_ids=args.stable_session_ids,
+            reset_session_state=not args.no_reset_session_state,
+            parallel_scenarios=not args.no_parallel_scenarios,
+            scenario_workers=args.scenario_workers,
+            reset_output=False,
+            console_llm=not args.no_console_llm,
+            console_llm_raw=args.console_llm_raw,
+            console_llm_max_chars=args.console_llm_max_chars,
         )
         return
 
@@ -1542,12 +2347,65 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
         turns,
         session_id=args.session_id,
         split_files=not args.single_file,
+        run_id=run_id,
+        stable_session_ids=args.stable_session_ids,
+        reset_session_state=not args.no_reset_session_state,
+        reset_output=False,
+        console_llm=not args.no_console_llm,
+        console_llm_raw=args.console_llm_raw,
+        console_llm_max_chars=args.console_llm_max_chars,
     )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--session-id", default="manual_test_session")
+    parser.add_argument(
+        "--run-id",
+        default="",
+        help="Optional run id for generated manual session ids. Defaults to timestamp_uuid.",
+    )
+    parser.add_argument(
+        "--stable-session-ids",
+        action="store_true",
+        help="Use legacy fixed manual session ids instead of run-scoped fresh ids.",
+    )
+    parser.add_argument(
+        "--no-reset-session-state",
+        action="store_true",
+        help="Do not delete known saved session artifacts before using a manual session id.",
+    )
+    parser.add_argument(
+        "--scenario-workers",
+        type=int,
+        default=_default_scenario_workers(),
+        help=(
+            "Maximum number of service scenarios to run in parallel. "
+            "Only turns within each scenario remain sequential. "
+            "Default: 4, or env OMNIX_MANUAL_SCENARIO_WORKERS if set."
+        ),
+    )
+    parser.add_argument(
+        "--no-parallel-scenarios",
+        action="store_true",
+        help="Run service scenarios sequentially.",
+    )
+    parser.add_argument(
+        "--no-console-llm",
+        action="store_true",
+        help="Do not print concise readable LLM responses to console.",
+    )
+    parser.add_argument(
+        "--console-llm-raw",
+        action="store_true",
+        help="Also print raw provider/LLM text in console response logs.",
+    )
+    parser.add_argument(
+        "--console-llm-max-chars",
+        type=int,
+        default=1200,
+        help="Maximum characters to print per console LLM response block.",
+    )
     parser.add_argument(
         "--all",
         action="store_true",
@@ -1661,6 +2519,7 @@ def main() -> None:
         raise
     finally:
         try:
+            _write_current_transcript_outputs()
             if not args.no_token_usage:
                 write_token_usage_report()
             if not args.no_code_diff:

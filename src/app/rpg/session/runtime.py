@@ -136,6 +136,7 @@ from app.rpg.memory.dialogue_context import (
     build_llm_memory_prompt_block,
 )
 from app.rpg.memory.memory_state import ensure_memory_state
+from app.rpg.memory.social_effects import apply_general_social_effects
 from app.rpg.memory.world_memory_state import ensure_world_memory_state
 from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.player.player_progression_state import (
@@ -6523,6 +6524,27 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(service_resolution.get("resolved_result"))
     action = _safe_dict(service_resolution.get("action"))
 
+    social_living_world_effects = apply_general_social_effects(
+        after_action_state,
+        resolved_result,
+        tick=current_tick,
+    )
+    if social_living_world_effects:
+        resolved_result["social_living_world_effects"] = social_living_world_effects
+        resolved_result["memory_entry"] = (
+            resolved_result.get("memory_entry")
+            or social_living_world_effects.get("memory_entry")
+            or {}
+        )
+        resolved_result["relationship_state"] = _safe_dict(after_action_state.get("relationship_state"))
+        resolved_result["npc_emotion_state"] = _safe_dict(after_action_state.get("npc_emotion_state"))
+        resolved_result["memory_state"] = _safe_dict(after_action_state.get("memory_state"))
+        authoritative["social_living_world_effects"] = social_living_world_effects
+        authoritative["relationship_state"] = _safe_dict(after_action_state.get("relationship_state"))
+        authoritative["npc_emotion_state"] = _safe_dict(after_action_state.get("npc_emotion_state"))
+        authoritative["memory_state"] = _safe_dict(after_action_state.get("memory_state"))
+        authoritative["result"] = resolved_result
+
     _t_authoritative = _time.monotonic()
 
     runtime_settings_for_contract = _safe_dict(
@@ -6608,10 +6630,13 @@ def _apply_turn_authoritative(
 
     step_result = step_simulation_state(setup)
     next_setup = _safe_dict(step_result.get("next_setup")) or setup
-    after_state = _ensure_simulation_state(_safe_dict(step_result.get("after_state")))
-
-    # step_simulation_state does not carry over runtime-level active_interactions.
-    after_state["active_interactions"] = _safe_list(after_progression_state.get("active_interactions"))
+    # step_simulation_state rebuilds a world-sim slice from scratch. Merge it
+    # back over the authoritative per-turn state so player/service/social roots
+    # persist across turns.
+    after_state = _merge_stepped_simulation_state(
+        after_progression_state,
+        _safe_dict(step_result.get("after_state")),
+    )
     _t_step = _time.monotonic()
 
     _log_interaction_trace(
@@ -7379,6 +7404,21 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         "artifact": result.get("artifact"),
         "session": session,
     }
+
+
+def _merge_stepped_simulation_state(
+    authoritative_state: Dict[str, Any],
+    stepped_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    authoritative_state = _ensure_simulation_state(_safe_dict(authoritative_state))
+    stepped_state = _safe_dict(stepped_state)
+    if not stepped_state:
+        return authoritative_state
+
+    merged_state = copy.deepcopy(authoritative_state)
+    for key, value in stepped_state.items():
+        merged_state[key] = copy.deepcopy(value)
+    return _ensure_simulation_state(merged_state)
 
 
 def apply_turn(

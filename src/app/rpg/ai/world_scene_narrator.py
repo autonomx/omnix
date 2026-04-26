@@ -22,6 +22,8 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from app.rpg.memory.npc_memory_recall import memory_reference_is_backed
+
 # Phase 8: player-facing encounter view
 from app.rpg.player import build_encounter_view
 
@@ -522,6 +524,32 @@ def _format_recalled_service_memories_for_prompt(narration_context: Dict[str, An
     return "\n".join(lines) if lines else "None."
 
 
+def _recalled_npc_memories_from_context(narration_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    narration_context = _safe_dict(narration_context)
+    memories = narration_context.get("recalled_npc_memories")
+    if isinstance(memories, list):
+        return [_safe_dict(memory) for memory in memories if _safe_dict(memory)]
+    return []
+
+
+def _format_recalled_npc_memories_for_prompt(narration_context: Dict[str, Any]) -> str:
+    memories = _recalled_npc_memories_from_context(narration_context)
+    if not memories:
+        return "None."
+
+    lines: List[str] = []
+    for memory in memories[:6]:
+        summary = _safe_str(memory.get("summary"))
+        kind = _safe_str(memory.get("kind"))
+        sentiment = _safe_str(memory.get("sentiment"))
+        if not summary:
+            continue
+        suffix = ", ".join(part for part in [kind, sentiment] if part)
+        lines.append(f"- {summary}" + (f" ({suffix})" if suffix else ""))
+
+    return "\n".join(lines) if lines else "None."
+
+
 def _line_has_prior_memory_reference(line: str) -> bool:
     lower = _safe_str(line).lower()
     if not lower:
@@ -580,7 +608,12 @@ def _strip_unbacked_memory_reference_from_npc_line(
     line: str,
     narration_context: Dict[str, Any],
 ) -> str:
-    if _memory_reference_is_backed(line, narration_context):
+    service_backed = _memory_reference_is_backed(line, narration_context)
+    npc_backed = memory_reference_is_backed(
+        line,
+        _recalled_npc_memories_from_context(narration_context),
+    )
+    if service_backed or npc_backed:
         return line
 
     grounded_line = _service_grounded_npc_line(narration_context)
@@ -619,13 +652,13 @@ def _strip_service_meta_language(text: str, narration_context: Dict[str, Any]) -
         return text
 
     if blocked_reason == "insufficient_funds":
-        return f"{provider_name} checks the registered offer and current coin, then finds the purchase cannot be completed."
+        return f"{provider_name} checks the available offer and current coin, then finds the purchase cannot be completed."
 
     if blocked_reason == "offer_not_found":
-        return f"{provider_name} checks the registered offers and finds no matching item or service."
+        return f"{provider_name} checks the available offers and finds no matching item or service."
 
     if _safe_str(service_result.get("kind")) == "service_purchase":
-        return f"{provider_name} checks the registered offer and current terms."
+        return f"{provider_name} checks the available offer and current terms."
 
     return text
 
@@ -753,7 +786,7 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
         return f"{provider_name} checks the available options."
 
     if status == "no_registered_offers":
-        return f"{provider_name} has no registered offer for that request."
+        return f"{provider_name} has no available offer for that request."
 
     return f"{provider_name} considers the service request."
 
@@ -776,7 +809,7 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
         )
 
         if status == "purchase_offer_not_found" or blocked_reason == "offer_not_found":
-            return "I do not have that listed among my registered offers."
+            return "I do not have that listed among my available offers."
 
         purchase_applied = (
             _safe_str(service_result.get("status")) == "purchased"
@@ -812,7 +845,7 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
             return f"I can offer {joined}."
 
     if status == "no_registered_offers":
-        return "I do not have a registered offer for that right now."
+        return "I do not have an available offer for that right now."
 
     return "Let me check what I can offer before we settle the details."
 
@@ -924,13 +957,13 @@ def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
         return f"{provider_name} looks over the registered service options."
 
     if status == "blocked":
-        return f"{provider_name} checks the registered offer and current coin, then finds the purchase cannot be completed."
+        return f"{provider_name} checks the available offer and current coin, then finds the purchase cannot be completed."
 
     if status == "purchased":
         return f"{provider_name} completes the registered service purchase."
 
     if status == "purchase_ready":
-        return f"{provider_name} confirms the selected registered offer."
+        return f"{provider_name} confirms the selected available offer."
 
     return f"{provider_name} considers the service request."
 
@@ -2106,6 +2139,12 @@ def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
         return f"You hit {target_name}, dealing {damage_total} damage."
 
     resolved = _safe_dict(narration_context.get("resolved_result"))
+    service_result = _service_result_from_context(narration_context)
+    if service_result.get("matched"):
+        grounded_service_action = _service_grounded_action_result(narration_context)
+        if grounded_service_action:
+            return grounded_service_action
+
     combat = _safe_dict(resolved.get("combat_result"))
     action_type = _safe_str(narration_context.get("action_type")).strip()
     action_label = _titleize_action(action_type)
@@ -2584,8 +2623,11 @@ Conversation thread rules:
 Relevant NPC memories from deterministic simulation:
 {_format_recalled_service_memories_for_prompt(narration_context)}
 
+Relevant general NPC memories:
+{_format_recalled_npc_memories_for_prompt(narration_context)}
+
 Memory rules:
-- NPCs may reference prior interactions only if they appear in Relevant NPC memories.
+- NPCs may reference prior interactions only if they appear in Relevant NPC memories or Relevant general NPC memories.
 - Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.
 - If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.
 

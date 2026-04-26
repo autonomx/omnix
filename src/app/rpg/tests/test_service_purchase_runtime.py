@@ -215,3 +215,49 @@ def test_service_authoritative_result_blocks_purchase_runtime_effects():
         == "npc:Elara::player"
     )
     assert result["service_application"]["stock_update"] == {}
+
+
+def test_paid_information_purchase_adds_rumor_journal_and_world_event():
+    state = {
+        "tick": 10,
+        "location_id": "loc_tavern",
+        "present_npcs": [{"id": "npc:Bran", "name": "Bran"}],
+        "player_state": {
+            "location_id": "loc_tavern",
+            "inventory_state": {
+                "currency": {"gold": 0, "silver": 2, "copper": 0},
+                "items": [],
+                "equipment": {},
+                "last_loot": [],
+            },
+        },
+    }
+    service_result = resolve_service_turn(
+        player_input="I buy Local rumor from Bran",
+        action={},
+        resolved_action={},
+        simulation_state=state,
+        runtime_state={},
+    )
+    action = _service_action_from_result(
+        "I buy Local rumor from Bran",
+        {},
+        service_result,
+    )
+    authoritative = _service_authoritative_result(state, action)
+    result = authoritative["result"]
+    sim = authoritative["simulation_state"]
+
+    assert result["purchase_applied"] is True
+    assert result["rumor_added"]["rumor_id"] == "rumor:old_mill_bandits"
+    assert result["journal_entry"]["entry_id"] == "journal:rumor:old_mill_bandits"
+    assert result["transaction_record"]["rumor_added"]["rumor_id"] == "rumor:old_mill_bandits"
+    assert result["transaction_record"]["rumor_id"] == "rumor:old_mill_bandits"
+    assert sim["journal_state"]["entries"][0]["source_id"] == "rumor:old_mill_bandits"
+    assert any(event["kind"] == "rumor_lead" for event in sim["world_event_state"]["events"])
+    legacy_ids = [
+        rumor.get("rumor_id", "")
+        for rumor in sim.get("memory_rumors", [])
+        if isinstance(rumor, dict)
+    ]
+    assert not any(rumor_id.startswith("rumor:bran_paid_rumor:") for rumor_id in legacy_ids)

@@ -5,6 +5,7 @@ from typing import Any, Dict
 from app.rpg.ai.conversation_threads import build_conversation_thread_prompt_context
 from app.rpg.ai.world_scene_narrator import narrate_scene
 from app.rpg.llm_app_gateway import build_app_llm_gateway
+from app.rpg.memory.npc_memory_recall import recall_npc_memories
 from app.rpg.memory.service_memory_recall import recall_service_memories_for_narration
 from app.rpg.session.state_normalization import (
     _safe_bool,
@@ -51,11 +52,36 @@ def build_turn_narration_context(
             or 0
         ),
     )
+    current_memory_entry = _safe_dict(
+        resolved_result.get("memory_entry")
+        or service_application.get("memory_entry")
+        or _safe_dict(resolved_result.get("social_living_world_effects")).get("memory_entry")
+    )
+    current_memory_id = _safe_str(current_memory_entry.get("memory_id"))
+    npc_recall_payload = recall_npc_memories(
+        after_state,
+        turn_contract=turn_contract,
+        resolved_result=resolved_result,
+        service_result=service_result,
+        current_tick=int(
+            current_memory_entry.get("tick")
+            or _safe_dict(after_state).get("tick")
+            or 0
+        ),
+        exclude_memory_ids=[current_memory_id] if current_memory_id else [],
+        limit=6,
+    )
     resolved_result["recalled_service_memories"] = (
         recall_payload.get("recalled_service_memories") or []
     )
     resolved_result["service_memory_recall_debug"] = (
         recall_payload.get("debug") or {}
+    )
+    resolved_result["recalled_npc_memories"] = (
+        npc_recall_payload.get("recalled_memories") or []
+    )
+    resolved_result["npc_memory_recall_debug"] = (
+        npc_recall_payload.get("debug") or {}
     )
     return {
         "simulation_state": after_state,
@@ -67,6 +93,8 @@ def build_turn_narration_context(
         "transaction_record": transaction_record,
         "recalled_service_memories": recall_payload.get("recalled_service_memories") or [],
         "service_memory_recall_debug": recall_payload.get("debug") or {},
+        "recalled_npc_memories": npc_recall_payload.get("recalled_memories") or [],
+        "npc_memory_recall_debug": npc_recall_payload.get("debug") or {},
         "narration_brief": _safe_dict(turn_contract.get("narration_brief")),
         "state_delta": _safe_dict(turn_contract.get("state_delta")),
         "npc_behavior_context": _safe_dict(turn_contract.get("npc_behavior_context")),
@@ -121,6 +149,62 @@ def assemble_turn_narration_response(
     perf = _safe_dict(perf)
     turn_contract = _safe_dict(turn_contract)
     resolved_result = _safe_dict(resolved_result)
+    last_turn_result = _safe_dict(runtime_state.get("last_turn_result"))
+    runtime_settings = _safe_dict(runtime_state.get("runtime_settings") or runtime_state.get("settings"))
+
+    fallback_narration = _safe_str(authoritative.get("deterministic_fallback_narration")).strip()
+    if not fallback_narration:
+        fallback_narration = "\n\n".join(
+            _safe_str(line).strip()
+            for line in _safe_list(last_turn_result.get("summary"))
+            if _safe_str(line).strip()
+        )
+    if not fallback_narration:
+        fallback_narration = _safe_str(_safe_dict(turn_contract.get("narration_brief")).get("summary")).strip()
+
+    authoritative["turn_id"] = _safe_str(
+        authoritative.get("turn_id") or narration_request.get("turn_id")
+    )
+    authoritative["tick"] = _safe_int(
+        authoritative.get("tick"),
+        _safe_int(narration_request.get("tick"), _safe_int(runtime_state.get("tick"), 0)),
+    )
+    authoritative["resolved_result"] = _safe_dict(
+        authoritative.get("resolved_result") or resolved_result
+    )
+    authoritative["combat_result"] = _safe_dict(
+        authoritative.get("combat_result") or last_turn_result.get("combat_result")
+    )
+    authoritative["xp_result"] = _safe_dict(
+        authoritative.get("xp_result") or last_turn_result.get("xp_result")
+    )
+    authoritative["skill_xp_result"] = _safe_dict(
+        authoritative.get("skill_xp_result") or last_turn_result.get("skill_xp_result")
+    )
+    authoritative["level_up"] = _safe_list(
+        authoritative.get("level_up")
+        if authoritative.get("level_up") is not None
+        else last_turn_result.get("level_up")
+    )
+    authoritative["skill_level_ups"] = _safe_list(
+        authoritative.get("skill_level_ups")
+        if authoritative.get("skill_level_ups") is not None
+        else last_turn_result.get("skill_level_ups")
+    )
+    authoritative["summary"] = (
+        authoritative.get("summary")
+        if authoritative.get("summary") is not None
+        else last_turn_result.get("summary")
+    )
+    authoritative["presentation"] = _safe_dict(
+        authoritative.get("presentation") or turn_contract.get("presentation")
+    )
+    authoritative["response_length"] = _safe_str(
+        authoritative.get("response_length")
+        or runtime_settings.get("response_length")
+        or perf.get("response_length")
+    )
+    authoritative["deterministic_fallback_narration"] = fallback_narration
 
     force_sync = bool(runtime_state.get("force_sync_narration", False))
 
@@ -130,7 +214,6 @@ def assemble_turn_narration_response(
         sync_scene = _safe_dict(narration_request.get("scene") or runtime_state.get("current_scene"))
         sync_context = _safe_dict(narration_request.get("narration_context"))
         runtime_performance = _safe_dict(runtime_state.get("performance"))
-        runtime_settings = _safe_dict(runtime_state.get("runtime_settings") or runtime_state.get("settings"))
         sync_simulation_state = _safe_dict(sync_context.get("simulation_state"))
         if _safe_dict(resolved_result.get("memory_state")):
             sync_simulation_state["memory_state"] = _safe_dict(resolved_result.get("memory_state"))
@@ -169,6 +252,32 @@ def assemble_turn_narration_response(
             resolved_result["recalled_service_memories"] = sync_context["recalled_service_memories"]
             resolved_result["service_memory_recall_debug"] = sync_context["service_memory_recall_debug"]
 
+        if not sync_context.get("recalled_npc_memories"):
+            current_memory_entry = _safe_dict(
+                resolved_result.get("memory_entry")
+                or _safe_dict(resolved_result.get("service_application")).get("memory_entry")
+                or _safe_dict(resolved_result.get("social_living_world_effects")).get("memory_entry")
+            )
+            current_memory_id = _safe_str(current_memory_entry.get("memory_id"))
+            npc_recall_payload = recall_npc_memories(
+                _safe_dict(sync_context.get("simulation_state")),
+                narration_context=sync_context,
+                turn_contract=turn_contract,
+                resolved_result=resolved_result,
+                service_result=_safe_dict(resolved_result.get("service_result")),
+                current_tick=int(
+                    current_memory_entry.get("tick")
+                    or _safe_dict(sync_context.get("simulation_state")).get("tick")
+                    or 0
+                ),
+                exclude_memory_ids=[current_memory_id] if current_memory_id else [],
+                limit=6,
+            )
+            sync_context["recalled_npc_memories"] = npc_recall_payload.get("recalled_memories") or []
+            sync_context["npc_memory_recall_debug"] = npc_recall_payload.get("debug") or {}
+            resolved_result["recalled_npc_memories"] = sync_context["recalled_npc_memories"]
+            resolved_result["npc_memory_recall_debug"] = sync_context["npc_memory_recall_debug"]
+
         llm_enabled = bool(perf.get("enable_live_narration_llm", True))
         llm_gateway = build_app_llm_gateway() if llm_enabled else None
 
@@ -190,6 +299,8 @@ def assemble_turn_narration_response(
             "narration_status": authoritative["narration_status"],
             "recalled_service_memories": sync_context.get("recalled_service_memories") or [],
             "service_memory_recall_debug": sync_context.get("service_memory_recall_debug") or {},
+            "recalled_npc_memories": sync_context.get("recalled_npc_memories") or [],
+            "npc_memory_recall_debug": sync_context.get("npc_memory_recall_debug") or {},
         }
 
         print(

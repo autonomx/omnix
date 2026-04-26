@@ -2087,6 +2087,61 @@ def test_assemble_turn_narration_response_sync_recomputes_service_recall_when_mi
     assert captured["narration_context"]["service_memory_recall_debug"]["count"] == 1
 
 
+def test_assemble_turn_narration_response_sync_preserves_structural_result_fields_without_authoritative_envelope():
+    from app.rpg.session.narration_runtime import assemble_turn_narration_response
+
+    with patch("app.rpg.session.narration_runtime.narrate_scene", return_value={
+        "narration": "Bran quotes the meal options.",
+        "narration_json": {"narration": "Bran quotes the meal options."},
+        "used_llm": False,
+    }), patch("app.rpg.session.narration_runtime.build_app_llm_gateway", return_value=object()):
+        result = assemble_turn_narration_response(
+            session={"session_id": "test_session"},
+            authoritative={},
+            turn_contract={
+                "presentation": {"available_actions": [{"action_id": "service:purchase:bran_meal_stew"}]},
+                "narration_brief": {"summary": "Bran offers a bowl of stew."},
+            },
+            narration_request={
+                "turn_id": "turn:42",
+                "tick": 42,
+                "scene": {"title": "The Rusty Flagon Tavern"},
+                "narration_context": {"player_input": "I ask Bran for food"},
+            },
+            runtime_state={
+                "force_sync_narration": True,
+                "performance": {},
+                "runtime_settings": {"response_length": "short"},
+                "last_turn_result": {
+                    "combat_result": {"status": "idle"},
+                    "xp_result": {"player_xp": 1},
+                    "skill_xp_result": {"awards": {}},
+                    "level_up": [],
+                    "skill_level_ups": [],
+                    "summary": ["Bran offers a bowl of stew."],
+                },
+            },
+            perf={"enable_live_narration_llm": True},
+            resolved_result={
+                "service_result": {
+                    "matched": True,
+                    "kind": "service_inquiry",
+                    "service_kind": "meal",
+                    "provider_id": "npc:Bran",
+                    "provider_name": "Bran",
+                },
+                "memory_state": {"service_memories": [{"memory_id": "memory:current"}]},
+            },
+        )
+
+    assert result["result"]["turn_id"] == "turn:42"
+    assert result["result"]["tick"] == 42
+    assert result["result"]["resolved_result"]["memory_state"]["service_memories"][0]["memory_id"] == "memory:current"
+    assert result["result"]["xp_result"]["player_xp"] == 1
+    assert result["result"]["presentation"]["available_actions"][0]["action_id"] == "service:purchase:bran_meal_stew"
+    assert result["result"]["response_length"] == "short"
+
+
 def test_narrator_reward_and_action_are_authoritative_only():
     from app.rpg.ai.world_scene_narrator import narrate_scene
 
@@ -2454,6 +2509,69 @@ def test_service_narration_uses_registered_lodging_offers():
     )
 
 
+def test_service_narration_ignores_registered_resolved_message_for_inquiry_action():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Elara reviews the repair request.",'
+                    '"action":"The inquiry is successfully registered by Elara; she confirms that basic repair services are available for purchase from her stall.",'
+                    '"npc":{"speaker":"Elara","line":"I can offer Basic gear repair for 4 silver."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_inquiry",
+        "service_kind": "repair",
+        "provider_id": "npc:Elara",
+        "provider_name": "Elara",
+        "location_id": "loc_market",
+        "status": "offers_available",
+        "offers": [
+            {
+                "offer_id": "elara_basic_repair",
+                "service_kind": "repair",
+                "label": "Basic gear repair",
+                "price": {"gold": 0, "silver": 4, "copper": 0},
+            }
+        ],
+        "selected_offer_id": "",
+        "purchase": None,
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "Market Stall", "actors": [{"name": "Elara"}]},
+        {
+            "player_input": "I ask Elara to repair my gear",
+            "turn_contract": {
+                "player_input": "I ask Elara to repair my gear",
+                "service_result": service_result,
+                "resolved_result": {
+                    "service_result": service_result,
+                    "message": "The inquiry is successfully registered by Elara; she confirms that basic repair services are available for purchase from her stall.",
+                },
+                "narration_brief": {"summary": "I ask Elara to repair my gear"},
+            },
+            "resolved_result": {
+                "service_result": service_result,
+                "message": "The inquiry is successfully registered by Elara; she confirms that basic repair services are available for purchase from her stall.",
+            },
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    assert result["narration_json"]["action"] == "Elara checks the available options."
+    assert "registered" not in result["narration"].lower()
+
+
 def test_service_narration_paragraph_does_not_repeat_player_input():
     from app.rpg.ai.world_scene_narrator import narrate_scene
 
@@ -2512,7 +2630,7 @@ def test_service_narration_paragraph_does_not_repeat_player_input():
 
     assert "as you ask" not in text
     assert "about a room to rent" not in text
-    assert narration_json["narration"] == "Bran looks over the registered lodging options."
+    assert narration_json["narration"] == "Bran looks over the available lodging options."
 
 
 def test_service_narration_uses_registered_shop_offers():
@@ -2926,8 +3044,8 @@ def test_service_purchase_offer_not_found_narration_does_not_invent_item_details
     assert "fine sword" not in text
     assert "displayed among her wares" not in text
     assert "good intentions" not in text
-    assert narration_json["action"] == "Elara cannot find a matching registered offer."
-    assert narration_json["npc"]["line"] == "I do not have that listed among my registered offers."
+    assert narration_json["action"] == "Elara cannot find a matching available offer."
+    assert narration_json["npc"]["line"] == "I do not have that listed among my available offers."
 
 
 def test_service_purchase_narration_uses_direct_service_application_when_contract_is_stale():
