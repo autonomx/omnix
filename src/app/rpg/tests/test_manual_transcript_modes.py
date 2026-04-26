@@ -460,6 +460,23 @@ def test_manual_extracts_conversation_thread_state():
     assert len(transcript._extract_conversation_thread_state(result)["threads"]) == 1
 
 
+def test_manual_extracts_ambient_tick_result_from_result_payload():
+    result = {
+        "result": {
+            "ambient_tick_result": {
+                "matched": True,
+                "applied": True,
+                "status": "ambient_tick_conversation",
+            }
+        }
+    }
+
+    extracted = transcript._extract_ambient_tick_result(result)
+
+    assert extracted["applied"] is True
+    assert extracted["status"] == "ambient_tick_conversation"
+
+
 def test_manual_warns_if_conversation_participant_not_present():
     result = {
         "result": {
@@ -528,3 +545,57 @@ def test_manual_warns_if_ambient_conversation_resolves_service():
 
     assert "ambient_conversation_unexpected_service_result" in warnings
     assert "ambient_conversation_unexpected_commerce_action" in warnings
+
+
+def test_record_scenario_error_adds_warning_row():
+    transcript._reset_regression_warnings()
+    transcript._record_scenario_error(
+        scenario_name="autonomous_conversation",
+        session_id="manual_service_autonomous_conversation_test",
+        error="NameError:test",
+    )
+
+    rows = list(transcript._REGRESSION_WARNING_ROWS)
+    assert rows
+    assert rows[0]["scenario"] == "autonomous_conversation"
+    assert "scenario_runtime_error:autonomous_conversation:NameError:test" in rows[0]["regression_warnings"]
+
+
+def test_scenario_contamination_allows_seeded_world_events():
+    warnings = transcript._scenario_contamination_warnings(
+        scenario_name="conversation_discusses_event",
+        turn_index=1,
+        before_currency={"gold": 0, "silver": 0, "copper": 0},
+        before_items=[],
+        result={},
+        pre_turn_snapshot={
+            "transaction_history_count": 0,
+            "active_services_count": 0,
+            "journal_entry_count": 0,
+            "world_event_count": 1,
+            "quest_count": 0,
+        },
+        allows_seeded_world_events=True,
+    )
+
+    assert "scenario_started_with_world_events" not in warnings
+
+
+def test_scenario_contamination_flags_unseeded_world_events():
+    warnings = transcript._scenario_contamination_warnings(
+        scenario_name="shop_success",
+        turn_index=1,
+        before_currency={"gold": 0, "silver": 2, "copper": 0},
+        before_items=[],
+        result={},
+        pre_turn_snapshot={
+            "transaction_history_count": 0,
+            "active_services_count": 0,
+            "journal_entry_count": 0,
+            "world_event_count": 1,
+            "quest_count": 0,
+        },
+        allows_seeded_world_events=False,
+    )
+
+    assert "scenario_started_with_world_events" in warnings

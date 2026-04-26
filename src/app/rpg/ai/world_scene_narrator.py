@@ -564,13 +564,16 @@ def _format_conversation_beat_for_prompt(narration_context: Dict[str, Any]) -> s
     if not conversation.get("triggered"):
         return "None."
     beat = _safe_dict(conversation.get("beat"))
+    topic = _safe_dict(conversation.get("topic"))
+    participation = _safe_dict(conversation.get("player_participation"))
     speaker = _safe_str(beat.get("speaker_name"))
     listener = _safe_str(beat.get("listener_name"))
     line = _safe_str(beat.get("line"))
-    topic = _safe_str(beat.get("topic"))
+    topic_title = _safe_str(topic.get("title") or beat.get("topic"))
     if not line:
         return "None."
-    return f'{speaker} speaks to {listener} about {topic}: "{line}"'
+    mode = _safe_str(participation.get("mode") or conversation.get("participation_mode") or "overheard")
+    return f'{speaker} speaks to {listener} about {topic_title} [{mode}]: "{line}"'
 
 
 def _apply_grounded_conversation_beat(
@@ -593,6 +596,15 @@ def _apply_grounded_conversation_beat(
         "speaker": speaker,
         "line": line,
     }
+    participation = _safe_dict(conversation.get("player_participation"))
+    if participation.get("pending_response"):
+        hooks = payload.get("followup_hooks")
+        if not isinstance(hooks, list):
+            hooks = []
+        prompt = _safe_str(participation.get("prompt"))
+        if prompt:
+            hooks.append(prompt)
+        payload["followup_hooks"] = hooks
 
 
 def _line_has_prior_memory_reference(line: str) -> bool:
@@ -2081,6 +2093,11 @@ def _sanitize_narration_payload(
         normalized["action"] = travel_action
 
     _apply_grounded_conversation_beat(normalized, narration_context)
+    conversation = _conversation_result_from_context(narration_context)
+    if conversation.get("triggered"):
+        normalized["action"] = "Ambient conversation continues nearby."
+        if not _safe_str(normalized.get("narration")) or "success" in _safe_str(normalized.get("narration")).lower():
+            normalized["narration"] = "Nearby voices continue in the living world around you."
 
     return normalized
 

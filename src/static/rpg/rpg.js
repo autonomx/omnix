@@ -2280,10 +2280,17 @@
     }
 
     async function apiSendTurn(sessionId, input) {
+        let payload = { session_id: sessionId, input: input, player_input: input };
+        if (
+          window.RpgConversationSettings &&
+          typeof window.RpgConversationSettings.attachToPayload === "function"
+        ) {
+          payload = window.RpgConversationSettings.attachToPayload(payload);
+        }
         var res = await fetch('/api/rpg/session/turn', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId, input: input }),
+            body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error('Turn request failed (' + res.status + ')');
         return res.json();
@@ -2801,10 +2808,17 @@
 
     /** Send a turn with a structured action payload (streaming). */
     async function apiSendTurnStreamWithAction(sessionId, input, action, onToken) {
+        let payload = { session_id: sessionId, input: input, player_input: input, action: action };
+        if (
+          window.RpgConversationSettings &&
+          typeof window.RpgConversationSettings.attachToPayload === "function"
+        ) {
+          payload = window.RpgConversationSettings.attachToPayload(payload);
+        }
         var res = await fetch('/api/rpg/session/turn/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId, input: input, action: action }),
+            body: JSON.stringify(payload),
         });
         if (!res.ok) {
             return buildTurnClientError('turn_stream_http_' + res.status, {
@@ -3397,13 +3411,17 @@
     }
 
     async function apiSendTurnStream(sessionId, input, onToken) {
+        let payload = { session_id: sessionId, input: input, player_input: input };
+        if (
+          window.RpgConversationSettings &&
+          typeof window.RpgConversationSettings.attachToPayload === "function"
+        ) {
+          payload = window.RpgConversationSettings.attachToPayload(payload);
+        }
         const response = await fetch('/api/rpg/session/turn/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: sessionId,
-                input: input,
-            }),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {

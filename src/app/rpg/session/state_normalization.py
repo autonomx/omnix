@@ -13,6 +13,7 @@ from app.rpg.player import ensure_player_party, ensure_player_state
 from app.rpg.player.player_progression_state import ensure_player_progression_state
 from app.rpg.presentation.personality_state import ensure_personality_state
 from app.rpg.presentation.visual_state import ensure_visual_state
+from app.rpg.world.conversation_settings import normalize_conversation_settings
 
 _DEFAULT_STORY_POLICY = {
     "save_load_stable": True,
@@ -144,6 +145,11 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
         rs if isinstance(rs, str) and rs.strip().lower() in _ALLOWED_REACTION_STYLES else "normal"
     )
     result["verbose_semantic_trace"] = _safe_bool(value.get("verbose_semantic_trace"), False)
+    # Preserve and normalize nested conversation_settings so UI payloads survive the
+    # normalization round-trip without being silently dropped.
+    raw_conv = value.get("conversation_settings")
+    if isinstance(raw_conv, dict):
+        result["conversation_settings"] = normalize_conversation_settings(raw_conv)
     return result
 
 

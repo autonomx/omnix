@@ -175,6 +175,13 @@ from app.rpg.session.ambient_policy import (
     classify_ambient_delivery,
     record_interrupt,
 )
+from app.rpg.session.ambient_tick_runtime import (
+    advance_autonomous_ambient_tick,
+    is_ambient_tick_command,
+)
+from app.rpg.session.conversation_thread_runtime import (
+    advance_conversation_threads_for_turn,
+)
 from app.rpg.session.idle_runtime import (
     advance_simulation_for_idle,
     build_idle_player_context,
@@ -245,7 +252,6 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
-from app.rpg.session.conversation_thread_runtime import advance_conversation_threads_for_turn
 
 _advance_simulation_for_idle = advance_simulation_for_idle
 _build_idle_player_context = build_idle_player_context
@@ -6176,6 +6182,8 @@ def _apply_turn_authoritative(
 
     mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
     current_tick = int(runtime_state.get("tick", 0) or 0)
+    ambient_tick_command = is_ambient_tick_command(player_input)
+    ambient_tick_result = {}
 
     turn_exec_key = f"turn:{current_tick}"
 
@@ -6528,11 +6536,60 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(service_resolution.get("resolved_result"))
     action = _safe_dict(service_resolution.get("action"))
 
+    if ambient_tick_command:
+        ambient_conversation_tick = _safe_int(
+            after_action_state.get("tick")
+            or after_action_state.get("current_tick")
+            or runtime_state.get("tick"),
+            current_tick,
+        )
+        ambient_tick_result = advance_autonomous_ambient_tick(
+            player_input=player_input,
+            simulation_state=after_action_state,
+            runtime_state=runtime_state,
+            tick=ambient_conversation_tick,
+        )
+        authoritative["simulation_state"] = after_action_state
+
+    if ambient_tick_result:
+        conversation_result = _safe_dict(ambient_tick_result.get("conversation_result"))
+        resolved_result["action_type"] = "ambient_tick"
+        resolved_result["semantic_action_type"] = "ambient_tick"
+        resolved_result["semantic_family"] = "ambient"
+        resolved_result["activity_label"] = "autonomous_ambient_tick"
+        resolved_result["service_result"] = {
+            "matched": False,
+            "kind": "not_service",
+            "status": "not_service",
+            "reason": "ambient_tick",
+        }
+        resolved_result["travel_result"] = {}
+        resolved_result["ambient_tick_result"] = ambient_tick_result
+        resolved_result["conversation_result"] = conversation_result
+        resolved_result["conversation_thread_state"] = _safe_dict(after_action_state.get("conversation_thread_state"))
+        resolved_result["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
+        authoritative["action_type"] = "ambient_tick"
+        authoritative["semantic_action_type"] = "ambient_tick"
+        authoritative["semantic_family"] = "ambient"
+        authoritative["activity_label"] = "autonomous_ambient_tick"
+        authoritative["service_result"] = {
+            "matched": False,
+            "kind": "not_service",
+            "status": "not_service",
+            "reason": "ambient_tick",
+        }
+        authoritative["travel_result"] = {}
+        authoritative["ambient_tick_result"] = ambient_tick_result
+        authoritative["conversation_result"] = conversation_result
+        authoritative["conversation_thread_state"] = _safe_dict(after_action_state.get("conversation_thread_state"))
+        authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
+        authoritative["simulation_state"] = after_action_state
+
     # Phase 9.0: deterministic travel/scene transition runtime.
     # Service turns remain service-first. Travel only claims the turn when no
     # deterministic service result has matched.
     _service_result_for_travel = _safe_dict(resolved_result.get("service_result"))
-    if not _service_result_for_travel.get("matched"):
+    if not ambient_tick_result and not _service_result_for_travel.get("matched"):
         ensure_location_state(after_action_state)
         _travel_result = resolve_travel_turn(
             player_input=player_input,
@@ -6584,6 +6641,15 @@ def _apply_turn_authoritative(
     authoritative["simulation_state"] = after_action_state
 
     service_result = _safe_dict(resolved_result.get("service_result"))
+    if ambient_tick_result:
+        service_result = {
+            "matched": False,
+            "kind": "not_service",
+            "status": "not_service",
+            "reason": "ambient_tick",
+        }
+        resolved_result["service_result"] = service_result
+
     if is_ambient_wait_or_listen_intent(player_input) and not service_result.get("matched"):
         resolved_result["action_type"] = "ambient_wait"
         resolved_result["semantic_action_type"] = "ambient_wait"
@@ -6594,12 +6660,18 @@ def _apply_turn_authoritative(
         authoritative["semantic_family"] = "ambient"
         authoritative["activity_label"] = "wait_and_listen"
 
-    conversation_result = advance_conversation_threads_for_turn(
-        player_input=player_input,
-        simulation_state=after_action_state,
-        resolved_result=resolved_result,
-        tick=current_tick,
-    )
+    conversation_result = _safe_dict(resolved_result.get("conversation_result"))
+    if not conversation_result and not ambient_tick_result:
+        conversation_result = advance_conversation_threads_for_turn(
+            player_input=player_input,
+            simulation_state=after_action_state,
+            resolved_result=resolved_result,
+            tick=_safe_int(
+                after_action_state.get("tick") or after_action_state.get("current_tick"),
+                current_tick,
+            ),
+            runtime_state=runtime_state,
+        )
     if conversation_result:
         resolved_result["conversation_result"] = conversation_result
         resolved_result["conversation_thread_state"] = _safe_dict(
@@ -6651,13 +6723,16 @@ def _apply_turn_authoritative(
         runtime_state["last_turn_contract"] = turn_contract
 
     if not turn_contract:
-        service_result = resolve_service_turn(
-            player_input=player_input,
-            action=action,
-            resolved_action=resolved_result,
-            simulation_state=before_state if "before_state" in locals() else simulation_state,
-            runtime_state=runtime_state,
-        )
+        if ambient_tick_result:
+            service_result = resolved_result["service_result"]
+        else:
+            service_result = resolve_service_turn(
+                player_input=player_input,
+                action=action,
+                resolved_action=resolved_result,
+                simulation_state=before_state if "before_state" in locals() else simulation_state,
+                runtime_state=runtime_state,
+            )
         if service_result.get("matched"):
             resolved_result["service_result"] = service_result
 
@@ -7657,6 +7732,14 @@ def _apply_idle_tick_to_session(
     # ── Phase G / G+1: scene weaving + continuity ───────────────────
     scene_beats = []
     current_tick = int(after_state.get("tick", runtime_state.get("tick", 0)) or 0)
+
+    autonomous_conversation_result = advance_autonomous_ambient_tick(
+        player_input="__autonomous_idle__",
+        simulation_state=after_state,
+        runtime_state=runtime_state,
+        tick=current_tick,
+    )
+
     continuing_scene = select_continuing_scene(runtime_state, after_state, current_tick)
     selected_scene = None
 
@@ -7671,6 +7754,36 @@ def _apply_idle_tick_to_session(
 
         for beat in scene_beats:
             raw_updates.append(_make_scene_update_from_beat(beat))
+
+    if autonomous_conversation_result.get("applied"):
+        conversation_result = _safe_dict(autonomous_conversation_result.get("conversation_result"))
+        beat = _safe_dict(conversation_result.get("beat"))
+        if beat:
+            raw_updates.append({
+                "tick": current_tick,
+                "kind": "npc_to_npc",
+                "priority": 0.6,
+                "interrupt": False,
+                "speaker_id": _safe_str(beat.get("speaker_id")),
+                "speaker_name": _safe_str(beat.get("speaker_name")),
+                "target_id": _safe_str(beat.get("listener_id")),
+                "target_name": _safe_str(beat.get("listener_name")),
+                "location_id": _safe_str(
+                    beat.get("location_id")
+                    or _safe_dict(conversation_result.get("topic")).get("location_id")
+                ),
+                "text": _safe_str(beat.get("line")),
+                "structured": {
+                    "lane": "autonomous_living_conversation",
+                    "thread_id": _safe_str(beat.get("thread_id")),
+                    "topic_id": _safe_str(beat.get("topic_id")),
+                    "topic_type": _safe_str(beat.get("topic_type")),
+                },
+                "source_event_ids": [],
+                "source": "deterministic_ambient_tick_runtime",
+                "created_at": _utc_now_iso(),
+                "lane": "idle",
+            })
 
         # When continuing a scene, suppress same-speaker standalone initiative.
         continuing_participants = set(_safe_list(continuing_scene.get("participants")))
@@ -7782,6 +7895,37 @@ def _apply_idle_tick_to_session(
         )
         raw_updates.append(dialogue_update)
 
+    # ── Phase F2: Autonomous conversation tick (real idle/world tick loop) ──
+    # This is the canonical integration point: pseudo __ambient_tick__ commands
+    # are for forced/test use only. Real idle ticks gate by autonomous_ticks_enabled.
+    _idle_autonomous_tick_result = advance_autonomous_ambient_tick(
+        player_input="__real_idle_world_tick__",
+        simulation_state=after_state,
+        runtime_state=runtime_state,
+        tick=current_tick,
+    )
+    debug_trace["autonomous_conversation_tick"] = _idle_autonomous_tick_result
+    if _idle_autonomous_tick_result.get("applied"):
+        _idle_conv_result = _safe_dict(_idle_autonomous_tick_result.get("conversation_result"))
+        _idle_beat = _safe_dict(_idle_conv_result.get("beat"))
+        if _idle_beat.get("line"):
+            raw_updates.append({
+                "type": "npc_conversation",
+                "kind": "npc_conversation",
+                "text": _safe_str(_idle_beat.get("line")),
+                "speaker_id": _safe_str(_idle_beat.get("speaker_id")),
+                "speaker_name": _safe_str(_idle_beat.get("speaker_name")),
+                "listener_id": _safe_str(_idle_beat.get("listener_id")),
+                "listener_name": _safe_str(_idle_beat.get("listener_name")),
+                "delivery": "ambient",
+                "thread_id": _safe_str(_idle_beat.get("thread_id")),
+                "topic": _safe_str(
+                    _safe_dict(_idle_conv_result.get("topic")).get("title") or ""
+                ),
+                "tick": current_tick,
+                "source": "deterministic_ambient_tick_runtime",
+            })
+
     # Record debug trace counts
     debug_trace["raw_counts"] = {
         "ambient_updates": len(raw_updates),
@@ -7791,6 +7935,7 @@ def _apply_idle_tick_to_session(
         "scene_beats": len(scene_beats) if scene_beats else 0,
         "world_event_candidates": len(world_event_candidates),
     }
+    debug_trace["autonomous_living_conversation"] = _safe_dict(autonomous_conversation_result)
     debug_trace["selected"] = {
         "initiative": _safe_dict(selected_initiative) if selected_initiative else {},
         "reaction": _safe_dict(selected_reaction) if selected_reaction else {},
@@ -7911,6 +8056,7 @@ def _apply_idle_tick_to_session(
         "continuing_scene": _safe_dict(continuing_scene) if continuing_scene else None,
         "world_events_emitted": len(event_updates) if event_updates else 0,
         "dialogue_candidate": _safe_dict(selected_dialogue) if selected_dialogue else None,
+        "autonomous_living_conversation": _safe_dict(autonomous_conversation_result),
     }
     runtime_state["llm_records"].append(idle_record)
     runtime_state["llm_records_index"][idle_capture_key] = idle_record

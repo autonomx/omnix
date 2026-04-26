@@ -189,3 +189,31 @@
   opacity: 0.7;
   padding: 4px 0;
 }
+
+.rpg-conversation-settings-panel {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px 0;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+}
+
+.rpg-conv-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.rpg-conv-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rpg-conv-setting input[type="number"],
+.rpg-conv-setting select {
+  max-width: 95px;
+}

@@ -162,7 +162,7 @@ ensure_narration_worker_running()
 
 def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
     data = _safe_dict(data)
-    player_input = _safe_str(data.get("input")).strip()
+    player_input = _safe_str(data.get("input") or data.get("player_input")).strip()
     action = _safe_dict(data.get("action"))
 
     if not action and player_input.startswith("{"):
@@ -190,17 +190,50 @@ def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Optional performance overrides from the request payload
     performance = _safe_dict(data.get("performance"))
+    runtime_settings = _safe_dict(data.get("runtime_settings"))
 
     return {
         "session_id": _safe_str(data.get("session_id")).strip(),
         "player_input": player_input,
         "action": action,
         "performance": performance,
+        "runtime_settings": runtime_settings,
     }
 
 
+def _deep_merge_dict(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(_safe_dict(base))
+    for key, value in _safe_dict(updates).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_dict(_safe_dict(merged.get(key)), value)
+        else:
+            merged[key] = value
+    return merged
 
 
+def _merge_request_runtime_settings(
+    session_id: str,
+    runtime_settings: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_settings = _safe_dict(runtime_settings)
+    if not session_id or not runtime_settings:
+        return {"ok": True, "applied": False}
+
+    session = load_runtime_session(session_id)
+    if session is None:
+        return {"ok": False, "error": "session_not_found"}
+
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    existing = _safe_dict(runtime_state.get("runtime_settings"))
+    merged = _deep_merge_dict(existing, runtime_settings)
+    runtime_state["runtime_settings"] = _normalize_runtime_settings(merged)
+    session["runtime_state"] = runtime_state
+    save_runtime_session(session)
+    return {
+        "ok": True,
+        "applied": True,
+        "settings": runtime_state["runtime_settings"],
+    }
 
 
 def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -396,8 +429,7 @@ async def update_rpg_session_settings(request: Request):
 
     runtime_state = _safe_dict(session.get("runtime_state"))
     existing = _safe_dict(runtime_state.get("runtime_settings"))
-    merged = dict(existing)
-    merged.update(settings)
+    merged = _deep_merge_dict(existing, settings)
     runtime_state["runtime_settings"] = _normalize_runtime_settings(merged)
     session["runtime_state"] = runtime_state
     session = save_runtime_session(session)
@@ -432,6 +464,19 @@ async def execute_rpg_session_turn(request: Request):
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
 
+    settings_merge = _merge_request_runtime_settings(
+        session_id,
+        _safe_dict(normalized.get("runtime_settings")),
+    )
+    if not settings_merge.get("ok"):
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": settings_merge.get("error") or "settings_merge_failed",
+            },
+            status_code=404,
+        )
+
     result = apply_turn(session_id, player_input, action=action)
     if not result.get("ok"):
         if result.get("error") == "session_not_found":
@@ -451,6 +496,7 @@ async def execute_rpg_session_turn_stream(request: Request):
     player_input = _safe_str(normalized.get("player_input")).strip()
     action = _safe_dict(normalized.get("action"))
     request_performance = _safe_dict(normalized.get("performance"))
+    request_runtime_settings = _safe_dict(normalized.get("runtime_settings"))
 
     sse_headers = {
         "Cache-Control": "no-cache",
@@ -461,6 +507,15 @@ async def execute_rpg_session_turn_stream(request: Request):
         def error_gen():
             yield _sse({"type": "error", "error": "session_id_required"})
         return StreamingResponse(error_gen(), status_code=400, media_type="text/event-stream", headers=sse_headers)
+
+    settings_merge = _merge_request_runtime_settings(session_id, request_runtime_settings)
+    if not settings_merge.get("ok"):
+        def error_gen():
+            yield _sse({
+                "type": "error",
+                "error": settings_merge.get("error") or "settings_merge_failed",
+            })
+        return StreamingResponse(error_gen(), status_code=404, media_type="text/event-stream", headers=sse_headers)
 
     def generate():
         try:

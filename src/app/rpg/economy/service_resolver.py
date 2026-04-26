@@ -23,15 +23,15 @@ from app.rpg.economy.service_registry import (
     get_service_provider,
 )
 from app.rpg.economy.service_stock import filter_available_offers
+from app.rpg.session.ambient_intent import (
+    is_ambient_wait_or_listen_intent,
+    is_room_context_ambient_not_lodging,
+)
 from app.rpg.world.location_registry import (
     current_location_id,
     has_explicit_location,
     location_allows_service,
     provider_present_at_location,
-)
-from app.rpg.session.ambient_intent import (
-    is_ambient_wait_or_listen_intent,
-    is_room_context_ambient_not_lodging,
 )
 
 

@@ -56,6 +56,7 @@ _TOKEN_USAGE_ROWS: List[Dict[str, Any]] = []
 _REGRESSION_WARNING_ROWS: List[Dict[str, Any]] = []
 _OUTPUT_LOCK = threading.RLock()
 _TOKEN_USAGE_LOCK = threading.RLock()
+_REGRESSION_WARNING_LOCK = threading.RLock()
 
 
 def _estimate_tokens_from_text(value: Any) -> int:
@@ -203,12 +204,32 @@ def _reset_token_usage() -> None:
 
 
 def _reset_regression_warnings() -> None:
-    _REGRESSION_WARNING_ROWS.clear()
+    with _REGRESSION_WARNING_LOCK:
+        _REGRESSION_WARNING_ROWS.clear()
 
 
 def _record_regression_warnings(row: Dict[str, Any]) -> None:
     warnings = _safe_list(row.get("regression_warnings")) + _safe_list(row.get("scenario_warnings"))
     if warnings:
+        with _REGRESSION_WARNING_LOCK:
+            _REGRESSION_WARNING_ROWS.append(row)
+
+
+def _record_scenario_error(
+    *,
+    scenario_name: str,
+    session_id: str = "",
+    error: str,
+) -> None:
+    row = {
+        "scenario": scenario_name,
+        "session_id": session_id,
+        "turn": 0,
+        "player_input": "",
+        "scenario_warnings": [f"scenario_runtime_error:{scenario_name}:{error}"],
+        "regression_warnings": [f"scenario_runtime_error:{scenario_name}:{error}"],
+    }
+    with _REGRESSION_WARNING_LOCK:
         _REGRESSION_WARNING_ROWS.append(row)
 
 
@@ -683,7 +704,7 @@ class ManagedServerGroup:
         self.processes.clear()
 
 
-def _run_git(args: Sequence[str]) -> str:
+def _run_git_command(args: List[str]) -> str:
     try:
         completed = subprocess.run(
             ["git", *args],
@@ -696,6 +717,59 @@ def _run_git(args: Sequence[str]) -> str:
         return completed.stdout or ""
     except Exception as exc:
         return f"[manual][code-diff] git command failed: git {' '.join(args)}\n{type(exc).__name__}: {exc}\n"
+
+
+def _git_untracked_files_under_roots(roots: List[Path]) -> List[Path]:
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files", "--others", "--exclude-standard"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except Exception:
+        return []
+
+    out: List[Path] = []
+    root_resolved = [root.resolve() for root in roots]
+    for line in (proc.stdout or "").splitlines():
+        rel = line.strip()
+        if not rel:
+            continue
+        path = (REPO_ROOT / rel).resolve()
+        if any(path == root or root in path.parents for root in root_resolved):
+            out.append(path)
+    return sorted(out)
+
+
+def _format_untracked_file_for_diff(path: Path) -> str:
+    try:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+    except Exception:
+        rel = str(path)
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        return (
+            f"\n\n# UNTRACKED FILE: {rel}\n"
+            f"# Could not read file: {type(exc).__name__}: {exc}\n"
+        )
+
+    lines = text.splitlines()
+    body = "\n".join(f"+{line}" for line in lines)
+    return (
+        f"\n\n"
+        f"diff --git a/{rel} b/{rel}\n"
+        f"new file mode 100644\n"
+        f"--- /dev/null\n"
+        f"+++ b/{rel}\n"
+        f"@@ -0,0 +1,{len(lines)} @@\n"
+        f"{body}\n"
+    )
 
 
 def _is_diff_candidate(path: Path, roots: Sequence[str]) -> bool:
@@ -755,50 +829,20 @@ def _untracked_file_diff(path: Path) -> str:
 def write_code_diff_snapshot(
     path: Path = CODE_DIFF_PATH,
     *,
-    roots: Sequence[str] = DEFAULT_CODE_DIFF_ROOTS,
+    roots: List[str] | None = None,
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if roots is None:
+        roots = DEFAULT_CODE_DIFF_ROOTS
+    path_roots = [Path(r) for r in roots]
+    root_args = [str(r) for r in roots]
 
-    tracked_diff = _run_git([
-        "--no-pager",
-        "diff",
-        "--no-ext-diff",
-        "--no-color",
-        "--",
-        *roots,
-    ])
-    untracked_paths = _git_untracked_files(roots)
-    untracked_diff = "\n".join(_untracked_file_diff(p) for p in untracked_paths)
-
-    header = [
-        "Manual RPG transcript code diff snapshot",
-        f"repo_root: {REPO_ROOT}",
-        f"roots: {', '.join(roots)}",
-        f"generated_at_unix: {time.time():.3f}",
-        "",
-        "Tracked diff:",
-        "=" * 80,
-        "",
-    ]
-
-    body = tracked_diff.strip()
-    if not body:
-        body = "[no tracked changes]"
-
-    footer = [
-        "",
-        "",
-        "Untracked new files:",
-        "=" * 80,
-        "",
-    ]
-    if untracked_diff.strip():
-        footer.append(untracked_diff.rstrip())
-    else:
-        footer.append("[no untracked source files]")
-
-    path.write_text("\n".join(header) + body + "\n".join(footer) + "\n", encoding="utf-8")
-    print(f"Wrote code diff to: {path.resolve()}", flush=True)
+    diff = _run_git_command(["diff", "--", *root_args])
+    untracked_files = _git_untracked_files_under_roots(path_roots)
+    if untracked_files:
+        diff += "\n\n# Untracked files included by manual_llm_transcript.py\n"
+        for untracked in untracked_files:
+            diff += _format_untracked_file_for_diff(untracked)
+    path.write_text(diff, encoding="utf-8")
 
 
 def _is_result_zip_candidate(path: Path) -> bool:
@@ -892,6 +936,87 @@ SERVICE_SCENARIOS = {
         "turns": [
             "I wait and listen to the room",
             "I wait and listen a little longer",
+        ],
+    },
+    "autonomous_conversation": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+            "max_world_signals_per_thread": 4,
+        },
+        "turns": [
+            "__ambient_tick__",
+            "__ambient_tick__",
+            "__ambient_tick__",
+        ],
+    },
+    "conversation_discusses_event": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_event_discussion": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_world_events": [
+            {
+                "event_id": "manual:event:old_mill_traveler",
+                "kind": "travel",
+                "title": "A traveler arrived from the old mill road",
+                "summary": "A nervous traveler came from the old mill road.",
+                "location_id": "loc_tavern",
+                "source": "manual_scenario_setup"
+            }
+        ],
+        "turns": ["__ambient_tick_event__"],
+    },
+    "conversation_discusses_quest": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_quest_discussion": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road.",
+                    "status": "active",
+                    "location_id": "loc_tavern"
+                }
+            ]
+        },
+        "turns": ["__ambient_tick_quest__"],
+    },
+    "player_invited_conversation": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "What do you mean about the old mill?",
         ],
     },
 }
@@ -1016,6 +1141,28 @@ def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
     if _safe_dict(result_sub.get("service_offer_state")):
         simulation_state["service_offer_state"] = _safe_dict(result_sub.get("service_offer_state"))
     return simulation_state
+
+
+def _pre_turn_contamination_snapshot(simulation_state: Dict[str, Any]) -> Dict[str, int]:
+    if not simulation_state:
+        return {
+            "transaction_history_count": 0,
+            "active_services_count": 0,
+            "journal_entry_count": 0,
+            "world_event_count": 0,
+            "quest_count": 0,
+        }
+
+    journal_state = _safe_dict(simulation_state.get("journal_state"))
+    world_event_state = _safe_dict(simulation_state.get("world_event_state"))
+    quest_state = _safe_dict(simulation_state.get("quest_state"))
+    return {
+        "transaction_history_count": len(_safe_list(simulation_state.get("transaction_history"))),
+        "active_services_count": len(_safe_list(simulation_state.get("active_services"))),
+        "journal_entry_count": len(_safe_list(journal_state.get("entries"))),
+        "world_event_count": len(_safe_list(world_event_state.get("events"))),
+        "quest_count": len(_safe_list(quest_state.get("quests"))),
+    }
 
 
 def _extract_player_inventory(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -1322,6 +1469,27 @@ def _extract_conversation_result(result: Dict[str, Any]) -> Dict[str, Any]:
     return _safe_dict(resolved.get("conversation_result"))
 
 
+def _extract_ambient_tick_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("ambient_tick_result"))
+    if direct:
+        return direct
+
+    narration_debug = _safe_dict(result_sub.get("narration_debug"))
+    direct = _safe_dict(narration_debug.get("ambient_tick_result"))
+    if direct:
+        return direct
+
+    turn_contract = _extract_turn_contract(result)
+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    direct = _safe_dict(resolved.get("ambient_tick_result"))
+    if direct:
+        return direct
+
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("ambient_tick_result"))
+
+
 def _extract_conversation_thread_state(result: Dict[str, Any]) -> Dict[str, Any]:
     result_sub = _safe_dict(_safe_dict(result).get("result"))
     direct = _safe_dict(result_sub.get("conversation_thread_state"))
@@ -1428,9 +1596,15 @@ def _compact_turn_summary(
         "location_state": _extract_location_state(result),
         "travel_result": _extract_travel_result(result),
         "conversation_result": _extract_conversation_result(result),
+        "ambient_tick_result": _extract_ambient_tick_result(result),
         "conversation_thread_state": _extract_conversation_thread_state(result),
         "conversation_thread_count": len(_safe_list(_extract_conversation_thread_state(result).get("threads"))),
         "conversation_world_signal_count": len(_safe_list(_extract_conversation_thread_state(result).get("world_signals"))),
+        "ambient_tick_applied": bool(_extract_ambient_tick_result(result).get("applied")),
+        "ambient_tick_status": _safe_str(_extract_ambient_tick_result(result).get("status")),
+        "pending_player_response": _safe_dict(
+            _extract_conversation_thread_state(result).get("pending_player_response")
+        ),
         "regression_warnings": _manual_regression_warnings(
             turn_index=index,
             player_input=player_input,
@@ -1459,6 +1633,10 @@ def _scenario_contamination_warnings(
     before_currency: Dict[str, Any] | None,
     before_items: List[Any] | None,
     result: Dict[str, Any],
+    pre_turn_snapshot: Dict[str, int] | None = None,
+    allows_seeded_world_events: bool = False,
+    allows_seeded_journal_entries: bool = False,
+    allows_seeded_quest_state: bool = False,
 ) -> List[str]:
     warnings: List[str] = []
     if turn_index == 1:
@@ -1470,19 +1648,22 @@ def _scenario_contamination_warnings(
             warnings.append("scenario_started_with_transaction_history")
         if active_services:
             warnings.append("scenario_started_with_active_services")
-        if _safe_list(journal_state.get("entries")):
+        if (
+            int(pre_turn_snapshot.get("journal_entry_count") or 0) > 0
+            and not allows_seeded_journal_entries
+        ):
             warnings.append("scenario_started_with_journal_entries")
-        # Turn 1 may legitimately emit its own current world event, such as a
-        # service inquiry event. That is not pre-existing contamination. More
-        # than one event on turn 1 is still suspicious for the manual scenarios.
-        # Exception: ambient_conversation may emit 2 turn-1 events: one
-        # service_inquiry (because "wait and listen" can match a lodging
-        # presentation) AND one npc_conversation (from the conversation thread
-        # system). Both are generated by turn 1 itself, not contamination.
-        events = _safe_list(world_event_state.get("events"))
-        event_limit = 2 if scenario_name == "ambient_conversation" else 1
-        if len(events) > event_limit:
+        if (
+            int(pre_turn_snapshot.get("world_event_count") or 0) > 0
+            and not allows_seeded_world_events
+        ):
             warnings.append("scenario_started_with_world_events")
+
+        if (
+            int(pre_turn_snapshot.get("quest_count") or 0) > 0
+            and not allows_seeded_quest_state
+        ):
+            warnings.append("scenario_started_with_quest_state")
 
     if scenario_name == "shop_success" and turn_index == 1:
         item_ids = {
@@ -1565,7 +1746,44 @@ def _manual_regression_warnings(
     service_application = _safe_dict(service_debug.get("service_application"))
     service_status = _effective_service_status(service_result, service_application)
     travel_result = _extract_travel_result(result)
+    action_type = _safe_str(
+        _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("action_type")
+        or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("action_type")
+        or _safe_dict(_safe_dict(result).get("result")).get("action_type")
+    )
+    semantic_action_type = _safe_str(
+        _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("semantic_action_type")
+        or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("semantic_action_type")
+        or _safe_dict(_safe_dict(result).get("result")).get("semantic_action_type")
+    )
+    semantic_family = _safe_str(
+        _safe_dict(_extract_turn_contract(result).get("resolved_result")).get("semantic_family")
+        or _safe_dict(_extract_turn_contract(result).get("resolved_action")).get("semantic_family")
+        or _safe_dict(_safe_dict(result).get("result")).get("semantic_family")
+    )
     player_lower = _safe_str(player_input).lower()
+
+    conversation = _extract_conversation_result(result)
+    conversation_triggered = bool(conversation.get("triggered"))
+    allowed_conversation_scenarios = {
+        "ambient_conversation",
+        "autonomous_conversation",
+        "conversation_discusses_event",
+        "conversation_discusses_quest",
+        "player_invited_conversation",
+    }
+
+    if conversation_triggered and scenario_name not in allowed_conversation_scenarios:
+        warnings.append("conversation_triggered_in_non_conversation_scenario")
+
+    if conversation_triggered and service_result.get("matched"):
+        warnings.append("conversation_triggered_during_service_turn")
+
+    if conversation_triggered and _safe_dict(_extract_travel_result(result)).get("matched"):
+        warnings.append("conversation_triggered_during_travel_turn")
+
+    if conversation_triggered and action_type in {"service_inquiry", "service_purchase", "travel", "social_activity"}:
+        warnings.append(f"conversation_triggered_during_action_type:{action_type}")
 
     if (
         "ask" in player_lower
@@ -1622,6 +1840,39 @@ def _manual_regression_warnings(
         world_events = _safe_list(_extract_world_event_state(result).get("events"))
         if any(_safe_str(_safe_dict(event).get("kind")).startswith("service_") for event in world_events):
             warnings.append("ambient_conversation_unexpected_service_world_event")
+    if scenario_name in {
+        "autonomous_conversation",
+        "conversation_discusses_event",
+        "conversation_discusses_quest",
+        "player_invited_conversation",
+    }:
+        conversation = _extract_conversation_result(result)
+        if turn_index == 1 and not conversation.get("triggered"):
+            warnings.append(f"{scenario_name}_expected_conversation_trigger")
+        if service_result.get("matched"):
+            warnings.append(f"{scenario_name}_unexpected_service_result")
+        state = _extract_conversation_thread_state(result)
+        if turn_index == 1 and not _safe_list(state.get("world_signals")):
+            warnings.append(f"{scenario_name}_expected_world_signal")
+        validation = _safe_dict(conversation.get("conversation_effect_validation"))
+        if validation and not validation.get("ok"):
+            warnings.append(f"{scenario_name}_conversation_effect_validation_failed")
+    if scenario_name == "conversation_discusses_event":
+        topic = _safe_dict(_extract_conversation_result(result).get("topic"))
+        if _safe_str(topic.get("topic_type")) != "recent_event":
+            warnings.append("conversation_discusses_event_expected_recent_event_topic")
+
+    if scenario_name == "conversation_discusses_quest":
+        topic = _safe_dict(_extract_conversation_result(result).get("topic"))
+        if _safe_str(topic.get("topic_type")) != "quest":
+            warnings.append("conversation_discusses_quest_expected_quest_topic")
+
+    if scenario_name == "player_invited_conversation" and turn_index == 1:
+        participation = _safe_dict(_extract_conversation_result(result).get("player_participation"))
+        if _safe_str(participation.get("mode")) != "player_invited":
+            warnings.append("player_invited_conversation_expected_player_invited_mode")
+        if not participation.get("pending_response"):
+            warnings.append("player_invited_conversation_expected_pending_response")
     if scenario_name == "blocked_purchase" and turn_index == 3:
         if bool(purchase.get("applied") or service_application.get("applied")):
             warnings.append("blocked_purchase_unexpectedly_applied")
@@ -1715,6 +1966,68 @@ def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
         return False
 
     return True
+
+
+def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> bool:
+    try:
+        from app.rpg.session.service import load_session, save_session
+    except Exception:
+        return False
+    session = _safe_dict(load_session(session_id))
+    if not session:
+        return False
+
+    simulation_state = _ensure_manual_simulation_roots(session)
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
+
+    conversation_settings = _safe_dict(scenario.get("conversation_settings"))
+    if conversation_settings:
+        current = _safe_dict(runtime_settings.get("conversation_settings"))
+        current.update(conversation_settings)
+        runtime_settings["conversation_settings"] = current
+
+    setup_world_events = _safe_list(scenario.get("setup_world_events"))
+    if setup_world_events:
+        world_event_state = _safe_dict(simulation_state.get("world_event_state"))
+        events = _safe_list(world_event_state.get("events"))
+        for index, event in enumerate(setup_world_events, start=1):
+            event = _safe_dict(event)
+            event.setdefault("event_id", f"manual:world_event:{session_id}:{index}")
+            event.setdefault("tick", index)
+            events.append(event)
+        world_event_state["events"] = events
+        simulation_state["world_event_state"] = world_event_state
+
+    setup_journal_entries = _safe_list(scenario.get("setup_journal_entries"))
+    if setup_journal_entries:
+        journal_state = _safe_dict(simulation_state.get("journal_state"))
+        entries = _safe_list(journal_state.get("entries"))
+        for index, entry in enumerate(setup_journal_entries, start=1):
+            entry = _safe_dict(entry)
+            entry.setdefault("entry_id", f"manual:journal:{session_id}:{index}")
+            entries.append(entry)
+        journal_state["entries"] = entries
+        simulation_state["journal_state"] = journal_state
+
+    setup_quest_state = _safe_dict(scenario.get("setup_quest_state"))
+    if setup_quest_state:
+        simulation_state["quest_state"] = setup_quest_state
+
+    setup_memory_state = _safe_dict(scenario.get("setup_memory_state"))
+    if setup_memory_state:
+        memory_state = _safe_dict(simulation_state.get("memory_state"))
+        memory_state.update(setup_memory_state)
+        simulation_state["memory_state"] = memory_state
+
+    runtime_state["runtime_settings"] = runtime_settings
+    session["runtime_state"] = runtime_state
+    _sync_manual_simulation_state(session, simulation_state)
+    try:
+        save_session(session)
+        return True
+    except Exception:
+        return False
 
 
 def _write_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
@@ -2196,6 +2509,9 @@ def _print_turn(
     _emit("CONVERSATION RESULT:", channel=channel)
     _emit(_compact_json(_extract_conversation_result(result)), channel=channel)
     _emit("", channel=channel)
+    _emit("AMBIENT TICK RESULT:", channel=channel)
+    _emit(_compact_json(_extract_ambient_tick_result(result)), channel=channel)
+    _emit("", channel=channel)
     _emit("CONVERSATION THREAD STATE:", channel=channel)
     _emit(_compact_json(_extract_conversation_thread_state(result)), channel=channel)
     _emit("", channel=channel)
@@ -2409,7 +2725,13 @@ def _run_one_service_scenario(
     _emit("#" * 80, channel=target_channel)
 
     seeded = _seed_session_currency(session_id, currency)
-    if not seeded:
+    setup_applied = _apply_manual_scenario_setup(session_id, scenario)
+    if not seeded or not setup_applied:
+        _record_scenario_error(
+            scenario_name=scenario_name,
+            session_id=session_id,
+            error="scenario_session_seed_failed",
+        )
         _emit("ERROR:", channel=target_channel)
         _emit(f"Could not create or seed scenario session: {session_id}", channel=target_channel)
         _emit(
@@ -2441,6 +2763,20 @@ def _run_one_service_scenario(
             _extract_player_currency(last_result) if last_result else currency
         )
         before_items = _extract_player_items(last_result) if last_result else []
+
+        # Compute pre-turn contamination snapshot
+        if index == 1:
+            # For turn 1, get the seeded simulation state
+            try:
+                from app.rpg.session.service import load_session
+                session = _safe_dict(load_session(session_id))
+                simulation_state = _extract_simulation_state({"session": session})
+            except Exception:
+                simulation_state = {}
+        else:
+            # For later turns, use the previous result's simulation state
+            simulation_state = _extract_simulation_state(last_result)
+        pre_turn_snapshot = _pre_turn_contamination_snapshot(simulation_state)
 
         result = apply_turn(session_id=session_id, player_input=player_input)
         extracted_location_id = _extract_current_location_id(result)
@@ -2488,6 +2824,10 @@ def _run_one_service_scenario(
             before_currency=before_currency,
             before_items=before_items,
             result=result,
+            pre_turn_snapshot=pre_turn_snapshot,
+            allows_seeded_world_events=bool(_safe_list(scenario.get("setup_world_events"))),
+            allows_seeded_journal_entries=bool(_safe_list(scenario.get("setup_journal_entries"))),
+            allows_seeded_quest_state=bool(_safe_dict(scenario.get("setup_quest_state"))),
         )
         summary_row["regression_warnings"] = _manual_regression_warnings(
             scenario_name=scenario_name,
@@ -2605,6 +2945,11 @@ def run_service_scenarios(
                 try:
                     completed[scenario_name] = future.result()
                 except Exception as exc:
+                    _record_scenario_error(
+                        scenario_name=scenario_name,
+                        session_id="",
+                        error=f"{type(exc).__name__}:{exc}",
+                    )
                     error_channel = f"service_{scenario_name}"
                     _emit("", channel=error_channel)
                     _emit("#" * 80, channel=error_channel)
@@ -2634,8 +2979,30 @@ def run_service_scenarios(
                     )
     else:
         for item in scenario_items:
-            summary = run_item(item)
             scenario_name = item[0]
+            try:
+                summary = run_item(item)
+            except Exception as exc:
+                _record_scenario_error(
+                    scenario_name=scenario_name,
+                    session_id="",
+                    error=f"{type(exc).__name__}:{exc}",
+                )
+                error_channel = f"service_{scenario_name}"
+                _emit("", channel=error_channel)
+                _emit("#" * 80, channel=error_channel)
+                _emit(f"SCENARIO: {scenario_name}", channel=error_channel)
+                _emit("ERROR:", channel=error_channel)
+                _emit(f"{type(exc).__name__}: {exc}", channel=error_channel)
+                _emit("#" * 80, channel=error_channel)
+                summary = {
+                    "scenario": scenario_name,
+                    "session_id": "",
+                    "seeded_currency": {},
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "turns": [],
+                    "_channel": error_channel,
+                }
             scenario_summaries.append({
                 key: value
                 for key, value in summary.items()
@@ -2901,9 +3268,11 @@ def main() -> None:
                 write_code_diff_snapshot(roots=code_diff_roots)
             if not args.no_results_zip:
                 write_results_zip()
-            if args.fail_on_regression_warnings and _REGRESSION_WARNING_ROWS:
+            with _REGRESSION_WARNING_LOCK:
+                warning_rows = list(_REGRESSION_WARNING_ROWS)
+            if args.fail_on_regression_warnings and warning_rows:
                 print("[manual][regression] warnings detected:", flush=True)
-                print(_compact_json(_REGRESSION_WARNING_ROWS), flush=True)
+                print(_compact_json(warning_rows), flush=True)
                 raise SystemExit(2)
         finally:
             servers.stop()
