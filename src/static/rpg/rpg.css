@@ -173,7 +173,7 @@
 
 .rpg-debug-row {
   display: grid;
-  grid-template-columns: minmax(90px, 160px) 1fr auto;
+  grid-template-columns: minmax(110px, 190px) 1fr auto;
   gap: 6px;
   align-items: baseline;
   padding: 4px 6px;

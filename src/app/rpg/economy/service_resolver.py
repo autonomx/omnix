@@ -29,6 +29,10 @@ from app.rpg.world.location_registry import (
     location_allows_service,
     provider_present_at_location,
 )
+from app.rpg.session.ambient_intent import (
+    is_ambient_wait_or_listen_intent,
+    is_room_context_ambient_not_lodging,
+)
 
 
 def _safe_str(value: Any) -> str:
@@ -45,6 +49,25 @@ def _safe_list(value: Any) -> List[Any]:
 
 def _contains_any(text_l: str, terms: List[str]) -> bool:
     return any(term in text_l for term in terms)
+
+
+def _not_service_result(reason: str, *, player_input: str = "") -> Dict[str, Any]:
+    return {
+        "matched": False,
+        "kind": "not_service",
+        "status": "not_service",
+        "reason": reason,
+        "player_input": player_input,
+        "source": "deterministic_service_resolver",
+    }
+
+
+def _should_skip_service_resolution(player_input: str) -> str:
+    if is_ambient_wait_or_listen_intent(player_input):
+        return "ambient_wait_or_listen"
+    if is_room_context_ambient_not_lodging(player_input):
+        return "ambient_room_context_not_lodging"
+    return ""
 
 
 def _detect_service_kind(text_l: str) -> str:
@@ -326,6 +349,10 @@ def resolve_service_turn(
     simulation_state: Dict[str, Any] | None,
     runtime_state: Dict[str, Any] | None,
 ) -> Dict[str, Any]:
+    skip_reason = _should_skip_service_resolution(player_input)
+    if skip_reason:
+        return _not_service_result(skip_reason, player_input=player_input)
+
     simulation_state = _safe_dict(simulation_state)
     intent = resolve_service_intent(
         player_input=player_input,

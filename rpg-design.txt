@@ -1,314 +1,100 @@
-Below is the literal apply-this-patch diff spec for Bundle D: Phase 8.4 + 8.5 + 9.0.
+Below is a literal apply-this-patch diff spec for:
 
-Apply in this order:
+Bundle E2 — Phase 9.3
+NPC-to-NPC conversation threads v1
 
-D1 — Harness/regression hardening
-D2 — Location registry + deterministic travel runtime
-D3 — Service availability respects current location
-D4 — Response/debug/UI visibility
-D5 — Tests
+Include:
+- conversation_thread_state
+- deterministic NPC-to-NPC thread triggers
+- participants selected from present NPCs only
+- bounded conversation beats
+- world_signals from conversation
+- no freeform world mutation
+- transcript/debug/UI visibility
+- update/add tests
 
-After each section, run the listed tests. Do not continue if the manual transcript regresses.
+This is intentionally bounded and deterministic. It does not let NPC dialogue mutate inventory, currency, stock, quests, journal, location, or rewards.
 
-Bundle D — Phase 8.4 + 8.5 + 9.0
-Required validation gate
+E2 behavior contract
 
-Run after the full patch:
+NPC-to-NPC conversation may write only:
 
-pytest src/app/rpg/tests/test_location_registry.py -q
-pytest src/app/rpg/tests/test_travel_runtime.py -q
-pytest src/app/rpg/tests/test_service_location_availability.py -q
-pytest src/app/rpg/tests/test_manual_transcript_modes.py -q
-pytest src/app/rpg/tests/test_service_purchase_runtime.py -q
-pytest src/app/rpg/tests/test_service_living_world_effects.py -q
-pytest src/app/rpg/tests/test_narration_queue.py -q
+conversation_thread_state
+world_event_state entry with kind=npc_conversation
+bounded world_signals under conversation_thread_state
+response/debug fields
+UI/debug display
 
-python src/tests/rpg/manual_llm_transcript.py --all
+It must not write:
 
-Expected:
+player inventory
+currency
+service stock
+transaction history
+journal entries
+quest state
+location changes
+NPC movement
+rewards
 
-manual transcript zip includes all files
-scenario_warnings: []
-regression_warnings: []
-shop_success travels to market before Elara purchase
-paid_info still creates rumor:old_mill_bandits
-no "The attempt fails"
-no player-facing "registered offer"
-no current-turn recall
-D1 PATCH — Harden manual transcript regression warnings
-File: src/tests/rpg/manual_llm_transcript.py
-1. Add regression warning helpers
+Trigger rule for v1:
 
-Add after _scenario_contamination_warnings(...).
+If the player waits/listens/idles/observes in a location with at least 2 present NPCs,
+create or advance one deterministic NPC conversation thread.
+PATCH 1 — Add enough present NPCs for conversations
+File: src/app/rpg/world/location_registry.py
 
-diff --git a/src/tests/rpg/manual_llm_transcript.py b/src/tests/rpg/manual_llm_transcript.py
---- a/src/tests/rpg/manual_llm_transcript.py
-+++ b/src/tests/rpg/manual_llm_transcript.py
-@@
- def _scenario_contamination_warnings(
-@@
-     return warnings
-+
-+
-+def _player_facing_text_for_regression_scan(result: Dict[str, Any]) -> str:
-+    text = _extract_narration(result)
-+    result_sub = _safe_dict(_safe_dict(result).get("result"))
-+    if not text:
-+        text = _safe_str(result_sub.get("narration"))
-+    return text or ""
-+
-+
-+def _current_memory_ids(result: Dict[str, Any]) -> set[str]:
-+    service_debug = _extract_service_debug(result)
-+    ids: set[str] = set()
-+
-+    for candidate in (
-+        service_debug.get("memory_entry"),
-+        _safe_dict(_extract_social_living_world_effects(result)).get("memory_entry"),
-+    ):
-+        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
-+        if memory_id:
-+            ids.add(memory_id)
-+
-+    turn_contract = _extract_turn_contract(result)
-+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+    for candidate in (
-+        resolved.get("memory_entry"),
-+        _safe_dict(resolved.get("service_application")).get("memory_entry"),
-+        _safe_dict(resolved.get("social_living_world_effects")).get("memory_entry"),
-+    ):
-+        memory_id = _safe_str(_safe_dict(candidate).get("memory_id"))
-+        if memory_id:
-+            ids.add(memory_id)
-+
-+    return ids
-+
-+
-+def _manual_regression_warnings(
-+    *,
-+    scenario_name: str = "",
-+    turn_index: int,
-+    player_input: str,
-+    result: Dict[str, Any],
-+) -> List[str]:
-+    warnings: List[str] = []
-+    text = _player_facing_text_for_regression_scan(result)
-+    lower = text.lower()
-+
-+    if "the attempt fails" in lower:
-+        warnings.append("player_facing_generic_attempt_fails")
-+    if "registered offer" in lower or "registered offers" in lower:
-+        warnings.append("player_facing_registered_offer_leak")
-+    if "session_not_found" in lower or _safe_str(_safe_dict(result).get("error")) == "session_not_found":
-+        warnings.append("session_not_found")
-+
-+    current_ids = _current_memory_ids(result)
-+    if current_ids:
-+        recalled = _extract_recalled_service_memories(result) + _extract_recalled_npc_memories(result)
-+        recalled_ids = {
-+            _safe_str(_safe_dict(memory).get("memory_id"))
-+            for memory in recalled
-+            if _safe_str(_safe_dict(memory).get("memory_id"))
-+        }
-+        overlap = sorted(current_ids & recalled_ids)
-+        if overlap:
-+            warnings.append(f"current_turn_memory_recalled:{','.join(overlap)}")
-+
-+    service_debug = _extract_service_debug(result)
-+    service_result = _safe_dict(service_debug.get("service_result"))
-+    purchase = _safe_dict(service_debug.get("purchase"))
-+    service_application = _safe_dict(service_debug.get("service_application"))
-+    service_status = _effective_service_status(service_result, service_application)
-+
-+    if _safe_str(service_result.get("kind")) == "service_purchase":
-+        if service_status == "blocked" and not _safe_str(purchase.get("blocked_reason")):
-+            warnings.append("blocked_purchase_missing_reason")
-+        if bool(purchase.get("applied") or service_application.get("applied")) and not _safe_dict(service_debug.get("transaction_record")):
-+            warnings.append("applied_purchase_missing_transaction_record")
-+
-+    # Scenario-specific expectations.
-+    if scenario_name == "shop_success" and turn_index == 3:
-+        if not bool(purchase.get("applied") or service_application.get("applied")):
-+            warnings.append("shop_success_expected_purchase_applied")
-+    if scenario_name == "lodging_success" and turn_index == 2:
-+        if not bool(purchase.get("applied") or service_application.get("applied")):
-+            warnings.append("lodging_success_expected_purchase_applied")
-+    if scenario_name == "paid_info" and turn_index == 2:
-+        if not _safe_dict(service_debug.get("rumor_added")).get("rumor_id"):
-+            warnings.append("paid_info_missing_rumor_added")
-+        if not _safe_dict(service_debug.get("journal_entry")).get("entry_id"):
-+            warnings.append("paid_info_missing_journal_entry")
-+    if scenario_name == "blocked_purchase" and turn_index == 3:
-+        if bool(purchase.get("applied") or service_application.get("applied")):
-+            warnings.append("blocked_purchase_unexpectedly_applied")
-+        if _safe_str(purchase.get("blocked_reason")) != "insufficient_funds":
-+            warnings.append("blocked_purchase_expected_insufficient_funds")
-+
-+    return warnings
-2. Add warnings to summaries
+Add one non-service NPC to tavern and market so conversation tests have at least two present NPCs.
 
-In _compact_turn_summary(...), before "token_usage" add:
-
-@@
-         "world_event_state": _extract_world_event_state(result),
-         "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
-+        "regression_warnings": _manual_regression_warnings(
-+            turn_index=index,
-+            player_input=player_input,
-+            result=result,
-+        ),
-         "token_usage": _extract_token_usage_from_result(result, player_input=player_input),
-
-Then in _run_one_service_scenario(...), after summary_row["scenario_warnings"] = ..., add:
-
-@@
-         summary_row["scenario_warnings"] = _scenario_contamination_warnings(
-             scenario_name=scenario_name,
-             turn_index=index,
-             before_currency=before_currency,
-             before_items=before_items,
-             result=result,
-             pre_turn_snapshot=pre_turn_snapshot,
-         )
-+        summary_row["regression_warnings"] = _manual_regression_warnings(
-+            scenario_name=scenario_name,
-+            turn_index=index,
-+            player_input=player_input,
-+            result=result,
-+        )
-         scenario_results.append(summary_row)
-
-If _compact_turn_summary(...) already adds generic regression warnings, this second assignment intentionally replaces them with scenario-aware warnings.
-
-3. Add fail-on-warning CLI
-
-In main() parser setup:
-
-@@
-     parser.add_argument(
-         "--console-llm-max-chars",
-         type=int,
-         default=1200,
-         help="Maximum characters to print per console LLM response block.",
-     )
-+    parser.add_argument(
-+        "--fail-on-regression-warnings",
-+        action="store_true",
-+        help="Exit non-zero if manual transcript summary contains regression_warnings or scenario_warnings.",
-+    )
-
-Add helper near write_results_zip(...):
-
-@@
- def write_results_zip(path: Path = RESULTS_ZIP_PATH) -> None:
-@@
-     print(
-         f"Wrote results zip to: {path.resolve()} ({len(candidates)} file(s))",
-         flush=True,
-     )
-+
-+
-+def _collect_manual_warning_rows() -> List[Dict[str, Any]]:
-+    rows: List[Dict[str, Any]] = []
-+    with _OUTPUT_LOCK:
-+        channels = list(_OUTPUTS.keys())
-+
-+    for channel in channels:
-+        if not (channel.startswith("flat_turn_") or channel.startswith("service_")):
-+            continue
-+        # Detailed parsing from text is intentionally avoided. The compact
-+        # summaries carry canonical warnings; this hook is kept for future
-+        # expansion. Current warning enforcement happens directly in runners.
-+    return rows
-
-Add global:
-
-@@
- _OUTPUTS: Dict[str, List[str]] = {}
- _TOKEN_USAGE_ROWS: List[Dict[str, Any]] = []
-+_REGRESSION_WARNING_ROWS: List[Dict[str, Any]] = []
-
-Add helper:
-
-@@
- def _reset_token_usage() -> None:
-     with _TOKEN_USAGE_LOCK:
-         _TOKEN_USAGE_ROWS.clear()
-+
-+
-+def _reset_regression_warnings() -> None:
-+    _REGRESSION_WARNING_ROWS.clear()
-+
-+
-+def _record_regression_warnings(row: Dict[str, Any]) -> None:
-+    warnings = _safe_list(row.get("regression_warnings")) + _safe_list(row.get("scenario_warnings"))
-+    if warnings:
-+        _REGRESSION_WARNING_ROWS.append(row)
-
-In run_requested_transcripts(...) after _reset_token_usage():
-
-@@
-     _reset_output()
-     _reset_token_usage()
-+    _reset_regression_warnings()
-
-In run_manual_transcript(...), after building summary_row:
-
-@@
--        summary_rows.append(
--            _compact_turn_summary(
--                index=index,
--                player_input=player_input,
--                result=result,
--                before_currency=before_currency,
--                before_items=before_items,
--            )
--        )
-+        summary_row = _compact_turn_summary(
-+            index=index,
-+            player_input=player_input,
-+            result=result,
-+            before_currency=before_currency,
-+            before_items=before_items,
-+        )
-+        _record_regression_warnings(summary_row)
-+        summary_rows.append(summary_row)
-
-In _run_one_service_scenario(...), after both warning fields are set:
-
-@@
-         summary_row["regression_warnings"] = _manual_regression_warnings(
-             scenario_name=scenario_name,
-             turn_index=index,
-             player_input=player_input,
-             result=result,
-         )
-+        _record_regression_warnings(summary_row)
-         scenario_results.append(summary_row)
-
-In main() finally block, after write_results_zip() and before servers.stop():
-
-@@
-             if not args.no_results_zip:
-                 write_results_zip()
-+            if args.fail_on_regression_warnings and _REGRESSION_WARNING_ROWS:
-+                print("[manual][regression] warnings detected:", flush=True)
-+                print(_compact_json(_REGRESSION_WARNING_ROWS), flush=True)
-+                raise SystemExit(2)
-         finally:
-             servers.stop()
-D2 PATCH — Add deterministic location registry
-New file: src/app/rpg/world/location_registry.py
 diff --git a/src/app/rpg/world/location_registry.py b/src/app/rpg/world/location_registry.py
-new file mode 100644
-index 0000000..9bde777
---- /dev/null
+--- a/src/app/rpg/world/location_registry.py
 +++ b/src/app/rpg/world/location_registry.py
-@@ -0,0 +1,233 @@
+@@
+         "present_npcs": [
+             {"id": "npc:Bran", "name": "Bran", "role": "innkeeper"},
++            {"id": "npc:Mira", "name": "Mira", "role": "server"},
+         ],
+@@
+         "present_npcs": [
+             {"id": "npc:Elara", "name": "Elara", "role": "merchant"},
++            {"id": "npc:Tomas", "name": "Tomas", "role": "porter"},
+         ],
+
+Add helper exports near other helpers:
+
+@@
+ def provider_present_at_location(simulation_state: Dict[str, Any], provider_id: str = "", provider_name: str = "") -> bool:
+@@
+     return False
++
++
++def present_npcs_for_current_location(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
++    location = get_location(current_location_id(simulation_state))
++    return deepcopy(_safe_list(location.get("present_npcs")))
+PATCH 2 — Add deterministic conversation thread runtime
+New file: src/app/rpg/world/conversation_threads.py
+diff --git a/src/app/rpg/world/conversation_threads.py b/src/app/rpg/world/conversation_threads.py
+new file mode 100644
+index 0000000..a15d2f1
+--- /dev/null
++++ b/src/app/rpg/world/conversation_threads.py
+@@ -0,0 +1,360 @@
 +from __future__ import annotations
 +
 +from copy import deepcopy
 +from typing import Any, Dict, List
++
++from app.rpg.world.location_registry import (
++    current_location_id,
++    get_location,
++    present_npcs_for_current_location,
++)
++from app.rpg.world.world_event_log import add_world_event
++
++
++MAX_CONVERSATION_THREADS = 32
++MAX_BEATS_PER_THREAD = 8
++MAX_WORLD_SIGNALS = 64
 +
 +
 +def _safe_str(value: Any) -> str:
@@ -323,1089 +109,924 @@ index 0000000..9bde777
 +    return value if isinstance(value, list) else []
 +
 +
-+LOCATIONS: Dict[str, Dict[str, Any]] = {
-+    "loc_tavern": {
-+        "location_id": "loc_tavern",
-+        "name": "The Rusty Flagon Tavern",
-+        "short_name": "tavern",
-+        "aliases": ["tavern", "inn", "rusty flagon", "the rusty flagon"],
-+        "description": "A warm tavern with worn beams, busy tables, and the smell of stew.",
-+        "present_npcs": [
-+            {"id": "npc:Bran", "name": "Bran", "role": "innkeeper"},
-+        ],
-+        "services": ["lodging", "meal", "paid_information"],
-+        "exits": {
-+            "market": "loc_market",
-+            "market square": "loc_market",
-+            "outside": "loc_market",
-+        },
-+    },
-+    "loc_market": {
-+        "location_id": "loc_market",
-+        "name": "Market Square",
-+        "short_name": "market",
-+        "aliases": ["market", "market square", "square", "bazaar"],
-+        "description": "A busy market square of stalls, carts, shouted prices, and foot traffic.",
-+        "present_npcs": [
-+            {"id": "npc:Elara", "name": "Elara", "role": "merchant"},
-+        ],
-+        "services": ["shop_goods", "repair"],
-+        "exits": {
-+            "tavern": "loc_tavern",
-+            "inn": "loc_tavern",
-+            "rusty flagon": "loc_tavern",
-+            "old mill road": "loc_old_mill_road",
-+        },
-+    },
-+    "loc_old_mill_road": {
-+        "location_id": "loc_old_mill_road",
-+        "name": "Old Mill Road",
-+        "short_name": "old mill road",
-+        "aliases": ["old mill", "old mill road", "mill road"],
-+        "description": "A rutted road leading toward the old mill and the quieter edge of town.",
-+        "present_npcs": [],
-+        "services": [],
-+        "exits": {
-+            "market": "loc_market",
-+            "market square": "loc_market",
-+        },
-+    },
-+}
++def _safe_int(value: Any, default: int = 0) -> int:
++    try:
++        return int(value)
++    except Exception:
++        return default
 +
 +
-+def list_locations() -> List[Dict[str, Any]]:
-+    return [deepcopy(location) for location in LOCATIONS.values()]
-+
-+
-+def get_location(location_id: str) -> Dict[str, Any]:
-+    return deepcopy(_safe_dict(LOCATIONS.get(_safe_str(location_id))))
-+
-+
-+def default_location_id() -> str:
-+    return "loc_tavern"
-+
-+
-+def current_location_id(simulation_state: Dict[str, Any]) -> str:
++def ensure_conversation_thread_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
 +    simulation_state = _safe_dict(simulation_state)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    location_id = (
-+        _safe_str(player_state.get("location_id"))
-+        or _safe_str(player_state.get("current_location_id"))
-+        or _safe_str(simulation_state.get("location_id"))
-+        or _safe_str(simulation_state.get("current_location_id"))
++    state = simulation_state.get("conversation_thread_state")
++    if not isinstance(state, dict):
++        state = {}
++        simulation_state["conversation_thread_state"] = state
++
++    if not isinstance(state.get("threads"), list):
++        state["threads"] = []
++    if not isinstance(state.get("active_thread_ids"), list):
++        state["active_thread_ids"] = []
++    if not isinstance(state.get("world_signals"), list):
++        state["world_signals"] = []
++    if not isinstance(state.get("debug"), dict):
++        state["debug"] = {}
++    return state
++
++
++def get_conversation_thread_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++    return deepcopy(ensure_conversation_thread_state(simulation_state))
++
++
++def _is_wait_or_listen_turn(player_input: str) -> bool:
++    lower = _safe_str(player_input).lower().strip()
++    if not lower:
++        return False
++    markers = (
++        "wait",
++        "listen",
++        "idle",
++        "observe",
++        "watch",
++        "linger",
++        "pass time",
++        "let time pass",
 +    )
-+    return location_id or default_location_id()
++    return any(marker in lower for marker in markers)
 +
 +
-+def normalize_location_name(value: str) -> str:
-+    value = _safe_str(value).strip().lower()
-+    value = value.replace("the ", "", 1) if value.startswith("the ") else value
-+    return " ".join(value.split())
++def _participant_key(npc: Dict[str, Any]) -> str:
++    return _safe_str(npc.get("id") or npc.get("npc_id") or npc.get("name"))
 +
 +
-+def find_location_by_name(value: str) -> Dict[str, Any]:
-+    needle = normalize_location_name(value)
-+    if not needle:
-+        return {}
++def _normalize_present_npc(npc: Dict[str, Any]) -> Dict[str, Any]:
++    npc = _safe_dict(npc)
++    npc_id = _safe_str(npc.get("id") or npc.get("npc_id"))
++    name = _safe_str(npc.get("name"))
++    if not npc_id and name:
++        npc_id = f"npc:{name}"
++    return {
++        "id": npc_id,
++        "name": name or npc_id.replace("npc:", ""),
++        "role": _safe_str(npc.get("role")),
++    }
 +
-+    for location in LOCATIONS.values():
-+        names = [
-+            _safe_str(location.get("location_id")),
-+            _safe_str(location.get("name")),
-+            _safe_str(location.get("short_name")),
-+            *_safe_list(location.get("aliases")),
-+        ]
-+        if any(normalize_location_name(name) == needle for name in names):
-+            return deepcopy(location)
 +
-+    for location in LOCATIONS.values():
-+        names = [
-+            _safe_str(location.get("name")),
-+            _safe_str(location.get("short_name")),
-+            *_safe_list(location.get("aliases")),
-+        ]
-+        if any(normalize_location_name(name) in needle for name in names):
-+            return deepcopy(location)
++def select_conversation_participants(
++    simulation_state: Dict[str, Any],
++    *,
++    limit: int = 2,
++) -> List[Dict[str, Any]]:
++    """Select participants only from NPCs present at current location."""
++    present = [
++        _normalize_present_npc(npc)
++        for npc in present_npcs_for_current_location(simulation_state)
++    ]
++    present = [npc for npc in present if _participant_key(npc)]
++    present.sort(key=lambda npc: (_safe_str(npc.get("id")), _safe_str(npc.get("name"))))
++    return deepcopy(present[:limit])
 +
++
++def _topic_for_location(location_id: str) -> Dict[str, str]:
++    if location_id == "loc_tavern":
++        return {
++            "topic_id": "tavern_evening_rumors",
++            "topic": "the mood in the tavern",
++            "signal_kind": "rumor_interest",
++            "summary": "The tavern staff trade quiet observations about travelers and local rumors.",
++        }
++    if location_id == "loc_market":
++        return {
++            "topic_id": "market_trade_pressure",
++            "topic": "market traffic",
++            "signal_kind": "market_pressure",
++            "summary": "Market workers comment on stock, traffic, and the day's trade.",
++        }
++    return {
++        "topic_id": "local_activity",
++        "topic": "local activity",
++        "signal_kind": "ambient_interest",
++        "summary": "Nearby NPCs exchange quiet comments about the area.",
++    }
++
++
++def _line_for_participant(
++    participant: Dict[str, Any],
++    *,
++    location_id: str,
++    beat_index: int,
++) -> str:
++    name = _safe_str(participant.get("name") or participant.get("id") or "NPC")
++    if location_id == "loc_tavern":
++        if beat_index % 2 == 1:
++            return f"{name} keeps their voice low, noting that the room has been busier than usual."
++        return f"{name} answers with a practical nod, saying travelers always bring more stories than coin."
++    if location_id == "loc_market":
++        if beat_index % 2 == 1:
++            return f"{name} remarks that the market crowd is moving quickly today."
++        return f"{name} replies that busy stalls mean both opportunity and trouble."
++    if beat_index % 2 == 1:
++        return f"{name} quietly observes the shifting mood nearby."
++    return f"{name} offers a brief response, keeping the exchange grounded in the present scene."
++
++
++def _thread_id_for(
++    *,
++    location_id: str,
++    participants: List[Dict[str, Any]],
++) -> str:
++    participant_ids = [
++        _safe_str(participant.get("id") or participant.get("name"))
++        for participant in participants
++    ]
++    participant_part = ":".join(participant_ids)
++    return f"conversation:{location_id}:{participant_part}"
++
++
++def _find_thread(state: Dict[str, Any], thread_id: str) -> Dict[str, Any]:
++    for thread in _safe_list(state.get("threads")):
++        thread = _safe_dict(thread)
++        if _safe_str(thread.get("thread_id")) == thread_id:
++            return thread
 +    return {}
 +
 +
-+def available_exits(simulation_state: Dict[str, Any]) -> Dict[str, str]:
-+    location = get_location(current_location_id(simulation_state))
-+    return dict(_safe_dict(location.get("exits")))
++def _append_world_signal(
++    state: Dict[str, Any],
++    signal: Dict[str, Any],
++) -> Dict[str, Any]:
++    signals = _safe_list(state.get("world_signals"))
++    signal_id = _safe_str(signal.get("signal_id"))
++    if not signal_id:
++        return {}
++    for existing in signals:
++        if _safe_str(_safe_dict(existing).get("signal_id")) == signal_id:
++            return deepcopy(_safe_dict(existing))
++    signals.append(deepcopy(signal))
++    if len(signals) > MAX_WORLD_SIGNALS:
++        del signals[:-MAX_WORLD_SIGNALS]
++    state["world_signals"] = signals
++    return deepcopy(signal)
 +
 +
-+def resolve_exit_destination(simulation_state: Dict[str, Any], destination_text: str) -> str:
-+    destination_text = normalize_location_name(destination_text)
-+    exits = available_exits(simulation_state)
-+    for alias, destination_id in exits.items():
-+        if normalize_location_name(alias) == destination_text:
-+            return _safe_str(destination_id)
-+    for alias, destination_id in exits.items():
-+        if normalize_location_name(alias) in destination_text:
-+            return _safe_str(destination_id)
-+
-+    direct = find_location_by_name(destination_text)
-+    direct_id = _safe_str(direct.get("location_id"))
-+    if direct_id and direct_id in set(exits.values()):
-+        return direct_id
-+    return ""
-+
-+
-+def set_current_location(simulation_state: Dict[str, Any], location_id: str) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    location_id = _safe_str(location_id) or default_location_id()
-+    location = get_location(location_id)
-+    if not location:
-+        location_id = default_location_id()
-+        location = get_location(location_id)
-+
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    if not player_state:
-+        player_state = {}
-+        simulation_state["player_state"] = player_state
-+
-+    simulation_state["location_id"] = location_id
-+    simulation_state["current_location_id"] = location_id
-+    simulation_state["location_state"] = {
-+        "current_location_id": location_id,
-+        "current_location": location,
-+        "available_exits": available_exits({"location_id": location_id}),
++def _make_beat(
++    *,
++    thread_id: str,
++    participants: List[Dict[str, Any]],
++    location_id: str,
++    tick: int,
++    beat_index: int,
++    topic_payload: Dict[str, str],
++) -> Dict[str, Any]:
++    speaker = participants[(beat_index - 1) % len(participants)]
++    listener = participants[beat_index % len(participants)]
++    return {
++        "beat_id": f"conversation:beat:{tick}:{thread_id}:{beat_index}",
++        "thread_id": thread_id,
++        "beat_index": beat_index,
++        "speaker_id": _safe_str(speaker.get("id")),
++        "speaker_name": _safe_str(speaker.get("name")),
++        "listener_id": _safe_str(listener.get("id")),
++        "listener_name": _safe_str(listener.get("name")),
++        "line": _line_for_participant(
++            speaker,
++            location_id=location_id,
++            beat_index=beat_index,
++        ),
++        "topic_id": _safe_str(topic_payload.get("topic_id")),
++        "topic": _safe_str(topic_payload.get("topic")),
++        "tick": int(tick or 0),
++        "source": "deterministic_conversation_thread_runtime",
 +    }
-+    simulation_state["present_npcs"] = deepcopy(_safe_list(location.get("present_npcs")))
-+    player_state["location_id"] = location_id
-+    player_state["current_location_id"] = location_id
-+    return simulation_state
 +
 +
-+def ensure_location_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
++def maybe_advance_conversation_thread(
++    simulation_state: Dict[str, Any],
++    *,
++    player_input: str,
++    tick: int = 0,
++) -> Dict[str, Any]:
++    """Create/advance one bounded NPC-to-NPC conversation thread.
++
++    Deterministic v1 trigger:
++    - player waits/listens/idles/observes
++    - current location has at least two present NPCs
++
++    This function intentionally mutates only:
++    - conversation_thread_state
++    - world_event_state via bounded npc_conversation event
++    """
++    simulation_state = _safe_dict(simulation_state)
++    state = ensure_conversation_thread_state(simulation_state)
 +    location_id = current_location_id(simulation_state)
-+    return set_current_location(simulation_state, location_id)
++    location = get_location(location_id)
 +
++    if not _is_wait_or_listen_turn(player_input):
++        state["debug"] = {
++            "last_triggered": False,
++            "reason": "not_wait_or_listen_turn",
++            "location_id": location_id,
++        }
++        return {
++            "triggered": False,
++            "reason": "not_wait_or_listen_turn",
++            "conversation_thread_state": get_conversation_thread_state(simulation_state),
++        }
 +
-+def provider_present_at_location(simulation_state: Dict[str, Any], provider_id: str = "", provider_name: str = "") -> bool:
-+    location = get_location(current_location_id(simulation_state))
-+    npcs = _safe_list(location.get("present_npcs"))
-+    provider_id = _safe_str(provider_id)
-+    provider_name = _safe_str(provider_name).lower()
-+    for npc in npcs:
-+        npc = _safe_dict(npc)
-+        if provider_id and _safe_str(npc.get("id")) == provider_id:
-+            return True
-+        if provider_name and _safe_str(npc.get("name")).lower() == provider_name:
-+            return True
-+    return False
++    participants = select_conversation_participants(simulation_state, limit=2)
++    if len(participants) < 2:
++        state["debug"] = {
++            "last_triggered": False,
++            "reason": "not_enough_present_npcs",
++            "location_id": location_id,
++            "present_npc_count": len(participants),
++        }
++        return {
++            "triggered": False,
++            "reason": "not_enough_present_npcs",
++            "conversation_thread_state": get_conversation_thread_state(simulation_state),
++        }
 +
++    topic_payload = _topic_for_location(location_id)
++    thread_id = _thread_id_for(location_id=location_id, participants=participants)
++    existing = _find_thread(state, thread_id)
 +
-+def location_allows_service(simulation_state: Dict[str, Any], service_kind: str) -> bool:
-+    location = get_location(current_location_id(simulation_state))
-+    return _safe_str(service_kind) in set(_safe_list(location.get("services")))
-D3 PATCH — Deterministic travel runtime
-New file: src/app/rpg/session/travel_runtime.py
-diff --git a/src/app/rpg/session/travel_runtime.py b/src/app/rpg/session/travel_runtime.py
++    if existing:
++        thread = existing
++    else:
++        thread = {
++            "thread_id": thread_id,
++            "location_id": location_id,
++            "location_name": _safe_str(location.get("name")),
++            "participants": deepcopy(participants),
++            "topic_id": _safe_str(topic_payload.get("topic_id")),
++            "topic": _safe_str(topic_payload.get("topic")),
++            "status": "active",
++            "beats": [],
++            "world_signals": [],
++            "created_tick": int(tick or 0),
++            "updated_tick": int(tick or 0),
++            "source": "deterministic_conversation_thread_runtime",
++        }
++        threads = _safe_list(state.get("threads"))
++        threads.append(thread)
++        if len(threads) > MAX_CONVERSATION_THREADS:
++            del threads[:-MAX_CONVERSATION_THREADS]
++        state["threads"] = threads
++
++    beats = _safe_list(thread.get("beats"))
++    beat_index = len(beats) + 1
++    if beat_index > MAX_BEATS_PER_THREAD:
++        thread["status"] = "paused"
++        state["debug"] = {
++            "last_triggered": False,
++            "reason": "thread_beat_limit_reached",
++            "thread_id": thread_id,
++            "location_id": location_id,
++        }
++        return {
++            "triggered": False,
++            "reason": "thread_beat_limit_reached",
++            "thread": deepcopy(thread),
++            "conversation_thread_state": get_conversation_thread_state(simulation_state),
++        }
++
++    beat = _make_beat(
++        thread_id=thread_id,
++        participants=participants,
++        location_id=location_id,
++        tick=tick,
++        beat_index=beat_index,
++        topic_payload=topic_payload,
++    )
++    beats.append(beat)
++    thread["beats"] = beats
++    thread["updated_tick"] = int(tick or 0)
++
++    signal = {
++        "signal_id": f"world_signal:conversation:{int(tick or 0)}:{thread_id}:{beat_index}",
++        "kind": _safe_str(topic_payload.get("signal_kind")),
++        "strength": 1,
++        "topic_id": _safe_str(topic_payload.get("topic_id")),
++        "summary": _safe_str(topic_payload.get("summary")),
++        "source_thread_id": thread_id,
++        "source_beat_id": _safe_str(beat.get("beat_id")),
++        "location_id": location_id,
++        "tick": int(tick or 0),
++        "source": "deterministic_conversation_thread_runtime",
++    }
++    signal = _append_world_signal(state, signal)
++    thread_signals = _safe_list(thread.get("world_signals"))
++    thread_signals.append(signal)
++    if len(thread_signals) > MAX_BEATS_PER_THREAD:
++        del thread_signals[:-MAX_BEATS_PER_THREAD]
++    thread["world_signals"] = thread_signals
++
++    active_ids = _safe_list(state.get("active_thread_ids"))
++    if thread_id not in active_ids:
++        active_ids.append(thread_id)
++    state["active_thread_ids"] = active_ids[-MAX_CONVERSATION_THREADS:]
++
++    world_event = add_world_event(
++        simulation_state,
++        {
++            "event_id": f"world:event:npc_conversation:{int(tick or 0)}:{thread_id}:{beat_index}",
++            "kind": "npc_conversation",
++            "title": "NPC conversation",
++            "summary": f"{beat['speaker_name']} speaks with {beat['listener_name']} about {beat['topic']}.",
++            "thread_id": thread_id,
++            "beat_id": beat["beat_id"],
++            "location_id": location_id,
++            "tick": int(tick or 0),
++            "source": "deterministic_conversation_thread_runtime",
++        },
++    )
++
++    state["debug"] = {
++        "last_triggered": True,
++        "reason": "wait_or_listen_turn",
++        "thread_id": thread_id,
++        "beat_id": beat["beat_id"],
++        "participant_ids": [_safe_str(p.get("id")) for p in participants],
++        "location_id": location_id,
++    }
++
++    return {
++        "triggered": True,
++        "reason": "wait_or_listen_turn",
++        "thread": deepcopy(thread),
++        "beat": deepcopy(beat),
++        "world_signal": deepcopy(signal),
++        "world_event": deepcopy(world_event),
++        "conversation_thread_state": get_conversation_thread_state(simulation_state),
++        "source": "deterministic_conversation_thread_runtime",
++    }
+PATCH 3 — Add session-facing conversation runtime wrapper
+New file: src/app/rpg/session/conversation_thread_runtime.py
+diff --git a/src/app/rpg/session/conversation_thread_runtime.py b/src/app/rpg/session/conversation_thread_runtime.py
 new file mode 100644
-index 0000000..6732add
+index 0000000..227327a
 --- /dev/null
-+++ b/src/app/rpg/session/travel_runtime.py
-@@ -0,0 +1,198 @@
++++ b/src/app/rpg/session/conversation_thread_runtime.py
+@@ -0,0 +1,74 @@
 +from __future__ import annotations
 +
-+from copy import deepcopy
 +from typing import Any, Dict
 +
-+from app.rpg.world.location_registry import (
-+    available_exits,
-+    current_location_id,
-+    get_location,
-+    resolve_exit_destination,
-+    set_current_location,
-+)
-+from app.rpg.world.world_event_log import add_world_event
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
++from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+TRAVEL_VERBS = (
-+    "go to ",
-+    "travel to ",
-+    "walk to ",
-+    "head to ",
-+    "move to ",
-+    "return to ",
-+    "follow bran",
-+    "follow the directions",
-+    "follow his directions",
-+    "follow bran's directions",
-+)
++def _safe_str(value: Any) -> str:
++    return "" if value is None else str(value)
 +
 +
-+def detect_travel_destination_text(player_input: str) -> str:
-+    lower = _safe_str(player_input).strip().lower()
-+    if not lower:
-+        return ""
-+
-+    if "market" in lower:
-+        return "market"
-+    if "tavern" in lower or "inn" in lower or "rusty flagon" in lower:
-+        return "tavern"
-+    if "old mill" in lower or "mill road" in lower:
-+        return "old mill road"
-+
-+    for verb in TRAVEL_VERBS:
-+        if verb in lower:
-+            return lower.split(verb, 1)[1].strip(" .")
-+    return ""
-+
-+
-+def resolve_travel_turn(
++def advance_conversation_threads_for_turn(
 +    *,
 +    player_input: str,
 +    simulation_state: Dict[str, Any],
++    resolved_result: Dict[str, Any],
 +    tick: int = 0,
 +) -> Dict[str, Any]:
-+    simulation_state = _safe_dict(simulation_state)
-+    from_location_id = current_location_id(simulation_state)
-+    destination_text = detect_travel_destination_text(player_input)
-+    if not destination_text:
-+        return {"matched": False}
++    """Advance deterministic NPC conversation threads when eligible.
 +
-+    destination_id = resolve_exit_destination(simulation_state, destination_text)
-+    if not destination_id:
++    Conversation threads are a living-world presentation/state layer. They do
++    not alter authoritative player resources, quests, stock, services, or
++    location.
++    """
++    resolved_result = _safe_dict(resolved_result)
++
++    service_result = _safe_dict(resolved_result.get("service_result"))
++    travel_result = _safe_dict(resolved_result.get("travel_result"))
++
++    # Keep v1 conservative: do not trigger during service purchases or travel.
++    if service_result.get("matched"):
 +        return {
-+            "matched": True,
-+            "applied": False,
-+            "status": "travel_destination_unavailable",
-+            "action_type": "travel",
-+            "from_location_id": from_location_id,
-+            "to_location_id": "",
-+            "destination_text": destination_text,
-+            "available_exits": available_exits(simulation_state),
-+            "summary": "No available route matches that destination.",
-+            "source": "deterministic_travel_runtime",
++            "triggered": False,
++            "reason": "service_turn",
++        }
++    if travel_result.get("matched"):
++        return {
++            "triggered": False,
++            "reason": "travel_turn",
 +        }
 +
-+    before = get_location(from_location_id)
-+    after = get_location(destination_id)
-+    set_current_location(simulation_state, destination_id)
-+
-+    world_event = add_world_event(
++    return maybe_advance_conversation_thread(
 +        simulation_state,
-+        {
-+            "event_id": f"world:event:travel:{int(tick or 0)}:{from_location_id}:{destination_id}",
-+            "kind": "travel",
-+            "title": "Location changed",
-+            "summary": f"Travelled from {_safe_str(before.get('name')) or from_location_id} to {_safe_str(after.get('name')) or destination_id}.",
-+            "from_location_id": from_location_id,
-+            "to_location_id": destination_id,
-+            "tick": int(tick or 0),
-+            "source": "deterministic_travel_runtime",
-+        },
++        player_input=player_input,
++        tick=tick,
 +    )
-+
-+    return {
-+        "matched": True,
-+        "applied": True,
-+        "status": "travelled",
-+        "action_type": "travel",
-+        "from_location_id": from_location_id,
-+        "to_location_id": destination_id,
-+        "from_location": before,
-+        "to_location": after,
-+        "destination_text": destination_text,
-+        "available_exits": available_exits(simulation_state),
-+        "present_npcs": deepcopy(after.get("present_npcs") or []),
-+        "world_event": world_event,
-+        "summary": f"You travel to {_safe_str(after.get('name')) or destination_id}.",
-+        "source": "deterministic_travel_runtime",
-+    }
-+
-+
-+def travel_resolved_result(travel_result: Dict[str, Any]) -> Dict[str, Any]:
-+    travel_result = _safe_dict(travel_result)
-+    if not travel_result.get("matched"):
-+        return {}
-+    return {
-+        "action_type": "travel",
-+        "outcome": "success" if travel_result.get("applied") else "failure",
-+        "travel_result": travel_result,
-+        "location_id": travel_result.get("to_location_id") or travel_result.get("from_location_id"),
-+        "summary": travel_result.get("summary"),
-+        "world_event": travel_result.get("world_event") or {},
-+        "source": "deterministic_travel_runtime",
-+    }
-D4 PATCH — Wire travel runtime into turn runtime
+PATCH 4 — Wire conversation runtime into turn runtime
 File: src/app/rpg/session/runtime.py
 
-Add imports:
+Add import:
 
 diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
 --- a/src/app/rpg/session/runtime.py
 +++ b/src/app/rpg/session/runtime.py
 @@
-+from app.rpg.session.travel_runtime import resolve_travel_turn, travel_resolved_result
-+from app.rpg.world.location_registry import ensure_location_state
++from app.rpg.session.conversation_thread_runtime import advance_conversation_threads_for_turn
 
-Find the section after the authoritative/resolved action is produced and before narration context is built. Add this after service resolution, and only when no service matched:
-
-@@
-     resolved_result = _safe_dict(
-         authoritative_result.get("resolved_result")
-         or authoritative_result.get("resolved_action")
-         or authoritative_result
-     )
-+
-+    # Phase 9.0: deterministic travel/scene transition runtime.
-+    # Service turns remain service-first. Travel only claims the turn when no
-+    # deterministic service result has matched.
-+    service_result = _safe_dict(resolved_result.get("service_result"))
-+    if not service_result.get("matched"):
-+        ensure_location_state(simulation_state)
-+        travel_result = resolve_travel_turn(
-+            player_input=player_input,
-+            simulation_state=simulation_state,
-+            tick=current_tick,
-+        )
-+        if travel_result.get("matched"):
-+            travel_resolved = travel_resolved_result(travel_result)
-+            resolved_result.update(travel_resolved)
-+            authoritative_result["travel_result"] = travel_result
-+            authoritative_result["resolved_result"] = resolved_result
-+            authoritative_result["location_state"] = _safe_dict(simulation_state.get("location_state"))
-+            authoritative_result["world_event_state"] = _safe_dict(simulation_state.get("world_event_state"))
-+            authoritative_result["simulation_state"] = simulation_state
-
-If your runtime uses a different variable name than authoritative_result, apply the same logic to the final result dict that gets returned by apply_turn(...).
-
-D5 PATCH — Narrator grounding for travel
-File: src/app/rpg/ai/world_scene_narrator.py
-
-Add helpers near other grounding helpers:
-
-diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
---- a/src/app/rpg/ai/world_scene_narrator.py
-+++ b/src/app/rpg/ai/world_scene_narrator.py
-@@
-+def _travel_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
-+    narration_context = _safe_dict(narration_context)
-+    resolved = _safe_dict(narration_context.get("resolved_result"))
-+    travel = _safe_dict(resolved.get("travel_result"))
-+    if travel:
-+        return travel
-+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
-+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+    return _safe_dict(resolved.get("travel_result"))
-+
-+
-+def _grounded_travel_narration(narration_context: Dict[str, Any]) -> str:
-+    travel = _travel_result_from_context(narration_context)
-+    if not travel.get("matched"):
-+        return ""
-+    if not travel.get("applied"):
-+        exits = _safe_dict(travel.get("available_exits"))
-+        if exits:
-+            return "No clear route matches that destination from here."
-+        return "There is no available route from here."
-+    to_location = _safe_dict(travel.get("to_location"))
-+    name = _safe_str(to_location.get("name") or travel.get("to_location_id"))
-+    return f"You arrive at {name}."
-+
-+
-+def _grounded_travel_action(narration_context: Dict[str, Any]) -> str:
-+    travel = _travel_result_from_context(narration_context)
-+    if not travel.get("matched"):
-+        return ""
-+    if travel.get("applied"):
-+        to_location = _safe_dict(travel.get("to_location"))
-+        name = _safe_str(to_location.get("name") or travel.get("to_location_id"))
-+        return f"You travel to {name}."
-+    return "No available route matches that destination."
-
-In _sanitize_narration_payload(...), near the end before return:
+Find the area after service/travel/social living-world resolution and before final response assembly. Add:
 
 @@
-     payload["action"] = _final_grounded_service_action_text(
-         _safe_str(payload.get("action")),
-         narration_context,
-     )
+     authoritative_result["location_state"] = _safe_dict(simulation_state.get("location_state"))
+     authoritative_result["current_location_id"] = resolved_result["current_location_id"]
+     authoritative_result["world_event_state"] = _safe_dict(simulation_state.get("world_event_state"))
+     authoritative_result["simulation_state"] = simulation_state
 +
-+    travel_narration = _grounded_travel_narration(narration_context)
-+    travel_action = _grounded_travel_action(narration_context)
-+    if travel_narration:
-+        payload["narration"] = travel_narration
-+    if travel_action:
-+        payload["action"] = travel_action
-
-This keeps travel deterministic and prevents the LLM from inventing arrival facts.
-
-D6 PATCH — Service availability respects current location
-File: src/app/rpg/economy/service_resolver.py
-
-Add import:
-
-diff --git a/src/app/rpg/economy/service_resolver.py b/src/app/rpg/economy/service_resolver.py
---- a/src/app/rpg/economy/service_resolver.py
-+++ b/src/app/rpg/economy/service_resolver.py
-@@
-+from app.rpg.world.location_registry import (
-+    current_location_id,
-+    location_allows_service,
-+    provider_present_at_location,
-+)
-
-Add helpers near resolver helper functions:
-
-@@
-+def _offer_location_allowed(offer: Dict[str, Any], simulation_state: Dict[str, Any]) -> bool:
-+    availability_rules = _safe_dict(offer.get("availability_rules"))
-+    required_location = _safe_str(
-+        availability_rules.get("requires_location")
-+        or offer.get("location_id")
++    conversation_result = advance_conversation_threads_for_turn(
++        player_input=player_input,
++        simulation_state=simulation_state,
++        resolved_result=resolved_result,
++        tick=current_tick,
 +    )
-+    if required_location and current_location_id(simulation_state) != required_location:
-+        return False
-+
-+    service_kind = _safe_str(offer.get("service_kind"))
-+    if service_kind and not location_allows_service(simulation_state, service_kind):
-+        return False
-+
-+    provider_id = _safe_str(offer.get("provider_id"))
-+    provider_name = _safe_str(offer.get("provider_name"))
-+    if provider_id or provider_name:
-+        return provider_present_at_location(
-+            simulation_state,
-+            provider_id=provider_id,
-+            provider_name=provider_name,
++    if conversation_result:
++        resolved_result["conversation_result"] = conversation_result
++        resolved_result["conversation_thread_state"] = _safe_dict(
++            conversation_result.get("conversation_thread_state")
++            or simulation_state.get("conversation_thread_state")
 +        )
-+
-+    return True
-+
-+
-+def _filter_offers_for_current_location(
-+    offers: List[Dict[str, Any]],
-+    simulation_state: Dict[str, Any],
-+) -> List[Dict[str, Any]]:
-+    return [
-+        offer
-+        for offer in offers
-+        if _offer_location_allowed(_safe_dict(offer), simulation_state)
-+    ]
++        resolved_result["world_event_state"] = _safe_dict(simulation_state.get("world_event_state"))
++        authoritative_result["conversation_result"] = conversation_result
++        authoritative_result["conversation_thread_state"] = _safe_dict(
++            simulation_state.get("conversation_thread_state")
++        )
++        authoritative_result["world_event_state"] = _safe_dict(simulation_state.get("world_event_state"))
++        authoritative_result["simulation_state"] = simulation_state
 
-Then find where offers are collected before presenting or matching. Apply the filter:
+If your runtime has a different final result variable, attach these same keys to the final result payload:
 
-@@
--    offers = _collect_service_offers(...)
-+    offers = _collect_service_offers(...)
-+    offers = _filter_offers_for_current_location(offers, simulation_state)
-
-If the function is named differently, apply the filter immediately after the candidate offers list is built and before selecting/matching an offer.
-
-Also include current location in service result debug:
-
-@@
-     result = {
-         ...
-+        "current_location_id": current_location_id(simulation_state),
-File: src/app/rpg/economy/service_registry.py
-
-Ensure Elara offers require market and Bran offers require tavern.
-
-Patch offer definitions:
-
-@@
-         "offer_id": "elara_torch",
-         "service_kind": "shop_goods",
-         "label": "Torch",
-+        "provider_id": "npc:Elara",
-+        "provider_name": "Elara",
-+        "availability_rules": {
-+            "requires_location": "loc_market"
-+        },
-@@
-         "offer_id": "elara_rope",
-         "service_kind": "shop_goods",
-         "label": "Rope",
-+        "provider_id": "npc:Elara",
-+        "provider_name": "Elara",
-+        "availability_rules": {
-+            "requires_location": "loc_market"
-+        },
-@@
-         "offer_id": "elara_repair_basic",
-         "service_kind": "repair",
-+        "provider_id": "npc:Elara",
-+        "provider_name": "Elara",
-+        "availability_rules": {
-+            "requires_location": "loc_market"
-+        },
-@@
-         "offer_id": "bran_common_room_cot",
-         "service_kind": "lodging",
-+        "provider_id": "npc:Bran",
-+        "provider_name": "Bran",
-+        "availability_rules": {
-+            "requires_location": "loc_tavern"
-+        },
-@@
-         "offer_id": "bran_meal",
-         "service_kind": "meal",
-+        "provider_id": "npc:Bran",
-+        "provider_name": "Bran",
-+        "availability_rules": {
-+            "requires_location": "loc_tavern"
-+        },
-@@
-         "offer_id": "bran_paid_rumor",
-         "service_kind": "paid_information",
-+        "provider_id": "npc:Bran",
-+        "provider_name": "Bran",
-+        "availability_rules": {
-+            "requires_location": "loc_tavern"
-+        },
-
-Use your actual offer IDs if they differ. Preserve existing fields.
-
-D7 PATCH — Response/debug visibility
+conversation_result
+conversation_thread_state
+world_event_state
+simulation_state
+PATCH 5 — Response builder debug propagation
 File: src/app/rpg/session/response_builder.py
 
-In _attach_living_world_debug_fields(...), add location/travel fields:
+In _attach_living_world_debug_fields(...), add:
 
 diff --git a/src/app/rpg/session/response_builder.py b/src/app/rpg/session/response_builder.py
 --- a/src/app/rpg/session/response_builder.py
 +++ b/src/app/rpg/session/response_builder.py
 @@
-     result_payload["world_event_state"] = _first_dict(
-         result_payload.get("world_event_state"),
-         resolved_result.get("world_event_state"),
-         service_application.get("world_event_state"),
+     result_payload["travel_result"] = _first_dict(
+         result_payload.get("travel_result"),
+         resolved_result.get("travel_result"),
      )
-+    result_payload["location_state"] = _first_dict(
-+        result_payload.get("location_state"),
-+        resolved_result.get("location_state"),
++    result_payload["conversation_result"] = _first_dict(
++        result_payload.get("conversation_result"),
++        resolved_result.get("conversation_result"),
 +    )
-+    result_payload["travel_result"] = _first_dict(
-+        result_payload.get("travel_result"),
-+        resolved_result.get("travel_result"),
++    result_payload["conversation_thread_state"] = _first_dict(
++        result_payload.get("conversation_thread_state"),
++        resolved_result.get("conversation_thread_state"),
 +    )
+PATCH 6 — Narrator prompt/debug grounding for conversation beats
+File: src/app/rpg/session/narration_runtime.py
 
-If resolved_result does not carry location_state, also add fallback from the session/simulation state where available in that function.
+When building narration_context, add:
 
-D8 PATCH — Manual transcript location/travel output
-File: src/tests/rpg/manual_llm_transcript.py
+diff --git a/src/app/rpg/session/narration_runtime.py b/src/app/rpg/session/narration_runtime.py
+--- a/src/app/rpg/session/narration_runtime.py
++++ b/src/app/rpg/session/narration_runtime.py
+@@
+         "travel_result": _safe_dict(resolved_result.get("travel_result")),
++        "conversation_result": _safe_dict(resolved_result.get("conversation_result")),
++        "conversation_thread_state": _safe_dict(resolved_result.get("conversation_thread_state")),
+         "runtime_state": runtime_state,
+         "simulation_state": simulation_state,
+     }
 
-Add extractors:
+If the context dict does not currently include travel_result, just add the two conversation fields near service_result, location_state, or world_event_state.
+
+Where narration_debug is assembled, add:
 
 @@
- def _extract_world_event_state(result: Dict[str, Any]) -> Dict[str, Any]:
+         "npc_memory_recall_debug": narration_context.get("npc_memory_recall_debug") or {},
++        "conversation_result": narration_context.get("conversation_result") or {},
++        "conversation_thread_state": narration_context.get("conversation_thread_state") or {},
+File: src/app/rpg/ai/world_scene_narrator.py
+
+Add helpers near grounding helpers:
+
+diff --git a/src/app/rpg/ai/world_scene_narrator.py b/src/app/rpg/ai/world_scene_narrator.py
+--- a/src/app/rpg/ai/world_scene_narrator.py
++++ b/src/app/rpg/ai/world_scene_narrator.py
 @@
-     simulation_state = _extract_simulation_state(result)
-     return _safe_dict(simulation_state.get("world_event_state"))
-+
-+
-+def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
-+    result_sub = _safe_dict(_safe_dict(result).get("result"))
-+    direct = _safe_dict(result_sub.get("location_state"))
++def _conversation_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
++    narration_context = _safe_dict(narration_context)
++    direct = _safe_dict(narration_context.get("conversation_result"))
 +    if direct:
 +        return direct
-+    simulation_state = _extract_simulation_state(result)
-+    return _safe_dict(simulation_state.get("location_state"))
++    resolved = _safe_dict(narration_context.get("resolved_result"))
++    return _safe_dict(resolved.get("conversation_result"))
 +
 +
-+def _extract_current_location_id(result: Dict[str, Any]) -> str:
-+    location_state = _extract_location_state(result)
-+    if _safe_str(location_state.get("current_location_id")):
-+        return _safe_str(location_state.get("current_location_id"))
-+    simulation_state = _extract_simulation_state(result)
-+    player_state = _safe_dict(simulation_state.get("player_state"))
-+    return (
-+        _safe_str(player_state.get("location_id"))
-+        or _safe_str(simulation_state.get("location_id"))
-+        or _safe_str(simulation_state.get("current_location_id"))
-+    )
++def _format_conversation_beat_for_prompt(narration_context: Dict[str, Any]) -> str:
++    conversation = _conversation_result_from_context(narration_context)
++    if not conversation.get("triggered"):
++        return "None."
++    beat = _safe_dict(conversation.get("beat"))
++    speaker = _safe_str(beat.get("speaker_name"))
++    listener = _safe_str(beat.get("listener_name"))
++    line = _safe_str(beat.get("line"))
++    topic = _safe_str(beat.get("topic"))
++    if not line:
++        return "None."
++    return f'{speaker} speaks to {listener} about {topic}: "{line}"'
 +
 +
-+def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
++def _apply_grounded_conversation_beat(
++    payload: Dict[str, Any],
++    narration_context: Dict[str, Any],
++) -> None:
++    conversation = _conversation_result_from_context(narration_context)
++    if not conversation.get("triggered"):
++        return
++    beat = _safe_dict(conversation.get("beat"))
++    speaker = _safe_str(beat.get("speaker_name"))
++    line = _safe_str(beat.get("line"))
++    if not speaker or not line:
++        return
++
++    # Preserve the normal narration/action, but force the NPC line to the
++    # deterministic conversation beat. The LLM can frame the scene but cannot
++    # invent the actual NPC-to-NPC line.
++    payload["npc"] = {
++        "speaker": speaker,
++        "line": line,
++    }
+
+Add to prompt text near memory/world context:
+
+@@
+ Relevant general NPC memories:
+ {_format_recalled_npc_memories_for_prompt(narration_context)}
++
++Deterministic NPC-to-NPC conversation beat:
++{_format_conversation_beat_for_prompt(narration_context)}
+ 
+ Memory rules:
+
+Add rule:
+
+@@
+ - Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.
+ - If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.
++- If a deterministic NPC-to-NPC conversation beat is provided, use only that speaker and line for the NPC dialogue. Do not invent additional conversation consequences.
+
+In _sanitize_narration_payload(...), near the end before return:
+
+@@
+     payload["action"] = _naturalize_service_debug_language(
+         _safe_str(payload.get("action"))
+     )
++    _apply_grounded_conversation_beat(payload, narration_context)
+ 
+     return payload
+PATCH 7 — Manual transcript extraction/printing
+File: src/tests/rpg/manual_llm_transcript.py
+
+Add extractors near location/travel extractors:
+
+diff --git a/src/tests/rpg/manual_llm_transcript.py b/src/tests/rpg/manual_llm_transcript.py
+--- a/src/tests/rpg/manual_llm_transcript.py
++++ b/src/tests/rpg/manual_llm_transcript.py
+@@
+ def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
+@@
+     resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+     return _safe_dict(resolved.get("travel_result"))
++
++
++def _extract_conversation_result(result: Dict[str, Any]) -> Dict[str, Any]:
 +    result_sub = _safe_dict(_safe_dict(result).get("result"))
-+    direct = _safe_dict(result_sub.get("travel_result"))
++    direct = _safe_dict(result_sub.get("conversation_result"))
++    if direct:
++        return direct
++    narration_debug = _safe_dict(result_sub.get("narration_debug"))
++    direct = _safe_dict(narration_debug.get("conversation_result"))
 +    if direct:
 +        return direct
 +    turn_contract = _extract_turn_contract(result)
 +    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+    return _safe_dict(resolved.get("travel_result"))
++    return _safe_dict(resolved.get("conversation_result"))
++
++
++def _extract_conversation_thread_state(result: Dict[str, Any]) -> Dict[str, Any]:
++    result_sub = _safe_dict(_safe_dict(result).get("result"))
++    direct = _safe_dict(result_sub.get("conversation_thread_state"))
++    if direct:
++        return direct
++    narration_debug = _safe_dict(result_sub.get("narration_debug"))
++    direct = _safe_dict(narration_debug.get("conversation_thread_state"))
++    if direct:
++        return direct
++    simulation_state = _extract_simulation_state(result)
++    return _safe_dict(simulation_state.get("conversation_thread_state"))
 
 In _compact_turn_summary(...), add:
 
 @@
-         "world_event_state": _extract_world_event_state(result),
-         "world_event_count": len(_safe_list(_extract_world_event_state(result).get("events"))),
-+        "current_location_id": _extract_current_location_id(result),
-+        "location_state": _extract_location_state(result),
-+        "travel_result": _extract_travel_result(result),
+         "location_state": _extract_location_state(result),
+         "travel_result": _extract_travel_result(result),
++        "conversation_result": _extract_conversation_result(result),
++        "conversation_thread_state": _extract_conversation_thread_state(result),
++        "conversation_thread_count": len(_safe_list(_extract_conversation_thread_state(result).get("threads"))),
++        "conversation_world_signal_count": len(_safe_list(_extract_conversation_thread_state(result).get("world_signals"))),
          "regression_warnings": _manual_regression_warnings(
 
-In _print_turn(...), after WORLD EVENT STATE:
+In _print_turn(...), after TRAVEL RESULT:
 
 @@
-     _emit("WORLD EVENT STATE:", channel=channel)
-     _emit(_compact_json(_extract_world_event_state(result)), channel=channel)
+     _emit("TRAVEL RESULT:", channel=channel)
+     _emit(_compact_json(_extract_travel_result(result)), channel=channel)
      _emit("", channel=channel)
-+    _emit("LOCATION STATE:", channel=channel)
-+    _emit(_compact_json(_extract_location_state(result)), channel=channel)
++    _emit("CONVERSATION RESULT:", channel=channel)
++    _emit(_compact_json(_extract_conversation_result(result)), channel=channel)
 +    _emit("", channel=channel)
-+    _emit("TRAVEL RESULT:", channel=channel)
-+    _emit(_compact_json(_extract_travel_result(result)), channel=channel)
++    _emit("CONVERSATION THREAD STATE:", channel=channel)
++    _emit(_compact_json(_extract_conversation_thread_state(result)), channel=channel)
 +    _emit("", channel=channel)
-D9 PATCH — Update manual scenarios to include travel
+Add regression warnings
+
+In _manual_regression_warnings(...), after travel/location warnings:
+
+@@
+     if provider_name == "Bran" and service_kind in {"lodging", "meal", "paid_information"}:
+         if current_location_id and current_location_id != "loc_tavern":
+             warnings.append("bran_service_resolved_outside_tavern")
++
++    conversation = _extract_conversation_result(result)
++    if conversation.get("triggered"):
++        thread = _safe_dict(conversation.get("thread"))
++        participants = _safe_list(thread.get("participants"))
++        participant_ids = {
++            _safe_str(_safe_dict(participant).get("id"))
++            for participant in participants
++        }
++        location_state = _extract_location_state(result)
++        current_location = _safe_dict(location_state.get("current_location"))
++        present_ids = {
++            _safe_str(_safe_dict(npc).get("id"))
++            for npc in _safe_list(current_location.get("present_npcs"))
++        }
++        if len(participants) < 2:
++            warnings.append("conversation_triggered_with_less_than_two_participants")
++        if present_ids and not participant_ids.issubset(present_ids):
++            warnings.append("conversation_participant_not_present")
++        # Guard against freeform mutation by conversation runtime.
++        if _safe_dict(conversation.get("journal_entry")):
++            warnings.append("conversation_created_journal_entry")
++        if _safe_dict(conversation.get("transaction_record")):
++            warnings.append("conversation_created_transaction_record")
++        if _safe_dict(conversation.get("inventory_delta")):
++            warnings.append("conversation_created_inventory_delta")
+PATCH 8 — Add manual scenario for NPC conversation
 File: src/tests/rpg/manual_llm_transcript.py
 
-Update MANUAL_TEST_TURNS.
+Add a scenario:
 
 @@
- MANUAL_TEST_TURNS = [
-     "I ask Bran for a room to rent",
-     "I ask Bran for food",
-     "I ask Bran if he has heard any rumors",
--    "I ask Elara what she sells",
--    "I buy a torch from Elara",
--    "I try to buy a sword I cannot afford",
--    "I ask Elara to repair my gear",
-     "I ask Bran for directions to the market",
-+    "I follow Bran's directions to the market",
-+    "I ask Elara what she sells",
-+    "I buy a torch from Elara",
-+    "I ask Elara to repair my gear",
- ]
-
-Update service scenarios:
-
+ SERVICE_SCENARIOS = {
 @@
-     "shop_success": {
+     "paid_info": {
          "currency": {"gold": 0, "silver": 2, "copper": 0},
          "turns": [
-+            "I follow Bran's directions to the market",
-             "I ask Elara what she sells",
-             "I buy a torch from Elara",
+             "I ask Bran if he has heard any rumors",
+             "I buy the local rumor from Bran",
          ],
      },
-     "blocked_purchase": {
-         "currency": {"gold": 0, "silver": 1, "copper": 0},
-         "turns": [
-+            "I follow Bran's directions to the market",
-             "I ask Elara what she sells",
-             "I buy rope from Elara",
-         ],
-     },
++    "ambient_conversation": {
++        "currency": {"gold": 0, "silver": 0, "copper": 0},
++        "turns": [
++            "I wait and listen to the room",
++            "I wait and listen a little longer",
++        ],
++    },
+ }
 
-Adjust scenario-specific regression warning turn indexes from D1:
+Add scenario warning expectations in _manual_regression_warnings(...):
 
 @@
--    if scenario_name == "shop_success" and turn_index == 3:
-+    if scenario_name == "shop_success" and turn_index == 3:
-@@
--    if scenario_name == "blocked_purchase" and turn_index == 3:
-+    if scenario_name == "blocked_purchase" and turn_index == 3:
+     if scenario_name == "paid_info" and turn_index == 2:
+         if not _safe_dict(service_debug.get("rumor_added")).get("rumor_id"):
+             warnings.append("paid_info_missing_rumor_added")
+         if not _safe_dict(service_debug.get("journal_entry")).get("entry_id"):
+             warnings.append("paid_info_missing_journal_entry")
++    if scenario_name == "ambient_conversation":
++        conversation = _extract_conversation_result(result)
++        if not conversation.get("triggered"):
++            warnings.append("ambient_conversation_expected_thread_trigger")
++        state = _extract_conversation_thread_state(result)
++        if not _safe_list(state.get("world_signals")):
++            warnings.append("ambient_conversation_expected_world_signal")
+PATCH 9 — UI inspector visibility
+File: src/static/rpg-living-world-inspector.js
 
-Those remain 3 because travel is now turn 1, inquiry turn 2, purchase turn 3.
+Add conversation fields in render(payload):
 
-D10 PATCH — Lightweight RPG inspector/debug UI
-New file: src/static/rpg-living-world-inspector.js
 diff --git a/src/static/rpg-living-world-inspector.js b/src/static/rpg-living-world-inspector.js
-new file mode 100644
-index 0000000..a0c28bb
---- /dev/null
+--- a/src/static/rpg-living-world-inspector.js
 +++ b/src/static/rpg-living-world-inspector.js
-@@ -0,0 +1,196 @@
-+(function () {
-+  "use strict";
+@@
+     const journalEntries = safeArr(safeObj(result.journal_state).entries);
+     const worldEvents = safeArr(safeObj(result.world_event_state).events);
++    const conversationState = safeObj(result.conversation_thread_state);
++    const conversationThreads = safeArr(conversationState.threads);
++    const worldSignals = safeArr(conversationState.world_signals);
+     const serviceOfferState = safeObj(result.service_offer_state);
+@@
+       ${renderList("World Events", worldEvents.slice(-8), (event) => `
+         <div class="rpg-debug-row">
+           <strong>${escapeHtml(event.title || event.kind || "event")}</strong>
+           <span>${escapeHtml(event.summary || "")}</span>
+           <code>${escapeHtml(event.kind || "")}</code>
+         </div>
+       `)}
 +
-+  function safeObj(value) {
-+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-+  }
-+
-+  function safeArr(value) {
-+    return Array.isArray(value) ? value : [];
-+  }
-+
-+  function escapeHtml(value) {
-+    return String(value ?? "")
-+      .replace(/&/g, "&amp;")
-+      .replace(/</g, "&lt;")
-+      .replace(/>/g, "&gt;")
-+      .replace(/"/g, "&quot;");
-+  }
-+
-+  function resultRoot(payload) {
-+    const root = safeObj(payload);
-+    return safeObj(root.result || root);
-+  }
-+
-+  function findOrCreatePanel() {
-+    const host =
-+      document.getElementById("rpgInspectorPanel") ||
-+      document.getElementById("rpg-inspector-panel") ||
-+      document.getElementById("rpg-top-panels") ||
-+      document.querySelector("[data-rpg-inspector]") ||
-+      document.body;
-+
-+    let panel = document.getElementById("rpgLivingWorldDebugPanel");
-+    if (!panel) {
-+      panel = document.createElement("section");
-+      panel.id = "rpgLivingWorldDebugPanel";
-+      panel.className = "rpg-living-world-debug-panel";
-+      host.appendChild(panel);
-+    }
-+    return panel;
-+  }
-+
-+  function renderList(title, rows, renderRow) {
-+    rows = safeArr(rows);
-+    if (!rows.length) {
-+      return `<details class="rpg-debug-section"><summary>${escapeHtml(title)} (0)</summary><div class="rpg-debug-empty">None</div></details>`;
-+    }
-+    return `
-+      <details class="rpg-debug-section" open>
-+        <summary>${escapeHtml(title)} (${rows.length})</summary>
-+        <div class="rpg-debug-list">
-+          ${rows.map(renderRow).join("")}
-+        </div>
-+      </details>
-+    `;
-+  }
-+
-+  function renderMap(title, obj, renderRow) {
-+    obj = safeObj(obj);
-+    const entries = Object.entries(obj);
-+    if (!entries.length) {
-+      return `<details class="rpg-debug-section"><summary>${escapeHtml(title)} (0)</summary><div class="rpg-debug-empty">None</div></details>`;
-+    }
-+    return `
-+      <details class="rpg-debug-section">
-+        <summary>${escapeHtml(title)} (${entries.length})</summary>
-+        <div class="rpg-debug-list">
-+          ${entries.map(([key, value]) => renderRow(key, safeObj(value))).join("")}
-+        </div>
-+      </details>
-+    `;
-+  }
-+
-+  function render(payload) {
-+    const result = resultRoot(payload);
-+    const locationState = safeObj(result.location_state);
-+    const currentLocation = safeObj(locationState.current_location);
-+    const currentLocationId =
-+      locationState.current_location_id ||
-+      result.current_location_id ||
-+      safeObj(result.travel_result).to_location_id ||
-+      "";
-+
-+    const txHistory = safeArr(result.transaction_history || safeObj(result.living_world_debug).transaction_history);
-+    const memoryState = safeObj(result.memory_state);
-+    const serviceMemories = safeArr(memoryState.service_memories);
-+    const socialMemories = safeArr(memoryState.social_memories);
-+    const relationshipState = safeObj(result.relationship_state);
-+    const emotionState = safeObj(result.npc_emotion_state);
-+    const journalEntries = safeArr(safeObj(result.journal_state).entries);
-+    const worldEvents = safeArr(safeObj(result.world_event_state).events);
-+    const serviceOfferState = safeObj(result.service_offer_state);
-+    const offers = safeObj(serviceOfferState.offers);
-+
-+    const panel = findOrCreatePanel();
-+    panel.innerHTML = `
-+      <div class="rpg-debug-header">
-+        <strong>Living World Debug</strong>
-+        <span>${escapeHtml(currentLocation.name || currentLocationId || "unknown location")}</span>
-+      </div>
-+
-+      ${renderMap("Service Stock / Offers", offers, (key, offer) => `
-+        <div class="rpg-debug-row">
-+          <strong>${escapeHtml(key)}</strong>
-+          <span>${escapeHtml(offer.label || offer.offer_id || "")}</span>
-+          <code>stock=${escapeHtml(offer.stock_remaining ?? offer.stock ?? "")}</code>
-+        </div>
-+      `)}
-+
-+      ${renderList("Transactions", txHistory, (tx) => `
-+        <div class="rpg-debug-row">
-+          <strong>${escapeHtml(tx.transaction_id || tx.id || "transaction")}</strong>
-+          <span>${escapeHtml(tx.status || "")}</span>
-+          <code>${escapeHtml(tx.offer_id || tx.service_kind || "")}</code>
-+        </div>
-+      `)}
-+
-+      ${renderList("Service Memories", serviceMemories, (memory) => `
-+        <div class="rpg-debug-row">
-+          <strong>${escapeHtml(memory.owner_name || memory.owner_id || "NPC")}</strong>
-+          <span>${escapeHtml(memory.summary || "")}</span>
-+        </div>
-+      `)}
-+
-+      ${renderList("Social Memories", socialMemories, (memory) => `
-+        <div class="rpg-debug-row">
-+          <strong>${escapeHtml(memory.owner_name || memory.owner_id || "NPC")}</strong>
-+          <span>${escapeHtml(memory.summary || "")}</span>
-+        </div>
-+      `)}
-+
-+      ${renderMap("Relationships", relationshipState, (key, rel) => {
-+        const axes = safeObj(rel.axes);
++      ${renderList("NPC Conversation Threads", conversationThreads.slice(-6), (thread) => {
++        const beats = safeArr(thread.beats);
++        const latest = safeObj(beats[beats.length - 1]);
 +        return `
 +          <div class="rpg-debug-row">
-+            <strong>${escapeHtml(key)}</strong>
-+            <code>trust=${escapeHtml(axes.trust ?? 0)} familiarity=${escapeHtml(axes.familiarity ?? 0)} annoyance=${escapeHtml(axes.annoyance ?? 0)}</code>
++            <strong>${escapeHtml(thread.topic || thread.thread_id || "conversation")}</strong>
++            <span>${escapeHtml(latest.speaker_name || "")}: ${escapeHtml(latest.line || "")}</span>
++            <code>${escapeHtml(thread.status || "active")}</code>
 +          </div>
 +        `;
 +      })}
 +
-+      ${renderMap("NPC Emotions", emotionState, (key, emo) => `
++      ${renderList("World Signals", worldSignals.slice(-8), (signal) => `
 +        <div class="rpg-debug-row">
-+          <strong>${escapeHtml(key)}</strong>
-+          <code>${escapeHtml(emo.dominant_emotion || "neutral")} v=${escapeHtml(emo.valence ?? 0)} a=${escapeHtml(emo.arousal ?? 0)}</code>
++          <strong>${escapeHtml(signal.kind || "signal")}</strong>
++          <span>${escapeHtml(signal.summary || "")}</span>
++          <code>${escapeHtml(signal.topic_id || "")}</code>
 +        </div>
 +      `)}
-+
-+      ${renderList("Journal", journalEntries, (entry) => `
-+        <div class="rpg-debug-row">
-+          <strong>${escapeHtml(entry.title || entry.entry_id || "journal")}</strong>
-+          <span>${escapeHtml(entry.summary || "")}</span>
-+          <code>${escapeHtml(entry.status || "")}</code>
-+        </div>
-+      `)}
-+
-+      ${renderList("World Events", worldEvents.slice(-8), (event) => `
-+        <div class="rpg-debug-row">
-+          <strong>${escapeHtml(event.title || event.kind || "event")}</strong>
-+          <span>${escapeHtml(event.summary || "")}</span>
-+          <code>${escapeHtml(event.kind || "")}</code>
-+        </div>
-+      `)}
-+    `;
-+  }
-+
-+  window.RpgLivingWorldInspector = { render };
-+})();
-File: src/static/rpg.css
-
-Append:
-
-diff --git a/src/static/rpg.css b/src/static/rpg.css
---- a/src/static/rpg.css
-+++ b/src/static/rpg.css
-@@
-+.rpg-living-world-debug-panel {
-+  border: 1px solid rgba(255, 255, 255, 0.12);
-+  border-radius: 10px;
-+  padding: 10px;
-+  margin: 10px 0;
-+  background: rgba(0, 0, 0, 0.22);
-+  font-size: 12px;
-+}
-+
-+.rpg-debug-header {
-+  display: flex;
-+  justify-content: space-between;
-+  gap: 8px;
-+  margin-bottom: 8px;
-+}
-+
-+.rpg-debug-section {
-+  margin: 6px 0;
-+}
-+
-+.rpg-debug-list {
-+  display: grid;
-+  gap: 4px;
-+  margin-top: 4px;
-+}
-+
-+.rpg-debug-row {
-+  display: grid;
-+  grid-template-columns: minmax(90px, 160px) 1fr auto;
-+  gap: 6px;
-+  align-items: baseline;
-+  padding: 4px 6px;
-+  border-radius: 6px;
-+  background: rgba(255, 255, 255, 0.05);
-+}
-+
-+.rpg-debug-row code {
-+  opacity: 0.85;
-+}
-+
-+.rpg-debug-empty {
-+  opacity: 0.7;
-+  padding: 4px 0;
-+}
-File: src/static/index.html
-
-Add script after RPG script includes:
-
-diff --git a/src/static/index.html b/src/static/index.html
---- a/src/static/index.html
-+++ b/src/static/index.html
-@@
- <script src="/static/rpg.js"></script>
-+<script src="/static/rpg-living-world-inspector.js"></script>
-
-If your HTML uses a different RPG script block, load rpg-living-world-inspector.js after the RPG UI code.
-
-File: src/static/rpg.js
-
-After handling an RPG turn response, add:
-
-diff --git a/src/static/rpg.js b/src/static/rpg.js
---- a/src/static/rpg.js
-+++ b/src/static/rpg.js
-@@
-         // existing response handling / render code
-+        if (window.RpgLivingWorldInspector && typeof window.RpgLivingWorldInspector.render === "function") {
-+          window.RpgLivingWorldInspector.render(data);
-+        }
-
-Apply this immediately after the code that receives the JSON response from /api/rpg/.../turn or equivalent and updates the narrative feed.
-
-D11 TESTS
-New file: src/app/rpg/tests/test_location_registry.py
-diff --git a/src/app/rpg/tests/test_location_registry.py b/src/app/rpg/tests/test_location_registry.py
+     `;
+   }
+PATCH 10 — Tests
+New file: src/app/rpg/tests/test_conversation_threads.py
+diff --git a/src/app/rpg/tests/test_conversation_threads.py b/src/app/rpg/tests/test_conversation_threads.py
 new file mode 100644
-index 0000000..5949dd1
+index 0000000..0ff61c7
 --- /dev/null
-+++ b/src/app/rpg/tests/test_location_registry.py
-@@ -0,0 +1,42 @@
-+from app.rpg.world.location_registry import (
-+    current_location_id,
-+    find_location_by_name,
-+    provider_present_at_location,
-+    resolve_exit_destination,
-+    set_current_location,
++++ b/src/app/rpg/tests/test_conversation_threads.py
+@@ -0,0 +1,112 @@
++from app.rpg.world.conversation_threads import (
++    get_conversation_thread_state,
++    maybe_advance_conversation_thread,
++    select_conversation_participants,
 +)
-+
-+
-+def test_find_location_by_alias():
-+    assert find_location_by_name("market")["location_id"] == "loc_market"
-+    assert find_location_by_name("the rusty flagon")["location_id"] == "loc_tavern"
-+
-+
-+def test_resolve_exit_destination_from_tavern_to_market():
-+    state = {"location_id": "loc_tavern", "player_state": {"location_id": "loc_tavern"}}
-+    assert resolve_exit_destination(state, "market") == "loc_market"
-+
-+
-+def test_set_current_location_updates_present_npcs():
-+    state = {}
-+    set_current_location(state, "loc_market")
-+    assert current_location_id(state) == "loc_market"
-+    assert state["present_npcs"][0]["name"] == "Elara"
-+    assert provider_present_at_location(state, provider_name="Elara")
-+    assert not provider_present_at_location(state, provider_name="Bran")
-New file: src/app/rpg/tests/test_travel_runtime.py
-diff --git a/src/app/rpg/tests/test_travel_runtime.py b/src/app/rpg/tests/test_travel_runtime.py
-new file mode 100644
-index 0000000..437eb56
---- /dev/null
-+++ b/src/app/rpg/tests/test_travel_runtime.py
-@@ -0,0 +1,34 @@
-+from app.rpg.session.travel_runtime import resolve_travel_turn, travel_resolved_result
-+
-+
-+def test_travel_to_market_mutates_location():
-+    state = {
-+        "location_id": "loc_tavern",
-+        "player_state": {"location_id": "loc_tavern"},
-+    }
-+
-+    result = resolve_travel_turn(
-+        player_input="I follow Bran's directions to the market",
-+        simulation_state=state,
-+        tick=7,
-+    )
-+
-+    assert result["matched"] is True
-+    assert result["applied"] is True
-+    assert result["from_location_id"] == "loc_tavern"
-+    assert result["to_location_id"] == "loc_market"
-+    assert state["location_id"] == "loc_market"
-+    assert state["present_npcs"][0]["name"] == "Elara"
-+    assert state["world_event_state"]["events"][0]["kind"] == "travel"
-+
-+
-+def test_unavailable_travel_destination_does_not_mutate_location():
-+    state = {
-+        "location_id": "loc_tavern",
-+        "player_state": {"location_id": "loc_tavern"},
-+    }
-+    result = resolve_travel_turn(player_input="I go to the moon", simulation_state=state, tick=1)
-+
-+    assert result["matched"] is False or result["applied"] is False
-+    assert state["location_id"] == "loc_tavern"
-New file: src/app/rpg/tests/test_service_location_availability.py
-diff --git a/src/app/rpg/tests/test_service_location_availability.py b/src/app/rpg/tests/test_service_location_availability.py
-new file mode 100644
-index 0000000..93fca21
---- /dev/null
-+++ b/src/app/rpg/tests/test_service_location_availability.py
-@@ -0,0 +1,66 @@
-+from app.rpg.economy.service_resolver import resolve_service_turn
 +from app.rpg.world.location_registry import set_current_location
 +
 +
-+def _base_state(location_id: str):
++def test_select_conversation_participants_uses_present_npcs_only():
++    state = {}
++    set_current_location(state, "loc_tavern")
++
++    participants = select_conversation_participants(state)
++
++    assert len(participants) == 2
++    assert {p["id"] for p in participants} == {"npc:Bran", "npc:Mira"}
++
++
++def test_waiting_in_tavern_creates_bounded_conversation_thread():
++    state = {}
++    set_current_location(state, "loc_tavern")
++
++    result = maybe_advance_conversation_thread(
++        state,
++        player_input="I wait and listen to the room",
++        tick=10,
++    )
++
++    assert result["triggered"] is True
++    assert result["beat"]["speaker_id"] in {"npc:Bran", "npc:Mira"}
++    assert result["world_signal"]["kind"] == "rumor_interest"
++    assert state["conversation_thread_state"]["threads"]
++    assert state["conversation_thread_state"]["world_signals"]
++    assert state["world_event_state"]["events"][0]["kind"] == "npc_conversation"
++
++
++def test_non_wait_turn_does_not_trigger_conversation():
++    state = {}
++    set_current_location(state, "loc_tavern")
++
++    result = maybe_advance_conversation_thread(
++        state,
++        player_input="I buy a meal from Bran",
++        tick=11,
++    )
++
++    assert result["triggered"] is False
++    assert result["reason"] == "not_wait_or_listen_turn"
++
++
++def test_conversation_does_not_mutate_player_resources_or_journal():
 +    state = {
 +        "player_state": {
 +            "inventory_state": {
 +                "currency": {"gold": 0, "silver": 5, "copper": 0},
-+                "items": [],
++                "items": [{"item_id": "torch"}],
 +                "equipment": {},
 +                "last_loot": [],
 +            }
++        },
++        "journal_state": {"entries": []},
++        "transaction_history": [],
++    }
++    set_current_location(state, "loc_tavern")
++
++    before_currency = dict(state["player_state"]["inventory_state"]["currency"])
++    before_items = list(state["player_state"]["inventory_state"]["items"])
++
++    result = maybe_advance_conversation_thread(
++        state,
++        player_input="I wait and listen",
++        tick=12,
++    )
++
++    assert result["triggered"] is True
++    assert state["player_state"]["inventory_state"]["currency"] == before_currency
++    assert state["player_state"]["inventory_state"]["items"] == before_items
++    assert state["journal_state"]["entries"] == []
++    assert state["transaction_history"] == []
+File: src/app/rpg/tests/test_manual_transcript_modes.py
+
+Add:
+
+diff --git a/src/app/rpg/tests/test_manual_transcript_modes.py b/src/app/rpg/tests/test_manual_transcript_modes.py
+--- a/src/app/rpg/tests/test_manual_transcript_modes.py
++++ b/src/app/rpg/tests/test_manual_transcript_modes.py
+@@
+ def test_manual_regression_allows_market_scenario_to_stay_in_market():
+@@
+     assert "shop_success_turn_2_expected_loc_market" not in warnings
++
++
++def test_manual_extracts_conversation_thread_state():
++    result = {
++        "result": {
++            "conversation_result": {
++                "triggered": True,
++                "beat": {
++                    "speaker_id": "npc:Bran",
++                    "speaker_name": "Bran",
++                    "line": "The room has been busier than usual.",
++                },
++            },
++            "conversation_thread_state": {
++                "threads": [{"thread_id": "conversation:loc_tavern:npc:Bran:npc:Mira"}],
++                "world_signals": [{"signal_id": "world_signal:conversation:1"}],
++            },
 +        }
 +    }
-+    set_current_location(state, location_id)
-+    return state
++
++    assert transcript._extract_conversation_result(result)["triggered"] is True
++    assert len(transcript._extract_conversation_thread_state(result)["threads"]) == 1
 +
 +
-+def test_elara_shop_goods_not_available_in_tavern():
-+    state = _base_state("loc_tavern")
-+    result = resolve_service_turn(
-+        player_input="I ask Elara what she sells",
-+        action={},
-+        resolved_action={},
-+        simulation_state=state,
-+        runtime_state={},
++def test_manual_warns_if_conversation_participant_not_present():
++    result = {
++        "result": {
++            "location_state": {
++                "current_location_id": "loc_tavern",
++                "current_location": {
++                    "present_npcs": [{"id": "npc:Bran", "name": "Bran"}]
++                },
++            },
++            "conversation_result": {
++                "triggered": True,
++                "thread": {
++                    "participants": [
++                        {"id": "npc:Bran", "name": "Bran"},
++                        {"id": "npc:Elara", "name": "Elara"},
++                    ]
++                },
++            },
++        }
++    }
++
++    warnings = transcript._manual_regression_warnings(
++        turn_index=1,
++        player_input="I wait and listen",
++        result=result,
 +    )
 +
-+    assert not result.get("matched") or result.get("provider_name") != "Elara"
-+
-+
-+def test_elara_shop_goods_available_in_market():
-+    state = _base_state("loc_market")
-+    result = resolve_service_turn(
-+        player_input="I ask Elara what she sells",
-+        action={},
-+        resolved_action={},
-+        simulation_state=state,
-+        runtime_state={},
-+    )
-+
-+    assert result.get("matched") is True
-+    assert result.get("provider_name") == "Elara"
-+    assert result.get("service_kind") == "shop_goods"
-+
-+
-+def test_bran_lodging_not_available_in_market():
-+    state = _base_state("loc_market")
-+    result = resolve_service_turn(
-+        player_input="I ask Bran for a room to rent",
-+        action={},
-+        resolved_action={},
-+        simulation_state=state,
-+        runtime_state={},
-+    )
-+
-+    assert not result.get("matched") or result.get("provider_name") != "Bran"
-
-If resolve_service_turn(...) has a different signature, adapt the test to your current resolver call pattern.
++    assert "conversation_participant_not_present" in warnings
+PATCH 11 — Optional: CSS label width for conversation rows
+File: src/static/rpg.css
+diff --git a/src/static/rpg.css b/src/static/rpg.css
+--- a/src/static/rpg.css
++++ b/src/static/rpg.css
+@@
+ .rpg-debug-row {
+   display: grid;
+-  grid-template-columns: minmax(90px, 160px) 1fr auto;
++  grid-template-columns: minmax(110px, 190px) 1fr auto;

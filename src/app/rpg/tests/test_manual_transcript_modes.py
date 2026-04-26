@@ -436,3 +436,95 @@ def test_manual_regression_allows_market_scenario_to_stay_in_market():
     )
 
     assert "shop_success_turn_2_expected_loc_market" not in warnings
+
+
+def test_manual_extracts_conversation_thread_state():
+    result = {
+        "result": {
+            "conversation_result": {
+                "triggered": True,
+                "beat": {
+                    "speaker_id": "npc:Bran",
+                    "speaker_name": "Bran",
+                    "line": "The room has been busier than usual.",
+                },
+            },
+            "conversation_thread_state": {
+                "threads": [{"thread_id": "conversation:loc_tavern:npc:Bran:npc:Mira"}],
+                "world_signals": [{"signal_id": "world_signal:conversation:1"}],
+            },
+        }
+    }
+
+    assert transcript._extract_conversation_result(result)["triggered"] is True
+    assert len(transcript._extract_conversation_thread_state(result)["threads"]) == 1
+
+
+def test_manual_warns_if_conversation_participant_not_present():
+    result = {
+        "result": {
+            "location_state": {
+                "current_location_id": "loc_tavern",
+                "current_location": {
+                    "present_npcs": [{"id": "npc:Bran", "name": "Bran"}]
+                },
+            },
+            "conversation_result": {
+                "triggered": True,
+                "thread": {
+                    "participants": [
+                        {"id": "npc:Bran", "name": "Bran"},
+                        {"id": "npc:Elara", "name": "Elara"},
+                    ]
+                },
+            },
+        }
+    }
+
+    warnings = transcript._manual_regression_warnings(
+        turn_index=1,
+        player_input="I wait and listen",
+        result=result,
+    )
+
+    assert "conversation_participant_not_present" in warnings
+
+
+def test_manual_warns_if_ambient_conversation_resolves_service():
+    result = {
+        "result": {
+            "service_result": {
+                "matched": True,
+                "kind": "service_inquiry",
+                "service_kind": "lodging",
+                "provider_name": "Bran",
+            },
+            "narration": "Bran looks over the available lodging options.",
+        },
+        "session": {
+            "runtime_state": {
+                "last_turn_contract": {
+                    "resolved_result": {
+                        "action_type": "service_inquiry",
+                        "semantic_family": "commerce",
+                        "service_result": {
+                            "matched": True,
+                            "kind": "service_inquiry",
+                            "service_kind": "lodging",
+                            "provider_name": "Bran",
+                        },
+                    }
+                }
+            }
+        },
+    }
+
+    warnings = transcript._manual_regression_warnings(
+        scenario_name="ambient_conversation",
+        turn_index=1,
+        player_input="I wait and listen to the room",
+        result=result,
+    )
+
+    assert "ambient_conversation_unexpected_service_result" in warnings
+    assert "ambient_conversation_unexpected_commerce_action" in warnings

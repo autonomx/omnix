@@ -108,6 +108,8 @@ def build_turn_narration_context(
             current_tick=_safe_int(after_state.get("tick"), current_tick),
             limit=4,
         ),
+        "conversation_result": _safe_dict(resolved_result.get("conversation_result")),
+        "conversation_thread_state": _safe_dict(resolved_result.get("conversation_thread_state")),
         "combat_result": combat_result,
         "npc_combat_result": npc_combat_result,
         "combat_state": combat_state,
@@ -301,6 +303,8 @@ def assemble_turn_narration_response(
             "service_memory_recall_debug": sync_context.get("service_memory_recall_debug") or {},
             "recalled_npc_memories": sync_context.get("recalled_npc_memories") or [],
             "npc_memory_recall_debug": sync_context.get("npc_memory_recall_debug") or {},
+            "conversation_result": sync_context.get("conversation_result") or {},
+            "conversation_thread_state": sync_context.get("conversation_thread_state") or {},
         }
 
         print(

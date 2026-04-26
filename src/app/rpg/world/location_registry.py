@@ -25,6 +25,7 @@ LOCATIONS: Dict[str, Dict[str, Any]] = {
         "description": "A warm tavern with worn beams, busy tables, and the smell of stew.",
         "present_npcs": [
             {"id": "npc:Bran", "name": "Bran", "role": "innkeeper"},
+            {"id": "npc:Mira", "name": "Mira", "role": "server"},
         ],
         "services": ["lodging", "meal", "paid_information"],
         "exits": {
@@ -41,6 +42,7 @@ LOCATIONS: Dict[str, Dict[str, Any]] = {
         "description": "A busy market square of stalls, carts, shouted prices, and foot traffic.",
         "present_npcs": [
             {"id": "npc:Elara", "name": "Elara", "role": "merchant"},
+            {"id": "npc:Tomas", "name": "Tomas", "role": "porter"},
         ],
         "services": ["shop_goods", "repair"],
         "exits": {
@@ -187,6 +189,11 @@ def set_current_location(simulation_state: Dict[str, Any], location_id: str) -> 
 def ensure_location_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     location_id = current_location_id(simulation_state)
     return set_current_location(simulation_state, location_id)
+
+
+def present_npcs_for_current_location(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    location = get_location(current_location_id(simulation_state))
+    return deepcopy(_safe_list(location.get("present_npcs")))
 
 
 def provider_present_at_location(simulation_state: Dict[str, Any], provider_id: str = "", provider_name: str = "") -> bool:

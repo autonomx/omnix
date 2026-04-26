@@ -93,6 +93,9 @@
     const emotionState = safeObj(result.npc_emotion_state);
     const journalEntries = safeArr(safeObj(result.journal_state).entries);
     const worldEvents = safeArr(safeObj(result.world_event_state).events);
+    const conversationState = safeObj(result.conversation_thread_state);
+    const conversationThreads = safeArr(conversationState.threads);
+    const worldSignals = safeArr(conversationState.world_signals);
     const serviceOfferState = safeObj(result.service_offer_state);
     const offers = safeObj(serviceOfferState.offers);
 
@@ -163,6 +166,26 @@
           <strong>${escapeHtml(event.title || event.kind || "event")}</strong>
           <span>${escapeHtml(event.summary || "")}</span>
           <code>${escapeHtml(event.kind || "")}</code>
+        </div>
+      `)}
+
+      ${renderList("NPC Conversation Threads", conversationThreads.slice(-6), (thread) => {
+        const beats = safeArr(thread.beats);
+        const latest = safeObj(beats[beats.length - 1]);
+        return `
+          <div class="rpg-debug-row">
+            <strong>${escapeHtml(thread.topic || thread.thread_id || "conversation")}</strong>
+            <span>${escapeHtml(latest.speaker_name || "")}: ${escapeHtml(latest.line || "")}</span>
+            <code>${escapeHtml(thread.status || "active")}</code>
+          </div>
+        `;
+      })}
+
+      ${renderList("World Signals", worldSignals.slice(-8), (signal) => `
+        <div class="rpg-debug-row">
+          <strong>${escapeHtml(signal.kind || "signal")}</strong>
+          <span>${escapeHtml(signal.summary || "")}</span>
+          <code>${escapeHtml(signal.topic_id || "")}</code>
         </div>
       `)}
     `;

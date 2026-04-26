@@ -170,6 +170,7 @@ from app.rpg.session.ambient_builder import (
     normalize_ambient_state,
     score_ambient_salience,
 )
+from app.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
 from app.rpg.session.ambient_policy import (
     classify_ambient_delivery,
     record_interrupt,
@@ -244,6 +245,7 @@ from app.rpg.world.world_event_director import (
     convert_events_to_ambient_updates,
     filter_world_events,
 )
+from app.rpg.session.conversation_thread_runtime import advance_conversation_threads_for_turn
 
 _advance_simulation_for_idle = advance_simulation_for_idle
 _build_idle_player_context = build_idle_player_context
@@ -6580,6 +6582,37 @@ def _apply_turn_authoritative(
     authoritative["current_location_id"] = resolved_result["current_location_id"]
     authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
     authoritative["simulation_state"] = after_action_state
+
+    service_result = _safe_dict(resolved_result.get("service_result"))
+    if is_ambient_wait_or_listen_intent(player_input) and not service_result.get("matched"):
+        resolved_result["action_type"] = "ambient_wait"
+        resolved_result["semantic_action_type"] = "ambient_wait"
+        resolved_result["semantic_family"] = "ambient"
+        resolved_result["activity_label"] = "wait_and_listen"
+        authoritative["action_type"] = "ambient_wait"
+        authoritative["semantic_action_type"] = "ambient_wait"
+        authoritative["semantic_family"] = "ambient"
+        authoritative["activity_label"] = "wait_and_listen"
+
+    conversation_result = advance_conversation_threads_for_turn(
+        player_input=player_input,
+        simulation_state=after_action_state,
+        resolved_result=resolved_result,
+        tick=current_tick,
+    )
+    if conversation_result:
+        resolved_result["conversation_result"] = conversation_result
+        resolved_result["conversation_thread_state"] = _safe_dict(
+            conversation_result.get("conversation_thread_state")
+            or after_action_state.get("conversation_thread_state")
+        )
+        resolved_result["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
+        authoritative["conversation_result"] = conversation_result
+        authoritative["conversation_thread_state"] = _safe_dict(
+            after_action_state.get("conversation_thread_state")
+        )
+        authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
+        authoritative["simulation_state"] = after_action_state
 
     _t_authoritative = _time.monotonic()
 

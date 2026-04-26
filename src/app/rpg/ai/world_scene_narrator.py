@@ -550,6 +550,51 @@ def _format_recalled_npc_memories_for_prompt(narration_context: Dict[str, Any]) 
     return "\n".join(lines) if lines else "None."
 
 
+def _conversation_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
+    narration_context = _safe_dict(narration_context)
+    direct = _safe_dict(narration_context.get("conversation_result"))
+    if direct:
+        return direct
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    return _safe_dict(resolved.get("conversation_result"))
+
+
+def _format_conversation_beat_for_prompt(narration_context: Dict[str, Any]) -> str:
+    conversation = _conversation_result_from_context(narration_context)
+    if not conversation.get("triggered"):
+        return "None."
+    beat = _safe_dict(conversation.get("beat"))
+    speaker = _safe_str(beat.get("speaker_name"))
+    listener = _safe_str(beat.get("listener_name"))
+    line = _safe_str(beat.get("line"))
+    topic = _safe_str(beat.get("topic"))
+    if not line:
+        return "None."
+    return f'{speaker} speaks to {listener} about {topic}: "{line}"'
+
+
+def _apply_grounded_conversation_beat(
+    payload: Dict[str, Any],
+    narration_context: Dict[str, Any],
+) -> None:
+    conversation = _conversation_result_from_context(narration_context)
+    if not conversation.get("triggered"):
+        return
+    beat = _safe_dict(conversation.get("beat"))
+    speaker = _safe_str(beat.get("speaker_name"))
+    line = _safe_str(beat.get("line"))
+    if not speaker or not line:
+        return
+
+    # Preserve the normal narration/action, but force the NPC line to the
+    # deterministic conversation beat. The LLM can frame the scene but cannot
+    # invent the actual NPC-to-NPC line.
+    payload["npc"] = {
+        "speaker": speaker,
+        "line": line,
+    }
+
+
 def _line_has_prior_memory_reference(line: str) -> bool:
     lower = _safe_str(line).lower()
     if not lower:
@@ -2035,6 +2080,8 @@ def _sanitize_narration_payload(
     if travel_action:
         normalized["action"] = travel_action
 
+    _apply_grounded_conversation_beat(normalized, narration_context)
+
     return normalized
 
 
@@ -2669,10 +2716,14 @@ Relevant NPC memories from deterministic simulation:
 Relevant general NPC memories:
 {_format_recalled_npc_memories_for_prompt(narration_context)}
 
+Deterministic NPC-to-NPC conversation beat:
+{_format_conversation_beat_for_prompt(narration_context)}
+
 Memory rules:
 - NPCs may reference prior interactions only if they appear in Relevant NPC memories or Relevant general NPC memories.
 - Do not invent prior purchases, debts, failed purchases, promises, favors, or relationships.
 - If Relevant NPC memories is None, do not say "again", "last time", "remember", or imply a previous encounter.
+- If a deterministic NPC-to-NPC conversation beat is provided, use only that speaker and line for the NPC dialogue. Do not invent additional conversation consequences.
 
 SCENE:
 Title: {title}

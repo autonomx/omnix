@@ -115,6 +115,14 @@ def _attach_living_world_debug_fields(result_payload: Dict[str, Any]) -> Dict[st
         result_payload.get("travel_result"),
         resolved_result.get("travel_result"),
     )
+    result_payload["conversation_result"] = _first_dict(
+        result_payload.get("conversation_result"),
+        resolved_result.get("conversation_result"),
+    )
+    result_payload["conversation_thread_state"] = _first_dict(
+        result_payload.get("conversation_thread_state"),
+        resolved_result.get("conversation_thread_state"),
+    )
 
     service_result = _safe_dict(
         resolved_result.get("service_result")

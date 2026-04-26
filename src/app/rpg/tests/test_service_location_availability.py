@@ -56,3 +56,21 @@ def test_bran_lodging_not_available_in_market():
     )
 
     assert not result.get("matched") or result.get("provider_name") != "Bran"
+
+
+def test_wait_and_listen_to_room_does_not_resolve_lodging_service():
+    state = _base_state("loc_tavern")
+    result = resolve_service_turn(
+        player_input="I wait and listen to the room",
+        action={},
+        resolved_action={},
+        simulation_state=state,
+        runtime_state={},
+    )
+
+    assert result.get("matched") is False
+    assert result.get("status") == "not_service"
+    assert result.get("reason") in {
+        "ambient_wait_or_listen",
+        "ambient_room_context_not_lodging",
+    }
