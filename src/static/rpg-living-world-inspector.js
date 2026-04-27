@@ -9,6 +9,10 @@
     return Array.isArray(value) ? value : [];
   }
 
+  function safeStr(value) {
+    return value == null ? "" : String(value);
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -98,6 +102,27 @@
     const worldSignals = safeArr(conversationState.world_signals);
     const serviceOfferState = safeObj(result.service_offer_state);
     const offers = safeObj(serviceOfferState.offers);
+    const npcGoalState = safeObj(result.npc_goal_state || safeObj(result.ambient_tick_result).npc_goal_state);
+    const npcGoals = safeObj(npcGoalState.goals);
+    const sceneActivityState = safeObj(result.scene_activity_state || safeObj(safeObj(result.ambient_tick_result).scene_activity_result).scene_activity_state);
+    const sceneActivities = safeArr(sceneActivityState.recent);
+    const conversation = safeObj(result.conversation_result || result);
+    const dialogueProfile = safeObj(result.dialogue_profile || conversation.dialogue_profile);
+    const npcResponseBeat = safeObj(conversation.npc_response_beat);
+    const roleplaySource =
+      result.roleplay_source ||
+      conversation.roleplay_source ||
+      npcResponseBeat.roleplay_source ||
+      "";
+    const biographyRole =
+      npcResponseBeat.biography_role ||
+      safeStr(dialogueProfile.role) ||
+      "";
+    const usedFactIds = safeArr(
+      result.used_fact_ids ||
+      conversation.used_fact_ids ||
+      npcResponseBeat.used_fact_ids
+    );
 
     const panel = findOrCreatePanel();
     panel.innerHTML = `
@@ -181,6 +206,22 @@
         `;
       })}
 
+      ${renderMap("NPC Goals", npcGoals, (npcId, goals) => `
+        <div class="rpg-debug-row">
+          <strong>${escapeHtml(npcId)}</strong>
+          <span>${escapeHtml(safeArr(goals).map((goal) => goal.kind || goal.goal_id).join(", "))}</span>
+          <code>${escapeHtml(safeArr(goals).length)} active</code>
+        </div>
+      `)}
+
+      ${renderList("Recent Scene Activities", sceneActivities.slice(-8), (activity) => `
+        <div class="rpg-debug-row">
+          <strong>${escapeHtml(activity.npc_name || activity.npc_id || "scene")}</strong>
+          <span>${escapeHtml(activity.text || "")}</span>
+          <code>${escapeHtml(activity.kind || "activity")} goal=${escapeHtml(activity.goal_kind || "")}</code>
+        </div>
+      `)}
+
       ${renderList("World Signals", worldSignals.slice(-8), (signal) => `
         <div class="rpg-debug-row">
           <strong>${escapeHtml(signal.kind || "signal")}</strong>
@@ -188,6 +229,26 @@
           <code>${escapeHtml(signal.topic_id || "")}</code>
         </div>
       `)}
+
+      ${biographyRole || roleplaySource || usedFactIds.length ? `
+      <details>
+        <summary><strong>NPC Biography Roleplay</strong></summary>
+        <div class="rpg-debug-section">
+          <div class="rpg-debug-row">
+            <strong>NPC Biography Role</strong>
+            <span>${escapeHtml(biographyRole)}</span>
+          </div>
+          <div class="rpg-debug-row">
+            <strong>Roleplay Source</strong>
+            <span>${escapeHtml(roleplaySource)}</span>
+          </div>
+          ${usedFactIds.length ? `<div class="rpg-debug-row">
+            <strong>Used Fact IDs</strong>
+            <span>${usedFactIds.map((id) => escapeHtml(id)).join(", ")}</span>
+          </div>` : ""}
+        </div>
+      </details>
+      ` : ""}
     `;
   }
 

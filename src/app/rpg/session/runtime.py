@@ -21,6 +21,13 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+
+def _has_pending_conversation_response(simulation_state: Dict[str, Any]) -> bool:
+    thread_state = _safe_dict(simulation_state.get("conversation_thread_state"))
+    pending = _safe_dict(thread_state.get("pending_player_response"))
+    return bool(pending.get("thread_id") and pending.get("topic_id"))
+
+
 from app.rpg.action_resolver import resolve_player_action
 from app.rpg.ai.action_intelligence import get_action_advisory, merge_action_advisory
 from app.rpg.ai.ambient_dialogue import (
@@ -6527,6 +6534,8 @@ def _apply_turn_authoritative(
     resolved_result = _safe_dict(authoritative.get("result"))
     resolved_result.setdefault("action_type", action_type)
 
+    pending_conversation_reply = _has_pending_conversation_response(after_action_state)
+
     service_resolution = mirror_service_result(
         resolved_result,
         action,
@@ -6639,6 +6648,26 @@ def _apply_turn_authoritative(
     authoritative["current_location_id"] = resolved_result["current_location_id"]
     authoritative["world_event_state"] = _safe_dict(after_action_state.get("world_event_state"))
     authoritative["simulation_state"] = after_action_state
+
+    if pending_conversation_reply:
+        resolved_result["action_type"] = "player_conversation_reply"
+        resolved_result["semantic_action_type"] = "player_conversation_reply"
+        resolved_result["semantic_family"] = "conversation"
+        resolved_result["activity_label"] = "player_conversation_reply"
+
+        service_result = {
+            "matched": False,
+            "kind": "not_service",
+            "status": "not_service",
+            "reason": "pending_conversation_response_takes_precedence",
+        }
+        resolved_result["service_result"] = service_result
+
+        authoritative["action_type"] = "player_conversation_reply"
+        authoritative["semantic_action_type"] = "player_conversation_reply"
+        authoritative["semantic_family"] = "conversation"
+        authoritative["activity_label"] = "player_conversation_reply"
+        authoritative["service_result"] = service_result
 
     service_result = _safe_dict(resolved_result.get("service_result"))
     if ambient_tick_result:

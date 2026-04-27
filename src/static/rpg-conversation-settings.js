@@ -26,6 +26,27 @@
     max_world_signals_per_thread: 2,
     max_world_events_per_thread: 4,
     signal_strength_cap: 1,
+    // Bundle N-O-P — NPC Biography Roleplay
+    npc_roleplay_use_llm: false,
+    npc_roleplay_max_line_chars: 240,
+    npc_roleplay_fallback_on_invalid: true,
+    // Bundle H
+    allow_npc_response_beats: true,
+    npc_response_style_influence: true,
+    // Bundle J
+    allow_rumor_propagation: true,
+    max_rumor_seeds: 24,
+    max_rumor_mentions_per_location: 3,
+    max_signal_age_ticks: 80,
+    // Bundle K-L-M
+    avoid_repeated_npc_response_lines: true,
+    allow_npc_goal_influence: true,
+    goal_player_invitation_bias_cap: 20,
+    allow_scene_activities: true,
+    scene_activity_interval_ticks: 2,
+    scene_activity_cooldown_ticks: 3,
+    allow_scene_activity_world_events: true,
+    allow_scene_activity_world_signals: true,
   };
 
   function loadSettings() {
@@ -115,6 +136,9 @@
           ${boolInput("Allow event discussion", "allow_event_discussion", settings)}
           ${boolInput("Allow rumor discussion", "allow_rumor_discussion", settings)}
           ${boolInput("Allow memory discussion", "allow_memory_discussion", settings)}
+          ${boolInput("Allow NPC response beats", "allow_npc_response_beats", settings)}
+          ${boolInput("NPC response style influence", "npc_response_style_influence", settings)}
+          ${boolInput("Allow rumor propagation", "allow_rumor_propagation", settings)}
           ${selectInput("Frequency", "frequency", settings, ["off", "rare", "normal", "frequent", "always"])}
           ${numberInput("Min ticks between conversations", "min_ticks_between_conversations", settings, 0, 20)}
           ${numberInput("Thread cooldown ticks", "thread_cooldown_ticks", settings, 0, 50)}
@@ -126,6 +150,20 @@
           ${numberInput("Max world signals/thread", "max_world_signals_per_thread", settings, 0, 10)}
           ${numberInput("Max world events/thread", "max_world_events_per_thread", settings, 0, 12)}
           ${numberInput("Signal strength cap", "signal_strength_cap", settings, 1, 5)}
+          ${boolInput("Use LLM for NPC roleplay lines", "npc_roleplay_use_llm", settings)}
+          ${numberInput("NPC roleplay max chars", "npc_roleplay_max_line_chars", settings, 80, 600)}
+          ${boolInput("Fallback when roleplay invalid", "npc_roleplay_fallback_on_invalid", settings)}
+          ${numberInput("Max rumor seeds", "max_rumor_seeds", settings, 0, 64)}
+          ${numberInput("Max rumors/location", "max_rumor_mentions_per_location", settings, 0, 12)}
+          ${numberInput("Signal expiry ticks", "max_signal_age_ticks", settings, 1, 100)}
+          ${boolInput("Avoid repeated NPC lines", "avoid_repeated_npc_response_lines", settings)}
+          ${boolInput("NPC goal influence", "allow_npc_goal_influence", settings)}
+          ${numberInput("Goal bias cap", "goal_player_invitation_bias_cap", settings, 0, 50)}
+          ${boolInput("Scene activities", "allow_scene_activities", settings)}
+          ${numberInput("Scene activity interval", "scene_activity_interval_ticks", settings, 1, 20)}
+          ${numberInput("Scene activity cooldown", "scene_activity_cooldown_ticks", settings, 0, 20)}
+          ${boolInput("Scene activity world events", "allow_scene_activity_world_events", settings)}
+          ${boolInput("Scene activity world signals", "allow_scene_activity_world_signals", settings)}
         </div>
       </details>
     `;

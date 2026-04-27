@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any, Dict, List
+
+from app.rpg.world.npc_biography_registry import get_npc_biography
+
+FORBIDDEN_NPC_DIALOGUE_CLAIMS = [
+    "Do not create or complete quests.",
+    "Do not grant rewards.",
+    "Do not create journal entries.",
+    "Do not create items.",
+    "Do not change inventory, currency, shop stock, location, or combat state.",
+    "Do not claim hidden facts unless they are present in deterministic allowed facts.",
+]
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _npc_social_entry(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    social_state = _safe_dict(simulation_state.get("conversation_social_state"))
+    by_npc = _safe_dict(social_state.get("npc_state") or social_state.get("npcs"))
+    return _safe_dict(by_npc.get(npc_id))
+
+
+def _npc_goal_entry(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
+    goal_state = _safe_dict(simulation_state.get("npc_goal_state"))
+    goals_by_npc = _safe_dict(goal_state.get("goals"))
+    goals = _safe_list(goals_by_npc.get(npc_id))
+    active_goals = [
+        _safe_dict(goal)
+        for goal in goals
+        if _safe_str(_safe_dict(goal).get("status") or "active") == "active"
+    ]
+    if not active_goals:
+        return {}
+    active_goals.sort(
+        key=lambda goal: (
+            _safe_int(goal.get("priority"), 0),
+            -_safe_int(goal.get("created_tick"), 0),
+        ),
+        reverse=True,
+    )
+    return deepcopy(active_goals[0])
+
+
+def _allowed_facts_from_topic(topic: Dict[str, Any]) -> List[str]:
+    topic = _safe_dict(topic)
+    facts = []
+    for value in _safe_list(topic.get("allowed_facts")):
+        text = _safe_str(value).strip()
+        if text:
+            facts.append(text)
+    summary = _safe_str(topic.get("summary")).strip()
+    if summary and summary not in facts:
+        facts.append(summary)
+    title = _safe_str(topic.get("title")).strip()
+    if title and title not in facts:
+        facts.append(title)
+    return facts[:8]
+
+
+def build_npc_dialogue_profile(
+    *,
+    npc_id: str,
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
+    topic: Dict[str, Any] | None = None,
+    listener_id: str = "",
+    response_intent: str = "comment",
+) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    runtime_state = _safe_dict(runtime_state)
+    topic = _safe_dict(topic)
+
+    biography = get_npc_biography(npc_id)
+    social = _npc_social_entry(simulation_state, _safe_str(biography.get("npc_id")))
+    active_goal = _npc_goal_entry(simulation_state, _safe_str(biography.get("npc_id")))
+    allowed_facts = _allowed_facts_from_topic(topic)
+
+    profile = {
+        "npc_id": _safe_str(biography.get("npc_id")),
+        "name": _safe_str(biography.get("name")),
+        "role": _safe_str(biography.get("role")),
+        "short_bio": _safe_str(biography.get("short_bio")),
+        "personality_traits": _safe_list(biography.get("personality_traits"))[:8],
+        "speaking_style": deepcopy(_safe_dict(biography.get("speaking_style"))),
+        "values": _safe_list(biography.get("values"))[:8],
+        "fears": _safe_list(biography.get("fears"))[:8],
+        "relationships": deepcopy(_safe_dict(biography.get("relationships"))),
+        "knowledge_boundaries": deepcopy(_safe_dict(biography.get("knowledge_boundaries"))),
+        "relationship_to_listener": _safe_str(_safe_dict(biography.get("relationships")).get(listener_id)),
+        "conversation_social_state": deepcopy(social),
+        "active_goal": deepcopy(active_goal),
+        "topic_id": _safe_str(topic.get("topic_id")),
+        "topic_type": _safe_str(topic.get("topic_type")),
+        "topic_title": _safe_str(topic.get("title")),
+        "allowed_facts": allowed_facts,
+        "used_fact_ids": [_safe_str(topic.get("topic_id"))] if _safe_str(topic.get("topic_id")) else [],
+        "response_intent": response_intent,
+        "forbidden_claims": list(FORBIDDEN_NPC_DIALOGUE_CLAIMS),
+        "source": "deterministic_npc_dialogue_profile",
+    }
+    return profile
+
+
+def deterministic_biography_line(
+    *,
+    profile: Dict[str, Any],
+    topic: Dict[str, Any] | None = None,
+    pivot: Dict[str, Any] | None = None,
+    response_style: str = "",
+) -> Dict[str, Any]:
+    profile = _safe_dict(profile)
+    topic = _safe_dict(topic)
+    pivot = _safe_dict(pivot)
+    role = _safe_str(profile.get("role")) or "local"
+    npc_id = _safe_str(profile.get("npc_id"))
+    name = _safe_str(profile.get("name")) or npc_id.replace("npc:", "")
+    style = _safe_str(response_style or profile.get("response_intent") or "guarded")
+    traits = [_safe_str(v) for v in _safe_list(profile.get("personality_traits"))]
+    facts = [_safe_str(v) for v in _safe_list(profile.get("allowed_facts")) if _safe_str(v)]
+    fact = facts[0] if facts else ""
+
+    pivot_requested = bool(pivot.get("requested"))
+    pivot_accepted = bool(pivot.get("accepted"))
+    pivot_reason = _safe_str(pivot.get("pivot_rejected_reason") or pivot.get("reason"))
+    hint = _safe_str(pivot.get("requested_topic_hint"))
+
+    if pivot_requested and not pivot_accepted:
+        if "plainspoken" in traits or role.lower().startswith("tavern"):
+            line = "I have no reliable word of that. I will not dress guesses up as fact."
+        elif "curious" in traits:
+            line = "I have heard no solid proof of that, only the shape of a question."
+        elif "disciplined" in traits:
+            line = "I cannot confirm that without a report or witness."
+        else:
+            line = "I do not know enough to call that true."
+        return {
+            "line": line,
+            "roleplay_source": "deterministic_template",
+            "biography_role": role,
+            "biography_traits": traits[:5],
+            "used_fact_ids": [],
+            "response_style": style,
+            "unbacked_hint": hint,
+            "pivot_rejected_reason": pivot_reason or "no_backed_topic_found",
+            "source": "deterministic_biography_dialogue",
+        }
+
+    if fact:
+        if role.lower().startswith("tavern"):
+            line = f"I keep a tavern, not a hero's ledger. But I can tell you this much: {fact}"
+        elif "informant" in role.lower() or "curious" in traits:
+            line = f"That lines up with what people keep circling around: {fact}"
+        elif "guard" in role.lower():
+            line = f"Keep to what can be verified: {fact}"
+        elif "merchant" in role.lower():
+            line = f"If it affects the roads or trade, it matters. What I know is this: {fact}"
+        else:
+            line = fact
+    else:
+        if "guarded" in traits:
+            line = "I would rather not build a story out of smoke."
+        elif "curious" in traits:
+            line = "There is something there, but not enough to name it yet."
+        else:
+            line = "I do not know enough to say more."
+
+    return {
+        "line": line,
+        "roleplay_source": "deterministic_template",
+        "biography_role": role,
+        "biography_traits": traits[:5],
+        "used_fact_ids": _safe_list(profile.get("used_fact_ids"))[:8],
+        "response_style": style,
+        "source": "deterministic_biography_dialogue",
+    }

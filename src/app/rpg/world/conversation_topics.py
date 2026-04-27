@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -253,11 +254,21 @@ def _is_synthetic_environment_memory(memory: Dict[str, Any]) -> bool:
     )
     if "the room/environment" in haystack or "room/environment" in haystack:
         return True
+    if "the tavern atmosphere" in haystack or "tavern atmosphere" in haystack:
+        return True
     if "npc:the room/environment" in haystack or "target:environment" in haystack:
+        return True
+    if "environment/npcs" in haystack or "npcs (general)" in haystack:
         return True
     if "partial observe interaction" in haystack:
         return True
-    if "observe" in haystack and ("room" in haystack or "environment" in haystack):
+    if "observe" in haystack and (
+        "room" in haystack
+        or "environment" in haystack
+        or "atmosphere" in haystack
+        or "ambience" in haystack
+        or "scene" in haystack
+    ):
         return True
     return False
 
@@ -370,3 +381,93 @@ def topic_is_backed_by_state(topic: Dict[str, Any]) -> bool:
     if topic_type == "location_smalltalk":
         return bool(source_id and facts)
     return bool(source_id and facts)
+
+
+# ── Bundle H: topic pivot detection ─────────────────────────────────────────
+
+_STOP_WORDS = frozenset({
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "must", "shall", "can", "i", "you", "he",
+    "she", "it", "we", "they", "what", "about", "that", "this", "of",
+    "in", "on", "at", "to", "for", "with", "by", "from", "up", "and",
+    "but", "or", "not", "no", "so", "me", "my", "your", "any", "all",
+    "know", "tell", "say", "said", "told", "hear", "heard", "mean",
+    "means", "meant", "please", "just", "still", "much", "more", "how",
+    "its", "our", "their", "us", "him", "her", "them", "those", "these",
+})
+
+
+def _topic_keywords(topic: Dict[str, Any]) -> frozenset:
+    topic = _safe_dict(topic)
+    raw = " ".join([
+        _safe_str(topic.get("title")),
+        _safe_str(topic.get("summary")),
+        _safe_str(topic.get("source_id")),
+        _safe_str(topic.get("topic_id")),
+    ])
+    return frozenset(
+        word
+        for word in re.sub(r"[^a-z0-9 ]", " ", raw.lower()).split()
+        if word and word not in _STOP_WORDS and len(word) > 2
+    )
+
+
+def _input_keywords(player_input: str) -> frozenset:
+    raw = _safe_str(player_input).lower()
+    return frozenset(
+        word
+        for word in re.sub(r"[^a-z0-9 ]", " ", raw).split()
+        if word and word not in _STOP_WORDS and len(word) > 2
+    )
+
+
+def detect_topic_pivot_hint(
+    player_input: str,
+    simulation_state: Dict[str, Any],
+    *,
+    current_topic: Dict[str, Any] | None = None,
+    settings: Dict[str, Any] | None = None,
+    exclude_event_ids: List[str] | None = None,
+) -> Dict[str, Any]:
+    """Return the best matching backed topic for the player's reply text.
+
+    Scores topics by keyword overlap with player_input.  Only returns a match
+    when the best candidate is backed by state.  Returns::
+
+        {"found": True,  "topic": {...}, "hint_text": "mill bandit", "score": 2}
+        {"found": False, "topic": {},    "hint_text": "",             "score": 0}
+
+    Hard constraints: read-only, no state mutation.
+    """
+    input_words = _input_keywords(player_input)
+    if not input_words:
+        return {"found": False, "topic": {}, "hint_text": "", "score": 0}
+
+    topics = conversation_topics_for_state(
+        simulation_state,
+        settings=settings,
+        exclude_event_ids=exclude_event_ids,
+    )
+
+    best_score = 0
+    best_topic: Dict[str, Any] = {}
+    best_overlap: frozenset = frozenset()
+
+    for topic in topics:
+        topic_words = _topic_keywords(topic)
+        overlap = input_words & topic_words
+        score = len(overlap)
+        if score > best_score:
+            best_score = score
+            best_topic = topic
+            best_overlap = overlap
+
+    if best_score > 0 and best_topic and topic_is_backed_by_state(best_topic):
+        return {
+            "found": True,
+            "topic": deepcopy(best_topic),
+            "hint_text": " ".join(sorted(best_overlap)),
+            "score": best_score,
+        }
+    return {"found": False, "topic": {}, "hint_text": "", "score": 0}

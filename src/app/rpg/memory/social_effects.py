@@ -3,6 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
+try:
+    from app.rpg.world.npc_biography_registry import get_npc_biography
+except Exception:
+    get_npc_biography = None
+
 MAX_SOCIAL_MEMORIES = 100
 
 
@@ -25,6 +30,131 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+SYNTHETIC_SOCIAL_TARGET_HINTS = {
+    "room",
+    "environment",
+    "atmosphere",
+    "ambience",
+    "ambient",
+    "scene",
+    "location",
+    "surroundings",
+    "area",
+    "place",
+    "general",
+    "npcs general",
+    "environment/npcs",
+    "environment/npcs general",
+}
+
+
+def _normalized_social_target_text(*values: Any) -> str:
+    return " ".join(_safe_str(value).strip().lower() for value in values if _safe_str(value).strip())
+
+
+def _looks_like_synthetic_social_target(*values: Any) -> bool:
+    text = _normalized_social_target_text(*values)
+    if not text:
+        return True
+
+    if "room/environment" in text:
+        return True
+    if "environment/npcs" in text:
+        return True
+    if "tavern atmosphere" in text:
+        return True
+    if "the room" in text and "environment" in text:
+        return True
+
+    compact = (
+        text.replace("npc:", "")
+        .replace("the ", "")
+        .replace("-", " ")
+        .replace("_", " ")
+        .strip()
+    )
+    compact_tokens = {token for token in compact.split() if token}
+
+    if compact in SYNTHETIC_SOCIAL_TARGET_HINTS:
+        return True
+    if compact_tokens and compact_tokens.issubset(SYNTHETIC_SOCIAL_TARGET_HINTS):
+        return True
+
+    return False
+
+
+def _is_known_real_npc(owner_id: str, owner_name: str = "") -> bool:
+    owner_id = _safe_str(owner_id).strip()
+    owner_name = _safe_str(owner_name).strip()
+
+    if not owner_id.startswith("npc:"):
+        return False
+    if _looks_like_synthetic_social_target(owner_id, owner_name):
+        return False
+
+    # Prefer the biography registry as the positive allowlist when present.
+    if get_npc_biography is not None:
+        try:
+            bio = get_npc_biography(owner_id)
+            bio_id = _safe_str(bio.get("npc_id"))
+            bio_name = _safe_str(bio.get("name"))
+            bio_source = _safe_str(bio.get("source"))
+
+            # Unknown fallback biographies are intentionally generic. Treat them
+            # as not enough proof for persistent social state.
+            if bio_id == owner_id and bio_source == "deterministic_npc_biography_registry":
+                if "no detailed biography" not in _safe_str(bio.get("short_bio")).lower():
+                    return True
+
+            # Allow known aliases if the registry returns a concrete biography.
+            if bio_id and bio_id != "npc:Unknown" and bio_name and "unknown" not in bio_name.lower():
+                if not _looks_like_synthetic_social_target(bio_id, bio_name):
+                    if "no detailed biography" not in _safe_str(bio.get("short_bio")).lower():
+                        return True
+        except Exception:
+            pass
+
+    # Fallback allowlist for pre-biography projects.
+    return owner_id in {
+        "npc:Bran",
+        "npc:Mira",
+        "npc:GuardCaptain",
+        "npc:Merchant",
+    }
+
+
+def _should_skip_social_target(owner_id: str, owner_name: str, resolved_result: Dict[str, Any]) -> Dict[str, Any]:
+    action_type = _safe_str(
+        resolved_result.get("action_type")
+        or resolved_result.get("semantic_action_type")
+        or resolved_result.get("semantic_family")
+    ).lower()
+    activity_label = _safe_str(resolved_result.get("activity_label")).lower()
+    target_id = _safe_str(resolved_result.get("target_id") or owner_id)
+    target_name = _safe_str(resolved_result.get("target_name") or owner_name)
+
+    if _looks_like_synthetic_social_target(owner_id, owner_name, target_id, target_name, activity_label):
+        return {
+            "skip": True,
+            "reason": "synthetic_social_target",
+        }
+
+    if action_type in {"ambient_wait", "wait", "listen", "observe", "ambient"}:
+        if not _is_known_real_npc(owner_id, owner_name):
+            return {
+                "skip": True,
+                "reason": "ambient_non_npc_social_target",
+            }
+
+    if not _is_known_real_npc(owner_id, owner_name):
+        return {
+            "skip": True,
+            "reason": "unknown_or_synthetic_npc_target",
+        }
+
+    return {"skip": False, "reason": ""}
+
+
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
@@ -35,6 +165,9 @@ def _round(value: float) -> float:
 
 def _relationship_key(owner_id: str, subject_id: str = "player") -> str:
     return f"{owner_id}::{subject_id}"
+
+
+
 
 
 def _ensure_relationship_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -154,6 +287,15 @@ def _social_summary(resolved_result: Dict[str, Any], owner_name: str) -> str:
     return "The player had a social interaction."
 
 
+def apply_social_effects(
+    simulation_state: Dict[str, Any],
+    resolved_result: Dict[str, Any],
+    *,
+    tick: int = 0,
+) -> Dict[str, Any]:
+    return apply_general_social_effects(simulation_state, resolved_result, tick=tick)
+
+
 def apply_general_social_effects(
     simulation_state: Dict[str, Any],
     resolved_result: Dict[str, Any],
@@ -189,6 +331,22 @@ def apply_general_social_effects(
         owner_id = owner_name if owner_name.startswith("npc:") else f"npc:{owner_name}"
     if not owner_id:
         return {}
+
+    owner_id = _safe_str(owner_id)
+    owner_name = _safe_str(owner_name)
+
+    skip_social = _should_skip_social_target(owner_id, owner_name, resolved_result)
+    if skip_social.get("skip"):
+        return {
+            "skipped": True,
+            "reason": _safe_str(skip_social.get("reason")) or "synthetic_social_target",
+            "owner_id": owner_id,
+            "owner_name": owner_name,
+            "target_id": _safe_str(resolved_result.get("target_id")),
+            "target_name": _safe_str(resolved_result.get("target_name")),
+            "action_type": _safe_str(resolved_result.get("action_type")),
+            "source": "deterministic_social_runtime",
+        }
 
     profile = _profile_for_social_action(resolved_result)
 
@@ -266,3 +424,5 @@ def apply_general_social_effects(
         "before_axes": before_axes,
         "source": "deterministic_social_runtime",
     }
+
+

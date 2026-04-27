@@ -1,226 +1,427 @@
-Below is a literal apply-this-patch diff spec for:
+Below is the literal apply-this-patch diff spec for:
 
-Bundle F — Autonomous Living Conversations v2
+Bundle N-O-P — NPC Biography Roleplay v1
 
-Phase 9.4 — autonomous ambient conversation ticks
-Phase 9.5 — player-addressed/player-invited conversation modes
-Phase 9.6 — bounded conversation world effects
-Phase 9.7 — conversation topic system
-Phase 9.8 — UI settings
+Apply after Bundle K-L-M is green.
 
-Apply in this order:
+This bundle adds:
 
-F1 — settings + topic/effect validator
-F2 — autonomous tick runtime + conversation runtime upgrade
-F3 — runtime/manual transcript integration
-F4 — UI settings/debug visibility
-F5 — tests
-
-Run the validation gate after each section that touches runtime.
-
-Bundle F rules
+N — NPC Biography Registry v1
+O — Biography-Grounded Dialogue v1
+P — Optional LLM NPC Roleplay Boundary v1
 
 Hard constraints:
 
-NPC conversations may:
-- create/advance conversation_thread_state
-- create npc_conversation world_events
-- create bounded world_signals
-- discuss deterministic topics from location, rumors, events, quests, journal, memories
+NPC biography may shape:
+- tone
+- personality
+- dialogue style
+- role-specific perspective
+- knowledge boundaries
+- safe deflections
 
-NPC conversations may not directly:
-- create/complete quests
-- create journal entries
+NPC biography may NOT:
+- create quests
+- complete quests
 - grant rewards
+- create journal entries
 - create items
-- change currency
-- mutate service stock
-- create transactions
+- change inventory/currency/stock
 - move NPCs
 - change location
 - start combat
-F1 PATCH — Conversation settings
-New file: src/app/rpg/world/conversation_settings.py
-diff --git a/src/app/rpg/world/conversation_settings.py b/src/app/rpg/world/conversation_settings.py
+- invent unbacked world facts
+N1 PATCH — Add NPC biography registry
+New file: src/app/rpg/world/npc_biography_registry.py
+diff --git a/src/app/rpg/world/npc_biography_registry.py b/src/app/rpg/world/npc_biography_registry.py
 new file mode 100644
-index 0000000..24cc21d
+index 0000000..nop0001
 --- /dev/null
-+++ b/src/app/rpg/world/conversation_settings.py
-@@ -0,0 +1,172 @@
++++ b/src/app/rpg/world/npc_biography_registry.py
+@@ -0,0 +1,309 @@
 +from __future__ import annotations
 +
 +from copy import deepcopy
-+from typing import Any, Dict
++from typing import Any, Dict, List
++
++
++def _safe_str(value: Any) -> str:
++    return "" if value is None else str(value)
 +
 +
 +def _safe_dict(value: Any) -> Dict[str, Any]:
 +    return value if isinstance(value, dict) else {}
 +
 +
-+def _safe_bool(value: Any, default: bool = False) -> bool:
-+    if isinstance(value, bool):
-+        return value
-+    if value is None:
-+        return default
-+    if isinstance(value, str):
-+        return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
-+    return bool(value)
++def _safe_list(value: Any) -> List[Any]:
++    return value if isinstance(value, list) else []
 +
 +
-+def _safe_int(value: Any, default: int = 0) -> int:
-+    try:
-+        return int(value)
-+    except Exception:
-+        return default
-+
-+
-+DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
-+    "enabled": True,
-+    "autonomous_ticks_enabled": False,
-+    "show_ambient_conversations": True,
-+    "frequency": "normal",
-+    "min_ticks_between_conversations": 3,
-+    "thread_cooldown_ticks": 8,
-+    "max_active_threads": 2,
-+    "max_beats_per_thread": 4,
-+    "conversation_chance_percent": 30,
-+    "allow_player_addressed": True,
-+    "allow_player_invited": False,
-+    "player_inclusion_chance_percent": 10,
-+    "require_relevant_memory_to_address_player": True,
-+    "pending_response_timeout_ticks": 3,
-+    "allow_world_signals": True,
-+    "allow_relationship_effects": False,
-+    "allow_quest_discussion": True,
-+    "allow_event_discussion": True,
-+    "allow_rumor_discussion": True,
-+    "allow_memory_discussion": True,
-+    "max_world_signals_per_thread": 2,
-+    "signal_strength_cap": 1,
-+}
-+
-+
-+FREQUENCY_TO_CHANCE = {
-+    "off": 0,
-+    "rare": 15,
-+    "normal": 30,
-+    "frequent": 60,
-+    "always": 100,
-+}
-+
-+
-+def conversation_settings_from_runtime(runtime_state: Dict[str, Any] | None) -> Dict[str, Any]:
-+    runtime_state = _safe_dict(runtime_state)
-+    runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
-+    explicit = _safe_dict(runtime_settings.get("conversation_settings"))
-+    living_world = _safe_dict(runtime_settings.get("living_world"))
-+    nested = _safe_dict(living_world.get("conversation_settings"))
-+
-+    settings = deepcopy(DEFAULT_CONVERSATION_SETTINGS)
-+    settings.update(nested)
-+    settings.update(explicit)
-+    return normalize_conversation_settings(settings)
-+
-+
-+def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
-+    settings = deepcopy(_safe_dict(settings))
-+    merged = deepcopy(DEFAULT_CONVERSATION_SETTINGS)
-+    merged.update(settings)
-+
-+    frequency = str(merged.get("frequency") or "normal").strip().lower()
-+    if frequency not in FREQUENCY_TO_CHANCE:
-+        frequency = "normal"
-+    merged["frequency"] = frequency
-+
-+    merged["enabled"] = _safe_bool(merged.get("enabled"), True)
-+    merged["autonomous_ticks_enabled"] = _safe_bool(merged.get("autonomous_ticks_enabled"), False)
-+    merged["show_ambient_conversations"] = _safe_bool(merged.get("show_ambient_conversations"), True)
-+
-+    merged["min_ticks_between_conversations"] = max(0, _safe_int(merged.get("min_ticks_between_conversations"), 3))
-+    merged["thread_cooldown_ticks"] = max(0, _safe_int(merged.get("thread_cooldown_ticks"), 8))
-+    merged["max_active_threads"] = max(1, _safe_int(merged.get("max_active_threads"), 2))
-+    merged["max_beats_per_thread"] = max(1, _safe_int(merged.get("max_beats_per_thread"), 4))
-+    merged["conversation_chance_percent"] = max(
-+        0,
-+        min(100, _safe_int(merged.get("conversation_chance_percent"), FREQUENCY_TO_CHANCE[frequency])),
-+    )
-+
-+    merged["allow_player_addressed"] = _safe_bool(merged.get("allow_player_addressed"), True)
-+    merged["allow_player_invited"] = _safe_bool(merged.get("allow_player_invited"), False)
-+    merged["player_inclusion_chance_percent"] = max(
-+        0,
-+        min(100, _safe_int(merged.get("player_inclusion_chance_percent"), 10)),
-+    )
-+    merged["require_relevant_memory_to_address_player"] = _safe_bool(
-+        merged.get("require_relevant_memory_to_address_player"),
-+        True,
-+    )
-+    merged["pending_response_timeout_ticks"] = max(1, _safe_int(merged.get("pending_response_timeout_ticks"), 3))
-+
-+    merged["allow_world_signals"] = _safe_bool(merged.get("allow_world_signals"), True)
-+    merged["allow_relationship_effects"] = _safe_bool(merged.get("allow_relationship_effects"), False)
-+    merged["allow_quest_discussion"] = _safe_bool(merged.get("allow_quest_discussion"), True)
-+    merged["allow_event_discussion"] = _safe_bool(merged.get("allow_event_discussion"), True)
-+    merged["allow_rumor_discussion"] = _safe_bool(merged.get("allow_rumor_discussion"), True)
-+    merged["allow_memory_discussion"] = _safe_bool(merged.get("allow_memory_discussion"), True)
-+    merged["max_world_signals_per_thread"] = max(0, _safe_int(merged.get("max_world_signals_per_thread"), 2))
-+    merged["signal_strength_cap"] = max(1, _safe_int(merged.get("signal_strength_cap"), 1))
-+    return merged
-+
-+
-+def write_conversation_settings_to_runtime(
-+    runtime_state: Dict[str, Any],
-+    settings: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    runtime_state = _safe_dict(runtime_state)
-+    runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
-+    runtime_settings["conversation_settings"] = normalize_conversation_settings(settings)
-+    runtime_state["runtime_settings"] = runtime_settings
-+    return runtime_state
-+
-+
-+def should_attempt_autonomous_conversation(
++def _bio(
 +    *,
-+    tick: int,
-+    last_conversation_tick: int,
-+    settings: Dict[str, Any],
-+    force: bool = False,
-+) -> bool:
-+    settings = normalize_conversation_settings(settings)
-+    if not settings.get("enabled"):
-+        return False
-+    if force:
-+        return True
-+    if not settings.get("autonomous_ticks_enabled"):
-+        return False
-+    min_delta = int(settings.get("min_ticks_between_conversations") or 0)
-+    if last_conversation_tick and int(tick or 0) - int(last_conversation_tick) < min_delta:
-+        return False
++    npc_id: str,
++    name: str,
++    role: str,
++    location_id: str,
++    short_bio: str,
++    personality_traits: List[str],
++    speaking_style: Dict[str, Any],
++    values: List[str],
++    fears: List[str],
++    relationships: Dict[str, str],
++    knowledge_boundaries: Dict[str, Any],
++    secrets: List[Dict[str, Any]] | None = None,
++) -> Dict[str, Any]:
++    return {
++        "npc_id": npc_id,
++        "name": name,
++        "role": role,
++        "location_id": location_id,
++        "short_bio": short_bio,
++        "personality_traits": list(personality_traits or [])[:8],
++        "speaking_style": dict(speaking_style or {}),
++        "values": list(values or [])[:8],
++        "fears": list(fears or [])[:8],
++        "relationships": dict(relationships or {}),
++        "knowledge_boundaries": {
++            "knows_about": list(_safe_list(_safe_dict(knowledge_boundaries).get("knows_about")))[:16],
++            "does_not_know_about": list(_safe_list(_safe_dict(knowledge_boundaries).get("does_not_know_about")))[:16],
++            "must_not_claim": list(_safe_list(_safe_dict(knowledge_boundaries).get("must_not_claim")))[:16],
++        },
++        "secrets": list(secrets or [])[:8],
++        "source": "deterministic_npc_biography_registry",
++    }
 +
-+    chance = int(settings.get("conversation_chance_percent") or 0)
-+    if chance <= 0:
-+        return False
-+    if chance >= 100:
-+        return True
 +
-+    # Deterministic pseudo-randomness from tick. This is replay-safe enough for
-+    # the current deterministic harness and avoids global RNG.
-+    bucket = (int(tick or 0) * 37 + 17) % 100
-+    return bucket < chance
-F1 PATCH — Conversation topic system
-New file: src/app/rpg/world/conversation_topics.py
-diff --git a/src/app/rpg/world/conversation_topics.py b/src/app/rpg/world/conversation_topics.py
++NPC_BIOGRAPHIES: Dict[str, Dict[str, Any]] = {
++    "npc:Bran": _bio(
++        npc_id="npc:Bran",
++        name="Bran",
++        role="Tavern keeper",
++        location_id="loc_tavern",
++        short_bio=(
++            "Bran keeps the tavern running, watches debts carefully, and treats rumors "
++            "as useful only when they come from reliable mouths."
++        ),
++        personality_traits=[
++            "practical",
++            "guarded",
++            "plainspoken",
++            "dry humor",
++            "protective of regulars",
++        ],
++        speaking_style={
++            "tone": "plainspoken",
++            "formality": "low",
++            "verbosity": "medium",
++            "quirks": [
++                "uses tavern and trade metaphors",
++                "asks direct questions",
++                "rarely volunteers dangerous details",
++            ],
++        },
++        values=[
++            "order",
++            "paid debts",
++            "local reputation",
++            "keeping violence out of the tavern",
++        ],
++        fears=[
++            "violence in the tavern",
++            "guards closing the inn",
++            "bandits reaching town",
++        ],
++        relationships={
++            "npc:Mira": "regular customer; Bran respects her curiosity but thinks she invites trouble",
++            "npc:GuardCaptain": "necessary but tense working relationship",
++            "player": "unknown traveler unless social state says otherwise",
++        },
++        knowledge_boundaries={
++            "knows_about": [
++                "tavern gossip",
++                "lodging",
++                "local roads",
++                "travelers",
++                "debts",
++                "rumors overheard in the common room",
++            ],
++            "does_not_know_about": [
++                "ancient magic",
++                "distant politics",
++                "secret lairs unless backed by rumor/event/quest state",
++            ],
++            "must_not_claim": [
++                "quest rewards",
++                "hidden treasure",
++                "secret locations without backed deterministic state",
++            ],
++        },
++        secrets=[
++            {
++                "secret_id": "secret:bran:old_mill_debts",
++                "summary": "Bran may know more about old mill debts than he admits.",
++                "reveal_policy": "never_without_backed_state",
++            }
++        ],
++    ),
++    "npc:Mira": _bio(
++        npc_id="npc:Mira",
++        name="Mira",
++        role="Curious local informant",
++        location_id="loc_tavern",
++        short_bio=(
++            "Mira listens more than she speaks, collects patterns in gossip, and pushes "
++            "people to admit what they are trying to avoid."
++        ),
++        personality_traits=[
++            "curious",
++            "observant",
++            "wry",
++            "probing",
++            "socially agile",
++        ],
++        speaking_style={
++            "tone": "curious",
++            "formality": "low",
++            "verbosity": "medium",
++            "quirks": [
++                "asks pointed follow-up questions",
++                "notices contradictions",
++                "phrases suspicions carefully",
++            ],
++        },
++        values=[
++            "truth",
++            "patterns",
++            "personal leverage",
++            "protecting vulnerable locals",
++        ],
++        fears=[
++            "being ignored when danger is obvious",
++            "powerful people burying the truth",
++        ],
++        relationships={
++            "npc:Bran": "respects Bran's caution but thinks he withholds too much",
++            "npc:GuardCaptain": "does not fully trust official explanations",
++            "player": "potential source of new information",
++        },
++        knowledge_boundaries={
++            "knows_about": [
++                "local rumors",
++                "people's moods",
++                "who avoids which roads",
++                "social tensions",
++            ],
++            "does_not_know_about": [
++                "official guard plans",
++                "private merchant ledgers",
++                "unseen threats unless backed by state",
++            ],
++            "must_not_claim": [
++                "confirmed guilt without backed evidence",
++                "hidden locations without backed deterministic state",
++            ],
++        },
++    ),
++    "npc:GuardCaptain": _bio(
++        npc_id="npc:GuardCaptain",
++        name="Guard Captain",
++        role="Local guard captain",
++        location_id="loc_tavern",
++        short_bio=(
++            "The Guard Captain is responsible for public order and tends to frame problems "
++            "in terms of risk, witnesses, and containment."
++        ),
++        personality_traits=[
++            "disciplined",
++            "skeptical",
++            "protective",
++            "authoritative",
++        ],
++        speaking_style={
++            "tone": "controlled",
++            "formality": "medium",
++            "verbosity": "low",
++            "quirks": [
++                "asks for facts",
++                "uses guard procedure language",
++                "avoids speculation",
++            ],
++        },
++        values=[
++            "public order",
++            "evidence",
++            "chain of command",
++            "keeping civilians alive",
++        ],
++        fears=[
++            "panic",
++            "false reports",
++            "being forced to act without evidence",
++        ],
++        relationships={
++            "npc:Bran": "relies on Bran for tavern reports but distrusts gossip",
++            "npc:Mira": "finds Mira useful but difficult to control",
++            "player": "unknown risk until proven otherwise",
++        },
++        knowledge_boundaries={
++            "knows_about": [
++                "guard patrols",
++                "local disturbances",
++                "reported threats",
++                "public safety",
++            ],
++            "does_not_know_about": [
++                "private secrets",
++                "unreported crimes",
++                "supernatural claims unless backed by state",
++            ],
++            "must_not_claim": [
++                "confirmed arrests",
++                "official rewards",
++                "combat orders",
++            ],
++        },
++    ),
++    "npc:Merchant": _bio(
++        npc_id="npc:Merchant",
++        name="Merchant",
++        role="Traveling merchant",
++        location_id="loc_market",
++        short_bio=(
++            "The merchant measures rumors by how they affect roads, prices, and risk."
++        ),
++        personality_traits=[
++            "pragmatic",
++            "opportunistic",
++            "careful",
++            "talkative when profit is nearby",
++        ],
++        speaking_style={
++            "tone": "practical",
++            "formality": "medium",
++            "verbosity": "medium",
++            "quirks": [
++                "mentions risk and trade",
++                "compares danger to cost",
++                "tries to avoid giving information for free",
++            ],
++        },
++        values=[
++            "profit",
++            "safe roads",
++            "reliable customers",
++            "good information",
++        ],
++        fears=[
++            "ambushes",
++            "spoiled goods",
++            "unpaid debts",
++        ],
++        relationships={
++            "player": "potential customer or escort",
++        },
++        knowledge_boundaries={
++            "knows_about": [
++                "trade routes",
++                "prices",
++                "road conditions",
++                "market gossip",
++            ],
++            "does_not_know_about": [
++                "local politics beyond trade impact",
++                "secret locations unless backed by state",
++            ],
++            "must_not_claim": [
++                "stock changes",
++                "discounts",
++                "quest rewards",
++            ],
++        },
++    ),
++}
++
++
++NPC_ALIAS_TO_ID = {
++    "bran": "npc:Bran",
++    "mira": "npc:Mira",
++    "guard captain": "npc:GuardCaptain",
++    "captain": "npc:GuardCaptain",
++    "merchant": "npc:Merchant",
++    "shopkeeper": "npc:Merchant",
++}
++
++
++def canonical_npc_id(value: Any) -> str:
++    text = _safe_str(value).strip()
++    if not text:
++        return ""
++    if text.startswith("npc:"):
++        return text
++    return NPC_ALIAS_TO_ID.get(text.lower(), f"npc:{text}")
++
++
++def get_npc_biography(npc_id_or_name: Any) -> Dict[str, Any]:
++    npc_id = canonical_npc_id(npc_id_or_name)
++    bio = NPC_BIOGRAPHIES.get(npc_id)
++    if bio:
++        return deepcopy(bio)
++    name = npc_id.replace("npc:", "") if npc_id else "Unknown NPC"
++    return _bio(
++        npc_id=npc_id or "npc:Unknown",
++        name=name,
++        role="Local NPC",
++        location_id="",
++        short_bio=f"{name} is a local person. No detailed biography has been registered yet.",
++        personality_traits=["ordinary", "cautious"],
++        speaking_style={
++            "tone": "neutral",
++            "formality": "medium",
++            "verbosity": "medium",
++            "quirks": [],
++        },
++        values=["safety"],
++        fears=["trouble"],
++        relationships={"player": "unknown"},
++        knowledge_boundaries={
++            "knows_about": ["immediate surroundings"],
++            "does_not_know_about": ["unbacked claims"],
++            "must_not_claim": [
++                "quest rewards",
++                "hidden locations",
++                "facts not backed by deterministic state",
++            ],
++        },
++    )
++
++
++def list_npc_biographies() -> List[Dict[str, Any]]:
++    return [deepcopy(value) for value in NPC_BIOGRAPHIES.values()]
++
+O1 PATCH — Add NPC dialogue profile builder
+New file: src/app/rpg/world/npc_dialogue_profile.py
+diff --git a/src/app/rpg/world/npc_dialogue_profile.py b/src/app/rpg/world/npc_dialogue_profile.py
 new file mode 100644
-index 0000000..9c291e5
+index 0000000..nop0002
 --- /dev/null
-+++ b/src/app/rpg/world/conversation_topics.py
-@@ -0,0 +1,313 @@
++++ b/src/app/rpg/world/npc_dialogue_profile.py
+@@ -0,0 +1,231 @@
 +from __future__ import annotations
 +
 +from copy import deepcopy
 +from typing import Any, Dict, List
 +
-+from app.rpg.world.location_registry import current_location_id, get_location
++from app.rpg.world.npc_biography_registry import get_npc_biography
++
++
++FORBIDDEN_NPC_DIALOGUE_CLAIMS = [
++    "Do not create or complete quests.",
++    "Do not grant rewards.",
++    "Do not create journal entries.",
++    "Do not create items.",
++    "Do not change inventory, currency, shop stock, location, or combat state.",
++    "Do not claim hidden facts unless they are present in deterministic allowed facts.",
++]
 +
 +
 +def _safe_str(value: Any) -> str:
@@ -242,301 +443,182 @@ index 0000000..9c291e5
 +        return default
 +
 +
-+def _topic(
++def _npc_social_entry(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
++    social_state = _safe_dict(simulation_state.get("conversation_social_state"))
++    by_npc = _safe_dict(social_state.get("npc_state") or social_state.get("npcs"))
++    return _safe_dict(by_npc.get(npc_id))
++
++
++def _npc_goal_entry(simulation_state: Dict[str, Any], npc_id: str) -> Dict[str, Any]:
++    goal_state = _safe_dict(simulation_state.get("npc_goal_state"))
++    goals_by_npc = _safe_dict(goal_state.get("goals"))
++    goals = _safe_list(goals_by_npc.get(npc_id))
++    active_goals = [
++        _safe_dict(goal)
++        for goal in goals
++        if _safe_str(_safe_dict(goal).get("status") or "active") == "active"
++    ]
++    if not active_goals:
++        return {}
++    active_goals.sort(
++        key=lambda goal: (
++            _safe_int(goal.get("priority"), 0),
++            -_safe_int(goal.get("created_tick"), 0),
++        ),
++        reverse=True,
++    )
++    return deepcopy(active_goals[0])
++
++
++def _allowed_facts_from_topic(topic: Dict[str, Any]) -> List[str]:
++    topic = _safe_dict(topic)
++    facts = []
++    for value in _safe_list(topic.get("allowed_facts")):
++        text = _safe_str(value).strip()
++        if text:
++            facts.append(text)
++    summary = _safe_str(topic.get("summary")).strip()
++    if summary and summary not in facts:
++        facts.append(summary)
++    title = _safe_str(topic.get("title")).strip()
++    if title and title not in facts:
++        facts.append(title)
++    return facts[:8]
++
++
++def build_npc_dialogue_profile(
 +    *,
-+    topic_id: str,
-+    topic_type: str,
-+    title: str,
-+    summary: str,
-+    source_id: str,
-+    source_kind: str,
-+    location_id: str,
-+    priority: int,
-+    allowed_facts: List[str],
-+    allowed_signal_kinds: List[str],
++    npc_id: str,
++    simulation_state: Dict[str, Any],
++    runtime_state: Dict[str, Any] | None = None,
++    topic: Dict[str, Any] | None = None,
++    listener_id: str = "",
++    response_intent: str = "comment",
 +) -> Dict[str, Any]:
++    simulation_state = _safe_dict(simulation_state)
++    runtime_state = _safe_dict(runtime_state)
++    topic = _safe_dict(topic)
++
++    biography = get_npc_biography(npc_id)
++    social = _npc_social_entry(simulation_state, _safe_str(biography.get("npc_id")))
++    active_goal = _npc_goal_entry(simulation_state, _safe_str(biography.get("npc_id")))
++    allowed_facts = _allowed_facts_from_topic(topic)
++
++    profile = {
++        "npc_id": _safe_str(biography.get("npc_id")),
++        "name": _safe_str(biography.get("name")),
++        "role": _safe_str(biography.get("role")),
++        "short_bio": _safe_str(biography.get("short_bio")),
++        "personality_traits": _safe_list(biography.get("personality_traits"))[:8],
++        "speaking_style": deepcopy(_safe_dict(biography.get("speaking_style"))),
++        "values": _safe_list(biography.get("values"))[:8],
++        "fears": _safe_list(biography.get("fears"))[:8],
++        "relationships": deepcopy(_safe_dict(biography.get("relationships"))),
++        "knowledge_boundaries": deepcopy(_safe_dict(biography.get("knowledge_boundaries"))),
++        "relationship_to_listener": _safe_str(_safe_dict(biography.get("relationships")).get(listener_id)),
++        "conversation_social_state": deepcopy(social),
++        "active_goal": deepcopy(active_goal),
++        "topic_id": _safe_str(topic.get("topic_id")),
++        "topic_type": _safe_str(topic.get("topic_type")),
++        "topic_title": _safe_str(topic.get("title")),
++        "allowed_facts": allowed_facts,
++        "used_fact_ids": [_safe_str(topic.get("topic_id"))] if _safe_str(topic.get("topic_id")) else [],
++        "response_intent": response_intent,
++        "forbidden_claims": list(FORBIDDEN_NPC_DIALOGUE_CLAIMS),
++        "source": "deterministic_npc_dialogue_profile",
++    }
++    return profile
++
++
++def deterministic_biography_line(
++    *,
++    profile: Dict[str, Any],
++    topic: Dict[str, Any] | None = None,
++    pivot: Dict[str, Any] | None = None,
++    response_style: str = "",
++) -> Dict[str, Any]:
++    profile = _safe_dict(profile)
++    topic = _safe_dict(topic)
++    pivot = _safe_dict(pivot)
++    role = _safe_str(profile.get("role")) or "local"
++    npc_id = _safe_str(profile.get("npc_id"))
++    name = _safe_str(profile.get("name")) or npc_id.replace("npc:", "")
++    style = _safe_str(response_style or profile.get("response_intent") or "guarded")
++    traits = [_safe_str(v) for v in _safe_list(profile.get("personality_traits"))]
++    facts = [_safe_str(v) for v in _safe_list(profile.get("allowed_facts")) if _safe_str(v)]
++    fact = facts[0] if facts else ""
++
++    pivot_requested = bool(pivot.get("requested"))
++    pivot_accepted = bool(pivot.get("accepted"))
++    pivot_reason = _safe_str(pivot.get("pivot_rejected_reason") or pivot.get("reason"))
++    hint = _safe_str(pivot.get("requested_topic_hint"))
++
++    if pivot_requested and not pivot_accepted:
++        if "plainspoken" in traits or role.lower().startswith("tavern"):
++            line = "I have no reliable word of that. I will not dress guesses up as fact."
++        elif "curious" in traits:
++            line = "I have heard no solid proof of that, only the shape of a question."
++        elif "disciplined" in traits:
++            line = "I cannot confirm that without a report or witness."
++        else:
++            line = "I do not know enough to call that true."
++        return {
++            "line": line,
++            "roleplay_source": "deterministic_template",
++            "biography_role": role,
++            "biography_traits": traits[:5],
++            "used_fact_ids": [],
++            "response_style": style,
++            "unbacked_hint": hint,
++            "pivot_rejected_reason": pivot_reason or "no_backed_topic_found",
++            "source": "deterministic_biography_dialogue",
++        }
++
++    if fact:
++        if role.lower().startswith("tavern"):
++            line = f"I keep a tavern, not a hero's ledger. But I can tell you this much: {fact}"
++        elif "informant" in role.lower() or "curious" in traits:
++            line = f"That lines up with what people keep circling around: {fact}"
++        elif "guard" in role.lower():
++            line = f"Keep to what can be verified: {fact}"
++        elif "merchant" in role.lower():
++            line = f"If it affects the roads or trade, it matters. What I know is this: {fact}"
++        else:
++            line = fact
++    else:
++        if "guarded" in traits:
++            line = "I would rather not build a story out of smoke."
++        elif "curious" in traits:
++            line = "There is something there, but not enough to name it yet."
++        else:
++            line = "I do not know enough to say more."
++
 +    return {
-+        "topic_id": topic_id,
-+        "topic_type": topic_type,
-+        "title": title,
-+        "summary": summary,
-+        "source_id": source_id,
-+        "source_kind": source_kind,
-+        "location_id": location_id,
-+        "priority": int(priority or 0),
-+        "allowed_facts": [fact for fact in allowed_facts if _safe_str(fact)],
-+        "allowed_signal_kinds": allowed_signal_kinds,
-+        "forbidden_direct_effects": [
-+            "quest_started",
-+            "quest_completed",
-+            "reward_granted",
-+            "item_created",
-+            "currency_changed",
-+            "stock_changed",
-+            "journal_entry_created",
-+            "location_changed",
-+            "combat_started",
-+            "npc_moved",
-+        ],
-+        "source": "deterministic_conversation_topic_runtime",
++        "line": line,
++        "roleplay_source": "deterministic_template",
++        "biography_role": role,
++        "biography_traits": traits[:5],
++        "used_fact_ids": _safe_list(profile.get("used_fact_ids"))[:8],
++        "response_style": style,
++        "source": "deterministic_biography_dialogue",
 +    }
 +
-+
-+def _location_topic(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-+    location_id = current_location_id(simulation_state)
-+    location = get_location(location_id)
-+    name = _safe_str(location.get("name") or location_id)
-+    if location_id == "loc_tavern":
-+        return _topic(
-+            topic_id="topic:location:loc_tavern:mood",
-+            topic_type="location_smalltalk",
-+            title="The tavern's mood",
-+            summary="The tavern is busy with travelers, food, and low conversation.",
-+            source_id=location_id,
-+            source_kind="location",
-+            location_id=location_id,
-+            priority=1,
-+            allowed_facts=[
-+                "The tavern is busy with travelers.",
-+                "The room has been busier than usual.",
-+            ],
-+            allowed_signal_kinds=["rumor_interest", "ambient_interest"],
-+        )
-+    if location_id == "loc_market":
-+        return _topic(
-+            topic_id="topic:location:loc_market:trade",
-+            topic_type="location_smalltalk",
-+            title="Market traffic",
-+            summary="The market is busy with stalls, porters, and customers.",
-+            source_id=location_id,
-+            source_kind="location",
-+            location_id=location_id,
-+            priority=1,
-+            allowed_facts=[
-+                "The market crowd is moving quickly.",
-+                "Busy stalls can mean both opportunity and trouble.",
-+            ],
-+            allowed_signal_kinds=["market_pressure", "ambient_interest"],
-+        )
-+    return _topic(
-+        topic_id=f"topic:location:{location_id}:ambient",
-+        topic_type="location_smalltalk",
-+        title=f"Local activity near {name}",
-+        summary=f"NPCs nearby discuss what is happening around {name}.",
-+        source_id=location_id,
-+        source_kind="location",
-+        location_id=location_id,
-+        priority=1,
-+        allowed_facts=[f"NPCs are present near {name}."],
-+        allowed_signal_kinds=["ambient_interest"],
-+    )
-+
-+
-+def _world_event_topics(simulation_state: Dict[str, Any], settings: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    if not settings.get("allow_event_discussion", True):
-+        return []
-+    location_id = current_location_id(simulation_state)
-+    event_state = _safe_dict(simulation_state.get("world_event_state"))
-+    events = _safe_list(event_state.get("events"))
-+    topics: List[Dict[str, Any]] = []
-+    for event in events[-8:]:
-+        event = _safe_dict(event)
-+        event_id = _safe_str(event.get("event_id"))
-+        title = _safe_str(event.get("title") or event.get("kind") or "Recent event")
-+        summary = _safe_str(event.get("summary"))
-+        if not event_id or not summary:
-+            continue
-+        event_location = _safe_str(event.get("location_id") or location_id)
-+        topics.append(
-+            _topic(
-+                topic_id=f"topic:event:{event_id}",
-+                topic_type="recent_event",
-+                title=title,
-+                summary=summary,
-+                source_id=event_id,
-+                source_kind="world_event",
-+                location_id=event_location,
-+                priority=6,
-+                allowed_facts=[summary],
-+                allowed_signal_kinds=["event_attention", "ambient_interest"],
-+            )
-+        )
-+    return topics
-+
-+
-+def _journal_topics(simulation_state: Dict[str, Any], settings: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    location_id = current_location_id(simulation_state)
-+    journal_state = _safe_dict(simulation_state.get("journal_state"))
-+    entries = _safe_list(journal_state.get("entries"))
-+    topics: List[Dict[str, Any]] = []
-+    for entry in entries[-8:]:
-+        entry = _safe_dict(entry)
-+        entry_id = _safe_str(entry.get("entry_id"))
-+        kind = _safe_str(entry.get("kind"))
-+        title = _safe_str(entry.get("title") or entry_id)
-+        summary = _safe_str(entry.get("summary"))
-+        if not entry_id or not summary:
-+            continue
-+        if kind == "rumor" and not settings.get("allow_rumor_discussion", True):
-+            continue
-+        topics.append(
-+            _topic(
-+                topic_id=f"topic:journal:{entry_id}",
-+                topic_type="rumor" if kind == "rumor" else "journal",
-+                title=title,
-+                summary=summary,
-+                source_id=entry_id,
-+                source_kind="journal_entry",
-+                location_id=location_id,
-+                priority=7 if kind == "rumor" else 5,
-+                allowed_facts=[summary],
-+                allowed_signal_kinds=["rumor_pressure", "quest_interest", "event_attention"],
-+            )
-+        )
-+    return topics
-+
-+
-+def _quest_topics(simulation_state: Dict[str, Any], settings: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    if not settings.get("allow_quest_discussion", True):
-+        return []
-+    quest_state = _safe_dict(simulation_state.get("quest_state"))
-+    quests = _safe_list(quest_state.get("quests"))
-+    location_id = current_location_id(simulation_state)
-+    topics: List[Dict[str, Any]] = []
-+    for quest in quests[-8:]:
-+        quest = _safe_dict(quest)
-+        quest_id = _safe_str(quest.get("quest_id"))
-+        status = _safe_str(quest.get("status") or "active")
-+        title = _safe_str(quest.get("title") or quest_id)
-+        summary = _safe_str(quest.get("summary") or title)
-+        if not quest_id or status in {"completed", "failed"}:
-+            continue
-+        topics.append(
-+            _topic(
-+                topic_id=f"topic:quest:{quest_id}",
-+                topic_type="quest",
-+                title=title,
-+                summary=summary,
-+                source_id=quest_id,
-+                source_kind="quest",
-+                location_id=_safe_str(quest.get("location_id") or location_id),
-+                priority=8,
-+                allowed_facts=[summary, f"The quest '{title}' is {status}."],
-+                allowed_signal_kinds=["quest_interest", "danger_warning", "rumor_pressure"],
-+            )
-+        )
-+    return topics
-+
-+
-+def _memory_topics(simulation_state: Dict[str, Any], settings: Dict[str, Any]) -> List[Dict[str, Any]]:
-+    if not settings.get("allow_memory_discussion", True):
-+        return []
-+    memory_state = _safe_dict(simulation_state.get("memory_state"))
-+    location_id = current_location_id(simulation_state)
-+    memories = _safe_list(memory_state.get("service_memories")) + _safe_list(memory_state.get("social_memories"))
-+    topics: List[Dict[str, Any]] = []
-+    for memory in memories[-8:]:
-+        memory = _safe_dict(memory)
-+        memory_id = _safe_str(memory.get("memory_id"))
-+        summary = _safe_str(memory.get("summary"))
-+        if not memory_id or not summary:
-+            continue
-+        topics.append(
-+            _topic(
-+                topic_id=f"topic:memory:{memory_id}",
-+                topic_type="memory",
-+                title="Recent memory",
-+                summary=summary,
-+                source_id=memory_id,
-+                source_kind="memory",
-+                location_id=location_id,
-+                priority=4,
-+                allowed_facts=[summary],
-+                allowed_signal_kinds=["social_tension", "ambient_interest"],
-+            )
-+        )
-+    return topics
-+
-+
-+def conversation_topics_for_state(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    settings: Dict[str, Any] | None = None,
-+) -> List[Dict[str, Any]]:
-+    settings = _safe_dict(settings)
-+    topics: List[Dict[str, Any]] = []
-+    topics.extend(_quest_topics(simulation_state, settings))
-+    topics.extend(_journal_topics(simulation_state, settings))
-+    topics.extend(_world_event_topics(simulation_state, settings))
-+    topics.extend(_memory_topics(simulation_state, settings))
-+    topics.append(_location_topic(simulation_state))
-+
-+    deduped: Dict[str, Dict[str, Any]] = {}
-+    for topic in topics:
-+        topic_id = _safe_str(topic.get("topic_id"))
-+        if not topic_id:
-+            continue
-+        existing = deduped.get(topic_id)
-+        if not existing or _safe_int(topic.get("priority")) > _safe_int(existing.get("priority")):
-+            deduped[topic_id] = topic
-+
-+    out = list(deduped.values())
-+    out.sort(key=lambda topic: (_safe_int(topic.get("priority")), _safe_str(topic.get("topic_id"))), reverse=True)
-+    return deepcopy(out)
-+
-+
-+def select_conversation_topic(
-+    simulation_state: Dict[str, Any],
-+    *,
-+    settings: Dict[str, Any] | None = None,
-+    forced_topic_type: str = "",
-+) -> Dict[str, Any]:
-+    topics = conversation_topics_for_state(simulation_state, settings=settings)
-+    if forced_topic_type:
-+        for topic in topics:
-+            if _safe_str(topic.get("topic_type")) == forced_topic_type:
-+                return deepcopy(topic)
-+    return deepcopy(topics[0]) if topics else {}
-+
-+
-+def topic_is_backed_by_state(topic: Dict[str, Any]) -> bool:
-+    topic = _safe_dict(topic)
-+    topic_type = _safe_str(topic.get("topic_type"))
-+    source_id = _safe_str(topic.get("source_id"))
-+    facts = _safe_list(topic.get("allowed_facts"))
-+    if topic_type == "location_smalltalk":
-+        return bool(source_id and facts)
-+    return bool(source_id and facts)
-F1 PATCH — Conversation effect validator
-New file: src/app/rpg/world/conversation_effects.py
-diff --git a/src/app/rpg/world/conversation_effects.py b/src/app/rpg/world/conversation_effects.py
+P1 PATCH — Add optional LLM roleplay boundary and validator
+New file: src/app/rpg/ai/npc_roleplay.py
+diff --git a/src/app/rpg/ai/npc_roleplay.py b/src/app/rpg/ai/npc_roleplay.py
 new file mode 100644
-index 0000000..4c53a1d
+index 0000000..nop0003
 --- /dev/null
-+++ b/src/app/rpg/world/conversation_effects.py
-@@ -0,0 +1,195 @@
++++ b/src/app/rpg/ai/npc_roleplay.py
+@@ -0,0 +1,298 @@
 +from __future__ import annotations
 +
-+from copy import deepcopy
++import json
++import re
 +from typing import Any, Dict, List
 +
 +
-+ALLOWED_SIGNAL_KINDS = {
-+    "rumor_interest",
-+    "rumor_pressure",
-+    "danger_warning",
-+    "market_pressure",
-+    "social_tension",
-+    "npc_concern",
-+    "service_demand",
-+    "quest_interest",
-+    "event_attention",
-+    "location_interest",
-+    "ambient_interest",
-+}
-+
-+
-+FORBIDDEN_CONVERSATION_RESULT_KEYS = {
++FORBIDDEN_EFFECT_KEYS = {
 +    "quest_started",
 +    "quest_completed",
 +    "reward",
@@ -556,6 +638,14 @@ index 0000000..4c53a1d
 +}
 +
 +
++FORBIDDEN_CLAIM_PATTERNS = [
++    re.compile(r"\b(reward|payment|gold|silver|coins?)\b", re.IGNORECASE),
++    re.compile(r"\b(take this|give you|grant you|you receive)\b", re.IGNORECASE),
++    re.compile(r"\b(quest completed|quest started|new quest)\b", re.IGNORECASE),
++    re.compile(r"\b(i know where|hidden treasure|secret lair)\b", re.IGNORECASE),
++]
++
++
 +def _safe_str(value: Any) -> str:
 +    return "" if value is None else str(value)
 +
@@ -568,922 +658,425 @@ index 0000000..4c53a1d
 +    return value if isinstance(value, list) else []
 +
 +
-+def _safe_int(value: Any, default: int = 0) -> int:
++def _extract_json_object(text: str) -> Dict[str, Any]:
++    text = _safe_str(text).strip()
++    if not text:
++        return {}
 +    try:
-+        return int(value)
++        value = json.loads(text)
++        return value if isinstance(value, dict) else {}
 +    except Exception:
-+        return default
++        pass
++    start = text.find("{")
++    end = text.rfind("}")
++    if start >= 0 and end > start:
++        try:
++            value = json.loads(text[start : end + 1])
++            return value if isinstance(value, dict) else {}
++        except Exception:
++            return {}
++    return {}
 +
 +
-+def build_conversation_world_signal(
++def build_npc_roleplay_prompt(profile: Dict[str, Any]) -> str:
++    profile = _safe_dict(profile)
++    return (
++        "You are writing ONE line of NPC dialogue for a deterministic RPG engine.\n"
++        "You may shape tone from the NPC biography, but you may not create world facts.\n"
++        "Only use allowed_facts. If the player asks about an unbacked topic, safely deflect.\n"
++        "Return strict JSON only with this schema:\n"
++        "{\n"
++        '  "speaker_id": string,\n'
++        '  "speaker_name": string,\n'
++        '  "line": string,\n'
++        '  "style_tags": [string],\n'
++        '  "used_fact_ids": [string],\n'
++        '  "claims": [string],\n'
++        '  "forbidden_effects": []\n'
++        "}\n\n"
++        f"NPC profile:\n{json.dumps(profile, ensure_ascii=False, indent=2)}\n"
++    )
++
++
++def validate_npc_roleplay_output(
++    output: Dict[str, Any],
 +    *,
-+    tick: int,
-+    thread_id: str,
-+    beat_id: str,
-+    topic: Dict[str, Any],
-+    settings: Dict[str, Any],
++    expected_speaker_id: str,
++    profile: Dict[str, Any],
++    max_line_chars: int = 240,
 +) -> Dict[str, Any]:
-+    topic = _safe_dict(topic)
-+    settings = _safe_dict(settings)
-+    allowed = _safe_list(topic.get("allowed_signal_kinds"))
-+    signal_kind = _safe_str(allowed[0] if allowed else "ambient_interest")
-+    if signal_kind not in ALLOWED_SIGNAL_KINDS:
-+        signal_kind = "ambient_interest"
-+
-+    cap = max(1, _safe_int(settings.get("signal_strength_cap"), 1))
-+    strength = min(cap, 1)
-+
-+    return {
-+        "signal_id": f"world_signal:conversation:{int(tick or 0)}:{thread_id}:{beat_id}",
-+        "kind": signal_kind,
-+        "strength": strength,
-+        "topic_id": _safe_str(topic.get("topic_id")),
-+        "topic_type": _safe_str(topic.get("topic_type")),
-+        "summary": _safe_str(topic.get("summary")),
-+        "source_id": _safe_str(topic.get("source_id")),
-+        "source_kind": _safe_str(topic.get("source_kind")),
-+        "source_thread_id": thread_id,
-+        "source_beat_id": beat_id,
-+        "location_id": _safe_str(topic.get("location_id")),
-+        "tick": int(tick or 0),
-+        "source": "deterministic_conversation_effect_runtime",
-+    }
-+
-+
-+def validate_conversation_effects(
-+    conversation_result: Dict[str, Any],
-+    *,
-+    settings: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    conversation_result = _safe_dict(conversation_result)
-+    settings = _safe_dict(settings)
++    output = _safe_dict(output)
++    profile = _safe_dict(profile)
 +    violations: List[str] = []
 +
-+    for key in FORBIDDEN_CONVERSATION_RESULT_KEYS:
-+        value = conversation_result.get(key)
-+        if value:
-+            violations.append(f"forbidden_key:{key}")
++    speaker_id = _safe_str(output.get("speaker_id"))
++    line = _safe_str(output.get("line")).strip()
++    used_fact_ids = [_safe_str(value) for value in _safe_list(output.get("used_fact_ids"))]
++    allowed_fact_ids = set(_safe_str(value) for value in _safe_list(profile.get("used_fact_ids")))
++    forbidden_effects = _safe_list(output.get("forbidden_effects"))
 +
-+    signal = _safe_dict(conversation_result.get("world_signal"))
-+    if signal:
-+        signal_kind = _safe_str(signal.get("kind"))
-+        if signal_kind not in ALLOWED_SIGNAL_KINDS:
-+            violations.append(f"invalid_signal_kind:{signal_kind}")
-+        cap = max(1, _safe_int(settings.get("signal_strength_cap"), 1))
-+        if _safe_int(signal.get("strength"), 0) > cap:
-+            violations.append("signal_strength_exceeds_cap")
++    if speaker_id != expected_speaker_id:
++        violations.append("speaker_id_mismatch")
++    if not line:
++        violations.append("empty_line")
++    if len(line) > max_line_chars:
++        violations.append("line_too_long")
 +
-+    topic = _safe_dict(conversation_result.get("topic"))
-+    if topic:
-+        topic_type = _safe_str(topic.get("topic_type"))
-+        if topic_type == "quest" and not settings.get("allow_quest_discussion", True):
-+            violations.append("quest_discussion_disabled")
-+        if topic_type == "recent_event" and not settings.get("allow_event_discussion", True):
-+            violations.append("event_discussion_disabled")
-+        if topic_type == "rumor" and not settings.get("allow_rumor_discussion", True):
-+            violations.append("rumor_discussion_disabled")
++    for key in FORBIDDEN_EFFECT_KEYS:
++        if output.get(key):
++            violations.append(f"forbidden_effect_key:{key}")
++
++    for effect in forbidden_effects:
++        text = _safe_str(effect)
++        if text:
++            violations.append(f"forbidden_effect_declared:{text}")
++
++    for fact_id in used_fact_ids:
++        if fact_id and fact_id not in allowed_fact_ids:
++            violations.append(f"unbacked_fact_id:{fact_id}")
++
++    for pattern in FORBIDDEN_CLAIM_PATTERNS:
++        if pattern.search(line):
++            # Permit the word "reward" only if an allowed fact explicitly contains it.
++            allowed_text = " ".join(_safe_str(value).lower() for value in _safe_list(profile.get("allowed_facts")))
++            if pattern.pattern.lower() not in allowed_text:
++                violations.append("forbidden_claim_pattern")
++                break
 +
 +    return {
 +        "ok": not violations,
 +        "violations": violations,
-+        "checked_forbidden_keys": sorted(FORBIDDEN_CONVERSATION_RESULT_KEYS),
-+        "allowed_signal_kinds": sorted(ALLOWED_SIGNAL_KINDS),
-+        "source": "deterministic_conversation_effect_validator",
++        "line": line,
++        "source": "npc_roleplay_validator",
 +    }
 +
 +
-+def strip_forbidden_conversation_effects(conversation_result: Dict[str, Any]) -> Dict[str, Any]:
-+    result = deepcopy(_safe_dict(conversation_result))
-+    for key in FORBIDDEN_CONVERSATION_RESULT_KEYS:
-+        result.pop(key, None)
-+    return result
-F2 PATCH — Upgrade conversation thread runtime
++async def try_generate_npc_roleplay_line(
++    *,
++    profile: Dict[str, Any],
++    expected_speaker_id: str,
++    provider: Any = None,
++    enabled: bool = False,
++) -> Dict[str, Any]:
++    if not enabled:
++        return {
++            "ok": False,
++            "roleplay_source": "llm_disabled",
++            "error": "npc_roleplay_llm_disabled",
++        }
++
++    if provider is None:
++        return {
++            "ok": False,
++            "roleplay_source": "llm_unavailable",
++            "error": "provider_unavailable",
++        }
++
++    prompt = build_npc_roleplay_prompt(profile)
++    try:
++        if hasattr(provider, "generate"):
++            raw = await provider.generate(prompt) if callable(provider.generate) else ""
++        elif hasattr(provider, "complete"):
++            raw = await provider.complete(prompt) if callable(provider.complete) else ""
++        else:
++            return {
++                "ok": False,
++                "roleplay_source": "llm_unavailable",
++                "error": "provider_has_no_generate_method",
++            }
++    except Exception as exc:
++        return {
++            "ok": False,
++            "roleplay_source": "llm_error",
++            "error": f"{type(exc).__name__}: {exc}",
++        }
++
++    parsed = _extract_json_object(_safe_str(raw))
++    validation = validate_npc_roleplay_output(
++        parsed,
++        expected_speaker_id=expected_speaker_id,
++        profile=profile,
++    )
++    if not validation.get("ok"):
++        return {
++            "ok": False,
++            "roleplay_source": "llm_fallback",
++            "raw": _safe_str(raw)[:2000],
++            "parsed": parsed,
++            "validation": validation,
++            "error": "llm_output_failed_validation",
++        }
++
++    return {
++        "ok": True,
++        "roleplay_source": "llm_validated",
++        "line": _safe_str(parsed.get("line")),
++        "style_tags": _safe_list(parsed.get("style_tags"))[:8],
++        "used_fact_ids": _safe_list(parsed.get("used_fact_ids"))[:8],
++        "claims": _safe_list(parsed.get("claims"))[:8],
++        "validation": validation,
++        "source": "npc_roleplay_llm_boundary",
++    }
++
+O2 PATCH — Wire biography-grounded dialogue into conversation replies
 File: src/app/rpg/world/conversation_threads.py
-
-Add imports:
-
+Add imports
 diff --git a/src/app/rpg/world/conversation_threads.py b/src/app/rpg/world/conversation_threads.py
 --- a/src/app/rpg/world/conversation_threads.py
 +++ b/src/app/rpg/world/conversation_threads.py
 @@
- from app.rpg.world.world_event_log import add_world_event
- from app.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
-+from app.rpg.world.conversation_effects import (
-+    build_conversation_world_signal,
-+    strip_forbidden_conversation_effects,
-+    validate_conversation_effects,
++from app.rpg.world.npc_dialogue_profile import (
++    build_npc_dialogue_profile,
++    deterministic_biography_line,
 +)
-+from app.rpg.world.conversation_settings import normalize_conversation_settings
-+from app.rpg.world.conversation_topics import (
-+    select_conversation_topic,
-+    topic_is_backed_by_state,
-+)
+Add helper
 
-Add state roots:
+Add near the existing NPC response helper functions:
 
 @@
- def ensure_conversation_thread_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-@@
-     if not isinstance(state.get("world_signals"), list):
-         state["world_signals"] = []
-+    if not isinstance(state.get("pending_player_response"), dict):
-+        state["pending_player_response"] = {}
-+    if not isinstance(state.get("cooldowns"), dict):
-+        state["cooldowns"] = {}
-     if not isinstance(state.get("debug"), dict):
-         state["debug"] = {}
-     return state
-
-Add helpers before maybe_advance_conversation_thread(...):
-
-@@
- def _make_beat(
-@@
-     return {
-@@
-     }
-+
-+
-+def _deterministic_percent(seed: str, tick: int) -> int:
-+    total = sum(ord(ch) for ch in _safe_str(seed))
-+    return (total + int(tick or 0) * 37 + 19) % 100
-+
-+
-+def _select_participation_mode(
++def _biography_grounded_npc_response(
 +    *,
-+    settings: Dict[str, Any],
-+    topic: Dict[str, Any],
-+    tick: int,
-+    force_player_mode: str = "",
-+) -> str:
-+    if force_player_mode in {"overheard", "player_addressed", "player_invited"}:
-+        return force_player_mode
-+
-+    settings = normalize_conversation_settings(settings)
-+    if not settings.get("allow_player_addressed") and not settings.get("allow_player_invited"):
-+        return "overheard"
-+
-+    chance = int(settings.get("player_inclusion_chance_percent") or 0)
-+    if chance <= 0:
-+        return "overheard"
-+
-+    bucket = _deterministic_percent(_safe_str(topic.get("topic_id")), tick)
-+    if bucket >= chance:
-+        return "overheard"
-+
-+    if settings.get("allow_player_invited"):
-+        return "player_invited"
-+    if settings.get("allow_player_addressed"):
-+        return "player_addressed"
-+    return "overheard"
-+
-+
-+def _player_participation_payload(
-+    *,
-+    mode: str,
-+    topic: Dict[str, Any],
-+    tick: int,
-+    settings: Dict[str, Any],
-+) -> Dict[str, Any]:
-+    pending = mode == "player_invited"
-+    return {
-+        "included": mode in {"player_addressed", "player_invited", "player_joined"},
-+        "mode": mode,
-+        "pending_response": pending,
-+        "prompt": (
-+            f"NPCs invite your response about {_safe_str(topic.get('title') or topic.get('topic_id'))}."
-+            if pending
-+            else ""
-+        ),
-+        "topic_id": _safe_str(topic.get("topic_id")),
-+        "created_tick": int(tick or 0) if pending else 0,
-+        "expires_tick": int(tick or 0) + int(settings.get("pending_response_timeout_ticks") or 3) if pending else 0,
-+    }
-+
-+
-+def _thread_on_cooldown(
-+    state: Dict[str, Any],
-+    *,
-+    thread_id: str,
-+    tick: int,
-+) -> bool:
-+    cooldowns = _safe_dict(state.get("cooldowns"))
-+    until = _safe_int(cooldowns.get(thread_id), 0)
-+    return bool(until and int(tick or 0) < until)
-+
-+
-+def _set_thread_cooldown(
-+    state: Dict[str, Any],
-+    *,
-+    thread_id: str,
-+    tick: int,
-+    settings: Dict[str, Any],
-+) -> None:
-+    cooldowns = _safe_dict(state.get("cooldowns"))
-+    cooldowns[thread_id] = int(tick or 0) + int(settings.get("thread_cooldown_ticks") or 0)
-+    state["cooldowns"] = cooldowns
-+
-+
-+def _conversation_line_for_topic(
-+    *,
-+    speaker: Dict[str, Any],
-+    location_id: str,
-+    beat_index: int,
-+    topic: Dict[str, Any],
-+    participation_mode: str,
-+) -> str:
-+    topic_type = _safe_str(topic.get("topic_type"))
-+    facts = _safe_list(topic.get("allowed_facts"))
-+    fact = _safe_str(facts[0] if facts else topic.get("summary"))
-+
-+    if participation_mode == "player_invited":
-+        return f"What do you make of this: {fact}"
-+    if participation_mode == "player_addressed":
-+        return f"You heard the talk about this too: {fact}"
-+
-+    if topic_type == "quest":
-+        return f"I keep hearing about it: {fact}"
-+    if topic_type == "recent_event":
-+        return f"That recent trouble still has people talking: {fact}"
-+    if topic_type == "rumor":
-+        return f"Rumor has it: {fact}"
-+    if topic_type == "memory":
-+        return f"People remember this clearly: {fact}"
-+
-+    return _line_for_participant(
-+        speaker,
-+        location_id=location_id,
-+        beat_index=beat_index,
-+    )
-
-Change _make_beat(...) signature and body:
-
-@@
- def _make_beat(
-     *,
-     thread_id: str,
-     participants: List[Dict[str, Any]],
-     location_id: str,
-     tick: int,
-     beat_index: int,
-     topic_payload: Dict[str, str],
-+    participation_mode: str = "overheard",
- ) -> Dict[str, Any]:
-@@
--        "line": _line_for_participant(
--            speaker,
--            location_id=location_id,
--            beat_index=beat_index,
--        ),
-+        "line": _conversation_line_for_topic(
-+            speaker=speaker,
-+            location_id=location_id,
-+            beat_index=beat_index,
-+            topic=topic_payload,
-+            participation_mode=participation_mode,
-+        ),
-         "topic_id": _safe_str(topic_payload.get("topic_id")),
-+        "topic_type": _safe_str(topic_payload.get("topic_type")),
-         "topic": _safe_str(topic_payload.get("topic")),
-
-Update maybe_advance_conversation_thread(...) signature:
-
-@@
- def maybe_advance_conversation_thread(
-     simulation_state: Dict[str, Any],
-     *,
-     player_input: str,
-     tick: int = 0,
-+    settings: Dict[str, Any] | None = None,
-+    autonomous: bool = False,
-+    force: bool = False,
-+    force_player_mode: str = "",
-+    forced_topic_type: str = "",
- ) -> Dict[str, Any]:
-
-At the top of the function after state creation:
-
-@@
-     simulation_state = _safe_dict(simulation_state)
-     state = ensure_conversation_thread_state(simulation_state)
-+    settings = normalize_conversation_settings(settings or {})
-     location_id = current_location_id(simulation_state)
-     location = get_location(location_id)
- 
--    if not is_ambient_wait_or_listen_intent(player_input):
-+    if not settings.get("enabled", True):
-+        return {
-+            "triggered": False,
-+            "reason": "conversation_settings_disabled",
-+            "conversation_thread_state": get_conversation_thread_state(simulation_state),
-+        }
-+
-+    if not force and not autonomous and not is_ambient_wait_or_listen_intent(player_input):
-         state["debug"] = {
-             "last_triggered": False,
-             "reason": "not_wait_or_listen_turn",
-             "location_id": location_id,
-         }
-
-Replace topic selection block. Find:
-
-topic_payload = _topic_for_location(location_id)
-
-replace with:
-
-@@
--    topic_payload = _topic_for_location(location_id)
-+    topic_payload = select_conversation_topic(
-+        simulation_state,
-+        settings=settings,
-+        forced_topic_type=forced_topic_type,
-+    )
-+    if not topic_payload:
-+        topic_payload = _topic_for_location(location_id)
-+    if not topic_is_backed_by_state(topic_payload):
-+        return {
-+            "triggered": False,
-+            "reason": "conversation_topic_not_backed_by_state",
-+            "topic": topic_payload,
-+            "conversation_thread_state": get_conversation_thread_state(simulation_state),
-+        }
-+    participation_mode = _select_participation_mode(
-+        settings=settings,
-+        topic=topic_payload,
-+        tick=tick,
-+        force_player_mode=force_player_mode,
-+    )
-
-Add cooldown before creating/using thread:
-
-@@
-     thread_id = _thread_id_for(location_id=location_id, participants=participants)
-+    if _thread_on_cooldown(state, thread_id=thread_id, tick=tick):
-+        return {
-+            "triggered": False,
-+            "reason": "thread_on_cooldown",
-+            "thread_id": thread_id,
-+            "conversation_thread_state": get_conversation_thread_state(simulation_state),
-+        }
-     existing = _find_thread(state, thread_id)
-
-When creating thread, add fields:
-
-@@
-             "topic_id": _safe_str(topic_payload.get("topic_id")),
--            "topic": _safe_str(topic_payload.get("topic")),
-+            "topic_type": _safe_str(topic_payload.get("topic_type")),
-+            "topic": _safe_str(topic_payload.get("title") or topic_payload.get("topic")),
-+            "topic_payload": deepcopy(topic_payload),
-+            "participation_mode": participation_mode,
-+            "player_participation": _player_participation_payload(
-+                mode=participation_mode,
-+                topic=topic_payload,
-+                tick=tick,
-+                settings=settings,
-+            ),
-             "status": "active",
-
-When existing thread is reused, preserve or update participation mode:
-
-@@
-     if existing:
-         thread = existing
-+        participation_mode = _safe_str(thread.get("participation_mode") or participation_mode or "overheard")
-     else:
-
-Change max beats:
-
-@@
--    if beat_index > MAX_BEATS_PER_THREAD:
-+    max_beats = int(settings.get("max_beats_per_thread") or MAX_BEATS_PER_THREAD)
-+    if beat_index > max_beats:
-         thread["status"] = "paused"
-+        _set_thread_cooldown(state, thread_id=thread_id, tick=tick, settings=settings)
-
-Pass participation mode into beat:
-
-@@
-         beat_index=beat_index,
-         topic_payload=topic_payload,
-+        participation_mode=participation_mode,
-     )
-
-Replace world signal creation with validator-based signal:
-
-@@
--    signal = {
--        "signal_id": f"world_signal:conversation:{int(tick or 0)}:{thread_id}:{beat_index}",
--        "kind": _safe_str(topic_payload.get("signal_kind")),
--        "strength": 1,
--        "topic_id": _safe_str(topic_payload.get("topic_id")),
--        "summary": _safe_str(topic_payload.get("summary")),
--        "source_thread_id": thread_id,
--        "source_beat_id": _safe_str(beat.get("beat_id")),
--        "location_id": location_id,
--        "tick": int(tick or 0),
--        "source": "deterministic_conversation_thread_runtime",
--    }
--    signal = _append_world_signal(state, signal)
-+    signal = {}
-+    if settings.get("allow_world_signals", True):
-+        signal = build_conversation_world_signal(
-+            tick=tick,
-+            thread_id=thread_id,
-+            beat_id=_safe_str(beat.get("beat_id")),
-+            topic=topic_payload,
-+            settings=settings,
-+        )
-+        # Enforce max signals per thread.
-+        if len(_safe_list(thread.get("world_signals"))) < int(settings.get("max_world_signals_per_thread") or 0):
-+            signal = _append_world_signal(state, signal)
-+        else:
-+            signal = {}
-
-Update pending player response:
-
-@@
-     state["active_thread_ids"] = active_ids[-MAX_CONVERSATION_THREADS:]
-+
-+    player_participation = _safe_dict(thread.get("player_participation"))
-+    if player_participation.get("pending_response"):
-+        state["pending_player_response"] = {
-+            "thread_id": thread_id,
-+            "topic_id": _safe_str(topic_payload.get("topic_id")),
-+            "prompt": _safe_str(player_participation.get("prompt")),
-+            "created_tick": int(tick or 0),
-+            "expires_tick": _safe_int(player_participation.get("expires_tick"), 0),
-+            "source": "deterministic_conversation_thread_runtime",
-+        }
-
-After world_event, build result and validate:
-
-@@
--    return {
-+    result = {
-         "triggered": True,
-         "reason": "wait_or_listen_turn",
-+        "autonomous": bool(autonomous),
-+        "participation_mode": participation_mode,
-+        "player_participation": deepcopy(_safe_dict(thread.get("player_participation"))),
-+        "topic": deepcopy(topic_payload),
-         "thread": deepcopy(thread),
-         "beat": deepcopy(beat),
-         "world_signal": deepcopy(signal),
-         "world_event": deepcopy(world_event),
-         "conversation_thread_state": get_conversation_thread_state(simulation_state),
-         "source": "deterministic_conversation_thread_runtime",
-     }
-+    validation = validate_conversation_effects(result, settings=settings)
-+    result["conversation_effect_validation"] = validation
-+    result = strip_forbidden_conversation_effects(result)
-+    return result
-F2 PATCH — Autonomous ambient tick runtime
-New file: src/app/rpg/session/ambient_tick_runtime.py
-diff --git a/src/app/rpg/session/ambient_tick_runtime.py b/src/app/rpg/session/ambient_tick_runtime.py
-new file mode 100644
-index 0000000..ac7d645
---- /dev/null
-+++ b/src/app/rpg/session/ambient_tick_runtime.py
-@@ -0,0 +1,137 @@
-+from __future__ import annotations
-+
-+from typing import Any, Dict
-+
-+from app.rpg.world.conversation_settings import (
-+    conversation_settings_from_runtime,
-+    should_attempt_autonomous_conversation,
-+)
-+from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
-+
-+
-+AMBIENT_TICK_COMMANDS = {
-+    "__ambient_tick__",
-+    "__idle_tick__",
-+    "__world_tick__",
-+    "__ambient_tick_player_addressed__",
-+    "__ambient_tick_player_invited__",
-+    "__ambient_tick_quest__",
-+    "__ambient_tick_event__",
-+    "__ambient_tick_rumor__",
-+}
-+
-+
-+def _safe_str(value: Any) -> str:
-+    return "" if value is None else str(value)
-+
-+
-+def _safe_dict(value: Any) -> Dict[str, Any]:
-+    return value if isinstance(value, dict) else {}
-+
-+
-+def is_ambient_tick_command(player_input: str) -> bool:
-+    return _safe_str(player_input).strip().lower() in AMBIENT_TICK_COMMANDS
-+
-+
-+def _forced_player_mode(command: str) -> str:
-+    command = _safe_str(command).strip().lower()
-+    if command == "__ambient_tick_player_invited__":
-+        return "player_invited"
-+    if command == "__ambient_tick_player_addressed__":
-+        return "player_addressed"
-+    return ""
-+
-+
-+def _forced_topic_type(command: str) -> str:
-+    command = _safe_str(command).strip().lower()
-+    if command == "__ambient_tick_quest__":
-+        return "quest"
-+    if command == "__ambient_tick_event__":
-+        return "recent_event"
-+    if command == "__ambient_tick_rumor__":
-+        return "rumor"
-+    return ""
-+
-+
-+def advance_autonomous_ambient_tick(
-+    *,
-+    player_input: str,
++    speaker_id: str,
++    listener_id: str,
 +    simulation_state: Dict[str, Any],
-+    runtime_state: Dict[str, Any],
-+    tick: int,
-+) -> Dict[str, Any]:
-+    runtime_state = _safe_dict(runtime_state)
-+    settings = conversation_settings_from_runtime(runtime_state)
-+    command = _safe_str(player_input).strip().lower()
-+
-+    force = is_ambient_tick_command(command)
-+    force_mode = _forced_player_mode(command)
-+    force_topic = _forced_topic_type(command)
-+
-+    conversation_state = _safe_dict(simulation_state.get("conversation_thread_state"))
-+    debug = _safe_dict(conversation_state.get("debug"))
-+    last_tick = int(debug.get("last_autonomous_conversation_tick") or 0)
-+
-+    should_attempt = should_attempt_autonomous_conversation(
-+        tick=tick,
-+        last_conversation_tick=last_tick,
-+        settings=settings,
-+        force=force,
-+    )
-+
-+    if not should_attempt:
-+        return {
-+            "matched": force,
-+            "applied": False,
-+            "status": "ambient_tick_no_conversation",
-+            "reason": "settings_or_cooldown_prevented_conversation",
-+            "conversation_settings": settings,
-+            "source": "deterministic_ambient_tick_runtime",
-+        }
-+
-+    conversation_result = maybe_advance_conversation_thread(
-+        simulation_state,
-+        player_input="__autonomous_ambient_tick__",
-+        tick=tick,
-+        settings=settings,
-+        autonomous=True,
-+        force=True,
-+        force_player_mode=force_mode,
-+        forced_topic_type=force_topic,
-+    )
-+
-+    conversation_state = _safe_dict(simulation_state.get("conversation_thread_state"))
-+    debug = _safe_dict(conversation_state.get("debug"))
-+    if conversation_result.get("triggered"):
-+        debug["last_autonomous_conversation_tick"] = int(tick or 0)
-+    conversation_state["debug"] = debug
-+    simulation_state["conversation_thread_state"] = conversation_state
-+
-+    return {
-+        "matched": force,
-+        "applied": bool(conversation_result.get("triggered")),
-+        "status": "ambient_tick_conversation" if conversation_result.get("triggered") else "ambient_tick_no_conversation",
-+        "conversation_result": conversation_result,
-+        "conversation_settings": settings,
-+        "source": "deterministic_ambient_tick_runtime",
-+    }
-F3 PATCH — Session runtime integration
-File: src/app/rpg/session/conversation_thread_runtime.py
-
-Patch advance_conversation_threads_for_turn(...) to accept settings/runtime state.
-
-diff --git a/src/app/rpg/session/conversation_thread_runtime.py b/src/app/rpg/session/conversation_thread_runtime.py
---- a/src/app/rpg/session/conversation_thread_runtime.py
-+++ b/src/app/rpg/session/conversation_thread_runtime.py
-@@
- from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
-+from app.rpg.world.conversation_settings import conversation_settings_from_runtime
-@@
- def advance_conversation_threads_for_turn(
-     *,
-     player_input: str,
-     simulation_state: Dict[str, Any],
-     resolved_result: Dict[str, Any],
-     tick: int = 0,
 +    runtime_state: Dict[str, Any] | None = None,
- ) -> Dict[str, Any]:
-@@
--    return maybe_advance_conversation_thread(
-+    return maybe_advance_conversation_thread(
-         simulation_state,
-         player_input=player_input,
-         tick=tick,
-+        settings=conversation_settings_from_runtime(runtime_state or {}),
-     )
-File: src/app/rpg/session/runtime.py
-
-Add import:
-
-diff --git a/src/app/rpg/session/runtime.py b/src/app/rpg/session/runtime.py
---- a/src/app/rpg/session/runtime.py
-+++ b/src/app/rpg/session/runtime.py
-@@
- from app.rpg.session.conversation_thread_runtime import advance_conversation_threads_for_turn
-+from app.rpg.session.ambient_tick_runtime import (
-+    advance_autonomous_ambient_tick,
-+    is_ambient_tick_command,
-+)
-
-Near the start of turn resolution, after simulation_state, runtime_state, player_input, and current_tick are available, add:
-
-@@
-+    ambient_tick_result = {}
-+    if is_ambient_tick_command(player_input):
-+        ambient_tick_result = advance_autonomous_ambient_tick(
-+            player_input=player_input,
-+            simulation_state=simulation_state,
-+            runtime_state=runtime_state,
-+            tick=current_tick,
-+        )
-
-After resolved_result is built, before service/travel conversation branching, add:
-
-@@
-     resolved_result = _safe_dict(
-         authoritative_result.get("resolved_result")
-         or authoritative_result.get("resolved_action")
-         or authoritative_result
-     )
++    topic: Dict[str, Any] | None = None,
++    pivot: Dict[str, Any] | None = None,
++    response_style: str = "",
++    response_intent: str = "answer",
++) -> Dict[str, Any]:
++    profile = build_npc_dialogue_profile(
++        npc_id=speaker_id,
++        simulation_state=simulation_state,
++        runtime_state=runtime_state or {},
++        topic=topic or {},
++        listener_id=listener_id,
++        response_intent=response_intent,
++    )
++    line_payload = deterministic_biography_line(
++        profile=profile,
++        topic=topic or {},
++        pivot=pivot or {},
++        response_style=response_style,
++    )
++    return {
++        "profile": profile,
++        "line_payload": line_payload,
++        "line": _safe_str(line_payload.get("line")),
++        "biography_role": _safe_str(line_payload.get("biography_role")),
++        "roleplay_source": _safe_str(line_payload.get("roleplay_source") or "deterministic_template"),
++        "used_fact_ids": _safe_list(line_payload.get("used_fact_ids")),
++        "response_style": _safe_str(line_payload.get("response_style") or response_style),
++        "source": "deterministic_biography_grounded_npc_response",
++    }
 +
-+    if ambient_tick_result:
-+        conversation_result = _safe_dict(ambient_tick_result.get("conversation_result"))
-+        resolved_result["action_type"] = "ambient_tick"
-+        resolved_result["semantic_action_type"] = "ambient_tick"
-+        resolved_result["semantic_family"] = "ambient"
-+        resolved_result["activity_label"] = "autonomous_ambient_tick"
-+        resolved_result["ambient_tick_result"] = ambient_tick_result
-+        resolved_result["conversation_result"] = conversation_result
-+        resolved_result["conversation_thread_state"] = _safe_dict(simulation_state.get("conversation_thread_state"))
-+        resolved_result["world_event_state"] = _safe_dict(simulation_state.get("world_event_state"))
-+        authoritative_result["action_type"] = "ambient_tick"
-+        authoritative_result["semantic_action_type"] = "ambient_tick"
-+        authoritative_result["semantic_family"] = "ambient"
-+        authoritative_result["activity_label"] = "autonomous_ambient_tick"
-+        authoritative_result["ambient_tick_result"] = ambient_tick_result
-+        authoritative_result["conversation_result"] = conversation_result
-+        authoritative_result["conversation_thread_state"] = _safe_dict(simulation_state.get("conversation_thread_state"))
-+        authoritative_result["world_event_state"] = _safe_dict(simulation_state.get("world_event_state"))
-+        authoritative_result["simulation_state"] = simulation_state
+Patch NPC response beat creation
 
-Then skip service/travel for ambient tick commands. Find where service result is considered, and add:
+Find the code that builds npc_response_beat after pending_player_response_consumed.
+
+It likely looks similar to:
+
+npc_response_beat = {
+    "beat_id": ...,
+    "speaker_id": responder_id,
+    "speaker_name": responder_name,
+    "listener_id": "player",
+    "listener_name": "Player",
+    "line": response_line,
+    "response_style": response_style,
+    ...
+}
+
+Before that dict is built, add:
 
 @@
--    service_result = _safe_dict(resolved_result.get("service_result"))
-+    service_result = _safe_dict(resolved_result.get("service_result"))
-+    if ambient_tick_result:
-+        service_result = {
-+            "matched": False,
-+            "kind": "not_service",
-+            "status": "not_service",
-+            "reason": "ambient_tick",
-+        }
-+        resolved_result["service_result"] = service_result
-
-Patch conversation call to pass runtime_state and avoid double-trigger when ambient tick already did it:
-
-@@
--    conversation_result = advance_conversation_threads_for_turn(
--        player_input=player_input,
--        simulation_state=simulation_state,
--        resolved_result=resolved_result,
--        tick=current_tick,
--    )
-+    conversation_result = _safe_dict(resolved_result.get("conversation_result"))
-+    if not conversation_result:
-+        conversation_result = advance_conversation_threads_for_turn(
-+            player_input=player_input,
++        biography_response = _biography_grounded_npc_response(
++            speaker_id=responder_id,
++            listener_id="player",
 +            simulation_state=simulation_state,
-+            resolved_result=resolved_result,
-+            tick=current_tick,
-+            runtime_state=runtime_state,
++            runtime_state=runtime_state or {},
++            topic=selected_topic or topic_payload or {},
++            pivot=topic_pivot or {},
++            response_style=response_style,
++            response_intent="answer" if _safe_dict(topic_pivot).get("accepted") else "deflect",
 +        )
-F3 PATCH — Narrator grounding for ambient tick/player invitation
-File: src/app/rpg/ai/world_scene_narrator.py
++        if _safe_str(biography_response.get("line")):
++            response_line = _safe_str(biography_response.get("line"))
 
-Extend _format_conversation_beat_for_prompt(...) to include topic and player participation:
-
-@@
- def _format_conversation_beat_for_prompt(narration_context: Dict[str, Any]) -> str:
-@@
-     beat = _safe_dict(conversation.get("beat"))
-+    topic = _safe_dict(conversation.get("topic"))
-+    participation = _safe_dict(conversation.get("player_participation"))
-     speaker = _safe_str(beat.get("speaker_name"))
-     listener = _safe_str(beat.get("listener_name"))
-     line = _safe_str(beat.get("line"))
--    topic = _safe_str(beat.get("topic"))
-+    topic_title = _safe_str(topic.get("title") or beat.get("topic"))
-     if not line:
-         return "None."
--    return f'{speaker} speaks to {listener} about {topic}: "{line}"'
-+    mode = _safe_str(participation.get("mode") or conversation.get("participation_mode") or "overheard")
-+    return f'{speaker} speaks to {listener} about {topic_title} [{mode}]: "{line}"'
-
-In _apply_grounded_conversation_beat(...), add player invitation text only through deterministic payload:
+Then add these fields to npc_response_beat:
 
 @@
-     payload["npc"] = {
-         "speaker": speaker,
-         "line": line,
-     }
-+    participation = _safe_dict(conversation.get("player_participation"))
-+    if participation.get("pending_response"):
-+        hooks = payload.get("followup_hooks")
-+        if not isinstance(hooks, list):
-+            hooks = []
-+        prompt = _safe_str(participation.get("prompt"))
-+        if prompt:
-+            hooks.append(prompt)
-+        payload["followup_hooks"] = hooks
+         "line": response_line,
+         "response_style": response_style,
++        "biography_role": _safe_str(biography_response.get("biography_role")),
++        "roleplay_source": _safe_str(biography_response.get("roleplay_source") or "deterministic_template"),
++        "used_fact_ids": _safe_list(biography_response.get("used_fact_ids")),
++        "dialogue_profile": _safe_dict(biography_response.get("profile")),
 
-Add final grounding for ambient tick action:
+Also add to the top-level conversation_result:
 
 @@
-     _apply_grounded_conversation_beat(payload, narration_context)
-+    conversation = _conversation_result_from_context(narration_context)
-+    if conversation.get("triggered"):
-+        payload["action"] = "Ambient conversation continues nearby."
-+        if not _safe_str(payload.get("narration")) or "success" in _safe_str(payload.get("narration")).lower():
-+            payload["narration"] = "Nearby voices continue in the living world around you."
+         "npc_response_beat": deepcopy(npc_response_beat),
++        "dialogue_profile": deepcopy(_safe_dict(npc_response_beat.get("dialogue_profile"))),
++        "roleplay_source": _safe_str(npc_response_beat.get("roleplay_source")),
++        "used_fact_ids": _safe_list(npc_response_beat.get("used_fact_ids")),
+O3 PATCH — Biography-ground ambient NPC-to-NPC lines
+File: src/app/rpg/world/conversation_threads.py
+
+Find _conversation_line_for_topic(...).
+
+At the end, before the fallback _line_for_participant(...), add role-based deterministic lines.
+
+@@
+ def _conversation_line_for_topic(
+@@
+     topic_type = _safe_str(topic.get("topic_type"))
+     facts = _safe_list(topic.get("allowed_facts"))
+     fact = _safe_str(facts[0] if facts else topic.get("summary"))
++    speaker_id = _safe_str(speaker.get("npc_id") or speaker.get("id"))
++    profile = build_npc_dialogue_profile(
++        npc_id=speaker_id,
++        simulation_state={},
++        runtime_state={},
++        topic=topic,
++        listener_id="",
++        response_intent="ambient_comment",
++    )
++    role = _safe_str(profile.get("role")).lower()
  
-     return payload
-F4 PATCH — Manual transcript scenarios and setup support
+     if participation_mode == "player_invited":
+-        return f"What do you make of this: {fact}"
++        if "tavern" in role:
++            return f"You look like you have ears worth using. What do you make of this: {fact}"
++        if "informant" in role:
++            return f"You heard that too, didn't you? {fact}"
++        if "guard" in role:
++            return f"If you know anything useful about this, say it plainly: {fact}"
++        return f"What do you make of this: {fact}"
+     if participation_mode == "player_addressed":
+-        return f"You heard the talk about this too: {fact}"
++        if "tavern" in role:
++            return f"You heard the room turning that over too: {fact}"
++        if "informant" in role:
++            return f"You noticed the same thread, I expect: {fact}"
++        if "guard" in role:
++            return f"You heard the report as well: {fact}"
++        return f"You heard the talk about this too: {fact}"
+ 
+     if topic_type == "quest":
+-        return f"I keep hearing about it: {fact}"
++        if "tavern" in role:
++            return f"People do not avoid a road for nothing. {fact}"
++        if "informant" in role:
++            return f"That keeps coming up in whispers: {fact}"
++        if "guard" in role:
++            return f"Reports agree on this much: {fact}"
++        return f"I keep hearing about it: {fact}"
+     if topic_type == "recent_event":
+-        return f"That recent trouble still has people talking: {fact}"
++        if "tavern" in role:
++            return f"It has the room talking into their cups: {fact}"
++        if "informant" in role:
++            return f"Everyone repeats it differently, but this part stays the same: {fact}"
++        if "guard" in role:
++            return f"Recent reports mention this: {fact}"
++        return f"That recent trouble still has people talking: {fact}"
+     if topic_type == "rumor":
+-        return f"Rumor has it: {fact}"
++        if "tavern" in role:
++            return f"Taverns breed rumors, but this one keeps returning: {fact}"
++        if "informant" in role:
++            return f"The rumor is not proof, but it has a shape: {fact}"
++        if "guard" in role:
++            return f"I would call that unverified, but worth noting: {fact}"
++        return f"Rumor has it: {fact}"
+
+This gives biography flavor without requiring LLM.
+
+P2 PATCH — Add settings for optional LLM NPC roleplay
+File: src/app/rpg/world/conversation_settings.py
+diff --git a/src/app/rpg/world/conversation_settings.py b/src/app/rpg/world/conversation_settings.py
+--- a/src/app/rpg/world/conversation_settings.py
++++ b/src/app/rpg/world/conversation_settings.py
+@@
+     "signal_strength_cap": 1,
++    "npc_roleplay_use_llm": False,
++    "npc_roleplay_max_line_chars": 240,
++    "npc_roleplay_fallback_on_invalid": True,
+ }
+@@
+     merged["signal_strength_cap"] = max(1, _safe_int(merged.get("signal_strength_cap"), 1))
++    merged["npc_roleplay_use_llm"] = _safe_bool(merged.get("npc_roleplay_use_llm"), False)
++    merged["npc_roleplay_max_line_chars"] = max(
++        80,
++        min(600, _safe_int(merged.get("npc_roleplay_max_line_chars"), 240)),
++    )
++    merged["npc_roleplay_fallback_on_invalid"] = _safe_bool(
++        merged.get("npc_roleplay_fallback_on_invalid"),
++        True,
++    )
+     return merged
+P3 PATCH — UI settings visibility
+File: src/static/rpg-conversation-settings.js
+diff --git a/src/static/rpg-conversation-settings.js b/src/static/rpg-conversation-settings.js
+--- a/src/static/rpg-conversation-settings.js
++++ b/src/static/rpg-conversation-settings.js
+@@
+     max_world_events_per_thread: 4,
+     signal_strength_cap: 1,
++    npc_roleplay_use_llm: false,
++    npc_roleplay_max_line_chars: 240,
++    npc_roleplay_fallback_on_invalid: true,
+@@
+           ${numberInput("Signal strength cap", "signal_strength_cap", settings, 1, 5)}
++          ${boolInput("Use LLM for NPC roleplay lines", "npc_roleplay_use_llm", settings)}
++          ${numberInput("NPC roleplay max chars", "npc_roleplay_max_line_chars", settings, 80, 600)}
++          ${boolInput("Fallback when roleplay invalid", "npc_roleplay_fallback_on_invalid", settings)}
+O4 PATCH — Inspector debug visibility
+File: src/static/rpg-living-world-inspector.js
+
+Find where conversation result/thread beat details are rendered.
+
+Add fields for:
+
+@@
++    const dialogueProfile = safeObj(result.dialogue_profile || conversation.dialogue_profile);
++    const npcResponseBeat = safeObj(conversation.npc_response_beat);
++    const roleplaySource =
++      result.roleplay_source ||
++      conversation.roleplay_source ||
++      npcResponseBeat.roleplay_source ||
++      "";
++    const biographyRole =
++      npcResponseBeat.biography_role ||
++      safeStr(dialogueProfile.role) ||
++      "";
++    const usedFactIds = safeArr(
++      result.used_fact_ids ||
++      conversation.used_fact_ids ||
++      npcResponseBeat.used_fact_ids
++    );
+
+Then add a rendered debug card/section:
+
+@@
++      ${renderKeyValue("NPC Biography Role", biographyRole)}
++      ${renderKeyValue("Roleplay Source", roleplaySource)}
++      ${renderList("Used Fact IDs", usedFactIds)}
+
+If the inspector uses custom helpers, adapt names only. Keep the output labels exactly:
+
+NPC Biography Role
+Roleplay Source
+Used Fact IDs
+P4 PATCH — Manual transcript scenarios
 File: src/tests/rpg/manual_llm_transcript.py
+Add scenarios
 
-Add scenario setup support. Add helper near _seed_session_currency(...):
-
-@@
- def _seed_session_currency(session_id: str, currency: Dict[str, Any]) -> bool:
-@@
-     except Exception:
-         return False
-+
-+
-+def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> bool:
-+    try:
-+        from app.rpg.session.service import load_session, save_session
-+    except Exception:
-+        return False
-+    session = _safe_dict(load_session(session_id))
-+    if not session:
-+        return False
-+
-+    simulation_state = _ensure_manual_simulation_roots(session)
-+    runtime_state = _safe_dict(session.get("runtime_state"))
-+    runtime_settings = _safe_dict(runtime_state.get("runtime_settings"))
-+
-+    conversation_settings = _safe_dict(scenario.get("conversation_settings"))
-+    if conversation_settings:
-+        current = _safe_dict(runtime_settings.get("conversation_settings"))
-+        current.update(conversation_settings)
-+        runtime_settings["conversation_settings"] = current
-+
-+    setup_world_events = _safe_list(scenario.get("setup_world_events"))
-+    if setup_world_events:
-+        world_event_state = _safe_dict(simulation_state.get("world_event_state"))
-+        events = _safe_list(world_event_state.get("events"))
-+        for index, event in enumerate(setup_world_events, start=1):
-+            event = _safe_dict(event)
-+            event.setdefault("event_id", f"manual:world_event:{session_id}:{index}")
-+            event.setdefault("tick", index)
-+            events.append(event)
-+        world_event_state["events"] = events
-+        simulation_state["world_event_state"] = world_event_state
-+
-+    setup_journal_entries = _safe_list(scenario.get("setup_journal_entries"))
-+    if setup_journal_entries:
-+        journal_state = _safe_dict(simulation_state.get("journal_state"))
-+        entries = _safe_list(journal_state.get("entries"))
-+        for index, entry in enumerate(setup_journal_entries, start=1):
-+            entry = _safe_dict(entry)
-+            entry.setdefault("entry_id", f"manual:journal:{session_id}:{index}")
-+            entries.append(entry)
-+        journal_state["entries"] = entries
-+        simulation_state["journal_state"] = journal_state
-+
-+    setup_quest_state = _safe_dict(scenario.get("setup_quest_state"))
-+    if setup_quest_state:
-+        simulation_state["quest_state"] = setup_quest_state
-+
-+    setup_memory_state = _safe_dict(scenario.get("setup_memory_state"))
-+    if setup_memory_state:
-+        memory_state = _safe_dict(simulation_state.get("memory_state"))
-+        memory_state.update(setup_memory_state)
-+        simulation_state["memory_state"] = memory_state
-+
-+    runtime_state["runtime_settings"] = runtime_settings
-+    session["runtime_state"] = runtime_state
-+    _sync_manual_simulation_state(session, simulation_state)
-+    try:
-+        save_session(session)
-+        return True
-+    except Exception:
-+        return False
-
-In _run_one_service_scenario(...), after seeding currency:
+Add these to the manual service scenario registry:
 
 @@
-     seeded = _seed_session_currency(session_id, currency)
-     if not seeded:
-@@
-         }
-+
-+    _apply_manual_scenario_setup(session_id, scenario)
-
-Add scenarios:
-
-@@
-     "ambient_conversation": {
-         "currency": {"gold": 0, "silver": 0, "copper": 0},
-         "turns": [
-             "I wait and listen to the room",
-             "I wait and listen a little longer",
-         ],
-     },
-+    "autonomous_conversation": {
-+        "currency": {"gold": 0, "silver": 0, "copper": 0},
-+        "conversation_settings": {
-+            "enabled": True,
-+            "autonomous_ticks_enabled": True,
-+            "frequency": "always",
-+            "conversation_chance_percent": 100,
-+            "min_ticks_between_conversations": 0,
-+            "thread_cooldown_ticks": 0,
-+        },
-+        "turns": [
-+            "__ambient_tick__",
-+            "__ambient_tick__",
-+            "__ambient_tick__",
-+        ],
-+    },
-+    "conversation_discusses_event": {
-+        "currency": {"gold": 0, "silver": 0, "copper": 0},
-+        "conversation_settings": {
-+            "enabled": True,
-+            "autonomous_ticks_enabled": True,
-+            "frequency": "always",
-+            "conversation_chance_percent": 100,
-+            "allow_event_discussion": True,
-+            "min_ticks_between_conversations": 0,
-+            "thread_cooldown_ticks": 0,
-+        },
-+        "setup_world_events": [
-+            {
-+                "kind": "travel",
-+                "title": "A traveler arrived from the old mill road",
-+                "summary": "A nervous traveler came from the old mill road.",
-+                "location_id": "loc_tavern",
-+                "source": "manual_scenario_setup",
-+            }
-+        ],
-+        "turns": ["__ambient_tick_event__"],
-+    },
-+    "conversation_discusses_quest": {
-+        "currency": {"gold": 0, "silver": 0, "copper": 0},
-+        "conversation_settings": {
-+            "enabled": True,
-+            "autonomous_ticks_enabled": True,
-+            "frequency": "always",
-+            "conversation_chance_percent": 100,
-+            "allow_quest_discussion": True,
-+            "min_ticks_between_conversations": 0,
-+            "thread_cooldown_ticks": 0,
-+        },
-+        "setup_quest_state": {
-+            "quests": [
-+                {
-+                    "quest_id": "quest:old_mill_bandits",
-+                    "title": "Trouble near the Old Mill",
-+                    "summary": "There is talk of armed figures near the old mill road.",
-+                    "status": "active",
-+                    "location_id": "loc_tavern",
-+                }
-+            ]
-+        },
-+        "turns": ["__ambient_tick_quest__"],
-+    },
-+    "player_invited_conversation": {
++    "npc_biography_shapes_bran_dialogue": {
 +        "currency": {"gold": 0, "silver": 0, "copper": 0},
 +        "conversation_settings": {
 +            "enabled": True,
@@ -1492,617 +1085,377 @@ Add scenarios:
 +            "conversation_chance_percent": 100,
 +            "allow_player_invited": True,
 +            "player_inclusion_chance_percent": 100,
++            "npc_roleplay_use_llm": False,
++            "min_ticks_between_conversations": 0,
++            "thread_cooldown_ticks": 0,
++        },
++        "setup_quest_state": {
++            "quests": [
++                {
++                    "quest_id": "quest:old_mill_bandits",
++                    "title": "Trouble near the Old Mill",
++                    "summary": "There is talk of armed figures near the old mill road at night.",
++                    "status": "active",
++                    "location_id": "loc_tavern",
++                }
++            ]
++        },
++        "turns": [
++            "__ambient_tick_quest__",
++            "What can you tell me about the trouble at the old mill road?",
++        ],
++    },
++    "npc_biography_shapes_mira_dialogue": {
++        "currency": {"gold": 0, "silver": 0, "copper": 0},
++        "conversation_settings": {
++            "enabled": True,
++            "autonomous_ticks_enabled": True,
++            "frequency": "always",
++            "conversation_chance_percent": 100,
++            "allow_player_invited": True,
++            "player_inclusion_chance_percent": 100,
++            "npc_roleplay_use_llm": False,
++            "min_ticks_between_conversations": 0,
++            "thread_cooldown_ticks": 0,
++        },
++        "setup_memory_state": {
++            "social_memories": [
++                {
++                    "memory_id": "memory:mira:pattern:old_road",
++                    "actor_id": "npc:Mira",
++                    "summary": "Mira noticed that travelers avoid discussing the old road directly.",
++                }
++            ]
++        },
++        "turns": [
++            "__ambient_tick_player_invited__",
++            "What pattern do you see here?",
++        ],
++    },
++    "npc_biography_blocks_unbacked_secret": {
++        "currency": {"gold": 0, "silver": 0, "copper": 0},
++        "conversation_settings": {
++            "enabled": True,
++            "autonomous_ticks_enabled": True,
++            "frequency": "always",
++            "conversation_chance_percent": 100,
++            "allow_player_invited": True,
++            "player_inclusion_chance_percent": 100,
++            "npc_roleplay_use_llm": False,
 +            "min_ticks_between_conversations": 0,
 +            "thread_cooldown_ticks": 0,
 +        },
 +        "turns": [
 +            "__ambient_tick_player_invited__",
-+            "What do you mean about the old mill?",
++            "Tell me about the secret vault under the city.",
 +        ],
 +    },
- }
++    "npc_roleplay_fallback_validation": {
++        "currency": {"gold": 0, "silver": 0, "copper": 0},
++        "conversation_settings": {
++            "enabled": True,
++            "autonomous_ticks_enabled": True,
++            "frequency": "always",
++            "conversation_chance_percent": 100,
++            "allow_player_invited": True,
++            "player_inclusion_chance_percent": 100,
++            "npc_roleplay_use_llm": False,
++            "npc_roleplay_fallback_on_invalid": True,
++            "min_ticks_between_conversations": 0,
++            "thread_cooldown_ticks": 0,
++        },
++        "turns": [
++            "__ambient_tick_player_invited__",
++            "Tell me something you are not allowed to invent.",
++        ],
++    },
+Add warnings/assertions
 
-Add extractors:
-
-@@
- def _extract_conversation_thread_state(result: Dict[str, Any]) -> Dict[str, Any]:
-@@
-     simulation_state = _extract_simulation_state(result)
-     return _safe_dict(simulation_state.get("conversation_thread_state"))
-+
-+
-+def _extract_ambient_tick_result(result: Dict[str, Any]) -> Dict[str, Any]:
-+    result_sub = _safe_dict(_safe_dict(result).get("result"))
-+    direct = _safe_dict(result_sub.get("ambient_tick_result"))
-+    if direct:
-+        return direct
-+    turn_contract = _extract_turn_contract(result)
-+    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
-+    return _safe_dict(resolved.get("ambient_tick_result"))
-
-Add to _compact_turn_summary(...):
-
-@@
-         "conversation_result": _extract_conversation_result(result),
-+        "ambient_tick_result": _extract_ambient_tick_result(result),
-         "conversation_thread_state": _extract_conversation_thread_state(result),
-
-Add to _print_turn(...):
+Find the scenario warning section and add:
 
 @@
-     _emit("CONVERSATION RESULT:", channel=channel)
-     _emit(_compact_json(_extract_conversation_result(result)), channel=channel)
-     _emit("", channel=channel)
-+    _emit("AMBIENT TICK RESULT:", channel=channel)
-+    _emit(_compact_json(_extract_ambient_tick_result(result)), channel=channel)
-+    _emit("", channel=channel)
-
-Add regression warnings:
-
-@@
-     if scenario_name == "ambient_conversation":
-@@
-         if any(_safe_str(_safe_dict(event).get("kind")).startswith("service_") for event in world_events):
-             warnings.append("ambient_conversation_unexpected_service_world_event")
-+
 +    if scenario_name in {
-+        "autonomous_conversation",
-+        "conversation_discusses_event",
-+        "conversation_discusses_quest",
-+        "player_invited_conversation",
++        "npc_biography_shapes_bran_dialogue",
++        "npc_biography_shapes_mira_dialogue",
++        "npc_biography_blocks_unbacked_secret",
++        "npc_roleplay_fallback_validation",
 +    }:
 +        conversation = _extract_conversation_result(result)
-+        if turn_index == 1 and not conversation.get("triggered"):
-+            warnings.append(f"{scenario_name}_expected_conversation_trigger")
-+        if service_result.get("matched"):
-+            warnings.append(f"{scenario_name}_unexpected_service_result")
-+        state = _extract_conversation_thread_state(result)
-+        if turn_index == 1 and not _safe_list(state.get("world_signals")):
-+            warnings.append(f"{scenario_name}_expected_world_signal")
-+        validation = _safe_dict(conversation.get("conversation_effect_validation"))
-+        if validation and not validation.get("ok"):
-+            warnings.append(f"{scenario_name}_conversation_effect_validation_failed")
-+        forbidden_keys = {
-+            "journal_entry",
-+            "transaction_record",
-+            "inventory_delta",
-+            "quest_started",
++        response_beat = _safe_dict(conversation.get("npc_response_beat"))
++        if turn_index == 2 and not response_beat:
++            warnings.append(f"{scenario_name}_expected_npc_response_beat")
++        if turn_index == 2:
++            roleplay_source = _safe_str(
++                response_beat.get("roleplay_source")
++                or conversation.get("roleplay_source")
++            )
++            if not roleplay_source:
++                warnings.append(f"{scenario_name}_missing_roleplay_source")
++            biography_role = _safe_str(response_beat.get("biography_role"))
++            if not biography_role:
++                warnings.append(f"{scenario_name}_missing_biography_role")
++            used_fact_ids = _safe_list(
++                response_beat.get("used_fact_ids")
++                or conversation.get("used_fact_ids")
++            )
++            if scenario_name == "npc_biography_shapes_bran_dialogue" and not used_fact_ids:
++                warnings.append("npc_biography_shapes_bran_dialogue_missing_used_fact_ids")
++
++    if scenario_name == "npc_biography_blocks_unbacked_secret" and turn_index == 2:
++        conversation = _extract_conversation_result(result)
++        response_beat = _safe_dict(conversation.get("npc_response_beat"))
++        line = _safe_str(response_beat.get("line")).lower()
++        forbidden_fragments = [
++            "secret vault is",
++            "under the city is",
++            "you receive",
++            "take this",
 +            "reward",
-+            "currency_delta",
-+            "stock_update",
-+        }
-+        for key in forbidden_keys:
-+            if conversation.get(key):
-+                warnings.append(f"{scenario_name}_conversation_forbidden_effect:{key}")
-+
-+    if scenario_name == "conversation_discusses_event":
-+        topic = _safe_dict(_extract_conversation_result(result).get("topic"))
-+        if _safe_str(topic.get("topic_type")) != "recent_event":
-+            warnings.append("conversation_discusses_event_expected_recent_event_topic")
-+
-+    if scenario_name == "conversation_discusses_quest":
-+        topic = _safe_dict(_extract_conversation_result(result).get("topic"))
-+        if _safe_str(topic.get("topic_type")) != "quest":
-+            warnings.append("conversation_discusses_quest_expected_quest_topic")
-+
-+    if scenario_name == "player_invited_conversation" and turn_index == 1:
-+        participation = _safe_dict(_extract_conversation_result(result).get("player_participation"))
-+        if _safe_str(participation.get("mode")) != "player_invited":
-+            warnings.append("player_invited_conversation_expected_player_invited_mode")
-+        if not participation.get("pending_response"):
-+            warnings.append("player_invited_conversation_expected_pending_response")
-F5 PATCH — UI settings and debug visibility
-New file: src/static/rpg-conversation-settings.js
-diff --git a/src/static/rpg-conversation-settings.js b/src/static/rpg-conversation-settings.js
++        ]
++        for fragment in forbidden_fragments:
++            if fragment in line:
++                warnings.append("npc_biography_blocks_unbacked_secret_invented_forbidden_claim")
+Add scenario allowlist
+
+Find CONVERSATION_EXPECTED_SCENARIOS and add:
+
+@@
+     "npc_goal_influences_response_style",
++    "npc_biography_shapes_bran_dialogue",
++    "npc_biography_shapes_mira_dialogue",
++    "npc_biography_blocks_unbacked_secret",
++    "npc_roleplay_fallback_validation",
+P5 PATCH — Tests
+New file: src/app/rpg/tests/test_bundle_nop_npc_biography_roleplay.py
+diff --git a/src/app/rpg/tests/test_bundle_nop_npc_biography_roleplay.py b/src/app/rpg/tests/test_bundle_nop_npc_biography_roleplay.py
 new file mode 100644
-index 0000000..0b41d4d
+index 0000000..nop0004
 --- /dev/null
-+++ b/src/static/rpg-conversation-settings.js
-@@ -0,0 +1,178 @@
-+(function () {
-+  "use strict";
-+
-+  const DEFAULTS = {
-+    enabled: true,
-+    autonomous_ticks_enabled: false,
-+    show_ambient_conversations: true,
-+    frequency: "normal",
-+    min_ticks_between_conversations: 3,
-+    thread_cooldown_ticks: 8,
-+    max_active_threads: 2,
-+    max_beats_per_thread: 4,
-+    conversation_chance_percent: 30,
-+    allow_player_addressed: true,
-+    allow_player_invited: false,
-+    player_inclusion_chance_percent: 10,
-+    allow_world_signals: true,
-+    allow_quest_discussion: true,
-+    allow_event_discussion: true,
-+    allow_rumor_discussion: true,
-+    max_world_signals_per_thread: 2,
-+    signal_strength_cap: 1,
-+  };
-+
-+  function loadSettings() {
-+    try {
-+      const raw = localStorage.getItem("rpg.conversationSettings");
-+      return Object.assign({}, DEFAULTS, raw ? JSON.parse(raw) : {});
-+    } catch (_) {
-+      return Object.assign({}, DEFAULTS);
-+    }
-+  }
-+
-+  function saveSettings(settings) {
-+    localStorage.setItem("rpg.conversationSettings", JSON.stringify(settings || {}));
-+    window.dispatchEvent(new CustomEvent("rpg:conversation-settings-changed", { detail: settings }));
-+  }
-+
-+  function boolInput(label, key, settings) {
-+    return `
-+      <label class="rpg-conv-setting">
-+        <input type="checkbox" data-conv-setting="${key}" ${settings[key] ? "checked" : ""}>
-+        <span>${label}</span>
-+      </label>
-+    `;
-+  }
-+
-+  function numberInput(label, key, settings, min, max) {
-+    return `
-+      <label class="rpg-conv-setting">
-+        <span>${label}</span>
-+        <input type="number" min="${min}" max="${max}" value="${settings[key]}" data-conv-setting="${key}">
-+      </label>
-+    `;
-+  }
-+
-+  function selectInput(label, key, settings, values) {
-+    return `
-+      <label class="rpg-conv-setting">
-+        <span>${label}</span>
-+        <select data-conv-setting="${key}">
-+          ${values.map((value) => `<option value="${value}" ${settings[key] === value ? "selected" : ""}>${value}</option>`).join("")}
-+        </select>
-+      </label>
-+    `;
-+  }
-+
-+  function findOrCreatePanel() {
-+    const host =
-+      document.getElementById("rpgSettingsPanel") ||
-+      document.getElementById("rpg-settings-panel") ||
-+      document.getElementById("rpgInspectorPanel") ||
-+      document.body;
-+
-+    let panel = document.getElementById("rpgConversationSettingsPanel");
-+    if (!panel) {
-+      panel = document.createElement("section");
-+      panel.id = "rpgConversationSettingsPanel";
-+      panel.className = "rpg-conversation-settings-panel";
-+      host.appendChild(panel);
-+    }
-+    return panel;
-+  }
-+
-+  function render() {
-+    const settings = loadSettings();
-+    const panel = findOrCreatePanel();
-+    panel.innerHTML = `
-+      <details open>
-+        <summary><strong>Living Conversations</strong></summary>
-+        <div class="rpg-conv-settings-grid">
-+          ${boolInput("Enable NPC conversations", "enabled", settings)}
-+          ${boolInput("Enable autonomous ticks", "autonomous_ticks_enabled", settings)}
-+          ${boolInput("Show ambient conversations", "show_ambient_conversations", settings)}
-+          ${boolInput("NPCs can address player", "allow_player_addressed", settings)}
-+          ${boolInput("NPCs can invite player response", "allow_player_invited", settings)}
-+          ${boolInput("Allow world signals", "allow_world_signals", settings)}
-+          ${boolInput("Allow quest discussion", "allow_quest_discussion", settings)}
-+          ${boolInput("Allow event discussion", "allow_event_discussion", settings)}
-+          ${boolInput("Allow rumor discussion", "allow_rumor_discussion", settings)}
-+          ${selectInput("Frequency", "frequency", settings, ["off", "rare", "normal", "frequent", "always"])}
-+          ${numberInput("Min ticks between conversations", "min_ticks_between_conversations", settings, 0, 20)}
-+          ${numberInput("Thread cooldown ticks", "thread_cooldown_ticks", settings, 0, 50)}
-+          ${numberInput("Max active threads", "max_active_threads", settings, 1, 5)}
-+          ${numberInput("Max beats per thread", "max_beats_per_thread", settings, 1, 12)}
-+          ${numberInput("Conversation chance %", "conversation_chance_percent", settings, 0, 100)}
-+          ${numberInput("Player inclusion chance %", "player_inclusion_chance_percent", settings, 0, 100)}
-+          ${numberInput("Max world signals/thread", "max_world_signals_per_thread", settings, 0, 10)}
-+          ${numberInput("Signal strength cap", "signal_strength_cap", settings, 1, 5)}
-+        </div>
-+      </details>
-+    `;
-+
-+    panel.querySelectorAll("[data-conv-setting]").forEach((input) => {
-+      input.addEventListener("change", () => {
-+        const next = loadSettings();
-+        const key = input.getAttribute("data-conv-setting");
-+        if (input.type === "checkbox") {
-+          next[key] = input.checked;
-+        } else if (input.type === "number") {
-+          next[key] = Number(input.value);
-+        } else {
-+          next[key] = input.value;
-+        }
-+        saveSettings(next);
-+      });
-+    });
-+  }
-+
-+  function attachToPayload(payload) {
-+    payload = payload || {};
-+    payload.runtime_settings = payload.runtime_settings || {};
-+    payload.runtime_settings.conversation_settings = loadSettings();
-+    return payload;
-+  }
-+
-+  window.RpgConversationSettings = {
-+    render,
-+    loadSettings,
-+    saveSettings,
-+    attachToPayload,
-+  };
-+
-+  if (document.readyState === "loading") {
-+    document.addEventListener("DOMContentLoaded", render);
-+  } else {
-+    render();
-+  }
-+})();
-File: src/static/index.html
-@@
- <script src="/static/rpg-living-world-inspector.js"></script>
-+<script src="/static/rpg-conversation-settings.js"></script>
-File: src/static/rpg.js
-
-Before sending RPG turn payload, attach settings:
-
-@@
--        const payload = {
-+        let payload = {
-           session_id: sessionId,
-           player_input: input,
-         };
-+        if (window.RpgConversationSettings && typeof window.RpgConversationSettings.attachToPayload === "function") {
-+          payload = window.RpgConversationSettings.attachToPayload(payload);
-+        }
-
-If your request payload is built elsewhere, apply the same call before fetch.
-
-File: src/static/rpg.css
-@@
-+.rpg-conversation-settings-panel {
-+  border: 1px solid rgba(255, 255, 255, 0.12);
-+  border-radius: 10px;
-+  padding: 10px;
-+  margin: 10px 0;
-+  background: rgba(0, 0, 0, 0.18);
-+  font-size: 12px;
-+}
-+
-+.rpg-conv-settings-grid {
-+  display: grid;
-+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-+  gap: 8px;
-+  margin-top: 8px;
-+}
-+
-+.rpg-conv-setting {
-+  display: flex;
-+  align-items: center;
-+  justify-content: space-between;
-+  gap: 8px;
-+}
-+
-+.rpg-conv-setting input[type="number"],
-+.rpg-conv-setting select {
-+  max-width: 90px;
-+}
-F6 PATCH — Inspector conversation fields
-File: src/static/rpg-living-world-inspector.js
-
-Enhance conversation display:
-
-@@
-     const conversationState = safeObj(result.conversation_thread_state);
-     const conversationThreads = safeArr(conversationState.threads);
-     const worldSignals = safeArr(conversationState.world_signals);
-+    const pendingPlayerResponse = safeObj(conversationState.pending_player_response);
-@@
-       ${renderList("NPC Conversation Threads", conversationThreads.slice(-6), (thread) => {
-         const beats = safeArr(thread.beats);
-         const latest = safeObj(beats[beats.length - 1]);
-+        const participation = safeObj(thread.player_participation);
-         return `
-           <div class="rpg-debug-row">
--            <strong>${escapeHtml(thread.topic || thread.thread_id || "conversation")}</strong>
-+            <strong>${escapeHtml(thread.topic || thread.thread_id || "conversation")}</strong>
-             <span>${escapeHtml(latest.speaker_name || "")}: ${escapeHtml(latest.line || "")}</span>
--            <code>${escapeHtml(thread.status || "active")}</code>
-+            <code>${escapeHtml(thread.status || "active")} · ${escapeHtml(participation.mode || thread.participation_mode || "overheard")}</code>
-           </div>
-         `;
-       })}
-+
-+      ${pendingPlayerResponse.thread_id ? `
-+        <details class="rpg-debug-section" open>
-+          <summary>Pending Player Response</summary>
-+          <div class="rpg-debug-row">
-+            <strong>${escapeHtml(pendingPlayerResponse.thread_id)}</strong>
-+            <span>${escapeHtml(pendingPlayerResponse.prompt || "")}</span>
-+            <code>${escapeHtml(pendingPlayerResponse.topic_id || "")}</code>
-+          </div>
-+        </details>
-+      ` : ""}
-F7 PATCH — Tests
-New file: src/app/rpg/tests/test_conversation_topics.py
-diff --git a/src/app/rpg/tests/test_conversation_topics.py b/src/app/rpg/tests/test_conversation_topics.py
-new file mode 100644
-index 0000000..1cc47f3
---- /dev/null
-+++ b/src/app/rpg/tests/test_conversation_topics.py
-@@ -0,0 +1,92 @@
-+from app.rpg.world.conversation_topics import (
-+    conversation_topics_for_state,
-+    select_conversation_topic,
-+)
-+from app.rpg.world.location_registry import set_current_location
-+
-+
-+def test_selects_quest_topic_when_backed_by_quest_state():
-+    state = {
-+        "quest_state": {
-+            "quests": [
-+                {
-+                    "quest_id": "quest:old_mill_bandits",
-+                    "title": "Trouble near the Old Mill",
-+                    "summary": "There is talk of armed figures near the old mill road.",
-+                    "status": "active",
-+                }
-+            ]
-+        }
-+    }
-+    set_current_location(state, "loc_tavern")
-+
-+    topic = select_conversation_topic(state, settings={"allow_quest_discussion": True}, forced_topic_type="quest")
-+
-+    assert topic["topic_type"] == "quest"
-+    assert topic["source_id"] == "quest:old_mill_bandits"
-+
-+
-+def test_event_discussion_requires_world_event_state():
-+    state = {
-+        "world_event_state": {
-+            "events": [
-+                {
-+                    "event_id": "event:traveler",
-+                    "kind": "travel",
-+                    "title": "A traveler arrived",
-+                    "summary": "A nervous traveler came from the old mill road.",
-+                }
-+            ]
-+        }
-+    }
-+    set_current_location(state, "loc_tavern")
-+
-+    topic = select_conversation_topic(state, settings={"allow_event_discussion": True}, forced_topic_type="recent_event")
-+
-+    assert topic["topic_type"] == "recent_event"
-+    assert topic["source_kind"] == "world_event"
-+
-+
-+def test_location_topic_is_fallback():
-+    state = {}
-+    set_current_location(state, "loc_tavern")
-+
-+    topics = conversation_topics_for_state(state, settings={})
-+
-+    assert topics
-+    assert any(topic["topic_type"] == "location_smalltalk" for topic in topics)
-New file: src/app/rpg/tests/test_conversation_settings.py
-diff --git a/src/app/rpg/tests/test_conversation_settings.py b/src/app/rpg/tests/test_conversation_settings.py
-new file mode 100644
-index 0000000..6624c44
---- /dev/null
-+++ b/src/app/rpg/tests/test_conversation_settings.py
-@@ -0,0 +1,42 @@
-+from app.rpg.world.conversation_settings import (
-+    conversation_settings_from_runtime,
-+    should_attempt_autonomous_conversation,
++++ b/src/app/rpg/tests/test_bundle_nop_npc_biography_roleplay.py
+@@ -0,0 +1,164 @@
++from app.rpg.ai.npc_roleplay import validate_npc_roleplay_output
++from app.rpg.world.npc_biography_registry import get_npc_biography, list_npc_biographies
++from app.rpg.world.npc_dialogue_profile import (
++    build_npc_dialogue_profile,
++    deterministic_biography_line,
 +)
 +
 +
-+def test_runtime_conversation_settings_override_defaults():
-+    settings = conversation_settings_from_runtime(
-+        {
-+            "runtime_settings": {
-+                "conversation_settings": {
-+                    "autonomous_ticks_enabled": True,
-+                    "frequency": "always",
-+                    "conversation_chance_percent": 100,
++def test_biography_registry_has_default_npcs():
++    ids = {bio["npc_id"] for bio in list_npc_biographies()}
++    assert "npc:Bran" in ids
++    assert "npc:Mira" in ids
++    assert "npc:GuardCaptain" in ids
++
++
++def test_bran_biography_contains_role_and_boundaries():
++    bio = get_npc_biography("npc:Bran")
++    assert bio["role"] == "Tavern keeper"
++    assert "personality_traits" in bio
++    assert "knowledge_boundaries" in bio
++    assert "must_not_claim" in bio["knowledge_boundaries"]
++
++
++def test_dialogue_profile_uses_topic_facts_and_biography():
++    state = {
++        "conversation_social_state": {
++            "npc_state": {
++                "npc:Bran": {
++                    "familiarity": 2,
++                    "trust_hint": "guarded",
 +                }
 +            }
-+        }
-+    )
-+
-+    assert settings["autonomous_ticks_enabled"] is True
-+    assert settings["conversation_chance_percent"] == 100
-+
-+
-+def test_autonomous_attempt_respects_enabled_and_force():
-+    settings = {
-+        "enabled": False,
-+        "autonomous_ticks_enabled": True,
-+        "conversation_chance_percent": 100,
-+    }
-+    assert not should_attempt_autonomous_conversation(tick=10, last_conversation_tick=0, settings=settings)
-+
-+    settings["enabled"] = True
-+    assert should_attempt_autonomous_conversation(tick=10, last_conversation_tick=0, settings=settings, force=True)
-New file: src/app/rpg/tests/test_ambient_tick_runtime.py
-diff --git a/src/app/rpg/tests/test_ambient_tick_runtime.py b/src/app/rpg/tests/test_ambient_tick_runtime.py
-new file mode 100644
-index 0000000..78f998b
---- /dev/null
-+++ b/src/app/rpg/tests/test_ambient_tick_runtime.py
-@@ -0,0 +1,80 @@
-+from app.rpg.session.ambient_tick_runtime import (
-+    advance_autonomous_ambient_tick,
-+    is_ambient_tick_command,
-+)
-+from app.rpg.world.location_registry import set_current_location
-+
-+
-+def _runtime_state():
-+    return {
-+        "runtime_settings": {
-+            "conversation_settings": {
-+                "enabled": True,
-+                "autonomous_ticks_enabled": True,
-+                "frequency": "always",
-+                "conversation_chance_percent": 100,
-+                "min_ticks_between_conversations": 0,
-+                "thread_cooldown_ticks": 0,
-+            }
-+        }
-+    }
-+
-+
-+def test_ambient_tick_command_detected():
-+    assert is_ambient_tick_command("__ambient_tick__")
-+    assert is_ambient_tick_command("__ambient_tick_player_invited__")
-+
-+
-+def test_autonomous_tick_triggers_conversation():
-+    state = {}
-+    set_current_location(state, "loc_tavern")
-+
-+    result = advance_autonomous_ambient_tick(
-+        player_input="__ambient_tick__",
-+        simulation_state=state,
-+        runtime_state=_runtime_state(),
-+        tick=1,
-+    )
-+
-+    assert result["applied"] is True
-+    assert result["conversation_result"]["triggered"] is True
-+    assert state["conversation_thread_state"]["threads"]
-+    assert state["world_event_state"]["events"][0]["kind"] == "npc_conversation"
-+
-+
-+def test_player_invited_tick_creates_pending_response():
-+    state = {}
-+    set_current_location(state, "loc_tavern")
-+    runtime_state = _runtime_state()
-+    runtime_state["runtime_settings"]["conversation_settings"]["allow_player_invited"] = True
-+    runtime_state["runtime_settings"]["conversation_settings"]["player_inclusion_chance_percent"] = 100
-+
-+    result = advance_autonomous_ambient_tick(
-+        player_input="__ambient_tick_player_invited__",
-+        simulation_state=state,
-+        runtime_state=runtime_state,
-+        tick=2,
-+    )
-+
-+    participation = result["conversation_result"]["player_participation"]
-+    assert participation["mode"] == "player_invited"
-+    assert participation["pending_response"] is True
-+    assert state["conversation_thread_state"]["pending_player_response"]["thread_id"]
-File: src/app/rpg/tests/test_conversation_threads.py
-
-Add:
-
-@@
- def test_conversation_does_not_mutate_player_resources_or_journal():
-@@
-     assert state["journal_state"]["entries"] == []
-     assert state["transaction_history"] == []
-+
-+
-+def test_conversation_can_discuss_backed_quest_without_creating_quest_or_reward():
-+    state = {
-+        "quest_state": {
-+            "quests": [
-+                {
-+                    "quest_id": "quest:old_mill_bandits",
-+                    "title": "Trouble near the Old Mill",
-+                    "summary": "There is talk of armed figures near the old mill road.",
-+                    "status": "active",
-+                }
-+            ]
-+        }
-+    }
-+    set_current_location(state, "loc_tavern")
-+
-+    result = maybe_advance_conversation_thread(
-+        state,
-+        player_input="__autonomous_ambient_tick__",
-+        tick=20,
-+        settings={
-+            "enabled": True,
-+            "allow_quest_discussion": True,
-+            "allow_world_signals": True,
-+            "max_world_signals_per_thread": 2,
-+            "signal_strength_cap": 1,
 +        },
-+        autonomous=True,
-+        force=True,
-+        forced_topic_type="quest",
-+    )
-+
-+    assert result["triggered"] is True
-+    assert result["topic"]["topic_type"] == "quest"
-+    assert result["world_signal"]["kind"] in {"quest_interest", "danger_warning", "rumor_pressure"}
-+    assert "quest_started" not in result
-+    assert "reward" not in result
-File: src/app/rpg/tests/test_manual_transcript_modes.py
-
-Add:
-
-@@
- def test_manual_warns_if_ambient_conversation_resolves_service():
-@@
-     assert "ambient_conversation_unexpected_service_result" in warnings
-     assert "ambient_conversation_unexpected_commerce_action" in warnings
-+
-+
-+def test_manual_warns_if_autonomous_conversation_has_forbidden_effect():
-+    result = {
-+        "result": {
-+            "conversation_result": {
-+                "triggered": True,
-+                "journal_entry": {"entry_id": "bad"},
-+                "conversation_effect_validation": {
-+                    "ok": False,
-+                    "violations": ["forbidden_key:journal_entry"],
-+                },
-+            },
-+            "conversation_thread_state": {
-+                "threads": [{"thread_id": "conversation:loc_tavern:npc:Bran:npc:Mira"}],
-+                "world_signals": [{"signal_id": "signal"}],
-+            },
-+        }
++        "npc_goal_state": {
++            "goals": {
++                "npc:Bran": [
++                    {
++                        "goal_id": "goal:bran:keep_tavern_orderly",
++                        "kind": "maintain_order",
++                        "priority": 3,
++                        "status": "active",
++                    }
++                ]
++            }
++        },
 +    }
-+
-+    warnings = transcript._manual_regression_warnings(
-+        scenario_name="autonomous_conversation",
-+        turn_index=1,
-+        player_input="__ambient_tick__",
-+        result=result,
++    topic = {
++        "topic_id": "topic:quest:old_mill",
++        "topic_type": "quest",
++        "title": "Trouble near the Old Mill",
++        "summary": "There is talk of armed figures near the old mill road.",
++        "allowed_facts": ["There is talk of armed figures near the old mill road."],
++    }
++    profile = build_npc_dialogue_profile(
++        npc_id="npc:Bran",
++        simulation_state=state,
++        runtime_state={},
++        topic=topic,
++        listener_id="player",
++        response_intent="answer",
 +    )
 +
-+    assert "autonomous_conversation_conversation_effect_validation_failed" in warnings
-+    assert "autonomous_conversation_conversation_forbidden_effect:journal_entry" in warnings
-Final validation gate
++    assert profile["role"] == "Tavern keeper"
++    assert profile["topic_type"] == "quest"
++    assert profile["allowed_facts"]
++    assert profile["used_fact_ids"] == ["topic:quest:old_mill"]
++    assert profile["active_goal"]["kind"] == "maintain_order"
++
++
++def test_deterministic_biography_line_personalizes_backed_fact():
++    profile = build_npc_dialogue_profile(
++        npc_id="npc:Bran",
++        simulation_state={},
++        runtime_state={},
++        topic={
++            "topic_id": "topic:quest:old_mill",
++            "topic_type": "quest",
++            "title": "Trouble near the Old Mill",
++            "summary": "There is talk of armed figures near the old mill road.",
++            "allowed_facts": ["There is talk of armed figures near the old mill road."],
++        },
++        listener_id="player",
++        response_intent="answer",
++    )
++
++    line = deterministic_biography_line(
++        profile=profile,
++        topic={
++            "topic_id": "topic:quest:old_mill",
++            "topic_type": "quest",
++            "allowed_facts": ["There is talk of armed figures near the old mill road."],
++        },
++        pivot={"requested": True, "accepted": True},
++        response_style="guarded",
++    )
++
++    assert line["roleplay_source"] == "deterministic_template"
++    assert line["biography_role"] == "Tavern keeper"
++    assert "old mill road" in line["line"].lower()
++    assert line["used_fact_ids"] == ["topic:quest:old_mill"]
++
++
++def test_deterministic_biography_line_deflects_unbacked_topic():
++    profile = build_npc_dialogue_profile(
++        npc_id="npc:Bran",
++        simulation_state={},
++        runtime_state={},
++        topic={},
++        listener_id="player",
++        response_intent="deflect",
++    )
++
++    line = deterministic_biography_line(
++        profile=profile,
++        topic={},
++        pivot={
++            "requested": True,
++            "accepted": False,
++            "requested_topic_hint": "secret vault under city",
++            "pivot_rejected_reason": "no_backed_topic_found",
++        },
++        response_style="guarded",
++    )
++
++    assert line["roleplay_source"] == "deterministic_template"
++    assert line["used_fact_ids"] == []
++    assert "no reliable word" in line["line"].lower() or "do not know" in line["line"].lower()
++    assert "secret vault is" not in line["line"].lower()
++
++
++def test_roleplay_validator_accepts_valid_output():
++    profile = {
++        "used_fact_ids": ["topic:quest:old_mill"],
++        "allowed_facts": ["There is trouble near the old mill road."],
++    }
++    validation = validate_npc_roleplay_output(
++        {
++            "speaker_id": "npc:Bran",
++            "speaker_name": "Bran",
++            "line": "Folk have been avoiding the old mill road after dusk.",
++            "style_tags": ["guarded"],
++            "used_fact_ids": ["topic:quest:old_mill"],
++            "claims": ["People avoid the old mill road."],
++            "forbidden_effects": [],
++        },
++        expected_speaker_id="npc:Bran",
++        profile=profile,
++    )
++
++    assert validation["ok"] is True
++
++
++def test_roleplay_validator_rejects_wrong_speaker_and_unbacked_fact():
++    profile = {
++        "used_fact_ids": ["topic:quest:old_mill"],
++        "allowed_facts": ["There is trouble near the old mill road."],
++    }
++    validation = validate_npc_roleplay_output(
++        {
++            "speaker_id": "npc:Mira",
++            "speaker_name": "Mira",
++            "line": "Take this reward and follow the secret lair map.",
++            "style_tags": ["helpful"],
++            "used_fact_ids": ["topic:secret:lair"],
++            "claims": ["There is a secret lair map."],
++            "forbidden_effects": [],
++        },
++        expected_speaker_id="npc:Bran",
++        profile=profile,
++    )
++
++    assert validation["ok"] is False
++    assert "speaker_id_mismatch" in validation["violations"]
++    assert "unbacked_fact_id:topic:secret:lair" in validation["violations"]
++
+P6 PATCH — Optional route/debug endpoint for biographies
+
+Only add this if your RPG API already exposes debug helpers. Otherwise skip.
+
+File: src/app/rpg/api/rpg_session_routes.py
+@@
++from app.rpg.world.npc_biography_registry import list_npc_biographies
+@@
++@router.get("/api/rpg/npc_biographies")
++async def list_rpg_npc_biographies():
++    return {
++        "ok": True,
++        "biographies": list_npc_biographies(),
++        "source": "deterministic_npc_biography_registry",
++    }
+
+If the router prefix already includes /api/rpg, use:
+
+@router.get("/npc_biographies")
+
+instead.
+
+Validation
 
 Run:
 
-pytest src/app/rpg/tests/test_conversation_settings.py -q
-pytest src/app/rpg/tests/test_conversation_topics.py -q
-pytest src/app/rpg/tests/test_ambient_tick_runtime.py -q
-pytest src/app/rpg/tests/test_conversation_threads.py -q
-pytest src/app/rpg/tests/test_manual_transcript_modes.py -q
-pytest src/app/rpg/tests/test_ambient_intent.py -q
-pytest src/app/rpg/tests/test_service_location_availability.py -q
-pytest src/app/rpg/tests/test_travel_runtime.py -q
-pytest src/app/rpg/tests/test_service_purchase_runtime.py -q
-pytest src/app/rpg/tests/test_narration_queue.py -q
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_nop_npc_biography_roleplay.py
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_hij_conversational_intelligence.py
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_klm_living_npc_agency.py
+
+Expected:
+
+npc_biography_shapes_bran_dialogue:
+  npc_response_beat.biography_role = Tavern keeper
+  roleplay_source = deterministic_template
+  used_fact_ids includes topic:quest:old_mill_bandits or equivalent
+
+npc_biography_shapes_mira_dialogue:
+  npc_response_beat.biography_role is present
+  line style is not identical to Bran's generic line
+
+npc_biography_blocks_unbacked_secret:
+  topic_pivot.requested = true
+  topic_pivot.accepted = false
+  pivot_rejected_reason = no_backed_topic_found
+  response line deflects
+  no invented secret vault fact
+
+npc_roleplay_fallback_validation:
+  roleplay_source = deterministic_template or llm_disabled fallback
+  no forbidden effects

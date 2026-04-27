@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.rpg.world.conversation_rumors import expire_conversation_world_signals
 from app.rpg.world.conversation_settings import (
     conversation_settings_from_runtime,
     should_attempt_autonomous_conversation,
 )
 from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
+from app.rpg.world.scene_activity_scheduler import maybe_schedule_scene_activity
 
 AMBIENT_TICK_COMMANDS = {
     "__ambient_tick__",
@@ -19,6 +21,10 @@ AMBIENT_TICK_COMMANDS = {
     "__ambient_tick_rumor__",
 }
 
+SCENE_ACTIVITY_TICK_COMMANDS = {
+    "__scene_activity_tick__",
+}
+
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
@@ -29,7 +35,23 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 
 def is_ambient_tick_command(player_input: str) -> bool:
-    return _safe_str(player_input).strip().lower() in AMBIENT_TICK_COMMANDS
+    command = _safe_str(player_input).strip().lower()
+    return command in AMBIENT_TICK_COMMANDS or command in SCENE_ACTIVITY_TICK_COMMANDS
+
+
+def is_scene_activity_tick_command(player_input: str) -> bool:
+    return _safe_str(player_input).strip().lower() in SCENE_ACTIVITY_TICK_COMMANDS
+
+
+def _is_conversation_trigger_input(player_input: str) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    if text.startswith("__ambient_tick"):
+        return True
+    return (
+        "wait" in text
+        or "listen" in text
+        or "observe" in text
+    )
 
 
 def _forced_player_mode(command: str) -> str:
@@ -63,9 +85,61 @@ def advance_autonomous_ambient_tick(
     settings = conversation_settings_from_runtime(runtime_state)
     command = _safe_str(player_input).strip().lower()
 
+    try:
+        signal_expiration = expire_conversation_world_signals(
+            simulation_state,
+            runtime_state=runtime_state,
+            current_tick=tick,
+            settings=settings,
+        )
+    except Exception as exc:
+        thread_signals = _safe_dict(simulation_state.get("conversation_thread_state")).get("world_signals")
+        thread_signals = thread_signals if isinstance(thread_signals, list) else []
+        rumor_signals = _safe_dict(simulation_state.get("conversation_rumor_state")).get("conversation_world_signals")
+        rumor_signals = rumor_signals if isinstance(rumor_signals, list) else []
+        signal_expiration = {
+            "expired_count": 0,
+            "remaining_thread_signal_count": len(thread_signals),
+            "remaining_rumor_signal_count": len(rumor_signals),
+            "error": f"{type(exc).__name__}: {exc}",
+            "source": "deterministic_ambient_tick_runtime",
+        }
+
     force = is_ambient_tick_command(command)
     force_mode = _forced_player_mode(command)
     force_topic = _forced_topic_type(command)
+
+    if is_scene_activity_tick_command(command):
+        scene_activity_result = maybe_schedule_scene_activity(
+            simulation_state,
+            tick=tick,
+            settings=settings,
+            force=True,
+        )
+        return {
+            "matched": True,
+            "applied": False,
+            "status": "scene_activity_tick",
+            "reason": "scene_activity_tick_command",
+            "conversation_result": {},
+            "scene_activity_result": scene_activity_result,
+            "signal_expiration": signal_expiration,
+            "conversation_settings": settings,
+            "source": "deterministic_ambient_tick_runtime",
+        }
+
+    if not _is_conversation_trigger_input(player_input):
+        return {
+            "matched": False,
+            "applied": False,
+            "status": "skipped_non_conversation_input",
+            "reason": "non_conversation_input",
+            "conversation_result": {},
+            "scene_activity_result": {},
+            "signal_expiration": signal_expiration,
+            "conversation_settings": settings,
+            "source": "deterministic_ambient_tick_runtime",
+        }
 
     conversation_state = _safe_dict(simulation_state.get("conversation_thread_state"))
     debug = _safe_dict(conversation_state.get("debug"))
@@ -79,11 +153,16 @@ def advance_autonomous_ambient_tick(
     )
 
     if not should_attempt:
+        scene_activity_result = maybe_schedule_scene_activity(
+            simulation_state, tick=tick, settings=settings
+        )
         return {
             "matched": force,
             "applied": False,
             "status": "ambient_tick_no_conversation",
             "reason": "settings_or_cooldown_prevented_conversation",
+            "scene_activity_result": scene_activity_result,
+            "signal_expiration": signal_expiration,
             "conversation_settings": settings,
             "source": "deterministic_ambient_tick_runtime",
         }
@@ -106,11 +185,17 @@ def advance_autonomous_ambient_tick(
     conversation_state["debug"] = debug
     simulation_state["conversation_thread_state"] = conversation_state
 
+    scene_activity_result = maybe_schedule_scene_activity(
+        simulation_state, tick=tick, settings=settings
+    )
+
     return {
         "matched": force,
         "applied": bool(conversation_result.get("triggered")),
         "status": "ambient_tick_conversation" if conversation_result.get("triggered") else "ambient_tick_no_conversation",
         "conversation_result": conversation_result,
+        "scene_activity_result": scene_activity_result,
+        "signal_expiration": signal_expiration,
         "conversation_settings": settings,
         "source": "deterministic_ambient_tick_runtime",
     }

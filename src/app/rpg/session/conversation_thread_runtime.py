@@ -5,7 +5,17 @@ from typing import Any, Dict
 from app.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
 from app.rpg.session.ambient_tick_runtime import is_ambient_tick_command
 from app.rpg.world.conversation_settings import conversation_settings_from_runtime
-from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
+from app.rpg.world.conversation_threads import (
+    handle_pending_player_conversation_response,
+    has_pending_player_conversation_response,
+    maybe_advance_conversation_thread,
+)
+
+
+def _has_pending_player_response(simulation_state: Dict[str, Any]) -> bool:
+    thread_state = _safe_dict(simulation_state.get("conversation_thread_state"))
+    pending = _safe_dict(thread_state.get("pending_player_response"))
+    return bool(pending.get("thread_id") and pending.get("topic_id"))
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -20,6 +30,7 @@ def _conversation_blocking_reason(
     *,
     player_input: str,
     resolved_result: Dict[str, Any],
+    allow_pending_player_response: bool = False,
 ) -> str:
     """Return a reason if this turn must not trigger NPC conversation.
 
@@ -37,6 +48,13 @@ def _conversation_blocking_reason(
     semantic_action_type = _safe_str(resolved_result.get("semantic_action_type"))
     semantic_family = _safe_str(resolved_result.get("semantic_family"))
 
+    # Pending NPC-invited replies have precedence over normal service/social
+    # routing. Otherwise questions like "What should I know about the room?"
+    # can be swallowed by lodging/info routing before the conversation runtime
+    # can consume the pending player response.
+    if allow_pending_player_response:
+        return ""
+
     if service_result.get("matched"):
         return "service_turn"
     if travel_result.get("matched"):
@@ -45,10 +63,13 @@ def _conversation_blocking_reason(
     blocked_action_types = {
         "service_inquiry",
         "service_purchase",
+        "service_transaction",
         "travel",
+        "travel_move",
+        "combat",
+        "combat_action",
         "social_activity",
         "attack",
-        "combat",
         "inventory",
         "item_use",
         "take",
@@ -58,7 +79,9 @@ def _conversation_blocking_reason(
     if action_type in blocked_action_types or semantic_action_type in blocked_action_types:
         return f"blocked_action_type:{action_type or semantic_action_type}"
 
-    if semantic_family in {"commerce", "travel", "combat", "inventory", "social"}:
+    if semantic_family in {"commerce", "travel", "combat", "inventory"}:
+        return f"blocked_semantic_family:{semantic_family}"
+    if semantic_family == "social" and not allow_pending_player_response:
         return f"blocked_semantic_family:{semantic_family}"
 
     if is_ambient_tick_command(player_input):
@@ -78,9 +101,15 @@ def advance_conversation_threads_for_turn(
     runtime_state: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     resolved_result = _safe_dict(resolved_result)
+    settings = conversation_settings_from_runtime(runtime_state or {})
+    pending_player_response = has_pending_player_conversation_response(
+        simulation_state,
+        tick=tick,
+    )
     block_reason = _conversation_blocking_reason(
         player_input=player_input,
         resolved_result=resolved_result,
+        allow_pending_player_response=pending_player_response,
     )
     if block_reason:
         return {
@@ -89,11 +118,19 @@ def advance_conversation_threads_for_turn(
             "source": "deterministic_conversation_thread_runtime",
         }
 
+    if pending_player_response and not is_ambient_tick_command(player_input):
+        return handle_pending_player_conversation_response(
+            simulation_state,
+            player_input=player_input,
+            tick=tick,
+            settings=settings,
+        )
+
     return maybe_advance_conversation_thread(
         simulation_state,
         player_input=player_input,
         tick=tick,
-        settings=conversation_settings_from_runtime(runtime_state or {}),
+        settings=settings,
         exclude_event_ids=_current_turn_world_event_ids(resolved_result),
     )
 

@@ -47,6 +47,7 @@ from app.rpg.session.runtime import (
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
+from app.rpg.world.npc_biography_registry import list_npc_biographies
 
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
@@ -694,6 +695,15 @@ async def execute_rpg_session_turn_stream(request: Request):
 
 # Debug/manual trigger endpoint.
 # Normal gameplay should rely on the background worker manager instead.
+@rpg_session_bp.get("/api/rpg/npc_biographies")
+async def list_rpg_npc_biographies():
+    return JSONResponse({
+        "ok": True,
+        "biographies": list_npc_biographies(),
+        "source": "deterministic_npc_biography_registry",
+    })
+
+
 @rpg_session_bp.post("/api/rpg/session/process_narration")
 async def process_rpg_session_narration(request: Request):
     data = await request.json()

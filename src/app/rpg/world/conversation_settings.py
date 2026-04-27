@@ -25,6 +25,10 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
 DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "enabled": True,
     "autonomous_ticks_enabled": False,
@@ -50,6 +54,29 @@ DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "max_world_signals_per_thread": 2,
     "max_world_events_per_thread": 4,
     "signal_strength_cap": 1,
+    # Bundle N-O-P — NPC Biography Roleplay
+    "npc_roleplay_use_llm": False,
+    "npc_roleplay_max_line_chars": 240,
+    "npc_roleplay_fallback_on_invalid": True,
+    "test_force_conversation_speaker_id": "",
+    "test_force_conversation_listener_id": "",
+    # Bundle H — NPC response beats + topic pivoting
+    "allow_npc_response_beats": True,
+    "npc_response_style_influence": True,
+    # Bundle KLM — NPC goals + scene activities
+    "avoid_repeated_npc_response_lines": True,
+    "allow_npc_goal_influence": True,
+    "goal_player_invitation_bias_cap": 20,
+    # Bundle J — rumor propagation caps
+    "allow_rumor_propagation": True,
+    "max_rumor_seeds": 24,
+    "max_rumor_mentions_per_location": 3,
+    "max_signal_age_ticks": 80,
+    "allow_scene_activities": True,
+    "scene_activity_interval_ticks": 2,
+    "scene_activity_cooldown_ticks": 3,
+    "allow_scene_activity_world_events": True,
+    "allow_scene_activity_world_signals": True,
 }
 
 
@@ -120,6 +147,38 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     merged["max_world_signals_per_thread"] = max(0, _safe_int(merged.get("max_world_signals_per_thread"), 2))
     merged["max_world_events_per_thread"] = max(0, _safe_int(merged.get("max_world_events_per_thread"), 4))
     merged["signal_strength_cap"] = max(1, _safe_int(merged.get("signal_strength_cap"), 1))
+    merged["npc_roleplay_use_llm"] = _safe_bool(merged.get("npc_roleplay_use_llm"), False)
+    merged["npc_roleplay_max_line_chars"] = max(
+        80,
+        min(600, _safe_int(merged.get("npc_roleplay_max_line_chars"), 240)),
+    )
+    merged["npc_roleplay_fallback_on_invalid"] = _safe_bool(
+        merged.get("npc_roleplay_fallback_on_invalid"),
+        True,
+    )
+    merged["test_force_conversation_speaker_id"] = _safe_str(
+        merged.get("test_force_conversation_speaker_id")
+    )
+    merged["test_force_conversation_listener_id"] = _safe_str(
+        merged.get("test_force_conversation_listener_id")
+    )
+    # Bundle H
+    merged["allow_npc_response_beats"] = _safe_bool(merged.get("allow_npc_response_beats"), True)
+    merged["npc_response_style_influence"] = _safe_bool(merged.get("npc_response_style_influence"), True)
+    # Bundle KLM
+    merged["avoid_repeated_npc_response_lines"] = _safe_bool(merged.get("avoid_repeated_npc_response_lines"), True)
+    merged["allow_npc_goal_influence"] = _safe_bool(merged.get("allow_npc_goal_influence"), True)
+    merged["goal_player_invitation_bias_cap"] = max(0, min(50, _safe_int(merged.get("goal_player_invitation_bias_cap"), 20)))
+    # Bundle J
+    merged["allow_rumor_propagation"] = _safe_bool(merged.get("allow_rumor_propagation"), True)
+    merged["max_rumor_seeds"] = max(1, _safe_int(merged.get("max_rumor_seeds"), 24))
+    merged["max_rumor_mentions_per_location"] = max(1, _safe_int(merged.get("max_rumor_mentions_per_location"), 3))
+    merged["max_signal_age_ticks"] = max(1, _safe_int(merged.get("max_signal_age_ticks"), 80))
+    merged["allow_scene_activities"] = _safe_bool(merged.get("allow_scene_activities"), True)
+    merged["scene_activity_interval_ticks"] = max(1, _safe_int(merged.get("scene_activity_interval_ticks"), 2))
+    merged["scene_activity_cooldown_ticks"] = max(0, _safe_int(merged.get("scene_activity_cooldown_ticks"), 3))
+    merged["allow_scene_activity_world_events"] = _safe_bool(merged.get("allow_scene_activity_world_events"), True)
+    merged["allow_scene_activity_world_signals"] = _safe_bool(merged.get("allow_scene_activity_world_signals"), True)
     return merged
 
 

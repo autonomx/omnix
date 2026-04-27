@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Sequence
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from app.rpg.session.runtime import apply_turn
+from app.rpg.world.conversation_threads import has_pending_player_conversation_response
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "resources" / "test-results"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -32,6 +33,7 @@ SERVICE_OUTPUT_PATH = OUTPUT_DIR / "manual_rpg_service_scenarios_all.txt"
 CODE_DIFF_PATH = OUTPUT_DIR / "code-diff.txt"
 RESULTS_ZIP_PATH = OUTPUT_DIR / "manual-rpg-test-results.zip"
 TOKEN_USAGE_PATH = OUTPUT_DIR / "token-usage.txt"
+CONVERSATION_PATH = OUTPUT_DIR / "conversation.html"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOT = REPO_ROOT / "src"
 RPG_SESSION_DIRS = [
@@ -54,6 +56,7 @@ CODE_DIFF_EXCLUDE_PARTS = {
 _OUTPUTS: Dict[str, List[str]] = {}
 _TOKEN_USAGE_ROWS: List[Dict[str, Any]] = []
 _REGRESSION_WARNING_ROWS: List[Dict[str, Any]] = []
+_REGRESSION_WARNINGS: List[str] = []
 _OUTPUT_LOCK = threading.RLock()
 _TOKEN_USAGE_LOCK = threading.RLock()
 _REGRESSION_WARNING_LOCK = threading.RLock()
@@ -206,6 +209,7 @@ def _reset_token_usage() -> None:
 def _reset_regression_warnings() -> None:
     with _REGRESSION_WARNING_LOCK:
         _REGRESSION_WARNING_ROWS.clear()
+        _REGRESSION_WARNINGS.clear()
 
 
 def _record_regression_warnings(row: Dict[str, Any]) -> None:
@@ -231,6 +235,17 @@ def _record_scenario_error(
     }
     with _REGRESSION_WARNING_LOCK:
         _REGRESSION_WARNING_ROWS.append(row)
+
+
+def _add_regression_warning(
+    *,
+    scenario: str,
+    turn: int,
+    warning: str,
+) -> None:
+    warning_entry = f"{scenario}:turn_{turn}:{warning}"
+    with _REGRESSION_WARNING_LOCK:
+        _REGRESSION_WARNINGS.append(warning_entry)
 
 
 def _token_usage_totals(rows: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -857,6 +872,7 @@ def _is_result_zip_candidate(path: Path) -> bool:
         "token-usage.txt",
         "manual_rpg_llm_transcript.txt",
         "manual_rpg_service_scenarios_all.txt",
+        "conversation.html",
     }:
         return True
     if path.name.startswith("manual_rpg_llm_transcript__") and path.suffix == ".txt":
@@ -1019,10 +1035,531 @@ SERVICE_SCENARIOS = {
             "What do you mean about the old mill?",
         ],
     },
+    # ── Bundle H-I-J conversation scenarios ────────────────────────────────────
+    #
+    # These use the real LLM to produce narrated output. They exercise the full
+    # apply_turn pipeline: topic pivot detection, NPC response beats, social
+    # state familiarity tracking, and rumor seed propagation.
+    #
+    "npc_replies_after_player_join": {
+        # Scenario: Player is invited into a running NPC conversation, replies,
+        # and the NPC must produce a contextually appropriate response beat.
+        # LLM narration should acknowledge the NPC responding directly to the player.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "allow_npc_response_beats": True,
+            "npc_response_style_influence": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "I hear you. Tell me more about what is happening around here.",
+        ],
+    },
+    "player_requests_backed_quest_topic": {
+        # Scenario: Player joins a conversation and pivots the topic to a backed
+        # active quest. The topic_pivot must be accepted (accepted=True, topic_type=quest).
+        # LLM narration should reference the quest ("old mill", "armed figures", etc.).
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "allow_npc_response_beats": True,
+            "npc_response_style_influence": True,
+            "allow_quest_discussion": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road at night.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "What can you tell me about the trouble at the old mill road?",
+        ],
+    },
+    "player_requests_unbacked_topic": {
+        # Scenario: Player joins and asks about something with no backing in the world
+        # state (no quest, event, or memory). topic_pivot must be rejected
+        # (accepted=False, pivot_rejected_reason non-empty). The NPC should deflect
+        # without fabricating details about the unbacked subject.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "allow_npc_response_beats": True,
+            "npc_response_style_influence": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "Tell me about the dragon lair hidden in the northern mountains.",
+        ],
+    },
+    "npc_response_uses_social_state": {
+        # Scenario: Player joins twice across two separate invitations. After the
+        # first join, familiarity accumulates. On the second turn the NPC response
+        # style should shift from "guarded" toward "evasive" or "helpful" as
+        # familiarity increases. LLM narration should reflect a warmer NPC tone.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "allow_npc_response_beats": True,
+            "npc_response_style_influence": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "I am happy to chat with you. What is on your mind?",
+            "__ambient_tick_player_invited__",
+            "Yes, I would love to hear more. You seem like someone worth talking to.",
+        ],
+    },
+    "rumor_seed_from_conversation": {
+        # Scenario: NPCs discuss an active quest. The conversation runtime should
+        # attach a world signal (quest_interest) which seeds a rumor entry in
+        # rumor_propagation_state. LLM narration should reflect NPC discussion of
+        # quest-related facts ("old mill road", "armed figures").
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_quest_discussion": True,
+            "allow_rumor_propagation": True,
+            "max_rumor_seeds": 16,
+            "max_rumor_mentions_per_location": 4,
+            "max_signal_age_ticks": 20,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+            "max_world_signals_per_thread": 4,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road at night.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": [
+            "__ambient_tick_quest__",
+            "__ambient_tick__",
+            "__ambient_tick__",
+        ],
+    },
+    "rumor_signal_expires": {
+        # Scenario: A quest rumor seed is created, then multiple ambient ticks
+        # advance the clock past max_signal_age_ticks (set to 3 ticks here).
+        # By turn 4 the seed should be expired and gone from rumor_propagation_state.
+        # LLM narration on later turns should not reference the expired rumor.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_quest_discussion": True,
+            "allow_rumor_propagation": True,
+            "max_rumor_seeds": 16,
+            "max_rumor_mentions_per_location": 4,
+            "max_signal_age_ticks": 3,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+            "max_world_signals_per_thread": 4,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road at night.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": [
+            "__ambient_tick_quest__",   # turn 1 — seeds the rumor (expires_tick = 1 + 3 = 4)
+            "__ambient_tick__",          # turn 2 — seed still active
+            "__ambient_tick__",          # turn 3 — seed at expiry boundary
+            "__ambient_tick__",          # turn 4 — seed should be gone (expired)
+            "__ambient_tick__",          # turn 5 — confirm no stale seed re-seeded
+        ],
+    },
+    "npc_goal_influences_response_style": {
+        # Scenario: Player is invited into a conversation. NPC goals are seeded so
+        # that the dominant goal biases the NPC response style toward goal-driven
+        # phrasing. The transcript verifies that npc_goal_state is populated and
+        # npc_response_style is present in the result.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "allow_npc_goal_influence": True,
+            "allow_npc_response_beats": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "What should I know about the room?",
+        ],
+    },
+    "scene_activity_schedules_idle_action": {
+        # Scenario: Conversation is disabled but scene activities are enabled.
+        # Two ambient ticks should each trigger at least one scene activity,
+        # visible in scene_activity_state.recent. Hard constraint: no inventory,
+        # currency, or transaction mutation.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "off",
+            "conversation_chance_percent": 0,
+            "allow_scene_activities": True,
+            "scene_activity_interval_ticks": 1,
+            "scene_activity_cooldown_ticks": 0,
+            "allow_scene_activity_world_events": True,
+            "allow_scene_activity_world_signals": True,
+        },
+        "turns": ["__scene_activity_tick__", "__scene_activity_tick__"],
+    },
+    "scene_activity_respects_cooldown": {
+        # Scenario: After the first ambient tick creates a scene activity with
+        # cooldown_ticks=10, the second tick must NOT create another activity.
+        # scene_activity_state.recent should have at most 1 entry after 2 ticks.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "off",
+            "conversation_chance_percent": 0,
+            "allow_scene_activities": True,
+            "scene_activity_interval_ticks": 1,
+            "scene_activity_cooldown_ticks": 10,
+        },
+        "turns": ["__scene_activity_tick__", "__scene_activity_tick__"],
+    },
+    # ── Multi-turn NPC-to-NPC conversation (3-4 turns)
+    "npc_npc_multiturn_conversation": {
+        # Scenario: Two tavern NPCs (Bran and Mira) discuss a traveler who arrived
+        # with news from the old mill road. Four ambient ticks drive 3-4 distinct
+        # conversational beats. The world event provides a factual anchor so the
+        # LLM has something specific to discuss across turns.
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": False,
+            "allow_event_discussion": True,
+            "allow_quest_discussion": True,
+            "allow_npc_response_beats": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+            "max_world_signals_per_thread": 4,
+            "max_world_events_per_thread": 4,
+        },
+        "setup_world_events": [
+            {
+                "event_id": "manual:event:mill_road_traveler",
+                "kind": "travel",
+                "title": "A traveler arrived from the old mill road",
+                "summary": (
+                    "A nervous traveler arrived at the Rusty Flagon Tavern from the old mill road, "
+                    "speaking of strange lights seen near the mill at dusk and the sound of armed men."
+                ),
+                "location_id": "loc_tavern",
+                "source": "manual_scenario_setup",
+            }
+        ],
+        "turns": [
+            "__ambient_tick__",   # turn 1 — Bran and Mira start discussing the traveler
+            "__ambient_tick__",   # turn 2 — they speculate about the strange lights
+            "__ambient_tick__",   # turn 3 — one of them mentions what they should do
+            "__ambient_tick__",   # turn 4 — the conversation reaches a natural conclusion
+        ],
+    },
+    "npc_npc_multiturn_quest_discussion": {
+        # Scenario: NPCs carry a 4-turn conversation anchored to an active quest.
+        # Each ambient tick adds a new beat to the same thread, building a coherent
+        # discussion arc: awareness → detail → speculation → conclusion.
+        # The LLM narration across all 4 turns should stay on-topic and reference
+        # quest-specific facts ("old mill", "armed figures").
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": False,
+            "allow_quest_discussion": True,
+            "allow_npc_response_beats": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+            "max_world_signals_per_thread": 4,
+            "max_world_events_per_thread": 4,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": (
+                        "There is talk of armed figures gathering near the old mill road at night. "
+                        "Locals are nervous and trade caravans have avoided the route."
+                    ),
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": [
+            "__ambient_tick_quest__",   # turn 1 — NPCs pick up the quest topic
+            "__ambient_tick__",          # turn 2 — they share what they know
+            "__ambient_tick__",          # turn 3 — speculation about who is involved
+            "__ambient_tick__",          # turn 4 — discussion of what should be done
+        ],
+    },
+    "npc_biography_shapes_bran_dialogue": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_roleplay_use_llm": False,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road at night.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": [
+            "__ambient_tick_quest__",
+            "What can you tell me about the trouble at the old mill road?",
+        ],
+    },
+    "npc_biography_shapes_mira_dialogue": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_roleplay_use_llm": False,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+            "test_force_conversation_speaker_id": "npc:Mira",
+            "test_force_conversation_listener_id": "player",
+        },
+        "setup_memory_state": {
+            "social_memories": [
+                {
+                    "memory_id": "memory:mira:pattern:old_road",
+                    "actor_id": "npc:Mira",
+                    "target_id": "player",
+                    "summary": "Mira noticed that travelers avoid discussing the old road directly.",
+                }
+            ]
+        },
+        "setup_conversation_thread_state": {
+            "pending_player_response": {
+                "thread_id": "conversation:manual:mira:player",
+                "topic_id": "topic:memory:memory:mira:pattern:old_road",
+                "prompt": "Mira invites your response about the pattern she noticed.",
+                "created_tick": 526,
+                "expires_tick": 536,
+                "source": "manual_scenario_setup",
+            },
+            "threads": [
+                {
+                    "thread_id": "conversation:manual:mira:player",
+                    "participants": [
+                        {"npc_id": "npc:Mira", "name": "Mira"},
+                        {"npc_id": "player", "name": "Player"}
+                    ],
+                    "location_id": "loc_tavern",
+                    "topic_id": "topic:memory:memory:mira:pattern:old_road",
+                    "topic_type": "memory",
+                    "topic": "Mira's observed pattern",
+                    "topic_payload": {
+                        "topic_id": "topic:memory:memory:mira:pattern:old_road",
+                        "topic_type": "memory",
+                        "title": "Mira's observed pattern",
+                        "summary": "Mira noticed that travelers avoid discussing the old road directly.",
+                        "source_id": "memory:mira:pattern:old_road",
+                        "source_kind": "memory",
+                        "location_id": "loc_tavern",
+                        "priority": 4,
+                        "allowed_facts": [
+                            "Mira noticed that travelers avoid discussing the old road directly."
+                        ],
+                        "allowed_signal_kinds": ["social_tension", "ambient_interest"],
+                        "source": "manual_scenario_setup"
+                    },
+                    "participation_mode": "player_invited",
+                    "player_participation": {
+                        "included": True,
+                        "mode": "player_invited",
+                        "pending_response": True,
+                        "prompt": "Mira invites your response about the pattern she noticed.",
+                        "topic_id": "topic:memory:memory:mira:pattern:old_road",
+                        "created_tick": 526,
+                        "expires_tick": 536
+                    },
+                    "beats": [
+                        {
+                            "beat_id": "conversation:beat:526:manual:mira:invite",
+                            "thread_id": "conversation:manual:mira:player",
+                            "speaker_id": "npc:Mira",
+                            "speaker_name": "Mira",
+                            "listener_id": "player",
+                            "listener_name": "Player",
+                            "line": "You noticed the same thread, I expect: Mira noticed that travelers avoid discussing the old road directly.",
+                            "topic_id": "topic:memory:memory:mira:pattern:old_road",
+                            "topic_type": "memory",
+                            "topic": "Mira's observed pattern",
+                            "tick": 526,
+                            "participation_mode": "player_invited",
+                            "source": "manual_scenario_setup"
+                        }
+                    ],
+                    "status": "active",
+                    "created_tick": 526,
+                    "updated_tick": 526,
+                    "source": "manual_scenario_setup"
+                }
+            ],
+            "active_thread_ids": ["conversation:manual:mira:player"],
+            "world_signals": [],
+            "debug": {}
+        },
+        "turns": [
+            "What pattern do you see here?",
+        ],
+    },
+    "npc_biography_blocks_unbacked_secret": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_roleplay_use_llm": False,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "Tell me about the secret vault under the city.",
+        ],
+    },
+    "npc_roleplay_fallback_validation": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_roleplay_use_llm": False,
+            "npc_roleplay_fallback_on_invalid": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "Tell me something you are not allowed to invent.",
+        ],
+    },
 }
 
-PROMPTS = MANUAL_TEST_TURNS
 
+CONVERSATION_EXPECTED_SCENARIOS = {
+    "ambient_conversation",
+    "autonomous_conversation",
+    "conversation_discusses_event",
+    "conversation_discusses_quest",
+    "player_invited_conversation",
+    "npc_replies_after_player_join",
+    "player_requests_backed_quest_topic",
+    "player_requests_unbacked_topic",
+    "npc_response_uses_social_state",
+    "rumor_seed_from_conversation",
+    "rumor_signal_expires",
+    "npc_goal_influences_response_style",
+    "npc_biography_shapes_bran_dialogue",
+    "npc_biography_shapes_mira_dialogue",
+    "npc_biography_blocks_unbacked_secret",
+    "npc_roleplay_fallback_validation",
+    "npc_npc_multiturn_conversation",
+    "npc_npc_multiturn_quest_discussion",
+}
+
+
+SCENE_ACTIVITY_ONLY_SCENARIOS = {
+    "scene_activity_schedules_idle_action",
+    "scene_activity_respects_cooldown",
+}
+
+
+PROMPTS = MANUAL_TEST_TURNS
 LEGACY_PROMPTS = [
     "I ask Bran for a room to rent",
     "I want a better room. I then punch Bran",
@@ -1041,8 +1578,33 @@ def _safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
 def _safe_str(value: Any) -> str:
-    return value if isinstance(value, str) else ""
+    return "" if value is None else str(value)
+
+
+def _looks_like_synthetic_social_debug(value: Any) -> bool:
+    text = _safe_str(value).lower()
+    return any(
+        fragment in text
+        for fragment in (
+            "room/environment",
+            "the room/environment",
+            "the tavern atmosphere",
+            "environment/npcs",
+            "npcs (general)",
+            "synthetic_social_target",
+            "ambient_non_npc_social_target",
+            "unknown_or_synthetic_npc_target",
+        )
+    )
+
 
 
 def _clone_or_create_manual_session(session_id: str) -> Dict[str, Any]:
@@ -1141,6 +1703,22 @@ def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
     if _safe_dict(result_sub.get("service_offer_state")):
         simulation_state["service_offer_state"] = _safe_dict(result_sub.get("service_offer_state"))
     return simulation_state
+
+
+def _extract_scene_activity_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("scene_activity_state"))
+
+
+def _extract_npc_response_style(result: Dict[str, Any]) -> str:
+    conversation = _extract_conversation_result(result)
+    style = _safe_str(conversation.get("npc_response_style"))
+    if style:
+        return style
+    style = _safe_str(_safe_dict(conversation.get("npc_response_beat")).get("response_style"))
+    if style:
+        return style
+    return _safe_str(_safe_dict(conversation.get("beat")).get("response_style"))
 
 
 def _pre_turn_contamination_snapshot(simulation_state: Dict[str, Any]) -> Dict[str, int]:
@@ -1503,6 +2081,32 @@ def _extract_conversation_thread_state(result: Dict[str, Any]) -> Dict[str, Any]
     return _safe_dict(simulation_state.get("conversation_thread_state"))
 
 
+def _extract_conversation_rumor_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    resolved = _safe_dict(_safe_dict(_safe_dict(result).get("result")).get("resolved_result"))
+    direct = _safe_dict(resolved.get("conversation_rumor_state"))
+    if direct:
+        return direct
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("conversation_rumor_state"))
+
+
+def _extract_npc_goal_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    conversation = _extract_conversation_result(result)
+    if _safe_dict(conversation.get("npc_goal_state")):
+        return _safe_dict(conversation.get("npc_goal_state"))
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("npc_goal_state"))
+
+
+def _extract_scene_activity_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    ambient = _extract_ambient_tick_result(result)
+    scene = _safe_dict(ambient.get("scene_activity_result"))
+    if _safe_dict(scene.get("scene_activity_state")):
+        return _safe_dict(scene.get("scene_activity_state"))
+    simulation_state = _extract_simulation_state(result)
+    return _safe_dict(simulation_state.get("scene_activity_state"))
+
+
 def _effective_service_status(
     service_result: Dict[str, Any],
     service_application: Dict[str, Any],
@@ -1765,25 +2369,31 @@ def _manual_regression_warnings(
 
     conversation = _extract_conversation_result(result)
     conversation_triggered = bool(conversation.get("triggered"))
-    allowed_conversation_scenarios = {
-        "ambient_conversation",
-        "autonomous_conversation",
-        "conversation_discusses_event",
-        "conversation_discusses_quest",
-        "player_invited_conversation",
-    }
 
-    if conversation_triggered and scenario_name not in allowed_conversation_scenarios:
+    if (
+        conversation.get("triggered")
+        and scenario_name not in CONVERSATION_EXPECTED_SCENARIOS
+        and scenario_name not in SCENE_ACTIVITY_ONLY_SCENARIOS
+    ):
         warnings.append("conversation_triggered_in_non_conversation_scenario")
 
-    if conversation_triggered and service_result.get("matched"):
+    if scenario_name in SCENE_ACTIVITY_ONLY_SCENARIOS and conversation.get("triggered"):
+        warnings.append("conversation_triggered_in_scene_activity_only_scenario")
+
+    conversation = _extract_conversation_result(result)
+    conversation_reason = _safe_str(conversation.get("reason"))
+    pending_consumed = conversation_reason == "pending_player_response_consumed"
+
+    if conversation_triggered and service_result.get("matched") and not pending_consumed:
         warnings.append("conversation_triggered_during_service_turn")
 
     if conversation_triggered and _safe_dict(_extract_travel_result(result)).get("matched"):
         warnings.append("conversation_triggered_during_travel_turn")
 
-    if conversation_triggered and action_type in {"service_inquiry", "service_purchase", "travel", "social_activity"}:
+    if conversation_triggered and action_type in {"service_inquiry", "service_purchase", "travel"} and not pending_consumed:
         warnings.append(f"conversation_triggered_during_action_type:{action_type}")
+    if conversation_triggered and action_type == "social_activity" and not has_pending_player_conversation_response(_extract_simulation_state(result), tick=_safe_int(_safe_dict(_extract_turn_contract(result).get("resolved_result")).get("current_tick"), 0)):
+        warnings.append("conversation_triggered_during_action_type:social_activity")
 
     if (
         "ask" in player_lower
@@ -1835,8 +2445,26 @@ def _manual_regression_warnings(
         if action_type in {"service_inquiry", "service_purchase"}:
             warnings.append("ambient_conversation_unexpected_commerce_action")
         service_debug = _extract_service_debug(result)
-        if _safe_dict(service_debug.get("memory_entry")):
+        memory_entry = _safe_dict(service_debug.get("memory_entry"))
+        if memory_entry:
             warnings.append("ambient_conversation_unexpected_service_memory")
+
+        simulation_state = _extract_simulation_state(result)
+        memory_state = _safe_dict(simulation_state.get("memory_state"))
+        social_memories = _safe_list(memory_state.get("social_memories"))
+        for memory in social_memories:
+            if _looks_like_synthetic_social_debug(memory):
+                warnings.append("synthetic_environment_social_memory_created")
+
+        relationship_state = _safe_dict(simulation_state.get("relationship_state"))
+        for key, value in relationship_state.items():
+            if _looks_like_synthetic_social_debug(key) or _looks_like_synthetic_social_debug(value):
+                warnings.append("synthetic_environment_relationship_created")
+
+        emotion_state = _safe_dict(simulation_state.get("npc_emotion_state"))
+        for key, value in emotion_state.items():
+            if _looks_like_synthetic_social_debug(key) or _looks_like_synthetic_social_debug(value):
+                warnings.append("synthetic_environment_emotion_state_created")
         world_events = _safe_list(_extract_world_event_state(result).get("events"))
         if any(_safe_str(_safe_dict(event).get("kind")).startswith("service_") for event in world_events):
             warnings.append("ambient_conversation_unexpected_service_world_event")
@@ -1873,6 +2501,270 @@ def _manual_regression_warnings(
             warnings.append("player_invited_conversation_expected_player_invited_mode")
         if not participation.get("pending_response"):
             warnings.append("player_invited_conversation_expected_pending_response")
+
+    # ── Bundle H-I-J scenario-specific regression checks ────────────────────────
+
+    _player_invited_turn1_scenarios = {
+        "npc_replies_after_player_join",
+        "player_requests_backed_quest_topic",
+        "player_requests_unbacked_topic",
+        "npc_response_uses_social_state",
+    }
+    if scenario_name in _player_invited_turn1_scenarios and turn_index == 1:
+        participation = _safe_dict(_extract_conversation_result(result).get("player_participation"))
+        if _safe_str(participation.get("mode")) != "player_invited":
+            warnings.append(f"{scenario_name}_expected_player_invited_mode_on_turn_1")
+        if not participation.get("pending_response"):
+            warnings.append(f"{scenario_name}_expected_pending_response_on_turn_1")
+
+    if scenario_name in _player_invited_turn1_scenarios and turn_index == 3:
+        # npc_response_uses_social_state has a second invite at turn 3
+        participation = _safe_dict(_extract_conversation_result(result).get("player_participation"))
+        if scenario_name == "npc_response_uses_social_state" and _safe_str(participation.get("mode")) != "player_invited":
+            warnings.append("npc_response_uses_social_state_expected_second_player_invite")
+
+    if scenario_name == "npc_replies_after_player_join" and turn_index == 2:
+        conv = _extract_conversation_result(result)
+        npc_beat = _safe_dict(conv.get("npc_response_beat"))
+        if not npc_beat:
+            warnings.append("npc_replies_after_player_join_missing_npc_response_beat")
+        elif not _safe_str(npc_beat.get("line")):
+            warnings.append("npc_replies_after_player_join_npc_response_beat_empty_line")
+        if not conv.get("topic_pivot"):
+            warnings.append("npc_replies_after_player_join_missing_topic_pivot_dict")
+
+    if scenario_name == "player_requests_backed_quest_topic" and turn_index == 2:
+        conv = _extract_conversation_result(result)
+        pivot = _safe_dict(conv.get("topic_pivot"))
+        if not pivot:
+            warnings.append("player_requests_backed_quest_topic_missing_topic_pivot")
+        else:
+            if pivot.get("accepted") is not True:
+                warnings.append("player_requests_backed_quest_topic_expected_pivot_accepted_true")
+            pivot_topic_type = (
+                _safe_str(pivot.get("topic_type"))
+                or _safe_str(pivot.get("selected_topic_type"))
+                or _safe_str(_safe_dict(pivot.get("selected_topic")).get("topic_type"))
+            )
+            if pivot_topic_type != "quest":
+                warnings.append(
+                    f"player_requests_backed_quest_topic_expected_quest_type_got_{pivot_topic_type or 'none'}"
+                )
+            if pivot.get("pivot_rejected_reason"):
+                warnings.append("player_requests_backed_quest_topic_unexpected_rejection_reason")
+        npc_beat = _safe_dict(conv.get("npc_response_beat"))
+        if not npc_beat:
+            warnings.append("player_requests_backed_quest_topic_missing_npc_response_beat")
+
+    if scenario_name == "player_requests_unbacked_topic" and turn_index == 2:
+        conv = _extract_conversation_result(result)
+        pivot = _safe_dict(conv.get("topic_pivot"))
+        if not pivot:
+            warnings.append("player_requests_unbacked_topic_missing_topic_pivot")
+        else:
+            if not pivot.get("requested"):
+                warnings.append("player_requests_unbacked_topic_expected_pivot_requested")
+            if pivot.get("accepted") is not False:
+                warnings.append("player_requests_unbacked_topic_expected_pivot_accepted_false")
+            if not _safe_str(pivot.get("pivot_rejected_reason") or pivot.get("reason")):
+                warnings.append("player_requests_unbacked_topic_expected_rejection_reason")
+            if _safe_str(pivot.get("pivot_rejected_reason") or pivot.get("reason")) not in {
+                "no_backed_topic_found",
+                "requested_topic_not_backed_by_state",
+            }:
+                warnings.append("player_requests_unbacked_topic_expected_no_backed_topic_reason")
+        npc_beat = _safe_dict(conv.get("npc_response_beat"))
+        if not npc_beat:
+            warnings.append("player_requests_unbacked_topic_missing_npc_deflection_beat")
+        elif not _safe_str(npc_beat.get("line")):
+            warnings.append("player_requests_unbacked_topic_npc_deflection_beat_empty_line")
+
+    if scenario_name == "npc_response_uses_social_state" and turn_index == 2:
+        conv = _extract_conversation_result(result)
+        npc_beat = _safe_dict(conv.get("npc_response_beat"))
+        if not npc_beat:
+            warnings.append("npc_response_uses_social_state_missing_npc_beat_turn_2")
+        elif not _safe_str(npc_beat.get("response_style")):
+            warnings.append("npc_response_uses_social_state_missing_response_style_turn_2")
+
+    if scenario_name in {"rumor_seed_from_conversation", "npc_npc_multiturn_quest_discussion"} and turn_index == 1:
+        conv_thread_state = _extract_conversation_thread_state(result)
+        world_signals = _safe_list(conv_thread_state.get("world_signals"))
+        quest_signals = [
+            s for s in world_signals
+            if _safe_str(_safe_dict(s).get("kind")) in {
+                "quest_interest", "rumor_pressure", "danger_warning", "social_tension"
+            }
+        ]
+        if not quest_signals:
+            warnings.append(f"{scenario_name}_expected_quest_eligible_world_signal_on_turn_1")
+        # Check rumor_propagation_state if supported
+        simulation_state = _extract_simulation_state(result)
+        rumor_state = _safe_dict(simulation_state.get("rumor_propagation_state"))
+        if scenario_name == "rumor_seed_from_conversation":
+            if rumor_state and not _safe_list(rumor_state.get("rumor_seeds")):
+                warnings.append("rumor_seed_from_conversation_no_rumor_seeds_after_quest_tick")
+
+    if scenario_name == "rumor_signal_expires" and turn_index == 1:
+        simulation_state = _extract_simulation_state(result)
+        rumor_state = _safe_dict(simulation_state.get("rumor_propagation_state"))
+        if rumor_state and not _safe_list(rumor_state.get("rumor_seeds")):
+            warnings.append("rumor_signal_expires_no_seed_created_on_turn_1")
+
+    if scenario_name == "rumor_signal_expires":
+        ambient_tick = _extract_ambient_tick_result(result)
+        signal_expiration = _safe_dict(ambient_tick.get("signal_expiration"))
+
+        seed_expiration = _safe_dict(signal_expiration.get("seed_expiration"))
+        expired_seen = (
+            _safe_int(signal_expiration.get("expired_count"), 0) > 0
+            or bool(_safe_list(signal_expiration.get("expired_signal_ids")))
+            or bool(_safe_list(signal_expiration.get("expired_seed_ids")))
+            or bool(_safe_list(seed_expiration.get("expired_seed_ids")))
+        )
+
+        if turn_index >= 4 and not expired_seen:
+            warnings.append("rumor_signal_expires_expected_expired_signal")
+    if scenario_name == "rumor_signal_expires":
+        ambient_tick = _extract_ambient_tick_result(result)
+        signal_expiration = _safe_dict(ambient_tick.get("signal_expiration"))
+
+        seed_expiration = _safe_dict(signal_expiration.get("seed_expiration"))
+        expired_seen = (
+            _safe_int(signal_expiration.get("expired_count"), 0) > 0
+            or bool(_safe_list(signal_expiration.get("expired_signal_ids")))
+            or bool(_safe_list(signal_expiration.get("expired_seed_ids")))
+            or bool(_safe_list(seed_expiration.get("expired_seed_ids")))
+        )
+
+        if turn_index >= 4 and not expired_seen:
+            warnings.append("rumor_signal_expires_expected_expired_signal")
+
+        rumor_state = _safe_dict(_extract_simulation_state(result).get("conversation_rumor_state"))
+        seeds = _safe_list(rumor_state.get("rumor_seeds"))
+
+        current_tick = _safe_int(
+            signal_expiration.get("current_tick")
+            or seed_expiration.get("current_tick")
+            or _safe_dict(_extract_turn_contract(result).get("semantic_action")).get("tick"),
+            0,
+        )
+
+        stale_seeds = [
+            seed for seed in seeds
+            if _safe_int(_safe_dict(seed).get("expires_tick"), 0)
+            and current_tick >= _safe_int(_safe_dict(seed).get("expires_tick"), 0)
+        ]
+
+        if turn_index >= 4 and stale_seeds:
+            warnings.append("rumor_signal_expires_stale_seed_still_present_on_turn_4")
+
+    if scenario_name == "npc_goal_influences_response_style" and turn_index == 2:
+        if conversation_reason != "pending_player_response_consumed":
+            warnings.append("npc_goal_influences_response_style_expected_pending_response_consumed")
+        response_style = _safe_str(
+            _safe_dict(conversation.get("npc_response_beat")).get("response_style")
+            or _safe_dict(conversation.get("beat")).get("response_style")
+        )
+        if not response_style:
+            warnings.append("npc_goal_influences_response_style_missing_response_style")
+
+    if scenario_name in {
+        "npc_biography_shapes_bran_dialogue",
+        "npc_biography_shapes_mira_dialogue",
+        "npc_biography_blocks_unbacked_secret",
+        "npc_roleplay_fallback_validation",
+    }:
+        conversation = _extract_conversation_result(result)
+        response_beat = _safe_dict(conversation.get("npc_response_beat"))
+        if turn_index == 2 and not response_beat:
+            warnings.append(f"{scenario_name}_expected_npc_response_beat")
+        if turn_index == 2:
+            roleplay_source = _safe_str(
+                response_beat.get("roleplay_source")
+                or conversation.get("roleplay_source")
+            )
+            if not roleplay_source:
+                warnings.append(f"{scenario_name}_missing_roleplay_source")
+            biography_role = _safe_str(response_beat.get("biography_role"))
+            if not biography_role:
+                warnings.append(f"{scenario_name}_missing_biography_role")
+            used_fact_ids = _safe_list(
+                response_beat.get("used_fact_ids")
+                or conversation.get("used_fact_ids")
+            )
+            if scenario_name == "npc_biography_shapes_bran_dialogue" and not used_fact_ids:
+                warnings.append("npc_biography_shapes_bran_dialogue_missing_used_fact_ids")
+
+            if scenario_name == "npc_biography_shapes_mira_dialogue":
+                speaker_id = _safe_str(response_beat.get("speaker_id"))
+                if speaker_id != "npc:Mira":
+                    warnings.append(
+                        f"npc_biography_shapes_mira_dialogue_expected_mira_got:{speaker_id or 'missing'}"
+                    )
+                if biography_role != "Curious local informant":
+                    warnings.append(
+                        "npc_biography_shapes_mira_dialogue_expected_informant_role"
+                    )
+                line = _safe_str(response_beat.get("line")).lower()
+                if "pattern" not in line and "noticed" not in line and "thread" not in line:
+                    warnings.append(
+                        "npc_biography_shapes_mira_dialogue_expected_mira_style_reference"
+                    )
+
+    if scenario_name == "npc_biography_blocks_unbacked_secret" and turn_index == 2:
+        conversation = _extract_conversation_result(result)
+        response_beat = _safe_dict(conversation.get("npc_response_beat"))
+        line = _safe_str(response_beat.get("line")).lower()
+        forbidden_fragments = [
+            "secret vault is",
+            "under the city is",
+            "you receive",
+            "take this",
+            "reward",
+        ]
+        for fragment in forbidden_fragments:
+            if fragment in line:
+                warnings.append("npc_biography_blocks_unbacked_secret_invented_forbidden_claim")
+
+    if scenario_name == "scene_activity_schedules_idle_action" and turn_index == 1:
+        conversation = _extract_conversation_result(result)
+        if conversation.get("triggered"):
+            warnings.append("scene_activity_schedules_idle_action_unexpected_conversation_trigger")
+        activity_state = _extract_scene_activity_state(result)
+        if not _safe_list(activity_state.get("recent")):
+            warnings.append("scene_activity_schedules_idle_action_missing_recent_activity")
+
+    if scenario_name == "scene_activity_respects_cooldown" and turn_index == 2:
+        conversation = _extract_conversation_result(result)
+        if conversation.get("triggered"):
+            warnings.append("scene_activity_respects_cooldown_unexpected_conversation_trigger")
+        activity_state = _extract_scene_activity_state(result)
+        recent = _safe_list(activity_state.get("recent"))
+        if len(recent) > 1:
+            warnings.append("scene_activity_respects_cooldown_expected_single_activity")
+
+    _multiturn_npc_npc_scenarios = {
+        "npc_npc_multiturn_conversation",
+        "npc_npc_multiturn_quest_discussion",
+    }
+    if scenario_name in _multiturn_npc_npc_scenarios:
+        conv = _extract_conversation_result(result)
+        if turn_index == 1 and not conv.get("triggered"):
+            warnings.append(f"{scenario_name}_expected_conversation_trigger_on_turn_1")
+        if service_result.get("matched"):
+            warnings.append(f"{scenario_name}_unexpected_service_result")
+        thread_state = _extract_conversation_thread_state(result)
+        threads = _safe_list(thread_state.get("threads"))
+        if turn_index >= 2 and not threads:
+            warnings.append(f"{scenario_name}_expected_active_thread_on_turn_{turn_index}")
+        # Threads must keep accumulating beats across turns
+        if threads:
+            max_beats = max(len(_safe_list(_safe_dict(t).get("beats"))) for t in threads)
+            if turn_index >= 2 and max_beats < 2:
+                warnings.append(
+                    f"{scenario_name}_expected_at_least_2_beats_by_turn_{turn_index}_got_{max_beats}"
+                )
     if scenario_name == "blocked_purchase" and turn_index == 3:
         if bool(purchase.get("applied") or service_application.get("applied")):
             warnings.append("blocked_purchase_unexpectedly_applied")
@@ -2019,6 +2911,13 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
         memory_state = _safe_dict(simulation_state.get("memory_state"))
         memory_state.update(setup_memory_state)
         simulation_state["memory_state"] = memory_state
+
+    setup_conversation_thread_state = _safe_dict(scenario.get("setup_conversation_thread_state"))
+    if setup_conversation_thread_state:
+        conversation_thread_state = _safe_dict(simulation_state.get("conversation_thread_state"))
+        for key, value in setup_conversation_thread_state.items():
+            conversation_thread_state[key] = value
+        simulation_state["conversation_thread_state"] = conversation_thread_state
 
     runtime_state["runtime_settings"] = runtime_settings
     session["runtime_state"] = runtime_state
@@ -2561,7 +3460,7 @@ def run_manual_transcript(
     console_llm: bool = True,
     console_llm_raw: bool = True,
     console_llm_max_chars: int = 1200,
-) -> None:
+) -> List[str]:
     if reset_output:
         _reset_output()
 
@@ -2598,6 +3497,7 @@ def run_manual_transcript(
     legacy_channel = "flat_legacy"
     output_map: Dict[str, Path] = {}
     summary_rows: List[Dict[str, Any]] = []
+    html_turns: List[str] = []
 
     _emit("Manual RPG LLM Transcript Summary", channel=summary_channel)
     _emit("", channel=summary_channel)
@@ -2620,6 +3520,15 @@ def run_manual_transcript(
         before_items = _extract_player_items(last_result) if last_result else []
         result = apply_turn(session_id=effective_session_id, player_input=player_input)
         last_result = result
+
+        # Collect conversation HTML for later writing
+        narration = _extract_narration(result)
+        turn_html = f"""    <div class="turn">
+        <p class="player">PLAYER: {player_input}</p>
+        <p class="ai">AI: {narration}</p>
+    </div>
+"""
+        html_turns.append(turn_html)
         if console_llm:
             _log_llm_response(
                 scope="flat",
@@ -2682,6 +3591,8 @@ def run_manual_transcript(
     else:
         _write_output(OUTPUT_PATH, channel=legacy_channel)
 
+    return html_turns
+
 
 def _run_one_service_scenario(
     *,
@@ -2695,6 +3606,7 @@ def _run_one_service_scenario(
     console_llm: bool = True,
     console_llm_raw: bool = True,
     console_llm_max_chars: int = 1200,
+    fail_on_regression_warnings: bool = False,
 ) -> Dict[str, Any]:
     scenario_channel = f"service_{scenario_name}"
     target_channel = scenario_channel if split_files else legacy_channel
@@ -2749,6 +3661,7 @@ def _run_one_service_scenario(
 
     last_result: Dict[str, Any] = {}
     scenario_results: List[Dict[str, Any]] = []
+    html_turns: List[str] = []
     current_currency = currency
     current_location_id = ""
 
@@ -2782,6 +3695,15 @@ def _run_one_service_scenario(
         extracted_location_id = _extract_current_location_id(result)
         if extracted_location_id:
             current_location_id = extracted_location_id
+
+        # Collect conversation HTML for later writing
+        narration = _extract_narration(result)
+        turn_html = f"""    <div class="turn">
+        <p class="player">PLAYER: {player_input}</p>
+        <p class="ai">AI: {narration}</p>
+    </div>
+"""
+        html_turns.append(turn_html)
 
         if console_llm:
             _log_llm_response(
@@ -2835,6 +3757,19 @@ def _run_one_service_scenario(
             player_input=player_input,
             result=result,
         )
+        if fail_on_regression_warnings:
+            for warning in summary_row["regression_warnings"]:
+                _add_regression_warning(
+                    scenario=scenario_name,
+                    turn=index,
+                    warning=warning,
+                )
+            for warning in summary_row["scenario_warnings"]:
+                _add_regression_warning(
+                    scenario=scenario_name,
+                    turn=index,
+                    warning=f"scenario_warning:{warning}",
+                )
         _record_regression_warnings(summary_row)
         scenario_results.append(summary_row)
 
@@ -2849,8 +3784,20 @@ def _run_one_service_scenario(
         "session_id": session_id,
         "seeded_currency": currency,
         "turns": scenario_results,
+        "html_turns": html_turns,
         "_channel": scenario_channel,
     }
+
+
+def _write_scenario_html(scenario_name: str, summary: Dict[str, Any]) -> None:
+    html_turns = summary.get("html_turns", [])
+    if not html_turns:
+        return
+    with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+        f.write(f"    <h3>Scenario: {scenario_name}</h3>\n")
+        for turn_html in html_turns:
+            f.write(turn_html)
+        f.write("\n")
 
 
 def run_service_scenarios(
@@ -2866,6 +3813,7 @@ def run_service_scenarios(
     console_llm: bool = True,
     console_llm_raw: bool = True,
     console_llm_max_chars: int = 1200,
+    fail_on_regression_warnings: bool = False,
 ) -> None:
     if reset_output:
         _reset_output()
@@ -2926,6 +3874,7 @@ def run_service_scenarios(
             console_llm=console_llm,
             console_llm_raw=console_llm_raw,
             console_llm_max_chars=console_llm_max_chars,
+            fail_on_regression_warnings=fail_on_regression_warnings,
         )
 
     if workers > 1:
@@ -2977,6 +3926,8 @@ def run_service_scenarios(
                     output_map[f"service_{scenario_name}"] = (
                         OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
                     )
+                # Write HTML for this scenario
+                _write_scenario_html(scenario_name, summary)
     else:
         for item in scenario_items:
             scenario_name = item[0]
@@ -3012,6 +3963,8 @@ def run_service_scenarios(
                 output_map[f"service_{scenario_name}"] = (
                     OUTPUT_DIR / f"manual_rpg_service_scenarios__{scenario_name}.txt"
                 )
+            # Write HTML for this scenario
+            _write_scenario_html(scenario_name, summary)
 
     _emit_summary_block("Service Scenario Summary", scenario_summaries, summary_channel)
 
@@ -3030,6 +3983,25 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
     _reset_output()
     _reset_token_usage()
     _reset_regression_warnings()
+    # Write HTML header
+    html_header = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG Conversation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .turn { margin-bottom: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background-color: white; }
+        .player { color: blue; font-weight: bold; }
+        .ai { color: green; margin-top: 10px; }
+        h1 { text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>RPG Conversation Transcript</h1>
+"""
+    CONVERSATION_PATH.write_text(html_header)
     turns = args.turn or MANUAL_TEST_TURNS
     run_id = args.run_id or _new_manual_run_id()
     args._manual_run_id = run_id
@@ -3037,6 +4009,8 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
     if args.all:
         # Run service scenarios first so parallel execution is visible early.
         # Flat transcript remains sequential because its turns depend on state.
+        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+            f.write("    <h2>Service Scenarios</h2>\n")
         run_service_scenarios(
             "all",
             split_files=not args.single_file,
@@ -3049,22 +4023,38 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
             console_llm=not args.no_console_llm,
             console_llm_raw=args.console_llm_raw,
             console_llm_max_chars=args.console_llm_max_chars,
+            fail_on_regression_warnings=args.fail_on_regression_warnings,
         )
-        run_manual_transcript(
-            turns,
-            session_id=args.session_id,
-            split_files=not args.single_file,
-            run_id=run_id,
-            stable_session_ids=args.stable_session_ids,
-            reset_session_state=not args.no_reset_session_state,
-            reset_output=False,
-            console_llm=not args.no_console_llm,
-            console_llm_raw=args.console_llm_raw,
-            console_llm_max_chars=args.console_llm_max_chars,
-        )
-        return
+        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+            f.write("    <h2>Flat Manual Transcript</h2>\n")
+
+    flat_html_turns = run_manual_transcript(
+        turns,
+        session_id=args.session_id,
+        split_files=not args.single_file,
+        run_id=run_id,
+        stable_session_ids=args.stable_session_ids,
+        reset_session_state=not args.no_reset_session_state,
+        reset_output=False,
+        console_llm=not args.no_console_llm,
+        console_llm_raw=args.console_llm_raw,
+        console_llm_max_chars=args.console_llm_max_chars,
+    )
+
+    # Write flat transcript HTML turns
+    with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+        for turn_html in flat_html_turns:
+            f.write(turn_html)
+
+    # Write HTML footer
+    html_footer = "</body>\n</html>"
+    with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+        f.write(html_footer)
+    return
 
     if args.service_scenarios:
+        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+            f.write("    <h2>Service Scenarios</h2>\n")
         run_service_scenarios(
             args.scenario,
             split_files=not args.single_file,
@@ -3077,10 +4067,15 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
             console_llm=not args.no_console_llm,
             console_llm_raw=args.console_llm_raw,
             console_llm_max_chars=args.console_llm_max_chars,
+            fail_on_regression_warnings=args.fail_on_regression_warnings,
         )
+        # Write HTML footer
+        html_footer = "</body>\n</html>"
+        with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+            f.write(html_footer)
         return
 
-    run_manual_transcript(
+    flat_html_turns = run_manual_transcript(
         turns,
         session_id=args.session_id,
         split_files=not args.single_file,
@@ -3092,6 +4087,16 @@ def run_requested_transcripts(args: argparse.Namespace) -> None:
         console_llm_raw=args.console_llm_raw,
         console_llm_max_chars=args.console_llm_max_chars,
     )
+
+    # Write flat transcript HTML turns
+    with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+        for turn_html in flat_html_turns:
+            f.write(turn_html)
+
+    # Write HTML footer
+    html_footer = "</body>\n</html>"
+    with open(CONVERSATION_PATH, "a", encoding="utf-8") as f:
+        f.write(html_footer)
 
 
 def main() -> None:
@@ -3270,10 +4275,16 @@ def main() -> None:
                 write_results_zip()
             with _REGRESSION_WARNING_LOCK:
                 warning_rows = list(_REGRESSION_WARNING_ROWS)
+                regression_warnings = list(_REGRESSION_WARNINGS)
             if args.fail_on_regression_warnings and warning_rows:
                 print("[manual][regression] warnings detected:", flush=True)
                 print(_compact_json(warning_rows), flush=True)
                 raise SystemExit(2)
+            if args.fail_on_regression_warnings and regression_warnings:
+                raise SystemExit(
+                    "manual regression warnings found:\n"
+                    + "\n".join(f"- {warning}" for warning in regression_warnings)
+                )
         finally:
             servers.stop()
 
