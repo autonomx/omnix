@@ -4,6 +4,8 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.world.npc_biography_registry import get_npc_biography
+from app.rpg.world.npc_history_state import recent_npc_history
+from app.rpg.world.npc_reputation_state import get_npc_reputation, response_style_from_reputation
 
 FORBIDDEN_NPC_DIALOGUE_CLAIMS = [
     "Do not create or complete quests.",
@@ -94,6 +96,8 @@ def build_npc_dialogue_profile(
     social = _npc_social_entry(simulation_state, _safe_str(biography.get("npc_id")))
     active_goal = _npc_goal_entry(simulation_state, _safe_str(biography.get("npc_id")))
     allowed_facts = _allowed_facts_from_topic(topic)
+    history = recent_npc_history(simulation_state, npc_id=_safe_str(biography.get("npc_id")), limit=5)
+    reputation = get_npc_reputation(simulation_state, npc_id=_safe_str(biography.get("npc_id")))
 
     profile = {
         "npc_id": _safe_str(biography.get("npc_id")),
@@ -116,6 +120,9 @@ def build_npc_dialogue_profile(
         "used_fact_ids": [_safe_str(topic.get("topic_id"))] if _safe_str(topic.get("topic_id")) else [],
         "response_intent": response_intent,
         "forbidden_claims": list(FORBIDDEN_NPC_DIALOGUE_CLAIMS),
+        "recent_history": deepcopy(history),
+        "npc_reputation": deepcopy(reputation),
+        "reputation_response_style": response_style_from_reputation(reputation, fallback="guarded"),
         "source": "deterministic_npc_dialogue_profile",
     }
     return profile
@@ -134,7 +141,7 @@ def deterministic_biography_line(
     role = _safe_str(profile.get("role")) or "local"
     npc_id = _safe_str(profile.get("npc_id"))
     name = _safe_str(profile.get("name")) or npc_id.replace("npc:", "")
-    style = _safe_str(response_style or profile.get("response_intent") or "guarded")
+    style = _safe_str(response_style or profile.get("reputation_response_style") or profile.get("response_intent") or "guarded")
     traits = [_safe_str(v) for v in _safe_list(profile.get("personality_traits"))]
     facts = [_safe_str(v) for v in _safe_list(profile.get("allowed_facts")) if _safe_str(v)]
     fact = facts[0] if facts else ""

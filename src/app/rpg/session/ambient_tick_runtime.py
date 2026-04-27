@@ -197,5 +197,8 @@ def advance_autonomous_ambient_tick(
         "scene_activity_result": scene_activity_result,
         "signal_expiration": signal_expiration,
         "conversation_settings": settings,
+        "npc_history_state": _safe_dict(simulation_state.get("npc_history_state")),
+        "npc_reputation_state": _safe_dict(simulation_state.get("npc_reputation_state")),
+        "conversation_director_state": _safe_dict(simulation_state.get("conversation_director_state")),
         "source": "deterministic_ambient_tick_runtime",
     }

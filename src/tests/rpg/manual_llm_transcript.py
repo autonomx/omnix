@@ -1528,6 +1528,73 @@ SERVICE_SCENARIOS = {
             "Tell me something you are not allowed to invent.",
         ],
     },
+    "npc_history_records_player_reply": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_history_enabled": True,
+            "npc_reputation_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "I will remember what you said.",
+        ],
+    },
+    "npc_reputation_changes_response_style": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "allow_player_invited": True,
+            "player_inclusion_chance_percent": 100,
+            "npc_history_enabled": True,
+            "npc_reputation_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": [
+            "__ambient_tick_player_invited__",
+            "That sounds useful. Thank you.",
+            "__ambient_tick_player_invited__",
+            "Can you help me understand more?",
+        ],
+    },
+    "conversation_director_selects_biography_relevant_topic": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_chance_percent": 100,
+            "conversation_director_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "setup_present_npc_state": {
+            "loc_tavern": ["npc:Bran", "npc:Mira"]
+        },
+        "turns": ["__ambient_tick_quest__"],
+    },
 }
 
 
@@ -1550,6 +1617,9 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "npc_roleplay_fallback_validation",
     "npc_npc_multiturn_conversation",
     "npc_npc_multiturn_quest_discussion",
+    "npc_history_records_player_reply",
+    "npc_reputation_changes_response_style",
+    "conversation_director_selects_biography_relevant_topic",
 }
 
 
@@ -1604,6 +1674,56 @@ def _looks_like_synthetic_social_debug(value: Any) -> bool:
             "unknown_or_synthetic_npc_target",
         )
     )
+
+
+def _manual_present_npcs(simulation_state: Dict[str, Any]) -> List[str]:
+    simulation_state = _safe_dict(simulation_state)
+
+    location_id = _safe_str(
+        simulation_state.get("current_location_id")
+        or _safe_dict(simulation_state.get("location_state")).get("current_location_id")
+        or _safe_dict(simulation_state.get("player_state")).get("location_id")
+        or "loc_tavern"
+    )
+
+    found: List[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, str):
+            text = value if value.startswith("npc:") else f"npc:{value}"
+            if text.startswith("npc:") and text not in found:
+                found.append(text)
+            return
+        if isinstance(value, dict):
+            for key in ("npc_id", "id", "character_id", "actor_id", "speaker_id", "listener_id"):
+                text = _safe_str(value.get(key))
+                if text:
+                    add(text)
+            return
+        if isinstance(value, list):
+            for item in value:
+                add(item)
+
+    for root_name in (
+        "present_npc_state",
+        "location_npc_state",
+        "scene_npc_state",
+        "npc_presence_state",
+        "location_presence_state",
+    ):
+        root = _safe_dict(simulation_state.get(root_name))
+        add(root.get(location_id))
+        add(root.get("present"))
+        add(root.get("npcs"))
+
+    if not found:
+        # Match the conservative director fallback.
+        if location_id == "loc_market":
+            found.extend(["npc:Merchant"])
+        else:
+            found.extend(["npc:Bran", "npc:Mira"])
+
+    return found
 
 
 
@@ -2765,6 +2885,48 @@ def _manual_regression_warnings(
                 warnings.append(
                     f"{scenario_name}_expected_at_least_2_beats_by_turn_{turn_index}_got_{max_beats}"
                 )
+
+    if scenario_name == "npc_history_records_player_reply" and turn_index == 2:
+        simulation_state = _extract_simulation_state(result)
+        history_state = _safe_dict(simulation_state.get("npc_history_state"))
+        by_npc = _safe_dict(history_state.get("by_npc"))
+        if not by_npc:
+            warnings.append("npc_history_records_player_reply_missing_history_state")
+        else:
+            has_entry = False
+            for npc_state in by_npc.values():
+                if _safe_list(_safe_dict(npc_state).get("entries")):
+                    has_entry = True
+                    break
+            if not has_entry:
+                warnings.append("npc_history_records_player_reply_missing_history_entry")
+
+    if scenario_name == "npc_reputation_changes_response_style" and turn_index >= 2:
+        simulation_state = _extract_simulation_state(result)
+        reputation_state = _safe_dict(simulation_state.get("npc_reputation_state"))
+        by_npc = _safe_dict(reputation_state.get("by_npc"))
+        if not by_npc:
+            warnings.append("npc_reputation_changes_response_style_missing_reputation_state")
+
+    if scenario_name == "conversation_director_selects_biography_relevant_topic":
+        conversation = _extract_conversation_result(result)
+        director = _safe_dict(conversation.get("director_intent"))
+        if turn_index == 1:
+            if not director.get("selected"):
+                warnings.append("conversation_director_expected_selected_intent")
+            if _safe_str(director.get("topic_type")) != "quest":
+                warnings.append(
+                    f"conversation_director_expected_quest_topic_got:{_safe_str(director.get('topic_type')) or 'missing'}"
+                )
+            simulation_state = _extract_simulation_state(result)
+            present_npcs = set(_manual_present_npcs(simulation_state))
+            speaker_id = _safe_str(director.get("speaker_id"))
+            listener_id = _safe_str(director.get("listener_id"))
+            if speaker_id and speaker_id not in present_npcs:
+                warnings.append(f"conversation_director_speaker_not_present:{speaker_id}")
+            if listener_id and listener_id not in present_npcs:
+                warnings.append(f"conversation_director_listener_not_present:{listener_id}")
+
     if scenario_name == "blocked_purchase" and turn_index == 3:
         if bool(purchase.get("applied") or service_application.get("applied")):
             warnings.append("blocked_purchase_unexpectedly_applied")
@@ -2783,6 +2945,16 @@ def _manual_regression_warnings(
             warnings.append("bran_service_resolved_outside_tavern")
 
     conversation = _extract_conversation_result(result)
+    simulation_state = _extract_simulation_state(result)
+    present_npcs = set(_manual_present_npcs(simulation_state))
+    director = _safe_dict(conversation.get("director_intent"))
+    if director.get("selected"):
+        speaker_id = _safe_str(director.get("speaker_id"))
+        listener_id = _safe_str(director.get("listener_id"))
+        if speaker_id and speaker_id not in present_npcs:
+            warnings.append(f"conversation_director_speaker_not_present:{speaker_id}")
+        if listener_id and listener_id not in present_npcs:
+            warnings.append(f"conversation_director_listener_not_present:{listener_id}")
     if conversation.get("triggered"):
         thread = _safe_dict(conversation.get("thread"))
         participants = _safe_list(thread.get("participants"))
@@ -2918,6 +3090,12 @@ def _apply_manual_scenario_setup(session_id: str, scenario: Dict[str, Any]) -> b
         for key, value in setup_conversation_thread_state.items():
             conversation_thread_state[key] = value
         simulation_state["conversation_thread_state"] = conversation_thread_state
+
+    setup_present_npc_state = _safe_dict(scenario.get("setup_present_npc_state"))
+    if setup_present_npc_state:
+        current = _safe_dict(simulation_state.get("present_npc_state"))
+        current.update(setup_present_npc_state)
+        simulation_state["present_npc_state"] = current
 
     runtime_state["runtime_settings"] = runtime_settings
     session["runtime_state"] = runtime_state

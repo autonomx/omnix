@@ -21,6 +21,13 @@ from app.rpg.world.conversation_social_state import (
     record_npc_response_beat,
     record_player_joined_conversation,
 )
+from app.rpg.world.conversation_director import select_conversation_intent
+from app.rpg.world.npc_history_state import add_npc_history_entry, prune_npc_history_state
+from app.rpg.world.npc_reputation_state import (
+    get_npc_reputation,
+    response_style_from_reputation,
+    update_npc_reputation,
+)
 from app.rpg.world.conversation_topics import (
     detect_topic_pivot_hint,
     select_conversation_topic,
@@ -642,14 +649,49 @@ def maybe_advance_conversation_thread(
 
     seed_default_npc_goals(simulation_state, tick=tick, location_id=location_id)
 
-    topic_payload = select_conversation_topic(
+    # QRS: Prune NPC history before starting a new conversation beat.
+    prune_npc_history_state(
         simulation_state,
-        settings=settings,
-        forced_topic_type=forced_topic_type,
-        exclude_event_ids=exclude_event_ids or [],
+        current_tick=tick,
+        max_entries_per_npc=int(settings.get("npc_history_max_entries_per_npc") or 20),
     )
-    if not topic_payload:
-        topic_payload = _topic_for_location(location_id)
+
+    # QRS: Ask the conversation director for a preferred intent.
+    director_intent: Dict[str, Any] = {}
+    if settings.get("conversation_director_enabled", True):
+        director_intent = select_conversation_intent(
+            simulation_state,
+            settings=settings,
+            tick=tick,
+        )
+
+    if director_intent.get("selected"):
+        speaker_npc_id = _safe_str(director_intent.get("speaker_id"))
+        listener_npc_id = _safe_str(director_intent.get("listener_id"))
+        speaker_bio = get_npc_biography(speaker_npc_id)
+        listener_bio = get_npc_biography(listener_npc_id)
+        participants = [
+            {
+                "id": speaker_npc_id,
+                "name": _safe_str(speaker_bio.get("name")) or speaker_npc_id.replace("npc:", ""),
+                "role": "",
+            },
+            {
+                "id": listener_npc_id,
+                "name": _safe_str(listener_bio.get("name")) or listener_npc_id.replace("npc:", ""),
+                "role": "",
+            },
+        ]
+        topic_payload = _safe_dict(director_intent.get("topic")) or {}
+    else:
+        topic_payload = select_conversation_topic(
+            simulation_state,
+            settings=settings,
+            forced_topic_type=forced_topic_type,
+            exclude_event_ids=exclude_event_ids or [],
+        )
+        if not topic_payload:
+            topic_payload = _topic_for_location(location_id)
     if not topic_is_backed_by_state(topic_payload):
         return {
             "triggered": False,
@@ -870,6 +912,13 @@ def maybe_advance_conversation_thread(
         "world_signal": deepcopy(signal),
         "world_event": deepcopy(world_event),
         "rumor_seed": deepcopy(rumor_seed),
+        "director_intent": deepcopy(director_intent),
+        "present_npcs": _safe_list(
+            director_intent.get("present_npcs")
+            or _safe_dict(_safe_dict(simulation_state.get("conversation_director_state")).get("debug")).get("present_npcs")
+        ),
+        "npc_history_state": deepcopy(_safe_dict(simulation_state.get("npc_history_state"))),
+        "npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
         "conversation_thread_state": get_conversation_thread_state(simulation_state),
         "source": "deterministic_conversation_thread_runtime",
     }
@@ -1078,11 +1127,44 @@ def handle_pending_player_conversation_response(
         npc_response_beat["roleplay_source"] = _safe_str(biography_response.get("roleplay_source") or "deterministic_template")
         npc_response_beat["used_fact_ids"] = _safe_list(biography_response.get("used_fact_ids"))
         npc_response_beat["dialogue_profile"] = _safe_dict(biography_response.get("profile"))
+
+        # QRS: Override response style based on NPC reputation before appending beat.
+        if settings.get("npc_reputation_enabled", True):
+            reputation = get_npc_reputation(simulation_state, npc_id=npc_id)
+            response_style = response_style_from_reputation(reputation, fallback=response_style)
+
         record_npc_response_beat(simulation_state, beat=npc_response_beat, tick=tick)
         all_beats = _safe_list(thread.get("beats"))
         all_beats.append(npc_response_beat)
         thread["beats"] = all_beats[-MAX_BEATS_PER_THREAD:]
         thread["updated_tick"] = int(tick or 0)
+
+        # QRS: Record NPC history and update reputation from player interaction.
+        responder_id = _safe_str(npc.get("id"))
+        responder_name = _safe_str(npc.get("name")) or responder_id.replace("npc:", "")
+        topic_title = _safe_str(active_topic.get("title") or active_topic.get("topic") or active_topic.get("topic_id"))
+        topic_id_str = _safe_str(active_topic.get("topic_id"))
+        if settings.get("npc_history_enabled", True):
+            add_npc_history_entry(
+                simulation_state,
+                npc_id=responder_id,
+                kind="player_conversation_reply",
+                summary=f"The player replied to {responder_name} about {topic_title or topic_id_str}.",
+                topic_id=topic_id_str,
+                tick=tick,
+                importance=2,
+                ttl_ticks=int(settings.get("npc_history_ttl_ticks") or 1000),
+            )
+        if settings.get("npc_reputation_enabled", True):
+            update_npc_reputation(
+                simulation_state,
+                npc_id=responder_id,
+                tick=tick,
+                familiarity_delta=1,
+                trust_delta=1 if topic_pivot.get("accepted") else 0,
+                annoyance_delta=1 if topic_pivot.get("requested") and not topic_pivot.get("accepted") else 0,
+                reason="player_joined_conversation",
+            )
 
     state["pending_player_response"] = {}
 
@@ -1155,6 +1237,8 @@ def handle_pending_player_conversation_response(
         "world_event": deepcopy(world_event),
         "conversation_social_state": deepcopy(social_state),
         "npc_goal_state": deepcopy(_safe_dict(simulation_state.get("npc_goal_state"))),
+        "npc_history_state": deepcopy(_safe_dict(simulation_state.get("npc_history_state"))),
+        "npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
         "conversation_thread_state": get_conversation_thread_state(simulation_state),
         "source": "deterministic_conversation_thread_runtime",
     }

@@ -107,6 +107,13 @@
     const sceneActivityState = safeObj(result.scene_activity_state || safeObj(safeObj(result.ambient_tick_result).scene_activity_result).scene_activity_state);
     const sceneActivities = safeArr(sceneActivityState.recent);
     const conversation = safeObj(result.conversation_result || result);
+    const npcHistoryStateRaw = safeObj(result.npc_history_state || conversation.npc_history_state || safeObj(result.ambient_tick_result).npc_history_state);
+    const npcHistoryByNpc = safeObj(npcHistoryStateRaw.by_npc);
+    const npcReputationStateRaw = safeObj(result.npc_reputation_state || conversation.npc_reputation_state || safeObj(result.ambient_tick_result).npc_reputation_state);
+    const npcReputationByNpc = safeObj(npcReputationStateRaw.by_npc);
+    const conversationDirectorState = safeObj(result.conversation_director_state || safeObj(result.ambient_tick_result).conversation_director_state);
+    const directorDebug = safeObj(conversationDirectorState.debug);
+    const directorIntent = safeObj(directorDebug.selected_intent || conversation.director_intent);
     const dialogueProfile = safeObj(result.dialogue_profile || conversation.dialogue_profile);
     const npcResponseBeat = safeObj(conversation.npc_response_beat);
     const roleplaySource =
@@ -246,6 +253,62 @@
             <strong>Used Fact IDs</strong>
             <span>${usedFactIds.map((id) => escapeHtml(id)).join(", ")}</span>
           </div>` : ""}
+        </div>
+      </details>
+      ` : ""}
+
+      ${Object.keys(npcHistoryByNpc).length ? `
+      <details>
+        <summary><strong>NPC History</strong></summary>
+        <div class="rpg-debug-section">
+          ${Object.entries(npcHistoryByNpc).map(([npcId, npcState]) => {
+            const entries = safeArr(safeObj(npcState).entries);
+            return `
+              <div class="rpg-debug-row">
+                <strong>${escapeHtml(npcId)}</strong>
+                <span>${entries.map((e) => escapeHtml(safeObj(e).summary || safeObj(e).kind || "")).join(" | ")}</span>
+                <code>${entries.length} entries</code>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </details>
+      ` : ""}
+
+      ${Object.keys(npcReputationByNpc).length ? `
+      <details>
+        <summary><strong>NPC Reputation</strong></summary>
+        <div class="rpg-debug-section">
+          ${Object.entries(npcReputationByNpc).map(([npcId, rep]) => {
+            const r = safeObj(rep);
+            return `
+              <div class="rpg-debug-row">
+                <strong>${escapeHtml(npcId)}</strong>
+                <code>fam=${escapeHtml(r.familiarity ?? 0)} trust=${escapeHtml(r.trust ?? 0)} annoy=${escapeHtml(r.annoyance ?? 0)} fear=${escapeHtml(r.fear ?? 0)} resp=${escapeHtml(r.respect ?? 0)}</code>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </details>
+      ` : ""}
+
+      ${directorIntent && directorIntent.selected ? `
+      <details>
+        <summary><strong>Conversation Director</strong></summary>
+        <div class="rpg-debug-section">
+          <div class="rpg-debug-row">
+            <strong>Speaker</strong><span>${escapeHtml(directorIntent.speaker_id || "")}</span>
+          </div>
+          <div class="rpg-debug-row">
+            <strong>Listener</strong><span>${escapeHtml(directorIntent.listener_id || "")}</span>
+          </div>
+          <div class="rpg-debug-row">
+            <strong>Topic</strong><span>${escapeHtml(directorIntent.topic_id || "")}</span>
+            <code>type=${escapeHtml(directorIntent.topic_type || "")} priority=${escapeHtml(directorIntent.priority ?? 0)}</code>
+          </div>
+          <div class="rpg-debug-row">
+            <strong>Reason</strong><span>${escapeHtml(directorIntent.reason || "")}</span>
+          </div>
         </div>
       </details>
       ` : ""}

@@ -67,6 +67,13 @@ DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "avoid_repeated_npc_response_lines": True,
     "allow_npc_goal_influence": True,
     "goal_player_invitation_bias_cap": 20,
+    # Bundle QRS — NPC history, reputation, conversation director
+    "npc_history_enabled": True,
+    "npc_history_max_entries_per_npc": 20,
+    "npc_history_ttl_ticks": 1000,
+    "npc_reputation_enabled": True,
+    "conversation_director_enabled": True,
+    "conversation_director_cooldown_ticks": 4,
     # Bundle J — rumor propagation caps
     "allow_rumor_propagation": True,
     "max_rumor_seeds": 24,
@@ -169,6 +176,13 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     merged["avoid_repeated_npc_response_lines"] = _safe_bool(merged.get("avoid_repeated_npc_response_lines"), True)
     merged["allow_npc_goal_influence"] = _safe_bool(merged.get("allow_npc_goal_influence"), True)
     merged["goal_player_invitation_bias_cap"] = max(0, min(50, _safe_int(merged.get("goal_player_invitation_bias_cap"), 20)))
+    # Bundle QRS
+    merged["npc_history_enabled"] = _safe_bool(merged.get("npc_history_enabled"), True)
+    merged["npc_history_max_entries_per_npc"] = max(1, min(50, _safe_int(merged.get("npc_history_max_entries_per_npc"), 20)))
+    merged["npc_history_ttl_ticks"] = max(10, min(100000, _safe_int(merged.get("npc_history_ttl_ticks"), 1000)))
+    merged["npc_reputation_enabled"] = _safe_bool(merged.get("npc_reputation_enabled"), True)
+    merged["conversation_director_enabled"] = _safe_bool(merged.get("conversation_director_enabled"), True)
+    merged["conversation_director_cooldown_ticks"] = max(1, min(100, _safe_int(merged.get("conversation_director_cooldown_ticks"), 4)))
     # Bundle J
     merged["allow_rumor_propagation"] = _safe_bool(merged.get("allow_rumor_propagation"), True)
     merged["max_rumor_seeds"] = max(1, _safe_int(merged.get("max_rumor_seeds"), 24))
