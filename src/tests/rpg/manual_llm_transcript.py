@@ -1595,6 +1595,57 @@ SERVICE_SCENARIOS = {
         },
         "turns": ["__ambient_tick_quest__"],
     },
+    "npc_schedule_populates_tavern_presence": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "npc_schedule_enabled": True,
+            "npc_presence_enabled": True,
+            "scene_population_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "turns": ["__ambient_tick__"],
+    },
+    "director_uses_presence_runtime": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "autonomous_ticks_enabled": True,
+            "frequency": "always",
+            "conversation_director_enabled": True,
+            "npc_schedule_enabled": True,
+            "npc_presence_enabled": True,
+            "scene_population_enabled": True,
+            "min_ticks_between_conversations": 0,
+            "thread_cooldown_ticks": 0,
+        },
+        "setup_quest_state": {
+            "quests": [
+                {
+                    "quest_id": "quest:old_mill_bandits",
+                    "title": "Trouble near the Old Mill",
+                    "summary": "There is talk of armed figures near the old mill road.",
+                    "status": "active",
+                    "location_id": "loc_tavern",
+                }
+            ]
+        },
+        "turns": ["__ambient_tick_quest__"],
+    },
+    "scene_activity_uses_present_npc": {
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+        "conversation_settings": {
+            "enabled": True,
+            "npc_schedule_enabled": True,
+            "npc_presence_enabled": True,
+            "scene_population_enabled": True,
+            "scene_activity_enabled": True,
+        },
+        "turns": ["__scene_activity_tick__"],
+    },
 }
 
 
@@ -1620,6 +1671,9 @@ CONVERSATION_EXPECTED_SCENARIOS = {
     "npc_history_records_player_reply",
     "npc_reputation_changes_response_style",
     "conversation_director_selects_biography_relevant_topic",
+    "npc_schedule_populates_tavern_presence",
+    "director_uses_presence_runtime",
+    "scene_activity_uses_present_npc",
 }
 
 
@@ -2199,6 +2253,35 @@ def _extract_conversation_thread_state(result: Dict[str, Any]) -> Dict[str, Any]
         return direct
     simulation_state = _extract_simulation_state(result)
     return _safe_dict(simulation_state.get("conversation_thread_state"))
+
+
+def _thread_participant_pair_key(thread: Dict[str, Any]) -> str:
+    participants = []
+    for participant in _safe_list(_safe_dict(thread).get("participants")):
+        participant = _safe_dict(participant)
+        npc_id = _safe_str(participant.get("npc_id") or participant.get("id"))
+        if npc_id.startswith("npc:"):
+            participants.append(npc_id)
+    if len(participants) < 2:
+        return ""
+    return "::".join(sorted(set(participants))[:2])
+
+
+def _count_beats_for_unordered_npc_pair(conversation_state: Dict[str, Any], pair_key: str) -> int:
+    total = 0
+    for thread in _safe_list(_safe_dict(conversation_state).get("threads")):
+        thread = _safe_dict(thread)
+        if _thread_participant_pair_key(thread) == pair_key:
+            total += len(_safe_list(thread.get("beats")))
+    return total
+
+
+def _latest_conversation_thread(conversation_state: Dict[str, Any]) -> Dict[str, Any]:
+    threads = _safe_list(_safe_dict(conversation_state).get("threads"))
+    if not threads:
+        return {}
+    # Return the thread with the most recent updated_tick
+    return max(threads, key=lambda t: _safe_int(_safe_dict(t).get("updated_tick"), 0))
 
 
 def _extract_conversation_rumor_state(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -2880,10 +2963,19 @@ def _manual_regression_warnings(
             warnings.append(f"{scenario_name}_expected_active_thread_on_turn_{turn_index}")
         # Threads must keep accumulating beats across turns
         if threads:
-            max_beats = max(len(_safe_list(_safe_dict(t).get("beats"))) for t in threads)
-            if turn_index >= 2 and max_beats < 2:
+            conversation_state = _extract_conversation_thread_state(result)
+            pair_key = ""
+            latest_thread = _latest_conversation_thread(conversation_state)
+            if latest_thread:
+                pair_key = _thread_participant_pair_key(latest_thread)
+            beat_count = (
+                _count_beats_for_unordered_npc_pair(conversation_state, pair_key)
+                if pair_key
+                else max(len(_safe_list(_safe_dict(t).get("beats"))) for t in threads)
+            )
+            if turn_index >= 2 and beat_count < 2:
                 warnings.append(
-                    f"{scenario_name}_expected_at_least_2_beats_by_turn_{turn_index}_got_{max_beats}"
+                    f"{scenario_name}_expected_at_least_2_beats_by_turn_{turn_index}_got_{beat_count}"
                 )
 
     if scenario_name == "npc_history_records_player_reply" and turn_index == 2:
@@ -2927,6 +3019,35 @@ def _manual_regression_warnings(
             if listener_id and listener_id not in present_npcs:
                 warnings.append(f"conversation_director_listener_not_present:{listener_id}")
 
+    if scenario_name == "npc_schedule_populates_tavern_presence" and turn_index == 1:
+        sim = _extract_simulation_state(result)
+        present = _safe_list(_safe_dict(sim.get("present_npc_state")).get("loc_tavern"))
+        if "npc:Bran" not in present or "npc:Mira" not in present:
+            warnings.append("npc_schedule_populates_tavern_presence_missing_bran_or_mira")
+        population = _safe_dict(sim.get("scene_population_state"))
+        if not _safe_list(population.get("present_npcs")):
+            warnings.append("npc_schedule_populates_tavern_presence_missing_scene_population")
+
+    if scenario_name == "director_uses_presence_runtime" and turn_index == 1:
+        conversation = _extract_conversation_result(result)
+        director = _safe_dict(conversation.get("director_intent"))
+        if not director.get("selected"):
+            warnings.append("director_uses_presence_runtime_expected_selected_intent")
+        present = set(_safe_list(_safe_dict(_extract_simulation_state(result).get("present_npc_state")).get("loc_tavern")))
+        if _safe_str(director.get("speaker_id")) not in present:
+            warnings.append("director_uses_presence_runtime_speaker_not_present")
+        if _safe_str(director.get("listener_id")) not in present:
+            warnings.append("director_uses_presence_runtime_listener_not_present")
+
+    if scenario_name == "scene_activity_uses_present_npc" and turn_index == 1:
+        sim = _extract_simulation_state(result)
+        scene_activity = _safe_dict(_safe_dict(result.get("result")).get("scene_activity_result"))
+        activity = _safe_dict(scene_activity.get("activity"))
+        present = set(_safe_list(_safe_dict(sim.get("present_npc_state")).get("loc_tavern")))
+        actor = _safe_str(activity.get("npc_id"))
+        if actor and actor not in present:
+            warnings.append("scene_activity_uses_present_npc_actor_not_present")
+
     if scenario_name == "blocked_purchase" and turn_index == 3:
         if bool(purchase.get("applied") or service_application.get("applied")):
             warnings.append("blocked_purchase_unexpectedly_applied")
@@ -2958,10 +3079,20 @@ def _manual_regression_warnings(
     if conversation.get("triggered"):
         thread = _safe_dict(conversation.get("thread"))
         participants = _safe_list(thread.get("participants"))
-        participant_ids = {
-            _safe_str(_safe_dict(participant).get("id"))
-            for participant in participants
-        }
+        participant_ids = set()
+        for participant in participants:
+            participant = _safe_dict(participant)
+            participant_id = _safe_str(
+                participant.get("npc_id")
+                or participant.get("id")
+                or participant.get("speaker_id")
+                or participant.get("listener_id")
+            )
+            if participant_id == "player":
+                continue
+            if not participant_id.startswith("npc:"):
+                continue
+            participant_ids.add(participant_id)
         location_state = _extract_location_state(result)
         current_location = _safe_dict(location_state.get("current_location"))
         present_ids = {

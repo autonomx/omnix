@@ -1,29 +1,34 @@
-Bundle Q — NPC Personal History v1
+Below is the next bundle spec:
+
+Bundle W-X-Y — Quest/NPC Knowledge, Dialogue Memory Recall, and Scene Continuity v1
+
+Apply after T-U-V.1, which passed.
+
+Bundle W — Quest/NPC Knowledge Model v1
 
 Goal:
 
-NPCs retain bounded deterministic history entries about meaningful interactions and events.
+NPCs should know different things based on deterministic state, biography, location, quest involvement, prior history, rumors, and recent conversations.
 
-Add:
+Add a bounded knowledge model:
 
-src/app/rpg/world/npc_history_state.py
+src/app/rpg/world/npc_knowledge_state.py
 
-State shape:
+Knowledge entries are not new facts by themselves. They are references to already-backed facts:
 
 {
-  "npc_history_state": {
+  "npc_knowledge_state": {
     "by_npc": {
       "npc:Bran": {
-        "entries": [
+        "known_facts": [
           {
-            "history_id": "hist:npc:Bran:527:player_conversation_reply",
-            "kind": "player_conversation_reply",
-            "summary": "The player asked Bran about the old mill road.",
-            "topic_id": "topic:quest:quest:old_mill_bandits",
-            "importance": 2,
+            "knowledge_id": "know:npc:Bran:topic:quest:quest:old_mill_bandits",
+            "source_topic_id": "topic:quest:quest:old_mill_bandits",
+            "source_kind": "quest",
+            "summary": "There is talk of armed figures near the old mill road.",
+            "confidence": 2,
             "tick": 527,
-            "expires_tick": 1527,
-            "source": "deterministic_npc_history_runtime"
+            "expires_tick": 2527
           }
         ]
       }
@@ -34,108 +39,108 @@ State shape:
 
 Rules:
 
-- max entries per NPC: 20
-- expired entries are pruned
-- no unbounded growth
-- history can influence dialogue/profile
-- history cannot create quests, rewards, inventory, journal, currency, stock, location changes, or combat
-Bundle R — NPC Reputation / Trust v1
+- knowledge entries must cite source_topic_id/source_event_id/source_memory_id/source_history_id
+- no uncited knowledge
+- max known facts per NPC
+- expired knowledge pruned
+- knowledge can influence dialogue and topic selection
+- knowledge cannot create quests, rewards, inventory, journal, currency, stock, location changes, or combat
+Bundle X — Dialogue Memory Recall v1
 
 Goal:
 
-NPCs develop bounded attitudes toward the player based on deterministic interactions.
+NPCs can recall recent player conversations and prior topics in dialogue, but only from bounded NPC history/reputation/knowledge state.
+
+Add recall selection:
+
+src/app/rpg/world/npc_dialogue_recall.py
+
+Recall output:
+
+{
+  "selected": true,
+  "recall": {
+    "kind": "prior_player_reply",
+    "summary": "The player asked Bran about the old mill road.",
+    "source_history_id": "hist:npc:Bran:527:player_conversation_reply",
+    "tick": 527
+  }
+}
+
+Rules:
+
+- recall only uses npc_history_state / npc_knowledge_state
+- recall is bounded to max 1–2 snippets per response
+- recall has cooldown so NPCs do not repeat it every turn
+- recall can shape line text
+- recall cannot create authoritative facts
+Bundle Y — Scene Continuity v1
+
+Goal:
+
+Scene population, activity, conversation threads, and recent beats should feel continuous across ambient ticks.
 
 Add:
 
-src/app/rpg/world/npc_reputation_state.py
+src/app/rpg/world/scene_continuity_state.py
 
 State shape:
 
 {
-  "npc_reputation_state": {
-    "by_npc": {
-      "npc:Bran": {
-        "familiarity": 3,
-        "trust": 1,
-        "annoyance": 0,
-        "fear": 0,
-        "respect": 1,
-        "last_updated_tick": 527,
-        "source": "deterministic_npc_reputation_runtime"
+  "scene_continuity_state": {
+    "by_location": {
+      "loc_tavern": {
+        "recent_focus": [
+          {
+            "focus_id": "focus:loc_tavern:topic:quest:old_mill_bandits",
+            "topic_id": "topic:quest:old_mill_bandits",
+            "kind": "quest_discussion",
+            "last_tick": 527,
+            "weight": 3
+          }
+        ],
+        "recent_speakers": ["npc:Bran", "npc:Mira"],
+        "recent_activities": []
       }
     },
     "debug": {}
   }
 }
 
-Influences:
-
-- dialogue style
-- willingness to answer
-- invitation chance
-- response style: helpful, guarded, evasive, annoyed, friendly
-
-Does not directly:
-
-- unlock quests
-- grant rewards
-- change prices
-- create inventory/currency/journal entries
-- move NPCs
-- start combat
-Bundle S — Conversation Director v1
-
-Goal:
-
-A bounded director chooses speaker/listener/topic intent using biography + goals + history + reputation + signals.
-
-Add:
-
-src/app/rpg/world/conversation_director.py
-
-Director output:
-
-{
-  "intent": {
-    "speaker_id": "npc:Bran",
-    "listener_id": "npc:Mira",
-    "topic_id": "topic:quest:quest:old_mill_bandits",
-    "topic_type": "quest",
-    "intent": "warn_about_road",
-    "reason": "quest_interest signal + Bran maintain_order goal + tavern keeper biography",
-    "priority": 6,
-    "source": "deterministic_conversation_director"
-  }
-}
-
 Rules:
 
-- deterministic scoring only
-- no random calls
-- cooldown per speaker/listener/topic
-- one selected intent per ambient tick
-- no unbounded state growth
-- director emits intent only; it does not mutate inventory/quest/reward/journal/currency/location/combat
-Patch files to add/change
-NEW  src/app/rpg/world/npc_history_state.py
-NEW  src/app/rpg/world/npc_reputation_state.py
-NEW  src/app/rpg/world/conversation_director.py
+- scene continuity helps pick follow-up topics/speakers
+- caps recent_focus/recent_speakers/recent_activities
+- expires old focus entries
+- avoids repeating the same line/topic too often
+- no direct mutation outside continuity state
+Files to add/change
+NEW  src/app/rpg/world/npc_knowledge_state.py
+NEW  src/app/rpg/world/npc_dialogue_recall.py
+NEW  src/app/rpg/world/scene_continuity_state.py
+
 MOD  src/app/rpg/world/conversation_settings.py
 MOD  src/app/rpg/world/npc_dialogue_profile.py
 MOD  src/app/rpg/world/conversation_threads.py
+MOD  src/app/rpg/world/conversation_director.py
 MOD  src/app/rpg/session/ambient_tick_runtime.py
 MOD  src/static/rpg-living-world-inspector.js
 MOD  src/tests/rpg/manual_llm_transcript.py
-NEW  src/app/rpg/tests/test_bundle_qrs_npc_history_reputation_director.py
-Q1 PATCH — src/app/rpg/world/npc_history_state.py
+
+NEW  src/app/rpg/tests/test_bundle_wxy_knowledge_recall_continuity.py
+W1 PATCH — NPC knowledge state
+
+Create:
+
+src/app/rpg/world/npc_knowledge_state.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
 
-MAX_HISTORY_ENTRIES_PER_NPC = 20
-DEFAULT_HISTORY_TTL_TICKS = 1000
+MAX_KNOWN_FACTS_PER_NPC = 24
+DEFAULT_KNOWLEDGE_TTL_TICKS = 2000
 
 
 def _safe_str(value: Any) -> str:
@@ -157,290 +162,163 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def ensure_npc_history_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    state = _safe_dict(simulation_state.get("npc_history_state"))
+def ensure_npc_knowledge_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state.get("npc_knowledge_state"))
     if not isinstance(state.get("by_npc"), dict):
         state["by_npc"] = {}
     if not isinstance(state.get("debug"), dict):
         state["debug"] = {}
-    simulation_state["npc_history_state"] = state
+    simulation_state["npc_knowledge_state"] = state
     return state
 
 
-def prune_npc_history_state(
+def prune_npc_knowledge_state(
     simulation_state: Dict[str, Any],
     *,
     current_tick: int,
-    max_entries_per_npc: int = MAX_HISTORY_ENTRIES_PER_NPC,
+    max_known_facts_per_npc: int = MAX_KNOWN_FACTS_PER_NPC,
 ) -> Dict[str, Any]:
-    state = ensure_npc_history_state(simulation_state)
+    state = ensure_npc_knowledge_state(simulation_state)
     by_npc = _safe_dict(state.get("by_npc"))
     expired_ids: List[str] = []
 
     for npc_id, npc_state in list(by_npc.items()):
         npc_state = _safe_dict(npc_state)
-        entries = []
-        for entry in _safe_list(npc_state.get("entries")):
-            entry = _safe_dict(entry)
-            history_id = _safe_str(entry.get("history_id"))
-            expires_tick = _safe_int(entry.get("expires_tick"), 0)
+        kept = []
+        for fact in _safe_list(npc_state.get("known_facts")):
+            fact = _safe_dict(fact)
+            knowledge_id = _safe_str(fact.get("knowledge_id"))
+            expires_tick = _safe_int(fact.get("expires_tick"), 0)
             if expires_tick and int(current_tick or 0) >= expires_tick:
-                if history_id:
-                    expired_ids.append(history_id)
+                if knowledge_id:
+                    expired_ids.append(knowledge_id)
                 continue
-            entries.append(entry)
+            kept.append(fact)
 
-        entries.sort(
+        kept.sort(
             key=lambda item: (
-                _safe_int(_safe_dict(item).get("importance"), 0),
+                _safe_int(_safe_dict(item).get("confidence"), 0),
                 _safe_int(_safe_dict(item).get("tick"), 0),
-                _safe_str(_safe_dict(item).get("history_id")),
+                _safe_str(_safe_dict(item).get("knowledge_id")),
             ),
             reverse=True,
         )
-        npc_state["entries"] = entries[: max(1, int(max_entries_per_npc or MAX_HISTORY_ENTRIES_PER_NPC))]
+        npc_state["known_facts"] = kept[: max(1, int(max_known_facts_per_npc or MAX_KNOWN_FACTS_PER_NPC))]
         by_npc[npc_id] = npc_state
 
     state["by_npc"] = by_npc
     state["debug"] = {
         **_safe_dict(state.get("debug")),
         "last_prune_tick": int(current_tick or 0),
-        "expired_history_ids": expired_ids,
-        "source": "deterministic_npc_history_runtime",
+        "expired_knowledge_ids": expired_ids,
+        "source": "deterministic_npc_knowledge_runtime",
     }
     return {
-        "expired_history_ids": expired_ids,
-        "source": "deterministic_npc_history_runtime",
+        "expired_knowledge_ids": expired_ids,
+        "source": "deterministic_npc_knowledge_runtime",
     }
 
 
-def add_npc_history_entry(
+def add_npc_knowledge_from_topic(
     simulation_state: Dict[str, Any],
     *,
     npc_id: str,
-    kind: str,
-    summary: str,
+    topic: Dict[str, Any],
     tick: int,
-    topic_id: str = "",
-    importance: int = 1,
-    ttl_ticks: int = DEFAULT_HISTORY_TTL_TICKS,
-    source: str = "deterministic_npc_history_runtime",
+    confidence: int = 2,
+    ttl_ticks: int = DEFAULT_KNOWLEDGE_TTL_TICKS,
 ) -> Dict[str, Any]:
     npc_id = _safe_str(npc_id)
-    summary = _safe_str(summary).strip()
-    kind = _safe_str(kind).strip() or "interaction"
-    if not npc_id.startswith("npc:") or not summary:
-        return {"created": False, "reason": "invalid_history_entry"}
+    topic = _safe_dict(topic)
+    topic_id = _safe_str(topic.get("topic_id"))
+    source_id = _safe_str(topic.get("source_id") or topic_id)
+    source_kind = _safe_str(topic.get("source_kind") or topic.get("topic_type"))
+    summary = _safe_str(topic.get("summary") or topic.get("title")).strip()
 
-    state = ensure_npc_history_state(simulation_state)
+    if not npc_id.startswith("npc:"):
+        return {"created": False, "reason": "invalid_npc_id"}
+    if not topic_id or not summary:
+        return {"created": False, "reason": "knowledge_requires_backed_topic"}
+
+    state = ensure_npc_knowledge_state(simulation_state)
     by_npc = _safe_dict(state.get("by_npc"))
     npc_state = _safe_dict(by_npc.get(npc_id))
-    entries = _safe_list(npc_state.get("entries"))
+    facts = _safe_list(npc_state.get("known_facts"))
 
     current_tick = int(tick or 0)
-    history_id = f"hist:{npc_id}:{current_tick}:{kind}:{abs(hash(summary)) % 100000}"
+    knowledge_id = f"know:{npc_id}:{topic_id}"
 
     entry = {
-        "history_id": history_id,
+        "knowledge_id": knowledge_id,
         "npc_id": npc_id,
-        "kind": kind,
+        "source_topic_id": topic_id,
+        "source_id": source_id,
+        "source_kind": source_kind,
         "summary": summary[:280],
-        "topic_id": _safe_str(topic_id),
-        "importance": max(1, min(5, _safe_int(importance, 1))),
+        "confidence": max(1, min(5, _safe_int(confidence, 2))),
         "tick": current_tick,
-        "expires_tick": current_tick + max(1, int(ttl_ticks or DEFAULT_HISTORY_TTL_TICKS)),
-        "source": source,
+        "expires_tick": current_tick + max(1, int(ttl_ticks or DEFAULT_KNOWLEDGE_TTL_TICKS)),
+        "source": "deterministic_npc_knowledge_runtime",
     }
 
-    # Deduplicate recent identical summaries.
-    deduped = []
-    for existing in entries:
-        existing = _safe_dict(existing)
-        if (
-            _safe_str(existing.get("summary")) == entry["summary"]
-            and _safe_str(existing.get("kind")) == entry["kind"]
-            and _safe_int(existing.get("tick"), 0) == current_tick
-        ):
-            continue
-        deduped.append(existing)
-
-    deduped.append(entry)
-    deduped.sort(
+    facts = [
+        _safe_dict(fact)
+        for fact in facts
+        if _safe_str(_safe_dict(fact).get("knowledge_id")) != knowledge_id
+    ]
+    facts.append(entry)
+    facts.sort(
         key=lambda item: (
-            _safe_int(_safe_dict(item).get("importance"), 0),
+            _safe_int(_safe_dict(item).get("confidence"), 0),
             _safe_int(_safe_dict(item).get("tick"), 0),
         ),
         reverse=True,
     )
 
-    npc_state["entries"] = deduped[:MAX_HISTORY_ENTRIES_PER_NPC]
+    npc_state["known_facts"] = facts[:MAX_KNOWN_FACTS_PER_NPC]
     by_npc[npc_id] = npc_state
     state["by_npc"] = by_npc
-    simulation_state["npc_history_state"] = state
+    simulation_state["npc_knowledge_state"] = state
 
     return {
         "created": True,
         "entry": deepcopy(entry),
-        "source": source,
+        "source": "deterministic_npc_knowledge_runtime",
     }
 
 
-def recent_npc_history(
+def known_facts_for_npc(
     simulation_state: Dict[str, Any],
     *,
     npc_id: str,
-    limit: int = 5,
+    limit: int = 6,
 ) -> List[Dict[str, Any]]:
-    state = ensure_npc_history_state(simulation_state)
+    state = ensure_npc_knowledge_state(simulation_state)
     npc_state = _safe_dict(_safe_dict(state.get("by_npc")).get(_safe_str(npc_id)))
-    entries = _safe_list(npc_state.get("entries"))
-    entries = sorted(
-        [_safe_dict(entry) for entry in entries],
-        key=lambda item: _safe_int(item.get("tick"), 0),
+    facts = sorted(
+        [_safe_dict(fact) for fact in _safe_list(npc_state.get("known_facts"))],
+        key=lambda item: (
+            _safe_int(item.get("confidence"), 0),
+            _safe_int(item.get("tick"), 0),
+        ),
         reverse=True,
     )
-    return deepcopy(entries[: max(0, int(limit or 0))])
-R1 PATCH — src/app/rpg/world/npc_reputation_state.py
-from __future__ import annotations
+    return deepcopy(facts[: max(0, int(limit or 0))])
+X1 PATCH — Dialogue recall selector
 
-from copy import deepcopy
-from typing import Any, Dict
+Create:
 
-
-REPUTATION_MIN = -5
-REPUTATION_MAX = 5
-
-
-def _safe_str(value: Any) -> str:
-    return "" if value is None else str(value)
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _clamp(value: Any, default: int = 0) -> int:
-    return max(REPUTATION_MIN, min(REPUTATION_MAX, _safe_int(value, default)))
-
-
-def ensure_npc_reputation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
-    state = _safe_dict(simulation_state.get("npc_reputation_state"))
-    if not isinstance(state.get("by_npc"), dict):
-        state["by_npc"] = {}
-    if not isinstance(state.get("debug"), dict):
-        state["debug"] = {}
-    simulation_state["npc_reputation_state"] = state
-    return state
-
-
-def get_npc_reputation(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-) -> Dict[str, Any]:
-    state = ensure_npc_reputation_state(simulation_state)
-    by_npc = _safe_dict(state.get("by_npc"))
-    entry = _safe_dict(by_npc.get(_safe_str(npc_id)))
-    return {
-        "npc_id": _safe_str(npc_id),
-        "familiarity": _clamp(entry.get("familiarity"), 0),
-        "trust": _clamp(entry.get("trust"), 0),
-        "annoyance": _clamp(entry.get("annoyance"), 0),
-        "fear": _clamp(entry.get("fear"), 0),
-        "respect": _clamp(entry.get("respect"), 0),
-        "last_updated_tick": _safe_int(entry.get("last_updated_tick"), 0),
-        "source": "deterministic_npc_reputation_runtime",
-    }
-
-
-def update_npc_reputation(
-    simulation_state: Dict[str, Any],
-    *,
-    npc_id: str,
-    tick: int,
-    familiarity_delta: int = 0,
-    trust_delta: int = 0,
-    annoyance_delta: int = 0,
-    fear_delta: int = 0,
-    respect_delta: int = 0,
-    reason: str = "",
-) -> Dict[str, Any]:
-    npc_id = _safe_str(npc_id)
-    if not npc_id.startswith("npc:"):
-        return {"updated": False, "reason": "invalid_npc_id"}
-
-    state = ensure_npc_reputation_state(simulation_state)
-    by_npc = _safe_dict(state.get("by_npc"))
-    current = get_npc_reputation(simulation_state, npc_id=npc_id)
-
-    updated = {
-        "npc_id": npc_id,
-        "familiarity": _clamp(current.get("familiarity") + int(familiarity_delta or 0)),
-        "trust": _clamp(current.get("trust") + int(trust_delta or 0)),
-        "annoyance": _clamp(current.get("annoyance") + int(annoyance_delta or 0)),
-        "fear": _clamp(current.get("fear") + int(fear_delta or 0)),
-        "respect": _clamp(current.get("respect") + int(respect_delta or 0)),
-        "last_updated_tick": int(tick or 0),
-        "last_reason": _safe_str(reason),
-        "source": "deterministic_npc_reputation_runtime",
-    }
-
-    by_npc[npc_id] = updated
-    state["by_npc"] = by_npc
-    simulation_state["npc_reputation_state"] = state
-
-    return {
-        "updated": True,
-        "entry": deepcopy(updated),
-        "source": "deterministic_npc_reputation_runtime",
-    }
-
-
-def response_style_from_reputation(
-    reputation: Dict[str, Any],
-    *,
-    fallback: str = "guarded",
-) -> str:
-    reputation = _safe_dict(reputation)
-    trust = _safe_int(reputation.get("trust"), 0)
-    annoyance = _safe_int(reputation.get("annoyance"), 0)
-    fear = _safe_int(reputation.get("fear"), 0)
-    respect = _safe_int(reputation.get("respect"), 0)
-
-    if fear >= 3:
-        return "evasive"
-    if annoyance >= 3:
-        return "annoyed"
-    if trust >= 2 and respect >= 1:
-        return "helpful"
-    if trust >= 1:
-        return "friendly"
-    return fallback or "guarded"
-S1 PATCH — src/app/rpg/world/conversation_director.py
+src/app/rpg/world/npc_dialogue_recall.py
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.world.conversation_topics import conversation_topics_for_state
-from app.rpg.world.location_registry import current_location_id
-from app.rpg.world.npc_biography_registry import get_npc_biography
-from app.rpg.world.npc_goal_state import active_goals_for_npc
+from app.rpg.world.npc_history_state import recent_npc_history
+from app.rpg.world.npc_knowledge_state import known_facts_for_npc
 
 
-DEFAULT_LOCATION_NPCS = {
-    "loc_tavern": ["npc:Bran", "npc:Mira", "npc:GuardCaptain"],
-    "loc_market": ["npc:Merchant", "npc:GuardCaptain"],
-}
+MAX_RECALLS_PER_RESPONSE = 2
 
 
 def _safe_str(value: Any) -> str:
@@ -462,182 +340,280 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _present_npcs(simulation_state: Dict[str, Any]) -> List[str]:
-    location_id = current_location_id(simulation_state)
-    present_state = _safe_dict(simulation_state.get("present_npc_state"))
-    explicit = _safe_list(present_state.get(location_id))
-    if explicit:
-        return [_safe_str(npc_id) for npc_id in explicit if _safe_str(npc_id).startswith("npc:")]
-    return list(DEFAULT_LOCATION_NPCS.get(location_id, ["npc:Bran", "npc:Mira"]))
-
-
-def _topic_score_for_npc(
-    *,
-    npc_id: str,
-    topic: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-) -> int:
-    topic = _safe_dict(topic)
-    topic_type = _safe_str(topic.get("topic_type"))
-    bio = get_npc_biography(npc_id)
-    role = _safe_str(bio.get("role")).lower()
-    knowledge = _safe_dict(bio.get("knowledge_boundaries"))
-    knows_about = " ".join(_safe_str(v).lower() for v in _safe_list(knowledge.get("knows_about")))
-    summary = " ".join(
-        _safe_str(topic.get(key)).lower()
-        for key in ("title", "summary", "topic_type", "source_kind")
-    )
-
-    score = _safe_int(topic.get("priority"), 0)
-
-    if topic_type == "quest":
-        score += 2
-    if topic_type == "recent_event":
-        score += 1
-    if topic_type == "rumor":
-        score += 1
-
-    if "tavern" in role and any(word in summary for word in ("tavern", "traveler", "road", "debt", "lodging")):
-        score += 2
-    if "informant" in role and any(word in summary for word in ("rumor", "pattern", "whisper", "avoid")):
-        score += 2
-    if "guard" in role and any(word in summary for word in ("danger", "road", "armed", "report", "trouble")):
-        score += 2
-    if "merchant" in role and any(word in summary for word in ("market", "road", "trade", "price", "goods")):
-        score += 2
-
-    for token in knows_about.split():
-        if len(token) > 3 and token in summary:
-            score += 1
-            break
-
-    for goal in active_goals_for_npc(simulation_state, npc_id=npc_id, limit=3):
-        kind = _safe_str(goal.get("kind"))
-        if kind == "maintain_order" and topic_type in {"recent_event", "quest"}:
-            score += 1
-        if kind == "gather_rumors" and topic_type in {"rumor", "recent_event", "quest"}:
-            score += 1
-        if kind == "warn_player" and topic_type in {"quest", "recent_event"}:
-            score += 1
-
-    return score
-
-
-def _director_cooldown_key(speaker_id: str, listener_id: str, topic_id: str) -> str:
-    return f"{speaker_id}->{listener_id}:{topic_id}"
-
-
-def ensure_conversation_director_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state.get("conversation_director_state"))
+def ensure_dialogue_recall_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state.get("npc_dialogue_recall_state"))
     if not isinstance(state.get("cooldowns"), dict):
         state["cooldowns"] = {}
-    if not isinstance(state.get("recent_intents"), list):
-        state["recent_intents"] = []
     if not isinstance(state.get("debug"), dict):
         state["debug"] = {}
-    simulation_state["conversation_director_state"] = state
+    simulation_state["npc_dialogue_recall_state"] = state
     return state
 
 
-def select_conversation_intent(
+def _token_overlap_score(a: str, b: str) -> int:
+    a_tokens = {token for token in _safe_str(a).lower().replace("_", " ").split() if len(token) > 3}
+    b_tokens = {token for token in _safe_str(b).lower().replace("_", " ").split() if len(token) > 3}
+    return len(a_tokens & b_tokens)
+
+
+def select_dialogue_recall(
     simulation_state: Dict[str, Any],
     *,
-    settings: Dict[str, Any],
+    npc_id: str,
+    topic: Dict[str, Any],
     tick: int,
+    cooldown_ticks: int = 4,
+    limit: int = MAX_RECALLS_PER_RESPONSE,
 ) -> Dict[str, Any]:
-    state = ensure_conversation_director_state(simulation_state)
-    location_id = current_location_id(simulation_state)
-    npcs = _present_npcs(simulation_state)
-    topics = conversation_topics_for_state(simulation_state, settings=settings)
+    state = ensure_dialogue_recall_state(simulation_state)
     cooldowns = _safe_dict(state.get("cooldowns"))
-    cooldown_ticks = max(1, _safe_int(settings.get("conversation_director_cooldown_ticks"), 4))
+    npc_id = _safe_str(npc_id)
+    topic = _safe_dict(topic)
+    topic_text = " ".join(
+        _safe_str(topic.get(key))
+        for key in ("topic_id", "topic_type", "title", "summary")
+    )
 
-    if len(npcs) < 2 or not topics:
-        state["debug"] = {
+    cooldown_key = f"{npc_id}:{_safe_str(topic.get('topic_id'))}"
+    cooldown_until = _safe_int(cooldowns.get(cooldown_key), 0)
+    if cooldown_until and int(tick or 0) < cooldown_until:
+        return {
             "selected": False,
-            "reason": "not_enough_npcs_or_topics",
-            "npc_count": len(npcs),
-            "topic_count": len(topics),
-            "tick": int(tick or 0),
+            "reason": "recall_on_cooldown",
+            "source": "deterministic_npc_dialogue_recall",
         }
-        return {"selected": False, "reason": "not_enough_npcs_or_topics"}
 
     candidates: List[Dict[str, Any]] = []
-    for speaker_id in npcs:
-        for listener_id in npcs:
-            if listener_id == speaker_id:
-                continue
-            for topic in topics[:8]:
-                topic_id = _safe_str(topic.get("topic_id"))
-                key = _director_cooldown_key(speaker_id, listener_id, topic_id)
-                cooldown_until = _safe_int(cooldowns.get(key), 0)
-                if cooldown_until and int(tick or 0) < cooldown_until:
-                    continue
-                score = _topic_score_for_npc(
-                    npc_id=speaker_id,
-                    topic=topic,
-                    simulation_state=simulation_state,
-                )
-                candidates.append(
-                    {
-                        "speaker_id": speaker_id,
-                        "listener_id": listener_id,
-                        "topic": topic,
-                        "score": score,
-                        "cooldown_key": key,
-                    }
-                )
+
+    for history in recent_npc_history(simulation_state, npc_id=npc_id, limit=8):
+        summary = _safe_str(history.get("summary"))
+        score = _token_overlap_score(topic_text, summary) + _safe_int(history.get("importance"), 0)
+        if score <= 0:
+            continue
+        candidates.append(
+            {
+                "kind": "history",
+                "summary": summary,
+                "source_history_id": _safe_str(history.get("history_id")),
+                "topic_id": _safe_str(history.get("topic_id")),
+                "tick": _safe_int(history.get("tick"), 0),
+                "score": score,
+            }
+        )
+
+    for fact in known_facts_for_npc(simulation_state, npc_id=npc_id, limit=8):
+        summary = _safe_str(fact.get("summary"))
+        score = _token_overlap_score(topic_text, summary) + _safe_int(fact.get("confidence"), 0)
+        if score <= 0:
+            continue
+        candidates.append(
+            {
+                "kind": "knowledge",
+                "summary": summary,
+                "source_knowledge_id": _safe_str(fact.get("knowledge_id")),
+                "topic_id": _safe_str(fact.get("source_topic_id")),
+                "tick": _safe_int(fact.get("tick"), 0),
+                "score": score,
+            }
+        )
 
     if not candidates:
         state["debug"] = {
             "selected": False,
-            "reason": "all_candidates_on_cooldown",
+            "reason": "no_relevant_recall",
+            "npc_id": npc_id,
+            "topic_id": _safe_str(topic.get("topic_id")),
             "tick": int(tick or 0),
+            "source": "deterministic_npc_dialogue_recall",
         }
-        return {"selected": False, "reason": "all_candidates_on_cooldown"}
+        return {"selected": False, "reason": "no_relevant_recall"}
 
     candidates.sort(
         key=lambda item: (
             _safe_int(item.get("score"), 0),
-            _safe_str(item.get("speaker_id")),
-            _safe_str(item.get("listener_id")),
-            _safe_str(_safe_dict(item.get("topic")).get("topic_id")),
+            _safe_int(item.get("tick"), 0),
         ),
         reverse=True,
     )
-    selected = candidates[0]
-    topic = _safe_dict(selected.get("topic"))
-
-    intent = {
-        "selected": True,
-        "speaker_id": _safe_str(selected.get("speaker_id")),
-        "listener_id": _safe_str(selected.get("listener_id")),
-        "topic_id": _safe_str(topic.get("topic_id")),
-        "topic_type": _safe_str(topic.get("topic_type")),
-        "topic": deepcopy(topic),
-        "intent": "discuss_backed_topic",
-        "reason": "highest_scored_biography_goal_topic_candidate",
-        "priority": _safe_int(selected.get("score"), 0),
-        "location_id": location_id,
-        "tick": int(tick or 0),
-        "source": "deterministic_conversation_director",
-    }
-
-    cooldowns[_safe_str(selected.get("cooldown_key"))] = int(tick or 0) + cooldown_ticks
+    selected = candidates[: max(1, int(limit or MAX_RECALLS_PER_RESPONSE))]
+    cooldowns[cooldown_key] = int(tick or 0) + max(1, int(cooldown_ticks or 4))
     state["cooldowns"] = cooldowns
-
-    recent = _safe_list(state.get("recent_intents"))
-    recent.append(intent)
-    state["recent_intents"] = recent[-20:]
     state["debug"] = {
         "selected": True,
-        "candidate_count": len(candidates),
-        "selected_intent": intent,
+        "npc_id": npc_id,
+        "topic_id": _safe_str(topic.get("topic_id")),
+        "selected_recall": selected,
         "tick": int(tick or 0),
-        "source": "deterministic_conversation_director",
+        "source": "deterministic_npc_dialogue_recall",
     }
 
-    return deepcopy(intent)
+    return {
+        "selected": True,
+        "recalls": deepcopy(selected),
+        "source": "deterministic_npc_dialogue_recall",
+    }
+Y1 PATCH — Scene continuity state
+
+Create:
+
+src/app/rpg/world/scene_continuity_state.py
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any, Dict, List
+
+from app.rpg.world.location_registry import current_location_id
+
+
+MAX_RECENT_FOCUS = 8
+MAX_RECENT_SPEAKERS = 8
+MAX_RECENT_ACTIVITIES = 8
+DEFAULT_FOCUS_TTL_TICKS = 50
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def ensure_scene_continuity_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(simulation_state.get("scene_continuity_state"))
+    if not isinstance(state.get("by_location"), dict):
+        state["by_location"] = {}
+    if not isinstance(state.get("debug"), dict):
+        state["debug"] = {}
+    simulation_state["scene_continuity_state"] = state
+    return state
+
+
+def update_scene_continuity_from_conversation(
+    simulation_state: Dict[str, Any],
+    *,
+    location_id: str = "",
+    topic_id: str = "",
+    topic_type: str = "",
+    speaker_id: str = "",
+    listener_id: str = "",
+    tick: int,
+) -> Dict[str, Any]:
+    location_id = _safe_str(location_id or current_location_id(simulation_state))
+    state = ensure_scene_continuity_state(simulation_state)
+    by_location = _safe_dict(state.get("by_location"))
+    entry = _safe_dict(by_location.get(location_id))
+
+    recent_focus = []
+    for focus in _safe_list(entry.get("recent_focus")):
+        focus = _safe_dict(focus)
+        expires_tick = _safe_int(focus.get("expires_tick"), 0)
+        if expires_tick and int(tick or 0) >= expires_tick:
+            continue
+        if _safe_str(focus.get("topic_id")) == _safe_str(topic_id):
+            continue
+        recent_focus.append(focus)
+
+    if topic_id:
+        recent_focus.insert(
+            0,
+            {
+                "focus_id": f"focus:{location_id}:{topic_id}",
+                "topic_id": _safe_str(topic_id),
+                "topic_type": _safe_str(topic_type),
+                "kind": f"{_safe_str(topic_type) or 'topic'}_discussion",
+                "last_tick": int(tick or 0),
+                "weight": 3,
+                "expires_tick": int(tick or 0) + DEFAULT_FOCUS_TTL_TICKS,
+                "source": "deterministic_scene_continuity_runtime",
+            },
+        )
+
+    speakers = [
+        value
+        for value in [_safe_str(speaker_id), _safe_str(listener_id)]
+        if value.startswith("npc:")
+    ]
+    recent_speakers = []
+    for speaker in speakers + _safe_list(entry.get("recent_speakers")):
+        speaker = _safe_str(speaker)
+        if speaker and speaker not in recent_speakers:
+            recent_speakers.append(speaker)
+
+    entry["recent_focus"] = recent_focus[:MAX_RECENT_FOCUS]
+    entry["recent_speakers"] = recent_speakers[:MAX_RECENT_SPEAKERS]
+    by_location[location_id] = entry
+    state["by_location"] = by_location
+    state["debug"] = {
+        "last_updated_tick": int(tick or 0),
+        "location_id": location_id,
+        "source": "deterministic_scene_continuity_runtime",
+    }
+
+    return {
+        "updated": True,
+        "location_id": location_id,
+        "scene_continuity": deepcopy(entry),
+        "source": "deterministic_scene_continuity_runtime",
+    }
+
+
+def update_scene_continuity_from_activity(
+    simulation_state: Dict[str, Any],
+    *,
+    location_id: str = "",
+    activity: Dict[str, Any],
+    tick: int,
+) -> Dict[str, Any]:
+    location_id = _safe_str(location_id or current_location_id(simulation_state))
+    state = ensure_scene_continuity_state(simulation_state)
+    by_location = _safe_dict(state.get("by_location"))
+    entry = _safe_dict(by_location.get(location_id))
+
+    recent_activities = _safe_list(entry.get("recent_activities"))
+    activity = _safe_dict(activity)
+    recent_activities.insert(
+        0,
+        {
+            "activity_id": _safe_str(activity.get("activity_id") or activity.get("kind")),
+            "kind": _safe_str(activity.get("kind")),
+            "npc_id": _safe_str(activity.get("npc_id")),
+            "summary": _safe_str(activity.get("text") or activity.get("summary")),
+            "tick": int(tick or 0),
+            "source": "deterministic_scene_continuity_runtime",
+        },
+    )
+    entry["recent_activities"] = recent_activities[:MAX_RECENT_ACTIVITIES]
+    by_location[location_id] = entry
+    state["by_location"] = by_location
+
+    return {
+        "updated": True,
+        "location_id": location_id,
+        "scene_continuity": deepcopy(entry),
+        "source": "deterministic_scene_continuity_runtime",
+    }
+
+
+def scene_continuity_for_location(
+    simulation_state: Dict[str, Any],
+    *,
+    location_id: str = "",
+) -> Dict[str, Any]:
+    location_id = _safe_str(location_id or current_location_id(simulation_state))
+    state = ensure_scene_continuity_state(simulation_state)
+    return deepcopy(_safe_dict(_safe_dict(state.get("by_location")).get(location_id)))
 Settings patch
 
 File:
@@ -646,22 +622,22 @@ src/app/rpg/world/conversation_settings.py
 
 Add defaults:
 
-"npc_history_enabled": True,
-"npc_history_max_entries_per_npc": 20,
-"npc_history_ttl_ticks": 1000,
-"npc_reputation_enabled": True,
-"conversation_director_enabled": True,
-"conversation_director_cooldown_ticks": 4,
+"npc_knowledge_enabled": True,
+"npc_knowledge_max_facts_per_npc": 24,
+"npc_knowledge_ttl_ticks": 2000,
+"npc_dialogue_recall_enabled": True,
+"npc_dialogue_recall_cooldown_ticks": 4,
+"scene_continuity_enabled": True,
 
 Normalize:
 
-merged["npc_history_enabled"] = _safe_bool(merged.get("npc_history_enabled"), True)
-merged["npc_history_max_entries_per_npc"] = max(1, min(50, _safe_int(merged.get("npc_history_max_entries_per_npc"), 20)))
-merged["npc_history_ttl_ticks"] = max(10, min(100000, _safe_int(merged.get("npc_history_ttl_ticks"), 1000)))
-merged["npc_reputation_enabled"] = _safe_bool(merged.get("npc_reputation_enabled"), True)
-merged["conversation_director_enabled"] = _safe_bool(merged.get("conversation_director_enabled"), True)
-merged["conversation_director_cooldown_ticks"] = max(1, min(100, _safe_int(merged.get("conversation_director_cooldown_ticks"), 4)))
-Dialogue profile patch
+merged["npc_knowledge_enabled"] = _safe_bool(merged.get("npc_knowledge_enabled"), True)
+merged["npc_knowledge_max_facts_per_npc"] = max(1, min(60, _safe_int(merged.get("npc_knowledge_max_facts_per_npc"), 24)))
+merged["npc_knowledge_ttl_ticks"] = max(10, min(100000, _safe_int(merged.get("npc_knowledge_ttl_ticks"), 2000)))
+merged["npc_dialogue_recall_enabled"] = _safe_bool(merged.get("npc_dialogue_recall_enabled"), True)
+merged["npc_dialogue_recall_cooldown_ticks"] = max(1, min(100, _safe_int(merged.get("npc_dialogue_recall_cooldown_ticks"), 4)))
+merged["scene_continuity_enabled"] = _safe_bool(merged.get("scene_continuity_enabled"), True)
+Dialogue profile integration
 
 File:
 
@@ -669,24 +645,43 @@ src/app/rpg/world/npc_dialogue_profile.py
 
 Import:
 
-from app.rpg.world.npc_history_state import recent_npc_history
-from app.rpg.world.npc_reputation_state import get_npc_reputation, response_style_from_reputation
+from app.rpg.world.npc_knowledge_state import known_facts_for_npc
+from app.rpg.world.npc_dialogue_recall import select_dialogue_recall
 
-In build_npc_dialogue_profile(...), after social/goal extraction:
+Inside build_npc_dialogue_profile(...), add:
 
-history = recent_npc_history(simulation_state, npc_id=_safe_str(biography.get("npc_id")), limit=5)
-reputation = get_npc_reputation(simulation_state, npc_id=_safe_str(biography.get("npc_id")))
+known_facts = known_facts_for_npc(simulation_state, npc_id=_safe_str(biography.get("npc_id")), limit=6)
+dialogue_recall = select_dialogue_recall(
+    simulation_state,
+    npc_id=_safe_str(biography.get("npc_id")),
+    topic=topic,
+    tick=_safe_int(runtime_state.get("tick"), 0),
+) if runtime_state.get("enable_dialogue_recall", True) else {"selected": False}
 
 Add to profile:
 
-"recent_history": deepcopy(history),
-"npc_reputation": deepcopy(reputation),
-"reputation_response_style": response_style_from_reputation(reputation, fallback="guarded"),
+"known_facts": deepcopy(known_facts),
+"dialogue_recall": deepcopy(dialogue_recall),
 
-In deterministic_biography_line(...), prefer reputation response style if response_style is empty:
+In deterministic_biography_line(...), when a recall is selected, add a short recall clause without inventing facts:
 
-style = _safe_str(response_style or profile.get("reputation_response_style") or profile.get("response_intent") or "guarded")
-Conversation thread integration patch
+recall = _safe_dict(profile.get("dialogue_recall"))
+recalls = _safe_list(recall.get("recalls"))
+recall_prefix = ""
+if recall.get("selected") and recalls:
+    first = _safe_dict(recalls[0])
+    recall_summary = _safe_str(first.get("summary"))
+    if recall_summary:
+        recall_prefix = f"I remember this much: {recall_summary} "
+
+Then prefix generated fact lines:
+
+line = recall_prefix + line
+
+Keep total line length bounded to around 280 chars:
+
+line = line[:280]
+Conversation thread integration
 
 File:
 
@@ -694,103 +689,139 @@ src/app/rpg/world/conversation_threads.py
 
 Imports:
 
-from app.rpg.world.npc_history_state import add_npc_history_entry, prune_npc_history_state
-from app.rpg.world.npc_reputation_state import update_npc_reputation, get_npc_reputation, response_style_from_reputation
-from app.rpg.world.conversation_director import select_conversation_intent
+from app.rpg.world.npc_knowledge_state import add_npc_knowledge_from_topic, prune_npc_knowledge_state
+from app.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation
 
-Inside ambient/autonomous conversation creation, before selecting topic/participants:
+When a conversation beat is created from a backed topic, add knowledge for speaker/listener:
 
-director_intent = {}
-if settings.get("conversation_director_enabled", True):
-    director_intent = select_conversation_intent(
+if settings.get("npc_knowledge_enabled", True):
+    for npc_id in {beat.get("speaker_id"), beat.get("listener_id")}:
+        npc_id = _safe_str(npc_id)
+        if npc_id.startswith("npc:"):
+            add_npc_knowledge_from_topic(
+                simulation_state,
+                npc_id=npc_id,
+                topic=topic_payload,
+                tick=tick,
+                confidence=2,
+                ttl_ticks=int(settings.get("npc_knowledge_ttl_ticks") or 2000),
+            )
+
+On player response consumed / NPC response beat, call scene continuity:
+
+if settings.get("scene_continuity_enabled", True):
+    update_scene_continuity_from_conversation(
         simulation_state,
-        settings=settings,
-        tick=tick,
-    )
-
-If director_intent.selected, use:
-
-topic_payload = director_intent["topic"]
-participants = [
-    {"npc_id": director_intent["speaker_id"], "name": director_intent["speaker_id"].replace("npc:", "")},
-    {"npc_id": director_intent["listener_id"], "name": director_intent["listener_id"].replace("npc:", "")},
-]
-
-When player response is consumed and npc_response_beat is created, add:
-
-if settings.get("npc_history_enabled", True):
-    add_npc_history_entry(
-        simulation_state,
-        npc_id=responder_id,
-        kind="player_conversation_reply",
-        summary=f"The player replied to {responder_name} about {topic_title or topic_id}.",
+        location_id=location_id,
         topic_id=topic_id,
+        topic_type=topic_type,
+        speaker_id=_safe_str(npc_response_beat.get("speaker_id")),
+        listener_id=_safe_str(npc_response_beat.get("listener_id")),
         tick=tick,
-        importance=2,
-        ttl_ticks=int(settings.get("npc_history_ttl_ticks") or 1000),
     )
 
-if settings.get("npc_reputation_enabled", True):
-    update_npc_reputation(
+Also after normal NPC-to-NPC beat:
+
+if settings.get("scene_continuity_enabled", True):
+    update_scene_continuity_from_conversation(
         simulation_state,
-        npc_id=responder_id,
+        location_id=location_id,
+        topic_id=_safe_str(beat.get("topic_id")),
+        topic_type=_safe_str(beat.get("topic_type")),
+        speaker_id=_safe_str(beat.get("speaker_id")),
+        listener_id=_safe_str(beat.get("listener_id")),
         tick=tick,
-        familiarity_delta=1,
-        trust_delta=1 if topic_pivot.get("accepted") else 0,
-        annoyance_delta=1 if topic_pivot.get("requested") and not topic_pivot.get("accepted") else 0,
-        reason="player_joined_conversation",
     )
 
-Before determining final response style, add:
+Before return, prune:
 
-reputation = get_npc_reputation(simulation_state, npc_id=responder_id)
-response_style = response_style_from_reputation(reputation, fallback=response_style)
+if settings.get("npc_knowledge_enabled", True):
+    prune_npc_knowledge_state(
+        simulation_state,
+        current_tick=tick,
+        max_known_facts_per_npc=int(settings.get("npc_knowledge_max_facts_per_npc") or 24),
+    )
 
-At the start/end of conversation advancement:
+Add result fields:
 
-prune_npc_history_state(
-    simulation_state,
-    current_tick=tick,
-    max_entries_per_npc=int(settings.get("npc_history_max_entries_per_npc") or 20),
-)
+"npc_knowledge_state": deepcopy(_safe_dict(simulation_state.get("npc_knowledge_state"))),
+"scene_continuity_state": deepcopy(_safe_dict(simulation_state.get("scene_continuity_state"))),
+Conversation director integration
 
-Add debug fields to result:
+File:
 
-"director_intent": deepcopy(director_intent),
-"npc_history_state": deepcopy(_safe_dict(simulation_state.get("npc_history_state"))),
-"npc_reputation_state": deepcopy(_safe_dict(simulation_state.get("npc_reputation_state"))),
-Ambient tick integration
+src/app/rpg/world/conversation_director.py
+
+Import:
+
+from app.rpg.world.scene_continuity_state import scene_continuity_for_location
+
+In select_conversation_intent(...), before sorting candidates, adjust score:
+
+continuity = scene_continuity_for_location(simulation_state, location_id=location_id)
+recent_focus_ids = {
+    _safe_str(focus.get("topic_id"))
+    for focus in _safe_list(continuity.get("recent_focus"))
+}
+
+When scoring topic:
+
+if _safe_str(topic.get("topic_id")) in recent_focus_ids:
+    score += 1
+
+This makes current scenes slightly more continuous without forcing repetition.
+
+Scene activity continuity integration
+
+File:
+
+src/app/rpg/world/scene_activity_scheduler.py
+
+Import:
+
+from app.rpg.world.scene_continuity_state import update_scene_continuity_from_activity
+
+After an activity is scheduled:
+
+if settings.get("scene_continuity_enabled", True):
+    update_scene_continuity_from_activity(
+        simulation_state,
+        location_id=location_id,
+        activity=activity,
+        tick=tick,
+    )
+Ambient tick result pass-through
 
 File:
 
 src/app/rpg/session/ambient_tick_runtime.py
 
-No large changes required if conversation threads call the director internally. Add only output pass-through if missing:
+Add to return payloads:
 
-"npc_history_state": _safe_dict(simulation_state.get("npc_history_state")),
-"npc_reputation_state": _safe_dict(simulation_state.get("npc_reputation_state")),
-"conversation_director_state": _safe_dict(simulation_state.get("conversation_director_state")),
-
-inside the returned result.
-
-Inspector patch
+"npc_knowledge_state": _safe_dict(simulation_state.get("npc_knowledge_state")),
+"npc_dialogue_recall_state": _safe_dict(simulation_state.get("npc_dialogue_recall_state")),
+"scene_continuity_state": _safe_dict(simulation_state.get("scene_continuity_state")),
+Inspector visibility
 
 File:
 
 src/static/rpg-living-world-inspector.js
 
-Add display sections:
+Add sections:
 
-NPC History
-NPC Reputation
-Conversation Director
+NPC Knowledge
+Dialogue Recall
+Scene Continuity
 
-Fields to show:
+Display:
 
-npc_history_state.by_npc
-npc_reputation_state.by_npc
-conversation_director_state.debug.selected_intent
-conversation_result.director_intent
+npc_knowledge_state.by_npc
+npc_dialogue_recall_state.debug
+scene_continuity_state.by_location
+conversation_result.npc_knowledge_state
+conversation_result.scene_continuity_state
+dialogue_profile.dialogue_recall
+dialogue_profile.known_facts
 Manual scenarios
 
 File:
@@ -799,54 +830,14 @@ src/tests/rpg/manual_llm_transcript.py
 
 Add scenarios:
 
-"npc_history_records_player_reply": {
+"npc_knowledge_records_backed_quest_discussion": {
     "currency": {"gold": 0, "silver": 0, "copper": 0},
     "conversation_settings": {
         "enabled": True,
         "autonomous_ticks_enabled": True,
         "frequency": "always",
         "conversation_chance_percent": 100,
-        "allow_player_invited": True,
-        "player_inclusion_chance_percent": 100,
-        "npc_history_enabled": True,
-        "npc_reputation_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0,
-    },
-    "turns": [
-        "__ambient_tick_player_invited__",
-        "I will remember what you said.",
-    ],
-},
-"npc_reputation_changes_response_style": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": True,
-        "frequency": "always",
-        "conversation_chance_percent": 100,
-        "allow_player_invited": True,
-        "player_inclusion_chance_percent": 100,
-        "npc_history_enabled": True,
-        "npc_reputation_enabled": True,
-        "min_ticks_between_conversations": 0,
-        "thread_cooldown_ticks": 0,
-    },
-    "turns": [
-        "__ambient_tick_player_invited__",
-        "That sounds useful. Thank you.",
-        "__ambient_tick_player_invited__",
-        "Can you help me understand more?",
-    ],
-},
-"conversation_director_selects_biography_relevant_topic": {
-    "currency": {"gold": 0, "silver": 0, "copper": 0},
-    "conversation_settings": {
-        "enabled": True,
-        "autonomous_ticks_enabled": True,
-        "frequency": "always",
-        "conversation_chance_percent": 100,
-        "conversation_director_enabled": True,
+        "npc_knowledge_enabled": True,
         "min_ticks_between_conversations": 0,
         "thread_cooldown_ticks": 0,
     },
@@ -862,44 +853,184 @@ Add scenarios:
         ]
     },
     "turns": ["__ambient_tick_quest__"],
-}
+},
+"npc_dialogue_recalls_prior_player_reply": {
+    "currency": {"gold": 0, "silver": 0, "copper": 0},
+    "conversation_settings": {
+        "enabled": True,
+        "autonomous_ticks_enabled": True,
+        "frequency": "always",
+        "conversation_chance_percent": 100,
+        "allow_player_invited": True,
+        "player_inclusion_chance_percent": 100,
+        "npc_history_enabled": True,
+        "npc_knowledge_enabled": True,
+        "npc_dialogue_recall_enabled": True,
+        "min_ticks_between_conversations": 0,
+        "thread_cooldown_ticks": 0,
+    },
+    "setup_quest_state": {
+        "quests": [
+            {
+                "quest_id": "quest:old_mill_bandits",
+                "title": "Trouble near the Old Mill",
+                "summary": "There is talk of armed figures near the old mill road.",
+                "status": "active",
+                "location_id": "loc_tavern",
+            }
+        ]
+    },
+    "turns": [
+        "__ambient_tick_quest__",
+        "I asked you about the old mill road.",
+        "__ambient_tick_player_invited__",
+        "Do you remember what I asked before?",
+    ],
+},
+"scene_continuity_tracks_recent_topic": {
+    "currency": {"gold": 0, "silver": 0, "copper": 0},
+    "conversation_settings": {
+        "enabled": True,
+        "autonomous_ticks_enabled": True,
+        "frequency": "always",
+        "conversation_chance_percent": 100,
+        "scene_continuity_enabled": True,
+        "min_ticks_between_conversations": 0,
+        "thread_cooldown_ticks": 0,
+    },
+    "setup_quest_state": {
+        "quests": [
+            {
+                "quest_id": "quest:old_mill_bandits",
+                "title": "Trouble near the Old Mill",
+                "summary": "There is talk of armed figures near the old mill road.",
+                "status": "active",
+                "location_id": "loc_tavern",
+            }
+        ]
+    },
+    "turns": ["__ambient_tick_quest__", "__ambient_tick__"],
+},
 
-Add them to CONVERSATION_EXPECTED_SCENARIOS.
+Add expected conversation scenarios:
+
+"npc_knowledge_records_backed_quest_discussion",
+"npc_dialogue_recalls_prior_player_reply",
+"scene_continuity_tracks_recent_topic",
 
 Warnings:
 
-if scenario_name == "npc_history_records_player_reply" and turn_index == 2:
-    history_state = _safe_dict(_extract_simulation_state(result).get("npc_history_state"))
-    if not _safe_dict(history_state.get("by_npc")):
-        warnings.append("npc_history_records_player_reply_missing_history_state")
+if scenario_name == "npc_knowledge_records_backed_quest_discussion" and turn_index == 1:
+    sim = _extract_simulation_state(result)
+    knowledge_state = _safe_dict(sim.get("npc_knowledge_state"))
+    if not _safe_dict(knowledge_state.get("by_npc")):
+        warnings.append("npc_knowledge_records_backed_quest_discussion_missing_knowledge")
 
-if scenario_name == "npc_reputation_changes_response_style" and turn_index >= 2:
-    reputation_state = _safe_dict(_extract_simulation_state(result).get("npc_reputation_state"))
-    if not _safe_dict(reputation_state.get("by_npc")):
-        warnings.append("npc_reputation_changes_response_style_missing_reputation_state")
-
-if scenario_name == "conversation_director_selects_biography_relevant_topic":
+if scenario_name == "npc_dialogue_recalls_prior_player_reply" and turn_index >= 4:
     conversation = _extract_conversation_result(result)
-    director = _safe_dict(conversation.get("director_intent"))
-    if turn_index == 1 and not director.get("selected"):
-        warnings.append("conversation_director_expected_selected_intent")
+    profile = _safe_dict(conversation.get("dialogue_profile"))
+    recall = _safe_dict(profile.get("dialogue_recall"))
+    if not recall.get("selected"):
+        warnings.append("npc_dialogue_recalls_prior_player_reply_missing_recall")
+
+if scenario_name == "scene_continuity_tracks_recent_topic" and turn_index >= 1:
+    sim = _extract_simulation_state(result)
+    continuity = _safe_dict(sim.get("scene_continuity_state"))
+    by_location = _safe_dict(continuity.get("by_location"))
+    loc = _safe_dict(by_location.get("loc_tavern"))
+    if not _safe_list(loc.get("recent_focus")):
+        warnings.append("scene_continuity_tracks_recent_topic_missing_recent_focus")
 Tests
 
-Add:
+Create:
 
-src/app/rpg/tests/test_bundle_qrs_npc_history_reputation_director.py
+src/app/rpg/tests/test_bundle_wxy_knowledge_recall_continuity.py
 
-Test coverage:
+Minimum tests:
 
-def test_npc_history_is_bounded_and_prunes_expired()
-def test_npc_reputation_updates_and_clamps()
-def test_reputation_response_style_changes()
-def test_conversation_director_selects_backed_topic()
-def test_conversation_director_respects_cooldown()
-def test_director_does_not_mutate_forbidden_state()
+from app.rpg.world.npc_knowledge_state import add_npc_knowledge_from_topic, known_facts_for_npc, prune_npc_knowledge_state
+from app.rpg.world.npc_dialogue_recall import select_dialogue_recall
+from app.rpg.world.scene_continuity_state import update_scene_continuity_from_conversation, scene_continuity_for_location
+
+
+def test_npc_knowledge_requires_backed_topic():
+    state = {}
+    result = add_npc_knowledge_from_topic(
+        state,
+        npc_id="npc:Bran",
+        topic={},
+        tick=10,
+    )
+    assert result["created"] is False
+
+
+def test_npc_knowledge_records_backed_topic_and_prunes_expired():
+    state = {}
+    result = add_npc_knowledge_from_topic(
+        state,
+        npc_id="npc:Bran",
+        topic={
+            "topic_id": "topic:quest:old_mill",
+            "topic_type": "quest",
+            "summary": "There is talk of armed figures near the old mill road.",
+            "source_id": "quest:old_mill",
+            "source_kind": "quest",
+        },
+        tick=10,
+        ttl_ticks=2,
+    )
+    assert result["created"] is True
+    assert known_facts_for_npc(state, npc_id="npc:Bran")
+    prune_npc_knowledge_state(state, current_tick=12)
+    assert not known_facts_for_npc(state, npc_id="npc:Bran")
+
+
+def test_dialogue_recall_selects_relevant_knowledge():
+    state = {}
+    add_npc_knowledge_from_topic(
+        state,
+        npc_id="npc:Bran",
+        topic={
+            "topic_id": "topic:quest:old_mill",
+            "topic_type": "quest",
+            "title": "Old Mill road",
+            "summary": "There is talk of armed figures near the old mill road.",
+            "source_id": "quest:old_mill",
+            "source_kind": "quest",
+        },
+        tick=10,
+    )
+    recall = select_dialogue_recall(
+        state,
+        npc_id="npc:Bran",
+        topic={
+            "topic_id": "topic:quest:old_mill",
+            "title": "Old Mill road",
+            "summary": "What about the old mill road?",
+        },
+        tick=11,
+    )
+    assert recall["selected"] is True
+    assert recall["recalls"]
+
+
+def test_scene_continuity_tracks_recent_topic():
+    state = {}
+    update_scene_continuity_from_conversation(
+        state,
+        location_id="loc_tavern",
+        topic_id="topic:quest:old_mill",
+        topic_type="quest",
+        speaker_id="npc:Bran",
+        listener_id="npc:Mira",
+        tick=10,
+    )
+    continuity = scene_continuity_for_location(state, location_id="loc_tavern")
+    assert continuity["recent_focus"][0]["topic_id"] == "topic:quest:old_mill"
+    assert "npc:Bran" in continuity["recent_speakers"]
 Validation
 
 Run:
 
-PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_qrs_npc_history_reputation_director.py
-PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_nop_npc_biography_roleplay.py
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_wxy_knowledge_recall_continuity.py
+PYTHONPATH=src pytest -q src/app/rpg/tests/test_bundle_tuv_npc_schedule_presence_population.py

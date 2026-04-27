@@ -7,7 +7,9 @@ from app.rpg.world.conversation_effects import build_conversation_world_signal
 from app.rpg.world.conversation_settings import normalize_conversation_settings
 from app.rpg.world.conversation_topics import select_conversation_topic
 from app.rpg.world.location_registry import current_location_id
+from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_goal_state import dominant_goal_for_npc, seed_default_npc_goals
+from app.rpg.world.npc_presence_runtime import present_npcs_at_location, update_present_npcs_for_location
 from app.rpg.world.world_event_log import add_world_event
 
 MAX_SCHEDULED_ACTIVITIES = 8
@@ -51,11 +53,23 @@ def ensure_scene_activity_state(simulation_state: Dict[str, Any]) -> Dict[str, A
     return state
 
 
-def _present_npcs(simulation_state: Dict[str, Any]) -> List[Dict[str, str]]:
-    # Keep this deterministic and conservative. If a richer NPC-presence runtime
-    # exists, it can replace this helper later. These IDs match existing manual
-    # conversation fixtures.
+def _present_npcs(simulation_state: Dict[str, Any], *, tick: int) -> List[Dict[str, str]]:
     location_id = current_location_id(simulation_state)
+    update_present_npcs_for_location(simulation_state, location_id=location_id, tick=tick)
+    npc_ids = present_npcs_at_location(simulation_state, location_id=location_id)
+    if npc_ids:
+        result = []
+        for npc_id in npc_ids:
+            bio = get_npc_biography(npc_id)
+            result.append(
+                {
+                    "npc_id": npc_id,
+                    "name": _safe_str(bio.get("name")) or npc_id.replace("npc:", ""),
+                    "role": _safe_str(bio.get("role")),
+                }
+            )
+        return result
+    # Conservative fallback
     if location_id == "loc_tavern":
         return [
             {"npc_id": "npc:Bran", "name": "Bran", "role": "tavern_keeper"},
@@ -150,7 +164,7 @@ def maybe_schedule_scene_activity(
     if not force and int(tick or 0) % interval != 0:
         return {"scheduled": False, "reason": "scene_activity_interval", "scene_activity_state": deepcopy(state)}
 
-    npcs = _present_npcs(simulation_state)
+    npcs = _present_npcs(simulation_state, tick=tick)
     if not npcs:
         return {"scheduled": False, "reason": "no_present_npcs", "scene_activity_state": deepcopy(state)}
 

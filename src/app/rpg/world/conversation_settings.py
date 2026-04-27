@@ -84,6 +84,10 @@ DEFAULT_CONVERSATION_SETTINGS: Dict[str, Any] = {
     "scene_activity_cooldown_ticks": 3,
     "allow_scene_activity_world_events": True,
     "allow_scene_activity_world_signals": True,
+    # Bundle T-U-V — NPC Schedule, Location Presence, and Dynamic Scene Population
+    "npc_schedule_enabled": True,
+    "npc_presence_enabled": True,
+    "scene_population_enabled": True,
 }
 
 
@@ -193,6 +197,10 @@ def normalize_conversation_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
     merged["scene_activity_cooldown_ticks"] = max(0, _safe_int(merged.get("scene_activity_cooldown_ticks"), 3))
     merged["allow_scene_activity_world_events"] = _safe_bool(merged.get("allow_scene_activity_world_events"), True)
     merged["allow_scene_activity_world_signals"] = _safe_bool(merged.get("allow_scene_activity_world_signals"), True)
+    # Bundle T-U-V
+    merged["npc_schedule_enabled"] = _safe_bool(merged.get("npc_schedule_enabled"), True)
+    merged["npc_presence_enabled"] = _safe_bool(merged.get("npc_presence_enabled"), True)
+    merged["scene_population_enabled"] = _safe_bool(merged.get("scene_population_enabled"), True)
     return merged
 
 

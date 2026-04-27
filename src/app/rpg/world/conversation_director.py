@@ -7,6 +7,7 @@ from app.rpg.world.conversation_topics import conversation_topics_for_state
 from app.rpg.world.location_registry import current_location_id
 from app.rpg.world.npc_biography_registry import get_npc_biography
 from app.rpg.world.npc_goal_state import active_goals_for_npc
+from app.rpg.world.npc_presence_runtime import present_npcs_at_location, update_present_npcs_for_location
 
 
 DEFAULT_LOCATION_NPCS = {
@@ -195,6 +196,12 @@ def select_conversation_intent(
 ) -> Dict[str, Any]:
     state = ensure_conversation_director_state(simulation_state)
     location_id = current_location_id(simulation_state)
+    if settings.get("npc_presence_enabled", True):
+        update_present_npcs_for_location(
+            simulation_state,
+            location_id=location_id,
+            tick=tick,
+        )
     npcs = _present_npcs(simulation_state)
     present_set = set(npcs)
     topics = conversation_topics_for_state(simulation_state, settings=settings)

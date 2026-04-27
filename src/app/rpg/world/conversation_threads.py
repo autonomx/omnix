@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.session.ambient_intent import is_ambient_wait_or_listen_intent
+from app.rpg.world.conversation_director import select_conversation_intent
 from app.rpg.world.conversation_effects import (
     build_conversation_world_signal,
     strip_forbidden_conversation_effects,
@@ -17,19 +18,10 @@ from app.rpg.world.conversation_rumor_propagation import (
 from app.rpg.world.conversation_settings import normalize_conversation_settings
 from app.rpg.world.conversation_social_state import (
     choose_npc_response_style,
-    get_npc_relationship_summary,
     record_npc_response_beat,
     record_player_joined_conversation,
 )
-from app.rpg.world.conversation_director import select_conversation_intent
-from app.rpg.world.npc_history_state import add_npc_history_entry, prune_npc_history_state
-from app.rpg.world.npc_reputation_state import (
-    get_npc_reputation,
-    response_style_from_reputation,
-    update_npc_reputation,
-)
 from app.rpg.world.conversation_topics import (
-    detect_topic_pivot_hint,
     select_conversation_topic,
     topic_is_backed_by_state,
 )
@@ -49,6 +41,15 @@ from app.rpg.world.npc_goal_state import (
     record_goal_influence,
     response_style_from_goal,
     seed_default_npc_goals,
+)
+from app.rpg.world.npc_history_state import (
+    add_npc_history_entry,
+    prune_npc_history_state,
+)
+from app.rpg.world.npc_reputation_state import (
+    get_npc_reputation,
+    response_style_from_reputation,
+    update_npc_reputation,
 )
 from app.rpg.world.world_event_log import add_world_event
 
@@ -185,11 +186,21 @@ def _thread_id_for(
     participants: List[Dict[str, Any]],
 ) -> str:
     participant_ids = [
-        _safe_str(participant.get("id") or participant.get("name"))
+        _safe_str(participant.get("npc_id") or participant.get("id"))
         for participant in participants
+        if _safe_str(participant.get("npc_id") or participant.get("id"))
     ]
-    participant_part = ":".join(participant_ids)
-    return f"conversation:{location_id}:{participant_part}"
+
+    # NPC-to-NPC conversations should have a stable thread identity regardless
+    # of who speaks first on a given tick. Bran->Mira and Mira->Bran are the
+    # same conversation thread; individual beats still preserve direction via
+    # speaker_id/listener_id.
+    npc_ids = [value for value in participant_ids if value.startswith("npc:")]
+    non_npc_ids = [value for value in participant_ids if not value.startswith("npc:")]
+    if len(npc_ids) >= 2 and not non_npc_ids:
+        participant_ids = sorted(set(npc_ids))
+
+    return f"conversation:{location_id}:{':'.join(participant_ids)}"
 
 
 def _find_thread(state: Dict[str, Any], thread_id: str) -> Dict[str, Any]:
@@ -725,17 +736,8 @@ def maybe_advance_conversation_thread(
 
     if existing:
         thread = existing
-        if force_player_mode in {"overheard", "player_addressed", "player_invited"}:
-            participation_mode = force_player_mode
-            thread["participation_mode"] = participation_mode
-            thread["player_participation"] = _player_participation_payload(
-                mode=participation_mode,
-                topic=topic_payload,
-                tick=tick,
-                settings=settings,
-            )
-        else:
-            participation_mode = _safe_str(thread.get("participation_mode") or participation_mode or "overheard")
+        thread["last_participants"] = deepcopy(participants)
+        participation_mode = _safe_str(thread.get("participation_mode") or participation_mode or "overheard")
     else:
         # Enforce max_active_threads: don't open a new thread when the cap is reached.
         active_ids = _safe_list(state.get("active_thread_ids"))
@@ -755,11 +757,24 @@ def maybe_advance_conversation_thread(
                 "max_active_threads": max_threads,
                 "conversation_thread_state": get_conversation_thread_state(simulation_state),
             }
+        canonical_participants = participants
+        npc_participants = [
+            participant
+            for participant in participants
+            if _safe_str(participant.get("npc_id") or participant.get("id")).startswith("npc:")
+        ]
+        if len(npc_participants) >= 2 and len(npc_participants) == len(participants):
+            canonical_participants = sorted(
+                participants,
+                key=lambda participant: _safe_str(participant.get("npc_id") or participant.get("id")),
+            )
+
         thread = {
             "thread_id": thread_id,
             "location_id": location_id,
             "location_name": _safe_str(location.get("name")),
-            "participants": deepcopy(participants),
+            "participants": canonical_participants,
+            "last_participants": participants,
             "topic_id": _safe_str(topic_payload.get("topic_id")),
             "topic_type": _safe_str(topic_payload.get("topic_type")),
             "topic": _safe_str(topic_payload.get("title") or topic_payload.get("topic")),

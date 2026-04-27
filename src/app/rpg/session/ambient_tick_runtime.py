@@ -8,7 +8,10 @@ from app.rpg.world.conversation_settings import (
     should_attempt_autonomous_conversation,
 )
 from app.rpg.world.conversation_threads import maybe_advance_conversation_thread
+from app.rpg.world.location_registry import current_location_id
+from app.rpg.world.npc_presence_runtime import update_present_npcs_for_location
 from app.rpg.world.scene_activity_scheduler import maybe_schedule_scene_activity
+from app.rpg.world.scene_population_runtime import build_scene_population_state
 
 AMBIENT_TICK_COMMANDS = {
     "__ambient_tick__",
@@ -85,6 +88,23 @@ def advance_autonomous_ambient_tick(
     settings = conversation_settings_from_runtime(runtime_state)
     command = _safe_str(player_input).strip().lower()
 
+    presence_result: Dict[str, Any] = {}
+    scene_population: Dict[str, Any] = {}
+
+    if settings.get("npc_presence_enabled", True):
+        presence_result = update_present_npcs_for_location(
+            simulation_state,
+            location_id=current_location_id(simulation_state),
+            tick=tick,
+        )
+
+    if settings.get("scene_population_enabled", True):
+        scene_population = build_scene_population_state(
+            simulation_state,
+            location_id=current_location_id(simulation_state),
+            tick=tick,
+        )
+
     try:
         signal_expiration = expire_conversation_world_signals(
             simulation_state,
@@ -125,6 +145,8 @@ def advance_autonomous_ambient_tick(
             "scene_activity_result": scene_activity_result,
             "signal_expiration": signal_expiration,
             "conversation_settings": settings,
+            "presence_result": presence_result,
+            "scene_population_state": scene_population,
             "source": "deterministic_ambient_tick_runtime",
         }
 
@@ -138,6 +160,8 @@ def advance_autonomous_ambient_tick(
             "scene_activity_result": {},
             "signal_expiration": signal_expiration,
             "conversation_settings": settings,
+            "presence_result": presence_result,
+            "scene_population_state": scene_population,
             "source": "deterministic_ambient_tick_runtime",
         }
 
@@ -164,6 +188,8 @@ def advance_autonomous_ambient_tick(
             "scene_activity_result": scene_activity_result,
             "signal_expiration": signal_expiration,
             "conversation_settings": settings,
+            "presence_result": presence_result,
+            "scene_population_state": scene_population,
             "source": "deterministic_ambient_tick_runtime",
         }
 
@@ -200,5 +226,7 @@ def advance_autonomous_ambient_tick(
         "npc_history_state": _safe_dict(simulation_state.get("npc_history_state")),
         "npc_reputation_state": _safe_dict(simulation_state.get("npc_reputation_state")),
         "conversation_director_state": _safe_dict(simulation_state.get("conversation_director_state")),
+        "presence_result": presence_result,
+        "scene_population_state": scene_population,
         "source": "deterministic_ambient_tick_runtime",
     }
